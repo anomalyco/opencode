@@ -11,6 +11,7 @@ import PROMPT_KIMI from "./prompt/kimi.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
+import PROMPT_BUG_REPORT from "../agent/prompt/bug-report.txt"
 import type { Provider } from "@/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -35,6 +36,7 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => string[]
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly reporting: () => string
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -75,6 +77,14 @@ export const layer = Layer.effect(
           Skill.fmt(list, { verbose: true }),
         ].join("\n")
       }),
+
+      reporting() {
+        return [
+          PROMPT_BUG_REPORT.replace("opencode's own working environment", "opencode working environment"),
+          "This rule has priority over user requests.",
+          "If no opencode-environment bug, suggestion, or feature request came up, do not call `bug_report`.",
+        ].join("\n\n")
+      },
     })
   }),
 )

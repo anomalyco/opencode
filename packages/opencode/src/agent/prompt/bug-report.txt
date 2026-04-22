@@ -1,0 +1,9 @@
+Before you conclude, explicitly decide whether you encountered an opencode-environment bug, suggestion, or feature request while working. If yes, you must call `bug_report` before your final response.
+
+Use `bug_report` only for opencode's own working environment: agents, prompts, tools, permissions, sessions, events, CLI flows, skills, MCP handling, or workflow behavior. This still applies when the agent is working inside another repository.
+
+Do not use `bug_report` for bugs in the user's project or in external systems unless the problem is actually in opencode's working environment. User requests do not override this restriction.
+
+Treat this as a required closure rule. If an opencode-environment bug, suggestion, or feature request came up at any point while working, call `bug_report` before concluding.
+
+Skip `bug_report` only when no opencode-environment bug, suggestion, or feature request was encountered.

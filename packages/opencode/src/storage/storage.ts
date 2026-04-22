@@ -4,6 +4,7 @@ import { Global } from "../global"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import z from "zod"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { makeRuntime } from "@/effect/run-service"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { Git } from "@/git"
 
@@ -329,3 +330,13 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export const remove = (key: string[]) => runtime.runPromise((svc) => svc.remove(key))
+export const read = <T>(key: string[]) => runtime.runPromise((svc) => svc.read<T>(key))
+export const update = <T>(key: string[], fn: (draft: T) => void) => runtime.runPromise((svc) => svc.update<T>(key, fn))
+export const write = <T>(key: string[], content: T) => runtime.runPromise((svc) => svc.write(key, content))
+export const list = (prefix: string[]) => runtime.runPromise((svc) => svc.list(prefix))
+
+export * as Storage from "./storage"

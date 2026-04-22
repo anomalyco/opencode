@@ -12,6 +12,7 @@ import { InvalidError } from "./error"
 import * as ConfigMarkdown from "./markdown"
 import { ConfigModelID } from "./model-id"
 import { ConfigPermission } from "./permission"
+import { teamAgentKnownKeys } from "./teams"
 
 const log = Log.create({ service: "config" })
 
@@ -25,6 +26,9 @@ const Color = Schema.Union([
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
     model: Schema.optional(ConfigModelID),
+    read_agentmd: Schema.optional(Schema.Boolean).annotate({
+      description: "Allow AGENTS.md-style instruction loading for this agent.",
+    }),
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
     }),
@@ -56,6 +60,7 @@ const AgentSchema = Schema.StructWithRest(
 const KNOWN_KEYS = new Set([
   "name",
   "model",
+  ...teamAgentKnownKeys,
   "variant",
   "prompt",
   "description",

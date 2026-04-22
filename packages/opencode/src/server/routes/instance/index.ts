@@ -28,6 +28,7 @@ import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
 import { InstanceMiddleware } from "./middleware"
 import { jsonRequest } from "./trace"
+import { mountInstanceTeamRoutes } from "@/server/teams"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   const app = new Hono()
@@ -52,6 +53,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
 
   return app
     .route("/project", ProjectRoutes())
+    .route("/", mountInstanceTeamRoutes(new Hono()))
     .route("/pty", PtyRoutes(upgrade))
     .route("/config", ConfigRoutes())
     .route("/experimental", ExperimentalRoutes())

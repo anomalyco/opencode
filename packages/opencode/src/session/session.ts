@@ -27,6 +27,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
+import { makeRuntime } from "@/effect/run-service"
 import { Effect, Layer, Option, Context } from "effect"
 
 const log = Log.create({ service: "session" })
@@ -698,6 +699,64 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Storage.defaultLayer))
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export const create = (input?: CreateInput) => runtime.runPromise((svc) => svc.create(input))
+export const fork = (input: z.infer<typeof ForkInput>) => runtime.runPromise((svc) => svc.fork(input))
+export const touch = (sessionID: SessionID) => runtime.runPromise((svc) => svc.touch(sessionID))
+export const get = (id: SessionID) => runtime.runPromise((svc) => svc.get(id))
+export const setTitle = (input: z.infer<typeof SetTitleInput>) => runtime.runPromise((svc) => svc.setTitle(input))
+export const setArchived = (input: z.infer<typeof SetArchivedInput>) =>
+  runtime.runPromise((svc) => svc.setArchived(input))
+export const setPermission = (input: z.infer<typeof SetPermissionInput>) =>
+  runtime.runPromise((svc) => svc.setPermission(input))
+export const setRevert = (input: z.infer<typeof SetRevertInput>) => runtime.runPromise((svc) => svc.setRevert(input))
+export const clearRevert = (sessionID: SessionID) => runtime.runPromise((svc) => svc.clearRevert(sessionID))
+export const setSummary = (input: { sessionID: SessionID; summary: Info["summary"] }) =>
+  runtime.runPromise((svc) => svc.setSummary(input))
+export const diff = (sessionID: SessionID) => runtime.runPromise((svc) => svc.diff(sessionID))
+export const messages = (input: z.infer<typeof MessagesInput>) => runtime.runPromise((svc) => svc.messages(input))
+export const children = (parentID: SessionID) => runtime.runPromise((svc) => svc.children(parentID))
+export const remove = (sessionID: SessionID) => runtime.runPromise((svc) => svc.remove(sessionID))
+export const updateMessage = <T extends MessageV2.Info>(msg: T) => runtime.runPromise((svc) => svc.updateMessage(msg))
+export const removeMessage = (input: { sessionID: SessionID; messageID: MessageID }) =>
+  runtime.runPromise((svc) => svc.removeMessage(input))
+export const removePart = (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) =>
+  runtime.runPromise((svc) => svc.removePart(input))
+export const getPart = (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) =>
+  runtime.runPromise((svc) => svc.getPart(input))
+export const updatePart = <T extends MessageV2.Part>(part: T) => runtime.runPromise((svc) => svc.updatePart(part))
+export const updatePartDelta = (input: {
+  sessionID: SessionID
+  messageID: MessageID
+  partID: PartID
+  field: string
+  delta: string
+}) => runtime.runPromise((svc) => svc.updatePartDelta(input))
+export const findMessage = (sessionID: SessionID, predicate: (msg: MessageV2.WithParts) => boolean) =>
+  runtime.runPromise((svc) => svc.findMessage(sessionID, predicate))
+
+export async function stopAll(input: { sessionID: SessionID; reason?: string }) {
+  const { SessionPrompt } = await import("./prompt")
+  const seen = new Set<string>()
+  const queue = [input.sessionID]
+  let sessions = 0
+
+  while (queue.length > 0) {
+    const sessionID = queue.pop()!
+    if (seen.has(sessionID)) continue
+    seen.add(sessionID)
+    sessions += 1
+    await SessionPrompt.cancel(sessionID).catch(() => undefined)
+    const next = await children(sessionID).catch(() => [] as Info[])
+    queue.push(...next.map((item) => item.id))
+  }
+
+  return { sessions, plans: 0 }
+}
+
+export * as Session from "./session"
 
 export function* list(input?: {
   directory?: string

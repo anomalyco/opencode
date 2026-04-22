@@ -14,7 +14,7 @@ Your output must be:
 <rules>
 - you MUST use the same language as the user message you are summarizing
 - Title must be grammatically correct and read naturally - no word salad
-- Never include tool names in the title (e.g. "read tool", "bash tool", "edit tool")
+- Never include tool names in the title (e.g. "inspect tool", "bash tool", "edit tool")
 - Focus on the main topic or question the user needs to retrieve
 - Vary your phrasing - avoid repetitive patterns like always starting with "Analyzing"
 - When a file is mentioned, focus on WHAT the user wants to do WITH the file, not just that they shared it

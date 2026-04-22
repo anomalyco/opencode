@@ -149,6 +149,9 @@ export const Info = Schema.Struct({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
   }),
+  locale: Schema.optional(Schema.String).annotate({
+    description: "User interface locale for translated user-facing records",
+  }),
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
@@ -197,6 +200,9 @@ export const Info = Schema.Struct({
     description: "Additional instruction files or patterns to include",
   }),
   layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
+  read_agentmd: Schema.optional(Schema.Boolean).annotate({
+    description: "Allow loading AGENTS.md-style instruction files (default: false)",
+  }),
   permission: Schema.optional(ConfigPermission.Info),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   enterprise: Schema.optional(

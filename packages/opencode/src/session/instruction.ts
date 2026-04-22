@@ -36,7 +36,11 @@ function extract(messages: MessageV2.WithParts[]) {
   const paths = new Set<string>()
   for (const msg of messages) {
     for (const part of msg.parts) {
-      if (part.type === "tool" && part.tool === "read" && part.state.status === "completed") {
+      if (
+        part.type === "tool" &&
+        ["read", "inspect"].includes(part.tool) &&
+        part.state.status === "completed"
+      ) {
         if (part.state.time.compacted) continue
         const loaded = part.state.metadata?.loaded
         if (!loaded || !Array.isArray(loaded)) continue
@@ -51,13 +55,14 @@ function extract(messages: MessageV2.WithParts[]) {
 
 export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
-  readonly systemPaths: () => Effect.Effect<Set<string>, AppFileSystem.Error>
-  readonly system: () => Effect.Effect<string[], AppFileSystem.Error>
-  readonly find: (dir: string) => Effect.Effect<string | undefined, AppFileSystem.Error>
+  readonly systemPaths: (agent?: string) => Effect.Effect<Set<string>, AppFileSystem.Error>
+  readonly system: (agent?: string) => Effect.Effect<string[], AppFileSystem.Error>
+  readonly find: (dir: string, agent?: string) => Effect.Effect<string | undefined, AppFileSystem.Error>
   readonly resolve: (
     messages: MessageV2.WithParts[],
     filepath: string,
     messageID: MessageID,
+    agent?: string,
   ) => Effect.Effect<{ filepath: string; content: string }[], AppFileSystem.Error>
 }
 
@@ -102,6 +107,12 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         return yield* fs.readFileString(filepath).pipe(Effect.catch(() => Effect.succeed("")))
       })
 
+      const enabled = Effect.fn("Instruction.enabled")(function* (agent?: string) {
+        const config = yield* cfg.get()
+        const item = agent ? config.agent?.[agent] : undefined
+        return item?.read_agentmd ?? config.read_agentmd ?? false
+      })
+
       const fetch = Effect.fnUntraced(function* (url: string) {
         const res = yield* http.execute(HttpClientRequest.get(url)).pipe(
           Effect.timeout(5000),
@@ -117,13 +128,14 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         s.claims.delete(messageID)
       })
 
-      const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
+      const systemPaths = Effect.fn("Instruction.systemPaths")(function* (agent?: string) {
         const config = yield* cfg.get()
         const ctx = yield* InstanceState.context
         const paths = new Set<string>()
+        const allow = yield* enabled(agent)
 
         // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
-        if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+        if (allow && !Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of FILES) {
             const matches = yield* fs.findUp(file, ctx.directory, ctx.worktree)
             if (matches.length > 0) {
@@ -133,10 +145,12 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
           }
         }
 
-        for (const file of globalFiles()) {
-          if (yield* fs.existsSafe(file)) {
-            paths.add(path.resolve(file))
-            break
+        if (allow) {
+          for (const file of globalFiles()) {
+            if (yield* fs.existsSafe(file)) {
+              paths.add(path.resolve(file))
+              break
+            }
           }
         }
 
@@ -160,9 +174,9 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         return paths
       })
 
-      const system = Effect.fn("Instruction.system")(function* () {
+      const system = Effect.fn("Instruction.system")(function* (agent?: string) {
         const config = yield* cfg.get()
-        const paths = yield* systemPaths()
+        const paths = yield* systemPaths(agent)
         const urls = (config.instructions ?? []).filter(
           (item) => item.startsWith("https://") || item.startsWith("http://"),
         )
@@ -176,7 +190,8 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         ]
       })
 
-      const find = Effect.fn("Instruction.find")(function* (dir: string) {
+      const find = Effect.fn("Instruction.find")(function* (dir: string, agent?: string) {
+        if (!(yield* enabled(agent))) return
         for (const file of FILES) {
           const filepath = path.resolve(path.join(dir, file))
           if (yield* fs.existsSafe(filepath)) return filepath
@@ -187,8 +202,9 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         messages: MessageV2.WithParts[],
         filepath: string,
         messageID: MessageID,
+        agent?: string,
       ) {
-        const sys = yield* systemPaths()
+        const sys = yield* systemPaths(agent)
         const already = extract(messages)
         const results: { filepath: string; content: string }[] = []
         const s = yield* InstanceState.get(state)
@@ -199,7 +215,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
 
         // Walk upward from the file being read and attach nearby instruction files once per message.
         while (current.startsWith(root) && current !== root) {
-          const found = yield* find(current)
+          const found = yield* find(current, agent)
           if (!found || found === target || sys.has(found) || already.has(found)) {
             current = path.dirname(current)
             continue

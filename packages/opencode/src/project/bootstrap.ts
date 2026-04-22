@@ -13,6 +13,7 @@ import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share"
 import * as Effect from "effect/Effect"
 import { Config } from "@/config"
+import { bootstrapProjectTeams } from "./teams/bootstrap"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
@@ -31,6 +32,7 @@ export const InstanceBootstrap = Effect.gen(function* () {
       Snapshot.Service,
     ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
   ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+  yield* Effect.promise(() => bootstrapProjectTeams())
 
   yield* Bus.Service.use((svc) =>
     svc.subscribeCallback(Command.Event.Executed, async (payload) => {

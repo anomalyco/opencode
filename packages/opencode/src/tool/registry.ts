@@ -1,88 +1,151 @@
-import { PlanExitTool } from "./plan"
-import { Session } from "../session"
-import { QuestionTool } from "./question"
-import { BashTool } from "./bash"
-import { EditTool } from "./edit"
-import { GlobTool } from "./glob"
-import { GrepTool } from "./grep"
-import { ReadTool } from "./read"
-import { TaskTool } from "./task"
-import { TodoWriteTool } from "./todo"
-import { WebFetchTool } from "./webfetch"
-import { WriteTool } from "./write"
-import { InvalidTool } from "./invalid"
-import { SkillTool } from "./skill"
-import * as Tool from "./tool"
-import { Config } from "../config"
-import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
+import path from "path"
+import { pathToFileURL } from "url"
 import z from "zod"
+import { Context, Effect, Layer } from "effect"
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { Glob } from "@opencode-ai/shared/util/glob"
+import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Agent } from "../agent/agent"
+import { Bus } from "../bus"
+import { Config } from "../config"
+import { FileTime } from "../file/time"
+import { Ripgrep } from "../file/ripgrep"
+import { Format } from "../format"
+import { LSP } from "../lsp"
 import { Plugin } from "../plugin"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../provider/schema"
-import { WebSearchTool } from "./websearch"
-import { CodeSearchTool } from "./codesearch"
-import { Flag } from "@/flag/flag"
-import { Log } from "@/util"
-import { LspTool } from "./lsp"
-import * as Truncate from "./truncate"
-import { ApplyPatchTool } from "./apply_patch"
-import { Glob } from "@opencode-ai/shared/util/glob"
-import path from "path"
-import { pathToFileURL } from "url"
-import { Effect, Layer, Context } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/unstable/http"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { Ripgrep } from "../file/ripgrep"
-import { Format } from "../format"
-import { InstanceState } from "@/effect"
 import { Question } from "../question"
-import { Todo } from "../session/todo"
-import { LSP } from "../lsp"
+import { Session } from "../session"
 import { Instruction } from "../session/instruction"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { Bus } from "../bus"
-import { Agent } from "../agent/agent"
+import { Todo } from "../session/todo"
 import { Skill } from "../skill"
+import { Storage } from "../storage/storage"
+import { Flag } from "@/flag/flag"
+import { InstanceState } from "@/effect"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { Permission } from "@/permission"
+import { Log } from "@/util"
+import { BashTool } from "./bash"
+import { CompressTool } from "./compress"
+import { InvalidTool } from "./invalid"
+import { PlanExitTool } from "./plan"
+import { QuestionTool } from "./question"
+import { DiscoverBatchTool } from "./read/discover-batch"
+import { InspectTool } from "./read/inspect"
+import { LspTool } from "./read/lsp"
+import { SearchTool } from "./read/search"
+import { SkillTool } from "./skill"
+import { TaskTool } from "./task"
+import { TaskAsyncDescription, TaskAsyncTool } from "./task/task_async"
+import { AtlasPlanFollowTool } from "./team-tools/atlas_plan_follow"
+import { BugReportTool } from "./team-tools/bug_report"
+import { BugReportManagementTool } from "./team-tools/bug_report_management"
+import { GitCommitTool, LocalGitAnnotateTool, LocalGitLogTool, LocalGitStateTool } from "./team-tools/localgit"
+import { MainPlanTool } from "./team-tools/main_plan"
+import { MemoryDescription, MemoryTool } from "./team-tools/memory"
+import { TodoWriteTool } from "./todo"
+import * as Tool from "./tool"
+import { Tool as SourceTool } from "./shared/tool"
+import * as Truncate from "./truncate"
+import { CodeSearchTool } from "./web/codesearch"
+import { EditBatchTool } from "./edit/batch"
+import { EditTool as SourceEditTool } from "./edit/index"
+import { ApplyPatchTool as SourceApplyPatchTool } from "./edit/apply_patch"
+import { PathEditTool } from "./edit/path_edit"
+import { disabledToolIDs } from "./edit/runtime"
+import { WorkspaceReplaceTool } from "./edit/workspace_replace"
+import { WriteTool as SourceWriteTool } from "./edit/write"
+import { LibBatchTool } from "./web/lib-batch"
+import { WebFetchTool } from "./web/webfetch"
+import { WebSearchTool } from "./web/websearch"
 
 const log = Log.create({ service: "tool.registry" })
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
-type ReadDef = Tool.InferDef<typeof ReadTool>
+type InspectDef = Tool.Def
 
 type State = {
   custom: Tool.Def[]
   builtin: Tool.Def[]
   task: TaskDef
-  read: ReadDef
+  inspect: InspectDef
 }
 
 export interface Interface {
   readonly ids: () => Effect.Effect<string[]>
   readonly all: () => Effect.Effect<Tool.Def[]>
-  readonly named: () => Effect.Effect<{ task: TaskDef; read: ReadDef }>
-  readonly tools: (model: { providerID: ProviderID; modelID: ModelID; agent: Agent.Info }) => Effect.Effect<Tool.Def[]>
+  readonly named: () => Effect.Effect<{ task: TaskDef; inspect: InspectDef }>
+  readonly tools: (model: {
+    providerID: ProviderID
+    modelID: ModelID
+    agent: Agent.Info
+    includeDisabled?: boolean
+  }) => Effect.Effect<Tool.Def[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
+function adaptSource<P extends z.ZodType, M extends Record<string, unknown>>(
+  info: SourceTool.Info<P, M>,
+): Effect.Effect<Tool.Def<P, M>> {
+  return Effect.gen(function* () {
+    const init = yield* Effect.promise(() => info.init())
+    return {
+      id: info.id,
+      description: init.description,
+      parameters: init.parameters,
+      formatValidationError: init.formatValidationError,
+      execute: (args, ctx) =>
+        Effect.promise(() =>
+          init.execute(args, {
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            agent: ctx.agent,
+            abort: ctx.abort,
+            callID: ctx.callID,
+            extra: ctx.extra,
+            messages: ctx.messages,
+            metadata: (input) => {
+              void Effect.runPromise(ctx.metadata(input))
+            },
+            ask: (input) => Effect.runPromise(ctx.ask(input)),
+          }),
+        ),
+    }
+  })
+}
+
+function teamToolVisible(input: { id: string; agent: Agent.Info }) {
+  if (input.id === AtlasPlanFollowTool.id) return input.agent.name === "atlas" || input.agent.name === "hades"
+  if (input.id === MainPlanTool.id) return input.agent.name === "niggli" || input.agent.name === "hades"
+  return true
+}
+
+function teamToolDescription(input: { id: string; agent: Agent.Info }) {
+  if (input.id === TaskAsyncTool.id) return TaskAsyncDescription(input.agent)
+  if (input.id === MemoryTool.id) return MemoryDescription(input.agent)
+  return Effect.succeed(undefined)
+}
+
 export const layer: Layer.Layer<
   Service,
   never,
+  | Bus.Service
   | Config.Service
   | Plugin.Service
   | Question.Service
   | Todo.Service
-  | Agent.Service
   | Skill.Service
   | Session.Service
-  | Provider.Service
+  | Agent.Service
   | LSP.Service
+  | FileTime.Service
   | Instruction.Service
   | AppFileSystem.Service
-  | Bus.Service
-  | HttpClient.HttpClient
+  | Storage.Service
+  | Provider.Service
   | ChildProcessSpawner
   | Ripgrep.Service
   | Format.Service
@@ -98,22 +161,43 @@ export const layer: Layer.Layer<
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
-    const read = yield* ReadTool
     const question = yield* QuestionTool
     const todo = yield* TodoWriteTool
-    const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
-    const webfetch = yield* WebFetchTool
-    const websearch = yield* WebSearchTool
     const bash = yield* BashTool
-    const codesearch = yield* CodeSearchTool
-    const globtool = yield* GlobTool
-    const writetool = yield* WriteTool
-    const edit = yield* EditTool
-    const greptool = yield* GrepTool
-    const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
+    const inspectInfo = yield* InspectTool
+    const discoverBatchInfo = yield* DiscoverBatchTool
+    const taskAsyncInfo = yield* TaskAsyncTool
+
+    const source = yield* Effect.all({
+      compress: adaptSource(CompressTool),
+      inspect: adaptSource(inspectInfo),
+      search: adaptSource(SearchTool),
+      discover_batch: adaptSource(discoverBatchInfo),
+      lsp: adaptSource(LspTool),
+      edit: adaptSource(SourceEditTool),
+      write: adaptSource(SourceWriteTool),
+      apply_patch: adaptSource(SourceApplyPatchTool),
+      path_edit: adaptSource(PathEditTool),
+      edit_batch: adaptSource(EditBatchTool),
+      workspace_replace: adaptSource(WorkspaceReplaceTool),
+      webfetch: adaptSource(WebFetchTool),
+      websearch: adaptSource(WebSearchTool),
+      codesearch: adaptSource(CodeSearchTool),
+      lib_batch: adaptSource(LibBatchTool),
+      task_async: adaptSource(taskAsyncInfo),
+      "atlas-plan-follow": adaptSource(AtlasPlanFollowTool),
+      "main-plan": adaptSource(MainPlanTool),
+      memory: adaptSource(MemoryTool),
+      bug_report: adaptSource(BugReportTool),
+      bug_report_management: adaptSource(BugReportManagementTool),
+      localgit_state: adaptSource(LocalGitStateTool),
+      localgit_log: adaptSource(LocalGitLogTool),
+      localgit_annotate: adaptSource(LocalGitAnnotateTool),
+      git_commit: adaptSource(GitCommitTool),
+    })
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -128,6 +212,9 @@ export const layer: Layer.Layer<
               Effect.gen(function* () {
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
+                  metadata: (input) => {
+                    void Effect.runPromise(toolCtx.metadata(input))
+                  },
                   ask: (req) => toolCtx.ask(req),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
@@ -143,7 +230,7 @@ export const layer: Layer.Layer<
                   metadata: {
                     ...metadata,
                     truncated: out.truncated,
-                    ...(out.truncated && { outputPath: out.outputPath }),
+                    ...(out.truncated ? { outputPath: out.outputPath } : {}),
                   },
                 }
               }),
@@ -157,8 +244,6 @@ export const layer: Layer.Layer<
         if (matches.length) yield* config.waitForDependencies()
         for (const match of matches) {
           const namespace = path.basename(match, path.extname(match))
-          // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
-          // Import it as `file://` so Node on Windows accepts the dynamic import.
           const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
           for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
@@ -172,27 +257,15 @@ export const layer: Layer.Layer<
           }
         }
 
-        yield* config.get()
         const questionEnabled =
           ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
-
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
           bash: Tool.init(bash),
-          read: Tool.init(read),
-          glob: Tool.init(globtool),
-          grep: Tool.init(greptool),
-          edit: Tool.init(edit),
-          write: Tool.init(writetool),
-          task: Tool.init(task),
-          fetch: Tool.init(webfetch),
-          todo: Tool.init(todo),
-          search: Tool.init(websearch),
-          code: Tool.init(codesearch),
-          skill: Tool.init(skilltool),
-          patch: Tool.init(patchtool),
           question: Tool.init(question),
-          lsp: Tool.init(lsptool),
+          todo: Tool.init(todo),
+          task: Tool.init(task),
+          skill: Tool.init(skilltool),
           plan: Tool.init(plan),
         })
 
@@ -202,30 +275,45 @@ export const layer: Layer.Layer<
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
             tool.bash,
-            tool.read,
-            tool.glob,
-            tool.grep,
-            tool.edit,
-            tool.write,
+            source.compress,
+            source.inspect,
+            source.search,
+            source.discover_batch,
+            source.lsp,
+            source.edit,
+            source.write,
+            source.path_edit,
+            source.apply_patch,
+            source.edit_batch,
+            source.workspace_replace,
+            source.webfetch,
+            source.websearch,
+            source.codesearch,
+            source.lib_batch,
             tool.task,
-            tool.fetch,
+            source.task_async,
             tool.todo,
-            tool.search,
-            tool.code,
             tool.skill,
-            tool.patch,
-            ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
+            source["atlas-plan-follow"],
+            source["main-plan"],
+            source.memory,
+            source.bug_report,
+            source.bug_report_management,
+            source.localgit_state,
+            source.localgit_log,
+            source.localgit_annotate,
+            source.git_commit,
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
           ],
           task: tool.task,
-          read: tool.read,
+          inspect: source.inspect,
         }
       }),
     )
 
     const all: Interface["all"] = Effect.fn("ToolRegistry.all")(function* () {
       const s = yield* InstanceState.get(state)
-      return [...s.builtin, ...s.custom] as Tool.Def[]
+      return [...s.builtin, ...s.custom]
     })
 
     const ids: Interface["ids"] = Effect.fn("ToolRegistry.ids")(function* () {
@@ -257,44 +345,47 @@ export const layer: Layer.Layer<
         (item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny",
       )
       const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
-      const description = list
-        .map(
-          (item) =>
-            `- ${item.name}: ${item.description ?? "This subagent should only be called manually by the user."}`,
-        )
-        .join("\n")
-      return ["Available agent types and the tools they have access to:", description].join("\n")
+      return list.length
+        ? [
+            "Use this tool to delegate work to another agent.",
+            "",
+            "Available subagents:",
+            ...list.map((item) => `- \`${item.name}\`: ${item.description ?? "No description provided."}`),
+          ].join("\n")
+        : "No subagents are currently available."
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
-      const filtered = (yield* all()).filter((tool) => {
-        if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
+      const list = (yield* all()).filter((tool) => {
+        if (!teamToolVisible({ id: tool.id, agent: input.agent })) return false
+        if ([CodeSearchTool.id, WebSearchTool.id].includes(tool.id)) {
           return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
         }
-
-        const usePatch =
-          input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
-        if (tool.id === ApplyPatchTool.id) return usePatch
-        if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
-
         return true
       })
+      const off = disabledToolIDs(
+        list.map((tool) => tool.id),
+        input.agent.permission,
+      )
+      const filtered = input.includeDisabled ? list : list.filter((tool) => !off.has(tool.id))
 
       return yield* Effect.forEach(
         filtered,
-        Effect.fnUntraced(function* (tool: Tool.Def) {
+        Effect.fnUntraced(function* (tool) {
           using _ = log.time(tool.id)
           const output = {
             description: tool.description,
             parameters: tool.parameters,
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          const dynamic = yield* teamToolDescription({ id: tool.id, agent: input.agent })
           return {
             id: tool.id,
             description: [
               output.description,
               tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
               tool.id === SkillTool.id ? yield* describeSkill(input.agent) : undefined,
+              dynamic,
             ]
               .filter(Boolean)
               .join("\n"),
@@ -309,7 +400,7 @@ export const layer: Layer.Layer<
 
     const named: Interface["named"] = Effect.fn("ToolRegistry.named")(function* () {
       const s = yield* InstanceState.get(state)
-      return { task: s.task, read: s.read }
+      return { task: s.task, inspect: s.inspect }
     })
 
     return Service.of({ ids, all, named, tools })
@@ -327,10 +418,11 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(LSP.defaultLayer),
+    Layer.provide(FileTime.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Storage.defaultLayer),
     Layer.provide(Bus.layer),
-    Layer.provide(FetchHttpClient.layer),
     Layer.provide(Format.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),

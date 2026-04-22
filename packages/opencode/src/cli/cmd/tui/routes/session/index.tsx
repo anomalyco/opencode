@@ -34,19 +34,18 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util"
-import type { Tool } from "@/tool"
-import type { ReadTool } from "@/tool/read"
-import type { WriteTool } from "@/tool/write"
+import * as RuntimeTool from "@/tool/tool"
+import { Tool as SharedTool } from "@/tool/shared/tool"
+import { InspectTool } from "@/tool/read/inspect"
+import { SearchTool } from "@/tool/read/search"
 import { BashTool } from "@/tool/bash"
-import type { GlobTool } from "@/tool/glob"
 import { TodoWriteTool } from "@/tool/todo"
-import type { GrepTool } from "@/tool/grep"
-import type { EditTool } from "@/tool/edit"
-import type { ApplyPatchTool } from "@/tool/apply_patch"
-import type { WebFetchTool } from "@/tool/webfetch"
-import type { CodeSearchTool } from "@/tool/codesearch"
-import type { WebSearchTool } from "@/tool/websearch"
+import { EditTool } from "@/tool/edit/index"
+import { WriteTool } from "@/tool/edit/write"
+import { ApplyPatchTool } from "@/tool/edit/apply_patch"
+import { CodeSearchTool, WebFetchTool, WebSearchTool } from "@/tool/web"
 import type { TaskTool } from "@/tool/task"
+import { TaskAsyncTool } from "@/tool/task/task_async"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -1363,7 +1362,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
-      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+      <Show when={props.parts.some((x) => x.type === "tool" && ["task", "task_async"].includes(x.tool))}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
             {keybind.print("session_child_first")}
@@ -1420,6 +1419,14 @@ const PART_MAPPING = {
   tool: ToolPart,
   reasoning: ReasoningPart,
 }
+
+type InferParameters<T> = [RuntimeTool.InferParameters<T>] extends [never]
+  ? SharedTool.InferParameters<T>
+  : RuntimeTool.InferParameters<T>
+
+type InferMetadata<T> = [RuntimeTool.InferMetadata<T>] extends [never]
+  ? SharedTool.InferMetadata<T>
+  : RuntimeTool.InferMetadata<T>
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
@@ -1530,14 +1537,11 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "bash"}>
           <Bash {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "glob"}>
-          <Glob {...toolprops} />
+        <Match when={props.part.tool === "inspect"}>
+          <Inspect {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "read"}>
-          <Read {...toolprops} />
-        </Match>
-        <Match when={props.part.tool === "grep"}>
-          <Grep {...toolprops} />
+        <Match when={props.part.tool === "search"}>
+          <Search {...toolprops} />
         </Match>
         <Match when={props.part.tool === "webfetch"}>
           <WebFetch {...toolprops} />
@@ -1556,6 +1560,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         </Match>
         <Match when={props.part.tool === "task"}>
           <Task {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "task_async"}>
+          <TaskAsync {...toolprops} />
         </Match>
         <Match when={props.part.tool === "apply_patch"}>
           <ApplyPatch {...toolprops} />
@@ -1578,8 +1585,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
 }
 
 type ToolProps<T> = {
-  input: Partial<Tool.InferParameters<T>>
-  metadata: Partial<Tool.InferMetadata<T>>
+  input: Partial<InferParameters<T>>
+  metadata: Partial<InferMetadata<T>>
   permission: Record<string, any>
   tool: string
   output?: string
@@ -1861,18 +1868,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
   )
 }
 
-function Glob(props: ToolProps<typeof GlobTool>) {
-  return (
-    <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
-      Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={props.metadata.count}>
-        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
-      </Show>
-    </InlineTool>
-  )
-}
-
-function Read(props: ToolProps<typeof ReadTool>) {
+function Inspect(props: ToolProps<typeof InspectTool>) {
   const { theme } = useTheme()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const loaded = createMemo(() => {
@@ -1882,16 +1878,31 @@ function Read(props: ToolProps<typeof ReadTool>) {
     if (!value || !Array.isArray(value)) return []
     return value.filter((p): p is string => typeof p === "string")
   })
+  const target = createMemo(() => {
+    const raw =
+      ("filePath" in props.input ? props.input.filePath : undefined) ??
+      ("path" in props.input ? props.input.path : undefined) ??
+      "."
+    return typeof raw === "string" ? raw : "."
+  })
+  const label = createMemo(() => {
+    if (props.input.action === "dir") return "Inspect dir"
+    if (props.input.action === "tree") return "Inspect tree"
+    if (props.input.action === "structured") return "Inspect structured"
+    if (props.input.action === "markdown") return "Inspect markdown"
+    if (props.input.action === "archive") return "Inspect archive"
+    return "Inspect file"
+  })
   return (
     <>
       <InlineTool
         icon="→"
-        pending="Reading file..."
-        complete={props.input.filePath}
+        pending="Inspecting..."
+        complete={target()}
         spinner={isRunning()}
         part={props.part}
       >
-        Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+        {label()} {normalizePath(target())} {input(props.input as Record<string, unknown>, ["action", "filePath", "path"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
@@ -1906,12 +1917,13 @@ function Read(props: ToolProps<typeof ReadTool>) {
   )
 }
 
-function Grep(props: ToolProps<typeof GrepTool>) {
+function Search(props: ToolProps<typeof SearchTool>) {
   return (
-    <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
-      Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={props.metadata.matches}>
-        ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
+    <InlineTool icon="✱" pending="Searching..." complete={props.input.pattern} part={props.part}>
+      {props.input.action === "path" ? "Search paths" : "Search content"} "{props.input.pattern}"{" "}
+      <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      <Show when={typeof props.metadata.count === "number"}>
+        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
       </Show>
     </InlineTool>
   )
@@ -2009,6 +2021,55 @@ function Task(props: ToolProps<typeof TaskTool>) {
       }}
     >
       {content()}
+    </InlineTool>
+  )
+}
+
+function TaskAsync(props: ToolProps<typeof TaskAsyncTool>) {
+  const action = createMemo(() => props.input.action ?? "start")
+  if (action() === "start") return <Task {...(props as unknown as ToolProps<typeof TaskTool>)} />
+
+  const { navigate } = useRoute()
+  const sync = useSync()
+
+  onMount(() => {
+    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length) {
+      void sync.session.sync(props.metadata.sessionId)
+    }
+  })
+
+  const isRunning = createMemo(() => props.part.state.status === "running")
+  const title = createMemo(() => {
+    if (action() === "wait") return "Wait async tasks"
+    if (action() === "status") return "Inspect async task"
+    if (action() === "resume") return "Resume async task"
+    if (action() === "message") return "Message async task"
+    if (action() === "abort") return "Abort async task"
+    return "Async task"
+  })
+  const target = createMemo(() => {
+    if (typeof props.input.task_id === "string" && props.input.task_id) return props.input.task_id
+    if (Array.isArray(props.input.task_ids) && props.input.task_ids.length > 0) return `${props.input.task_ids.length} tasks`
+    return ""
+  })
+
+  return (
+    <InlineTool
+      icon="│"
+      spinner={isRunning()}
+      complete={target() || true}
+      pending="Managing async task..."
+      part={props.part}
+      onClick={() => {
+        if (props.metadata.sessionId) {
+          navigate({ type: "session", sessionID: props.metadata.sessionId })
+        }
+      }}
+    >
+      {title()}
+      <Show when={target()}>
+        <> · {target()}</>
+      </Show>
     </InlineTool>
   )
 }

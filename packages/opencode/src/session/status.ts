@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect"
+import { makeRuntime } from "@/effect/run-service"
 import { SessionID } from "./schema"
 import { Effect, Layer, Context } from "effect"
 import z from "zod"
@@ -84,5 +85,11 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export const get = (sessionID: SessionID) => runtime.runPromise((svc) => svc.get(sessionID))
+export const list = () => runtime.runPromise((svc) => svc.list())
+export const set = (sessionID: SessionID, status: Info) => runtime.runPromise((svc) => svc.set(sessionID, status))
 
 export * as SessionStatus from "./status"

@@ -10,9 +10,11 @@ import { lazy } from "@/util/lazy"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { AppRuntime } from "@/effect/app-runtime"
 import { jsonRequest, runRequest } from "./trace"
+import { applyProjectTeamRoutes } from "@/server/teams/project"
 
 export const ProjectRoutes = lazy(() =>
-  new Hono()
+  applyProjectTeamRoutes(
+    new Hono()
     .get(
       "/",
       describeRoute({
@@ -119,4 +121,5 @@ export const ProjectRoutes = lazy(() =>
           return yield* svc.update({ ...body, projectID })
         }),
     ),
+  ),
 )

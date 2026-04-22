@@ -26,11 +26,13 @@ import { lazy } from "@/util/lazy"
 import { Bus } from "@/bus"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { jsonRequest, runRequest } from "./trace"
+import { applySessionTeamRoutes } from "@/server/teams/session"
 
 const log = Log.create({ service: "server" })
 
 export const SessionRoutes = lazy(() =>
-  new Hono()
+  applySessionTeamRoutes(
+    new Hono()
     .get(
       "/",
       describeRoute({
@@ -1108,4 +1110,5 @@ export const SessionRoutes = lazy(() =>
           return true
         }),
     ),
+  ),
 )

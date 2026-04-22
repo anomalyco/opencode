@@ -12,33 +12,39 @@ import { Server } from "../../server/server"
 import { Provider } from "../../provider"
 import { Agent } from "../../agent/agent"
 import { Permission } from "../../permission"
-import { Tool } from "../../tool"
-import { GlobTool } from "../../tool/glob"
-import { GrepTool } from "../../tool/grep"
-import { ReadTool } from "../../tool/read"
-import { WebFetchTool } from "../../tool/webfetch"
-import { EditTool } from "../../tool/edit"
-import { WriteTool } from "../../tool/write"
-import { CodeSearchTool } from "../../tool/codesearch"
-import { WebSearchTool } from "../../tool/websearch"
+import * as RuntimeTool from "../../tool/tool"
+import { InspectTool } from "../../tool/read/inspect"
+import { SearchTool } from "../../tool/read/search"
+import { CodeSearchTool, WebFetchTool, WebSearchTool } from "../../tool/web"
+import { EditTool } from "../../tool/edit/index"
+import { WriteTool } from "../../tool/edit/write"
 import { TaskTool } from "../../tool/task"
+import { TaskAsyncTool } from "../../tool/task/task_async"
 import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
+import { Tool as SharedTool } from "../../tool/shared/tool"
 import { Locale } from "../../util"
 import { AppRuntime } from "@/effect/app-runtime"
 
+type InferParameters<T> = [RuntimeTool.InferParameters<T>] extends [never]
+  ? SharedTool.InferParameters<T>
+  : RuntimeTool.InferParameters<T>
+type InferMetadata<T> = [RuntimeTool.InferMetadata<T>] extends [never]
+  ? SharedTool.InferMetadata<T>
+  : RuntimeTool.InferMetadata<T>
+
 type ToolProps<T> = {
-  input: Tool.InferParameters<T>
-  metadata: Tool.InferMetadata<T>
+  input: InferParameters<T>
+  metadata: InferMetadata<T>
   part: ToolPart
 }
 
 function props<T>(part: ToolPart): ToolProps<T> {
   const state = part.state
   return {
-    input: state.input as Tool.InferParameters<T>,
-    metadata: ("metadata" in state ? state.metadata : {}) as Tool.InferMetadata<T>,
+    input: state.input as InferParameters<T>,
+    metadata: ("metadata" in state ? state.metadata : {}) as InferMetadata<T>,
     part,
   }
 }
@@ -74,44 +80,45 @@ function fallback(part: ToolPart) {
   })
 }
 
-function glob(info: ToolProps<typeof GlobTool>) {
-  const root = info.input.path ?? ""
-  const title = `Glob "${info.input.pattern}"`
-  const suffix = root ? `in ${normalizePath(root)}` : ""
-  const num = info.metadata.count
-  const description =
-    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
-  inline({
-    icon: "✱",
-    title,
-    ...(description && { description }),
-  })
-}
-
-function grep(info: ToolProps<typeof GrepTool>) {
-  const root = info.input.path ?? ""
-  const title = `Grep "${info.input.pattern}"`
-  const suffix = root ? `in ${normalizePath(root)}` : ""
-  const num = info.metadata.matches
-  const description =
-    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
-  inline({
-    icon: "✱",
-    title,
-    ...(description && { description }),
-  })
-}
-
-function read(info: ToolProps<typeof ReadTool>) {
-  const file = normalizePath(info.input.filePath)
+function inspect(info: ToolProps<typeof InspectTool>) {
+  const target =
+    ("filePath" in info.input ? info.input.filePath : undefined) ??
+    ("path" in info.input ? info.input.path : undefined) ??
+    ""
+  const title =
+    info.input.action === "file"
+      ? `Inspect file ${normalizePath(target)}`
+      : info.input.action === "dir"
+        ? `Inspect dir ${normalizePath(target)}`
+        : info.input.action === "tree"
+          ? `Inspect tree ${normalizePath(target)}`
+          : info.input.action === "structured"
+            ? `Inspect structured ${normalizePath(target)}`
+            : info.input.action === "markdown"
+              ? `Inspect markdown ${normalizePath(target)}`
+              : `Inspect archive ${normalizePath(target)}`
   const pairs = Object.entries(info.input).filter(([key, value]) => {
-    if (key === "filePath") return false
+    if (key === "action" || key === "filePath" || key === "path") return false
     return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
   })
   const description = pairs.length ? `[${pairs.map(([key, value]) => `${key}=${value}`).join(", ")}]` : undefined
   inline({
     icon: "→",
-    title: `Read ${file}`,
+    title,
+    ...(description && { description }),
+  })
+}
+
+function search(info: ToolProps<typeof SearchTool>) {
+  const root = info.input.path ?? ""
+  const kind = info.input.action === "path" ? "Search paths" : "Search content"
+  const suffix = root ? `in ${normalizePath(root)}` : ""
+  const num = typeof info.metadata.count === "number" ? info.metadata.count : undefined
+  const description =
+    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
+  inline({
+    icon: "✱",
+    title: `${kind} "${info.input.pattern}"`,
     ...(description && { description }),
   })
 }
@@ -173,6 +180,44 @@ function task(info: ToolProps<typeof TaskTool>) {
     icon,
     title: name,
     description: desc ? `${agent} Agent` : undefined,
+  })
+}
+
+function taskAsync(
+  info: {
+    input: {
+      action?: string
+      subagent_type?: string
+      description?: string
+      task_id?: string
+      task_ids?: string[]
+    }
+    part: ToolPart
+  },
+) {
+  const action = info.input.action ?? "start"
+  if (action === "start") return task(info as ToolProps<typeof TaskTool>)
+  const status = info.part.state.status
+  const icon = status === "error" ? "✗" : status === "running" ? "•" : "✓"
+  const title =
+    action === "wait"
+      ? "Wait Async Tasks"
+      : action === "status"
+        ? "Inspect Async Task"
+        : action === "resume"
+          ? "Resume Async Task"
+          : action === "message"
+            ? "Message Async Task"
+            : action === "abort"
+              ? "Abort Async Task"
+              : "Async Task"
+  const description =
+    info.input.task_id ??
+    (Array.isArray(info.input.task_ids) && info.input.task_ids.length > 0 ? `${info.input.task_ids.length} tasks` : undefined)
+  inline({
+    icon,
+    title,
+    ...(description ? { description } : {}),
   })
 }
 
@@ -409,15 +454,15 @@ export const RunCommand = cmd({
       function tool(part: ToolPart) {
         try {
           if (part.tool === "bash") return bash(props<typeof BashTool>(part))
-          if (part.tool === "glob") return glob(props<typeof GlobTool>(part))
-          if (part.tool === "grep") return grep(props<typeof GrepTool>(part))
-          if (part.tool === "read") return read(props<typeof ReadTool>(part))
+          if (part.tool === "inspect") return inspect(props<typeof InspectTool>(part))
+          if (part.tool === "search") return search(props<typeof SearchTool>(part))
           if (part.tool === "write") return write(props<typeof WriteTool>(part))
           if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
           if (part.tool === "edit") return edit(props<typeof EditTool>(part))
           if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
           if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
           if (part.tool === "task") return task(props<typeof TaskTool>(part))
+          if (part.tool === "task_async") return taskAsync(props<typeof TaskAsyncTool>(part))
           if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
           if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
           return fallback(part)

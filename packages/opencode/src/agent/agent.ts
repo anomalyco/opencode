@@ -19,10 +19,12 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
-import { Effect, Context, Layer } from "effect"
+import { makeRuntime } from "@/effect/run-service"
+import { Effect, Exit, Context, Layer } from "effect"
 import { InstanceState } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { loadAgents, agentPermissionDefaults } from "./load"
 
 export const Info = z
   .object({
@@ -82,11 +84,13 @@ export const layer = Layer.effect(
       Effect.fn("Agent.state")(function* (_ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
+        const base = path.join(Global.Path.config, "*")
         const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
 
         const defaults = Permission.fromConfig({
           "*": "allow",
           doom_loop: "ask",
+          ...agentPermissionDefaults(),
           external_directory: {
             "*": "ask",
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
@@ -94,13 +98,14 @@ export const layer = Layer.effect(
           question: "deny",
           plan_enter: "deny",
           plan_exit: "deny",
-          // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
-          read: {
+          inspect: {
             "*": "allow",
             "*.env": "ask",
             "*.env.*": "ask",
             "*.env.example": "allow",
           },
+          search: "allow",
+          discover_batch: "allow",
         })
 
         const user = Permission.fromConfig(cfg.permission ?? {})
@@ -164,14 +169,18 @@ export const layer = Layer.effect(
               defaults,
               Permission.fromConfig({
                 "*": "deny",
-                grep: "allow",
-                glob: "allow",
-                list: "allow",
+                inspect: {
+                  "*": "allow",
+                  "*.env": "ask",
+                  "*.env.*": "ask",
+                  "*.env.example": "allow",
+                },
+                search: "allow",
+                discover_batch: "allow",
                 bash: "allow",
                 webfetch: "allow",
                 websearch: "allow",
                 codesearch: "allow",
-                read: "allow",
                 external_directory: {
                   "*": "ask",
                   ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
@@ -233,6 +242,8 @@ export const layer = Layer.effect(
           },
         }
 
+        Object.assign(agents, loadAgents({ defaults, user }))
+
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
           if (value.disable) {
             delete agents[key]
@@ -262,7 +273,7 @@ export const layer = Layer.effect(
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }
 
-        // Ensure Truncate.GLOB is allowed unless explicitly configured
+        // Ensure common external directories stay available unless explicitly denied.
         for (const name in agents) {
           const agent = agents[name]
           const explicit = agent.permission.some((r) => {
@@ -270,12 +281,24 @@ export const layer = Layer.effect(
             if (r.action !== "deny") return false
             return r.pattern === Truncate.GLOB
           })
-          if (explicit) continue
+          if (!explicit) {
+            agents[name].permission = Permission.merge(
+              agents[name].permission,
+              Permission.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
+            )
+          }
 
-          agents[name].permission = Permission.merge(
-            agents[name].permission,
-            Permission.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
-          )
+          const baseDeny = agent.permission.some((r) => {
+            if (r.permission !== "external_directory") return false
+            if (r.action !== "deny") return false
+            return r.pattern === base
+          })
+          if (!baseDeny) {
+            agents[name].permission = Permission.merge(
+              agents[name].permission,
+              Permission.fromConfig({ external_directory: { [base]: "allow" } }),
+            )
+          }
         }
 
         const get = Effect.fnUntraced(function* (agent: string) {
@@ -288,7 +311,7 @@ export const layer = Layer.effect(
             agents,
             values(),
             sortBy(
-              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "atlas"), "desc"],
               [(x) => x.name, "asc"],
             ),
           )
@@ -303,7 +326,11 @@ export const layer = Layer.effect(
             if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)
             return agent.name
           }
-          const visible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
+          const pick = (items: Info[]) => items.find((item) => item.mode !== "subagent" && item.hidden !== true)
+          const visible =
+            pick([agents.atlas].filter(Boolean)) ||
+            pick(Object.values(agents).filter((item) => item.name !== "atlas" && item.name !== "ayaz")) ||
+            pick([agents.ayaz].filter(Boolean))
           if (!visible) throw new Error("no primary visible agent found")
           return visible.name
         })
@@ -318,7 +345,11 @@ export const layer = Layer.effect(
 
     return Service.of({
       get: Effect.fn("Agent.get")(function* (agent: string) {
-        return yield* InstanceState.useEffect(state, (s) => s.get(agent))
+        const item = yield* InstanceState.useEffect(state, (s) => s.get(agent))
+        if (!item?.model) return item
+        const exit = yield* provider.getModel(item.model.providerID, item.model.modelID).pipe(Effect.exit)
+        if (Exit.isSuccess(exit)) return item
+        return { ...item, model: undefined }
       }),
       list: Effect.fn("Agent.list")(function* () {
         return yield* InstanceState.useEffect(state, (s) => s.list())
@@ -407,5 +438,13 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(Skill.defaultLayer),
 )
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export const get = (name: string) => runtime.runPromise((svc) => svc.get(name))
+export const list = () => runtime.runPromise((svc) => svc.list())
+export const defaultAgent = () => runtime.runPromise((svc) => svc.defaultAgent())
+export const generate = (input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) =>
+  runtime.runPromise((svc) => svc.generate(input))
 
 export * as Agent from "./agent"

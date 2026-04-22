@@ -49,6 +49,8 @@ import { InstanceState } from "@/effect"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect"
+import { makeRuntime } from "@/effect/run-service"
+import { system as memorySystem } from "@/team/memory"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1027,7 +1029,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}`,
+                    text: `Called the Inspect tool with the following input: ${JSON.stringify({ action: "file", filePath: part.filename })}`,
                   },
                   {
                     messageID: info.id,
@@ -1045,10 +1047,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const filepath = fileURLToPath(part.url)
               if (yield* fsys.isDir(filepath)) part.mime = "application/x-directory"
 
-              const { read } = yield* registry.named()
-              const execRead = (args: Parameters<typeof read.execute>[0], extra?: Tool.Context["extra"]) => {
+              const { inspect } = yield* registry.named()
+              const execInspect = (args: Parameters<typeof inspect.execute>[0], extra?: Tool.Context["extra"]) => {
                 const controller = new AbortController()
-                return read
+                return inspect
                   .execute(args, {
                     sessionID: input.sessionID,
                     abort: controller.signal,
@@ -1086,18 +1088,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   offset = Math.max(start, 1)
                   if (end) limit = end - (offset - 1)
                 }
-                const args = { filePath: filepath, offset, limit }
+                const args = { action: "file" as const, filePath: filepath, offset, limit }
                 const pieces: Draft<MessageV2.Part>[] = [
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
+                    text: `Called the Inspect tool with the following input: ${JSON.stringify(args)}`,
                   },
                 ]
                 const exit = yield* provider.getModel(info.model.providerID, info.model.modelID).pipe(
-                  Effect.flatMap((mdl) => execRead(args, { model: mdl })),
+                  Effect.flatMap((mdl) => execInspect(args, { model: mdl })),
                   Effect.exit,
                 )
                 if (Exit.isSuccess(exit)) {
@@ -1124,7 +1126,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   }
                 } else {
                   const error = Cause.squash(exit.cause)
-                  log.error("failed to read file", { error })
+                  log.error("failed to inspect file", { error })
                   const message = error instanceof Error ? error.message : String(error)
                   yield* bus.publish(Session.Event.Error, {
                     sessionID: input.sessionID,
@@ -1135,18 +1137,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: `Read tool failed to read ${filepath} with the following error: ${message}`,
+                    text: `Inspect tool failed to inspect ${filepath} with the following error: ${message}`,
                   })
                 }
                 return pieces
               }
 
               if (part.mime === "application/x-directory") {
-                const args = { filePath: filepath }
-                const exit = yield* execRead(args).pipe(Effect.exit)
+                const args = { action: "dir" as const, path: filepath }
+                const exit = yield* execInspect(args).pipe(Effect.exit)
                 if (Exit.isFailure(exit)) {
                   const error = Cause.squash(exit.cause)
-                  log.error("failed to read directory", { error })
+                  log.error("failed to inspect directory", { error })
                   const message = error instanceof Error ? error.message : String(error)
                   yield* bus.publish(Session.Event.Error, {
                     sessionID: input.sessionID,
@@ -1158,7 +1160,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       sessionID: input.sessionID,
                       type: "text",
                       synthetic: true,
-                      text: `Read tool failed to read ${filepath} with the following error: ${message}`,
+                      text: `Inspect tool failed to inspect ${filepath} with the following error: ${message}`,
                     },
                   ]
                 }
@@ -1168,7 +1170,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
+                    text: `Called the Inspect tool with the following input: ${JSON.stringify(args)}`,
                   },
                   {
                     messageID: info.id,
@@ -1187,7 +1189,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   sessionID: input.sessionID,
                   type: "text",
                   synthetic: true,
-                  text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
+                  text: `Called the Inspect tool with the following input: {"action":"file","filePath":"${filepath}"}`,
                 },
                 {
                   id: part.id,
@@ -1470,13 +1472,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+            const [skills, env, reporting, instructions, memory, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               Effect.sync(() => sys.environment(model)),
-              instruction.system().pipe(Effect.orDie),
+              Effect.sync(() => sys.reporting()),
+              instruction.system(agent.name).pipe(Effect.orDie),
+              Effect.promise(() => memorySystem(agent.name)).pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...(skills ? [skills] : []), ...instructions]
+            const system = [...env, ...(skills ? [skills] : []), ...memory, reporting, ...instructions]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
@@ -1820,5 +1824,16 @@ const bashRegex = /!`([^`]+)`/g
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export const cancel = (sessionID: SessionID) => runtime.runPromise((svc) => svc.cancel(sessionID))
+export const prompt = (input: PromptInput) => runtime.runPromise((svc) => svc.prompt(input))
+export const loop = (input: z.infer<typeof LoopInput>) => runtime.runPromise((svc) => svc.loop(input))
+export const shell = (input: ShellInput) => runtime.runPromise((svc) => svc.shell(input))
+export const command = (input: CommandInput) => runtime.runPromise((svc) => svc.command(input))
+export const resolvePromptParts = (template: string) => runtime.runPromise((svc) => svc.resolvePromptParts(template))
+export const active = (sessionID: SessionID) =>
+  import("./status").then(({ SessionStatus }) => SessionStatus.get(sessionID).then((status) => status.type !== "idle"))
 
 export * as SessionPrompt from "./prompt"

@@ -225,46 +225,38 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
-            if (permission === "read") {
-              const raw = data.filePath
-              const filePath = typeof raw === "string" ? raw : ""
+            if (permission === "inspect") {
+              const raw =
+                typeof data.filePath === "string" ? data.filePath : typeof data.path === "string" ? data.path : ""
+              const action = typeof data.action === "string" ? Locale.titlecase(data.action) : "Inspect"
               return {
                 icon: "→",
-                title: `Read ${normalizePath(filePath)}`,
+                title: `${action} ${normalizePath(raw)}`,
                 body: (
-                  <Show when={filePath}>
+                  <Show when={raw}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + normalizePath(filePath)}</text>
+                      <text fg={theme.textMuted}>{"Path: " + normalizePath(raw)}</text>
                     </box>
                   </Show>
                 ),
               }
             }
 
-            if (permission === "glob") {
+            if (permission === "search") {
               const pattern = typeof data.pattern === "string" ? data.pattern : ""
+              const scope = typeof data.path === "string" ? data.path : ""
+              const action = data.action === "content" ? "Search Content" : "Search"
               return {
                 icon: "✱",
-                title: `Glob "${pattern}"`,
+                title: `${action} "${pattern}"`,
                 body: (
-                  <Show when={pattern}>
+                  <Show when={pattern || scope}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "grep") {
-              const pattern = typeof data.pattern === "string" ? data.pattern : ""
-              return {
-                icon: "✱",
-                title: `Grep "${pattern}"`,
-                body: (
-                  <Show when={pattern}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
+                      <text fg={theme.textMuted}>
+                        {[pattern ? "Pattern: " + pattern : undefined, scope ? "Path: " + normalizePath(scope) : undefined]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </text>
                     </box>
                   </Show>
                 ),

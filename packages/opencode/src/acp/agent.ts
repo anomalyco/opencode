@@ -1555,16 +1555,30 @@ function toToolKind(toolName: string): ToolKind {
       return "fetch"
 
     case "edit":
+    case "apply_patch":
+    case "path_edit":
+    case "edit_batch":
+    case "workspace_replace":
     case "patch":
     case "write":
+    case "git_commit":
       return "edit"
 
+    case "search":
+    case "discover_batch":
     case "grep":
     case "glob":
+    case "websearch":
+    case "codesearch":
+    case "lib_batch":
+    case "localgit_state":
+    case "localgit_log":
+    case "localgit_annotate":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
       return "search"
 
+    case "inspect":
     case "read":
       return "read"
 
@@ -1576,13 +1590,23 @@ function toToolKind(toolName: string): ToolKind {
 function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {
   const tool = toolName.toLocaleLowerCase()
   switch (tool) {
+    case "inspect":
     case "read":
     case "edit":
+    case "apply_patch":
+    case "path_edit":
     case "write":
-      return input["filePath"] ? [{ path: input["filePath"] }] : []
+      return typeof input["filePath"] === "string"
+        ? [{ path: input["filePath"] }]
+        : typeof input["path"] === "string"
+          ? [{ path: input["path"] }]
+          : []
+    case "search":
+    case "discover_batch":
     case "glob":
     case "grep":
-      return input["path"] ? [{ path: input["path"] }] : []
+    case "workspace_replace":
+      return typeof input["path"] === "string" ? [{ path: input["path"] }] : []
     case "bash":
       return []
     default:
