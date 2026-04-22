@@ -4,6 +4,12 @@ export abstract class NamedError extends Error {
   abstract schema(): z.core.$ZodType
   abstract toObject(): { name: string; data: any }
 
+  static hasName(error: unknown, name: string): boolean {
+    return (
+      typeof error === "object" && error !== null && "name" in error && (error as Record<string, unknown>).name === name
+    )
+  }
+
   static create<Name extends string, Data extends z.core.$ZodType>(name: Name, data: Data) {
     const schema = z
       .object({

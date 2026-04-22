@@ -40,7 +40,7 @@ import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
+import { Filesystem } from "@/util"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
@@ -314,8 +314,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     setStore(
       produce((draft) => {
         const lock = pick(kv.get("theme_mode_lock"))
-        const mode = pick(kv.get("theme_mode", props.mode))
-        draft.mode = lock ?? mode ?? props.mode
+        const mode = lock ?? props.mode
+        if (!lock && pick(kv.get("theme_mode")) !== undefined) {
+          kv.set("theme_mode", undefined)
+        }
+        draft.mode = mode
         draft.lock = lock
         const active = config.theme ?? kv.get("theme", "opencode")
         draft.active = typeof active === "string" ? active : "opencode"
@@ -329,7 +332,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     function init() {
-      Promise.allSettled([
+      void Promise.allSettled([
         resolveSystemTheme(store.mode),
         getCustomThemes()
           .then((custom) => {
@@ -373,11 +376,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     function apply(mode: "dark" | "light") {
-      kv.set("theme_mode", mode)
+      if (store.lock !== undefined) kv.set("theme_mode", mode)
       if (store.mode === mode) return
       setStore("mode", mode)
       renderer.clearPaletteCache()
-      resolveSystemTheme(mode)
+      void resolveSystemTheme(mode)
     }
 
     function pin(mode: "dark" | "light" = store.mode) {
@@ -389,6 +392,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     function free() {
       setStore("lock", undefined)
       kv.set("theme_mode_lock", undefined)
+      kv.set("theme_mode", undefined)
       const mode = renderer.themeMode
       if (mode) apply(mode)
     }

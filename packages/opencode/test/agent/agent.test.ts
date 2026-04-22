@@ -84,7 +84,7 @@ test("explore agent denies edit and write", async () => {
 })
 
 test("explore agent asks for external directories and allows Truncate.GLOB", async () => {
-  const { Truncate } = await import("../../src/tool/truncate")
+  const { Truncate } = await import("../../src/tool")
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
@@ -474,7 +474,7 @@ test("legacy tools config converts to permissions", async () => {
   })
 })
 
-test("legacy tools config maps write/edit/patch/multiedit to edit permission", async () => {
+test("legacy tools config maps write/edit/patch to edit permission", async () => {
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -496,7 +496,7 @@ test("legacy tools config maps write/edit/patch/multiedit to edit permission", a
 })
 
 test("Truncate.GLOB is allowed even when user denies external_directory globally", async () => {
-  const { Truncate } = await import("../../src/tool/truncate")
+  const { Truncate } = await import("../../src/tool")
   await using tmp = await tmpdir({
     config: {
       permission: {
@@ -516,7 +516,7 @@ test("Truncate.GLOB is allowed even when user denies external_directory globally
 })
 
 test("Truncate.GLOB is allowed even when user denies external_directory per-agent", async () => {
-  const { Truncate } = await import("../../src/tool/truncate")
+  const { Truncate } = await import("../../src/tool")
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -540,7 +540,7 @@ test("Truncate.GLOB is allowed even when user denies external_directory per-agen
 })
 
 test("explicit Truncate.GLOB deny is respected", async () => {
-  const { Truncate } = await import("../../src/tool/truncate")
+  const { Truncate } = await import("../../src/tool")
   await using tmp = await tmpdir({
     config: {
       permission: {

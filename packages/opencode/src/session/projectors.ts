@@ -1,11 +1,9 @@
-import { NotFoundError, eq, and, sql } from "../storage/db"
+import { NotFoundError, eq, and } from "../storage"
 import { SyncEvent } from "@/sync"
-import { Session } from "./index"
+import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
-import { SessionTable, MessageTable, PartTable, SessionEntryTable } from "./session.sql"
-import { Log } from "../util/log"
-import { DateTime } from "effect"
-import { SessionEntry } from "@/v2/session-entry"
+import { SessionTable, MessageTable, PartTable } from "./session.sql"
+import { Log } from "../util"
 
 const log = Log.create({ service: "session.projector" })
 

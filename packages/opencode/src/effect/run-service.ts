@@ -1,13 +1,12 @@
 import { Effect, Layer, ManagedRuntime } from "effect"
 import * as Context from "effect/Context"
 import { Instance } from "@/project/instance"
-import { LocalContext } from "@/util/local-context"
+import { LocalContext } from "@/util"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
-import { Observability } from "./observability"
+import * as Observability from "./observability"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import type { InstanceContext } from "@/project/instance"
-
-export const memoMap = Layer.makeMemoMapUnsafe()
+import { memoMap } from "./memo-map"
 
 type Refs = {
   instance?: InstanceContext
@@ -38,7 +37,7 @@ export function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A
 
 export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined
-  const getRuntime = () => (rt ??= ManagedRuntime.make(Layer.merge(layer, Observability.layer), { memoMap }))
+  const getRuntime = () => (rt ??= ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer), { memoMap }))
 
   return {
     runSync: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) => getRuntime().runSync(attach(service.use(fn))),
