@@ -509,3 +509,33 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Cavalry
+
+Add the [Cavalry MCP server](https://github.com/kacperchlebowicz/Cavalry-mcp) to connect OpenCode to [Cavalry](https://cavalry.scenegroup.co/) animation software. Create layers, set attributes, animate with keyframes, render frames, and more through natural language. Requires Cavalry with Stallion script enabled.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "cavalry": {
+      "type": "local",
+      "command": ["npx", "-y", "kacperchlebowicz-cavalry-mcp"]
+    }
+  }
+}
+```
+
+Since we named our MCP server `cavalry`, you can add `use the cavalry tool` to your prompts to get the agent to use it.
+
+```txt "use the cavalry tool"
+Create a rectangle layer and animate its position over 2 seconds. use the cavalry tool
+```
+
+Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/).
+
+```md title="AGENTS.md"
+When working with Cavalry animation, use the `cavalry` tools to create layers, set attributes, and render frames.
+```
