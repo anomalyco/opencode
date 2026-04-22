@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { dirname, join, relative, resolve as pathResolve } from "path"
-import { realpathSync } from "fs"
+import { realpathSync, accessSync, constants } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
 import { Effect, FileSystem, Layer, Schema, Context } from "effect"
@@ -23,6 +23,7 @@ export namespace AppFileSystem {
   export interface Interface extends FileSystem.FileSystem {
     readonly isDir: (path: string) => Effect.Effect<boolean>
     readonly isFile: (path: string) => Effect.Effect<boolean>
+    readonly isWritable: (path: string) => Effect.Effect<boolean>
     readonly existsSafe: (path: string) => Effect.Effect<boolean>
     readonly readJson: (path: string) => Effect.Effect<unknown, Error>
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
@@ -42,6 +43,17 @@ export namespace AppFileSystem {
     Service,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
+
+      const isWritable = Effect.fn("FileSystem.isWritable")(function* (path: string) {
+        return yield* Effect.sync(() => {
+          try {
+            accessSync(path, constants.W_OK)
+            return true
+          } catch {
+            return false
+          }
+        })
+      })
 
       const existsSafe = Effect.fn("FileSystem.existsSafe")(function* (path: string) {
         return yield* fs.exists(path).pipe(Effect.orElseSucceed(() => false))
@@ -162,6 +174,7 @@ export namespace AppFileSystem {
 
       return Service.of({
         ...fs,
+        isWritable,
         existsSafe,
         isDir,
         isFile,

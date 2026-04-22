@@ -430,6 +430,13 @@ export const layer = Layer.effect(
     })
 
     const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
+      // Some config dirs may be read-only or not yet exist.
+      // Writing .gitignore there will fail; skip in that case.
+      const writable = yield* fs.isWritable(dir)
+      if (!writable) {
+        log.debug("config dir is not writable, skipping .gitignore", { dir })
+        return
+      }
       const dirExists = yield* fs.isDir(dir)
       if (!dirExists) {
         log.debug("config dir does not exist, skipping .gitignore", { dir })
