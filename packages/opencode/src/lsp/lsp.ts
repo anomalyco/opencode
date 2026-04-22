@@ -583,6 +583,9 @@ export async function documentSymbol(uri: string) {
 }
 
 export async function workspaceSymbol(query: string) {
+  if ((await status()).length === 0) {
+    throw new Error("No LSP server is available for this file/workspace path.")
+  }
   return runtime.runPromise((svc) => svc.workspaceSymbol(query))
 }
 

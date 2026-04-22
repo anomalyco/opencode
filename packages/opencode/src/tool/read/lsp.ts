@@ -348,7 +348,7 @@ export const LspTool = Tool.define("lsp", {
       if (!exists) throw new Error(`File not found: ${file}`)
     }
 
-    const available = file ? await LSP.hasClients(file) : true
+    const available = file ? await LSP.hasClients(file) : input.operation === "workspaceSymbol" ? (await LSP.status()).length > 0 : true
     if (!available) {
       ctx.metadata({
         metadata: {

@@ -56,7 +56,11 @@ export async function withTouchedFiles<T>(files: string[], fn: (touches: LSP.Tou
 }
 
 export function appendTouchWarnings(output: string, touches: LSP.TouchStatus[]) {
-  const lines = touches.flatMap((item) => LSP.touchWarnings(item))
+  const lines = touches.flatMap((item) => {
+    const warnings = LSP.touchWarnings(item)
+    if (item.opened || item.ready) return warnings
+    return warnings.filter((line) => !line.includes("No LSP server is available"))
+  })
   if (!lines.length) return output
   return `${output}\n\n${lines.map((item) => `LSP notice: ${item}`).join("\n")}`
 }

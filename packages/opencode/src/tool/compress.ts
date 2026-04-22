@@ -284,15 +284,33 @@ function fallback(input: {
   safe: Array<ReturnType<typeof item>>
   reason: string
 }) {
+  const kind =
+    input.reason === "empty output"
+      ? "empty summarizer output"
+      : /bad request/i.test(input.reason)
+        ? "request rejected before summary generation"
+        : /timeout/i.test(input.reason)
+          ? "summary generation timed out"
+          : "summary generation failed"
   return {
-    summary: `Compression used a conservative fallback summary because the summarizer failed: ${input.reason}`,
+    summary: `Compression used a conservative fallback summary because ${kind}: ${input.reason}`,
     current_focus: input.goal,
     findings: input.selected.slice(0, 8).map((part) => `${part.part.tool}: ${part.label}`),
-    decisions: ["A fallback summary was emitted instead of skipping compression entirely."],
+    decisions: [
+      "A fallback summary was emitted instead of skipping compression entirely.",
+      `Failure kind: ${kind}.`,
+    ],
     files: Array.from(new Set(input.selected.flatMap((part) => txt([part.file, part.path])))).slice(0, 20),
-    open_questions: [],
-    next_step: "Re-run discovery only if the compressed labels are not enough for the next action.",
-    risks: [`Compression summary failed: ${input.reason}`],
+    open_questions: /bad request/i.test(input.reason)
+      ? ["Was the hidden summarizer request rejected because of model/service constraints or an unsupported source shape?"]
+      : [],
+    next_step: /bad request/i.test(input.reason)
+      ? "Retry compress after reducing the selected block or keeping more items raw if a denser carry-forward summary is still needed."
+      : "Re-run discovery only if the compressed labels are not enough for the next action.",
+    risks: [
+      `Compression summary failed: ${input.reason}`,
+      `Selected items: ${input.selected.length}; kept raw: ${input.kept.length}; protected raw: ${input.safe.length}.`,
+    ],
   } satisfies z.infer<typeof shape>
 }
 

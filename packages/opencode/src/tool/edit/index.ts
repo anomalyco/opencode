@@ -121,7 +121,7 @@ const dataModeParameters = z
     mode: z.literal("data"),
     filePath: z.string().describe("The absolute or relative path to the JSON or JSONC file to modify"),
     pointer: z.string().optional().describe("JSON Pointer path such as /scripts/build or /references/0/path."),
-    action: z.enum(["set", "delete", "merge", "append", "prepend", "insert"]),
+    action: z.enum(["set", "delete", "merge", "append", "prepend", "insert", "replace", "create"]),
     value: z.unknown().optional(),
     index: z.coerce.number().int().min(0).optional(),
     create: z.boolean().optional(),
@@ -145,7 +145,7 @@ const frontmatterModeParameters = z
     mode: z.literal("frontmatter"),
     filePath: z.string().describe("The absolute or relative path to the Markdown file to modify"),
     pointer: z.string().optional().describe("JSON Pointer path within the frontmatter, such as /title or /owner/team."),
-    action: z.enum(["set", "delete", "merge", "append", "prepend", "insert"]),
+    action: z.enum(["set", "delete", "merge", "append", "prepend", "insert", "replace", "create"]),
     value: z.unknown().optional(),
     index: z.coerce.number().int().min(0).optional(),
   })
@@ -256,7 +256,9 @@ const parameters = z
     action: z
       .enum(["set", "delete", "merge", "append", "prepend", "insert", "replace", "create"])
       .optional()
-      .describe("Structured edit action when mode is data, frontmatter, or markdown."),
+      .describe(
+        "Structured edit action. For data/frontmatter use set, delete, merge, append, prepend, insert, replace, or create. For markdown use replace, append, prepend, delete, or create.",
+      ),
     value: z.unknown().optional().describe("Structured value payload for data or frontmatter edit modes."),
     index: z.coerce.number().int().min(0).optional().describe("Structured insertion index where supported."),
     create: z.boolean().optional().describe("Optional structured create flag where supported."),

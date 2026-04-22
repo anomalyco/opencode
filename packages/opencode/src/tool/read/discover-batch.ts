@@ -1,5 +1,7 @@
 import z from "zod"
 import { Effect } from "effect"
+import type { Agent } from "@/agent/agent"
+import { Permission } from "@/permission"
 import { Tool } from "../shared/tool"
 import { batchList, batchResult, stableBatchKey, type BatchOut } from "../shared/batch"
 import {
@@ -107,6 +109,26 @@ type Row = {
   out: BatchOut
 }
 
+function permissionFor(item: Call) {
+  if (item.tool === "localgit_state" || item.tool === "localgit_log" || item.tool === "localgit_annotate") {
+    return "git_read"
+  }
+  return item.tool
+}
+
+function denied(input: { agent: Agent.Info; calls: Call[] }) {
+  const seen = new Set<string>()
+  return input.calls.flatMap((item) => {
+    const permission = permissionFor(item)
+    const key = `${permission}:${item.tool}`
+    if (seen.has(key)) return []
+    seen.add(key)
+    return Permission.evaluate(permission, "*", input.agent.permission).action === "deny"
+      ? [{ tool: item.tool, permission }]
+      : []
+  })
+}
+
 function stripTool<T extends { tool: string }>(item: T): Omit<T, "tool"> {
   const { tool: _, ...rest } = item
   return rest
@@ -133,7 +155,7 @@ export const DiscoverBatchTool = Tool.defineEffect(
 
     return {
       description:
-        "Run multiple canonical local discovery calls in one tool invocation. Use this for 2-4 independent, tightly scoped calls that can run in parallel. Each call must match exactly one nested tool shape from inspect, search, localgit_state, localgit_log, localgit_annotate, or lsp; mixed or speculative fields are rejected so the caller can retry cleanly. Prefer broad narrowing calls first (for example inspect:tree or search:path) before deeper file/content lookups.",
+        "Run multiple canonical local discovery calls in one tool invocation. Use this for 2-4 independent, tightly scoped calls that can run in parallel. Each call must match exactly one nested tool shape from inspect, search, localgit_state, localgit_log, localgit_annotate, or lsp; mixed or speculative fields are rejected so the caller can retry cleanly. Nested localgit or lsp calls still require the caller to have those capabilities. Prefer broad narrowing calls first (for example inspect:tree or search:path) before deeper file/content lookups.",
       parameters: z.object({
         calls: z
           .array(DiscoverBatchCallSchema)
@@ -142,6 +164,16 @@ export const DiscoverBatchTool = Tool.defineEffect(
           .describe("Ordered canonical discovery calls to run in one batch."),
       }),
       async execute(input: { calls: Call[] }, ctx: Tool.Context<Record<string, unknown>>) {
+        const { Agent } = await import("@/agent/agent")
+        const agent = await Agent.get(ctx.agent)
+        const blocked = denied({ agent, calls: input.calls })
+        if (blocked.length) {
+          throw new Error(
+            blocked
+              .map((item) => `${item.tool} requires ${item.permission} permission for the current agent`)
+              .join("; "),
+          )
+        }
         const needs = new Set(input.calls.map((item) => item.tool))
         const [inspect, search, gitState, gitLog, gitAnnotate, lsp] = await Promise.all([
           needs.has("inspect") ? Effect.runPromise(Tool.init(inspectInfo)) : Promise.resolve(undefined),

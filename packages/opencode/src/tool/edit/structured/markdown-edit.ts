@@ -73,6 +73,12 @@ function body(text: string) {
   return clean ? `\n\n${clean}\n` : "\n"
 }
 
+function sectionRows(section: string, next?: Head) {
+  const rows = section.replace(/\n$/, "").split("\n")
+  if (next && rows.at(-1) !== "") rows.push("")
+  return rows
+}
+
 export const markdownEditParameters = z
   .object({
     filePath: z.string().describe("Absolute or relative path to a Markdown file."),
@@ -194,6 +200,6 @@ export async function executeMarkdownEdit(input: z.infer<typeof markdownEditPara
         ? `${head}${body(input.content ?? "").trim()}${cur.slice(head.length).replace(/^\n*/, "\n\n")}`
         : `${head}${body(input.content ?? "")}`
 
-  const rows = [...data.rows.slice(0, start), ...section.replace(/\n$/, "").split("\n"), ...data.rows.slice(end)]
+  const rows = [...data.rows.slice(0, start), ...sectionRows(section, next), ...data.rows.slice(end)]
   return save(doc.file, rows.join("\n"), ctx, `Updated Markdown section '${hit.text}'.`)
 }

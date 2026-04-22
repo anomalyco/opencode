@@ -164,6 +164,19 @@ function body(msg?: MessageV2.WithParts, max = 4000) {
   return clip(merged(msg), max)
 }
 
+function assistantBodies(msgs: MessageV2.WithParts[], max = 1_500) {
+  return msgs
+    .filter((msg): msg is AssistantMessage => msg.info.role === "assistant")
+    .map((msg) => body(msg, max))
+    .filter((item) => item.trim().length > 0)
+}
+
+function stitchedAssistantResult(msgs: MessageV2.WithParts[], max = 4_000) {
+  const recent = Array.from(new Set(assistantBodies(msgs, Math.max(500, Math.floor(max / 2))))).slice(-3)
+  if (!recent.length) return ""
+  return clip(recent.join("\n\n---\n\n"), max)
+}
+
 type AssistantMessage = MessageV2.WithParts & { info: MessageV2.Assistant }
 type UserMessage = MessageV2.WithParts & { info: MessageV2.User }
 
@@ -237,11 +250,14 @@ function taskOutputState(
 
 function resultText(
   status: SessionStatus.Info,
+  msgs: MessageV2.WithParts[],
   assistant?: AssistantMessage,
   visibleAssistant: AssistantMessage | undefined = assistant,
   session?: Session.Info,
   max = 4_000,
 ) {
+  const stitched = stitchedAssistantResult(msgs, max)
+  if (stitched) return stitched
   const { latest, visible } = snapshots(assistant, visibleAssistant, max)
   if (latest.text) return latest.text
   if (visible.text) return visible.text
@@ -1078,7 +1094,7 @@ export const TaskAsyncTool = Tool.defineEffect(
         ctx.metadata({ title: info.session.title, metadata: meta(info.session.id) })
 
         const { latest, visible } = snapshots(info.assistant, info.visibleAssistant, 4_000)
-        const show = resultText(info.status, info.assistant, info.visibleAssistant, info.session, 4_000)
+        const show = resultText(info.status, info.msgs, info.assistant, info.visibleAssistant, info.session, 4_000)
         const taskOutput = taskOutputState(info.status, info.assistant, info.visibleAssistant, info.session)
         const lastAssistantText = body(info.assistant) || body(info.visibleAssistant)
         const note = issue({ latest, visible })

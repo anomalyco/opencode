@@ -65,14 +65,14 @@ export const dataEditParameters = z
     filePath: z.string().describe("Absolute or relative path to a JSON or JSONC file."),
     pointer: z.string().optional().describe("JSON Pointer path such as /scripts/build or /references/0/path."),
     action: z
-      .enum(["set", "delete", "merge", "append", "prepend", "insert"])
+      .enum(["set", "delete", "merge", "append", "prepend", "insert", "replace", "create"])
       .describe("Structured edit operation to perform."),
     value: z.unknown().optional().describe("Value to write when action is set."),
     index: z.coerce.number().int().min(0).optional().describe("Array index to use when action is insert."),
     create: z.boolean().optional().describe("Create the file with an empty JSON object if it does not exist yet."),
   })
   .superRefine((input, ctx) => {
-    if (["set", "merge", "append", "prepend", "insert"].includes(input.action) && input.value === undefined) {
+    if (["set", "merge", "append", "prepend", "insert", "replace", "create"].includes(input.action) && input.value === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `value is required when action is ${input.action}`,
@@ -96,17 +96,18 @@ export async function executeDataEdit(input: z.infer<typeof dataEditParameters>,
 
   const doc = await load(input.filePath, ctx, input.create ? "{}\n" : undefined)
   const root = parse(doc.text, doc.file)
-  if (input.action === "delete" && (!input.pointer || input.pointer === "")) {
+  const action = input.action === "replace" || input.action === "create" ? "set" : input.action
+  if (action === "delete" && (!input.pointer || input.pointer === "")) {
     throw new Error("Deleting the document root is not supported")
   }
   const base = path(root, input.pointer)
 
-  if (input.action === "delete") {
+  if (action === "delete") {
     at(root, input.pointer)
     return save(doc.file, patch(doc.text, base, undefined), ctx, `Deleted structured data at ${input.pointer ?? "/"}.`)
   }
 
-  if (input.action === "set") {
+  if (action === "set") {
     return save(
       doc.file,
       patch(doc.text, base, input.value),
@@ -115,7 +116,7 @@ export async function executeDataEdit(input: z.infer<typeof dataEditParameters>,
     )
   }
 
-  if (input.action === "merge") {
+  if (action === "merge") {
     if (!obj(input.value)) throw new Error("merge requires an object value")
     let next = doc.text
     let hit: unknown
@@ -153,12 +154,14 @@ export async function executeDataEdit(input: z.infer<typeof dataEditParameters>,
     hit = input.pointer ? at(data, input.pointer) : data
   }
   const list = arr(data, input.pointer)
-  const idx = input.action === "append" ? list.length : input.action === "prepend" ? 0 : input.index!
+  const idx = action === "append" ? list.length : action === "prepend" ? 0 : input.index!
   if (idx > list.length) throw new Error(`Array index out of range at ${input.pointer ?? "/"}`)
+  const nextList = [...list]
+  nextList.splice(idx, 0, input.value)
   return save(
     doc.file,
-    patch(next, [...path(data, input.pointer), idx], input.value),
+    patch(next, path(data, input.pointer), nextList),
     ctx,
-    `${input.action}ed structured data at ${input.pointer ?? "/"}.`,
+    `${action}ed structured data at ${input.pointer ?? "/"}.`,
   )
 }

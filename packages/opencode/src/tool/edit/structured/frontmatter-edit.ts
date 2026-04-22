@@ -8,13 +8,13 @@ export const frontmatterEditParameters = z
     filePath: z.string().describe("Absolute or relative path to a Markdown file."),
     pointer: z.string().optional().describe("JSON Pointer path within the frontmatter, such as /title or /owner/team."),
     action: z
-      .enum(["set", "delete", "merge", "append", "prepend", "insert"])
+      .enum(["set", "delete", "merge", "append", "prepend", "insert", "replace", "create"])
       .describe("Frontmatter edit operation to perform."),
     value: z.unknown().optional().describe("Value to write when action is set."),
     index: z.coerce.number().int().min(0).optional().describe("Array index to use when action is insert."),
   })
   .superRefine((input, ctx) => {
-    if (["set", "merge", "append", "prepend", "insert"].includes(input.action) && input.value === undefined) {
+    if (["set", "merge", "append", "prepend", "insert", "replace", "create"].includes(input.action) && input.value === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `value is required when action is ${input.action}`,
@@ -34,19 +34,20 @@ export async function executeFrontmatterEdit(input: z.infer<typeof frontmatterEd
   const doc = await load(input.filePath, ctx)
   const md = matter(doc.text)
   const data = structuredClone(md.data)
+  const action = input.action === "replace" || input.action === "create" ? "set" : input.action
 
-  if (input.action === "delete") {
+  if (action === "delete") {
     at(data, input.pointer)
     drop(data, input.pointer)
     return save(doc.file, matter.stringify(md.content, data), ctx, `Deleted frontmatter at ${input.pointer ?? "/"}.`)
   }
 
-  if (input.action === "set") {
+  if (action === "set") {
     put(data, input.pointer, input.value)
     return save(doc.file, matter.stringify(md.content, data), ctx, `Updated frontmatter at ${input.pointer ?? "/"}.`)
   }
 
-  if (input.action === "merge") {
+  if (action === "merge") {
     if (!obj(input.value)) throw new Error("merge requires an object value")
     let hit: unknown
     try {
@@ -74,13 +75,13 @@ export async function executeFrontmatterEdit(input: z.infer<typeof frontmatterEd
     hit = input.pointer ? at(data, input.pointer) : data
   }
   const list = arr({ root: hit }, "/root")
-  const idx = input.action === "append" ? list.length : input.action === "prepend" ? 0 : input.index!
+  const idx = action === "append" ? list.length : action === "prepend" ? 0 : input.index!
   if (idx > list.length) throw new Error(`Array index out of range at ${input.pointer ?? "/"}`)
   list.splice(idx, 0, input.value)
   return save(
     doc.file,
     matter.stringify(md.content, data),
     ctx,
-    `${input.action}ed frontmatter at ${input.pointer ?? "/"}.`,
+    `${action}ed frontmatter at ${input.pointer ?? "/"}.`,
   )
 }

@@ -235,6 +235,9 @@ export const SearchTool = Tool.define<typeof SearchParametersSchema, Record<stri
   async execute(input, ctx) {
     const nextInput = parseSearchInput(input)
     const search = root(nextInput)
+    const stat = Filesystem.stat(search)
+    if (!stat) throw new Error(`Search path not found: ${search}`)
+    if (!stat.isDirectory()) throw new Error(`Search path must be a directory: ${search}`)
     await assertExternalDirectory(ctx, search, { kind: "directory" })
     await ctx.ask({
       permission: "search",

@@ -822,6 +822,7 @@ export namespace TeamMemory {
             })
             const now = Date.now()
             const created = previous?.time.created ?? now
+            const merging = mergeArea(area) && previous !== undefined && !input.id
             const sourceChanged =
               previous !== undefined && (previous.title !== title || previous.content !== content)
             const translation = sourceChanged
@@ -848,10 +849,10 @@ export namespace TeamMemory {
               class: input.class ?? previous?.class ?? base.class,
               kind: input.kind ?? previous?.kind ?? base.kind,
               domain: input.domain ?? previous?.domain ?? base.domain,
-              title: mergeArea(area) && previous ? wide(previous.title, title) : title,
-              content: mergeArea(area) && previous ? grow(previous.content, content) : content,
+              title: merging ? wide(previous.title, title) : title,
+              content: merging ? grow(previous.content, content) : content,
               scope: scope ?? previous?.scope,
-              tags: uniq([...(previous?.tags ?? []), ...(input.tags ?? [])]),
+              tags: merging ? uniq([...(previous?.tags ?? []), ...(input.tags ?? [])]) : (input.tags ?? previous?.tags),
               status: input.status ?? previous?.status ?? Status.enum.active,
               created_by: previous?.created_by ?? input.actor,
               updated_by: input.actor,

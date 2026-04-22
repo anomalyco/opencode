@@ -39,7 +39,7 @@ export const EditBatchCallSchema = z
     replaceAll: z.boolean().optional().describe("Replace all matches where supported."),
     edits: z.array(EditStepSchema).optional().describe("Sequential same-file edit steps for tool=edit."),
     mode: z.preprocess(blank, z.string().optional()).describe("Edit mode (data/frontmatter/markdown) or workspace_replace mode (literal/regex/identifier)."),
-    action: z.preprocess(blank, z.string().optional()).describe("Structured edit action for tool=edit with mode data/frontmatter/markdown."),
+    action: z.preprocess(blank, z.string().optional()).describe("Structured edit action for tool=edit. Data/frontmatter accept set, delete, merge, append, prepend, insert, replace, or create; markdown accepts replace, append, prepend, delete, or create."),
     value: z
       .string()
       .optional()
