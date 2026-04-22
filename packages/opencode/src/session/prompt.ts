@@ -337,11 +337,18 @@ Goal: Write your final plan to the plan file (the only file you can edit).
 - Include the paths of critical files to be modified
 - Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
 
-### Phase 5: Call plan_exit tool
-At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
-This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
+### Phase 5: Call plan_exit tool (MANDATORY)
+When your plan is fully complete and the plan file is written, you MUST call plan_exit. This is the ONLY way to exit plan mode — do not ask "Should I proceed?" or "Want me to implement this?" in plain text.
 
-**Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
+- Your plan is written to the plan file → call plan_exit
+- The task is simple and needs no detailed plan → call plan_exit
+- You finished answering the user's follow-up and updated the plan → call plan_exit
+
+Do NOT call plan_exit:
+- During phases 1-3 while you are still exploring or designing
+- When you need the user to clarify requirements (use question tool instead)
+
+**Important:** Use question tool to clarify requirements/approach. Use plan_exit ONLY to signal that planning is complete and request approval to build. Do NOT use question tool to ask "Is this plan okay?" — that is what plan_exit does.
 
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
 </system-reminder>`,

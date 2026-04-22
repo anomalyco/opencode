@@ -5,9 +5,10 @@ import * as Tool from "./tool"
 import { Question } from "../question"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
+import { Agent } from "../agent/agent"
 import { Provider } from "../provider"
 import { Instance } from "../project/instance"
-import { type SessionID, MessageID, PartID } from "../session/schema"
+import { MessageID, PartID, type SessionID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
 function getLastModel(sessionID: SessionID) {
@@ -22,6 +23,7 @@ export const PlanExitTool = Tool.define(
   Effect.gen(function* () {
     const session = yield* Session.Service
     const question = yield* Question.Service
+    const agents = yield* Agent.Service
     const provider = yield* Provider.Service
 
     return {
@@ -49,7 +51,9 @@ export const PlanExitTool = Tool.define(
 
           if (answers[0]?.[0] === "No") yield* new Question.RejectedError()
 
-          const model = getLastModel(ctx.sessionID) ?? (yield* provider.defaultModel())
+          const buildAgent = yield* agents.get("build")
+          const lastUserModel = getLastModel(ctx.sessionID)
+          const model = buildAgent.model ?? lastUserModel ?? (yield* provider.defaultModel())
 
           const msg: MessageV2.User = {
             id: MessageID.ascending(),
@@ -57,7 +61,7 @@ export const PlanExitTool = Tool.define(
             role: "user",
             time: { created: Date.now() },
             agent: "build",
-            model,
+            model: { providerID: model.providerID, modelID: model.modelID },
           }
           yield* session.updateMessage(msg)
           yield* session.updatePart({
