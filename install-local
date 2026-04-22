@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RED='\033[0;31m'
+ORANGE='\033[38;5;214m'
+NC='\033[0m'
+
+usage() {
+    cat <<EOF
+OpenCode Local Installer
+
+Usage: install-local [options]
+
+Options:
+    -h, --help              Display this help message
+    -v, --version <version> Ignored for local builds; uses 1.4.2-build.MMddhhmmss
+    -b, --binary <path>     Install from a local binary instead of building this repo
+        --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
+
+Examples:
+    ./install-local
+    ./install-local --binary /path/to/opencode
+EOF
+}
+
+print_message() {
+    local level=$1
+    local message=$2
+    local color=""
+
+    case $level in
+        info) color="${NC}" ;;
+        warning) color="${ORANGE}" ;;
+        error) color="${RED}" ;;
+    esac
+
+    echo -e "${color}${message}${NC}"
+}
+
+pick_bun() {
+    local bin
+
+    for bin in "${BUN:-}" "$(command -v bun 2>/dev/null || true)" "$HOME/.bun/bin/bun"; do
+        if [[ -z "$bin" || ! -x "$bin" ]]; then
+            continue
+        fi
+
+        if [[ -z "$req" || "$("$bin" --version 2>/dev/null || true)" == "$req" ]]; then
+            bun_bin="$bin"
+            return
+        fi
+    done
+}
+
+requested_version=${VERSION:-}
+binary_path=""
+pass=()
+script=${BASH_SOURCE[0]}
+bun_bin=""
+ver=""
+
+if command -v realpath >/dev/null 2>&1; then
+    script=$(realpath "$script")
+fi
+
+root=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd -P)
+pkg="$root/packages/opencode"
+req=$(sed -n 's/.*"packageManager": "bun@\([^"]*\)".*/\1/p' "$root/package.json")
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -v|--version)
+            if [[ -n "${2:-}" ]]; then
+                requested_version="$2"
+                pass+=("$1" "$2")
+                shift 2
+            else
+                print_message error "Error: --version requires a version argument"
+                exit 1
+            fi
+            ;;
+        -b|--binary)
+            if [[ -n "${2:-}" ]]; then
+                binary_path="$2"
+                pass+=("$1" "$2")
+                shift 2
+            else
+                print_message error "Error: --binary requires a path argument"
+                exit 1
+            fi
+            ;;
+        *)
+            pass+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ ! -x "$root/install" ]]; then
+    print_message error "Install script not found or not executable: $root/install"
+    exit 1
+fi
+
+if [[ -n "$binary_path" ]]; then
+    exec "$root/install" "${pass[@]}"
+fi
+
+if [[ ! -d "$pkg" ]]; then
+    print_message error "Package directory not found: $pkg"
+    exit 1
+fi
+
+pick_bun
+if [[ -z "$bun_bin" ]]; then
+    print_message error "bun${req:+@$req} is required but was not found"
+    exit 1
+fi
+
+if [[ -n "$requested_version" ]]; then
+    print_message warning "Warning: --version is ignored; install-local builds the current checkout"
+fi
+
+export PATH="$(dirname "$bun_bin"):$PATH"
+ver="1.4.2-build.$(date +%m%d%H%M%S)"
+export OPENCODE_VERSION="$ver"
+
+print_message info "Using bun${req:+@$req} from $bun_bin"
+print_message info "Using local version: $ver"
+print_message info "Installing dependencies in local repo: $root"
+(
+    cd "$root"
+    "$bun_bin" install
+)
+
+print_message info "Building local binary from repo: $pkg"
+(
+    cd "$pkg"
+    "$bun_bin" run script/build.ts --single
+)
+
+binary_path=$(compgen -G "$pkg/dist/*/bin/opencode" | head -n 1 || true)
+if [[ -z "$binary_path" ]]; then
+    print_message error "Built binary not found under $pkg/dist"
+    exit 1
+fi
+
+exec "$root/install" --binary "$binary_path" "${pass[@]}"
