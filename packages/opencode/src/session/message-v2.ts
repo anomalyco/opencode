@@ -777,12 +777,19 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         // text/plain and directory files are converted into text parts, ignore them
         if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
+          const filePath = part.source && "path" in part.source ? part.source.path : undefined
           if (options?.stripMedia && isMedia(part.mime)) {
             userMessage.parts.push({
               type: "text",
-              text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
+              text: `[Attached ${part.mime}: ${part.filename ?? "file"}${filePath ? ` (${filePath})` : ""}]`,
             })
           } else {
+            if (filePath) {
+              userMessage.parts.push({
+                type: "text",
+                text: `Attached file path: ${filePath}`,
+              })
+            }
             userMessage.parts.push({
               type: "file",
               url: part.url,

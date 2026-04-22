@@ -64,6 +64,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       filename: file.name,
       mime,
       dataUrl: url,
+      path: (file as any).path,
     }
     const cursor = prompt.cursor() ?? getCursorPosition(editor)
     prompt.set([...prompt.current(), attachment], cursor)

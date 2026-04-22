@@ -189,6 +189,13 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       mime: attachment.mime,
       url: attachment.dataUrl,
       filename: attachment.filename,
+      source: attachment.path
+        ? {
+            type: "file" as const,
+            path: attachment.path,
+            text: { value: attachment.filename, start: 0, end: attachment.filename.length },
+          }
+        : undefined,
     } satisfies PromptRequestPart
   })
 

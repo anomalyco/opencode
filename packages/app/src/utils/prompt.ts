@@ -108,6 +108,7 @@ export function extractPromptFromParts(parts: Part[], opts?: { directory?: strin
           filename: filePart.filename ?? attachmentName,
           mime: filePart.mime,
           dataUrl: filePart.url,
+          path: filePart.source && "path" in filePart.source ? filePart.source.path : undefined,
         })
       }
     }

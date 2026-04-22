@@ -34,6 +34,7 @@ function writeOsc52(text: string): void {
 export interface Content {
   data: string
   mime: string
+  filepath?: string
 }
 
 // Checks clipboard for images first, then falls back to text.
@@ -48,7 +49,50 @@ export async function read(): Promise<Content | undefined> {
   const os = platform()
 
   if (os === "darwin") {
-    const tmpfile = path.join(tmpdir(), "opencode-clipboard.png")
+    // First, check if the clipboard contains file paths
+    try {
+      const filePaths = await Process.text(
+        [
+          "osascript",
+          "-e",
+          "try",
+          "-e",
+          "set theFiles to the clipboard as alias list",
+          "-e",
+          'set filePaths to ""',
+          "-e",
+          "repeat with aFile in theFiles",
+          "-e",
+          'set filePaths to filePaths & (POSIX path of aFile) & "\\n"',
+          "-e",
+          "end repeat",
+          "-e",
+          "return filePaths",
+          "-e",
+          "on error",
+          "-e",
+          "try",
+          "-e",
+          "set theFile to the clipboard as alias",
+          "-e",
+          "return POSIX path of theFile",
+          "-e",
+          "on error",
+          "-e",
+          'return ""',
+          "-e",
+          "end try",
+          "-e",
+          "end try",
+        ],
+        { nothrow: true },
+      )
+      if (filePaths.text.trim()) {
+        return { data: filePaths.text.trim(), mime: "text/plain" }
+      }
+    } catch {}
+
+    const tmpfile = path.join(tmpdir(), `opencode-clipboard-${Date.now()}.png`)
     try {
       await Process.run(
         [
