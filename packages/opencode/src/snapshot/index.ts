@@ -286,7 +286,10 @@ export const layer: Layer.Layer<
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
               const days = yield* retentionDays()
-              const result = yield* git(args(["gc", `--prune=${days}.days`]), { cwd: state.directory })
+              // git gc repacks objects into pack files before pruning, so old objects survive in packs.
+              // Remove existing pack files so old objects become loose and can actually be pruned.
+              yield* fs.remove(path.join(state.gitdir, "objects", "pack")).pipe(Effect.catch(() => Effect.void))
+              const result = yield* git(args(["prune", `--expire=${days}.days`]), { cwd: state.directory })
               if (result.code !== 0) {
                 log.warn("cleanup failed", {
                   exitCode: result.code,
