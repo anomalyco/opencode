@@ -176,6 +176,10 @@ async function summaryAssistant(sessionID: SessionID, parentID: MessageID, root:
   return msg
 }
 
+async function lastCompactionPart(sessionID: SessionID) {
+  return (await svc.messages({ sessionID })).at(-2)?.parts.find((item): item is MessageV2.CompactionPart => item.type === "compaction")
+}
+
 function fake(
   input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
   result: "continue" | "compact",
@@ -979,12 +983,9 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const part = (await svc.messages({ sessionID: session.id }))
-            .at(-2)
-            ?.parts.find((item) => item.type === "compaction")
-
+          const part = await lastCompactionPart(session.id)
           expect(part?.type).toBe("compaction")
-          if (part?.type === "compaction") expect(part.tail_start_id).toBe(keep.id)
+          expect(part?.tail_start_id).toBe(keep.id)
         } finally {
           await rt.dispose()
         }
@@ -1024,12 +1025,9 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const part = (await svc.messages({ sessionID: session.id }))
-            .at(-2)
-            ?.parts.find((item) => item.type === "compaction")
-
+          const part = await lastCompactionPart(session.id)
           expect(part?.type).toBe("compaction")
-          if (part?.type === "compaction") expect(part.tail_start_id).toBe(keep.id)
+          expect(part?.tail_start_id).toBe(keep.id)
         } finally {
           await rt.dispose()
         }
@@ -1075,12 +1073,9 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const part = (await svc.messages({ sessionID: session.id }))
-            .at(-2)
-            ?.parts.find((item) => item.type === "compaction")
-
+          const part = await lastCompactionPart(session.id)
           expect(part?.type).toBe("compaction")
-          if (part?.type === "compaction") expect(part.tail_start_id).toBeUndefined()
+          expect(part?.tail_start_id).toBeUndefined()
           expect(captured).toContain("yyyy")
         } finally {
           await rt.dispose()
@@ -1136,12 +1131,9 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const part = (await svc.messages({ sessionID: session.id }))
-            .at(-2)
-            ?.parts.find((item) => item.type === "compaction")
-
+          const part = await lastCompactionPart(session.id)
           expect(part?.type).toBe("compaction")
-          if (part?.type === "compaction") expect(part.tail_start_id).toBeUndefined()
+          expect(part?.tail_start_id).toBeUndefined()
           expect(captured).toContain("recent image turn")
           expect(captured).toContain("Attached image/png: big.png")
         } finally {
@@ -1205,12 +1197,9 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const part = (await svc.messages({ sessionID: session.id }))
-            .at(-2)
-            ?.parts.find((item) => item.type === "compaction")
-
+          const part = await lastCompactionPart(session.id)
           expect(part?.type).toBe("compaction")
-          if (part?.type === "compaction") expect(part.tail_start_id).toBe(keep.id)
+          expect(part?.tail_start_id).toBe(keep.id)
           expect(captured).toContain("zzzz")
           expect(captured).not.toContain("keep tail")
 
@@ -1845,12 +1834,9 @@ describe("session.compaction.process", () => {
             ),
           )
 
-          const part = (await svc.messages({ sessionID: session.id }))
-            .at(-2)
-            ?.parts.find((item) => item.type === "compaction")
-
+          const part = await lastCompactionPart(session.id)
           expect(part?.type).toBe("compaction")
-          if (part?.type === "compaction") expect(part.tail_start_id).toBe(keep.id)
+          expect(part?.tail_start_id).toBe(keep.id)
         } finally {
           await rt.dispose()
         }

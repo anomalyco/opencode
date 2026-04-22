@@ -265,17 +265,19 @@ export const layer: Layer.Layer<
       let total = 0
       let keep: Tail | undefined
       for (let i = recent.length - 1; i >= 0; i--) {
+        const turn = recent[i]!
         const size = sizes[i]
         if (total + size <= budget) {
           total += size
-          keep = { start: recent[i]!.start, id: recent[i]!.id }
+          keep = { start: turn.start, id: turn.id }
           continue
         }
+        const remaining = budget - total
         const split = yield* splitTurn({
           messages: input.messages,
-          turn: recent[i]!,
+          turn,
           model: input.model,
-          budget: budget - total,
+          budget: remaining,
           estimate,
         })
         if (split) keep = split
@@ -314,17 +316,15 @@ export const layer: Layer.Layer<
         if (msg.info.role === "assistant" && msg.info.summary) break loop
         for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
           const part = msg.parts[partIndex]
-          if (part.type === "tool")
-            if (part.state.status === "completed") {
-              if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-              if (part.state.time.compacted) break loop
-              const estimate = Token.estimate(part.state.output)
-              total += estimate
-              if (total > PRUNE_PROTECT) {
-                pruned += estimate
-                toPrune.push(part)
-              }
-            }
+          if (part.type !== "tool") continue
+          if (part.state.status !== "completed") continue
+          if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
+          if (part.state.time.compacted) break loop
+          const estimate = Token.estimate(part.state.output)
+          total += estimate
+          if (total <= PRUNE_PROTECT) continue
+          pruned += estimate
+          toPrune.push(part)
         }
       }
 
