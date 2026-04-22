@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -88,6 +89,7 @@ import { TuiPluginRuntime } from "../../plugin"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
+import { ScrollNavigationButtons } from "../../component/scroll-to-bottom"
 
 addDefaultParsers(parsers.parsers)
 
@@ -164,6 +166,8 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [isScrolledToBottom, setIsScrolledToBottom] = createSignal(true)
+  const [userMessageIndex, setUserMessageIndex] = createSignal(-1)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -237,6 +241,15 @@ export function Session() {
   const keybind = useKeybind()
   const dialog = useDialog()
   const renderer = useRenderer()
+
+  createEffect(() => {
+    if (!scroll || scroll.isDestroyed) return
+    const interval = setInterval(() => {
+      if (!scroll || scroll.isDestroyed) return
+      setIsScrolledToBottom(scroll.scrollTop >= scroll.scrollHeight - scroll.height - 5)
+    }, 500)
+    onCleanup(() => clearInterval(interval))
+  })
 
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
@@ -334,7 +347,41 @@ export function Session() {
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
+      setUserMessageIndex(-1)
     }, 50)
+  }
+
+  function toPreviousUserMessage() {
+    if (!scroll || scroll.isDestroyed) return
+    const messages = sync.data.message[route.sessionID]
+    if (!messages || !messages.length) return
+
+    const userMessages = messages.filter((msg) => msg.role === "user")
+    if (userMessages.length === 0) return
+
+    if (userMessageIndex() === -1) {
+      const currentScrollTop = scroll.scrollTop
+      let index = userMessages.length - 1
+      for (let i = userMessages.length - 1; i >= 0; i--) {
+        const msg = userMessages[i]
+        const child = scroll.getChildren().find((c) => c.id === msg.id)
+        if (child && child.y < currentScrollTop) {
+          index = i
+          break
+        }
+        if (i === 0) index = -1
+      }
+      setUserMessageIndex(index > 0 ? index - 1 : index)
+    } else {
+      setUserMessageIndex((prev) => Math.max(0, prev - 1))
+    }
+
+    const targetIndex = userMessageIndex()
+    if (targetIndex >= 0 && targetIndex < userMessages.length) {
+      const msg = userMessages[targetIndex]
+      const child = scroll.getChildren().find((c) => c.id === msg.id)
+      if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    }
   }
 
   const local = useLocal()
@@ -1157,6 +1204,11 @@ export function Session() {
                 )}
               </For>
             </scrollbox>
+            <ScrollNavigationButtons
+              isScrolledToBottom={isScrolledToBottom}
+              onClickUp={toPreviousUserMessage}
+              onClickDown={toBottom}
+            />
             <box flexShrink={0}>
               <Show when={permissions().length > 0}>
                 <PermissionPrompt request={permissions()[0]} />
