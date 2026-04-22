@@ -159,15 +159,15 @@ Schema at source.
 These are the highest-priority next targets. Each is a small, self-contained
 schema module with a clear domain.
 
-- [ ] `src/control-plane/schema.ts`
-- [ ] `src/permission/schema.ts`
-- [ ] `src/project/schema.ts`
+- [x] `src/control-plane/schema.ts`
+- [x] `src/permission/schema.ts`
+- [x] `src/project/schema.ts`
 - [x] `src/provider/schema.ts`
-- [ ] `src/pty/schema.ts`
-- [ ] `src/question/schema.ts`
-- [ ] `src/session/schema.ts`
-- [ ] `src/sync/schema.ts`
-- [ ] `src/tool/schema.ts`
+- [x] `src/pty/schema.ts`
+- [x] `src/question/schema.ts`
+- [x] `src/session/schema.ts`
+- [x] `src/sync/schema.ts`
+- [x] `src/tool/schema.ts`
 
 ### Session domain
 

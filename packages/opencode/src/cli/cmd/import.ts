@@ -168,7 +168,7 @@ export const ImportCommand = cmd({
       )
 
       for (const msg of exportData.messages) {
-        const msgInfo = MessageV2.Info.parse(msg.info)
+        const msgInfo = MessageV2.Info.zod.parse(msg.info)
         const { id, sessionID: _, ...msgData } = msgInfo
         Database.use((db) =>
           db
@@ -184,7 +184,7 @@ export const ImportCommand = cmd({
         )
 
         for (const part of msg.parts) {
-          const partInfo = MessageV2.Part.parse(part)
+          const partInfo = MessageV2.Part.zod.parse(part)
           const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
           Database.use((db) =>
             db
