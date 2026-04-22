@@ -1,7 +1,7 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
+import type { OpencodeClient, VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -25,6 +25,7 @@ export function createChildStoreManager(input: {
   onBootstrap: (directory: string) => void
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
+  getSdk: (directory: string) => OpencodeClient
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const vcsCache = new Map<string, VcsCache>()
@@ -157,20 +158,23 @@ export function createChildStoreManager(input: {
 
       const init = () =>
         createRoot((dispose) => {
+          const sdk = input.getSdk(directory)
+
+          const initialMeta = meta[0].value
           const initialIcon = icon[0].value
 
           const [pathQuery, mcpQuery, lspQuery, providerQuery] = useQueries(() => ({
             queries: [
-              loadPathQuery(directory),
-              loadMcpQuery(directory),
-              loadLspQuery(directory),
-              loadProvidersQuery(directory),
+              loadPathQuery(directory, sdk),
+              loadMcpQuery(directory, sdk),
+              loadLspQuery(directory, sdk),
+              loadProvidersQuery(directory, sdk),
             ],
           }))
 
           const child = createStore<State>({
             project: "",
-            projectMeta: undefined,
+            projectMeta: initialMeta,
             icon: initialIcon,
             get provider_ready() {
               return providerQuery.isLoading
@@ -195,11 +199,15 @@ export function createChildStoreManager(input: {
             get mcp_ready() {
               return mcpQuery.isLoading
             },
-            mcp: {},
+            get mcp() {
+              return mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
+            },
             get lsp_ready() {
               return lspQuery.isLoading
             },
-            lsp: [],
+            get lsp() {
+              return lspQuery.isLoading ? [] : (lspQuery.data ?? [])
+            },
             vcs: vcsStore.value,
             limit: 5,
             message: {},
@@ -220,6 +228,11 @@ export function createChildStoreManager(input: {
             const cached = vcsStore.value
             if (!cached?.branch) return
             child[1]("vcs", (value) => value ?? cached)
+          })
+
+          onPersistedInit(meta[2], () => {
+            if (child[0].projectMeta !== initialMeta) return
+            child[1]("projectMeta", meta[0].value)
           })
 
           onPersistedInit(icon[2], () => {

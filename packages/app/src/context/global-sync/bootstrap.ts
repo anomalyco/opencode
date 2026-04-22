@@ -265,8 +265,6 @@ export async function bootstrapDirectory(input: {
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
     input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
-  input.setStore("mcp", {})
-  input.setStore("lsp", [])
   if (loading) input.setStore("status", "partial")
 
   const rev = (providerRev.get(input.directory) ?? 0) + 1
@@ -355,18 +353,14 @@ export async function bootstrapDirectory(input: {
       () => Promise.resolve(input.loadSessions(input.directory)),
       () => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk)),
       () =>
-        input.queryClient.ensureQueryData(
-          loadProvidersQuery(input.directory, input.sdk),
-          //     .catch((err) => {
-          //       if (providerRev.get(input.directory) !== rev) console.error("Failed to refresh provider list", err)
-          //       const project = getFilename(input.directory)
-          //       showToast({
-          //         variant: "error",
-          //         title: input.translate("toast.project.reloadFailed.title", { project }),
-          //         description: formatServerError(err, input.translate),
-          //       })
-          //     })
-        ),
+        input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
+          const project = getFilename(input.directory)
+          showToast({
+            variant: "error",
+            title: input.translate("toast.project.reloadFailed.title", { project }),
+            description: formatServerError(err, input.translate),
+          })
+        }),
     ].filter(Boolean) as (() => Promise<any>)[]
 
     await waitForPaint()
