@@ -8,6 +8,14 @@ export type TranslateError = {
   detail: string
 }
 
+export type TranslationActivity = {
+  translate_status?: "idle" | "waiting" | "started" | "finished"
+}
+
+export function hasActiveTranslations(items?: ReadonlyArray<TranslationActivity>) {
+  return (items ?? []).some((item) => item.translate_status === "waiting" || item.translate_status === "started")
+}
+
 function configLocale(input: unknown) {
   if (typeof input !== "object" || !input) return
   const locale = (input as { locale?: unknown }).locale

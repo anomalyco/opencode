@@ -73,7 +73,7 @@ Rules:
 export const architect = {
   name: "architect",
   description:
-    "Read-only architecture consultation subagent for other agents. Use it when repository evidence leaves a boundary, ownership, contract, placement, migration, rollout, or design-validation decision unresolved before coding or delivery. Provide one architecture question or candidate design, the constraints, decision horizon, desired outcome, relevant repo evidence, and any candidate options; it returns `Status`, `Decision Scope`, `Primary Recommendation`, `Concrete Example`, `Evidence`, `Tradeoffs`, `Delivery Impact`, and `Questions For Caller` concisely.",
+    "Read-only architecture consultation subagent for other agents. Use it when repository evidence, or paired \`explorer\` and \`librarian\` evidence, leaves a boundary, ownership, contract, placement, migration, rollout, or design-validation decision unresolved before coding or delivery. It stays in an advisory lane, can load focused \`architect-*\` workflow skills for routing, boundary and contract analysis, ownership and placement, migration and rollout, and proposal validation, and returns \`Status\`, \`Decision Scope\`, \`Primary Recommendation\`, \`Concrete Example\`, \`Evidence\`, \`Tradeoffs\`, \`Delivery Impact\`, and \`Questions For Caller\` concisely. Critical concurrency guidance: run at most 2 \`architect\` tasks in parallel, and only when the architecture questions are clearly independent. Provide one architecture question or candidate design, the constraints, decision horizon, desired outcome, relevant repo evidence, and any candidate options.",
   color: "info",
   mode: "subagent" as const,
   native: true,

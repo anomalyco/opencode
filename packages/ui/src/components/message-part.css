@@ -640,6 +640,12 @@
   }
 }
 
+[data-slot="tool-group-icon"] {
+  display: inline-flex;
+  align-items: center;
+  color: var(--icon-weaker);
+}
+
 [data-component="context-tool-group-list"] {
   padding-top: 0;
   padding-right: 0;
@@ -653,6 +659,52 @@
     min-width: 0;
     padding: 0;
   }
+}
+
+[data-component="discovery-tool-stack"] {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-component="discovery-batch-calls"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+[data-slot="discovery-batch-call"] {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+}
+
+[data-slot="discovery-batch-call-icon"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon-weaker);
+}
+
+[data-slot="discovery-batch-call-label"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+[data-component="discovery-batch-result-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 [data-component="diagnostics"] {

@@ -452,7 +452,7 @@ export namespace MainPlanTranslate {
         })
         const done = input?.wait ? yield* Deferred.make<number, Error>() : undefined
         yield* Queue.offer(next.q, { ids, done })
-        if (!done) return 0
+        if (!done) return ids.length
         return yield* Deferred.await(done)
       })
 

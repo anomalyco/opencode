@@ -1347,24 +1347,6 @@ export const TaskAsyncTestSupport = {
 
 export const TaskAsyncDescription: Tool.DynamicDescription = (agent) =>
   Effect.gen(function* () {
-    const notes: string[] = []
-    if (agent.name === "atlas") {
-      notes.push("For `atlas`, use `task_async` as the async delegation surface for helper lanes, `lead`, and `niggli`.")
-    }
-    if (agent.name === "ayaz") {
-      notes.push(
-        "For `ayaz`, stay in direct execution by default. Use `task_async` only when a helper lane clearly reduces uncertainty, supports non-overlapping parallel work, or owns the dominant frontend, browser-proof, or independent-review slice; prefer `wait` over repeated `status`, use `message` for follow-up, and `resume` only for unfinished idle tasks.",
-      )
-    }
-    if (agent.name === "niggli") {
-      notes.push(
-        "For `niggli`, use `task_async` only for planning-support helpers such as `architect`, `explorer`, `librarian`, or `hades`; keep the durable plan in `main-plan`.",
-      )
-    }
-    if (agent.name === "lead") {
-      notes.push("`lead` should use `task_async` for worker delegation, follow-up, waiting, and completion tracking.")
-    }
-
     const rows = Action.options.map((item) => ({
       name: item,
       rule: Permission.evaluate(id, item, agent.permission),
@@ -1401,16 +1383,14 @@ export const TaskAsyncDescription: Tool.DynamicDescription = (agent) =>
     const followup: string[] = []
     if (start && wait && status) {
       followup.push(
-        `Recommended lifecycle for \`${agent.name}\`: use \`start\` to launch work, \`wait\` to arm non-blocking completion watching, and \`status\` to retrieve stored results later by \`task_id\`.`,
+        "Recommended lifecycle for this caller: use `start` to launch work, `wait` to arm non-blocking completion watching, and `status` to retrieve stored results later by `task_id`.",
       )
     } else if (start && status) {
       followup.push(
-        `Recommended lifecycle for \`${agent.name}\`: use \`start\` to launch work and \`status\` to retrieve stored results later by \`task_id\`.`,
+        "Recommended lifecycle for this caller: use `start` to launch work and `status` to retrieve stored results later by `task_id`.",
       )
     } else if (wait || status) {
-      followup.push(
-        `For \`${agent.name}\`, \`task_async\` is currently a follow-up surface: use \`wait\` and/or \`status\` only on already-owned async tasks.`,
-      )
+      followup.push("`task_async` is currently a follow-up surface for this caller: use `wait` and/or `status` only on already-owned async tasks.")
     }
     if (wait) {
       followup.push(
@@ -1444,8 +1424,8 @@ export const TaskAsyncDescription: Tool.DynamicDescription = (agent) =>
       .join("\n")
 
     return [
-      ...notes,
       "This tool is asynchronous: `start`, `message`, `resume`, and active `wait` registrations can return before background work is finished, completion appears as a UI notification instead of being injected into the caller session, results stay retrievable later through `task_async status` by `task_id`, and active `wait` registrations are persisted and recovered across process restarts.",
+      "The dynamic sections below describe the `task_async` lifecycle that is currently available for this caller, based on the caller's merged permissions.",
       ...followup,
       "Permission-tailored action view:",
       availableActions,

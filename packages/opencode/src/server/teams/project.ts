@@ -80,7 +80,7 @@ export function applyProjectTeamRoutes(app: Hono) {
         },
       }),
       async (c) => {
-        const count = await MemoryTranslate.translate({ all: true, wait: true })
+        const count = await MemoryTranslate.translate({ all: true })
         return c.json({ count })
       },
     )

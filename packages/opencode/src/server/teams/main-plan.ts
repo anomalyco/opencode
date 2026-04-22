@@ -152,7 +152,7 @@ export const MainPlanRoutes = lazy(() =>
       }),
       async (c) => {
         return c.json({
-          count: await MainPlanTranslate.translate({ all: true, wait: true }),
+          count: await MainPlanTranslate.translate({ all: true }),
         })
       },
     ),

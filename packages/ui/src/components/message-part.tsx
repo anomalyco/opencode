@@ -272,6 +272,156 @@ export type ToolInfo = {
   subtitle?: string
 }
 
+const DISCOVERY_TOOLS = new Set([
+  "inspect",
+  "search",
+  "lsp",
+  "discover_batch",
+  "archive_list",
+  "data_query",
+  "dir_tree",
+  "markdown_read",
+  "localgit_state",
+  "localgit_log",
+  "localgit_annotate",
+])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function discoveryCallCount(input: Record<string, unknown>) {
+  return Array.isArray(input.calls) ? input.calls.length : 0
+}
+
+function discoveryCallLabel(i18n: UiI18n, count: number) {
+  if (count <= 0) return ""
+  return i18n.t(count === 1 ? "ui.messagePart.discovery.check.one" : "ui.messagePart.discovery.check.other", {
+    count,
+  })
+}
+
+function discoveryToolInfo(i18n: UiI18n, tool: string, input: Record<string, unknown>): ToolInfo | undefined {
+  switch (tool) {
+    case "inspect": {
+      const action = typeof input.action === "string" ? input.action : undefined
+      return {
+        icon:
+          action === "tree" || action === "dir"
+            ? "file-tree"
+            : action === "archive"
+              ? "archive"
+              : action === "structured"
+                ? "code-lines"
+                : action === "markdown"
+                  ? "prompt"
+                  : "glasses",
+        title: i18n.t("ui.tool.inspect"),
+        subtitle:
+          typeof input.filePath === "string"
+            ? getFilename(input.filePath)
+            : typeof input.path === "string"
+              ? getFilename(input.path)
+              : undefined,
+      }
+    }
+    case "search":
+      return {
+        icon: "magnifying-glass",
+        title: i18n.t("ui.tool.search"),
+        subtitle:
+          typeof input.pattern === "string"
+            ? input.pattern
+            : typeof input.path === "string"
+              ? getFilename(input.path)
+              : undefined,
+      }
+    case "lsp":
+      return {
+        icon: "code",
+        title: i18n.t("ui.tool.lsp"),
+        subtitle:
+          typeof input.query === "string"
+            ? input.query
+            : typeof input.filePath === "string"
+              ? getFilename(input.filePath)
+              : typeof input.operation === "string"
+                ? input.operation
+                : undefined,
+      }
+    case "discover_batch":
+      return {
+        icon: "dot-grid",
+        title: i18n.t("ui.tool.discoverBatch"),
+        subtitle: discoveryCallLabel(i18n, discoveryCallCount(input)) || undefined,
+      }
+    case "archive_list":
+      return {
+        icon: "archive",
+        title: i18n.t("ui.tool.archiveList"),
+        subtitle:
+          typeof input.filePath === "string"
+            ? getFilename(input.filePath)
+            : typeof input.path === "string"
+              ? getFilename(input.path)
+              : undefined,
+      }
+    case "data_query":
+      return {
+        icon: "code-lines",
+        title: i18n.t("ui.tool.dataQuery"),
+        subtitle: typeof input.filePath === "string" ? getFilename(input.filePath) : undefined,
+      }
+    case "dir_tree":
+      return {
+        icon: "file-tree",
+        title: i18n.t("ui.tool.dirTree"),
+        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
+      }
+    case "markdown_read":
+      return {
+        icon: "prompt",
+        title: i18n.t("ui.tool.markdownRead"),
+        subtitle: typeof input.filePath === "string" ? getFilename(input.filePath) : undefined,
+      }
+    case "localgit_state":
+      return {
+        icon: "branch",
+        title: i18n.t("ui.tool.localGitState"),
+        subtitle:
+          typeof input.path === "string"
+            ? getFilename(input.path)
+            : typeof input.base === "string"
+              ? input.base
+              : undefined,
+      }
+    case "localgit_log":
+      return {
+        icon: "branch",
+        title: i18n.t("ui.tool.localGitLog"),
+        subtitle:
+          typeof input.path === "string"
+            ? getFilename(input.path)
+            : typeof input.ref === "string"
+              ? input.ref
+              : typeof input.base === "string"
+                ? input.base
+                : undefined,
+      }
+    case "localgit_annotate":
+      return {
+        icon: "branch",
+        title: i18n.t("ui.tool.localGitAnnotate"),
+        subtitle:
+          typeof input.filePath === "string"
+            ? getFilename(input.filePath)
+            : typeof input.pattern === "string"
+              ? input.pattern
+              : undefined,
+      }
+  }
+}
+
 function agentTitle(i18n: UiI18n, type?: string) {
   if (!type) return i18n.t("ui.tool.agent.default")
   return i18n.t("ui.tool.agent", { type })
@@ -320,6 +470,8 @@ function taskAgent(
 
 export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   const i18n = useI18n()
+  const discovery = discoveryToolInfo(i18n, tool, isRecord(input) ? input : {})
+  if (discovery) return discovery
   switch (tool) {
     case "read":
       return {
@@ -467,8 +619,112 @@ function taskSession(
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 
-const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+type ToolGroupKind = "context" | "terminal" | "edit" | "research"
+
+const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list", ...DISCOVERY_TOOLS])
+const TERMINAL_GROUP_TOOLS = new Set(["bash"])
+const EDIT_GROUP_TOOLS = new Set(["edit", "write", "apply_patch"])
+const RESEARCH_GROUP_TOOLS = new Set(["websearch", "codesearch", "lib_batch"])
 const HIDDEN_TOOLS = new Set(["todowrite"])
+
+function discoveryToolOutput(part: ToolPart) {
+  if (part.state.status === "error" && typeof part.state.error === "string") return part.state.error
+  if (part.state.status === "completed" && typeof part.state.output === "string") {
+    return part.state.output
+  }
+  return ""
+}
+
+function estimateTokens(text: string | undefined) {
+  const value = text?.trim()
+  if (!value) return 0
+  return Math.max(1, Math.round(value.length / 4))
+}
+
+function discoveryBatchCalls(input: Record<string, unknown>) {
+  if (!Array.isArray(input.calls)) return [] as Record<string, unknown>[]
+  return input.calls.flatMap((item) => (isRecord(item) ? [item] : []))
+}
+
+function discoveryBatchSections(output: string | undefined) {
+  if (!output) return [] as Array<{ key: string; label: string; output: string }>
+  const hits = [...output.matchAll(/^\[(\d+)\]\s+(.+)$/gm)]
+  if (hits.length === 0) return []
+
+  return hits.flatMap((hit, index) => {
+    const start = hit.index
+    if (start === undefined) return []
+    const lineEnd = output.indexOf("\n", start)
+    const bodyStart = lineEnd === -1 ? output.length : lineEnd + 1
+    const bodyEnd = hits[index + 1]?.index ?? output.length
+    return [
+      {
+        key: `discover-batch-${hit[1] ?? index + 1}`,
+        label: (hit[2] ?? "").trim(),
+        output: output.slice(bodyStart, bodyEnd).trim(),
+      },
+    ]
+  })
+}
+
+function discoveryBatchSectionInfo(i18n: UiI18n, label: string): ToolInfo {
+  const hit = /^([a-z_]+)(?::([a-z_]+))?(?:\s+—\s+(.+))?$/.exec(label)
+  const tool = hit?.[1]
+  const detail = hit?.[3]?.trim() || hit?.[2]?.trim() || label
+  const input = tool === "lsp" ? { operation: hit?.[2] } : { action: hit?.[2] }
+  const info = tool ? discoveryToolInfo(i18n, tool, input) ?? getToolInfo(tool, input) : undefined
+  return {
+    icon: info?.icon ?? "mcp",
+    title: info?.title ?? label,
+    subtitle: detail,
+  }
+}
+
+function toolGroupKind(part: PartType): ToolGroupKind | undefined {
+  if (part.type !== "tool") return
+  if (CONTEXT_GROUP_TOOLS.has(part.tool)) return "context"
+  if (TERMINAL_GROUP_TOOLS.has(part.tool)) return "terminal"
+  if (EDIT_GROUP_TOOLS.has(part.tool)) return "edit"
+  if (RESEARCH_GROUP_TOOLS.has(part.tool)) return "research"
+}
+
+function terminalToolText(part: ToolPart) {
+  const input = (part.state.input ?? {}) as Record<string, unknown>
+  const metadata = ("metadata" in part.state ? (part.state.metadata ?? {}) : {}) as Record<string, unknown>
+  const command = typeof input.command === "string" ? input.command : typeof metadata.command === "string" ? metadata.command : ""
+  const output =
+    part.state.status === "completed" && typeof part.state.output === "string"
+      ? part.state.output
+      : typeof metadata.output === "string"
+        ? metadata.output
+        : ""
+  return stripAnsi(`$ ${command}${output ? `\n\n${output}` : ""}`)
+}
+
+function editToolText(part: ToolPart) {
+  const input = (part.state.input ?? {}) as Record<string, unknown>
+  const metadata = ("metadata" in part.state ? (part.state.metadata ?? {}) : {}) as Record<string, unknown>
+  const filediff = isRecord(metadata.filediff) ? metadata.filediff : undefined
+  const values = [
+    typeof input.filePath === "string" ? input.filePath : "",
+    typeof input.oldString === "string" ? input.oldString : "",
+    typeof input.newString === "string" ? input.newString : "",
+    typeof input.content === "string" ? input.content : "",
+    typeof input.patch === "string" ? input.patch : "",
+    typeof filediff?.before === "string" ? filediff.before : "",
+    typeof filediff?.after === "string" ? filediff.after : "",
+  ]
+  return values.filter(Boolean).join("\n")
+}
+
+function groupTokenText(kind: ToolGroupKind, part: ToolPart) {
+  if (kind === "context") return discoveryToolOutput(part)
+  if (kind === "terminal") return terminalToolText(part)
+  if (kind === "research") {
+    return part.state.status === "completed" && typeof part.state.output === "string" ? part.state.output : ""
+  }
+  return editToolText(part)
+}
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
@@ -495,7 +751,8 @@ type PartGroup =
     }
   | {
       key: string
-      type: "context"
+      type: "tool-group"
+      kind: ToolGroupKind
       refs: PartRef[]
     }
 
@@ -511,7 +768,8 @@ function sameGroup(a: PartGroup, b: PartGroup) {
     if (b.type !== "part") return false
     return sameRef(a.ref, b.ref)
   }
-  if (b.type !== "context") return false
+  if (b.type !== "tool-group") return false
+  if (a.kind !== b.kind) return false
   if (a.refs.length !== b.refs.length) return false
   return a.refs.every((ref, i) => sameRef(ref, b.refs[i]!))
 }
@@ -526,29 +784,42 @@ function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[]
 function groupParts(parts: { messageID: string; part: PartType }[]) {
   const result: PartGroup[] = []
   let start = -1
+  let kind: ToolGroupKind | undefined
 
   const flush = (end: number) => {
-    if (start < 0) return
+    if (start < 0 || !kind) return
     const first = parts[start]
     const last = parts[end]
     if (!first || !last) {
       start = -1
+      kind = undefined
       return
     }
     result.push({
-      key: `context:${first.part.id}`,
-      type: "context",
+      key: `${kind}:${first.part.id}`,
+      type: "tool-group",
+      kind,
       refs: parts.slice(start, end + 1).map((item) => ({
         messageID: item.messageID,
         partID: item.part.id,
       })),
     })
     start = -1
+    kind = undefined
   }
 
   parts.forEach((item, index) => {
-    if (isContextGroupTool(item.part)) {
-      if (start < 0) start = index
+    const nextKind = toolGroupKind(item.part)
+    if (nextKind) {
+      if (start < 0) {
+        start = index
+        kind = nextKind
+        return
+      }
+      if (kind === nextKind) return
+      flush(index - 1)
+      start = index
+      kind = nextKind
       return
     }
 
@@ -637,24 +908,45 @@ export function AssistantParts(props: {
 
         return (
           <Switch>
-            <Match when={entryType() === "context"}>
+            <Match when={entryType() === "tool-group"}>
               {(() => {
                 const parts = createMemo(
                   () => {
                     const entry = entryAccessor()
-                    if (entry.type !== "context") return emptyTools
+                    if (entry.type !== "tool-group") return emptyTools
                     return entry.refs
                       .map((ref) => part().get(ref.messageID)?.get(ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+                      .filter((part): part is ToolPart => !!part && isGroupedToolPart(part))
                   },
                   emptyTools,
                   { equals: same },
                 )
+                const items = createMemo(() => {
+                  const entry = entryAccessor()
+                  if (entry.type !== "tool-group") return [] as Array<{ part: ToolPart; message: AssistantMessage }>
+                  return entry.refs.flatMap((ref) => {
+                    const tool = part().get(ref.messageID)?.get(ref.partID)
+                    const message = msgs().get(ref.messageID)
+                    return tool && message && isGroupedToolPart(tool) ? [{ part: tool, message }] : []
+                  })
+                })
                 const busy = createMemo(() => props.working && last() === entryAccessor().key)
+                const kind = createMemo(() => {
+                  const entry = entryAccessor()
+                  return entry.type === "tool-group" ? entry.kind : "context"
+                })
 
                 return (
                   <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} busy={busy()} />
+                    <ToolPartGroup kind={kind()} parts={parts()} busy={busy()}>
+                      <For each={items()}>
+                        {(item) => (
+                          <div data-slot="context-tool-group-item">
+                            <Part part={item.part} message={item.message} />
+                          </div>
+                        )}
+                      </For>
+                    </ToolPartGroup>
                   </Show>
                 )
               })()}
@@ -694,8 +986,8 @@ export function AssistantParts(props: {
   )
 }
 
-function isContextGroupTool(part: PartType): part is ToolPart {
-  return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
+function isGroupedToolPart(part: PartType): part is ToolPart {
+  return part.type === "tool" && !!toolGroupKind(part)
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
@@ -711,6 +1003,13 @@ function contextToolDetail(part: ToolPart): string | undefined {
 
 function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const input = (part.state.input ?? {}) as Record<string, unknown>
+  const discovery = discoveryToolInfo(i18n, part.tool, input)
+  if (discovery) {
+    return {
+      ...discovery,
+      subtitle: discovery.subtitle || contextToolDetail(part),
+    }
+  }
   const path = typeof input.path === "string" ? input.path : "/"
   const filePath = typeof input.filePath === "string" ? input.filePath : undefined
   const pattern = typeof input.pattern === "string" ? input.pattern : undefined
@@ -762,10 +1061,148 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
 }
 
 function contextToolSummary(parts: ToolPart[]) {
-  const read = parts.filter((part) => part.tool === "read").length
-  const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
-  const list = parts.filter((part) => part.tool === "list").length
-  return { read, search, list }
+  return {
+    tools: parts.length,
+    estimatedTokens: parts.reduce((sum, part) => sum + estimateTokens(discoveryToolOutput(part)), 0),
+  }
+}
+
+function DiscoveryToolGroupItem(props: { part: ToolPart }) {
+  const i18n = useI18n()
+  const [open, setOpen] = createSignal(false)
+  const info = createMemo(() => getToolInfo(props.part.tool, props.part.state.input ?? {}))
+  const trigger = createMemo(() => contextToolTrigger(props.part, i18n))
+  const running = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
+  const output = createMemo(() => discoveryToolOutput(props.part).trim())
+  const batchCalls = createMemo(() => {
+    if (props.part.tool !== "discover_batch") return [] as Record<string, unknown>[]
+    return discoveryBatchCalls((props.part.state.input ?? {}) as Record<string, unknown>)
+  })
+  const batchSections = createMemo(() => {
+    if (props.part.tool !== "discover_batch" || running()) return [] as Array<{ key: string; label: string; output: string }>
+    return discoveryBatchSections(output())
+  })
+
+  if (batchSections().length > 0) {
+    return (
+      <div data-component="discovery-batch-result-list">
+        <For each={batchSections()}>
+          {(section) => {
+            const [sectionOpen, setSectionOpen] = createSignal(false)
+            const sectionInfo = createMemo(() => discoveryBatchSectionInfo(i18n, section.label))
+
+            return (
+              <Collapsible open={sectionOpen()} onOpenChange={setSectionOpen} variant="ghost" class="tool-collapsible">
+                <Collapsible.Trigger>
+                  <div data-component="tool-trigger">
+                    <div data-slot="basic-tool-tool-trigger-content">
+                      <span data-slot="basic-tool-tool-indicator">
+                        <Icon name={sectionInfo().icon} size="small" />
+                      </span>
+                      <div data-slot="basic-tool-tool-info">
+                        <div data-slot="basic-tool-tool-info-structured">
+                          <div data-slot="basic-tool-tool-info-main">
+                            <span data-slot="basic-tool-tool-title">{sectionInfo().title}</span>
+                            <Show when={sectionInfo().subtitle}>
+                              <span data-slot="basic-tool-tool-subtitle">{sectionInfo().subtitle}</span>
+                            </Show>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <Collapsible.Arrow />
+                  </div>
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                  <div data-component="bash-output">
+                    <div data-slot="bash-scroll" data-scrollable>
+                      <pre data-slot="bash-pre">
+                        <code>{section.output}</code>
+                      </pre>
+                    </div>
+                  </div>
+                </Collapsible.Content>
+              </Collapsible>
+            )
+          }}
+        </For>
+      </div>
+    )
+  }
+
+  return (
+    <Collapsible
+      open={open()}
+      onOpenChange={(value) => {
+        if (running() || !output()) return
+        setOpen(value)
+      }}
+      variant="ghost"
+      class="tool-collapsible"
+    >
+      <Collapsible.Trigger data-hide-details={!output() || running() ? "true" : undefined}>
+        <div data-component="tool-trigger" data-hide-details={!output() || running() ? "true" : undefined}>
+          <div data-slot="basic-tool-tool-trigger-content">
+            <span data-slot="basic-tool-tool-indicator">
+              <Icon name={info().icon} size="small" />
+            </span>
+            <div data-slot="basic-tool-tool-info">
+              <div data-slot="basic-tool-tool-info-structured">
+                <div data-component="discovery-tool-stack">
+                  <div data-slot="basic-tool-tool-info-main">
+                    <span data-slot="basic-tool-tool-title">
+                      <TextShimmer text={trigger().title} active={running()} />
+                    </span>
+                    <Show when={!running() && trigger().subtitle}>
+                      <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
+                    </Show>
+                  </div>
+                  <Show when={running() && batchCalls().length > 0}>
+                    <div data-component="discovery-batch-calls">
+                      <For each={batchCalls()}>
+                        {(call) => {
+                          const tool = typeof call.tool === "string" ? call.tool : "discover_batch"
+                          const info = discoveryToolInfo(i18n, tool, call) ?? {
+                            icon: "mcp" as const,
+                            title: tool,
+                          }
+
+                          return (
+                            <span data-slot="discovery-batch-call">
+                              <span data-slot="discovery-batch-call-icon">
+                                <Icon name={info.icon} size="small" />
+                              </span>
+                              <span data-slot="discovery-batch-call-label">
+                                <TextShimmer text={info.title} active offset={0} />
+                              </span>
+                            </span>
+                          )
+                        }}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </div>
+          </div>
+          <Show when={!!output() && !running()}>
+            <Collapsible.Arrow />
+          </Show>
+        </div>
+      </Collapsible.Trigger>
+      <Show when={!!output() && !running()}>
+        <Collapsible.Content>
+          <div data-component="bash-output">
+            <div data-slot="bash-scroll" data-scrollable>
+              <pre data-slot="bash-pre">
+                <code>{output()}</code>
+              </pre>
+            </div>
+          </div>
+        </Collapsible.Content>
+      </Show>
+    </Collapsible>
+  )
 }
 
 function ExaOutput(props: { output?: string }) {
@@ -849,23 +1286,35 @@ export function AssistantMessageDisplay(props: {
 
         return (
           <Switch>
-            <Match when={entryType() === "context"}>
+            <Match when={entryType() === "tool-group"}>
               {(() => {
                 const parts = createMemo(
                   () => {
                     const entry = entryAccessor()
-                    if (entry.type !== "context") return emptyTools
+                    if (entry.type !== "tool-group") return emptyTools
                     return entry.refs
                       .map((ref) => part().get(ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+                      .filter((part): part is ToolPart => !!part && isGroupedToolPart(part))
                   },
                   emptyTools,
                   { equals: same },
                 )
+                const kind = createMemo(() => {
+                  const entry = entryAccessor()
+                  return entry.type === "tool-group" ? entry.kind : "context"
+                })
 
                 return (
                   <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} />
+                    <ToolPartGroup kind={kind()} parts={parts()}>
+                      <For each={parts()}>
+                        {(part) => (
+                          <div data-slot="context-tool-group-item">
+                            <Part part={part} message={props.message} />
+                          </div>
+                        )}
+                      </For>
+                    </ToolPartGroup>
                   </Show>
                 )
               })()}
@@ -896,14 +1345,63 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
-function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
+function toolGroupSummary(kind: ToolGroupKind, parts: ToolPart[]) {
+  const estimatedTokens = parts.reduce((sum, part) => sum + estimateTokens(groupTokenText(kind, part)), 0)
+  if (kind === "terminal") return { key: "commands", count: parts.length, estimatedTokens }
+  if (kind === "edit") return { key: "edits", count: parts.length, estimatedTokens }
+  if (kind === "research") return { key: "searches", count: parts.length, estimatedTokens }
+  return { key: "tools", count: parts.length, estimatedTokens }
+}
+
+function toolGroupConfig(kind: ToolGroupKind, i18n: UiI18n) {
+  if (kind === "terminal") {
+    return {
+      icon: "console" as const,
+      activeText: i18n.t("ui.sessionTurn.status.runningCommands"),
+      doneText: i18n.t("ui.sessionTurn.status.commandsCompleted"),
+      countOne: i18n.t("ui.messagePart.terminal.commands.one"),
+      countOther: i18n.t("ui.messagePart.terminal.commands.other"),
+    }
+  }
+
+  if (kind === "edit") {
+    return {
+      icon: "code-lines" as const,
+      activeText: i18n.t("ui.sessionTurn.status.makingEdits"),
+      doneText: i18n.t("ui.sessionTurn.status.editsCompleted"),
+      countOne: i18n.t("ui.messagePart.edit.edits.one"),
+      countOther: i18n.t("ui.messagePart.edit.edits.other"),
+    }
+  }
+
+  if (kind === "research") {
+    return {
+      icon: "window-cursor" as const,
+      activeText: i18n.t("ui.sessionTurn.status.searchingWeb"),
+      doneText: i18n.t("ui.sessionTurn.status.searchedWeb"),
+      countOne: i18n.t("ui.messagePart.research.searches.one"),
+      countOther: i18n.t("ui.messagePart.research.searches.other"),
+    }
+  }
+
+  return {
+    icon: "magnifying-glass" as const,
+    activeText: i18n.t("ui.sessionTurn.status.gatheringContext"),
+    doneText: i18n.t("ui.sessionTurn.status.gatheredContext"),
+    countOne: i18n.t("ui.messagePart.discovery.tools.one"),
+    countOther: i18n.t("ui.messagePart.discovery.tools.other"),
+  }
+}
+
+function ToolPartGroup(props: { kind: ToolGroupKind; parts: ToolPart[]; busy?: boolean; children?: JSX.Element }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const pending = createMemo(
     () =>
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
-  const summary = createMemo(() => contextToolSummary(props.parts))
+  const summary = createMemo(() => toolGroupSummary(props.kind, props.parts))
+  const config = createMemo(() => toolGroupConfig(props.kind, i18n))
 
   return (
     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost" class="tool-collapsible">
@@ -913,11 +1411,14 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
             data-slot="context-tool-group-title"
             class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
           >
+            <span data-slot="tool-group-icon" class="shrink-0">
+              <Icon name={config().icon} size="small" />
+            </span>
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
                 active={pending()}
-                activeText={i18n.t("ui.sessionTurn.status.gatheringContext")}
-                doneText={i18n.t("ui.sessionTurn.status.gatheredContext")}
+                activeText={config().activeText}
+                doneText={config().doneText}
                 split={false}
               />
             </span>
@@ -928,22 +1429,16 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
               <AnimatedCountList
                 items={[
                   {
-                    key: "read",
-                    count: summary().read,
-                    one: i18n.t("ui.messagePart.context.read.one"),
-                    other: i18n.t("ui.messagePart.context.read.other"),
+                    key: summary().key,
+                    count: summary().count,
+                    one: config().countOne,
+                    other: config().countOther,
                   },
                   {
-                    key: "search",
-                    count: summary().search,
-                    one: i18n.t("ui.messagePart.context.search.one"),
-                    other: i18n.t("ui.messagePart.context.search.other"),
-                  },
-                  {
-                    key: "list",
-                    count: summary().list,
-                    one: i18n.t("ui.messagePart.context.list.one"),
-                    other: i18n.t("ui.messagePart.context.list.other"),
+                    key: "tokens",
+                    count: summary().estimatedTokens,
+                    one: i18n.t("ui.messagePart.discovery.tokens.one"),
+                    other: i18n.t("ui.messagePart.discovery.tokens.other"),
                   },
                 ]}
                 fallback=""
@@ -955,39 +1450,18 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
       </Collapsible.Trigger>
       <Collapsible.Content>
         <div data-component="context-tool-group-list">
-          <Index each={props.parts}>
-            {(partAccessor) => {
-              const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
-              const running = createMemo(
-                () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
-              )
-              return (
+          <Show
+            when={props.kind === "context"}
+            fallback={props.children}
+          >
+            <Index each={props.parts}>
+              {(partAccessor) => (
                 <div data-slot="context-tool-group-item">
-                  <div data-component="tool-trigger">
-                    <div data-slot="basic-tool-tool-trigger-content">
-                      <div data-slot="basic-tool-tool-info">
-                        <div data-slot="basic-tool-tool-info-structured">
-                          <div data-slot="basic-tool-tool-info-main">
-                            <span data-slot="basic-tool-tool-title">
-                              <TextShimmer text={trigger().title} active={running()} />
-                            </span>
-                            <Show when={!running() && trigger().subtitle}>
-                              <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
-                            </Show>
-                            <Show when={!running() && trigger().args?.length}>
-                              <For each={trigger().args}>
-                                {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
-                              </For>
-                            </Show>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <DiscoveryToolGroupItem part={partAccessor()} />
                 </div>
-              )
-            }}
-          </Index>
+              )}
+            </Index>
+          </Show>
         </div>
       </Collapsible.Content>
     </Collapsible>
@@ -1845,6 +2319,9 @@ ToolRegistry.register({
         icon="console"
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
+            <span data-slot="basic-tool-tool-indicator">
+              <Icon name="console" size="small" />
+            </span>
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
@@ -1901,6 +2378,9 @@ ToolRegistry.register({
           defer
           trigger={
             <div data-component="edit-trigger">
+              <span data-slot="basic-tool-tool-indicator">
+                <Icon name="code-lines" size="small" />
+              </span>
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
@@ -1973,6 +2453,9 @@ ToolRegistry.register({
           defer
           trigger={
             <div data-component="write-trigger">
+              <span data-slot="basic-tool-tool-indicator">
+                <Icon name="code-lines" size="small" />
+              </span>
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
@@ -2053,10 +2536,23 @@ ToolRegistry.register({
               {...props}
               icon="code-lines"
               defer
-              trigger={{
-                title: i18n.t("ui.tool.patch"),
-                subtitle: subtitle(),
-              }}
+              trigger={
+                <div data-component="edit-trigger">
+                  <span data-slot="basic-tool-tool-indicator">
+                    <Icon name="code-lines" size="small" />
+                  </span>
+                  <div data-slot="message-part-title-area">
+                    <div data-slot="message-part-title">
+                      <span data-slot="message-part-title-text">
+                        <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
+                      </span>
+                      <Show when={!pending() && subtitle()}>
+                        <span data-slot="message-part-title-filename">{subtitle()}</span>
+                      </Show>
+                    </div>
+                  </div>
+                </div>
+              }
             >
               <Show when={files().length > 0}>
                 <Accordion
@@ -2147,6 +2643,9 @@ ToolRegistry.register({
             defer
             trigger={
               <div data-component="edit-trigger">
+                <span data-slot="basic-tool-tool-indicator">
+                  <Icon name="code-lines" size="small" />
+                </span>
                 <div data-slot="message-part-title-area">
                   <div data-slot="message-part-title">
                     <span data-slot="message-part-title-text">

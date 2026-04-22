@@ -273,6 +273,156 @@ export type ToolInfo = {
   subtitle?: string
 }
 
+const DISCOVERY_TOOLS = new Set([
+  "inspect",
+  "search",
+  "lsp",
+  "discover_batch",
+  "archive_list",
+  "data_query",
+  "dir_tree",
+  "markdown_read",
+  "localgit_state",
+  "localgit_log",
+  "localgit_annotate",
+])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function discoveryCallCount(input: Record<string, unknown>) {
+  return Array.isArray(input.calls) ? input.calls.length : 0
+}
+
+function discoveryCallLabel(i18n: UiI18n, count: number) {
+  if (count <= 0) return ""
+  return i18n.t(count === 1 ? "ui.messagePart.discovery.check.one" : "ui.messagePart.discovery.check.other", {
+    count,
+  })
+}
+
+function discoveryToolInfo(i18n: UiI18n, tool: string, input: Record<string, unknown>): ToolInfo | undefined {
+  switch (tool) {
+    case "inspect": {
+      const action = typeof input.action === "string" ? input.action : undefined
+      return {
+        icon:
+          action === "tree" || action === "dir"
+            ? "file-tree"
+            : action === "archive"
+              ? "archive"
+              : action === "structured"
+                ? "code-lines"
+                : action === "markdown"
+                  ? "prompt"
+                  : "glasses",
+        title: i18n.t("ui.tool.inspect"),
+        subtitle:
+          typeof input.filePath === "string"
+            ? getFilename(input.filePath)
+            : typeof input.path === "string"
+              ? getFilename(input.path)
+              : undefined,
+      }
+    }
+    case "search":
+      return {
+        icon: "magnifying-glass",
+        title: i18n.t("ui.tool.search"),
+        subtitle:
+          typeof input.pattern === "string"
+            ? input.pattern
+            : typeof input.path === "string"
+              ? getFilename(input.path)
+              : undefined,
+      }
+    case "lsp":
+      return {
+        icon: "code",
+        title: i18n.t("ui.tool.lsp"),
+        subtitle:
+          typeof input.query === "string"
+            ? input.query
+            : typeof input.filePath === "string"
+              ? getFilename(input.filePath)
+              : typeof input.operation === "string"
+                ? input.operation
+                : undefined,
+      }
+    case "discover_batch":
+      return {
+        icon: "dot-grid",
+        title: i18n.t("ui.tool.discoverBatch"),
+        subtitle: discoveryCallLabel(i18n, discoveryCallCount(input)) || undefined,
+      }
+    case "archive_list":
+      return {
+        icon: "archive",
+        title: i18n.t("ui.tool.archiveList"),
+        subtitle:
+          typeof input.filePath === "string"
+            ? getFilename(input.filePath)
+            : typeof input.path === "string"
+              ? getFilename(input.path)
+              : undefined,
+      }
+    case "data_query":
+      return {
+        icon: "code-lines",
+        title: i18n.t("ui.tool.dataQuery"),
+        subtitle: typeof input.filePath === "string" ? getFilename(input.filePath) : undefined,
+      }
+    case "dir_tree":
+      return {
+        icon: "file-tree",
+        title: i18n.t("ui.tool.dirTree"),
+        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
+      }
+    case "markdown_read":
+      return {
+        icon: "prompt",
+        title: i18n.t("ui.tool.markdownRead"),
+        subtitle: typeof input.filePath === "string" ? getFilename(input.filePath) : undefined,
+      }
+    case "localgit_state":
+      return {
+        icon: "branch",
+        title: i18n.t("ui.tool.localGitState"),
+        subtitle:
+          typeof input.path === "string"
+            ? getFilename(input.path)
+            : typeof input.base === "string"
+              ? input.base
+              : undefined,
+      }
+    case "localgit_log":
+      return {
+        icon: "branch",
+        title: i18n.t("ui.tool.localGitLog"),
+        subtitle:
+          typeof input.path === "string"
+            ? getFilename(input.path)
+            : typeof input.ref === "string"
+              ? input.ref
+              : typeof input.base === "string"
+                ? input.base
+                : undefined,
+      }
+    case "localgit_annotate":
+      return {
+        icon: "branch",
+        title: i18n.t("ui.tool.localGitAnnotate"),
+        subtitle:
+          typeof input.filePath === "string"
+            ? getFilename(input.filePath)
+            : typeof input.pattern === "string"
+              ? input.pattern
+              : undefined,
+      }
+  }
+}
+
 function agentTitle(i18n: UiI18n, type?: string) {
   if (!type) return i18n.t("ui.tool.agent.default")
   return i18n.t("ui.tool.agent", { type })
@@ -321,6 +471,8 @@ function taskAgent(
 
 export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   const i18n = useI18n()
+  const discovery = discoveryToolInfo(i18n, tool, isRecord(input) ? input : {})
+  if (discovery) return discovery
   switch (tool) {
     case "read":
       return {
@@ -468,8 +620,27 @@ function taskSession(
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 
-const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list", ...DISCOVERY_TOOLS])
 const HIDDEN_TOOLS = new Set(["todowrite"])
+
+function discoveryToolOutput(part: ToolPart) {
+  if (part.state.status === "error" && typeof part.state.error === "string") return part.state.error
+  if (part.state.status === "completed" && typeof part.state.output === "string") {
+    return part.state.output
+  }
+  return ""
+}
+
+function estimateTokens(text: string | undefined) {
+  const value = text?.trim()
+  if (!value) return 0
+  return Math.max(1, Math.round(value.length / 4))
+}
+
+function discoveryBatchCalls(input: Record<string, unknown>) {
+  if (!Array.isArray(input.calls)) return [] as Record<string, unknown>[]
+  return input.calls.flatMap((item) => (isRecord(item) ? [item] : []))
+}
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
@@ -712,6 +883,13 @@ function contextToolDetail(part: ToolPart): string | undefined {
 
 function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const input = (part.state.input ?? {}) as Record<string, unknown>
+  const discovery = discoveryToolInfo(i18n, part.tool, input)
+  if (discovery) {
+    return {
+      ...discovery,
+      subtitle: discovery.subtitle || contextToolDetail(part),
+    }
+  }
   const path = typeof input.path === "string" ? input.path : "/"
   const filePath = typeof input.filePath === "string" ? input.filePath : undefined
   const pattern = typeof input.pattern === "string" ? input.pattern : undefined
@@ -763,10 +941,97 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
 }
 
 function contextToolSummary(parts: ToolPart[]) {
-  const read = parts.filter((part) => part.tool === "read").length
-  const search = parts.filter((part) => part.tool === "glob" || part.tool === "grep").length
-  const list = parts.filter((part) => part.tool === "list").length
-  return { read, search, list }
+  return {
+    tools: parts.length,
+    estimatedTokens: parts.reduce((sum, part) => sum + estimateTokens(discoveryToolOutput(part)), 0),
+  }
+}
+
+function DiscoveryToolGroupItem(props: { part: ToolPart }) {
+  const i18n = useI18n()
+  const [open, setOpen] = createSignal(false)
+  const info = createMemo(() => getToolInfo(props.part.tool, props.part.state.input ?? {}))
+  const trigger = createMemo(() => contextToolTrigger(props.part, i18n))
+  const running = createMemo(() => props.part.state.status === "pending" || props.part.state.status === "running")
+  const output = createMemo(() => discoveryToolOutput(props.part).trim())
+  const batchCalls = createMemo(() => {
+    if (props.part.tool !== "discover_batch") return [] as Record<string, unknown>[]
+    return discoveryBatchCalls((props.part.state.input ?? {}) as Record<string, unknown>)
+  })
+
+  return (
+    <Collapsible
+      open={open()}
+      onOpenChange={(value) => {
+        if (running() || !output()) return
+        setOpen(value)
+      }}
+      variant="ghost"
+      class="tool-collapsible"
+    >
+      <Collapsible.Trigger data-hide-details={!output() || running() ? "true" : undefined}>
+        <div data-component="tool-trigger" data-hide-details={!output() || running() ? "true" : undefined}>
+          <div data-slot="basic-tool-tool-trigger-content">
+            <span data-slot="basic-tool-tool-indicator">
+              <Icon name={info().icon} size="small" />
+            </span>
+            <div data-slot="basic-tool-tool-info">
+              <div data-slot="basic-tool-tool-info-structured">
+                <div data-component="discovery-tool-stack">
+                  <div data-slot="basic-tool-tool-info-main">
+                    <span data-slot="basic-tool-tool-title">
+                      <TextShimmer text={trigger().title} active={running()} />
+                    </span>
+                    <Show when={!running() && trigger().subtitle}>
+                      <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
+                    </Show>
+                  </div>
+                  <Show when={running() && batchCalls().length > 0}>
+                    <div data-component="discovery-batch-calls">
+                      <For each={batchCalls()}>
+                        {(call) => {
+                          const tool = typeof call.tool === "string" ? call.tool : "discover_batch"
+                          const info = discoveryToolInfo(i18n, tool, call) ?? {
+                            icon: "mcp" as const,
+                            title: tool,
+                          }
+
+                          return (
+                            <span data-slot="discovery-batch-call">
+                              <span data-slot="discovery-batch-call-icon">
+                                <Icon name={info.icon} size="small" />
+                              </span>
+                              <span data-slot="discovery-batch-call-label">
+                                <TextShimmer text={info.title} active offset={0} />
+                              </span>
+                            </span>
+                          )
+                        }}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </div>
+          </div>
+          <Show when={!!output() && !running()}>
+            <Collapsible.Arrow />
+          </Show>
+        </div>
+      </Collapsible.Trigger>
+      <Show when={!!output() && !running()}>
+        <Collapsible.Content>
+          <div data-component="bash-output">
+            <div data-slot="bash-scroll" data-scrollable>
+              <pre data-slot="bash-pre">
+                <code>{output()}</code>
+              </pre>
+            </div>
+          </div>
+        </Collapsible.Content>
+      </Show>
+    </Collapsible>
+  )
 }
 
 function ExaOutput(props: { output?: string }) {
@@ -914,6 +1179,9 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
             data-slot="context-tool-group-title"
             class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
           >
+            <span data-slot="discovery-group-icon" class="shrink-0">
+              <Icon name="magnifying-glass" size="small" />
+            </span>
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
                 active={pending()}
@@ -929,22 +1197,16 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
               <AnimatedCountList
                 items={[
                   {
-                    key: "read",
-                    count: summary().read,
-                    one: i18n.t("ui.messagePart.context.read.one"),
-                    other: i18n.t("ui.messagePart.context.read.other"),
+                    key: "tools",
+                    count: summary().tools,
+                    one: i18n.t("ui.messagePart.discovery.tools.one"),
+                    other: i18n.t("ui.messagePart.discovery.tools.other"),
                   },
                   {
-                    key: "search",
-                    count: summary().search,
-                    one: i18n.t("ui.messagePart.context.search.one"),
-                    other: i18n.t("ui.messagePart.context.search.other"),
-                  },
-                  {
-                    key: "list",
-                    count: summary().list,
-                    one: i18n.t("ui.messagePart.context.list.one"),
-                    other: i18n.t("ui.messagePart.context.list.other"),
+                    key: "tokens",
+                    count: summary().estimatedTokens,
+                    one: i18n.t("ui.messagePart.discovery.tokens.one"),
+                    other: i18n.t("ui.messagePart.discovery.tokens.other"),
                   },
                 ]}
                 fallback=""
@@ -958,33 +1220,9 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
         <div data-component="context-tool-group-list">
           <Index each={props.parts}>
             {(partAccessor) => {
-              const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
-              const running = createMemo(
-                () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
-              )
               return (
                 <div data-slot="context-tool-group-item">
-                  <div data-component="tool-trigger">
-                    <div data-slot="basic-tool-tool-trigger-content">
-                      <div data-slot="basic-tool-tool-info">
-                        <div data-slot="basic-tool-tool-info-structured">
-                          <div data-slot="basic-tool-tool-info-main">
-                            <span data-slot="basic-tool-tool-title">
-                              <TextShimmer text={trigger().title} active={running()} />
-                            </span>
-                            <Show when={!running() && trigger().subtitle}>
-                              <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
-                            </Show>
-                            <Show when={!running() && trigger().args?.length}>
-                              <For each={trigger().args}>
-                                {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
-                              </For>
-                            </Show>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <DiscoveryToolGroupItem part={partAccessor()} />
                 </div>
               )
             }}

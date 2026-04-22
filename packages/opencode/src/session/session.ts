@@ -11,7 +11,7 @@ import { InstallationVersion } from "../installation/version"
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage"
 import { SyncEvent } from "../sync"
 import type { SQL } from "../storage"
-import { PartTable, SessionTable } from "./session.sql"
+import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage"
 import { Log } from "../util"
@@ -46,6 +46,7 @@ export function isDefaultTitle(title: string) {
 }
 
 type SessionRow = typeof SessionTable.$inferSelect
+type PartRow = typeof PartTable.$inferSelect
 
 export function fromRow(row: SessionRow): Info {
   const summary =
@@ -384,12 +385,145 @@ type Patch = z.infer<typeof Event.Updated.schema>["info"]
 
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
   Effect.sync(() => Database.use(fn))
+const bootedInterruptedTools = new Set<string>()
+
+function interruptedTool(input: {
+  part: MessageV2.ToolPart
+  fallbackStart: number
+  now: number
+}): MessageV2.ToolPart {
+  const metadata =
+    input.part.state.status === "running"
+      ? { ...(input.part.state.metadata ?? {}), interrupted: true }
+      : { interrupted: true }
+  return {
+    ...input.part,
+    state: {
+      status: "error",
+      input: input.part.state.input,
+      error: "Tool execution was interrupted after process restart",
+      metadata,
+      time: {
+        start: input.part.state.status === "running" ? input.part.state.time.start : input.fallbackStart,
+        end: input.now,
+      },
+    },
+  }
+}
+
+function interruptedAssistantMessage(input: { message: MessageV2.Assistant; now: number }) {
+  return {
+    ...input.message,
+    finish: input.message.finish ?? "tool-calls",
+    time: {
+      ...input.message.time,
+      completed: input.message.time.completed ?? input.now,
+    },
+  } satisfies MessageV2.Assistant
+}
+
+export async function recoverInterruptedToolParts() {
+  const rows = Database.use((db) => db.select().from(PartTable).all())
+    .flatMap((row) => {
+      const part = {
+        ...row.data,
+        id: row.id,
+        messageID: row.message_id,
+        sessionID: row.session_id,
+      } as MessageV2.Part
+      if (part.type !== "tool") return []
+      if (part.state.status !== "running" && part.state.status !== "pending") return []
+      return [{ row, part }]
+    })
+  if (!rows.length) return 0
+
+  const now = Date.now()
+  const sessions = new Set<SessionID>()
+  const messageIDs = [...new Set(rows.map(({ row }) => row.message_id))]
+  Database.use((db) =>
+    db.transaction((tx) => {
+      rows.forEach(({ row, part }) => {
+        const next = interruptedTool({
+          part,
+          fallbackStart: row.time_created,
+          now,
+        })
+        const data = Object.assign({}, row.data as object, {
+          state: next.state,
+          metadata: next.metadata,
+        }) as unknown as PartRow["data"]
+        sessions.add(row.session_id)
+        tx
+          .update(PartTable)
+          .set({
+            time_updated: now,
+            data,
+          })
+          .where(eq(PartTable.id, row.id))
+          .run()
+      })
+      if (messageIDs.length) {
+        tx
+          .select()
+          .from(MessageTable)
+          .where(inArray(MessageTable.id, messageIDs))
+          .all()
+          .forEach((row) => {
+            const message = {
+              ...row.data,
+              id: row.id,
+              sessionID: row.session_id,
+            } as MessageV2.Info
+            if (message.role !== "assistant") return
+            const next = interruptedAssistantMessage({ message, now })
+            if (next.finish === message.finish && next.time.completed === message.time.completed) return
+            const { id, sessionID, ...data } = next
+            tx
+              .update(MessageTable)
+              .set({
+                time_updated: now,
+                data,
+              })
+              .where(eq(MessageTable.id, row.id))
+              .run()
+          })
+      }
+      sessions.forEach((sessionID) => {
+        tx
+          .update(SessionTable)
+          .set({
+            time_updated: now,
+          })
+          .where(eq(SessionTable.id, sessionID))
+          .run()
+      })
+    }),
+  )
+  log.warn("recovered interrupted tool parts", {
+    count: rows.length,
+    sessions: sessions.size,
+  })
+  return rows.length
+}
+
+async function bootInterruptedToolParts() {
+  const key = Database.Path
+  if (bootedInterruptedTools.has(key)) return
+  bootedInterruptedTools.add(key)
+  try {
+    await recoverInterruptedToolParts()
+  } catch (error) {
+    bootedInterruptedTools.delete(key)
+    throw error
+  }
+}
 
 export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const storage = yield* Storage.Service
+    yield* Effect.promise(() => bootInterruptedToolParts())
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID

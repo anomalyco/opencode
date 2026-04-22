@@ -347,8 +347,10 @@ download_and_install() {
 
 install_from_binary() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}from: ${NC}$binary_path"
-    cp "$binary_path" "${INSTALL_DIR}/opencode"
-    chmod 755 "${INSTALL_DIR}/opencode"
+    local tmp_bin="${INSTALL_DIR}/.opencode.install.$$"
+    cp "$binary_path" "$tmp_bin"
+    chmod 755 "$tmp_bin"
+    mv -f "$tmp_bin" "${INSTALL_DIR}/opencode"
 }
 
 if [ -n "$binary_path" ]; then

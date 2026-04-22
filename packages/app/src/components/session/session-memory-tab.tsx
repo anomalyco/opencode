@@ -7,7 +7,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { sdkJson } from "@/utils/sdk-team"
-import { align, issue, type TranslateError } from "@/utils/translation"
+import { align, hasActiveTranslations, issue, type TranslateError } from "@/utils/translation"
 import { createStore } from "solid-js/store"
 
 export function SessionMemoryTab(props: { class?: string } = {}) {
@@ -49,6 +49,7 @@ export function SessionMemoryTab(props: { class?: string } = {}) {
   }
 
   const stamp = createMemo(() => [sync.data.memory_entry.length, sync.data.memory_activity[0]?.id] as const)
+  const translating = createMemo(() => state.translating || hasActiveTranslations(sync.data.memory_entry))
 
   createEffect(
     on(
@@ -66,7 +67,7 @@ export function SessionMemoryTab(props: { class?: string } = {}) {
   })
 
   const translate = async () => {
-    if (state.translating) return
+    if (translating()) return
     if (sync.data.memory_entry.length === 0) return
     setState("translating", true)
     setState("error", undefined)
@@ -85,10 +86,10 @@ export function SessionMemoryTab(props: { class?: string } = {}) {
           method: "POST",
         }),
       )
-      .then((result) => {
+      .then(() => {
         showToast({
           title: language.t("ui.memory.toast.translateTitle"),
-          description: language.t("ui.memory.toast.translateDone", { count: result.count ?? 0 }),
+          description: language.t("ui.memory.panel.translating"),
         })
       })
       .catch((err: unknown) => {
@@ -132,7 +133,7 @@ export function SessionMemoryTab(props: { class?: string } = {}) {
         <MemoryPanel
           entries={sync.data.memory_entry}
           activity={sync.data.memory_activity}
-          translating={state.translating}
+          translating={translating()}
           onTranslate={translate}
           onRemove={remove}
           translateError={state.error}

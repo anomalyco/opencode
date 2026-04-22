@@ -179,6 +179,23 @@ test("bug report prompt is injected into active and legacy agent prompts when al
   })
 })
 
+test("specialist subagent descriptions include explicit parallel guidance", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const explorer = await load(tmp.path, (svc) => svc.get("explorer"))
+      const librarian = await load(tmp.path, (svc) => svc.get("librarian"))
+      const architect = await load(tmp.path, (svc) => svc.get("architect"))
+      const frontend = await load(tmp.path, (svc) => svc.get("frontend"))
+      expect(explorer?.description).toContain("at most 4 `explorer` tasks in parallel")
+      expect(librarian?.description).toContain("at most 4 `librarian` tasks in parallel")
+      expect(architect?.description).toContain("at most 2 `architect` tasks in parallel")
+      expect(frontend?.description).toContain("at most 2 `frontend` tasks in parallel")
+    },
+  })
+})
+
 test("general agent denies todo tools", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

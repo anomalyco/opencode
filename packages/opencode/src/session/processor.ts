@@ -24,6 +24,12 @@ import { isRecord } from "@/util/record"
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
 
+class ToolStreamStopped extends Error {
+  constructor() {
+    super("Tool stream stopped after tool error")
+  }
+}
+
 export type Result = "compact" | "stop" | "continue"
 
 export type Event = LLM.Event
@@ -336,7 +342,10 @@ export const layer: Layer.Layer<
           }
 
           case "tool-error": {
-            yield* failToolCall(value.toolCallId, value.error)
+            const failed = yield* failToolCall(value.toolCallId, value.error)
+            if (!failed) return
+            ctx.assistantMessage.finish = ctx.assistantMessage.finish ?? "tool-calls"
+            throw new ToolStreamStopped()
             return
           }
 
@@ -564,6 +573,10 @@ export const layer: Layer.Layer<
             Effect.catchCauseIf(
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
+            ),
+            Effect.catchIf(
+              (error): error is ToolStreamStopped => error instanceof ToolStreamStopped,
+              () => Effect.void,
             ),
             Effect.retry(
               SessionRetry.policy({

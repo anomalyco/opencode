@@ -4,7 +4,7 @@ import { onCleanup } from "solid-js"
 import { useLanguage } from "./language"
 import { useGlobalSDK } from "./global-sdk"
 import { useSDK } from "./sdk"
-import { align, issue, type TranslateError } from "@/utils/translation"
+import { align, hasActiveTranslations, issue, type TranslateError } from "@/utils/translation"
 import { sdkJson } from "@/utils/sdk-team"
 
 type BugReportEntry = {
@@ -150,10 +150,7 @@ export const { use: useBugReport, provider: BugReportProvider } = createSimpleCo
         return store.loaded
       },
       get translating() {
-        return (
-          store.translating ||
-          store.reports.some((item) => item.translate_status === "waiting" || item.translate_status === "started")
-        )
+        return store.translating || hasActiveTranslations(store.reports)
       },
       get error() {
         return store.error

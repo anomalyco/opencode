@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import * as Stream from "effect/Stream"
 import path from "path"
 import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -20,7 +21,7 @@ import { SessionSummary } from "../../src/session/summary"
 import { Snapshot } from "../../src/snapshot"
 import { Log } from "../../src/util"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { provideTmpdirServer } from "../fixture/fixture"
+import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
 
@@ -162,16 +163,46 @@ const deps = Layer.mergeAll(
   Permission.defaultLayer,
   Plugin.defaultLayer,
   Config.defaultLayer,
-  LLM.defaultLayer,
   Provider.defaultLayer,
   status,
 ).pipe(Layer.provideMerge(infra))
 const env = Layer.mergeAll(
   TestLLMServer.layer,
-  SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps)),
+  SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps), Layer.provide(LLM.defaultLayer)),
 )
 
 const it = testEffect(env)
+const streamEnv = (stream: Stream.Stream<LLM.Event, unknown>) =>
+  SessionProcessor.layer.pipe(
+    Layer.provide(summary),
+    Layer.provideMerge(deps),
+    Layer.provide(
+      Layer.succeed(
+        LLM.Service,
+        LLM.Service.of({
+          stream: () => stream,
+        }),
+      ),
+    ),
+  )
+const itToolError = testEffect(
+  streamEnv(
+    Stream.concat(
+      Stream.fromIterable([
+        { type: "start" } as LLM.Event,
+        { type: "tool-input-start", id: "call-1", toolName: "discover_batch" } as LLM.Event,
+        {
+          type: "tool-call",
+          toolCallId: "call-1",
+          toolName: "discover_batch",
+          input: { tasks: [{ tool: "search", args: { action: "content", pattern: "MessagePart" } }] },
+        } as LLM.Event,
+        { type: "tool-error", toolCallId: "call-1", error: new Error("boom") } as LLM.Event,
+      ]),
+      Stream.never,
+    ),
+  ),
+)
 
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
@@ -709,6 +740,58 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         }
       }),
     { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+itToolError.live("session.processor effect tests stop after tool errors even if the provider stream keeps hanging", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "tool error")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        msg.finish = undefined
+        yield* session.updateMessage(msg)
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* Effect.raceFirst(
+          handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies MessageV2.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "tool error" }],
+            tools: {},
+          }),
+          Effect.sleep("250 millis").pipe(Effect.flatMap(() => Effect.fail(new Error("timed out")))),
+        )
+
+        const parts = MessageV2.parts(msg.id)
+        const call = parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+
+        expect(value).toBe("continue")
+        expect(handle.message.finish).toBe("tool-calls")
+        expect(handle.message.time.completed).toBeDefined()
+        expect(call?.state.status).toBe("error")
+        if (call?.state.status !== "error") throw new Error("expected tool error part")
+        expect(call.state.error).toBe("boom")
+      }),
+    { git: true, config: cfg },
   ),
 )
 

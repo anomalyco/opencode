@@ -82,7 +82,7 @@ export const BugReportRoutes = () =>
       }),
       async (c) => {
         return c.json({
-          count: await BugReportTranslate.translate({ all: true, wait: true }),
+          count: await BugReportTranslate.translate({ all: true }),
         })
       },
     )
