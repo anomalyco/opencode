@@ -5,6 +5,21 @@ description: Customize your keybinds.
 
 OpenCode has a list of keybinds that you can customize through `tui.json`.
 
+On macOS, the default keybinds automatically swap `ctrl` and `cmd` (super). For example, `leader` is `cmd+x` on macOS and `ctrl+x` on other platforms.
+
+## Modifier Keys
+
+| Modifier | Description                                      |
+| -------- | -------------------------------------------------- |
+| `ctrl`   | Control key                                       |
+| `alt`    | Option (Alt) key - alias: `meta`, `option`     |
+| `super`  | Windows key on Windows, **cmd** on macOS - alias: `cmd`, `command` |
+| `shift`  | Shift key                                       |
+
+You can use:
+- `super`, `cmd`, or `command` interchangeably
+- `alt`, `meta`, or `option` interchangeably
+
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
