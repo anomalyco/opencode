@@ -79,6 +79,11 @@ type Turn = {
   id: MessageID
 }
 
+type Tail = {
+  start: number
+  id: MessageID
+}
+
 type CompletedCompaction = {
   userIndex: number
   assistantIndex: number
@@ -149,6 +154,31 @@ function turns(messages: MessageV2.WithParts[]) {
     result[i].end = result[i + 1].start
   }
   return result
+}
+
+function splitTurn(input: {
+  messages: MessageV2.WithParts[]
+  turn: Turn
+  model: Provider.Model
+  budget: number
+  estimate: (input: { messages: MessageV2.WithParts[]; model: Provider.Model }) => Effect.Effect<number>
+}) {
+  return Effect.gen(function* () {
+    if (input.budget <= 0) return undefined
+    if (input.turn.end - input.turn.start <= 1) return undefined
+    for (let start = input.turn.start + 1; start < input.turn.end; start++) {
+      const size = yield* input.estimate({
+        messages: input.messages.slice(start, input.turn.end),
+        model: input.model,
+      })
+      if (size > input.budget) continue
+      return {
+        start,
+        id: input.messages[start]!.info.id,
+      } satisfies Tail
+    }
+    return undefined
+  })
 }
 
 export interface Interface {
@@ -231,18 +261,26 @@ export const layer: Layer.Layer<
           }),
         { concurrency: 1 },
       )
-      if (sizes.at(-1)! > budget) {
-        log.info("tail fallback", { budget, size: sizes.at(-1) })
-        return { head: input.messages, tail_start_id: undefined }
-      }
 
       let total = 0
-      let keep: Turn | undefined
+      let keep: Tail | undefined
       for (let i = recent.length - 1; i >= 0; i--) {
         const size = sizes[i]
-        if (total + size > budget) break
-        total += size
-        keep = recent[i]
+        if (total + size <= budget) {
+          total += size
+          keep = { start: recent[i]!.start, id: recent[i]!.id }
+          continue
+        }
+        const split = yield* splitTurn({
+          messages: input.messages,
+          turn: recent[i]!,
+          model: input.model,
+          budget: budget - total,
+          estimate,
+        })
+        if (split) keep = split
+        else if (!keep) log.info("tail fallback", { budget, size, total })
+        break
       }
 
       if (!keep || keep.start === 0) return { head: input.messages, tail_start_id: undefined }
