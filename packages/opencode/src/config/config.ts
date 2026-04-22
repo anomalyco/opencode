@@ -430,6 +430,11 @@ export const layer = Layer.effect(
     })
 
     const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
+      const dirExists = yield* fs.isDir(dir)
+      if (!dirExists) {
+        log.debug("config dir does not exist, skipping .gitignore", { dir })
+        return
+      }
       const gitignore = path.join(dir, ".gitignore")
       const hasIgnore = yield* fs.existsSafe(gitignore)
       if (!hasIgnore) {
