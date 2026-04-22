@@ -1,0 +1,31 @@
+{
+  "name": "@opencode-ai/ui-team",
+  "version": "1.14.20",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./message-part": "./src/components/message-part.tsx",
+    "./message-part-tools": "./src/register-message-part.ts",
+    "./memory-panel": "./src/team-components/memory-panel.tsx",
+    "./memory-strip": "./src/team-components/memory-strip.tsx",
+    "./bug-report-panel": "./src/team-components/bug-report-panel.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/shared": "workspace:*",
+    "@solidjs/router": "catalog:",
+    "motion": "12.34.5",
+    "solid-js": "catalog:",
+    "strip-ansi": "7.1.2"
+  }
+}

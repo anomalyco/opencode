@@ -1,0 +1,131 @@
+[data-component="team-tool-body"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+[data-slot="team-tool-pills"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+[data-slot="team-tool-pill"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+[data-slot="team-tool-pill"][data-tone="success"] {
+  color: var(--text-success);
+}
+
+[data-slot="team-tool-pill"][data-tone="error"] {
+  color: var(--text-danger);
+}
+
+[data-slot="team-tool-summary"] {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+[data-slot="team-tool-stack"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-slot="team-tool-line"] {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+[data-slot="team-tool-links"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-slot="team-tool-link"] {
+  color: var(--text-link);
+  font-size: 12px;
+  line-height: 16px;
+  text-decoration: none;
+}
+
+[data-slot="team-tool-link"]:hover {
+  text-decoration: underline;
+}
+
+[data-slot="team-tool-kv-grid"] {
+  display: grid;
+  gap: 8px;
+}
+
+[data-slot="team-tool-kv-row"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+[data-slot="team-tool-kv-label"] {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+[data-slot="team-tool-kv-value"] {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+[data-slot="team-tool-code"] {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-slot="team-tool-card"] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-secondary);
+}
+
+[data-slot="team-tool-title-row"] {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+[data-slot="team-tool-title"] {
+  color: var(--text-strong);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+[data-slot="team-tool-meta"] {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}

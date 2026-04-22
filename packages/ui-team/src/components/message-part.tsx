@@ -30,34 +30,35 @@ import {
   QuestionAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
-import { useData } from "../context"
-import { useFileComponent } from "../context/file"
-import { useDialog } from "../context/dialog"
-import { type UiI18n, useI18n } from "../context/i18n"
-import { BasicTool, GenericTool } from "./basic-tool"
-import { Accordion } from "./accordion"
-import { StickyAccordionHeader } from "./sticky-accordion-header"
-import { Collapsible } from "./collapsible"
-import { FileIcon } from "./file-icon"
-import { Icon } from "./icon"
-import { ToolErrorCard } from "./tool-error-card"
-import { Checkbox } from "./checkbox"
-import { DiffChanges } from "./diff-changes"
-import { Markdown } from "./markdown"
-import { ImagePreview } from "./image-preview"
+import { useData } from "../../../ui/src/context"
+import { useFileComponent } from "../../../ui/src/context/file"
+import { useDialog } from "../../../ui/src/context/dialog"
+import { type UiI18n, useI18n } from "../../../ui/src/context/i18n"
+import { BasicTool, GenericTool } from "../../../ui/src/components/basic-tool"
+import { Accordion } from "../../../ui/src/components/accordion"
+import { StickyAccordionHeader } from "../../../ui/src/components/sticky-accordion-header"
+import { Collapsible } from "../../../ui/src/components/collapsible"
+import { FileIcon } from "../../../ui/src/components/file-icon"
+import { Icon } from "../../../ui/src/components/icon"
+import { ToolErrorCard } from "../../../ui/src/components/tool-error-card"
+import { Checkbox } from "../../../ui/src/components/checkbox"
+import { DiffChanges } from "../../../ui/src/components/diff-changes"
+import { Markdown } from "../../../ui/src/components/markdown"
+import { ImagePreview } from "../../../ui/src/components/image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/shared/util/path"
 import { checksum } from "@opencode-ai/shared/util/encode"
-import { Tooltip } from "./tooltip"
-import { IconButton } from "./icon-button"
-import { Spinner } from "./spinner"
-import { TextShimmer } from "./text-shimmer"
-import { AnimatedCountList } from "./tool-count-summary"
-import { ToolStatusTitle } from "./tool-status-title"
-import { patchFiles } from "./apply-patch-file"
+import { Tooltip } from "../../../ui/src/components/tooltip"
+import { IconButton } from "../../../ui/src/components/icon-button"
+import { Spinner } from "../../../ui/src/components/spinner"
+import { TextShimmer } from "../../../ui/src/components/text-shimmer"
+import { AnimatedCountList } from "../../../ui/src/components/tool-count-summary"
+import { ToolStatusTitle } from "../../../ui/src/components/tool-status-title"
+import { patchFiles } from "../../../ui/src/components/apply-patch-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
-import { attached, inline, kind } from "./message-file"
-import { editTools, mcpTools, taskAsyncTool, teamTools } from "@opencode-ai/ui-team/message-part-tools"
+import { attached, inline, kind } from "../../../ui/src/components/message-file"
+import { editTools, taskAsyncTool, teamTools } from "../team-tool/team-tools"
+import { mcpTools } from "../team-tool/mcp-tools"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -264,7 +265,7 @@ function getDirectory(path: string | undefined) {
   return relativizeProjectPath(_getDirectory(path), data.directory)
 }
 
-import type { IconProps } from "./icon"
+import type { IconProps } from "../../../ui/src/components/icon"
 
 export type ToolInfo = {
   icon: IconProps["name"]

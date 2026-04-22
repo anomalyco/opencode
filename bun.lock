@@ -35,6 +35,7 @@
         "@opencode-ai/sdk": "workspace:*",
         "@opencode-ai/shared": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
+        "@opencode-ai/ui-team": "workspace:*",
         "@shikijs/transformers": "3.9.2",
         "@solid-primitives/active-element": "2.1.3",
         "@solid-primitives/audio": "1.4.2",
@@ -573,6 +574,7 @@
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
         "@opencode-ai/shared": "workspace:*",
+        "@opencode-ai/ui-team": "workspace:*",
         "@pierre/diffs": "catalog:",
         "@shikijs/transformers": "3.9.2",
         "@solid-primitives/bounds": "0.1.3",
@@ -613,6 +615,25 @@
         "vite": "catalog:",
         "vite-plugin-icons-spritesheet": "3.0.1",
         "vite-plugin-solid": "catalog:",
+      },
+    },
+    "packages/ui-team": {
+      "name": "@opencode-ai/ui-team",
+      "version": "1.14.20",
+      "dependencies": {
+        "@opencode-ai/sdk": "workspace:*",
+        "@opencode-ai/shared": "workspace:*",
+        "@solidjs/router": "catalog:",
+        "motion": "12.34.5",
+        "solid-js": "catalog:",
+        "strip-ansi": "7.1.2",
+      },
+      "devDependencies": {
+        "@tsconfig/node22": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
       },
     },
     "packages/web": {
@@ -1573,6 +1594,8 @@
     "@opencode-ai/storybook": ["@opencode-ai/storybook@workspace:packages/storybook"],
 
     "@opencode-ai/ui": ["@opencode-ai/ui@workspace:packages/ui"],
+
+    "@opencode-ai/ui-team": ["@opencode-ai/ui-team@workspace:packages/ui-team"],
 
     "@opencode-ai/web": ["@opencode-ai/web@workspace:packages/web"],
 
