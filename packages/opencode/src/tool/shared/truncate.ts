@@ -7,7 +7,7 @@ import { AppFileSystem } from "@/filesystem"
 import { evaluate } from "@/permission/evaluate"
 import { Identifier } from "../../id/id"
 import { Log } from "../../util/log"
-import { ToolID } from "./schema"
+import { ToolID } from "../schema"
 import { TRUNCATION_DIR } from "./truncation-dir"
 
 export namespace Truncate {

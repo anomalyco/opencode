@@ -8,6 +8,7 @@ import { Filesystem } from "../../src/util"
 import path from "path"
 import { testEffect } from "../lib/effect"
 import { writeFileStringScoped } from "../lib/filesystem"
+import { Truncate as SharedTruncate } from "../../src/tool/shared/truncate"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 const ROOT = path.resolve(import.meta.dir, "..", "..")
@@ -114,7 +115,7 @@ describe("Truncate", () => {
 
         expect(result.truncated).toBe(true)
         expect(result.content).toContain("The tool call succeeded but the output was truncated")
-        expect(result.content).toContain("Grep")
+        expect(result.content).toContain("Use Search")
         if (!result.truncated) throw new Error("expected truncated")
         expect(result.outputPath).toBeDefined()
         expect(result.outputPath).toContain("tool_")
@@ -132,7 +133,7 @@ describe("Truncate", () => {
         const result = yield* svc.output(lines, { maxLines: 10 }, agent as any)
 
         expect(result.truncated).toBe(true)
-        expect(result.content).toContain("Grep")
+        expect(result.content).toContain("Task tool")
         expect(result.content).toContain("Task tool")
       }),
     )
@@ -145,7 +146,7 @@ describe("Truncate", () => {
         const result = yield* svc.output(lines, { maxLines: 10 }, agent as any)
 
         expect(result.truncated).toBe(true)
-        expect(result.content).toContain("Grep")
+        expect(result.content).toContain("Use Search")
         expect(result.content).not.toContain("Task tool")
       }),
     )
@@ -169,6 +170,20 @@ describe("Truncate", () => {
 
       expect(out.code).toBe(0)
     }, 20000)
+
+    test("shared truncate helper resolves truncated output without hanging", async () => {
+      const result = await Promise.race([
+        SharedTruncate.output("x".repeat(60_000), {}, {
+          permission: [{ permission: "task_async", pattern: "*", action: "allow" as const }],
+        } as any),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("shared truncate timed out")), 2_000)),
+      ])
+
+      expect(result.truncated).toBe(true)
+      expect(result.content).toContain("The tool call succeeded but the output was truncated")
+      if (!result.truncated) throw new Error("expected truncated")
+      expect(result.outputPath).toContain("tool_")
+    })
   })
 
   describe("cleanup", () => {
