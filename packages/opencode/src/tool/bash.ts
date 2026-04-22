@@ -17,6 +17,7 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
+import { BackgroundShell } from "../shell/background"
 import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
@@ -57,6 +58,12 @@ const Parameters = z.object({
     .string()
     .describe(
       `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
+    )
+    .optional(),
+  run_in_background: z
+    .boolean()
+    .describe(
+      "Set to true to run the command in the background. Returns a shell_id immediately while the process keeps running. Read incremental output with the bash_output tool and terminate with kill_shell. Use for long-running processes (dev servers, watchers, log tails) that you do not want to block on.",
     )
     .optional(),
   description: z
@@ -335,6 +342,7 @@ export const BashTool = Tool.define(
     const fs = yield* AppFileSystem.Service
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
+    const bg = yield* BackgroundShell.Service
 
     const cygpath = Effect.fn("BashTool.cygpath")(function* (shell: string, text: string) {
       const lines = yield* spawner
@@ -602,13 +610,44 @@ export const BashTool = Tool.define(
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
               yield* ask(ctx, scan)
 
+              const env = yield* shellEnv(ctx, cwd)
+
+              if (params.run_in_background) {
+                const { shellID } = yield* bg.start({
+                  shell,
+                  shellName: name,
+                  command: params.command,
+                  cwd,
+                  env,
+                  description: params.description,
+                })
+                const summary = [
+                  `shell_id: ${shellID}`,
+                  `command: ${params.command}`,
+                  "",
+                  "Running in background. Use bash_output with this shell_id to read incremental output, and kill_shell to terminate when done.",
+                ].join("\n")
+                return {
+                  title: params.description,
+                  metadata: {
+                    output: summary,
+                    exit: null,
+                    description: params.description,
+                    truncated: false,
+                    shellID,
+                    background: true,
+                  },
+                  output: summary,
+                }
+              }
+
               return yield* run(
                 {
                   shell,
                   name,
                   command: params.command,
                   cwd,
-                  env: yield* shellEnv(ctx, cwd),
+                  env,
                   timeout,
                   description: params.description,
                 },

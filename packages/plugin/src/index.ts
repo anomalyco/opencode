@@ -258,6 +258,50 @@ export interface Hooks {
     output: { headers: Record<string, string> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  /**
+   * Fires once when a new session is created, before any user message has been
+   * processed. Useful for booting dev servers, warming caches, or seeding
+   * project-specific context.
+   */
+  "session.start"?: (
+    input: { sessionID: string; parentID?: string; directory: string },
+    output: {},
+  ) => Promise<void>
+  /**
+   * Fires when a session is removed / ends. Use to tear down anything
+   * `session.start` set up.
+   */
+  "session.end"?: (
+    input: { sessionID: string; parentID?: string; directory: string },
+    output: {},
+  ) => Promise<void>
+  /**
+   * Fires when the user submits a prompt, before the LLM is called. Plugins
+   * can append context parts (e.g. inject repo state) by pushing onto
+   * `output.parts`, or block the prompt by setting `output.block` to a reason
+   * string.
+   */
+  "chat.prompt.submit"?: (
+    input: { sessionID: string; agent?: string; messageID?: string },
+    output: { parts: Part[]; block?: string },
+  ) => Promise<void>
+  /**
+   * Fires when an assistant turn finishes (after the last tool call has
+   * resolved). Use for post-turn linting, formatting, or notifications.
+   */
+  "chat.stop"?: (
+    input: { sessionID: string; messageID: string; agent: string; aborted: boolean },
+    output: {},
+  ) => Promise<void>
+  /**
+   * User-visible notification surface. The TUI / desktop shell decides how to
+   * present these (toast, system notification, etc.). Plugins call this via
+   * the `event` hook or by surfacing content from other hooks.
+   */
+  notify?: (
+    input: { sessionID?: string; level: "info" | "warn" | "error"; title: string; body?: string },
+    output: {},
+  ) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
     output: { parts: Part[] },
