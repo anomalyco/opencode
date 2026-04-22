@@ -18,6 +18,7 @@ import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { calculateRanges, DiffRange } from "../format/diff-range"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -95,9 +96,10 @@ export const EditTool = Tool.define(
                     diff,
                   },
                 })
+                const ranges = calculateRanges(contentOld, params.newString)
                 yield* afs.writeWithDirs(filePath, params.newString)
-                yield* format.file(filePath)
-                yield* bus.publish(File.Event.Edited, { file: filePath })
+                yield* format.file(filePath, ranges)
+                yield* bus.publish(File.Event.Edited, { file: filePath, ranges: ranges.map(DiffRange.toJSON) })
                 yield* bus.publish(FileWatcher.Event.Updated, {
                   file: filePath,
                   event: existed ? "change" : "add",
@@ -134,9 +136,10 @@ export const EditTool = Tool.define(
                 },
               })
 
+              const ranges = calculateRanges(contentOld, contentNew)
               yield* afs.writeWithDirs(filePath, contentNew)
-              yield* format.file(filePath)
-              yield* bus.publish(File.Event.Edited, { file: filePath })
+              yield* format.file(filePath, ranges)
+              yield* bus.publish(File.Event.Edited, { file: filePath, ranges: ranges.map(DiffRange.toJSON) })
               yield* bus.publish(FileWatcher.Event.Updated, {
                 file: filePath,
                 event: "change",

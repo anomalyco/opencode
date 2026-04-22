@@ -52,7 +52,7 @@ const resolve = () =>
     }),
   )
 
-const subscribeBus = <D extends BusEvent.Definition>(def: D, callback: () => unknown) =>
+const subscribeBus = <D extends BusEvent.Definition>(def: D, callback: (event: any) => unknown) =>
   runtime.runPromise(Bus.Service.use((bus) => bus.subscribeCallback(def, callback)))
 
 async function onceBus<D extends BusEvent.Definition>(def: D) {
@@ -630,6 +630,41 @@ describe("tool.edit", () => {
       })
       expect(output).toBe(normalize(blockNew + "\n" + blockNew + "\n", "\r\n"))
       expectCrlf(output)
+    })
+  })
+
+  describe("range-based formatting", () => {
+    test("emits File.Event.Edited with ranges covering only the changed region", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      // "line1\nline2\n" is 12 chars — TARGET starts at position 12
+      await fs.writeFile(filepath, "line1\nline2\nTARGET\nline4\n", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const { File } = await import("../../src/file")
+
+          let ranges: { start: number; end: number }[] | undefined
+          const unsub = await subscribeBus(File.Event.Edited, (event: any) => {
+            ranges = event.properties.ranges
+          })
+
+          try {
+            const edit = await resolve()
+            await runtime.runPromise(
+              edit.execute({ filePath: filepath, oldString: "TARGET", newString: "CHANGED" }, ctx),
+            )
+          } finally {
+            unsub()
+          }
+
+          expect(ranges).toBeDefined()
+          expect(ranges!.length).toBeGreaterThan(0)
+          // unchanged prefix "line1\nline2\n" must not be inside any range
+          expect(ranges![0].start).toBeGreaterThan(0)
+        },
+      })
     })
   })
 

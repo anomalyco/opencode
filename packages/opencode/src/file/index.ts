@@ -78,6 +78,16 @@ export const Event = {
     "file.edited",
     z.object({
       file: z.string(),
+      ranges: z
+        .array(
+          z.object({
+            start: z.number(),
+            end: z.number(),
+            byteOffset: z.number().optional(),
+            byteLength: z.number().optional(),
+          }),
+        )
+        .optional(),
     }),
   ),
 }

@@ -227,6 +227,37 @@ describe("tool.write", () => {
     )
   })
 
+  describe("range-based formatting", () => {
+    it.live("emits File.Event.Edited with ranges covering only the changed region", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const filepath = path.join(dir, "file.txt")
+          // "line1\nline2\n" is 12 chars — TARGET starts at position 12
+          yield* Effect.promise(() => fs.writeFile(filepath, "line1\nline2\nTARGET\nline4\n", "utf-8"))
+
+          const { File } = yield* Effect.promise(() => import("../../src/file"))
+
+          let ranges: { start: number; end: number }[] | undefined
+          const bus = yield* Bus.Service
+          const unsub = yield* bus.subscribeCallback(File.Event.Edited, (event: any) => {
+            ranges = event.properties.ranges
+          })
+
+          try {
+            yield* run({ filePath: filepath, content: "line1\nline2\nCHANGED\nline4\n" })
+          } finally {
+            unsub()
+          }
+
+          expect(ranges).toBeDefined()
+          expect(ranges!.length).toBeGreaterThan(0)
+          // unchanged prefix "line1\nline2\n" must not be inside any range
+          expect(ranges![0].start).toBeGreaterThan(0)
+        }),
+      ),
+    )
+  })
+
   describe("title generation", () => {
     it.live("returns relative path as title", () =>
       provideTmpdirInstance((dir) =>

@@ -8,6 +8,7 @@ import z from "zod"
 import { Config } from "../config"
 import { Log } from "../util"
 import * as Formatter from "./formatter"
+import { DiffRange } from "./diff-range"
 
 const log = Log.create({ service: "format" })
 
@@ -25,7 +26,7 @@ export type Status = z.infer<typeof Status>
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly status: () => Effect.Effect<Status[]>
-  readonly file: (filepath: string) => Effect.Effect<void>
+  readonly file: (filepath: string, ranges?: DiffRange[]) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Format") {}
@@ -70,47 +71,53 @@ export const layer = Layer.effect(
               }
             }),
           )
-          return checks.filter((x) => x.cmd).map((x) => ({ item: x.item, cmd: x.cmd! }))
+          return checks
+            .filter((x): x is { item: Formatter.Info; cmd: string[] } => Array.isArray(x.cmd))
+            .map((x) => ({ item: x.item, cmd: x.cmd }))
         }
 
-        function formatFile(filepath: string) {
+        function formatFile(filepath: string, ranges?: DiffRange[]) {
           return Effect.gen(function* () {
-            log.info("formatting", { file: filepath })
+            log.info("formatting", { file: filepath, ranges })
             const ext = path.extname(filepath)
 
+            const dir = yield* InstanceState.directory
             for (const { item, cmd } of yield* Effect.promise(() => getFormatter(ext))) {
-              if (cmd === false) continue
-              log.info("running", { command: cmd })
-              const replaced = cmd.map((x) => x.replace("$FILE", filepath))
-              const dir = yield* InstanceState.directory
-              const code = yield* spawner
-                .spawn(
-                  ChildProcess.make(replaced[0]!, replaced.slice(1), {
-                    cwd: dir,
-                    env: item.environment,
-                    extendEnv: true,
-                  }),
-                )
-                .pipe(
-                  Effect.flatMap((handle) => handle.exitCode),
-                  Effect.scoped,
-                  Effect.catch(() =>
-                    Effect.sync(() => {
-                      log.error("failed to format file", {
-                        error: "spawn failed",
-                        command: cmd,
-                        ...item.environment,
-                        file: filepath,
-                      })
-                      return ChildProcessSpawner.ExitCode(1)
+              const cmds =
+                item.buildRangeCommand && ranges?.length
+                  ? item.buildRangeCommand(filepath, cmd, ranges)
+                  : [cmd.map((x) => x.replace("$FILE", filepath))]
+              for (const replaced of cmds) {
+                log.info("running", { command: replaced })
+                const code = yield* spawner
+                  .spawn(
+                    ChildProcess.make(replaced[0]!, replaced.slice(1), {
+                      cwd: dir,
+                      env: item.environment,
+                      extendEnv: true,
                     }),
-                  ),
-                )
-              if (code !== 0) {
-                log.error("failed", {
-                  command: cmd,
-                  ...item.environment,
-                })
+                  )
+                  .pipe(
+                    Effect.flatMap((handle) => handle.exitCode),
+                    Effect.scoped,
+                    Effect.catch(() =>
+                      Effect.sync(() => {
+                        log.error("failed to format file", {
+                          error: "spawn failed",
+                          command: replaced,
+                          ...item.environment,
+                          file: filepath,
+                        })
+                        return ChildProcessSpawner.ExitCode(1)
+                      }),
+                    ),
+                  )
+                if (code !== 0) {
+                  log.error("failed", {
+                    command: replaced,
+                    ...item.environment,
+                  })
+                }
               }
             }
           })
@@ -186,9 +193,9 @@ export const layer = Layer.effect(
       return result
     })
 
-    const file = Effect.fn("Format.file")(function* (filepath: string) {
+    const file = Effect.fn("Format.file")(function* (filepath: string, ranges?: DiffRange[]) {
       const { formatFile } = yield* InstanceState.get(state)
-      yield* formatFile(filepath)
+      yield* formatFile(filepath, ranges)
     })
 
     return Service.of({ init, status, file })

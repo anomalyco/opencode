@@ -557,6 +557,43 @@ EOF`
     })
   })
 
+  test("emits File.Event.Edited with ranges covering only the changed region", async () => {
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "range_test.txt")
+        // "line1\nline2\n" is 12 chars — TARGET starts at position 12
+        await fs.writeFile(target, "line1\nline2\nTARGET\nline4\n", "utf-8")
+
+        const { File } = await import("../../src/file")
+
+        let ranges: { start: number; end: number }[] | undefined
+        const unsub = await runtime.runPromise(
+          Bus.Service.use((bus) =>
+            bus.subscribeCallback(File.Event.Edited, (event: any) => {
+              ranges = event.properties.ranges
+            }),
+          ),
+        )
+
+        try {
+          const patchText = "*** Begin Patch\n*** Update File: range_test.txt\n@@\n-TARGET\n+CHANGED\n*** End Patch"
+          await execute({ patchText }, ctx)
+        } finally {
+          unsub()
+        }
+
+        expect(ranges).toBeDefined()
+        expect(ranges!.length).toBeGreaterThan(0)
+        // unchanged prefix "line1\nline2\n" must not be inside any range
+        expect(ranges![0].start).toBeGreaterThan(0)
+      },
+    })
+  })
+
   test("matches with Unicode punctuation differences", async () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
