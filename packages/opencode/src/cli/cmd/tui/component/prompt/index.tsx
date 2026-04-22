@@ -110,8 +110,6 @@ export function Prompt(props: PromptProps) {
   const kv = useKV()
   const skillCatalog = useSkillCatalog()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
-  const skillCatalog = useSkillCatalog()
-  const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
