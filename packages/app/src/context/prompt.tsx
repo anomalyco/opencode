@@ -185,9 +185,9 @@ function createPromptSession(dir: string, id: string | undefined) {
 
   return {
     ready,
-    current: createMemo(() => store.prompt),
+    current: () => store.prompt,
     cursor: createMemo(() => store.cursor),
-    dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
+    dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
     context: {
       items: createMemo(() => store.context.items),
       add(item: ContextItem) {
@@ -277,7 +277,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const pick = (scope?: Scope) => (scope ? load(scope.dir, scope.id) : session())
 
     return {
-      ready: () => session().ready(),
+      ready: () => session().ready,
       current: () => session().current(),
       cursor: () => session().cursor(),
       dirty: () => session().dirty(),
