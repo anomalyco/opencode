@@ -490,7 +490,6 @@ export const dict = {
   "session.header.open.action": "{{app}}を開く",
   "session.header.open.ariaLabel": "{{app}}で開く",
   "session.header.open.menu": "開くオプション",
-  "session.header.open.copyPath": "パスをコピー",
   "status.popover.trigger": "ステータス",
   "status.popover.ariaLabel": "サーバー設定",
   "status.popover.tab.servers": "サーバー",

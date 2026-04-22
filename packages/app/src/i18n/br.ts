@@ -493,7 +493,6 @@ export const dict = {
   "session.header.open.action": "Abrir {{app}}",
   "session.header.open.ariaLabel": "Abrir em {{app}}",
   "session.header.open.menu": "Opções de abertura",
-  "session.header.open.copyPath": "Copiar caminho",
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Configurações de servidores",
   "status.popover.tab.servers": "Servidores",

@@ -421,6 +421,9 @@ export const SortableWorkspace = (props: {
         </div>
 
         <Collapsible.Content>
+          <div class="pt-2 pb-1 px-2 text-12-medium text-text-weak uppercase tracking-wide">
+            {language.t("sidebar.heading.chats")}
+          </div>
           <WorkspaceSessionList
             slug={slug}
             mobile={props.mobile}

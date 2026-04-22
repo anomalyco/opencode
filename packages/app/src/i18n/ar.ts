@@ -489,7 +489,6 @@ export const dict = {
   "session.header.open.action": "فتح {{app}}",
   "session.header.open.ariaLabel": "فتح في {{app}}",
   "session.header.open.menu": "خيارات الفتح",
-  "session.header.open.copyPath": "نسخ المسار",
   "status.popover.trigger": "الحالة",
   "status.popover.ariaLabel": "إعدادات الخوادم",
   "status.popover.tab.servers": "الخوادم",

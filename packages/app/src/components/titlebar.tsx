@@ -289,7 +289,8 @@ export function Titlebar() {
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
-      <div class="min-w-0 flex items-center justify-center pointer-events-none">
+      <div class="min-w-0 flex items-center justify-center gap-2 pointer-events-none">
+        <div class="pointer-events-auto text-13-medium text-text-strong select-none">Logo placeholder</div>
         <div id="opencode-titlebar-center" class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full" />
       </div>
 

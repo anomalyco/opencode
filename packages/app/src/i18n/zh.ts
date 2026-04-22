@@ -543,7 +543,6 @@ export const dict = {
   "session.header.open.action": "打开 {{app}}",
   "session.header.open.ariaLabel": "在 {{app}} 中打开",
   "session.header.open.menu": "打开选项",
-  "session.header.open.copyPath": "复制路径",
 
   "status.popover.trigger": "状态",
   "status.popover.ariaLabel": "服务器配置",
