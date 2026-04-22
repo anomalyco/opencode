@@ -633,7 +633,6 @@ export function Autocomplete(props: {
         >
           {(option, index) => (
             <box
-              paddingLeft={1}
               paddingRight={1}
               backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
@@ -650,22 +649,18 @@ export function Autocomplete(props: {
               }}
               onMouseUp={() => select()}
             >
-              <Show when={option().gitStatus}>
-                <text
-                  fg={
-                    index === store.selected
-                      ? selectedForeground(theme)
-                      : option().gitStatus === "untracked"
-                        ? theme.diffAdded
-                        : option().gitStatus === "modified"
-                          ? theme.warning
-                          : theme.diffAdded
-                  }
-                  flexShrink={0}
-                >
-                  {option().gitStatus === "untracked" ? "U " : option().gitStatus === "modified" ? "M " : "A "}
-                </text>
-              </Show>
+              <text
+                fg={
+                  option().gitStatus
+                    ? option().gitStatus === "modified"
+                      ? theme.warning
+                      : theme.diffAdded
+                    : undefined
+                }
+                flexShrink={0}
+              >
+                {option().gitStatus ? "▎" : " "}
+              </text>
               <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option().display}
               </text>
