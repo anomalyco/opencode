@@ -31,7 +31,6 @@ export const FileDiff = z
 export type FileDiff = z.infer<typeof FileDiff>
 
 const log = Log.create({ service: "snapshot" })
-const prune = "7.days"
 const limit = 2 * 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
@@ -286,10 +285,18 @@ export const layer: Layer.Layer<
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
               const days = yield* retentionDays()
-              // git gc repacks objects into pack files before pruning, so old objects survive in packs.
-              // Remove existing pack files so old objects become loose and can actually be pruned.
-              yield* fs.remove(path.join(state.gitdir, "objects", "pack")).pipe(Effect.catch(() => Effect.void))
-              const result = yield* git(args(["prune", `--expire=${days}.days`]), { cwd: state.directory })
+
+              // Remove pack files so old objects can't survive in packs
+              const packDir = path.join(state.gitdir, "objects", "pack")
+              if (yield* exists(packDir)) {
+                const entries = yield* fs.readDirectoryEntries(packDir).pipe(Effect.orDie)
+                for (const entry of entries) {
+                  yield* fs.remove(path.join(packDir, entry.name)).pipe(Effect.catch(() => Effect.void))
+                }
+              }
+
+              // Prune loose objects older than retention period
+              const result = yield* git(args(["prune", `--expire=${days}.days`]))
               if (result.code !== 0) {
                 log.warn("cleanup failed", {
                   exitCode: result.code,
@@ -297,6 +304,20 @@ export const layer: Layer.Layer<
                 })
                 return
               }
+
+              // Remove empty object directories
+              const objectsDir = path.join(state.gitdir, "objects")
+              const entries = yield* fs.readDirectoryEntries(objectsDir).pipe(Effect.orDie)
+              for (const entry of entries) {
+                if (entry.type === "directory" && entry.name !== "pack" && entry.name !== "info") {
+                  const dirPath = path.join(objectsDir, entry.name)
+                  const dirEntries = yield* fs.readDirectoryEntries(dirPath).pipe(Effect.orDie)
+                  if (dirEntries.length === 0) {
+                    yield* fs.remove(dirPath).pipe(Effect.catch(() => Effect.void))
+                  }
+                }
+              }
+
               log.info("cleanup", { retentionDays: days })
             }),
           )
