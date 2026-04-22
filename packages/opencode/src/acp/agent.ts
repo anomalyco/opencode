@@ -38,7 +38,7 @@ import { pathToFileURL } from "url"
 import { Filesystem } from "@/util/filesystem"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig } from "./types"
+import type { ACPConfig, ACPSessionState } from "./types"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
@@ -150,6 +150,8 @@ export class Agent implements ACPAgent {
   private shellSnapshots = new Map<string, string>()
   private toolStarts = new Set<string>()
   private permissionQueues = new Map<string, Promise<void>>()
+  // Maps child session IDs to their root ACP-tracked session ID
+  private childToRootSession = new Map<string, string>()
   private permissionOptions: PermissionOption[] = [
     { optionId: "once", kind: "allow_once", name: "Allow once" },
     { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -190,11 +192,55 @@ export class Agent implements ACPAgent {
     }
   }
 
+  /**
+   * Given a session ID, returns the ACPSessionState for that session or the
+   * nearest ACP-tracked ancestor. Child sessions created by the Task tool
+   * have a parentID chain leading back to the root ACP session. We cache
+   * the mapping so we only traverse the chain once per child session.
+   */
+  private async resolveRootSession(sessionID: string): Promise<ACPSessionState | undefined> {
+    // Fast path: directly tracked by ACP session manager
+    const direct = this.sessionManager.tryGet(sessionID)
+    if (direct) return direct
+
+    // Check cache
+    const cached = this.childToRootSession.get(sessionID)
+    if (cached) return this.sessionManager.tryGet(cached)
+
+    // Walk the parentID chain via the SDK until we find a known root session
+    let currentID = sessionID
+    const visited: string[] = []
+    while (true) {
+      visited.push(currentID)
+      const info = await this.sdk.session
+        .get({ sessionID: currentID, directory: "" }, { throwOnError: false })
+        .then((x) => x.data)
+        .catch(() => undefined)
+
+      if (!info) break
+
+      const parentID = info.parentID
+      if (!parentID) break
+
+      const root = this.sessionManager.tryGet(parentID)
+      if (root) {
+        // Cache the mapping for all visited IDs
+        for (const id of visited) {
+          this.childToRootSession.set(id, root.id)
+        }
+        return root
+      }
+      currentID = parentID
+    }
+
+    return undefined
+  }
+
   private async handleEvent(event: Event) {
     switch (event.type) {
       case "permission.asked": {
         const permission = event.properties
-        const session = this.sessionManager.tryGet(permission.sessionID)
+        const session = await this.resolveRootSession(permission.sessionID)
         if (!session) return
 
         const prev = this.permissionQueues.get(permission.sessionID) ?? Promise.resolve()
@@ -277,7 +323,7 @@ export class Agent implements ACPAgent {
         log.info("message part updated", { event: event.properties })
         const props = event.properties
         const part = props.part
-        const session = this.sessionManager.tryGet(part.sessionID)
+        const session = await this.resolveRootSession(part.sessionID)
         if (!session) return
         const sessionId = session.id
 
@@ -440,16 +486,19 @@ export class Agent implements ACPAgent {
 
       case "message.part.delta": {
         const props = event.properties
-        const session = this.sessionManager.tryGet(props.sessionID)
+        const session = await this.resolveRootSession(props.sessionID)
         if (!session) return
         const sessionId = session.id
+        // Use the child session's own cwd for SDK lookups (may differ from root)
+        const childSession = this.sessionManager.tryGet(props.sessionID)
+        const directory = childSession?.cwd ?? session.cwd
 
         const message = await this.sdk.session
           .message(
             {
               sessionID: props.sessionID,
               messageID: props.messageID,
-              directory: session.cwd,
+              directory,
             },
             { throwOnError: true },
           )
