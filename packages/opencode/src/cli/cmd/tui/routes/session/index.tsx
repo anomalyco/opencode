@@ -76,6 +76,7 @@ import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util"
 import { Global } from "@/global"
+import { errorMessage } from "@/util/error"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -182,10 +183,15 @@ export function Session() {
 
   createEffect(async () => {
     const previousWorkspace = project.workspace.current()
-    const result = await sdk.client.session.get({ sessionID: route.sessionID }, { throwOnError: true })
-    if (!result.data) {
+    const sessionID = route.sessionID
+    const result = await sdk.client.session.get({ sessionID })
+
+    if (result.error || !result.data) {
       toast.show({
-        message: `Session not found: ${route.sessionID}`,
+        message:
+          result.response?.status === 404
+            ? `Session not found: ${sessionID}`
+            : errorMessage(result.error ?? `Failed to load session: ${sessionID}`),
         variant: "error",
       })
       navigate({ type: "home" })
@@ -203,7 +209,7 @@ export function Session() {
         await sync.bootstrap({ fatal: false })
       } catch (e) {}
     }
-    await sync.session.sync(route.sessionID)
+    await sync.session.sync(sessionID)
     if (scroll) scroll.scrollBy(100_000)
   })
 
