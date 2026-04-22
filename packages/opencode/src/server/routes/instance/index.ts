@@ -40,6 +40,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post("/question/:requestID/reject", (c) => handler(c.req.raw, context))
     app.get("/permission", (c) => handler(c.req.raw, context))
     app.post("/permission/:requestID/reply", (c) => handler(c.req.raw, context))
+    app.get("/config", (c) => handler(c.req.raw, context))
     app.get("/config/providers", (c) => handler(c.req.raw, context))
     app.get("/provider", (c) => handler(c.req.raw, context))
     app.get("/provider/auth", (c) => handler(c.req.raw, context))
@@ -259,7 +260,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "LSP server status",
             content: {
               "application/json": {
-                schema: resolver(LSP.Status.array()),
+                schema: resolver(LSP.Status.zod.array()),
               },
             },
           },

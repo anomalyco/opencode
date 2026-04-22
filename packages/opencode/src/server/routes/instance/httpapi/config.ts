@@ -9,6 +9,15 @@ export const ConfigApi = HttpApi.make("config")
   .add(
     HttpApiGroup.make("config")
       .add(
+        HttpApiEndpoint.get("get", root, {
+          success: Config.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.get",
+            summary: "Get configuration",
+            description: "Retrieve the current OpenCode configuration settings and preferences.",
+          }),
+        ),
         HttpApiEndpoint.get("providers", `${root}/providers`, {
           success: Provider.ConfigProvidersResult,
         }).annotateMerge(
@@ -36,16 +45,23 @@ export const ConfigApi = HttpApi.make("config")
 
 export const configHandlers = Layer.unwrap(
   Effect.gen(function* () {
-    const svc = yield* Provider.Service
+    const providerSvc = yield* Provider.Service
+    const configSvc = yield* Config.Service
+
+    const get = Effect.fn("ConfigHttpApi.get")(function* () {
+      return yield* configSvc.get()
+    })
 
     const providers = Effect.fn("ConfigHttpApi.providers")(function* () {
-      const providers = yield* svc.list()
+      const providers = yield* providerSvc.list()
       return {
         providers: Object.values(providers),
         default: Provider.defaultModelIDs(providers),
       }
     })
 
-    return HttpApiBuilder.group(ConfigApi, "config", (handlers) => handlers.handle("providers", providers))
+    return HttpApiBuilder.group(ConfigApi, "config", (handlers) =>
+      handlers.handle("get", get).handle("providers", providers),
+    )
   }),
 ).pipe(Layer.provide(Provider.defaultLayer), Layer.provide(Config.defaultLayer))

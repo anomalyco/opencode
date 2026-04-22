@@ -91,9 +91,10 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | Kimi K2.5             | kimi-k2.5             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2.6             | kimi-k2.6             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle            | big-pickle            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Ling 2.6 Flash        | ling-2.6-flash        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-Die [Model-ID](/docs/config/#models) in deiner OpenCode-Konfiguration verwendet das Format `opencode/<model-id>`. Für GPT 5.3 Codex würdest du zum Beispiel `opencode/gpt-5.3-codex` in deiner Konfiguration verwenden.
+Die [Model-ID](/docs/config/#models) in deiner OpenCode-Konfiguration verwendet das Format `opencode/<model-id>`. Für GPT 5.4 würdest du zum Beispiel `opencode/gpt-5.4` in deiner Konfiguration verwenden.
 
 ---
 
@@ -114,8 +115,9 @@ Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M
 | Model                             | Input  | Output  | Cached Read | Cached Write |
 | --------------------------------- | ------ | ------- | ----------- | ------------ |
 | Big Pickle                        | Free   | Free    | Free        | -            |
-| Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.5 Free                 | Free   | Free    | Free        | -            |
+| Ling 2.6 Flash Free               | Free   | Free    | Free        | -            |
+| Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | GLM 5.1                           | $1.40  | $4.40   | $0.26       | -            |
@@ -163,6 +165,7 @@ Kreditkartengebühren werden zum Selbstkostenpreis weitergegeben (4.4% + $0.30 p
 Die kostenlosen Modelle:
 
 - MiniMax M2.5 Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
+- Ling 2.6 Flash Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - Nemotron 3 Super Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - Big Pickle ist ein Stealth-Modell, das für begrenzte Zeit kostenlos auf OpenCode verfügbar ist. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 
@@ -206,6 +209,7 @@ Alle unsere Modelle werden in den USA gehostet. Unsere Provider folgen einer Zer
 
 - Big Pickle: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - MiniMax M2.5 Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
+- Ling 2.6 Flash Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - Nemotron 3 Super Free (kostenlose NVIDIA-Endpunkte): Bereitgestellt gemäß den [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Nur für Testzwecke, nicht für Produktion oder sensible Daten. Eingaben und Ausgaben werden von NVIDIA protokolliert, um seine Modelle und Dienste zu verbessern. Übermitteln Sie keine personenbezogenen oder vertraulichen Daten.
 - OpenAI APIs: Anfragen werden in Übereinstimmung mit [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) 30 Tage lang gespeichert.
 - Anthropic APIs: Anfragen werden in Übereinstimmung mit [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) 30 Tage lang gespeichert.
