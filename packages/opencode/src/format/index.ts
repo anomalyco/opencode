@@ -25,7 +25,7 @@ export type Status = z.infer<typeof Status>
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly status: () => Effect.Effect<Status[]>
-  readonly file: (filepath: string) => Effect.Effect<void>
+  readonly file: (filepath: string) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Format") {}
@@ -70,16 +70,19 @@ export const layer = Layer.effect(
               }
             }),
           )
-          return checks.filter((x) => x.cmd).map((x) => ({ item: x.item, cmd: x.cmd! }))
+          return checks
+            .filter((x): x is { item: Formatter.Info; cmd: string[] } => x.cmd !== false)
+            .map((x) => ({ item: x.item, cmd: x.cmd }))
         }
 
         function formatFile(filepath: string) {
           return Effect.gen(function* () {
             log.info("formatting", { file: filepath })
-            const ext = path.extname(filepath)
+            const formatters = yield* Effect.promise(() => getFormatter(path.extname(filepath)))
 
-            for (const { item, cmd } of yield* Effect.promise(() => getFormatter(ext))) {
-              if (cmd === false) continue
+            if (!formatters.length) return false
+
+            for (const { item, cmd } of formatters) {
               log.info("running", { command: cmd })
               const replaced = cmd.map((x) => x.replace("$FILE", filepath))
               const dir = yield* InstanceState.directory
@@ -113,6 +116,8 @@ export const layer = Layer.effect(
                 })
               }
             }
+
+            return true
           })
         }
 
@@ -188,7 +193,7 @@ export const layer = Layer.effect(
 
     const file = Effect.fn("Format.file")(function* (filepath: string) {
       const { formatFile } = yield* InstanceState.get(state)
-      yield* formatFile(filepath)
+      return yield* formatFile(filepath)
     })
 
     return Service.of({ init, status, file })
