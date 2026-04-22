@@ -190,6 +190,7 @@ export function Session() {
         toast.show({
           message: `Session not found: ${sessionID}`,
           variant: "error",
+          duration: 5000,
         })
         navigate({ type: "home" })
         return
@@ -213,6 +214,7 @@ export function Session() {
       toast.show({
         message: errorMessage(error),
         variant: "error",
+        duration: 5000,
       })
       navigate({ type: "home" })
     })
