@@ -1,0 +1,170 @@
+---
+title: Enterprise
+description: Bezpečné používání OpenCode ve vaší organizaci.
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+OpenCode Enterprise je pro organizace, které chtějí mít jistotu, že jejich kód a data nikdy neopustí jejich infrastrukturu. Může to udělat pomocí centralizované konfigurace, která se integruje s vaší SSO a interní bránou AI.
+
+:::note
+OpenCode neukládá žádný váš kód ani kontextová data.
+:::
+
+Chcete-li začít se OpenCode Enterprise:
+
+1. Proveďte interní zkoušku se svým týmem.
+2. **<a href={email}>Kontaktujte nás</a>** pro projednání cen a možností implementace.
+
+---
+
+## Zkušební provoz
+
+OpenCode je open source a neukládá žádný váš kód ani kontextová data, takže vaši vývojáři mohou jednoduše [začít](/docs/cs/) a provést zkušební verzi.
+
+---
+
+### Zpracování dat
+
+**OpenCode neukládá váš kód ani kontextová data.** Veškeré zpracování probíhá lokálně nebo prostřednictvím přímých volání API vašemu poskytovateli AI.
+
+To znamená, že pokud používáte poskytovatele, kterému důvěřujete, nebo interní
+AI gateway, můžete OpenCode používat bezpečně.
+
+Jedinou výhradou je volitelná funkce `/share`.
+
+---
+
+#### Sdílení konverzací
+
+Pokud uživatel povolí funkci `/share`, konverzace a data s ní spojená se odesílají do služby, kterou používáme k hostování těchto sdílených stránek na opencode.ai.
+
+Data jsou v současné době poskytována prostřednictvím naší sítě CDN a jsou ukládána do mezipaměti na okraji v blízkosti vašich uživatelů.
+
+Doporučujeme vám tuto možnost pro zkušební verzi deaktivovat.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[Další informace o sdílení](/docs/cs/share).
+
+---
+
+### Vlastnictví kódu
+
+**Vlastníte veškerý kód vytvořený OpenCode.** Neexistují žádná licenční omezení ani nároky na vlastnictví.
+
+---
+
+## Ceny
+
+Pro OpenCode Enterprise používáme model na sedadlo. Pokud máte vlastní bránu LLM, neúčtujeme poplatky za použité tokeny. Pro další podrobnosti o cenách a možnostech implementace nás **<a href={email}>kontaktujte</a>**.
+
+---
+
+## Nasazení
+
+Jakmile dokončíte zkušební verzi a budete připraveni používat OpenCode na
+vaší organizaci, můžete nás **<a href={email}>kontaktovat</a>** a prodiskutovat
+ceny a možnosti implementace.
+
+---
+
+### Centrální konfigurace
+
+Můžeme nastavit OpenCode tak, aby používal jedinou centrální konfiguraci pro celou vaši organizaci.
+
+Tato centralizovaná konfigurace se může integrovat s vaším poskytovatelem SSO a zajišťuje všem uživatelům přístup pouze k vaší interní bráně AI.
+
+---
+
+### Integrace SSO
+
+Prostřednictvím centrální konfigurace se OpenCode může integrovat s poskytovatelem SSO vaší organizace pro ověřování.
+
+To umožňuje OpenCode získat přihlašovací údaje pro vaši interní bránu AI prostřednictvím vašeho stávajícího systému správy identit.
+
+---
+
+### Interní brána AI
+
+Pomocí centrální konfigurace lze OpenCode také nakonfigurovat tak, aby používal pouze vaši interní bránu AI.
+
+Můžete také zakázat všechny ostatní poskytovatele AI a zajistit, aby všechny požadavky procházely schválenou infrastrukturou vaší organizace.
+
+---
+
+### Vlastní hosting
+
+I když doporučujeme zakázat stránky pro sdílení, aby vaše data nikdy neopustila
+vaší organizaci, můžeme vám také pomoci s jejich vlastním hostováním ve vaší infrastruktuře.
+
+To je aktuálně na naší cestovní mapě. Pokud máte zájem, **<a href={email}>dejte nám vědět</a>**.
+
+---
+
+## Nejčastější dotazy
+
+<details>
+<summary>Co je OpenCode Enterprise?</summary>
+
+OpenCode Enterprise je pro organizace, které chtějí mít jistotu, že jejich kód a data nikdy neopustí jejich infrastrukturu. Může to udělat pomocí centralizované konfigurace, která se integruje s vaší SSO a interní bránou AI.
+
+</details>
+
+<details>
+<summary>Jak mohu začít se OpenCode Enterprise?</summary>
+
+Jednoduše začněte interní zkouškou se svým týmem. OpenCode ve výchozím nastavení neukládá váš kód ani kontextová data, takže je snadné začít.
+
+Pak **<a href={email}>kontaktujte nás</a>** a prodiskutujte ceny a možnosti implementace.
+
+</details>
+
+<details>
+<summary>Jak funguje podnikové stanovování cen?</summary>
+
+Nabízíme podnikovou cenu za sedadlo. Pokud máte vlastní bránu LLM, neúčtujeme poplatky za použité tokeny. Pro další podrobnosti **<a href={email}>kontaktujte nás</a>** pro vlastní cenovou nabídku na základě potřeb vaší organizace.
+
+</details>
+
+<details>
+<summary>Jsou moje data zabezpečena pomocí OpenCode Enterprise?</summary>
+
+Ano. OpenCode neukládá váš kód ani kontextová data. Veškeré zpracování probíhá lokálně nebo prostřednictvím přímých volání API vašemu poskytovateli AI. Díky centrální konfiguraci a integraci SSO zůstanou vaše data v bezpečí infrastruktury vaší organizace.
+
+</details>
+
+<details>
+<summary>Můžeme použít vlastní soukromý registr NPM?</summary>
+
+OpenCode podporuje soukromé registry npm prostřednictvím nativní podpory souborů `.npmrc` Bun. Pokud vaše organizace používá soukromý registr, jako je JFrog Artifactory, Nexus nebo podobný, ujistěte se, že jsou vývojáři před spuštěním OpenCode ověřeni.
+
+Chcete-li nastavit ověřování pomocí soukromého registru:
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+Tím se vytvoří `~/.npmrc` s detaily ověření. OpenCode bude automaticky
+zvedni tohle.
+
+:::caution
+Před spuštěním OpenCode musíte být přihlášeni do soukromého registru.
+:::
+
+Případně můžete ručně nakonfigurovat soubor `.npmrc`:
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+Před spuštěním OpenCode musí být vývojáři přihlášeni do soukromého registru, aby bylo zajištěno, že balíčky lze nainstalovat z vašeho podnikového registru.
+
+</details>

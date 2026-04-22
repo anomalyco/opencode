@@ -1,0 +1,300 @@
+---
+title: Odstraňování problémů
+description: Běžné problémy a jak je řešit.
+---
+
+Chcete-li ladit problémy se OpenCode, začněte kontrolou protokolů a místních dat, která ukládá na disk.
+
+---
+
+## Protokoly
+
+Soubory protokolu se zapisují do:
+
+- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **Windows**: Stiskněte `WIN+R` a vložte `%USERPROFILE%\.local\share\opencode\log`
+
+Soubory protokolu jsou pojmenovány časovými razítky (např. `2025-01-09T123456.log`) a je uchováváno posledních 10 souborů protokolu.
+
+Chcete-li získat podrobnější informace o ladění, můžete nastavit úroveň protokolu pomocí možnosti příkazového řádku `--log-level`. Například `opencode --log-level DEBUG`.
+
+---
+
+## Úložiště
+
+opencode ukládá data relace a další data aplikací na disk na adrese:
+
+- **macOS/Linux**: `~/.local/share/opencode/`
+- **Windows**: Stiskněte `WIN+R` a vložte `%USERPROFILE%\.local\share\opencode`
+
+Tento adresář obsahuje:
+
+- `auth.json` - Autentizační data, jako jsou klíče API, tokeny OAuth
+- `log/` - Protokoly aplikací
+- `project/` - Data specifická pro projekt, jako jsou data relace a zprávy
+  - Pokud je projekt v Git repo, je uložen v `./<project-slug>/storage/`
+  - Pokud se nejedná o repo Git, je uloženo v `./global/storage/`
+
+---
+
+## Desktopová aplikace
+
+OpenCode Desktop spouští na pozadí místní server OpenCode (sidecar `opencode-cli`). Většina problémů je způsobena nesprávně fungujícím pluginem, poškozenou mezipamětí nebo špatným nastavením serveru.
+
+### Rychlé kontroly
+
+- Úplně ukončete a znovu spusťte aplikaci.
+– Pokud aplikace zobrazí chybovou obrazovku, klikněte na **Restartovat** a zkopírujte podrobnosti o chybě.
+- Pouze macOS: Nabídka `OpenCode` -> **Znovu načíst webové zobrazení** (pomáhá, pokud je UI prázdný/zamrzlý).
+
+---
+
+### Zakázat pluginy
+
+Pokud aplikace pro stolní počítače při spuštění selhává, visí nebo se chová podivně, začněte deaktivací pluginů.
+
+#### Zkontrolujte globální konfiguraci
+
+Otevřete svůj globální konfigurační soubor a vyhledejte klíč `plugin`.
+
+- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (nebo `~/.config/opencode/opencode.json`)
+- **macOS/Linux** (starší instalace): `~/.local/share/opencode/opencode.jsonc`
+- **Windows**: Stiskněte `WIN+R` a vložte `%USERPROFILE%\.config\opencode\opencode.jsonc`
+
+Pokud máte nakonfigurované pluginy, dočasně je deaktivujte odstraněním klíče nebo jeho nastavením na prázdné pole:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [],
+}
+```
+
+#### Zkontrolujte adresáře pluginů
+
+OpenCode také umí načíst lokální pluginy z disku. Dočasně je přesuňte z cesty (nebo přejmenujte složku) a restartujte desktopovou aplikaci:
+
+- **Globální pluginy**
+  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **Windows**: Stiskněte `WIN+R` a vložte `%USERPROFILE%\.config\opencode\plugins`
+- **Pluginy projektu** (pouze pokud používáte konfiguraci pro jednotlivé projekty)
+  - `<your-project>/.opencode/plugins/`
+
+Pokud aplikace začne znovu fungovat, znovu povolte pluginy jeden po druhém, abyste zjistili, který z nich způsobuje problém.
+
+---
+
+### Vymažte mezipaměť
+
+Pokud deaktivace pluginů nepomůže (nebo se instalace pluginu zasekne), vymažte mezipaměť, aby ji OpenCode mohl znovu sestavit.
+
+1. Úplně ukončete OpenCode Desktop.
+2. Odstraňte adresář mezipaměti:
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> vložit `~/.cache/opencode`
+- **Linux**: smazat `~/.cache/opencode` (nebo spustit `rm -rf ~/.cache/opencode`)
+- **Windows**: Stiskněte `WIN+R` a vložte `%USERPROFILE%\.cache\opencode`
+
+3. Restartujte OpenCode Desktop.
+
+---
+
+### Opravte problémy s připojením k serveru
+
+OpenCode Desktop může buď spustit svůj vlastní lokální server (výchozí) nebo se připojit k serveru URL, který jste nakonfigurovali.
+
+Pokud se zobrazí dialogové okno **"Připojení se nezdařilo"** (nebo se aplikace nikdy nedostane přes úvodní obrazovku), zkontrolujte adresu URL vlastního serveru.
+
+#### Vymažte výchozí server URL na ploše
+
+Na domovské obrazovce klikněte na název serveru (se stavovou tečkou) a otevřete výběr serveru. V části **Výchozí server** klikněte na **Vymazat**.
+
+#### Odeberte `server.port` / `server.hostname` z vaší konfigurace
+
+Pokud váš `opencode.json(c)` obsahuje sekci `server`, dočasně ji odeberte a restartujte desktopovou aplikaci.
+
+#### Zkontrolujte proměnné prostředí
+
+Pokud máte ve svém prostředí nastaveno `OPENCODE_PORT`, aplikace pro stolní počítače se pokusí použít tento port pro místní server.
+
+- Zrušte nastavení `OPENCODE_PORT` (nebo vyberte volný port) a restartujte.
+
+---
+
+### Linux: Problémy Wayland / X11
+
+Na Linux mohou některá nastavení Wayland způsobit prázdná okna nebo chyby sazeče.
+
+- Pokud jste na Waylandu a aplikace je prázdná/padá, zkuste ji spustit pomocí `OC_ALLOW_WAYLAND=1`.
+- Pokud to zhorší situaci, odstraňte ji a zkuste místo toho spustit v rámci relace X11.
+
+---
+
+### Windows: Runtime WebView2
+
+Na Windows vyžaduje OpenCode Desktop Microsoft Edge **WebView2 Runtime**. Pokud se aplikace otevře do prázdného okna nebo se nespustí, nainstalujte/aktualizujte WebView2 a zkuste to znovu.
+
+---
+
+### Windows: Obecné problémy s výkonem
+
+Pokud máte pomalý výkon, problémy s přístupem k souborům nebo problémy s terminálem na Windows, zkuste použít [WSL (Windows Subsystem for Linux)](/docs/cs/windows-wsl). WSL poskytuje prostředí Linux, které hladce spolupracuje s funkcemi OpenCode.
+
+---
+
+### Oznámení se nezobrazují
+
+OpenCode Desktop zobrazuje systémová oznámení, pouze když:
+
+- upozornění jsou povolena pro OpenCode v nastavení operačního systému a
+- okno aplikace není zaostřené.
+
+---
+
+### Resetovat úložiště aplikací pro stolní počítače (poslední možnost)
+
+Pokud se aplikace nespustí a nemůžete vymazat nastavení zevnitř UI, resetujte uložený stav desktopové aplikace.
+
+1. Ukončete OpenCode Desktop.
+2. Najděte a odstraňte tyto soubory (nacházejí se v datovém adresáři aplikace OpenCode Desktop):
+
+- `opencode.settings.dat` (výchozí server pro stolní počítač URL)
+- `opencode.global.dat` a `opencode.workspace.*.dat` (stav UI jako nedávné servery/projekty)
+
+Chcete-li rychle najít adresář:
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (pak vyhledejte názvy souborů výše)
+- **Linux**: hledejte pod `~/.local/share` názvy souborů výše
+- **Windows**: Stiskněte `WIN+R` -> `%APPDATA%` (poté vyhledejte názvy souborů výše)
+
+---
+
+## Získání pomoci
+
+Pokud máte problémy se OpenCode:
+
+1. **Hlášení problémů na GitHub**
+
+Nejlepší způsob, jak nahlásit chyby nebo požádat o funkce, je prostřednictvím našeho úložiště GitHub:
+
+[**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+
+Před vytvořením nového problému vyhledejte existující problémy, abyste zjistili, zda váš problém již nebyl nahlášen.
+
+2. **Připojte se k našemu Discordu**
+
+Pro pomoc v reálném čase a diskuzi komunity se připojte k našemu serveru Discord:
+
+[**opencode.ai/discord**](https://opencode.ai/discord)
+
+---
+
+## Běžné problémy
+
+Zde jsou některé běžné problémy a jejich řešení.
+
+---
+
+### OpenCode se nespustí
+
+1. Zkontrolujte protokoly, zda neobsahují chybové zprávy
+2. Zkuste spustit s `--print-logs`, abyste viděli výstup na terminálu
+3. Ujistěte se, že máte nejnovější verzi `opencode upgrade`
+
+---
+
+### Problémy s autentizací
+
+1. Zkuste se znovu ověřit pomocí příkazu `/connect` v TUI
+2. Zkontrolujte, zda jsou vaše klíče API platné
+3. Ujistěte se, že vaše síť umožňuje připojení k API poskytovatele
+
+---
+
+### Model není k dispozici
+
+1. Zkontrolujte, zda jste se ověřili u poskytovatele
+2. Ověřte, že název modelu ve vaší konfiguraci je správný
+3. Některé modely mohou vyžadovat specifický přístup nebo předplatné
+
+Pokud narazíte na `ProviderModelNotFoundError`, pravděpodobně se mýlíte
+odkazovat někde na model.
+Modely by měly být označovány takto: `<providerId>/<modelId>`
+
+Příklady:
+
+- `openai/gpt-4.1`
+- `openrouter/google/gemini-2.5-flash`
+- `opencode/kimi-k2`
+
+Chcete-li zjistit, k jakým modelům máte přístup, spusťte `opencode models`
+
+---
+
+### Chyba ProviderInitError
+
+Pokud narazíte na chybu ProviderInitError, pravděpodobně máte neplatnou nebo poškozenou konfiguraci.
+
+Chcete-li to vyřešit:
+
+1. Nejprve ověřte, zda je váš poskytovatel správně nastaven podle [průvodce poskytovatele](/docs/cs/providers)
+2. Pokud problém přetrvává, zkuste vymazat uloženou konfiguraci:
+
+   ```bash
+   rm -rf ~/.local/share/opencode
+   ```
+
+Na Windows stiskněte `WIN+R` a odstraňte: `%USERPROFILE%\.local\share\opencode`
+
+3. Znovu se ověřte u svého poskytovatele pomocí příkazu `/connect` v TUI.
+
+---
+
+### AI_APICallError a problémy s balíčkem poskytovatele
+
+Pokud narazíte na chyby volání API, může to být způsobeno zastaralými balíčky poskytovatelů. opencode dynamicky instaluje balíčky poskytovatelů (OpenAI, Anthropic, Google atd.) podle potřeby a ukládá je lokálně do mezipaměti.
+
+Řešení problémů s balíčky poskytovatele:
+
+1. Vymažte mezipaměť balíčků poskytovatele:
+
+   ```bash
+   rm -rf ~/.cache/opencode
+   ```
+
+Na Windows stiskněte `WIN+R` a odstraňte: `%USERPROFILE%\.cache\opencode`
+
+2. Restartováním opencode přeinstalujte nejnovější balíčky poskytovatele
+
+To donutí opencode stáhnout nejnovější verze balíčků poskytovatelů, což často řeší problémy s kompatibilitou s parametry modelu a změnami API.
+
+---
+
+### Kopírování/vkládání nefunguje na Linux
+
+Aby funkce kopírování/vkládání fungovala, musí mít uživatelé Linux nainstalovaný jeden z následujících nástrojů schránky:
+
+**Pro systémy X11:**
+
+```bash
+apt install -y xclip
+# or
+apt install -y xsel
+```
+
+**Pro systémy Wayland:**
+
+```bash
+apt install -y wl-clipboard
+```
+
+**Pro prostředí bez hlavy:**
+
+```bash
+apt install -y xvfb
+# and run:
+Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+export DISPLAY=:99.0
+```
+
+opencode zjistí, zda používáte Wayland a dáváte přednost `wl-clipboard`, jinak se pokusí najít nástroje schránky v pořadí: `xclip` a `xsel`.

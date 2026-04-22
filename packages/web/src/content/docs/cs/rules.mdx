@@ -1,0 +1,188 @@
+---
+title: Pravidla
+description: Nastavte vlastní pokyny pro opencode.
+---
+
+Můžete poskytnout vlastní pokyny opencode vytvořením souboru `AGENTS.md`. To je podobné pravidlům Cursoru. Obsahuje instrukce, které budou zahrnuty v kontextu LLM pro přizpůsobení jeho chování pro váš konkrétní projekt.
+
+---
+
+## Inicializovat
+
+Chcete-li vytvořit nový soubor `AGENTS.md`, můžete spustit příkaz `/init` v opencode.
+
+:::tip
+Soubor `AGENTS.md` svého projektu byste měli odevzdat do systému Git.
+:::
+
+`/init` prohledá důležité soubory ve vašem repo, může položit několik cílených otázek, když na ně kódová základna nedokáže odpovědět, a poté vytvoří nebo aktualizuje `AGENTS.md` se stručnými pokyny pro konkrétní projekt.
+
+Zaměřuje se na věci, které budou s největší pravděpodobností potřebovat budoucí relace agentů:
+
+- příkazy build, lint a test
+- příkazový příkaz a cílené ověřovací kroky, když na tom záleží
+- architektura a struktura repo, které nejsou zřejmé ze samotných názvů souborů
+- konvence specifické pro daný projekt, zvláštnosti nastavení a provozní problémy
+- odkazy na existující zdroje instrukcí, jako jsou pravidla Cursor nebo Copilot
+
+Pokud již máte `AGENTS.md`, `/init` jej vylepší na místě, místo aby jej slepě nahradil.
+
+---
+
+## Příklad
+
+Tento soubor můžete také vytvořit ručně. Zde je příklad některých věcí, které můžete vložit do souboru `AGENTS.md`.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+Zde přidáváme pokyny pro konkrétní projekt a budou sdíleny v rámci vašeho týmu.
+
+---
+
+## Typy
+
+opencode také podporuje čtení souboru `AGENTS.md` z více míst. A to slouží různým účelům.
+
+### Project
+
+Umístěte `AGENTS.md` do kořenového adresáře projektu pro pravidla specifická pro projekt. Ty platí pouze tehdy, když pracujete v tomto adresáři nebo jeho podadresářích.
+
+### Globální
+
+Globální pravidla můžete mít také v souboru `~/.config/opencode/AGENTS.md`. To se použije ve všech relacích opencode.
+
+Vzhledem k tomu, že toto není vázáno na Git ani sdíleno s vaším týmem, doporučujeme toto použít k určení jakýchkoli osobních pravidel, kterými by se měl LLM řídit.
+
+### Kompatibilita kódu Claude
+
+Pro uživatele, kteří migrují z kódu Claude, OpenCode podporuje konvence souborů kódu Claude jako záložní:
+
+- **Pravidla projektu**: `CLAUDE.md` v adresáři vašeho projektu (používá se, pokud žádné `AGENTS.md` neexistuje)
+- **Globální pravidla**: `~/.claude/CLAUDE.md` (používá se, pokud žádné `~/.config/opencode/AGENTS.md` neexistuje)
+- **Schopnosti**: `~/.claude/skills/` — podrobnosti viz [Agent Skills](/docs/cs/skills/)
+
+Chcete-li deaktivovat kompatibilitu kódu Claude, nastavte jednu z těchto proměnných prostředí:
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## Přednost
+
+Při spuštění opencode hledá soubory pravidel v tomto pořadí:
+
+1. **Místní soubory** přechodem nahoru z aktuálního adresáře (`AGENTS.md`, `CLAUDE.md`)
+2. **Globální soubor** na `~/.config/opencode/AGENTS.md`
+3. **Soubor kódu Claude** na adrese `~/.claude/CLAUDE.md` (pokud není zakázáno)
+
+První odpovídající soubor vyhrává v každé kategorii. Pokud máte například `AGENTS.md` i `CLAUDE.md`, použije se pouze `AGENTS.md`. Podobně má `~/.config/opencode/AGENTS.md` přednost před `~/.claude/CLAUDE.md`.
+
+---
+
+## Vlastní pokyny
+
+Soubory uživatelských instrukcí můžete zadat ve svém `opencode.json` nebo globálním `~/.config/opencode/opencode.json`. To vám a vašemu týmu umožňuje znovu použít existující pravidla, aniž byste je museli duplikovat na AGENTS.md.
+
+Příklad:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+K načtení pokynů z webu můžete také použít vzdálené adresy URL.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+Vzdálené instrukce se načítají s časovým limitem 5 sekund.
+
+Všechny soubory instrukcí jsou kombinovány s vašimi soubory `AGENTS.md`.
+
+---
+
+## Odkazování na externí soubory
+
+Přestože opencode automaticky neanalyzuje odkazy na soubory v `AGENTS.md`, můžete dosáhnout podobné funkce dvěma způsoby:
+
+### Pomocí opencode.json
+
+Doporučený přístup je použít pole `instructions` v `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### Manuální pokyny v AGENTS.md
+
+Můžete naučit opencode číst externí soubory poskytnutím explicitních instrukcí ve vašem `AGENTS.md`. Zde je praktický příklad:
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+Tento přístup vám umožňuje:
+
+- Vytvářejte modulární, opakovaně použitelné soubory pravidel
+- Sdílejte pravidla napříč projekty prostřednictvím symbolických odkazů nebo submodulů git
+- Udržujte AGENTS.md stručné a odkazujte na podrobné pokyny
+- Ujistěte se, že opencode načítá soubory pouze v případě potřeby pro konkrétní úlohu
+
+:::tip
+Pro monorepo nebo projekty se sdílenými standardy je použití `opencode.json` se vzory glob (jako `packages/*/AGENTS.md`) lépe udržovatelné než manuální instrukce.
+:::

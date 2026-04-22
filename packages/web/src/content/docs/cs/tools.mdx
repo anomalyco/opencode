@@ -1,0 +1,345 @@
+---
+title: Nástroje
+description: Spravujte nástroje, které může LLM používat.
+---
+
+Nástroje umožňují LLM provádět akce ve vaší kódové základně. OpenCode je dodáván se sadou vestavěných nástrojů, ale můžete ji rozšířit o [vlastní nástroje](/docs/cs/custom-tools) nebo [servery MCP](/docs/cs/mcp-servers).
+
+Ve výchozím nastavení jsou všechny nástroje **povoleny** a ke spuštění nepotřebují oprávnění. Chování nástroje můžete ovládat prostřednictvím [oprávnění](/docs/cs/permissions).
+
+---
+
+## Konfigurace
+
+K ovládání chování nástroje použijte pole `permission`. Pro každý nástroj můžete povolit, zakázat nebo vyžadovat schválení.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+Zástupné znaky můžete také použít k ovládání více nástrojů najednou. Chcete-li například vyžadovat schválení všech nástrojů ze serveru MCP:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[Další informace](/docs/cs/permissions) o konfiguraci oprávnění.
+
+---
+
+## Vestavěný
+
+Zde jsou všechny vestavěné nástroje dostupné v OpenCode.
+
+---
+
+### basta
+
+Spouštějte příkazy shellu v prostředí vašeho projektu.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+Tento nástroj umožňuje LLM spouštět terminálové příkazy jako `npm install`, `git status` nebo jakýkoli jiný příkaz shellu.
+
+---
+
+### upravit
+
+Upravte existující soubory pomocí přesných náhrad řetězců.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Tento nástroj provádí přesné úpravy souborů nahrazením přesné shody textu. Je to primární způsob, jakým LLM upravuje kód.
+
+---
+
+### pište
+
+Vytvořte nové soubory nebo přepište stávající.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Použijte toto, abyste umožnili LLM vytvářet nové soubory. Přepíše existující soubory, pokud již existují.
+
+:::note
+Nástroj `write` je řízen oprávněním `edit`, které pokrývá všechny úpravy souborů (`edit`, `write`, `apply_patch`).
+:::
+
+---
+
+### číst
+
+Přečtěte si obsah souboru z vaší kódové základny.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+Tento nástroj čte soubory a vrací jejich obsah. Podporuje čtení specifických rozsahů řádků pro velké soubory.
+
+---
+
+### grep
+
+Prohledávejte obsah souboru pomocí regulárních výrazů.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+Rychlé vyhledávání obsahu ve vaší kódové základně. Podporuje úplnou syntaxi regulárních výrazů a filtrování vzorů souborů.
+
+---
+
+### globus
+
+Najděte soubory podle vzoru.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+Vyhledávejte soubory pomocí vzorů glob, jako je `**/*.js` nebo `src/**/*.ts`. Vrátí odpovídající cesty k souboru seřazené podle času úpravy.
+
+---
+
+### lsp (experimentální)
+
+Komunikujte s nakonfigurovanými servery LSP a získejte funkce inteligence kódu, jako jsou definice, reference, informace o umístění kurzoru a hierarchie volání.
+
+:::note
+Tento nástroj je dostupný pouze při `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (nebo `OPENCODE_EXPERIMENTAL=true`).
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+Mezi podporované operace patří `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` a `outgoingCalls`.
+
+Chcete-li nakonfigurovat, které servery LSP jsou k dispozici pro váš projekt, viz [Servery LSP](/docs/cs/lsp).
+
+---
+
+### apply_patch
+
+Použijte záplaty na soubory.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Tento nástroj aplikuje opravné soubory na vaši kódovou základnu. Užitečné pro aplikaci diffů a záplat z různých zdrojů.
+
+Při manipulaci s háčky `tool.execute.before` nebo `tool.execute.after` zkontrolujte `input.tool === "apply_patch"` (ne `"patch"`).
+
+`apply_patch` používá `output.args.patchText` místo `output.args.filePath`. Cesty jsou vloženy do značek v `patchText` a jsou relativní ke kořenu projektu (například: `*** Add File: src/new-file.ts`, `*** Update File: src/existing.ts`, `*** Move to: src/renamed.ts`, `*** Delete File: src/obsolete.ts`).
+
+:::note
+Nástroj `apply_patch` je řízen oprávněním `edit`, které pokrývá všechny úpravy souborů (`edit`, `write`, `apply_patch`).
+:::
+
+---
+
+### dovednost
+
+Načtěte [dovednost](/docs/cs/skills) (soubor `SKILL.md`) a vraťte jeho obsah do konverzace.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todopište
+
+Spravujte seznamy úkolů během relací kódování.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+Vytváří a aktualizuje seznamy úkolů pro sledování průběhu složitých operací. LLM to používá k organizaci vícekrokových úkolů.
+
+:::note
+Tento nástroj je ve výchozím nastavení pro podagenty zakázán, ale můžete jej povolit ručně. [Další informace](/docs/cs/agents/#oprávnění)
+:::
+
+---
+
+### webfetch
+
+Načítání webového obsahu.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+Umožňuje LLM načítat a číst webové stránky. Užitečné pro vyhledávání dokumentace nebo vyhledávání online zdrojů.
+
+---
+
+### vyhledávání na webu
+
+Hledejte informace na webu.
+
+:::note
+Tento nástroj je dostupný pouze při použití poskytovatele OpenCode nebo když je proměnná prostředí `OPENCODE_ENABLE_EXA` nastavena na jakoukoli pravdivou hodnotu (např. `true` nebo `1`).
+
+Povolení při spuštění OpenCode:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Provádí vyhledávání na webu pomocí Exa AI k nalezení relevantních informací online. Užitečné pro zkoumání témat, hledání aktuálních událostí nebo shromažďování informací za hranicí tréninkových dat.
+
+Není vyžadován žádný klíč API – nástroj se připojuje přímo k hostované službě MCP Exa AI bez ověřování.
+
+:::tip
+Použijte `websearch`, když potřebujete najít informace (objevení), a `webfetch`, když potřebujete načíst obsah z konkrétního URL (vyhledání).
+:::
+
+---
+
+### otázka
+
+Během provádění pokládejte uživateli otázky.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+Tento nástroj umožňuje LLM klást uživateli otázky během úkolu. Je to užitečné pro:
+
+- Shromažďování uživatelských preferencí nebo požadavků
+- Vyjasnění nejednoznačných pokynů
+- Přijímání rozhodnutí o možnostech implementace
+- Nabízení možností, jakým směrem se vydat
+
+Každá otázka obsahuje záhlaví, text otázky a seznam možností. Uživatelé si mohou vybrat z nabízených možností nebo zadat vlastní odpověď. Pokud existuje více otázek, uživatelé mohou mezi nimi přecházet před odesláním všech odpovědí.
+
+---
+
+## Vlastní nástroje
+
+Vlastní nástroje vám umožňují definovat vlastní funkce, které může LLM volat. Ty jsou definovány ve vašem konfiguračním souboru a mohou spouštět libovolný kód.
+
+[Další informace](/docs/cs/custom-tools) o vytváření vlastních nástrojů.
+
+---
+
+## servery MCP
+
+Servery MCP (Model Context Protocol) umožňují integrovat externí nástroje a služby. To zahrnuje přístup k databázi, integrace API a služby třetích stran.
+
+[Další informace](/docs/cs/mcp-servers) o konfiguraci serverů MCP.
+
+---
+
+## Vnitřní
+
+Nástroje jako `grep` a `glob` interně používají pod kapotou [ripgrep](https://github.com/BurntSushi/ripgrep). Ve výchozím nastavení ripgrep respektuje vzory `.gitignore`, což znamená, že soubory a adresáře uvedené ve vašem `.gitignore` budou vyloučeny z vyhledávání a výpisů.
+
+---
+
+### Ignorujte vzory
+
+Chcete-li zahrnout soubory, které by byly normálně ignorovány, vytvořte soubor `.ignore` v kořenovém adresáři projektu. Tento soubor může explicitně povolit určité cesty.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+Například tento soubor `.ignore` umožňuje ripgrepu vyhledávat v adresářích `node_modules/`, `dist/` a `build/`, i když jsou uvedeny v `.gitignore`.

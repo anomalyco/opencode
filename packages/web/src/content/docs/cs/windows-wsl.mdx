@@ -1,0 +1,112 @@
+---
+title: Windows (WSL)
+description: Spusťte OpenCode na Windows pomocí WSL pro nejlepší prostředí.
+---
+
+import { Steps } from "@astrojs/starlight/components"
+
+OpenCode lze spustit přímo na Windows, ale pro nejlepší prostředí doporučujeme použít [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install). WSL poskytuje prostředí Linux, které dobře spolupracuje s funkcemi OpenCode.
+
+:::tip[Proč WSL?]
+WSL nabízí lepší výkon souborového systému, plnou terminálovou podporu a kompatibilitu s vývojovými nástroji, na které OpenCode spoléhá.
+:::
+
+---
+
+## Nastavení
+
+<Steps>
+
+1. **Nainstalujte WSL**
+
+   Pokud jste tak ještě neučinili, [nainstalujte WSL](https://learn.microsoft.com/en-us/windows/wsl/install) pomocí oficiálního průvodce Microsoft.
+
+2. **Nainstalujte OpenCode do WSL**
+
+   Jakmile je WSL nastaven, otevřete svůj terminál WSL a nainstalujte OpenCode pomocí jedné z [metod instalace](/docs/cs/).
+
+   ```bash
+   curl -fsSL https://opencode.ai/install | bash
+   ```
+
+3. **Použijte OpenCode z WSL**
+
+   Přejděte do adresáře svého projektu (přístup k souborům Windows přes `/mnt/c/`, `/mnt/d/` atd.) a spusťte OpenCode.
+
+   ```bash
+   cd /mnt/c/Users/YourName/project
+   opencode
+   ```
+
+</Steps>
+
+---
+
+## Desktopová aplikace + WSL Server
+
+Pokud dáváte přednost použití aplikace OpenCode Desktop, ale chcete provozovat server v WSL:
+
+1. **Spusťte server v WSL** s `--hostname 0.0.0.0`, abyste povolili externí připojení:
+
+   ```bash
+   opencode serve --hostname 0.0.0.0 --port 4096
+   ```
+
+2. **Připojte aplikaci Desktop** k `http://localhost:4096`
+
+:::note
+Pokud `localhost` ve vašem nastavení nefunguje, připojte se místo toho pomocí adresy IP WSL (ze WSL: `hostname -I`) a použijte `http://<wsl-ip>:4096`.
+:::
+
+:::caution
+Při použití `--hostname 0.0.0.0` nastavte `OPENCODE_SERVER_PASSWORD` pro zabezpečení serveru.
+:::
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+```
+
+---
+
+## Webový klient + WSL
+
+Pro nejlepší webové prostředí na Windows:
+
+1. **Spusťte `opencode web` v terminálu WSL** místo PowerShell:
+
+   ```bash
+   opencode web --hostname 0.0.0.0
+   ```
+
+2. **Přístup z vašeho prohlížeče Windows** na `http://localhost:<port>` (OpenCode vytiskne URL)
+
+Spuštění `opencode web` ze WSL zajišťuje správný přístup k systému souborů a integraci terminálu, přičemž je stále přístupný z vašeho prohlížeče Windows.
+
+---
+
+## Přístup k souborům Windows
+
+WSL má přístup ke všem vašim souborům Windows prostřednictvím adresáře `/mnt/`:
+
+- Pohon `C:` → `/mnt/c/`
+- Pohon `D:` → `/mnt/d/`
+- A tak dále...
+
+Příklad:
+
+```bash
+cd /mnt/c/Users/YourName/Documents/project
+opencode
+```
+
+:::tip
+Pro nejplynulejší práci zvažte klonování nebo zkopírování repozitáře do souborového systému WSL (například pod `~/code/`) a spuštění OpenCode tam.
+:::
+
+---
+
+## Tipy
+
+- Udržujte OpenCode spuštěný v WSL pro projekty uložené na jednotkách Windows - přístup k souborům je bezproblémový
+- Použijte [rozšíření WSL](https://code.visualstudio.com/docs/remote/wsl) VS Code spolu se OpenCode pro integrovaný vývojový pracovní postup
+- Vaše konfigurace OpenCode a relace jsou uloženy v prostředí WSL na `~/.local/share/opencode/`

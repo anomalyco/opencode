@@ -1,0 +1,389 @@
+---
+title: Pluginy
+description: Napište si vlastní pluginy pro rozšíření OpenCode.
+---
+
+Pluginy vám umožňují rozšířit OpenCode připojením k různým událostem a přizpůsobením chování. Můžete vytvořit pluginy pro přidání nových funkcí, integraci s externími službami nebo úpravu výchozího chování OpenCode.
+
+Podívejte se například na [pluginy](/docs/cs/ecosystem/#pluginy) vytvořené komunitou.
+
+---
+
+## Použijte plugin
+
+Pluginy lze načíst dvěma způsoby.
+
+---
+
+### Z místních souborů
+
+Umístěte soubory JavaScript nebo TypeScript do adresáře pluginu.
+
+- `.opencode/plugins/` - Zásuvné moduly na úrovni projektu
+- `~/.config/opencode/plugins/` - Globální pluginy
+
+Soubory v těchto adresářích se automaticky načtou při spuštění.
+
+---
+
+### Od npm
+
+V konfiguračním souboru zadejte balíčky npm.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+Podporovány jsou běžné i omezené balíčky npm.
+
+Procházejte dostupné pluginy v [ekosystému](/docs/cs/ecosystem/#pluginy).
+
+---
+
+### Jak se instalují pluginy
+
+**Pluginy npm** se instalují automaticky pomocí Bun při spuštění. Balíčky a jejich závislosti jsou ukládány do mezipaměti v `~/.cache/opencode/node_modules/`.
+
+**Místní pluginy** se načítají přímo z adresáře pluginů. Chcete-li používat externí balíčky, musíte vytvořit `package.json` ve svém konfiguračním adresáři (viz [Závislosti](#závislosti)), nebo publikovat plugin do npm a [přidat jej do své konfigurace](/docs/cs/config/#pluginy).
+
+---
+
+### Načíst objednávku
+
+Pluginy se načítají ze všech zdrojů a všechny háčky běží v pořadí. Pořadí nakládky je:
+
+1. Globální konfigurace (`~/.config/opencode/opencode.json`)
+2. Konfigurace projektu (`opencode.json`)
+3. Globální adresář zásuvných modulů (`~/.config/opencode/plugins/`)
+4. Adresář pluginu projektu (`.opencode/plugins/`)
+
+Duplicitní balíčky npm se stejným názvem a verzí se načtou jednou. Místní plugin a plugin npm s podobnými názvy se však načítají samostatně.
+
+---
+
+## Vytvořte plugin
+
+Plugin je **modul JavaScript/TypeScript**, který exportuje jeden nebo více pluginů
+funkcí. Každá funkce přijímá objekt kontextu a vrací objekt háčků.
+
+---
+
+### Závislosti
+
+Místní pluginy a vlastní nástroje mohou používat externí balíčky npm. Přidejte `package.json` do svého konfiguračního adresáře se závislostmi, které potřebujete.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode spustí `bun install` při spuštění, aby je nainstaloval. Vaše pluginy a nástroje je pak mohou importovat.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### Základní struktura
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+Funkce pluginu obdrží:
+
+- `project`: Aktuální informace o projektu.
+- `directory`: Aktuální pracovní adresář.
+- `worktree`: Cesta k pracovnímu stromu git.
+- `client`: Klient opencode SDK pro interakci s AI.
+- `$`: [shell API](https://bun.com/docs/runtime/shell) Bun pro provádění příkazů.
+
+---
+
+### Podpora TypeScript
+
+Pro pluginy TypeScript můžete importovat typy z balíčku pluginů:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### Události
+
+Pluginy se mohou přihlásit k odběru událostí, jak je vidět níže v sekci Příklady. Zde je seznam různých dostupných akcí.
+
+#### Události Command
+
+- `command.executed`
+
+#### Události File
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### Události instalace
+
+- `installation.updated`
+
+#### Události LSP
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### Události Message
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### Události oprávnění
+
+- `permission.asked`
+- `permission.replied`
+
+#### Události na serveru
+
+- `server.connected`
+
+#### Události Session
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### Události Todo
+
+- `todo.updated`
+
+#### Události Shell
+
+- `shell.env`
+
+#### Události nástroje
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### Události TUI
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## Příklady
+
+Zde je několik příkladů pluginů, které můžete použít k rozšíření opencode.
+
+---
+
+### Odesílat upozornění
+
+Odesílat upozornění, když nastanou určité události:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+Používáme `osascript` ke spuštění AppleScriptu na macOS. Zde jej používáme k odesílání upozornění.
+
+:::note
+Pokud používáte desktopovou aplikaci OpenCode, může automaticky odesílat systémová upozornění, když je připravena odpověď nebo když dojde k chybě relace.
+:::
+
+---
+
+### .env ochrana
+
+Zabránit opencode ve čtení souborů `.env`:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### Vložení proměnných prostředí
+
+Vložení proměnných prostředí do všech spouštění shellu (nástroje AI a uživatelské terminály):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### Vlastní nástroje
+
+Pluginy mohou také přidat vlastní nástroje do opencode:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+Pomocník `tool` vytvoří vlastní nástroj, který může opencode volat. Vezme funkci schématu Zod a vrátí definici nástroje s:
+
+- `description`: Co nástroj dělá
+- `args`: Schéma Zod pro argumenty nástroje
+- `execute`: Funkce, která se spustí při vyvolání nástroje
+
+Vaše vlastní nástroje budou k dispozici opencode spolu s vestavěnými nástroji.
+
+:::note
+Pokud nástroj zásuvného modulu používá stejný název jako vestavěný nástroj, má přednost nástroj zásuvného modulu.
+:::
+
+---
+
+### Protokolování
+
+Pro strukturované protokolování použijte `client.app.log()` místo `console.log`:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+Úrovně: `debug`, `info`, `warn`, `error`. Podrobnosti viz [dokumentace SDK](https://opencode.ai/docs/cs/sdk).
+
+---
+
+### Zhutňovací háky
+
+Přizpůsobte kontext zahrnutý při zhuštění relace:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+Hák `experimental.session.compacting` se spustí předtím, než LLM vygeneruje shrnutí pokračování. Použijte jej k vložení kontextu specifického pro doménu, který by výchozí výzva komprimace chyběla.
+
+Výzvu ke zhutnění můžete také zcela nahradit nastavením `output.prompt`:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+Když je nastaveno `output.prompt`, zcela nahradí výchozí výzvu ke komprimaci. Pole `output.context` je v tomto případě ignorováno.

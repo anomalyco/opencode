@@ -1,0 +1,156 @@
+---
+title: Podpora ACP
+description: Použijte OpenCode v libovolném editoru kompatibilním s ACP.
+---
+
+OpenCode podporuje [Agent Client Protocol](https://agentclientprotocol.com) nebo (ACP), což vám umožňuje používat jej přímo v kompatibilních editorech a IDE.
+
+:::tip
+Seznam editorů a nástrojů, které podporují ACP, najdete ve [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
+:::
+
+ACP je otevřený protokol, který standardizuje komunikaci mezi editory kódu a kódovacími agenty AI.
+
+---
+
+## Konfigurace
+
+Chcete-li použít OpenCode přes ACP, nakonfigurujte svůj editor tak, aby spouštěl příkaz `opencode acp`.
+
+Příkaz spustí OpenCode jako podproces kompatibilní s ACP, který komunikuje s vaším editorem přes JSON-RPC přes stdio.
+
+Níže jsou uvedeny příklady oblíbených editorů, které podporují ACP.
+
+---
+
+### Zed
+
+Přidejte do své konfigurace [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+K jeho otevření použijte akci `agent: new thread` v **Command Palette**.
+
+Klávesovou zkratku můžete také svázat úpravou `keymap.json`:
+
+```json title="keymap.json"
+[
+  {
+    "bindings": {
+      "cmd-alt-o": [
+        "agent::NewExternalAgentThread",
+        {
+          "agent": {
+            "custom": {
+              "name": "OpenCode",
+              "command": {
+                "command": "opencode",
+                "args": ["acp"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]
+```
+
+---
+
+### IDE JetBrains
+
+Přidejte do svého souboru acp.json [JetBrains IDE](https://www.jetbrains.com/) podle [dokumentace](https://www.jetbrains.com/help/ai-assistant/acp.html):
+
+```json title="acp.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "/absolute/path/bin/opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+Chcete-li jej otevřít, použijte nového agenta 'OpenCode' ve výběru agenta chatu AI.
+
+---
+
+### Avante.nvim
+
+Přidejte do své konfigurace [Avante.nvim](https://github.com/yetone/avante.nvim):
+
+```lua
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" }
+    }
+  }
+}
+```
+
+Pokud potřebujete předat proměnné prostředí:
+
+```lua {6-8}
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" },
+      env = {
+        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+      }
+    }
+  }
+}
+```
+
+---
+
+### CodeCompanion.nvim
+
+Chcete-li použít OpenCode jako agenta ACP v [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), přidejte do své konfigurace Neovim následující:
+
+```lua
+require("codecompanion").setup({
+  interactions = {
+    chat = {
+      adapter = {
+        name = "opencode",
+        model = "claude-sonnet-4",
+      },
+    },
+  },
+})
+```
+
+Tato konfigurace nastaví CodeCompanion tak, aby používal OpenCode jako agenta ACP pro chat.
+
+Pokud potřebujete předat proměnné prostředí (jako je `OPENCODE_API_KEY`), prohlédněte si úplné podrobnosti v části [Konfigurace adaptérů: Proměnné prostředí](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) v dokumentaci CodeCompanion.nvim.
+
+## Podpora
+
+OpenCode funguje přes ACP stejně jako v terminálu. Všechny funkce jsou podporovány:
+
+:::note
+Některé vestavěné příkazy lomítka jako `/undo` a `/redo` aktuálně nejsou podporovány.
+:::
+
+- Vestavěné nástroje (operace se soubory, terminálové příkazy atd.)
+- Vlastní nástroje a příkazy lomítka
+- Servery MCP nakonfigurované ve vaší konfiguraci OpenCode
+- Pravidla specifická pro projekt ze `AGENTS.md`
+- Vlastní formátovače a lintry
+- Systém agentů a oprávnění

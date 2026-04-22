@@ -1,52 +1,58 @@
 ---
-import config from "../../config.mjs"
-import astroConfig from "virtual:starlight/user-config"
+import appConfig from "../../config.mjs"
+import starlightConfig from "virtual:starlight/user-config"
 import { getRelativeLocaleUrl } from "astro:i18n"
 import { Icon } from "@astrojs/starlight/components"
-import Default from "toolbeam-docs-theme/overrides/Header.astro"
+import Search from "virtual:starlight/components/Search"
 import SiteTitle from "@astrojs/starlight/components/SiteTitle.astro"
 
 const path = Astro.url.pathname
 const locale = Astro.currentLocale || "root"
 const route = Astro.locals.starlightRoute
-const t = Astro.locals.t as (key: string) => string
-const links = astroConfig.social || []
-const headerLinks = config.headerLinks
+const t = Astro.locals.t as ((key: string) => string) & {
+  all?: () => Record<string, string>
+}
+const links = starlightConfig.social || []
+const headerLinks = appConfig.headerLinks
 const sharePath = /\/s(\/|$)/.test(path)
+const shouldRenderSearch =
+  starlightConfig.pagefind ||
+  starlightConfig.components.Search !== "@astrojs/starlight/components/Search.astro"
 
 function href(url: string) {
-  if (url === "/" || url === "/docs" || url === "/docs/") {
+  if (url === "/docs" || url === "/docs/") {
     return getRelativeLocaleUrl(locale, "")
   }
   return url
 }
+
+function text(key: string) {
+  return t.all?.()[key] ?? t(key)
+}
 ---
 
-{sharePath ? (
-  <div class="header sl-flex">
-    <div class="title-wrapper sl-flex">
-      <SiteTitle {...route} />
-    </div>
-    <div class="middle-group sl-flex">
-      {headerLinks?.map(({ name, url }) => (
-        <a class="links" href={href(url)}>{t(name)}</a>
-      ))}
-    </div>
-    <div class="sl-hidden md:sl-flex right-group">
-      {links.length > 0 && (
-        <div class="sl-flex social-icons">
-          {links.map(({ href, icon }) => (
-            <a {href} rel="me" target="_blank">
-              <Icon name={icon} size="1rem" />
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
+<div class="header sl-flex">
+  <div class="title-wrapper sl-flex">
+    <SiteTitle {...route} />
   </div>
-) : (
-  <Default {...route} />
-)}
+  <div class="middle-group sl-flex">
+    {headerLinks?.map(({ name, url }) => (
+      <a class="links" href={href(url)}>{text(name)}</a>
+    ))}
+  </div>
+  <div class="sl-hidden md:sl-flex right-group">
+    {links.length > 0 && (
+      <div class="sl-flex social-icons">
+        {links.map(({ href, icon }) => (
+          <a {href} rel="me" target="_blank">
+            <Icon name={icon} size="1rem" />
+          </a>
+        ))}
+      </div>
+    )}
+    {!sharePath && shouldRenderSearch && <Search {...route} />}
+  </div>
+</div>
 
 <style>
   .header {

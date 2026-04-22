@@ -1,6 +1,7 @@
 export const docsLocale = [
   "ar",
   "bs",
+  "cs",
   "da",
   "de",
   "es",
@@ -28,6 +29,8 @@ export const localeAlias = {
   ar: "ar",
   br: "pt-br",
   bs: "bs",
+  cs: "cs",
+  cz: "cs",
   da: "da",
   de: "de",
   en: "root",
@@ -55,6 +58,7 @@ export const localeAlias = {
 const starts = [
   ["ko", "ko"],
   ["bs", "bs"],
+  ["cs", "cs"],
   ["de", "de"],
   ["es", "es"],
   ["fr", "fr"],

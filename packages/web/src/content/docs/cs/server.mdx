@@ -1,0 +1,287 @@
+---
+title: Server
+description: Komunikujte se serverem OpenCode přes HTTP.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+Příkaz `opencode serve` spouští headless HTTP server, který zpřístupňuje koncový bod OpenAPI pro klienty OpenCode.
+
+---
+
+### Použití
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### Možnosti
+
+| Vlajka | Popis | Výchozí |
+| ---------------- | ------------------------------------ | ----------------- |
+| `--port` | Port k poslechu na | `4096` |
+| `--hostname` | Název hostitele k poslechu | `127.0.0.1` |
+| `--mdns` | Povolit zjišťování mDNS | `false` |
+| `--mdns-domain` | Vlastní název domény pro službu mDNS | `opencode.local` |
+| `--cors` | Další původ prohlížeče pro povolení | `[]` |
+
+`--cors` lze absolvovat vícekrát:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### Autentizace
+
+Nastavte `OPENCODE_SERVER_PASSWORD` na ochranu serveru pomocí základního ověření HTTP. Výchozí uživatelské jméno je `opencode` nebo jej přepíšete nastavením `OPENCODE_SERVER_USERNAME`. To platí pro `opencode serve` i `opencode web`.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### Jak to funguje
+
+Když spustíte `opencode`, spustí se TUI a server. Kde je TUI
+klient, který komunikuje se serverem. Server odhaluje specifikaci OpenAPI 3.1
+koncový bod. Tento koncový bod se také používá ke generování [SDK](/docs/cs/sdk).
+
+:::tip
+Použijte server OpenCode k programové interakci s OpenCode.
+:::
+
+Tato architektura umožňuje OpenCode podporovat více klientů a vám programově komunikovat s OpenCode.
+
+Spuštěním `opencode serve` můžete spustit samostatný server. Pokud máte
+opencode TUI běží, `opencode serve` spustí nový server.
+
+---
+
+#### Připojte se k existujícímu serveru
+
+Když spustíte TUI, náhodně přiřadí port a název hostitele. Místo toho můžete předat `--hostname` a `--port` [vlajky](/docs/cs/cli). Poté použijte toto pro připojení k jeho serveru.
+
+Koncový bod [`/tui`](#tui) lze použít k řízení TUI přes server. Můžete například předvyplnit nebo spustit výzvu. Toto nastavení používají pluginy OpenCode [IDE](/docs/cs/ide).
+
+---
+
+## Spec
+
+Server publikuje specifikaci OpenAPI 3.1, kterou lze zobrazit na:
+
+```
+http://<hostname>:<port>/doc
+```
+
+Například `http://localhost:4096/doc`. Specifikace použijte ke generování klientů nebo ke kontrole typů požadavků a odpovědí. Nebo si to prohlédněte v průzkumníku Swagger.
+
+---
+
+## API
+
+Server opencode zpřístupňuje následující rozhraní API.
+
+---
+
+### Globální
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ----------------- | ------------------------------- | ------------------------------------- |
+| `GET` | `/global/health` | Získat stav a verzi serveru | `{ healthy: true, version: string }` |
+| `GET` | `/global/event` | Získejte globální události (stream SSE) | Stream akce |
+
+---
+
+### Project
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ------------------- | ------------------------ | ---------------------------------------------- |
+| `GET` | `/project` | Seznam všech projektů | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET` | `/project/current` | Získejte aktuální projekt | <a href={typesUrl}><code>Project</code></a> |
+
+---
+
+### Path a VCS
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ------- | ------------------------------------- | -------------------------------------------- |
+| `GET` | `/path` | Získat aktuální cestu | <a href={typesUrl}><code>Path</code></a> |
+| `GET` | `/vcs` | Získejte informace VCS pro aktuální projekt | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### Instance
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | -------------------- | ----------------------------- | --------- |
+| `POST` | `/instance/dispose` | Zlikvidujte aktuální instanci | `boolean` |
+
+---
+
+### Konfigurace
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------- | -------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET` | `/config` | Získat informace o konfiguraci | <a href={typesUrl}><code>Config</code></a> |
+| `PATCH` | `/config` | Aktualizovat konfiguraci | <a href={typesUrl}><code>Config</code></a> |
+| `GET` | `/config/providers` | Seznam poskytovatelů a výchozích modelů | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### Provider
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | --------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET` | `/provider` | Seznam všech poskytovatelů | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET` | `/provider/auth` | Získejte metody ověřování poskytovatele | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }` |
+| `POST` | `/provider/{id}/oauth/authorize` | Autorizujte poskytovatele pomocí OAuth | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a> |
+| `POST` | `/provider/{id}/oauth/callback` | Zpracovat zpětné volání OAuth pro poskytovatele | `boolean` |
+
+---
+
+### relace
+
+| Metoda | Cesta | Popis | Poznámky |
+| -------- | ----------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET` | `/session` | Seznam všech relací | Vrátí <a href={typesUrl}><code>Session[]</code></a> |
+| `POST` | `/session` | Vytvořit novou relaci | tělo: `{ parentID?, title? }`, návraty <a href={typesUrl}><code>Session</code></a> |
+| `GET` | `/session/status` | Získat stav relace pro všechny relace | Vrátí `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }` |
+| `GET` | `/session/:id` | Získejte podrobnosti o relaci | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `DELETE` | `/session/:id` | Smazat relaci a všechna její data | Vrátí `boolean` |
+| `PATCH` | `/session/:id` | Aktualizovat vlastnosti relace | tělo: `{ title? }`, návraty <a href={typesUrl}><code>Session</code></a> |
+| `GET` | `/session/:id/children` | Získejte dětské relace relace | Vrátí <a href={typesUrl}><code>Session[]</code></a> |
+| `GET` | `/session/:id/todo` | Získejte seznam úkolů pro relaci | Vrátí <a href={typesUrl}><code>Todo[]</code></a> |
+| `POST` | `/session/:id/init` | Analyzujte aplikaci a vytvořte `AGENTS.md` | tělo: `{ messageID, providerID, modelID }`, vrací `boolean` |
+| `POST` | `/session/:id/fork` | Fork existující relace ve zprávě | tělo: `{ messageID? }`, návraty <a href={typesUrl}><code>Session</code></a> |
+| `POST` | `/session/:id/abort` | Přerušit běžící relaci | Vrátí `boolean` |
+| `POST` | `/session/:id/share` | Sdílet relaci | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `DELETE` | `/session/:id/share` | Zrušit sdílení relace | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `GET` | `/session/:id/diff` | Získejte rozdíl pro tuto relaci | dotaz: `messageID?`, vrátí <a href={typesUrl}><code>FileDiff[]</code></a> |
+| `POST` | `/session/:id/summarize` | Shrňte relaci | tělo: `{ providerID, modelID }`, vrací `boolean` |
+| `POST` | `/session/:id/revert` | Vrátit zprávu | tělo: `{ messageID, partID? }`, vrací `boolean` |
+| `POST` | `/session/:id/unrevert` | Obnovit všechny vrácené zprávy | Vrátí `boolean` |
+| `POST` | `/session/:id/permissions/:permissionID` | Odpovědět na žádost o povolení | tělo: `{ response, remember? }`, vrací `boolean` |
+
+---
+
+### Zprávy
+
+| Metoda | Cesta | Popis | Poznámky |
+| ------ | ---------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------- ---------------------------------------------------------------------------------- |
+| `GET` | `/session/:id/message` | Seznam zpráv v relaci | dotaz: `limit?`, vrátí `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]` |
+| `POST` | `/session/:id/message` | Odeslat zprávu a čekat na odpověď | tělo: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, vrací `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET` | `/session/:id/message/:messageID` | Získat podrobnosti o zprávě | Vrátí `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `POST` | `/session/:id/prompt_async` | Odeslat zprávu asynchronně (bez čekání) | tělo: stejné jako `/session/:id/message`, vrací `204 No Content` |
+| `POST` | `/session/:id/command` | Proveďte příkaz lomítko | tělo: `{ messageID?, agent?, model?, command, arguments }`, vrací `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `POST` | `/session/:id/shell` | Spusťte příkaz shellu | tělo: `{ agent, model?, command }`, vrací `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+
+---
+
+### Příkazy
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ---------- | ------------------ | ---------------------------------------------- |
+| `GET` | `/command` | Vypsat všechny příkazy | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### Soubory
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET` | `/find?pattern=<pat>` | Hledat text v souborech | Pole shodných objektů se `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `GET` | `/find/file?query=<q>` | Najít soubory a adresáře podle názvu | `string[]` (cesty) |
+| `GET` | `/find/symbol?query=<q>` | Najít symboly pracovního prostoru | <a href={typesUrl}><code>Symbol[]</code></a> |
+| `GET` | `/file?path=<path>` | Seznam souborů a adresářů | <a href={typesUrl}><code>FileNode[]</code></a> |
+| `GET` | `/file/content?path=<p>` | Číst soubor | <a href={typesUrl}><code>FileContent</code></a> |
+| `GET` | `/file/status` | Získat stav pro sledované soubory | <a href={typesUrl}><code>File[]</code></a> |
+
+#### Parametry dotazu `/find/file`
+
+- `query` (povinné) — hledaný řetězec (fuzzy shoda)
+- `type` (volitelné) — omezení výsledků na `"file"` nebo `"directory"`
+- `directory` (volitelné) – přepíše kořen projektu pro vyhledávání
+– `limit` (volitelné) – maximální počet výsledků (1–200)
+- `dirs` (volitelné) — starší příznak (`"false"` vrací pouze soubory)
+
+---
+
+### Nástroje (experimentální)
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | -------------------------------------------- | ----------------------------------------- | --------------------------------------------- |
+| `GET` | `/experimental/tool/ids` | Vypsat všechna ID nástrojů | <a href={typesUrl}><code>ToolIDs</code></a> |
+| `GET` | `/experimental/tool?provider=<p>&model=<m>` | Seznam nástrojů se schématy JSON pro model | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP, formátovače a MCP
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ------------ | --------------------------- | --------------------------------------------------------- |
+| `GET` | `/lsp` | Získejte stav serveru LSP | <a href={typesUrl}><code>LSPStatus[]</code></a> |
+| `GET` | `/formatter` | Získat stav formátovače | <a href={typesUrl}><code>FormatterStatus[]</code></a> |
+| `GET` | `/mcp` | Získejte stav serveru MCP | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp` | Přidat server MCP dynamicky | tělo: `{ name, config }`, vrátí objekt stavu MCP |
+
+---
+
+### Agenti
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | -------- | -------------------------- | -------------------------------------------- |
+| `GET` | `/agent` | Seznam všech dostupných agentů | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### Protokolování
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ------ | ------------------------------------------------------------- | --------- |
+| `POST` | `/log` | Napište záznam do protokolu. Tělo: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ------------------------ | -------------------------------------------- | ----------------------- |
+| `POST` | `/tui/append-prompt` | Připojte text k výzvě | `boolean` |
+| `POST` | `/tui/open-help` | Otevřete dialogové okno nápovědy | `boolean` |
+| `POST` | `/tui/open-sessions` | Otevřete výběr relace | `boolean` |
+| `POST` | `/tui/open-themes` | Otevřete výběr motivu | `boolean` |
+| `POST` | `/tui/open-models` | Otevřete volič modelu | `boolean` |
+| `POST` | `/tui/submit-prompt` | Odeslat aktuální výzvu | `boolean` |
+| `POST` | `/tui/clear-prompt` | Vymažte výzvu | `boolean` |
+| `POST` | `/tui/execute-command` | Proveďte příkaz (`{ command }`) | `boolean` |
+| `POST` | `/tui/show-toast` | Zobrazit toast (`{ title?, message, variant }`) | `boolean` |
+| `GET` | `/tui/control/next` | Počkejte na další kontrolní požadavek | Kontrolní objekt požadavku |
+| `POST` | `/tui/control/response` | Reakce na požadavek řízení (`{ body }`) | `boolean` |
+
+---
+
+### Auth
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ----------- | ---------------------------------------------------------------- | --------- |
+| `PUT` | `/auth/:id` | Nastavte ověřovací údaje. Tělo musí odpovídat schématu poskytovatele | `boolean` |
+
+---
+
+### Události
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | -------- | ----------------------------------------------------------------------------- | -------------------------- |
+| `GET` | `/event` | Stream událostí odeslaných serverem. První událost je `server.connected`, poté autobusová událost | Stream událostí odeslaných serverem |
+
+---
+
+### Dokumenty
+
+| Metoda | Cesta | Popis | Odpověď |
+| ------ | ------ | -------------------------- | ---------------------------- |
+| `GET` | `/doc` | Specifikace OpenAPI 3.1 | HTML stránka se specifikací OpenAPI |

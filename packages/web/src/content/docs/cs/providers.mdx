@@ -1,0 +1,2169 @@
+---
+title: Poskytovatelé
+description: Používejte v OpenCode libovolného poskytovatele LLM.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+
+OpenCode používá [AI SDK](https://ai-sdk.dev/) a [Models.dev](https://models.dev) k podpoře **75+ poskytovatelů LLM** a podporuje spouštění místních modelů.
+
+Chcete-li přidat poskytovatele, musíte:
+
+1. Přidejte klíče API pro poskytovatele pomocí příkazu `/connect`.
+2. Nakonfigurujte poskytovatele v konfiguraci OpenCode.
+
+---
+
+### Přihlašovací údaje
+
+Když přidáte klíče API poskytovatele pomocí příkazu `/connect`, uloží se
+v `~/.local/share/opencode/auth.json`.
+
+---
+
+### Konfigurace
+
+Poskytovatele si můžete přizpůsobit prostřednictvím sekce `provider` ve vašem OpenCode
+configu.
+
+---
+
+#### Základní URL
+
+Základní URL můžete přizpůsobit libovolnému poskytovateli nastavením možnosti `baseURL`. To je užitečné při používání služeb proxy nebo vlastních koncových bodů.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "https://api.anthropic.com/v1"
+      }
+    }
+  }
+}
+```
+
+---
+
+## OpenCode Zen
+
+OpenCode Zen je seznam modelů poskytnutých týmem OpenCode, které byly
+testováno a ověřeno, aby dobře fungovalo s OpenCode. [Další informace](/docs/cs/zen).
+
+:::tip
+Pokud jste noví, doporučujeme začít s OpenCode Zen.
+:::
+
+1. Spusťte příkaz `/connect` v TUI, vyberte `OpenCode Zen` a přejděte na [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Přihlaste se, přidejte své fakturační údaje a zkopírujte klíč API.
+
+3. Vložte klíč API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte `/models` v TUI, abyste viděli seznam modelů, které doporučujeme.
+
+   ```txt
+   /models
+   ```
+
+Funguje jako každý jiný poskytovatel v OpenCode a je zcela volitelné.
+
+---
+
+## OpenCode Go
+
+OpenCode Go je levný plán předplatného, který poskytuje spolehlivý přístup k oblíbeným modelům otevřeného kódování poskytovaným týmem OpenCode, které byly
+testováno a ověřeno, aby dobře fungovalo s OpenCode.
+
+1. Spusťte příkaz `/connect` v TUI, vyberte `OpenCode Go` a přejděte na [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Přihlaste se, přidejte své fakturační údaje a zkopírujte klíč API.
+
+3. Vložte klíč API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte `/models` v TUI, abyste viděli seznam modelů, které doporučujeme.
+
+   ```txt
+   /models
+   ```
+
+Funguje jako každý jiný poskytovatel v OpenCode a je zcela volitelné.
+
+---
+
+## Adresář
+
+Podívejme se na některé poskytovatele podrobně. Pokud chcete přidat poskytovatele do
+seznam, klidně si otevřete PR.
+
+:::note
+Nevidíte zde poskytovatele? Odeslat PR.
+:::
+
+---
+
+### 302.AI
+
+1. Přejděte do [302.AI konzole](https://302.ai/), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **302.AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte svůj klíč 302.AI API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Amazon Bedrock
+
+Chcete-li použít Amazon Bedrock s OpenCode:
+
+1. Přejděte do **Katalogu modelů** v konzole Amazon Bedrock a požádejte
+   přístup k požadovaným modelům.
+
+   :::tip
+   Musíte mít přístup k modelu, který chcete v Amazon Bedrock.
+   :::
+
+2. **Nakonfigurujte ověřování** pomocí jedné z následujících metod:
+
+   ***
+
+   #### Proměnné prostředí (rychlý start)
+
+   Při spuštění OpenCode nastavte jednu z těchto proměnných prostředí:
+
+   ```bash
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
+
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   ```
+
+   Nebo si je přidejte do svého bash profilu:
+
+   ```bash title="~/.bash_profile"
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
+   ```
+
+   ***
+
+   #### Konfigurační soubor (doporučeno)
+
+   Pro projektovou nebo trvalou konfiguraci použijte `opencode.json`:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
+
+   **Dostupné možnosti:**
+   - `region` - Oblast AWS (např. `us-east-1`, `eu-west-1`)
+   - `profile` - AWS pojmenovaný profil z `~/.aws/credentials`
+   - `endpoint` - Vlastní koncový bod URL pro koncové body VPC (alias pro obecnou možnost `baseURL`)
+
+   :::tip
+   Možnosti konfiguračního souboru mají přednost před proměnnými prostředí.
+   :::
+
+   ***
+
+   #### Pokročilé: koncové body VPC
+
+   Pokud pro Bedrock používáte koncové body VPC:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
+
+   :::note
+   Volba `endpoint` je alias pro generickou volbu `baseURL` s použitím terminologie specifické pro AWS. Pokud jsou zadány oba `endpoint` i `baseURL`, `endpoint` má přednost.
+   :::
+
+   ***
+
+   #### Metody autentizace
+   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Vytvořte uživatele IAM a vygenerujte přístupové klíče v konzole AWS
+   - **`AWS_PROFILE`**: Použijte pojmenované profily ze `~/.aws/credentials`. Nejprve nakonfigurujte pomocí `aws configure --profile my-profile` nebo `aws sso login`
+   - **`AWS_BEARER_TOKEN_BEDROCK`**: Generujte dlouhodobé klíče API z konzole Amazon Bedrock
+   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: Pro EKS IRSA (IAM role pro servisní účty) nebo jiná prostředí Kubernetes s federací OIDC. Tyto proměnné prostředí automaticky vkládá Kubernetes při používání anotací servisních účtů.
+
+   ***
+
+   #### Priorita ověřování
+
+   Amazon Bedrock používá následující prioritu ověřování:
+   1. **Bearer token** – proměnná prostředí `AWS_BEARER_TOKEN_BEDROCK` nebo token z příkazu `/connect`
+   2. **AWS Credential Chain** – profil, přístupové klíče, sdílené přihlašovací údaje, role IAM, tokeny webové identity (EKS IRSA), metadata instance
+
+   :::note
+   Když je nastaven bearer token (prostřednictvím `/connect` nebo `AWS_BEARER_TOKEN_BEDROCK`), má přednost před všemi metodami přihlašovacích údajů AWS včetně nakonfigurovaných profilů.
+   :::
+
+3. Spuštěním příkazu `/models` vyberte požadovaný model.
+
+   ```txt
+   /models
+   ```
+
+:::note
+Pro vlastní inferenční profily použijte název modelu a poskytovatele v klíči a nastavte vlastnost `id` na arn. Tím je zajištěno správné ukládání do mezipaměti.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      // ...
+      "models": {
+        "anthropic-claude-sonnet-4.5": {
+          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### Anthropic
+
+1. Jakmile se zaregistrujete, spusťte příkaz `/connect` a vyberte Antropický.
+
+   ```txt
+   /connect
+   ```
+
+2. Zde můžete vybrat možnost **Claude Pro/Max** a otevře se váš prohlížeč
+   a požádat vás o ověření.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Manually enter API Key
+   └
+   ```
+
+3. Nyní by měly být dostupné všechny modely Anthropic, když použijete příkaz `/models`.
+
+   ```txt
+   /models
+   ```
+
+:::info
+Existují pluginy, které vám umožňují používat vaše modely Claude Pro/Max
+OpenCode. Anthropic to výslovně zakazuje.
+
+Předchozí verze OpenCode byly dodávány s těmito pluginy, ale to není
+delší případ od 1.3.0
+
+Jiné společnosti podporují svobodu volby pomocí vývojářských nástrojů - můžete použít
+následující předplatná v OpenCode s nulovým nastavením:
+
+- ChatGPT Plus
+- Github Copilot
+- Gitlab Duo
+  :::
+
+---
+
+### Azure OpenAI
+
+:::note
+Pokud narazíte na chyby „Omlouvám se, ale s tímto požadavkem nemohu pomoci“, zkuste ve svém prostředku Azure změnit filtr obsahu z **VýchozíV2** na **Výchozí**.
+:::
+
+1. Přejděte na [portál Azure](https://portal.azure.com/) a vytvořte zdroj **Azure OpenAI**. Budete potřebovat:
+   - **Název zdroje**: Stane se součástí vašeho koncového bodu API (`https://RESOURCE_NAME.openai.azure.com/`)
+   - **API klíč**: Buď `KEY 1` nebo `KEY 2` z vašeho zdroje
+
+2. Přejděte na [Azure AI Foundry](https://ai.azure.com/) a nasaďte model.
+
+   :::note
+   Aby opencode správně fungoval, musí název nasazení odpovídat názvu modelu.
+   :::
+
+3. Spusťte příkaz `/connect` a vyhledejte **Azure**.
+
+   ```txt
+   /connect
+   ```
+
+4. Zadejte klíč API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. Nastavte název zdroje jako proměnnou prostředí:
+
+   ```bash
+   AZURE_RESOURCE_NAME=XXX opencode
+   ```
+
+Nebo si to přidejte do svého bash profilu:
+
+   ```bash title="~/.bash_profile"
+   export AZURE_RESOURCE_NAME=XXX
+   ```
+
+6. Spuštěním příkazu `/models` vyberte nasazený model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Azure Cognitive Services
+
+1. Přejděte na [portál Azure](https://portal.azure.com/) a vytvořte zdroj **Azure OpenAI**. Budete potřebovat:
+   - **Název zdroje**: Stane se součástí vašeho koncového bodu API (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`)
+   - **API klíč**: Buď `KEY 1` nebo `KEY 2` z vašeho zdroje
+
+2. Přejděte na [Azure AI Foundry](https://ai.azure.com/) a nasaďte model.
+
+   :::note
+   Aby opencode správně fungoval, musí název nasazení odpovídat názvu modelu.
+   :::
+
+3. Spusťte příkaz `/connect` a vyhledejte **Azure Cognitive Services**.
+
+   ```txt
+   /connect
+   ```
+
+4. Zadejte klíč API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. Nastavte název zdroje jako proměnnou prostředí:
+
+   ```bash
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   ```
+
+Nebo si to přidejte do svého bash profilu:
+
+   ```bash title="~/.bash_profile"
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   ```
+
+6. Spuštěním příkazu `/models` vyberte nasazený model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Baseten
+
+1. Přejděte na [Základní](https://app.baseten.co/), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Baseten**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč Baseten API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cerebras
+
+1. Přejděte do [konzole Cerebras](https://inference.cerebras.ai/), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Cerebras**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč Cerebras API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Qwen 3 Coder 480B_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Cloudflare AI Gateway
+
+Cloudflare AI Gateway vám umožňuje přistupovat k modelům od OpenAI, Anthropic, Workers AI a dalších prostřednictvím jednotného koncového bodu. S [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) nepotřebujete samostatné klíče API pro každého poskytovatele.
+
+1. Přejděte do [Cloudflare dashboard](https://dash.cloudflare.com/), přejděte na **AI** > **AI Gateway** a vytvořte novou bránu. Poznamenejte si své **ID účtu** a **ID brány**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Cloudflare AI Gateway**.
+
+   ```txt
+   /connect
+   ```
+
+3. Po zobrazení výzvy zadejte své **ID účtu**.
+
+   ```txt
+   ┌ Enter your Cloudflare Account ID
+   │
+   │
+   └ enter
+   ```
+
+4. Po zobrazení výzvy zadejte své **ID brány**.
+
+   ```txt
+   ┌ Enter your Cloudflare AI Gateway ID
+   │
+   │
+   └ enter
+   ```
+
+5. Zadejte svůj token **Cloudflare API**.
+
+   ```txt
+   ┌ Gateway API token
+   │
+   │
+   └ enter
+   ```
+
+6. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+Modely můžete také přidat prostřednictvím konfigurace opencode.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "cloudflare-ai-gateway": {
+         "models": {
+           "openai/gpt-4o": {},
+           "anthropic/claude-sonnet-4": {}
+         }
+       }
+     }
+   }
+   ```
+
+Alternativně můžete místo použití `/connect` nastavit proměnné prostředí.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_GATEWAY_ID=your-gateway-id
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```
+
+---
+
+### Cloudflare Workers AI
+
+Cloudflare Workers AI vám umožňuje spouštět modely AI v globální síti Cloudflare přímo přes REST API, bez nutnosti samostatných účtů poskytovatelů pro podporované modely.
+
+1. Přejděte na [Cloudflare dashboard](https://dash.cloudflare.com/), přejděte na **Workers AI** a vyberte **Use REST API**, abyste získali své **ID účtu** a vytvořili token API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Cloudflare Workers AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Po zobrazení výzvy zadejte své **ID účtu**.
+
+   ```txt
+   ┌ Enter your Cloudflare Account ID
+   │
+   │
+   └ enter
+   ```
+
+4. Zadejte svůj **Cloudflare API klíč**.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+Alternativně můžete místo použití `/connect` nastavit proměnné prostředí.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   export CLOUDFLARE_API_KEY=your-api-token
+   ```
+
+---
+
+### Cortecs
+
+1. Přejděte do [Konzole Cortecs](https://cortecs.ai/), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Cortecs**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč Cortecs API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Kimi K2 Instruct_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### DeepSeek
+
+1. Přejděte do [Konzole DeepSeek](https://platform.deepseek.com/), vytvořte si účet a klikněte na **Vytvořit nový klíč API**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **DeepSeek**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč DeepSeek API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model DeepSeek, jako je _DeepSeek Reasoner_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Deep Infra
+
+1. Přejděte na [Deep Infra dashboard](https://deepinfra.com/dash), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Deep Infra**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč Deep Infra API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Firmware
+
+1. Přejděte na [Firmware dashboard](https://app.firmware.ai/signup), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Firmware**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč firmwaru API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Fireworks AI
+
+1. Přejděte do [konzole Fireworks AI](https://app.fireworks.ai/), vytvořte si účet a klikněte na **Vytvořit klíč API**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Fireworks AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč Fireworks AI API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Kimi K2 Instruct_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### GitLab Duo
+
+:::caution[experimentální]
+Podpora GitLab Duo v OpenCode je experimentální. Vlastnosti, konfigurace a
+chování se může v budoucích verzích změnit.
+:::
+
+OpenCode se integruje s [platformou GitLab Duo Agent](https://docs.gitlab.com/user/duo_agent_platform/),
+poskytuje AI agentní chat s nativním voláním nástrojů.
+
+:::note[Požadavky licence]
+Platforma GitLab Duo Agent vyžaduje předplatné GitLab **Premium** nebo **Ultimate**.
+Je dostupná na GitLab.com i v GitLab Self-Managed.
+Viz [Předpoklady platformy GitLab Duo Agent](https://docs.gitlab.com/user/duo_agent_platform/#prerequisites)
+pro úplné požadavky.
+:::
+
+1. Spusťte příkaz `/connect` a vyberte GitLab.
+
+   ```txt
+   /connect
+   ```
+
+2. Vyberte způsob ověření:
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ OAuth (Recommended)
+   │ Personal Access Token
+   └
+   ```
+
+   #### Použití OAuth (doporučeno)
+
+   Vyberte **OAuth** a prohlížeč se otevře pro autorizaci.
+
+   #### Použití osobního přístupového tokenu
+   1. Přejděte do [Nastavení uživatele GitLab > Přístupové tokeny](https://gitlab.com/-/user_settings/personal_access_tokens)
+   2. Klikněte na **Přidat nový token**
+   3. Název: `OpenCode`, Rozsah: `api`
+   4. Zkopírujte token (začíná `glpat-`)
+   5. Zadejte jej do terminálu
+
+3. Spuštěním příkazu `/models` zobrazíte dostupné modely.
+
+   ```txt
+   /models
+   ```
+
+K dispozici jsou tři modely založené na Claude:
+   - **duo-chat-haiku-4-5** (výchozí) - Rychlé reakce na rychlé úkoly
+   - **duo-chat-sonnet-4-5** - Vyvážený výkon pro většinu pracovních postupů
+   - **duo-chat-opus-4-5** - Nejschopnější pro komplexní analýzu
+
+:::note
+Pokud nechcete, můžete také zadat proměnnou prostředí 'GITLAB_TOKEN'
+k uložení tokenu v úložišti ověření opencode.
+:::
+
+##### Self-Hosted GitLab
+
+:::note[poznámka o shodě]
+OpenCode používá malý model pro některé úlohy AI, jako je generování názvu relace.
+Ve výchozím nastavení používá `gpt-5-nano` hostovaný službou Zen. Pokud chcete OpenCode
+omezit pouze na svou vlastní instanci hostovanou v GitLabu, přidejte do souboru
+`opencode.json` následující nastavení. Doporučuje se také zakázat sdílení relací.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "gitlab/duo-chat-haiku-4-5",
+  "share": "disabled"
+}
+```
+
+:::
+
+Pro samostatně hostované instance GitLab:
+
+```bash
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_TOKEN=glpat-...
+```
+
+Pokud vaše instance provozuje vlastní bránu AI:
+
+```bash
+GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
+```
+
+Nebo přidejte do svého bash profilu:
+
+```bash title="~/.bash_profile"
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
+export GITLAB_TOKEN=glpat-...
+```
+
+:::note
+Váš správce GitLab musí:
+
+1. [Zapněte GitLab Duo](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-gitlab-duo-on-or-off)
+   pro uživatele, skupinu nebo instanci
+2. [Zapněte platformu Agent](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-gitlab-duo-agent-platform-on-or-off)
+   (GitLab 18.8+) nebo [povolit beta a experimentální funkce](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-on-beta-and-experimental-features)
+   (GitLab 18.7 a starší)
+3. Pro Self-Managed [nakonfigurujte svou instanci](https://docs.gitlab.com/administration/gitlab_duo/configure/gitlab_self_managed/)
+   :::
+
+##### OAuth pro instance s vlastním hostitelem
+
+Aby Oauth fungoval pro vaši samostatně hostovanou instanci, musíte vytvořit
+novou aplikaci (Nastavení → Aplikace) s
+zpětné volání URL `http://127.0.0.1:8080/callback` a následující rozsahy:
+
+- api (přístup k API vaším jménem)
+- read_user (Přečtěte si své osobní údaje)
+- read_repository (Umožňuje přístup pouze pro čtení k úložišti)
+
+Poté vystavte ID aplikace jako proměnnou prostředí:
+
+```bash
+export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
+```
+
+Více dokumentace na domovské stránce [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-gitlab-auth).
+
+##### Konfigurace
+
+Přizpůsobit prostřednictvím `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "gitlab": {
+      "options": {
+        "instanceUrl": "https://gitlab.com"
+      }
+    }
+  }
+}
+```
+
+##### Modely pracovního postupu platformy GitLab Duo Agent (DAP)
+
+Modely pracovních toků DAP poskytují alternativní cestu provádění, která směruje volání nástrojů
+prostřednictvím služby GitLab Duo Workflow Service (DWS) namísto standardního agentního chatu.
+Když je vybrán model `duo-workflow-*`, OpenCode:
+
+1. Objevte dostupné modely z vašeho jmenného prostoru GitLab
+2. Pokud je k dispozici více modelů, předložte nástroj pro výběr
+3. Uložte vybraný model do mezipaměti na disk pro rychlé následné spuštění
+4. Směrujte požadavky na provedení nástroje prostřednictvím systému nástrojů OpenCode s oprávněním
+
+Dostupné modely pracovních toků DAP se řídí konvencí pojmenování `duo-workflow-*` a
+jsou dynamicky objeveny z vaší instance GitLab.
+
+##### Nástroje GitLab API (volitelné, ale vysoce doporučené)
+
+Přístup k nástrojům GitLab (požadavky na sloučení, problémy, kanály, CI/CD atd.):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-gitlab-plugin"]
+}
+```
+
+Tento plugin poskytuje komplexní možnosti správy úložiště GitLab včetně recenzí MR, sledování problémů, sledování potrubí a dalších.
+
+---
+
+### GitHub Copilot
+
+Chcete-li používat předplatné GitHub Copilot se opencode:
+
+:::note
+Některé modely mohou vyžadovat [Pro+
+předplatné](https://github.com/features/copilot/plans) k použití.
+:::
+
+1. Spusťte příkaz `/connect` a vyhledejte GitHub Copilot.
+
+   ```txt
+   /connect
+   ```
+
+2. Přejděte na [github.com/login/device](https://github.com/login/device) a zadejte kód.
+
+   ```txt
+   ┌ Login with GitHub Copilot
+   │
+   │ https://github.com/login/device
+   │
+   │ Enter code: 8F43-6FCF
+   │
+   └ Waiting for authorization...
+   ```
+
+3. Nyní spusťte příkaz `/models` a vyberte požadovaný model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Google Vertex AI
+
+Chcete-li použít Google Vertex AI s OpenCode:
+
+1. Přejděte do **Model Garden** v cloudové konzoli Google a zkontrolujte
+   modely dostupné ve vašem regionu.
+
+   :::note
+   Musíte mít cloudový projekt Google s povoleným Vertex AI API.
+   :::
+
+2. Nastavte požadované proměnné prostředí:
+   - `GOOGLE_CLOUD_PROJECT`: ID vašeho cloudového projektu Google
+   - `VERTEX_LOCATION` (volitelné): Oblast pro Vertex AI (výchozí `global`)
+   - Autentizace (vyberte jednu):
+     - `GOOGLE_APPLICATION_CREDENTIALS`: Cesta ke souboru klíče JSON vašeho servisního účtu
+     - Ověření pomocí gcloud CLI: `gcloud auth application-default login`
+
+Nastavte je při spuštění opencode.
+
+   ```bash
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   ```
+
+Nebo si je přidejte do svého bash profilu.
+
+   ```bash title="~/.bash_profile"
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
+   ```
+
+:::tip
+Oblast `global` zlepšuje dostupnost a snižuje chyby bez dalších nákladů. Pro požadavky na umístění dat použijte regionální koncové body (např. `us-central1`). [Další informace](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+:::
+
+3. Spuštěním příkazu `/models` vyberte požadovaný model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Groq
+
+1. Přejděte do [Groq konzole](https://console.groq.com/), klikněte na **Vytvořit klíč API** a zkopírujte klíč.
+
+2. Spusťte příkaz `/connect` a vyhledejte Groq.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč API pro poskytovatele.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte požadovaný.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Hugging Face
+
+[Poskytovatelé odvození Hugging Face](https://huggingface.co/docs/inference-providers) poskytuje přístup k otevřeným modelům podporovaným více než 17 poskytovateli.
+
+1. Přejděte do [Nastavení Hugging Face](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) a vytvořte token s oprávněním volat poskytovatelům odvození.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Hugging Face**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte svůj token Hugging Face.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Kimi-K2-Instruct_ nebo _GLM-4.6_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Helicone
+
+[Helicone](https://helicone.ai) je platforma pro observabilitu LLM, která poskytuje protokolování, monitoring a analytiku pro vaše AI aplikace. Helicone AI Gateway automaticky směruje požadavky k příslušnému poskytovateli podle modelu.
+
+1. Přejděte na [Helicone](https://helicone.ai), vytvořte si účet a vygenerujte klíč API z řídicího panelu.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Helicone**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte svůj klíč Helicone API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+Další poskytovatele a pokročilé funkce, jako je ukládání do mezipaměti a omezení rychlosti, naleznete v [dokumentaci Helicone](https://docs.helicone.ai).
+
+#### Volitelné konfigurace
+
+V případě, že uvidíte funkci nebo model ze Helicone, který není automaticky nakonfigurován prostřednictvím opencode, můžete jej vždy nakonfigurovat sami.
+
+Zde je [adresář modelů Helicone](https://helicone.ai/models), budete jej potřebovat k získání ID modelů, které chcete přidat.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+      },
+      "models": {
+        "gpt-4o": {
+          // Model ID (from Helicone's model directory page)
+          "name": "GPT-4o", // Your own custom name for the model
+        },
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+        },
+      },
+    },
+  },
+}
+```
+
+#### Vlastní záhlaví
+
+Helicone podporuje vlastní záhlaví pro funkce, jako je ukládání do mezipaměti, sledování uživatelů a správa relací. Přidejte je do konfigurace poskytovatele pomocí `options.headers`:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "helicone": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Helicone",
+      "options": {
+        "baseURL": "https://ai-gateway.helicone.ai",
+        "headers": {
+          "Helicone-Cache-Enabled": "true",
+          "Helicone-User-Id": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+##### Sledování relací
+
+Funkce [Sessions](https://docs.helicone.ai/features/sessions) Helicone vám umožňuje seskupit související požadavky LLM dohromady. Použijte plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) k automatickému přihlášení každé konverzace OpenCode jako relace v Helicone.
+
+```bash
+npm install -g opencode-helicone-session
+```
+
+Přidejte to do své konfigurace.
+
+```json title="opencode.json"
+{
+  "plugin": ["opencode-helicone-session"]
+}
+```
+
+Plugin vloží do vašich požadavků hlavičky `Helicone-Session-Id` a `Helicone-Session-Name`. Na stránce Sessions Helicone uvidíte každou OpenCode konverzaci uvedenou jako samostatnou relaci.
+
+##### Běžné záhlaví Helicone
+
+| Záhlaví | Popis |
+| --------------------------- | -------------------------------------------------------------- |
+| `Helicone-Cache-Enabled` | Povolit ukládání odpovědí do mezipaměti (`true`/`false`) |
+| `Helicone-User-Id` | Sledování metrik podle uživatele |
+| `Helicone-Property-[Name]` | Přidat uživatelské vlastnosti (např. `Helicone-Property-Environment`) |
+| `Helicone-Prompt-Id` | Přidružit požadavky k verzím prompt |
+
+Všechna dostupná záhlaví naleznete v [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory).
+
+---
+
+### llama.cpp
+
+OpenCode můžete nakonfigurovat tak, aby používal lokální modely pomocí nástroje `llama-server` z [llama.cpp](https://github.com/ggml-org/llama.cpp).
+
+```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "llama.cpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama-server (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1"
+      },
+      "models": {
+        "qwen3-coder:a3b": {
+          "name": "Qwen3-Coder: a3b-30b (local)",
+          "limit": {
+            "context": 128000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+V tomto příkladu:
+
+- `llama.cpp` je vlastní ID poskytovatele. Může to být libovolný řetězec.
+- `npm` určuje balíček, který se má použít pro tohoto poskytovatele. Zde se `@ai-sdk/openai-compatible` používá pro jakékoli API kompatibilní s OpenAI.
+- `name` je zobrazovaný název poskytovatele v uživatelském rozhraní.
+- `options.baseURL` je koncový bod pro místní server.
+- `models` je mapa ID modelů k jejich konfiguracím. Název modelu se zobrazí v seznamu pro výběr modelu.
+
+---
+
+### IO.NET
+
+IO.NET nabízí 17 modelů optimalizovaných pro různé případy použití:
+
+1. Přejděte do [IO.NET konzole](https://ai.io.net/), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **IO.NET**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč IO.NET API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### LM Studio
+
+opencode můžete nakonfigurovat tak, aby používal místní modely prostřednictvím LM Studio.
+
+```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "google/gemma-3n-e4b": {
+          "name": "Gemma 3n-e4b (local)"
+        }
+      }
+    }
+  }
+}
+```
+
+V tomto příkladu:
+
+- `lmstudio` je vlastní ID poskytovatele. Může to být libovolný řetězec.
+- `npm` určuje balíček, který se má použít pro tohoto poskytovatele. Zde se `@ai-sdk/openai-compatible` používá pro jakékoli API kompatibilní s OpenAI.
+- `name` je zobrazovaný název poskytovatele v uživatelském rozhraní.
+- `options.baseURL` je koncový bod pro místní server.
+- `models` je mapa ID modelů k jejich konfiguracím. Název modelu se zobrazí v seznamu pro výběr modelu.
+
+---
+
+### Moonshot AI
+
+Chcete-li použít Kimi K2 z Moonshot AI:
+
+1. Přejděte do [konzole Moonshot AI](https://platform.moonshot.ai/console), vytvořte účet a klikněte na **Vytvořit klíč API**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Moonshot AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč Moonshot API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte _Kimi K2_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### MiniMax
+
+1. Přejděte do [MiniMax API Console](https://platform.minimax.io/login), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **MiniMax**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč MiniMax API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _M2.1_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### NVIDIA
+
+NVIDIA poskytuje přístup k modelům Nemotron a mnoha dalším otevřeným modelům prostřednictvím [build.nvidia.com](https://build.nvidia.com) zdarma.
+
+1. Přejděte na [build.nvidia.com](https://build.nvidia.com), vytvořte si účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **NVIDIA**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč NVIDIA API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako nemotron-3-super-120b-a12b.
+
+   ```txt
+   /models
+   ```
+
+#### On-Prem / NIM
+
+Modely NVIDIA můžete také používat lokálně prostřednictvím [NVIDIA NIM](https://docs.nvidia.com/nim/) nastavením vlastní základní adresy URL.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "nvidia": {
+      "options": {
+        "baseURL": "http://localhost:8000/v1"
+      }
+    }
+  }
+}
+```
+
+#### Proměnná prostředí
+
+Případně nastavte klíč API jako proměnnou prostředí.
+
+```bash frame="none"
+export NVIDIA_API_KEY=nvapi-your-key-here
+```
+
+---
+
+### Nebius Token Factory
+
+1. Přejděte do [konzole Nebius Token Factory](https://tokenfactory.nebius.com/), vytvořte si účet a klikněte na **Přidat klíč**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Nebius Token Factory**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč Nebius Token Factory API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Kimi K2 Instruct_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Ollama
+
+opencode můžete nakonfigurovat tak, aby používal místní modely prostřednictvím Ollama.
+
+:::tip
+Ollama se může automaticky nakonfigurovat pro OpenCode. Podrobnosti naleznete v [dokumentech o integraci Ollama](https://docs.ollama.com/integrations/opencode).
+:::
+
+```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "llama2": {
+          "name": "Llama 2"
+        }
+      }
+    }
+  }
+}
+```
+
+V tomto příkladu:
+
+- `ollama` je vlastní ID poskytovatele. Může to být libovolný řetězec.
+- `npm` určuje balíček, který se má použít pro tohoto poskytovatele. Zde se `@ai-sdk/openai-compatible` používá pro jakékoli API kompatibilní s OpenAI.
+- `name` je zobrazovaný název poskytovatele v uživatelském rozhraní.
+- `options.baseURL` je koncový bod pro místní server.
+- `models` je mapa ID modelů k jejich konfiguracím. Název modelu se zobrazí v seznamu pro výběr modelu.
+
+:::tip
+Pokud volání nástrojů nefungují, zkuste zvýšit `num_ctx` v Ollama. Začátek kolem 16k - 32k.
+:::
+
+---
+
+### Ollama Cloud
+
+Použití cloudu Ollama se OpenCode:
+
+1. Přejděte na [https://ollama.com/](https://ollama.com/) a přihlaste se nebo si vytvořte účet.
+
+2. Přejděte na **Nastavení** > **Klíče** a kliknutím na **Přidat klíč API** vygenerujte nový klíč API.
+
+3. Zkopírujte klíč API pro použití v OpenCode.
+
+4. Spusťte příkaz `/connect` a vyhledejte **Ollama Cloud**.
+
+   ```txt
+   /connect
+   ```
+
+5. Zadejte klíč Ollama Cloud API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+6. **Důležité**: Před použitím cloudových modelů v OpenCode musíte lokálně stáhnout informace o modelu:
+
+   ```bash
+   ollama pull gpt-oss:20b-cloud
+   ```
+
+7. Spuštěním příkazu `/models` vyberte model cloudu Ollama.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenAI
+
+Doporučujeme zaregistrovat se do [ChatGPT Plus nebo Pro](https://chatgpt.com/pricing).
+
+1. Jakmile se zaregistrujete, spusťte příkaz `/connect` a vyberte OpenAI.
+
+   ```txt
+   /connect
+   ```
+
+2. Zde můžete vybrat možnost **ChatGPT Plus/Pro** a otevře se váš prohlížeč
+   a požádat vás o ověření.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ ChatGPT Plus/Pro
+   │ Manually enter API Key
+   └
+   ```
+
+3. Nyní by měly být dostupné všechny modely OpenAI, když použijete příkaz `/models`.
+
+   ```txt
+   /models
+   ```
+
+##### Pomocí kláves API
+
+Pokud již máte klíč API, můžete vybrat **Zadat klíč API ručně** a vložit jej do terminálu.
+
+---
+
+### OpenCode Zen
+
+OpenCode Zen je seznam testovaných a ověřených modelů poskytnutých týmem OpenCode. [Další informace](/docs/cs/zen).
+
+1. Přihlaste se do **<a href={console}>OpenCode Zen</a>** a klikněte na **Vytvořit klíč API**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **OpenCode Zen**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte svůj klíč OpenCode API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Qwen 3 Coder 480B_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### OpenRouter
+
+1. Přejděte na [OpenRouter dashboard](https://openrouter.ai/settings/keys), klikněte na **Vytvořit klíč API** a zkopírujte klíč.
+
+2. Spusťte příkaz `/connect` a vyhledejte OpenRouter.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč API pro poskytovatele.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Mnoho modelů OpenRouter je ve výchozím nastavení předinstalováno, spusťte příkaz `/models` a vyberte ten, který chcete.
+
+   ```txt
+   /models
+   ```
+
+Můžete také přidat další modely prostřednictvím konfigurace opencode.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. Můžete je také přizpůsobit pomocí konfigurace opencode. Zde je příklad zadání poskytovatele
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "moonshotai/kimi-k2": {
+             "options": {
+               "provider": {
+                 "order": ["baseten"],
+                 "allow_fallbacks": false
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### LLM Gateway
+
+1. Přejděte na [Dashboard brány LLM](https://llmgateway.io/dashboard), klikněte na **Vytvořit klíč API** a zkopírujte klíč.
+
+2. Spusťte příkaz `/connect` a vyhledejte bránu LLM.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč API pro poskytovatele.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Mnoho modelů brány LLM je ve výchozím nastavení předinstalováno, spusťte příkaz `/models` a vyberte požadovaný.
+
+   ```txt
+   /models
+   ```
+
+Můžete také přidat další modely prostřednictvím konfigurace opencode.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmgateway": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. Můžete je také přizpůsobit pomocí konfigurace opencode. Zde je příklad zadání poskytovatele
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmgateway": {
+         "models": {
+           "glm-4.7": {
+             "name": "GLM 4.7"
+           },
+           "gpt-5.2": {
+             "name": "GPT-5.2"
+           },
+           "gemini-2.5-pro": {
+             "name": "Gemini 2.5 Pro"
+           },
+           "claude-3-5-sonnet-20241022": {
+             "name": "Claude 3.5 Sonnet"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+### SAP AI Core
+
+SAP AI Core poskytuje přístup k více než 40 modelům od OpenAI, Anthropic, Google, Amazon, Meta, Mistral a AI21 prostřednictvím jednotné platformy.
+
+1. Přejděte do svého [SAP BTP Cockpit](https://account.hana.ondemand.com/), přejděte do své instance služby SAP AI Core a vytvořte servisní klíč.
+
+   :::tip
+   Servisní klíč je objekt JSON obsahující `clientid`, `clientsecret`, `url` a `serviceurls.AI_API_URL`. Svou instanci AI Core najdete v části **Služby** > **Instance a předplatné** v kokpitu BTP.
+   :::
+
+2. Spusťte příkaz `/connect` a vyhledejte **SAP AI Core**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte svůj servisní klíč JSON.
+
+   ```txt
+   ┌ Service key
+   │
+   │
+   └ enter
+   ```
+
+Nebo nastavte proměnnou prostředí `AICORE_SERVICE_KEY`:
+
+   ```bash
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
+
+Nebo si to přidejte do svého bash profilu:
+
+   ```bash title="~/.bash_profile"
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
+
+4. Volitelně nastavte ID implementace a skupinu prostředků:
+
+   ```bash
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   ```
+
+   :::note
+   Tato nastavení jsou volitelná a měla by být nakonfigurována podle vašeho nastavení SAP AI Core.
+   :::
+
+5. Spusťte příkaz `/models` a vyberte z více než 40 dostupných modelů.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving poskytuje plně spravované suverénní hostitelské prostředí pro modely AI se zaměřením na LLM jako Llama, Mistral a Qwen s maximální datovou suverenitou na evropské infrastruktuře.
+
+1. Přejděte na [STACKIT Portal](https://portal.stackit.cloud), přejděte na **AI Model Serving** a vytvořte ověřovací token pro svůj projekt.
+
+   :::tip
+   Před vytvořením ověřovacích tokenů potřebujete zákaznický účet STACKIT, uživatelský účet a projekt.
+   :::
+
+2. Spusťte příkaz `/connect` a vyhledejte **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte svůj ověřovací token STACKIT AI Model Serving.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte z dostupných modelů, jako je _Qwen3-VL 235B_ nebo _Llama 3.3 70B_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Koncové body OVHcloud AI
+
+1. Přejděte na [OVHcloud panel](https://ovh.com/manager). Přejděte do sekce `Public Cloud`, `AI & Machine Learning` > `AI Endpoints` a na kartě `API Keys` klikněte na **Vytvořit nový klíč API**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Koncové body OVHcloud AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč API koncových bodů OVHcloud AI.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _gpt-oss-120b_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Scaleway
+
+Chcete-li použít [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) s Opencode:
+
+1. Přejděte do [Nastavení IAM konzoly Scaleway](https://console.scaleway.com/iam/api-keys) a vygenerujte nový klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Scaleway**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte svůj klíč Scaleway API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _devstral-2-123b-instruct-2512_ nebo _gpt-oss-120b_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Together AI
+
+1. Přejděte do [Together AI console](https://api.together.ai), vytvořte si účet a klikněte na **Add Key**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Together AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč Together AI API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Kimi K2 Instruct_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Venice AI
+
+1. Přejděte do [konzole Venice AI](https://venice.ai), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Venice AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte váš klíč Venice AI API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Llama 3.3 70B_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Vercel AI Gateway
+
+Vercel AI Gateway vám umožňuje přistupovat k modelům od OpenAI, Anthropic, Google, xAI a dalších prostřednictvím jednotného koncového bodu. Modely jsou nabízeny za katalogovou cenu bez přirážky.
+
+1. Přejděte na [Dashboard Vercel](https://vercel.com/), přejděte na kartu **AI Gateway** a kliknutím na **API keys** vytvořte nový klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Vercel AI Gateway**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč API brány Vercel AI.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spuštěním příkazu `/models` vyberte model.
+
+   ```txt
+   /models
+   ```
+
+Modely můžete také přizpůsobit pomocí konfigurace opencode. Zde je příklad zadání pořadí směrování poskytovatele.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vercel": {
+      "models": {
+        "anthropic/claude-sonnet-4": {
+          "options": {
+            "order": ["anthropic", "vertex"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Některé užitečné možnosti směrování:
+
+| Možnost | Popis |
+| -------------------- | ----------------------------------------------------- |
+| `order` | Pořadí poskytovatelů k vyzkoušení |
+| `only` | Omezit na konkrétní poskytovatele |
+| `zeroDataRetention` | Používejte pouze poskytovatele s nulovými zásadami uchovávání dat |
+
+---
+
+### xAI
+
+1. Přejděte do [xAI konzole](https://console.x.ai/), vytvořte účet a vygenerujte klíč API.
+
+2. Spusťte příkaz `/connect` a vyhledejte **xAI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč xAI API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _Grok Beta_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### Z.AI
+
+1. Přejděte do [konzole Z.AI API](https://z.ai/manage-apikey/apikey-list), vytvořte účet a klikněte na **Vytvořit nový klíč API**.
+
+2. Spusťte příkaz `/connect` a vyhledejte **Z.AI**.
+
+   ```txt
+   /connect
+   ```
+
+Pokud jste přihlášeni k odběru **GLM Coding Plan**, vyberte **Z.AI Coding Plan**.
+
+3. Zadejte klíč Z.AI API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Spusťte příkaz `/models` a vyberte model jako _GLM-4.7_.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### ZenMux
+
+1. Přejděte na [Dashboard ZenMux](https://zenmux.ai/settings/keys), klikněte na **Vytvořit klíč API** a zkopírujte klíč.
+
+2. Spusťte příkaz `/connect` a vyhledejte ZenMux.
+
+   ```txt
+   /connect
+   ```
+
+3. Zadejte klíč API pro poskytovatele.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Mnoho modelů ZenMux je ve výchozím nastavení předinstalováno, spusťte příkaz `/models` a vyberte požadovaný.
+
+   ```txt
+   /models
+   ```
+
+Můžete také přidat další modely prostřednictvím konfigurace opencode.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "zenmux": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+---
+
+## Vlastní poskytovatel
+
+Chcete-li přidat jakéhokoli poskytovatele **kompatibilního s OpenAI**, který není uveden v příkazu `/connect`:
+
+:::tip
+S opencode můžete použít jakéhokoli poskytovatele kompatibilního s OpenAI. Většina moderních poskytovatelů AI nabízí API kompatibilní s OpenAI.
+:::
+
+1. Spusťte příkaz `/connect` a přejděte dolů na **Ostatní**.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+2. Zadejte jedinečné ID poskytovatele.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ◇  Enter provider id
+   │  myprovider
+   └
+   ```
+
+   :::note
+   Vyberte si zapamatovatelné ID, použijete ho ve svém konfiguračním souboru.
+   :::
+
+3. Zadejte váš klíč API pro poskytovatele.
+
+   ```bash
+   $ /connect
+
+   ┌  Add credential
+   │
+   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+4. Vytvořte nebo aktualizujte soubor `opencode.json` v adresáři projektu:
+
+   ```json title="opencode.json" ""myprovider"" {5-15}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "myprovider": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "My AI ProviderDisplay Name",
+         "options": {
+           "baseURL": "https://api.myprovider.com/v1"
+         },
+         "models": {
+           "my-model-name": {
+             "name": "My Model Display Name"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+Zde jsou možnosti konfigurace:
+   - **npm**: Balíček AI SDK k použití, `@ai-sdk/openai-compatible` pro poskytovatele kompatibilní s OpenAI (pro `/v1/chat/completions`). Pokud váš poskytovatel/model používá `/v1/responses`, použijte `@ai-sdk/openai`.
+   - **name**: Zobrazovaný název v uživatelském rozhraní.
+   - **modely**: Dostupné modely.
+   - **options.baseURL**: URL koncového bodu API.
+   - **options.apiKey**: Volitelně nastavte klíč API, pokud nepoužíváte auth.
+   - **options.headers**: Volitelně nastavte vlastní záhlaví.
+
+Více o pokročilých možnostech v příkladu níže.
+
+5. Spusťte příkaz `/models` a váš vlastní poskytovatel a modely se objeví ve výběrovém seznamu.
+
+---
+
+##### Příklad
+
+Zde je příklad nastavení možností `apiKey`, `headers` a modelu `limit`.
+
+```json title="opencode.json" {9,11,17-20}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Podrobnosti konfigurace:
+
+- **apiKey**: Nastavte pomocí syntaxe proměnné `env`, [další informace](/docs/cs/config/#proměnné-prostředí).
+- **záhlaví**: Vlastní záhlaví odeslaná s každým požadavkem.
+- **limit.context**: Maximální vstupní tokeny, které model přijímá.
+- **limit.output**: Maximální počet tokenů, které může model vygenerovat.
+
+Pole `limit` umožňují OpenCode pochopit, kolik kontextu vám zbývá. Standardní poskytovatelé je automaticky stahují z models.dev.
+
+---
+
+## Odstraňování problémů
+
+Pokud máte potíže s konfigurací poskytovatele, zkontrolujte následující:
+
+1. **Zkontrolujte nastavení ověřování**: Spusťte `opencode auth list` a zjistěte, zda přihlašovací údaje
+   pro poskytovatele jsou přidány do vaší konfigurace.
+
+To se netýká poskytovatelů jako Amazon Bedrock, kteří se při ověřování spoléhají na proměnné prostředí.
+
+2. U vlastních poskytovatelů zkontrolujte konfiguraci opencode a:
+   - Ujistěte se, že ID poskytovatele použité v příkazu `/connect` odpovídá ID ve vaší konfiguraci opencode.
+   - Pro poskytovatele je použit správný balíček npm. Například použijte `@ai-sdk/cerebras` pro Cerebras. A pro všechny ostatní poskytovatele kompatibilní s OpenAI použijte `@ai-sdk/openai-compatible` (pro `/v1/chat/completions`); pokud model používá `/v1/responses`, použijte `@ai-sdk/openai`. U smíšených nastavení pod jedním poskytovatelem můžete přepsat na model pomocí `provider.npm`.
+   - Zkontrolujte, zda je v poli `options.baseURL` použit správný koncový bod API.

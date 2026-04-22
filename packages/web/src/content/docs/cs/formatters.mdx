@@ -1,0 +1,132 @@
+---
+title: Formátovače
+description: OpenCode používá formátovače specifické pro daný jazyk.
+---
+
+OpenCode automaticky formátuje soubory poté, co jsou zapsány nebo upraveny pomocí formátovačů specifických pro daný jazyk. Tím zajistíte, že vygenerovaný kód bude odpovídat stylům kódu vašeho projektu.
+
+---
+
+## Vestavěný
+
+OpenCode přichází s několika vestavěnými formátovači pro oblíbené jazyky a rámce. Níže je uveden seznam potřebných formátovačů, podporovaných přípon souborů a příkazů nebo možností konfigurace.
+
+| Formátovač | Rozšíření | Požadavky |
+| --------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| vzduch | .R | K dispozici příkaz `air` |
+| biom | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml a [více](https://biomejs.dev/) | Konfigurační soubor `biome.json(c)` |
+| cargofmt | .rs | K dispozici příkaz `cargo fmt` |
+| Clang-formát | .c, .cpp, .h, .hpp, .ino a [další](https://clang.llvm.org/docs/ClangFormat.html) | Konfigurační soubor `.clang-format` |
+| cljfmt | .clj, .cljs, .cljc, .edn | K dispozici příkaz `cljfmt` |
+| šipka | .dart | K dispozici příkaz `dart` |
+| dfmt | .d | K dispozici příkaz `dfmt` |
+| lesk | .záblesk | K dispozici příkaz `gleam` |
+| gofmt | .jdi | K dispozici příkaz `gofmt` |
+| htmlbeautifier | .erb, .html.erb | K dispozici příkaz `htmlbeautifier` |
+| ktlint | .kt, .kts | K dispozici příkaz `ktlint` |
+| mix | .ex, .exs, .eex, .heex, .leex, .neex, .sface | K dispozici příkaz `mix` |
+| nixfmt | .nix | K dispozici příkaz `nixfmt` |
+| ocamlformat | .ml, .mli | K dispozici příkaz `ocamlformat` a konfigurační soubor `.ocamlformat` |
+| ormolu | .hs | K dispozici příkaz `ormolu` |
+| oxfmt (experimentální) | .js, .jsx, .ts, .tsx | Závislost `oxfmt` v `package.json` a [příznak experimentální proměnné env](/docs/cs/cli/#experimentální) |
+| půllitr | .php | Závislost `laravel/pint` v `composer.json` |
+| hezčí | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml a [více](https://prettier.io/docs/en/index.html) | Závislost `prettier` v `package.json` |
+| rubocop | .rb, .rake, .gemspec, .ru | K dispozici příkaz `rubocop` |
+| ruff | .py, .pyi | Příkaz `ruff` dostupný s konfigurací |
+| rustfmt | .rs | K dispozici příkaz `rustfmt` |
+| shfmt | .sh, .bash | K dispozici příkaz `shfmt` |
+| standardrb | .rb, .rake, .gemspec, .ru | K dispozici příkaz `standardrb` |
+| terraform | .tf, .tfvars | K dispozici příkaz `terraform` |
+| uv | .py, .pyi | K dispozici příkaz `uv` |
+| zig | .zig, .zon | K dispozici příkaz `zig` |
+
+Pokud tedy váš projekt obsahuje `prettier` ve vašem `package.json`, OpenCode jej automaticky použije.
+
+---
+
+## Jak to funguje
+
+Když OpenCode zapisuje nebo upravuje soubor,:
+
+1. Zkontroluje příponu souboru proti všem povoleným formátovačům.
+2. Spustí příslušný příkaz formátovače na souboru.
+3. Automaticky použije změny formátování.
+
+Tento proces probíhá na pozadí a zajišťuje, že vaše styly kódu budou zachovány bez jakýchkoli ručních kroků.
+
+---
+
+## Konfigurace
+
+Formátovače si můžete přizpůsobit prostřednictvím sekce `formatter` v konfiguraci OpenCode.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+Každá konfigurace formátovače podporuje následující:
+
+| Nemovitost | Typ | Popis |
+| -------------- | -------- | -------------------------------------------------------- |
+| `disabled` | booleovský | Nastavením na `true` deaktivujete formátovač |
+| `command` | řetězec[] | Příkaz ke spuštění pro formátování |
+| `environment` | objekt | Proměnné prostředí, které se mají nastavit při spuštění formátovače |
+| `extensions` | řetězec[] | Přípony souborů by měl tento formátovač zvládnout |
+
+Podívejme se na některé příklady.
+
+---
+
+### Zakázání formátovačů
+
+Chcete-li globálně zakázat **všechny** formátovače, nastavte `formatter` na `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+Chcete-li deaktivovat **konkrétní** formátovač, nastavte `disabled` na `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### Vlastní formátovače
+
+Vestavěné formátovače můžete přepsat nebo přidat nové zadáním příkazu, proměnných prostředí a přípon souborů:
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+Zástupný symbol **`$FILE`** v příkazu bude nahrazen cestou k formátovanému souboru.

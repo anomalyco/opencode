@@ -1,0 +1,223 @@
+---
+title: Modely
+description: Konfigurace poskytovatele a modelu LLM.
+---
+
+OpenCode používá [AI SDK](https://ai-sdk.dev/) a [Models.dev](https://models.dev) k podpoře **75+ poskytovatelů LLM** a podporuje spouštění místních modelů.
+
+---
+
+## Poskytovatelé
+
+Většina oblíbených poskytovatelů je ve výchozím nastavení předinstalována. Pokud jste přihlašovací údaje pro poskytovatele přidali pomocí příkazu `/connect`, budou k dispozici při spuštění OpenCode.
+
+Další informace o [poskytovatelích](/docs/cs/providers).
+
+---
+
+## Vyberte model
+
+Jakmile nakonfigurujete svého poskytovatele, můžete si vybrat požadovaný model zadáním:
+
+```bash frame="none"
+/models
+```
+
+---
+
+## Doporučené modely
+
+Existuje spousta modelů a každý týden vycházejí nové modely.
+
+:::tip
+Zvažte použití některého z modelů, které doporučujeme.
+:::
+
+Existuje však jen několik z nich, které jsou dobré jak ve generování kódu, tak ve volání nástrojů.
+
+Zde je několik modelů, které dobře fungují se OpenCode, v žádném konkrétním pořadí. (Toto není vyčerpávající seznam a není nutně aktuální):
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## Nastavit výchozí
+
+Chcete-li jeden z nich nastavit jako výchozí model, můžete ve svém zařízení nastavit klíč `model`
+Konfigurace OpenCode.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+Zde je úplné ID `provider_id/model_id`. Pokud například používáte [OpenCode Zen](/docs/cs/zen), použijete `opencode/gpt-5.1-codex` pro GPT 5.1 Codex.
+
+Pokud jste nakonfigurovali [vlastního poskytovatele](/docs/cs/providers/#vlastní-poskytovatel), `provider_id` je klíč z části `provider` vaší konfigurace a `model_id` je klíč z `provider.models`.
+
+---
+
+## Konfigurace modelů
+
+Možnosti modelu můžete globálně nakonfigurovat prostřednictvím konfigurace.
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Zde konfigurujeme globální nastavení pro dva vestavěné modely: `gpt-5` při přístupu přes poskytovatele `openai` a `claude-sonnet-4-20250514` při přístupu přes poskytovatele `anthropic`.
+Vestavěný poskytovatel a názvy modelů lze nalézt na [Models.dev](https://models.dev).
+
+Tyto možnosti můžete také nakonfigurovat pro libovolné agenty, které používáte. Konfigurace agenta zde přepíše všechny globální možnosti. [Další informace](/docs/cs/agents/#další).
+
+Můžete také definovat vlastní varianty, které rozšiřují ty vestavěné. Varianty umožňují konfigurovat různá nastavení pro stejný model bez vytváření duplicitních položek:
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## Varianty
+
+Mnoho modelů podporuje více variant s různými konfiguracemi. OpenCode se dodává s vestavěnými výchozími variantami pro oblíbené poskytovatele.
+
+### Vestavěné varianty
+
+OpenCode se dodává s výchozími variantami pro mnoho poskytovatelů:
+
+**Anthropic**:
+
+- `high` - Rozpočet s vysokým přemýšlením (výchozí)
+- `max` - Maximální rozpočet na přemýšlení
+
+**OpenAI**:
+
+Liší se podle modelu, ale zhruba:
+
+- `none` - Bez uvažování
+- `minimal` - Minimální úsilí o uvažování
+- `low` - Nízká snaha o uvažování
+- `medium` - Střední úsilí o uvažování
+- `high` - Velké úsilí o uvažování
+- `xhigh` - Mimořádně vysoké uvažování
+
+**Google**:
+
+- `low` - Nižší rozpočet na úsilí/tokenu
+- `high` - Vyšší rozpočet na úsilí/tokenu
+
+:::tip
+Tento seznam není úplný. Mnoho dalších poskytovatelů má také vestavěné výchozí hodnoty.
+:::
+
+### Vlastní varianty
+
+Existující varianty můžete přepsat nebo přidat vlastní:
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### Varianty cyklu
+
+Pro rychlé přepínání mezi variantami použijte klávesovou zkratku `variant_cycle`. [Další informace](/docs/cs/keybinds).
+
+---
+
+## Načítání modelů
+
+Když se OpenCode spustí, zkontroluje modely v následujícím pořadí priority:
+
+1. Příznak příkazového řádku `--model` nebo `-m`. Formát je stejný jako v konfiguračním souboru: `provider_id/model_id`.
+
+2. Seznam modelů v konfiguraci OpenCode.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+Formát je zde `provider/model`.
+
+3. Poslední použitý model.
+
+4. První model využívající interní prioritu.

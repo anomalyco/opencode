@@ -1,0 +1,48 @@
+---
+title: IDE
+description: Rozšíření OpenCode pro VS Code, Cursor a další IDE
+---
+
+OpenCode se integruje se VS Code, Cursorem nebo jakýmkoli IDE, který podporuje terminál. Chcete-li začít, stačí spustit `opencode` v terminálu.
+
+---
+
+## Použití
+
+- **Rychlé spuštění**: Použijte `Cmd+Esc` (Mac) nebo `Ctrl+Esc` (Windows/Linux) k otevření OpenCode v rozděleném zobrazení terminálu nebo zaměření existující relace terminálu, pokud již běží.
+- **Nová relace**: Použijte `Cmd+Shift+Esc` (Mac) nebo `Ctrl+Shift+Esc` (Windows/Linux) ke spuštění nové terminálové relace OpenCode, i když je již otevřená. Můžete také kliknout na tlačítko OpenCode v uživatelském rozhraní.
+- **Context Awareness**: Automaticky sdílejte svůj aktuální výběr nebo kartu s OpenCode.
+- **File Reference Shortcuts**: Pro vložení odkazů na soubory použijte `Cmd+Option+K` (Mac) nebo `Alt+Ctrl+K` (Linux/Windows). Například `@File#L37-42`.
+
+---
+
+## Instalace
+
+Instalace OpenCode na VS Code a populární vidlice jako Cursor, Windsurf, VSCodium:
+
+1. Otevřete VS Code
+2. Otevřete integrovaný terminál
+3. Spusťte `opencode` – rozšíření se nainstaluje automaticky
+
+Pokud na druhou stranu chcete použít svůj vlastní IDE, když spouštíte `/editor` nebo `/export` ze TUI, budete muset nastavit `export EDITOR="code --wait"`. [Další informace](/docs/cs/tui/#nastavení-editoru).
+
+---
+
+### Ruční instalace
+
+Vyhledejte **OpenCode** na webu Extension Marketplace a klikněte na **Instalovat**.
+
+---
+
+### Odstraňování problémů
+
+Pokud se rozšíření nepodaří nainstalovat automaticky:
+
+- Ujistěte se, že používáte `opencode` v integrovaném terminálu.
+- Ujistěte se, že je nainstalován CLI pro váš IDE:
+  - Pro VS Code: příkaz `code`
+  - Pro kurzor: příkaz `cursor`
+  - Pro Windsurf: příkaz `windsurf`
+  - Pro VSCodium: příkaz `codium`
+  - Pokud ne, spusťte `Cmd+Shift+P` (Mac) nebo `Ctrl+Shift+P` (Windows/Linux) a vyhledejte „Shell Command: Install 'code' command in PATH“ (nebo ekvivalent pro váš IDE)
+- Ujistěte se, že VS Code má oprávnění instalovat rozšíření

@@ -1,0 +1,170 @@
+---
+title: Go
+description: Nízkonákladové předplatné pro otevřené modely na psaní kódu.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go je levné předplatné – **5 $ na první měsíc**, poté **10 $ měsíčně** – které vám poskytuje spolehlivý přístup k oblíbeným modelům otevřeného kódování.
+
+:::note
+OpenCode Go je aktuálně ve verzi beta.
+:::
+
+Go funguje jako každý jiný poskytovatel v OpenCode. Přihlásíte se k odběru OpenCode Go a
+získejte klíč API. Je **zcela volitelná** a nemusíte ji používat
+použít OpenCode.
+
+Je určen především pro mezinárodní uživatele, modely hostované v USA, EU a Singapuru pro stabilní globální přístup.
+
+---
+
+## Pozadí
+
+Otevřené modely jsou opravdu dobré. Nyní dosahují výkonu blízko
+proprietární modely pro úlohy kódování. A protože je dokáže obsloužit mnoho poskytovatelů
+konkurenční jsou obvykle mnohem levnější.
+
+Získání spolehlivého přístupu k nim s nízkou latencí však může být obtížné. Poskytovatelé
+se liší kvalitou a dostupností.
+
+:::tip
+Testovali jsme vybranou skupinu modelů a poskytovatelů, kteří dobře fungují s OpenCode.
+:::
+
+Abychom to napravili, provedli jsme několik věcí:
+
+1. Testovali jsme vybranou skupinu otevřených modelů a hovořili s jejich týmy o tom, jak na to
+   nejlépe je spustit.
+2. Poté jsme spolupracovali s několika poskytovateli, abychom se ujistili, že jsou poskytovány
+   správně.
+3. Nakonec jsme porovnali kombinaci modelu/poskytovatele a přišli jsme
+   se seznamem, který můžeme doporučit.
+
+OpenCode Go vám poskytuje přístup k těmto modelům za **5 $ na první měsíc**, poté za **10 $ měsíčně**.
+
+---
+
+## Jak to funguje
+
+OpenCode Go funguje jako každý jiný poskytovatel v OpenCode.
+
+1. Přihlásíte se do **<a href={console}>OpenCode Zen</a>**, předplatíte si Go a
+   zkopírujte svůj klíč API.
+2. Spustíte příkaz `/connect` v TUI, vyberete `OpenCode Go` a vložíte
+   váš klíč API.
+3. Spusťte `/models` v TUI, abyste viděli seznam modelů dostupných přes Go.
+
+:::note
+Pouze jeden člen na pracovní prostor se může přihlásit k odběru OpenCode Go.
+:::
+
+Aktuální seznam modelů obsahuje:
+
+- **GLM-5**
+- **GLM-5.1**
+- **Kimi K2.5**
+- **Kimi K2.6**
+- **MiMo-V2-Pro**
+- **MiMo-V2-Omni**
+- **MiniMax M2,5**
+- **MiniMax M2.7**
+- **Qwen3.5 Plus**
+- **Qwen3.6 Plus**
+
+Seznam modelů se může měnit, jak testujeme a přidáváme nové.
+
+---
+
+## Limity použití
+
+OpenCode Go zahrnuje následující limity:
+
+- **Limit 5 hodin** – 12 USD za použití
+- **Týdenní limit** – 30 USD za použití
+- **Měsíční limit** – použití 60 USD
+
+Limity jsou definovány v dolarové hodnotě. To znamená, že váš skutečný počet požadavků závisí na modelu, který používáte. Levnější modely jako Qwen3.5 Plus umožňují více požadavků, zatímco dražší modely jako GLM-5.1 umožňují méně.
+
+Níže uvedená tabulka uvádí odhadovaný počet požadavků na základě typických vzorců používání Go:
+
+| Model | požadavky za 5 hodin | požadavky za týden | žádosti za měsíc |
+| ------------ | -------------------- | ------------------ | ------------------- |
+| GLM-5.1 | 880 | 2 150 | 4 300 |
+| GLM-5 | 1 150 | 2 880 | 5 750 |
+| Kimi K2.5 | 1 850 | 4 630 | 9 250 |
+| Kimi K2.6 | 1 150 | 2 880 | 5 750 |
+| MiMo-V2-Pro | 1 290 | 3 225 | 6 450 |
+| MiMo-V2-Omni | 2 150 | 5 450 | 10 900 |
+| Qwen3.6 Plus | 3 300 | 8 200 | 16 300 |
+| MiniMax M2.7 | 3 400 | 8 500 | 17 000 |
+| MiniMax M2,5 | 6 300 | 15 900 | 31 800 |
+| Qwen3.5 Plus | 10 200 | 25 200 | 50 500 |
+
+Odhady jsou založeny na pozorovaných průměrných vzorcích požadavků:
+
+- GLM-5/5.1 – 700 vstupních, 52 000 mezipaměti, 150 výstupních tokenů na požadavek
+- Kimi K2.5/K2.6 – 870 vstupů, 55 000 mezipaměti, 200 výstupních tokenů na požadavek
+- MiniMax M2.7/M2.5 – 300 vstupů, 55 000 mezipaměti, 125 výstupních tokenů na požadavek
+- MiMo-V2-Pro – 350 vstupních, 41 000 mezipaměti, 250 výstupních tokenů na požadavek
+- MiMo-V2-Omni – 1000 vstupů, 60 000 mezipaměti, 140 výstupních tokenů na požadavek
+- Qwen3.5 Plus – 410 vstupních, 47 000 mezipaměti, 140 výstupních tokenů na požadavek
+- Qwen3.6 Plus – 500 vstupních, 57 000 mezipaměti, 190 výstupních tokenů na požadavek
+
+Aktuální využití můžete sledovat v **<a href={console}>console</a>**.
+
+:::tip
+Pokud dosáhnete limitu využití, můžete pokračovat v používání bezplatných modelů.
+:::
+
+Limity použití se mohou změnit, protože se učíme z dřívějšího používání a zpětné vazby.
+
+---
+
+### Použití za hranicemi
+
+Pokud máte na zůstatku Zen také kredity, můžete povolit **Použít zůstatek**
+možnost v konzole. Když je povoleno, Go se vrátí zpět na váš Zen balance
+po dosažení limitů využití namísto blokování požadavků.
+
+---
+
+## Koncové body
+
+K modelům Go můžete také přistupovat prostřednictvím následujících koncových bodů API.
+
+| Model | ID modelu | Koncový bod | AI Balíček SDK |
+| ------------ | ------------ | ------------------------------------------------- | ---------------------------- |
+| GLM-5.1 | glm-5.1 | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5 | glm-5 | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 | kimi-k2.5 | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6 | kimi-k2.6 | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro | mimo-v2-pro | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages` | `@ai-sdk/anthropic` |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages` | `@ai-sdk/anthropic` |
+| Qwen3.6 Plus | qwen3.6-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba` |
+| Qwen3.5 Plus | qwen3.5-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba` |
+
+[ID modelu](/docs/cs/config/#modely) ve vaší konfiguraci OpenCode
+používá formát `opencode-go/<model-id>`. Například pro Kimi K2.6 byste
+ve své konfiguraci použili `opencode-go/kimi-k2.6`.
+
+---
+
+## Soukromí
+
+Plán je určen především pro mezinárodní uživatele a používá modely hostované v USA, EU a Singapuru kvůli stabilnímu globálnímu přístupu. Naši poskytovatelé se řídí zásadou nulového uchovávání a nepoužívají vaše data k trénování modelů.
+
+---
+
+## Cíle
+
+Vytvořili jsme OpenCode Přejít na:
+
+1. Zajistěte, aby kódování AI bylo **dostupné** více lidem díky levnému předplatnému.
+2. Poskytněte **spolehlivý** přístup k nejlepším modelům otevřeného kódování.
+3. Vytvářejte modely, které jsou **testovány a testovány** pro použití kódovacího agenta.
+4. Mít **žádný lock-in** tím, že vám umožní používat se OpenCode také jakéhokoli jiného poskytovatele.

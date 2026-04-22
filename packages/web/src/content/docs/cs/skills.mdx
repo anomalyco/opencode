@@ -1,0 +1,222 @@
+---
+title: "Dovednosti agentů"
+description: "Definujte opakovaně použitelné chování pomocí definic SKILL.md"
+---
+
+Dovednosti agentů umožňují OpenCode objevit opakovaně použitelné instrukce z vašeho úložiště nebo domovského adresáře.
+Dovednosti se načítají na vyžádání prostřednictvím nativního nástroje `skill` – agenti vidí dostupné dovednosti a v případě potřeby mohou načíst celý obsah.
+
+---
+
+## Umístění souborů
+
+Vytvořte jednu složku pro každý název dovednosti a vložte do ní `SKILL.md`.
+OpenCode prohledává tato umístění:
+
+- Konfigurace projektu: `.opencode/skills/<name>/SKILL.md`
+- Globální konfigurace: `~/.config/opencode/skills/<name>/SKILL.md`
+- Projekt kompatibilní s Claude: `.claude/skills/<name>/SKILL.md`
+- Globální umístění kompatibilní s Claude: `~/.claude/skills/<name>/SKILL.md`
+- Projektové umístění kompatibilní s agenty: `.agents/skills/<name>/SKILL.md`
+- Globální umístění kompatibilní s agenty: `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## Jak funguje objevování
+
+Pro místní cesty projektu OpenCode prochází z vašeho aktuálního pracovního adresáře, dokud nedosáhne pracovního stromu git.
+Načte všechny odpovídající `skills/*/SKILL.md` v `.opencode/` a všechny odpovídající `.claude/skills/*/SKILL.md` nebo `.agents/skills/*/SKILL.md` podél cesty.
+
+Globální definice jsou také načteny z `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` a `~/.agents/skills/*/SKILL.md`.
+
+---
+
+## Napište frontmatter
+
+Každý `SKILL.md` musí začínat YAML frontmatterem.
+Jsou rozpoznána pouze tato pole:
+
+- `name` (vyžadováno)
+- `description` (vyžadováno)
+- `license` (volitelné)
+- `compatibility` (volitelné)
+- `metadata` (volitelně, mapa mezi řetězci)
+
+Neznámá pole frontmatter jsou ignorována.
+
+---
+
+## Ověření názvů
+
+`name` musí:
+
+- Musí mít 1–64 znaků
+- Být malými alfanumerickými písmeny s oddělovači jednou pomlčkou
+- Nezačíná ani nekončí `-`
+- Neobsahuje po sobě jdoucí `--`
+- Musí odpovídat názvu adresáře, který obsahuje `SKILL.md`
+
+Ekvivalentní regulární výraz:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## Dodržujte pravidla délky
+
+`description` musí mít 1–1024 znaků.
+Udržujte jej dostatečně konkrétní, aby si agent správně vybral.
+
+---
+
+## Použijte příklad
+
+Vytvořte `.opencode/skills/git-release/SKILL.md` takto:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## Rozpoznejte popis nástroje
+
+OpenCode uvádí dostupné dovednosti v popisu nástroje `skill`.
+Každý záznam obsahuje název a popis dovednosti:
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+Agent načte dovednost voláním nástroje:
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## Konfigurace oprávnění
+
+Kontrolujte, ke kterým dovednostem mohou agenti přistupovat pomocí oprávnění založených na vzorech v `opencode.json`:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| Permission | Chování |
+| ---------- | ------------------------------------------ |
+| `allow` | Dovednost okamžitě načte |
+| `deny` | Dovednost byla agentovi skryta, přístup zamítnut |
+| `ask`      | Uživatel byl před načtením vyzván ke schválení |
+
+Vzory podporují zástupné znaky: `internal-*` odpovídá `internal-docs`, `internal-tools` atd.
+
+---
+
+## Přepsání pro agenta
+
+Udělte konkrétním agentům jiná oprávnění, než jsou globální výchozí hodnoty.
+
+**Pro vlastní agenty** (ve frontmatteru pro agenty):
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**Pro vestavěné agenty** (v `opencode.json`):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## Deaktivace nástroje dovedností
+
+Zcela deaktivujte dovednosti pro agenty, kteří by je neměli používat:
+
+**Pro vlastní agenty**:
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**Pro vestavěné agenty**:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+Když je zakázána, sekce `<available_skills>` je zcela vynechána.
+
+---
+
+## Odstraňování problémů s načítáním
+
+Pokud se dovednost nezobrazí:
+
+1. Ověřte, že `SKILL.md` je napsáno velkými písmeny
+2. Zkontrolujte, zda frontmatter obsahuje `name` a `description`
+3. Zajistěte, aby názvy dovedností byly na všech místech jedinečné
+4. Zkontrolujte oprávnění – dovednosti se `deny` jsou před agenty skryté

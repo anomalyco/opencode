@@ -1,0 +1,752 @@
+---
+title: Agenti
+description: Konfigurujte a používejte specializované agenty.
+---
+
+Agenti jsou specializovaní asistenti AI, které lze nakonfigurovat pro konkrétní úkoly a pracovní postupy. Umožňují vám vytvářet cílené nástroje s vlastními výzvami, modely a přístupem k nástrojům.
+
+:::tip
+Použijte agenta plánu k analýze kódu a kontrole návrhů bez provádění jakýchkoli změn kódu.
+:::
+
+Mezi agenty můžete během relace přepínat nebo je vyvolat zmínkou `@`.
+
+---
+
+## Typy
+
+V OpenCode jsou dva typy agentů; primární agenti a subagenti.
+
+---
+
+### Primární agenti
+
+Primární agenti jsou hlavními asistenty, se kterými komunikujete přímo. Můžete je procházet pomocí klávesy **Tab** nebo vámi nakonfigurované klávesy `switch_agent`. Tito agenti řídí vaši hlavní konverzaci. Přístup k nástroji je konfigurován prostřednictvím oprávnění – například Build má všechny nástroje povolené, zatímco plán je omezený.
+
+:::tip
+K přepínání mezi primárními agenty během relace můžete použít klávesu **Tab**.
+:::
+
+OpenCode přichází se dvěma vestavěnými primárními agenty, **Build** a **Plan**. Budeme
+podívejte se na tyto níže.
+
+---
+
+### Subagenti
+
+Subagenti jsou specializovaní asistenti, které mohou primární agenti vyvolat pro konkrétní úkoly. Můžete je také vyvolat ručně tak, že je **@ zmíníte** ve svých zprávách.
+
+OpenCode se dodává se dvěma vestavěnými subagenty, **General** a **Explore**. Na to se podíváme níže.
+
+---
+
+## Vestavěný
+
+OpenCode se dodává se dvěma vestavěnými primárními agenty a dvěma vestavěnými subagenty.
+
+---
+
+### Použijte sestavení
+
+_Režim_: `primary`
+
+Build je **výchozí** primární agent se všemi povolenými nástroji. Toto je standardní agent pro vývojovou práci, kde potřebujete plný přístup k operacím se soubory a systémovým příkazům.
+
+---
+
+### Použijte plán
+
+_Režim_: `primary`
+
+Omezený agent určený pro plánování a analýzu. Používáme systém oprávnění, abychom vám poskytli větší kontrolu a zabránili nechtěným změnám.
+Ve výchozím nastavení jsou všechny následující položky nastaveny na `ask`:
+
+- `file edits`: Všechny zápisy, opravy a úpravy
+- `bash`: Všechny bash příkazy
+
+Tento agent je užitečný, když chcete, aby LLM analyzoval kód, navrhoval změny nebo vytvářel plány bez jakýchkoli skutečných úprav vaší kódové základny.
+
+---
+
+### Použijte obecné
+
+_Režim_: `subagent`
+
+Univerzální agent pro výzkum složitých otázek a provádění vícekrokových úkolů. Má úplný přístup k nástrojům (kromě úkolů), takže může v případě potřeby provádět změny souborů. Použijte toto ke spuštění více jednotek práce paralelně.
+
+---
+
+### Použijte průzkum
+
+_Režim_: `subagent`
+
+Rychlý agent pouze pro čtení pro zkoumání kódových základen. Nelze upravovat soubory. Použijte to, když potřebujete rychle najít soubory podle vzorů, hledat v kódu klíčová slova nebo odpovídat na otázky o kódové základně.
+
+---
+
+### Použijte zhutnění
+
+_Režim_: `primary`
+
+Skrytý systémový agent, který komprimuje dlouhý kontext do menšího souhrnu. V případě potřeby se spouští automaticky a nelze jej vybrat v uživatelském rozhraní.
+
+---
+
+### Použijte název
+
+_Režim_: `primary`
+
+Skrytý systémový agent, který generuje krátké názvy relací. Spouští se automaticky a nelze jej vybrat v uživatelském rozhraní.
+
+---
+
+### Použijte souhrn
+
+_Režim_: `primary`
+
+Skrytý systémový agent, který vytváří souhrny relací. Spouští se automaticky a nelze jej vybrat v uživatelském rozhraní.
+
+---
+
+## Použití
+
+1. U primárních agentů použijte klávesu **Tab** k procházení mezi nimi během relace. Můžete také použít vámi nakonfigurovanou klávesnici `switch_agent`.
+
+2. Subagenty lze vyvolat:
+   - **Automaticky** primárními agenty pro specializované úkoly na základě jejich popisů.
+   - Ručně **@ uvedením** zástupce ve vaší zprávě. Například.
+
+     ```txt frame="none"
+     @general help me search for this function
+     ```
+
+3. **Navigace mezi relacemi**: Když podagenti vytvářejí podřízené relace, použijte `session_child_first` (výchozí: **\<Leader>+Dolů**) k zadání první podřízené relace od rodiče.
+
+4. Jakmile jste v dětské relaci, použijte:
+   - `session_child_cycle` (výchozí: **Vpravo**) pro přechod na další podřízenou relaci
+   - `session_child_cycle_reverse` (výchozí: **Left**) pro přechod na předchozí podřízenou relaci
+   - `session_parent` (výchozí: **Up**) pro návrat k nadřazené relaci
+
+To vám umožní přepínat mezi hlavní konverzací a specializovanou prací podřízeného agenta.
+
+---
+
+## Konfigurace
+
+Můžete si přizpůsobit vestavěné agenty nebo si vytvořit své vlastní prostřednictvím konfigurace. Agenty lze konfigurovat dvěma způsoby:
+
+---
+
+### JSON
+
+Nakonfigurujte agenty v konfiguračním souboru `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+---
+
+### Markdown
+
+Agenty můžete také definovat pomocí souborů markdown. Umístěte je do:
+
+- Globální: `~/.config/opencode/agents/`
+- Podle projektu: `.opencode/agents/`
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Reviews code for quality and best practices
+mode: subagent
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+Název souboru markdown se stane jménem agenta. Například `review.md` vytvoří agenta `review`.
+
+---
+
+## Možnosti
+
+Podívejme se na tyto možnosti konfigurace podrobně.
+
+---
+
+### Popis
+
+Použijte volbu `description` ke krátkému popisu toho, co agent dělá a kdy jej použít.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "description": "Reviews code for best practices and potential issues"
+    }
+  }
+}
+```
+
+Toto je **povinná** možnost konfigurace.
+
+---
+
+### Teplota
+
+Ovládejte náhodnost a kreativitu odpovědí LLM pomocí konfigurace `temperature`.
+
+Nižší hodnoty činí odpovědi cílenější a determinističtější, zatímco vyšší hodnoty zvyšují kreativitu a variabilitu.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+Hodnoty teploty se obvykle pohybují od 0,0 do 1,0:
+
+- **0,0-0,2**: Velmi soustředěné a deterministické reakce, ideální pro analýzu a plánování kódu
+- **0,3-0,5**: Vyvážené odpovědi s trochou kreativity, dobré pro obecné rozvojové úkoly
+– **0,6–1,0**: Kreativnější a rozmanitější odpovědi, užitečné pro brainstorming a průzkum
+
+```json title="opencode.json"
+{
+  "agent": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+Pokud není specifikována žádná teplota, OpenCode použije výchozí hodnoty specifické pro daný model; typicky 0 pro většinu modelů, 0,55 pro modely Qwen.
+
+---
+
+### Maximální počet kroků
+
+Ovládejte maximální počet opakování agenta, které může agent provést, než bude nucen odpovědět pouze textem. To umožňuje uživatelům, kteří chtějí řídit náklady, nastavit limit na akce agentů.
+
+Pokud toto není nastaveno, agent bude pokračovat v iteraci, dokud se model nerozhodne zastavit nebo uživatel nepřeruší relaci.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "steps": 5
+    }
+  }
+}
+```
+
+Když je dosaženo limitu, agent obdrží speciální systémovou výzvu, která mu dá pokyn, aby odpověděl shrnutím své práce a doporučenými zbývajícími úkoly.
+
+:::caution
+Starší pole `maxSteps` je zastaralé. Místo toho použijte `steps`.
+:::
+
+---
+
+### Zakázat
+
+Chcete-li agenta deaktivovat, nastavte na `true`.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "disable": true
+    }
+  }
+}
+```
+
+---
+
+### Výzva
+
+S konfigurací `prompt` zadejte vlastní soubor systémových výzev pro tohoto agenta. Soubor s výzvou by měl obsahovat pokyny specifické pro účel agenta.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+Tato cesta je relativní vzhledem k umístění konfiguračního souboru. Funguje tedy jak pro globální konfiguraci OpenCode, tak pro konfiguraci konkrétního projektu.
+
+---
+
+### Model
+
+Použijte konfiguraci `model` k přepsání modelu pro tohoto agenta. Užitečné pro použití různých modelů optimalizovaných pro různé úkoly. Například rychlejší model pro plánování, schopnější model pro implementaci.
+
+:::tip
+Pokud neurčíte model, primární agenti použijí [model globálně nakonfigurovaný](/docs/cs/config/#modely), zatímco subagenti budou používat model primárního agenta, který subagenta vyvolal.
+:::
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+ID modelu ve vaší konfiguraci OpenCode používá formát `provider/model-id`. Pokud například používáte [OpenCode Zen](/docs/cs/zen), použijete `opencode/gpt-5.1-codex` pro GPT 5.1 Codex.
+
+---
+
+### Nástroje (zastaralé)
+
+`tools` je **zastaralé**. Upřednostněte pole [`permission`](#oprávnění) agenta pro nové konfigurace, aktualizace a jemnější ovládání.
+
+Umožňuje ovládat, které nástroje jsou v tomto agentovi k dispozici. Konkrétní nástroje můžete povolit nebo zakázat jejich nastavením na `true` nebo `false`. V konfiguraci `tools` agenta je `true` ekvivalentní oprávnění `{"*": "allow"}` a `false` je ekvivalentní oprávnění `{"*": "deny"}`.
+
+```json title="opencode.json" {3-6,9-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
+  "agent": {
+    "plan": {
+      "tools": {
+        "write": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+:::note
+Konfigurace specifická pro agenta přepíše globální konfiguraci.
+:::
+
+Zástupné znaky můžete také použít ve starších záznamech `tools` k ovládání více nástrojů najednou. Chcete-li například zakázat všechny nástroje ze serveru MCP:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "readonly": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+[Další informace o nástrojích](/docs/cs/tools).
+
+---
+
+### Oprávnění
+
+Můžete nakonfigurovat oprávnění ke správě akcí, které může agent provádět. V současné době lze oprávnění pro nástroje `edit`, `bash` a `webfetch` nakonfigurovat tak, aby:
+
+- `"ask"` — Před spuštěním nástroje požádejte o schválení
+- `"allow"` — Povolit všechny operace bez schválení
+- `"deny"` — Deaktivujte nástroj
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  }
+}
+```
+
+Tato oprávnění můžete u každého agenta přepsat.
+
+```json title="opencode.json" {3-5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "ask"
+      }
+    }
+  }
+}
+```
+
+Můžete také nastavit oprávnění v agentech Markdown.
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash:
+    "*": ask
+    "git diff": allow
+    "git log*": allow
+    "grep *": allow
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+Můžete nastavit oprávnění pro konkrétní příkazy bash.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git push": "ask",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+To může mít globus vzor.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git *": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+A můžete také použít zástupný znak `*` ke správě oprávnění pro všechny příkazy.
+Protože má přednost poslední odpovídající pravidlo, umístěte na první místo zástupný znak `*` a poté specifická pravidla.
+
+```json title="opencode.json" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+[Další informace o oprávněních](/docs/cs/permissions).
+
+---
+
+### Režim
+
+Ovládejte režim agenta pomocí konfigurace `mode`. Volba `mode` se používá k určení způsobu použití agenta.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "mode": "subagent"
+    }
+  }
+}
+```
+
+Možnost `mode` lze nastavit na `primary`, `subagent` nebo `all`. Pokud není zadáno žádné `mode`, výchozí hodnota je `all`.
+
+---
+
+### Skryto
+
+Skryjte subagenta v nabídce automatického dokončování `@` pomocí `hidden: true`. Užitečné pro interní subagenty, které by měly být vyvolány pouze programově jinými agenty prostřednictvím nástroje Task.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}
+```
+
+To má vliv pouze na viditelnost uživatele v nabídce automatického doplňování. Pokud to oprávnění umožňují, model může stále vyvolávat skryté agenty prostřednictvím nástroje Úloha.
+
+:::note
+Platí pouze pro agenty `mode: subagent`.
+:::
+
+---
+
+### Oprávnění k úkolům
+
+Pomocí nástroje Task s `permission.task` určete, které podagenty může agent vyvolat. Používá glob vzory pro flexibilní párování.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+Při nastavení na `deny` je subagent zcela odstraněn z popisu nástroje Task, takže se jej model nepokusí vyvolat.
+
+:::tip
+Pravidla se vyhodnocují v pořadí a vyhrává **poslední shodné pravidlo**. Ve výše uvedeném příkladu se `orchestrator-planner` shoduje se `*` (zakázat) i `orchestrator-*` (povolit), ale protože `orchestrator-*` následuje za `*`, výsledkem je `allow`.
+:::
+
+:::tip
+Uživatelé mohou kdykoli vyvolat libovolného subagenta přímo prostřednictvím nabídky automatického dokončování `@`, i když by to oprávnění agenta zakazovala.
+:::
+
+---
+
+### Barva
+
+Přizpůsobte si vizuální vzhled agenta v UI pomocí možnosti `color`. To ovlivňuje, jak se agent zobrazí v rozhraní.
+
+Použijte platnou hexadecimální barvu (např. `#FF5733`) nebo barvu motivu: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
+    }
+  }
+}
+```
+
+---
+
+### Nahoru P
+
+Ovládejte rozmanitost odezvy pomocí možnosti `top_p`. Alternativa k teplotě pro řízení náhodnosti.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+Hodnoty se pohybují od 0,0 do 1,0. Nižší hodnoty jsou zaměřenější, vyšší hodnoty rozmanitější.
+
+---
+
+### Další
+
+Jakékoli další možnosti, které zadáte v konfiguraci agenta, budou **předány přímo** poskytovateli jako modelové možnosti. To vám umožní používat funkce a parametry specifické pro poskytovatele.
+
+Například s modely uvažování OpenAI můžete ovládat uvažování:
+
+```json title="opencode.json" {6,7}
+{
+  "agent": {
+    "deep-thinker": {
+      "description": "Agent that uses high reasoning effort for complex problems",
+      "model": "openai/gpt-5",
+      "reasoningEffort": "high",
+      "textVerbosity": "low"
+    }
+  }
+}
+```
+
+Tyto další možnosti jsou specifické pro model a poskytovatele. Dostupné parametry naleznete v dokumentaci vašeho poskytovatele.
+
+:::tip
+Spuštěním `opencode models` zobrazíte seznam dostupných modelů.
+:::
+
+---
+
+## Vytvořte agenty
+
+Nové agenty můžete vytvořit pomocí následujícího příkazu:
+
+```bash
+opencode agent create
+```
+
+Tento interaktivní příkaz:
+
+1. Zeptejte se, kam uložit agenta; globální nebo projektově specifické.
+2. Popis toho, co by měl agent dělat.
+3. Vygenerujte příslušnou systémovou výzvu a identifikátor.
+4. Nechte si vybrat, ke kterým nástrojům má agent přístup.
+5. Nakonec vytvořte soubor markdown s konfigurací agenta.
+
+---
+
+## Případy použití
+
+Zde jsou některé běžné případy použití pro různé agenty.
+
+- **Build agent**: Kompletní vývojová práce se všemi povolenými nástroji
+- **Agent plánu**: Analýza a plánování bez provádění změn
+- **Review agent**: Kontrola kódu s přístupem pouze pro čtení plus dokumentační nástroje
+- **Debug agent**: Zaměřeno na vyšetřování s aktivovanými nástroji bash a read
+- **Agent Dokumentů**: Psaní dokumentace pomocí operací se soubory, ale bez systémových příkazů
+
+---
+
+## Příklady
+
+Zde je několik příkladů agentů, které by se vám mohly hodit.
+
+:::tip
+Máte agenta, o kterého byste se chtěli podělit? [Odeslat PR](https://github.com/anomalyco/opencode).
+:::
+
+---
+
+### Dokumentační agent
+
+```markdown title="~/.config/opencode/agents/docs-writer.md"
+---
+description: Writes and maintains project documentation
+mode: subagent
+tools:
+  bash: false
+---
+
+You are a technical writer. Create clear, comprehensive documentation.
+
+Focus on:
+
+- Clear explanations
+- Proper structure
+- Code examples
+- User-friendly language
+```
+
+---
+
+### Bezpečnostní auditor
+
+```markdown title="~/.config/opencode/agents/security-auditor.md"
+---
+description: Performs security audits and identifies vulnerabilities
+mode: subagent
+tools:
+  write: false
+  edit: false
+---
+
+You are a security expert. Focus on identifying potential security issues.
+
+Look for:
+
+- Input validation vulnerabilities
+- Authentication and authorization flaws
+- Data exposure risks
+- Dependency vulnerabilities
+- Configuration security issues
+```

@@ -1,0 +1,463 @@
+---
+title: SDK
+description: Typově bezpečný klient JS pro server opencode.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+opencode JS/TS SDK poskytuje typově bezpečného klienta pro interakci se serverem.
+Použijte jej k vytváření integrací a ovládání opencode programově.
+
+[Další informace](/docs/cs/server) o tom, jak server funguje. Podívejte se například na [projekty](/docs/cs/ecosystem/#projekty) vytvořené komunitou.
+
+---
+
+## Instalace
+
+Nainstalujte SDK z npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## Vytvořit klienta
+
+Vytvořte instanci opencode:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+Tím se spustí server i klient
+
+#### Možnosti
+
+| Možnost | Typ | Popis | Výchozí |
+| ---------- | -------------- | ------------------------------- | ----------- |
+| `hostname` | `string` | Název hostitele serveru | `127.0.0.1` |
+| `port` | `number` | Port serveru | `4096` |
+| `signal` | `AbortSignal` | Zrušit signál pro zrušení | `undefined` |
+| `timeout` | `number` | Časový limit v ms pro spuštění serveru | `5000` |
+| `config` | `Config` | Konfigurační objekt | `{}` |
+
+---
+
+## Konfigurace
+
+Pro přizpůsobení chování můžete předat konfigurační objekt. Instance stále přebírá váš `opencode.json`, ale můžete přepsat nebo přidat konfiguraci přímo:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## Pouze klient
+
+Pokud již máte spuštěnou instanci opencode, můžete vytvořit instanci klienta a připojit se k ní:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Možnosti
+
+| Možnost | Typ | Popis | Výchozí |
+| ---------------- | ---------- | --------------------------------- | ------------------------ |
+| `baseUrl` | `string` | URL serveru | `http://localhost:4096` |
+| `fetch` | `function` | Vlastní implementace načítání | `globalThis.fetch` |
+| `parseAs` | `string` | Metoda analýzy odezvy | `auto` |
+| `responseStyle` | `string` | Styl návratu: `data` nebo `fields` | `fields` |
+| `throwOnError` | `boolean` | Vyhazovat chyby místo návratu | `false` |
+
+---
+
+## Typy
+
+SDK obsahuje definice TypeScript pro všechny typy API. Importujte je přímo:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+Všechny typy jsou generovány ze specifikace OpenAPI serveru a jsou dostupné v souboru <a href={typesUrl}>types</a>.
+
+---
+
+## Chyby
+
+SDK může způsobit chyby, které můžete zachytit a zvládnout:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## Strukturovaný výstup
+
+Můžete si vyžádat strukturovaný výstup JSON z modelu zadáním `format` se schématem JSON. Model použije nástroj `StructuredOutput`, aby vrátil ověřené JSON odpovídající vašemu schématu.
+
+### Základní použití
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### Typy výstupních formátů
+
+| Typ | Popis |
+| -------------- | ------------------------------------------------------- |
+| `text` | Výchozí. Standardní textová odpověď (žádný strukturovaný výstup) |
+| `json_schema` | Vrátí ověřené JSON odpovídající zadanému schématu |
+
+### Formát schématu JSON
+
+Při použití `type: 'json_schema'` uveďte:
+
+| Pole | Typ | Popis |
+| ------------ | ---------------- | ---------------------------------------------------------- |
+| `type` | `'json_schema'` | Požadovaný. Určuje režim schématu JSON |
+| `schema` | `object` | Požadovaný. JSON Objekt schématu definující výstupní strukturu |
+| `retryCount` | `number` | Volitelný. Počet opakování ověření (výchozí: 2) |
+
+### Zpracování chyb
+
+Pokud model po všech opakováních nedokáže vytvořit platný strukturovaný výstup, odpověď bude obsahovat `StructuredOutputError`:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### Nejlepší postupy
+
+1. **Poskytněte jasné popisy** ve vlastnostech schématu, které modelu pomohou pochopit, jaká data má extrahovat
+2. **Použijte `required`** k určení, která pole musí být přítomna
+3. **Zaměřte se na schémata** – složitá vnořená schémata mohou být pro model obtížnější správně vyplnit
+4. **Nastavit vhodné `retryCount`** - zvýšení pro složitá schémata, snížení pro jednoduchá
+
+---
+
+## API
+
+SDK zpřístupňuje všechna rozhraní API serveru prostřednictvím typově bezpečného klienta.
+
+---
+
+### Globální
+
+| Metoda | Popis | Odpověď |
+| ------------------ | -------------------------------- | ------------------------------------- |
+| `global.health()` | Zkontrolujte stav a verzi serveru | `{ healthy: true, version: string }` |
+
+---
+
+#### Příklady
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### Aplikace
+
+| Metoda | Popis | Odpověď |
+| --------------- | -------------------------- | -------------------------------------------- |
+| `app.log()` | Napište záznam do logu | `boolean` |
+| `app.agents()` | Seznam všech dostupných agentů | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### Příklady
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Project
+
+| Metoda | Popis | Odpověď |
+| -------------------- | -------------------- | ---------------------------------------------- |
+| `project.list()` | Seznam všech projektů | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Získat aktuální projekt | <a href={typesUrl}><code>Project</code></a> |
+
+---
+
+#### Příklady
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Path
+
+| Metoda | Popis | Odpověď |
+| ------------ | ----------------- | ----------------------------------------- |
+| `path.get()` | Získat aktuální cestu | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### Příklady
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Konfigurace
+
+| Metoda | Popis | Odpověď |
+| --------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `config.get()` | Získat informace o konfiguraci | <a href={typesUrl}><code>Config</code></a> |
+| `config.providers()` | Seznam poskytovatelů a výchozích modelů | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Příklady
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### relace
+
+| Metoda | Popis | Poznámky |
+| ---------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------ ------------------------------------------------------------------------------------------------------ |
+| `session.list()` | Seznam relací | Vrátí <a href={typesUrl}><code>Session[]</code></a> |
+| `session.get({ path })` | Získat relaci | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `session.children({ path })` | Seznam dětských relací | Vrátí <a href={typesUrl}><code>Session[]</code></a> |
+| `session.create({ body })` | Vytvořit relaci | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `session.delete({ path })` | Smazat relaci | Vrátí `boolean` |
+| `session.update({ path, body })` | Aktualizovat vlastnosti relace | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `session.init({ path, body })` | Analyzujte aplikaci a vytvořte `AGENTS.md` | Vrátí `boolean` |
+| `session.abort({ path })` | Přerušit běžící relaci | Vrátí `boolean` |
+| `session.share({ path })` | Sdílet relaci | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `session.unshare({ path })` | Zrušit sdílení relace | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `session.summarize({ path, body })` | Shrnout relaci | Vrátí `boolean` |
+| `session.messages({ path })` | Seznam zpráv v relaci | Vrátí `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` |
+| `session.message({ path })` | Získat podrobnosti o zprávě | Vrácení `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` |
+| `session.prompt({ path, body })` | Odeslat výzvu | `body.noReply: true` vrátí UserMessage (pouze kontext). Výchozí vrátí <a href={typesUrl}><code>AssistantMessage</code></a> s odpovědí AI. Podporuje `body.outputFormat` pro [strukturovaný výstup](#strukturovaný-výstup) |
+| `session.command({ path, body })` | Odeslat příkaz relaci | Vrátí `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` |
+| `session.shell({ path, body })` | Spusťte příkaz shellu | Vrátí <a href={typesUrl}><code>AssistantMessage</code></a> |
+| `session.revert({ path, body })` | Vrátit zprávu | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `session.unrevert({ path })` | Obnovit vrácené zprávy | Vrátí <a href={typesUrl}><code>Session</code></a> |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Odpovědět na žádost o povolení | Vrátí `boolean` |
+
+---
+
+#### Příklady
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### Soubory
+
+| Metoda | Popis | Odpověď |
+| -------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `find.text({ query })` | Hledat text v souborech | Pole shodných objektů se `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })` | Najít soubory a adresáře podle názvu | `string[]` (cesty) |
+| `find.symbols({ query })` | Najít symboly pracovního prostoru | <a href={typesUrl}><code>Symbol[]</code></a> |
+| `file.read({ query })` | Číst soubor | `{ type: "raw" \| "patch", content: string }` |
+| `file.status({ query? })` | Získat stav pro sledované soubory | <a href={typesUrl}><code>File[]</code></a> |
+
+`find.files` podporuje několik volitelných polí dotazu:
+
+- `type`: `"file"` nebo `"directory"`
+- `directory`: přepíše kořen projektu pro vyhledávání
+- `limit`: maximální počet výsledků (1–200)
+
+---
+
+#### Příklady
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| Metoda | Popis | Odpověď |
+| ------------------------------- | -------------------------- | --------- |
+| `tui.appendPrompt({ body })` | Připojte text k výzvě | `boolean` |
+| `tui.openHelp()` | Otevřete dialogové okno nápovědy | `boolean` |
+| `tui.openSessions()` | Otevřete výběr relace | `boolean` |
+| `tui.openThemes()` | Otevřete výběr motivu | `boolean` |
+| `tui.openModels()` | Otevřete volič modelu | `boolean` |
+| `tui.submitPrompt()` | Odeslat aktuální výzvu | `boolean` |
+| `tui.clearPrompt()` | Vymažte výzvu | `boolean` |
+| `tui.executeCommand({ body })` | Proveďte příkaz | `boolean` |
+| `tui.showToast({ body })` | Zobrazit upozornění na toast | `boolean` |
+
+---
+
+#### Příklady
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### Auth
+
+| Metoda | Popis | Odpověď |
+| -------------------- | ------------------------------- | --------- |
+| `auth.set({ ... })` | Nastavit ověřovací údaje | `boolean` |
+
+---
+
+#### Příklady
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### Události
+
+| Metoda | Popis | Odpověď |
+| -------------------- | -------------------------- | -------------------------- |
+| `event.subscribe()` | Stream událostí odeslaných serverem | Stream událostí odeslaných serverem |
+
+---
+
+#### Příklady
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

@@ -1,0 +1,605 @@
+---
+title: CLI
+description: Volby a příkazy OpenCode CLI.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode CLI ve výchozím nastavení spouští [TUI](/docs/cs/tui), když je spuštěn bez jakýchkoli argumentů.
+
+```bash
+opencode
+```
+
+Ale také přijímá příkazy, jak jsou zdokumentovány na této stránce. To vám umožní programově komunikovat se OpenCode.
+
+```bash
+opencode run "Explain how closures work in JavaScript"
+```
+
+---
+
+### tui
+
+Spusťte uživatelské rozhraní terminálu OpenCode.
+
+```bash
+opencode [project]
+```
+
+#### Vlajky
+
+| Vlajka | Krátké | Popis |
+| ------------ | ----- | ------------------------------------------------------------------------ |
+| `--continue` | `-c` | Pokračovat v poslední relaci |
+| `--session` | `-s` | ID relace pro pokračování |
+| `--fork` |       | Při pokračování přerušte relaci (použijte se `--continue` nebo `--session`) |
+| `--prompt` |       | Výzva k použití |
+| `--model` | `-m` | Model k použití ve formě poskytovatel/model |
+| `--agent` |       | Agent k použití |
+| `--port` |       | Port k poslechu na |
+| `--hostname` |       | Název hostitele k poslechu |
+
+---
+
+## Příkazy
+
+OpenCode CLI má také následující příkazy.
+
+---
+
+### agent
+
+Správa agentů pro OpenCode.
+
+```bash
+opencode agent [command]
+```
+
+---
+
+### připojit
+
+Připojte terminál k již běžícímu backend serveru OpenCode spuštěnému pomocí příkazů `serve` nebo `web`.
+
+```bash
+opencode attach [url]
+```
+
+To umožňuje použití TUI se vzdáleným backendem OpenCode. Například:
+
+```bash
+# Start the backend server for web/mobile access
+opencode web --port 4096 --hostname 0.0.0.0
+
+# In another terminal, attach the TUI to the running backend
+opencode attach http://10.20.30.40:4096
+```
+
+#### Vlajky
+
+| Vlajka | Krátké | Popis |
+| ----------- | ----- | ---------------------------------- |
+| `--dir` |       | Pracovní adresář pro spuštění TUI v |
+| `--session` | `-s` | ID relace pro pokračování |
+
+---
+
+#### vytvořit
+
+Vytvořte nového agenta s vlastní konfigurací.
+
+```bash
+opencode agent create
+```
+
+Tento příkaz vás provede vytvořením nového agenta s vlastní systémovou výzvou a konfigurací nástroje.
+
+---
+
+#### seznam
+
+Seznam všech dostupných agentů.
+
+```bash
+opencode agent list
+```
+
+---
+
+### autent
+
+Příkaz pro správu přihlašovacích údajů a přihlášení pro poskytovatele.
+
+```bash
+opencode auth [command]
+```
+
+---
+
+#### přihlášení
+
+OpenCode je napájen ze seznamu poskytovatelů na [Models.dev](https://models.dev), takže můžete použít `opencode auth login` ke konfiguraci klíčů API pro libovolného poskytovatele, kterého chcete použít. To je uloženo v `~/.local/share/opencode/auth.json`.
+
+```bash
+opencode auth login
+```
+
+Když se OpenCode spustí, načte poskytovatele ze souboru pověření. A pokud jsou nějaké klíče definované ve vašich prostředích nebo soubor `.env` ve vašem projektu.
+
+---
+
+#### seznam
+
+Uvádí seznam všech ověřených poskytovatelů uložených v souboru pověření.
+
+```bash
+opencode auth list
+```
+
+Nebo zkrácená verze.
+
+```bash
+opencode auth ls
+```
+
+---
+
+#### odhlášení
+
+Odhlásí vás od poskytovatele vymazáním ze souboru pověření.
+
+```bash
+opencode auth logout
+```
+
+---
+
+### github
+
+Spravujte agenta GitHub pro automatizaci úložiště.
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### nainstalovat
+
+Nainstalujte GitHub agenta do svého úložiště.
+
+```bash
+opencode github install
+```
+
+Tím nastavíte potřebný pracovní postup GitHub Actions a provede vás procesem konfigurace. [Další informace](/docs/cs/github).
+
+---
+
+#### běžet
+
+Spusťte agenta GitHub. To se obvykle používá v akcích GitHub.
+
+```bash
+opencode github run
+```
+
+##### Vlajky
+
+| Vlajka | Popis |
+| --------- | --------------------------------------- |
+| `--event` | GitHub simulovaná událost pro spuštění agenta pro |
+| `--token` | GitHub osobní přístupový token |
+
+---
+
+### mcp
+
+Správa serverů Model Context Protocol.
+
+```bash
+opencode mcp [command]
+```
+
+---
+
+#### přidat
+
+Přidejte do své konfigurace server MCP.
+
+```bash
+opencode mcp add
+```
+
+Tento příkaz vás provede přidáním místního nebo vzdáleného serveru MCP.
+
+---
+
+#### seznam
+
+Seznam všech nakonfigurovaných serverů MCP a jejich stav připojení.
+
+```bash
+opencode mcp list
+```
+
+Nebo použijte zkrácenou verzi.
+
+```bash
+opencode mcp ls
+```
+
+---
+
+#### autent
+
+Ověření pomocí serveru MCP s povoleným OAuth.
+
+```bash
+opencode mcp auth [name]
+```
+
+Pokud nezadáte název serveru, budete vyzváni k výběru z dostupných serverů podporujících protokol OAuth.
+
+Můžete také uvést servery podporující protokol OAuth a jejich stav ověřování.
+
+```bash
+opencode mcp auth list
+```
+
+Nebo použijte zkrácenou verzi.
+
+```bash
+opencode mcp auth ls
+```
+
+---
+
+#### odhlášení
+
+Odeberte přihlašovací údaje OAuth pro server MCP.
+
+```bash
+opencode mcp logout [name]
+```
+
+---
+
+#### ladění
+
+Ladění problémů s připojením OAuth pro server MCP.
+
+```bash
+opencode mcp debug <name>
+```
+
+---
+
+### modely
+
+Seznam všech dostupných modelů od nakonfigurovaných poskytovatelů.
+
+```bash
+opencode models [provider]
+```
+
+Tento příkaz zobrazí všechny modely dostupné u vašich nakonfigurovaných poskytovatelů ve formátu `provider/model`.
+
+To je užitečné pro zjištění přesného názvu modelu, který se má použít v [vaše konfigurace](/docs/cs/config/).
+
+Volitelně můžete předat ID poskytovatele k filtrování modelů podle tohoto poskytovatele.
+
+```bash
+opencode models anthropic
+```
+
+#### Vlajky
+
+| Vlajka | Popis |
+| ----------- | ------------------------------------------------------------- |
+| `--refresh` | Obnovte mezipaměť modelů z models.dev |
+| `--verbose` | Použijte podrobnější výstup modelu (zahrnuje metadata, jako jsou náklady) |
+
+K aktualizaci seznamu modelů uložených v mezipaměti použijte příznak `--refresh`. To je užitečné, když byly k poskytovateli přidány nové modely a chcete je vidět v OpenCode.
+
+```bash
+opencode models --refresh
+```
+
+---
+
+### běh
+
+Spusťte opencode v neinteraktivním režimu přímým předáním výzvy.
+
+```bash
+opencode run [message..]
+```
+
+To je užitečné pro skriptování, automatizaci nebo když chcete rychlou odpověď bez spouštění plného TUI. Například.
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+Můžete se také připojit ke spuštěné instanci `opencode serve`, abyste se vyhnuli časům studeného spouštění serveru MCP při každém spuštění:
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
+#### Vlajky
+
+| Vlajka | Krátké | Popis |
+| --------------------------------- | ----- | ------------------------------------------------------------------------ |
+| `--command` |       | Příkaz ke spuštění, použijte zprávu pro args |
+| `--continue` | `-c` | Pokračovat v poslední relaci |
+| `--session` | `-s` | ID relace pro pokračování |
+| `--fork` |       | Při pokračování přerušte relaci (použijte se `--continue` nebo `--session`) |
+| `--share` |       | Sdílejte relaci |
+| `--model` | `-m` | Model k použití ve formě poskytovatel/model |
+| `--agent` |       | Agent k použití |
+| `--file` | `-f` | Soubory pro připojení ke zprávě |
+| `--format` |       | Formát: výchozí (formátovaný) nebo json (nezpracované události JSON) |
+| `--title` |       | Název relace (pokud není zadána žádná hodnota, použije zkrácenou výzvu) |
+| `--attach` |       | Připojit k běžícímu serveru opencode (např. http://localhost:4096) |
+| `--port` |       | Port pro místní server (výchozí nastavení je náhodný port) |
+| `--dangerously-skip-permissions` |       | Automaticky schvalovat oprávnění, která nejsou výslovně odepřena (nebezpečné!) |
+
+---
+
+### sloužit
+
+Spusťte bezhlavý server OpenCode pro přístup API. Úplné rozhraní HTTP najdete v [dokumentech k serveru](/docs/cs/server).
+
+```bash
+opencode serve
+```
+
+Tím se spustí server HTTP, který poskytuje API přístup k funkcím opencode bez rozhraní TUI. Nastavte `OPENCODE_SERVER_PASSWORD` pro povolení základního ověřování HTTP (výchozí uživatelské jméno je `opencode`).
+
+#### Vlajky
+
+| Vlajka | Popis |
+| ------------ | ------------------------------------------- |
+| `--port` | Port k poslechu na |
+| `--hostname` | Název hostitele k poslechu |
+| `--mdns` | Povolit zjišťování mDNS |
+| `--cors` | Další původ(y) prohlížeče pro povolení CORS |
+
+---
+
+### relace
+
+Spravujte relace OpenCode.
+
+```bash
+opencode session [command]
+```
+
+---
+
+#### seznam
+
+Seznam všech relací OpenCode.
+
+```bash
+opencode session list
+```
+
+##### Vlajky
+
+| Vlajka | Krátké | Popis |
+| -------------- | ----- | ------------------------------------- |
+| `--max-count` | `-n` | Omezit na N posledních relací |
+| `--format` |       | Výstupní formát: tabulka nebo json (tabulka) |
+
+---
+
+### statistiky
+
+Zobrazte statistiky využití tokenů a nákladů pro vaše relace OpenCode.
+
+```bash
+opencode stats
+```
+
+#### Vlajky
+
+| Vlajka | Popis |
+| ----------- | --------------------------------------------------------------------------- |
+| `--days` | Zobrazit statistiky za posledních N dní (celou dobu) |
+| `--tools` | Počet nástrojů k zobrazení (vše) |
+| `--models` | Zobrazit rozdělení využití modelu (ve výchozím nastavení skryté). Předáním čísla zobrazíte horní N |
+| `--project` | Filtrovat podle projektu (všechny projekty, prázdný řetězec: aktuální projekt) |
+
+---
+
+### exportovat
+
+Exportujte data relace jako JSON.
+
+```bash
+opencode export [sessionID]
+```
+
+Pokud nezadáte ID relace, budete vyzváni k výběru z dostupných relací.
+
+---
+
+### import
+
+Importujte data relace ze souboru JSON nebo adresy URL sdílení OpenCode.
+
+```bash
+opencode import <file>
+```
+
+Můžete importovat z místního souboru nebo adresy URL sdílení OpenCode.
+
+```bash
+opencode import session.json
+opencode import https://opncd.ai/s/abc123
+```
+
+---
+
+### web
+
+Spusťte bezhlavý server OpenCode s webovým rozhraním.
+
+```bash
+opencode web
+```
+
+Tím se spustí server HTTP a otevře se webový prohlížeč pro přístup k OpenCode prostřednictvím webového rozhraní. Nastavte `OPENCODE_SERVER_PASSWORD` pro povolení základního ověřování HTTP (výchozí uživatelské jméno je `opencode`).
+
+#### Vlajky
+
+| Vlajka | Popis |
+| ------------ | ------------------------------------------- |
+| `--port` | Port k poslechu na |
+| `--hostname` | Název hostitele k poslechu |
+| `--mdns` | Povolit zjišťování mDNS |
+| `--cors` | Další původ(y) prohlížeče pro povolení CORS |
+
+---
+
+### acp
+
+Spusťte server ACP (Agent Client Protocol).
+
+```bash
+opencode acp
+```
+
+Tento příkaz spustí server ACP, který komunikuje přes stdin/stdout pomocí nd-JSON.
+
+#### Vlajky
+
+| Vlajka | Popis |
+| ------------ | ---------------------- |
+| `--cwd` | Pracovní adresář |
+| `--port` | Port k poslechu na |
+| `--hostname` | Název hostitele k poslechu |
+
+---
+
+### odinstalovat
+
+Odinstalujte OpenCode a odstraňte všechny související soubory.
+
+```bash
+opencode uninstall
+```
+
+#### Vlajky
+
+| Vlajka | Krátké | Popis |
+| ---------------- | ----- | -------------------------------------------- |
+| `--keep-config` | `-c` | Ponechat konfigurační soubory |
+| `--keep-data` | `-d` | Uchovávejte data relace a snímky |
+| `--dry-run` |       | Ukaž, co by bylo odstraněno bez odstranění |
+| `--force` | `-f` | Přeskočit výzvy k potvrzení |
+
+---
+
+### upgrade
+
+Aktualizuje opencode na nejnovější verzi nebo konkrétní verzi.
+
+```bash
+opencode upgrade [target]
+```
+
+Pro upgrade na nejnovější verzi.
+
+```bash
+opencode upgrade
+```
+
+Pro upgrade na konkrétní verzi.
+
+```bash
+opencode upgrade v0.1.48
+```
+
+#### Vlajky
+
+| Vlajka | Krátké | Popis |
+| ---------- | ----- | ------------------------------------------------------------------ |
+| `--method` | `-m` | Použitý způsob instalace; curl, npm, pnpm, buchta, vařit |
+
+---
+
+## Globální příznaky
+
+opencode CLI má následující globální příznaky.
+
+| Vlajka | Krátké | Popis |
+| --------------- | ----- | ------------------------------------- |
+| `--help` | `-h` | Zobrazit nápovědu |
+| `--version` | `-v` | Číslo verze pro tisk |
+| `--print-logs` |       | Tisk protokolů na stderr |
+| `--log-level` |       | Úroveň protokolu (LADĚNÍ, INFO, WARN, ERROR) |
+
+---
+
+## Proměnné prostředí
+
+OpenCode lze konfigurovat pomocí proměnných prostředí.
+
+| Proměnná | Typ | Popis |
+| -------------------------------------- | ------- | -------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE` | booleovský | Automaticky sdílet relace |
+| `OPENCODE_GIT_BASH_PATH` | řetězec | Cesta k Git Bash spustitelný na Windows |
+| `OPENCODE_CONFIG` | řetězec | Cesta ke konfiguračního souboru |
+| `OPENCODE_TUI_CONFIG` | řetězec | Konfigurační soubor Cesta k TUI |
+| `OPENCODE_CONFIG_DIR` | řetězec | Cesta ke konfiguračního adresáře |
+| `OPENCODE_CONFIG_CONTENT` | řetězec | Vložený obsah konfigurace json |
+| `OPENCODE_DISABLE_AUTOUPDATE` | booleovský | Zakázat automatické kontroly aktualizací |
+| `OPENCODE_DISABLE_PRUNE` | booleovský | Zakázat ořezávání starých dat |
+| `OPENCODE_DISABLE_TERMINAL_TITLE` | booleovský | Zakázat automatické aktualizace názvu terminálu |
+| `OPENCODE_PERMISSION` | řetězec | Vložená konfigurace oprávnění json |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS` | booleovský | Zakázat výchozí pluginy |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD` | booleovský | Zakázat automatické stahování serveru LSP |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | booleovský | Povolit experimentální modely |
+| `OPENCODE_DISABLE_AUTOCOMPACT` | booleovský | Zakázat automatické komprimování kontextu |
+| `OPENCODE_DISABLE_CLAUDE_CODE` | booleovský | Zakázat čtení z `.claude` (výzva + dovednosti) |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | booleovský | Zakázat čtení `~/.claude/CLAUDE.md` |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | booleovský | Zakázat načítání `.claude/skills` |
+| `OPENCODE_DISABLE_MODELS_FETCH` | booleovský | Zakázat načítání modelů ze vzdálených zdrojů |
+| `OPENCODE_DISABLE_MOUSE` | booleovský | Zakázat zachycení myši v TUI |
+| `OPENCODE_FAKE_VCS` | řetězec | Falešný poskytovatel VCS pro testovací účely |
+| `OPENCODE_CLIENT` | řetězec | Identifikátor klienta (výchozí `cli`) |
+| `OPENCODE_ENABLE_EXA` | booleovský | Povolit nástroje pro vyhledávání na webu Exa |
+| `OPENCODE_SERVER_PASSWORD` | řetězec | Povolit základní ověření pro `serve`/`web` |
+| `OPENCODE_SERVER_USERNAME` | řetězec | Přepsat uživatelské jméno základního ověření (výchozí `opencode`) |
+| `OPENCODE_MODELS_URL` | řetězec | Vlastní URL pro načítání konfigurace modelů |
+
+---
+
+### Experimentální
+
+Tyto proměnné prostředí umožňují experimentální funkce, které se mohou změnit nebo odstranit.
+
+| Proměnná | Typ | Popis |
+| ------------------------------------------------ | ------- | ---------------------------------------- |
+| `OPENCODE_EXPERIMENTAL` | booleovský | Povolit všechny experimentální funkce |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY` | booleovský | Povolit zjišťování ikon |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT` | booleovský | Zakázat kopírování při výběru v TUI |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | číslo | Výchozí časový limit pro příkazy bash v ms |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` | číslo | Maximální výstupní tokeny pro odpovědi LLM |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER` | booleovský | Povolit sledování souborů pro celý adresář |
+| `OPENCODE_EXPERIMENTAL_OXFMT` | booleovský | Povolit formátovač oxfmt |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL` | booleovský | Povolit experimentální nástroj LSP |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER` | booleovský | Zakázat sledování souborů |
+| `OPENCODE_EXPERIMENTAL_EXA` | booleovský | Povolit experimentální funkce Exa |
+| `OPENCODE_EXPERIMENTAL_LSP_TY` | booleovský | Povolit TY LSP pro soubory python |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN` | booleovský | Povolit experimentální funkce markdown |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE` | booleovský | Povolit režim plánu |

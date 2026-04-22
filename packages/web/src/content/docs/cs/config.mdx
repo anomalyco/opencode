@@ -1,0 +1,809 @@
+---
+title: Konfigurace
+description: Použití JSON konfigurace OpenCode.
+---
+
+OpenCode můžete nakonfigurovat pomocí konfiguračního souboru JSON.
+
+---
+
+## Formát
+
+OpenCode podporuje formáty **JSON** i **JSONC** (JSON s komentáři).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
+}
+```
+
+---
+
+## Umístění
+
+Konfiguraci můžete uložit na několik různých míst. Každé z nich má jiné pořadí priority.
+
+:::note
+Konfigurační soubory jsou **sloučeny dohromady**, nejsou nahrazeny.
+:::
+
+Konfigurační soubory jsou sloučeny, nikoli nahrazeny. Nastavení z následujících konfiguračních umístění jsou kombinována. Pozdější konfigurace přepíší dřívější pouze pro konfliktní klíče. Nekonfliktní nastavení ze všech konfigurací jsou zachována.
+
+Pokud například vaše globální konfigurace nastaví `autoupdate: true` a konfigurace vašeho projektu nastaví `model: "anthropic/claude-sonnet-4-5"`, konečná konfigurace bude zahrnovat obě nastavení.
+
+---
+
+### Přednostní pořadí
+
+Zdroje konfigurace se načítají v tomto pořadí (pozdější zdroje přepíší dřívější):
+
+1. **Vzdálená konfigurace** (od `.well-known/opencode`) – výchozí nastavení organizace
+2. **Globální konfigurace** (`~/.config/opencode/opencode.json`) – uživatelské preference
+3. **Vlastní konfigurace** (`OPENCODE_CONFIG` env var) – vlastní přepsání
+4. **Konfigurace projektu** (`opencode.json` v projektu) – nastavení specifická pro projekt
+5. **`.opencode` adresáře** - agenti, příkazy, pluginy
+6. **Inline konfigurace** (`OPENCODE_CONFIG_CONTENT` env var) – přepisy za běhu
+7. **Spravované konfigurační soubory** (`/Library/Application Support/opencode/` na macOS) – řízené správcem
+8. **Spravované předvolby macOS** (`.mobileconfig` přes MDM) – nejvyšší priorita, nelze ji přepsat uživatelem
+
+To znamená, že konfigurace projektu mohou přepsat globální výchozí hodnoty a globální konfigurace mohou přepsat výchozí nastavení vzdálené organizace. Spravovaná nastavení přepíší vše.
+
+:::note
+Adresáře `.opencode` a `~/.config/opencode` používají pro podadresáře **množná jména**: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` a `themes/`. Jednotná jména (např. `agent/`) jsou také podporována z důvodu zpětné kompatibility.
+:::
+
+---
+
+### Vzdálená konfigurace
+
+Organizace mohou poskytnout výchozí konfiguraci prostřednictvím koncového bodu `.well-known/opencode`. To se načte automaticky, když se ověříte u poskytovatele, který to podporuje.
+
+Nejprve se načte vzdálená konfigurace, která slouží jako základní vrstva. Všechny ostatní zdroje konfigurací (globální, projektové) mohou tyto výchozí hodnoty přepsat.
+
+Pokud například vaše organizace poskytuje servery MCP, které jsou ve výchozím nastavení zakázány:
+
+```json title="Remote config from .well-known/opencode"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+Konkrétní servery můžete povolit v místní konfiguraci:
+
+```json title="opencode.json"
+{
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+---
+
+### Globální
+
+Umístěte globální konfiguraci OpenCode do `~/.config/opencode/opencode.json`. Globální konfiguraci použijte pro uživatelské předvolby serveru/runtime, jako jsou poskytovatelé, modely a oprávnění.
+
+Pro nastavení specifická pro TUI použijte `~/.config/opencode/tui.json`.
+
+Globální konfigurace přepíše výchozí nastavení vzdálené organizace.
+
+---
+
+### Projekt
+
+Přidejte `opencode.json` do kořenového adresáře projektu. Konfigurace projektu má nejvyšší prioritu mezi standardními konfiguračními soubory – přepíše globální i vzdálené konfigurace.
+
+Pro nastavení TUI specifická pro projekt přidejte vedle něj `tui.json`.
+
+:::tip
+Umístěte konfiguraci specifickou pro projekt do kořenového adresáře vašeho projektu.
+:::
+
+Když se OpenCode spustí, hledá konfigurační soubor v aktuálním adresáři nebo přejde do nejbližšího adresáře Git.
+
+Toto je také bezpečné zkontrolovat v Gitu a používá stejné schéma jako globální.
+
+---
+
+### Vlastní cesta
+
+Zadejte vlastní cestu konfiguračního souboru pomocí proměnné prostředí `OPENCODE_CONFIG`.
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+Vlastní konfigurace se načte mezi globální konfigurace a konfigurace projektu v pořadí priority.
+
+---
+
+### Vlastní adresář
+
+Zadejte vlastní konfigurační adresář pomocí proměnné prostředí
+`OPENCODE_CONFIG_DIR`. V tomto adresáři budou vyhledáni agenti, příkazy,
+režimy a pluginy stejně jako standardní adresář `.opencode` a měly by
+sledovat stejnou strukturu.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+Vlastní adresář se načte po globálních konfiguračních adresářích a `.opencode`, takže **může přepsat** jejich nastavení.
+
+---
+
+### Spravovaná nastavení
+
+Organizace mohou vynutit konfiguraci, kterou uživatelé nemohou přepsat. Spravovaná nastavení se načtou na úrovni nejvyšší priority.
+
+#### Souborové
+
+Přetáhněte soubor `opencode.json` nebo `opencode.jsonc` do adresáře konfigurace spravované systémem:
+
+| Platforma | Cesta |
+| -------- | ----------------------------------------- |
+| macOS | `/Library/Application Support/opencode/` |
+| Linux | `/etc/opencode/` |
+| Windows | `%ProgramData%\opencode` |
+
+Tyto adresáře vyžadují k zápisu přístup správce/root, takže je uživatelé nemohou upravovat.
+
+#### Spravované preference macOS
+
+Na macOS čte OpenCode spravované preference z domény předvoleb `ai.opencode.managed`. Nasaďte `.mobileconfig` přes MDM (Jamf, Kandji, FleetDM) a nastavení se vynutí automaticky.
+
+OpenCode kontroluje tyto cesty:
+
+1. `/Library/Managed Preferences/<user>/ai.opencode.managed.plist`
+2. `/Library/Managed Preferences/ai.opencode.managed.plist`
+
+Klávesy plist mapují přímo do polí `opencode.json`. Klíče metadat MDM (`PayloadUUID`, `PayloadType` atd.) jsou odstraněny automaticky.
+
+**Vytvoření `.mobileconfig`**
+
+Použijte `ai.opencode.managed` jako `PayloadType`. Klíče konfigurace OpenCode patří přímo do slovníku payloadu:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>ai.opencode.managed</string>
+      <key>PayloadIdentifier</key>
+      <string>com.example.opencode.config</string>
+      <key>PayloadUUID</key>
+      <string>GENERATE-YOUR-OWN-UUID</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>share</key>
+      <string>disabled</string>
+      <key>server</key>
+      <dict>
+        <key>hostname</key>
+        <string>127.0.0.1</string>
+      </dict>
+      <key>permission</key>
+      <dict>
+        <key>*</key>
+        <string>ask</string>
+        <key>bash</key>
+        <dict>
+          <key>*</key>
+          <string>ask</string>
+          <key>rm -rf *</key>
+          <string>deny</string>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadIdentifier</key>
+  <string>com.example.opencode</string>
+  <key>PayloadUUID</key>
+  <string>GENERATE-YOUR-OWN-UUID</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>
+```
+
+Generujte jedinečné UUID pomocí `uuidgen`. Upravte nastavení tak, aby odpovídala požadavkům vaší organizace.
+
+**Nasazení přes MDM**
+
+- **Jamf Pro:** Počítače > Konfigurační profily > Nahrát > rozsah pro cílová zařízení nebo chytré skupiny
+- **FleetDM:** Přidejte `.mobileconfig` do svého úložiště gitops pod `mdm.macos_settings.custom_settings` a spusťte `fleetctl apply`
+
+**Ověření na zařízení**
+
+Poklepáním na `.mobileconfig` jej nainstalujte lokálně pro testování (zobrazí se v Nastavení systému > Soukromí a zabezpečení > Profily), poté spusťte:
+
+```bash
+opencode debug config
+```
+
+Všechny klíče spravovaných předvoleb se objeví ve vyřešené konfiguraci a nelze je přepsat konfigurací uživatele nebo projektu.
+
+---
+
+## Schéma
+
+Schéma konfigurace server/runtime je definováno v [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+
+Konfigurace TUI používá [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json).
+
+Váš editor by měl být schopen ověřovat a automaticky doplňovat na základě schématu.
+
+---
+
+### TUI
+
+Pro nastavení specifická pro TUI použijte vyhrazený soubor `tui.json` (nebo `tui.jsonc`).
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto",
+  "mouse": true
+}
+```
+
+Pomocí `OPENCODE_TUI_CONFIG` přejděte na vlastní konfigurační soubor TUI.
+
+Starší klíče `theme`, `keybinds` a `tui` v `opencode.json` jsou zastaralé a pokud je to možné, automaticky se migrují.
+
+---
+
+### Server
+
+Nastavení serveru pro příkazy `opencode serve` a `opencode web` můžete nakonfigurovat pomocí volby `server`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "mdnsDomain": "myproject.local",
+    "cors": ["http://localhost:5173"]
+  }
+}
+```
+
+Dostupné možnosti:
+
+- `port` - Port pro poslech.
+- `hostname` - Název hostitele k poslechu. Když je povoleno `mdns` a není nastaven žádný název hostitele, výchozí hodnota je `0.0.0.0`.
+- `mdns` - Povolit zjišťování služby mDNS. To umožňuje ostatním zařízením v síti objevit váš server OpenCode.
+- `mdnsDomain` - Vlastní název domény pro službu mDNS. Výchozí hodnota je `opencode.local`. Užitečné pro spuštění více instancí ve stejné síti.
+- `cors` - Další zdroje umožňující CORS při použití serveru HTTP z klienta založeného na prohlížeči. Hodnoty musí být úplný původ (schéma + hostitel + volitelný port), např. `https://app.example.com`.
+
+[Další informace o serveru zde](/docs/cs/server).
+
+---
+
+### Nástroje
+
+Nástroje, které může LLM používat, můžete spravovat pomocí možnosti `tools`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[Další informace o nástrojích naleznete zde](/docs/cs/tools).
+
+---
+
+### Modely
+
+Pomocí možností `provider`, `model` a `small_model` můžete nakonfigurovat poskytovatele a modely, které chcete ve své konfiguraci OpenCode používat.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5"
+}
+```
+
+Volba `small_model` konfiguruje samostatný model pro nenáročné úlohy, jako je generování titulů. Ve výchozím nastavení se OpenCode pokouší použít levnější model, pokud je k dispozici od vašeho poskytovatele, jinak se vrátí k vašemu hlavnímu modelu.
+
+Možnosti poskytovatele mohou zahrnovat `timeout`, `chunkTimeout` a `setCacheKey`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "chunkTimeout": 30000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - Časový limit požadavku v milisekundách (výchozí: 300 000). Pro deaktivaci nastavte na `false`.
+- `chunkTimeout` - Časový limit v milisekundách mezi streamovanými bloky odezvy. Pokud žádný blok nedorazí včas, požadavek se přeruší.
+- `setCacheKey` - Ujistěte se, že klíč mezipaměti je vždy nastaven pro určeného poskytovatele.
+
+Můžete také nakonfigurovat [místní modely](/docs/cs/models). [Další informace](/docs/cs/models).
+
+---
+
+#### Možnosti specifické pro poskytovatele
+
+Někteří poskytovatelé podporují další možnosti konfigurace nad rámec obecných nastavení `timeout` a `apiKey`.
+
+##### Amazon Bedrock
+
+Amazon Bedrock podporuje konfiguraci specifickou pro AWS:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - Oblast AWS pro Bedrock (výchozí nastavení `AWS_REGION` env var nebo `us-east-1`)
+- `profile` - AWS pojmenovaný profil z `~/.aws/credentials` (výchozí `AWS_PROFILE` env var)
+- `endpoint` - Vlastní koncový bod URL pro koncové body VPC. Toto je alias pro generickou volbu `baseURL` používající terminologii specifickou pro AWS. Pokud jsou zadány oba, má přednost `endpoint`.
+
+:::note
+Bearer tokeny (`AWS_BEARER_TOKEN_BEDROCK` nebo `/connect`) mají přednost před ověřováním na základě profilu. Podrobnosti viz [přednost ověření](/docs/cs/providers/#priorita-ověřování).
+:::
+
+[Další informace o konfiguraci Amazon Bedrock](/docs/cs/providers/#amazon-bedrock).
+
+---
+
+### Motivy
+
+Nastavte svůj motiv UI v `tui.json`.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
+}
+```
+
+[Další informace zde](/docs/cs/themes).
+
+---
+
+### Agenti
+
+Specializované agenty můžete nakonfigurovat pro konkrétní úlohy prostřednictvím volby `agent`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-5",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // Disable file modification tools for review-only agent
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+Agenty můžete také definovat pomocí souborů markdown v `~/.config/opencode/agents/` nebo `.opencode/agents/`. [Další informace zde](/docs/cs/agents).
+
+---
+
+### Výchozí agent
+
+Výchozího agenta můžete nastavit pomocí volby `default_agent`. To určuje, který agent se použije, když žádný není explicitně specifikován.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+Výchozí agent musí být primární agent (nikoli podagent). Může to být vestavěný agent, jako je `"build"` nebo `"plan"`, nebo [vlastní agent](/docs/cs/agents), kterého jste definovali. Pokud zadaný agent neexistuje nebo je podagentem, OpenCode se vrátí k `"build"` s varováním.
+
+Toto nastavení platí pro všechna rozhraní: TUI, CLI (`opencode run`), desktopová aplikace a GitHub Action.
+
+---
+
+### Sdílení
+
+Funkci [share](/docs/cs/share) můžete nakonfigurovat pomocí možnosti `share`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+To trvá:
+
+- `"manual"` - Povolit ruční sdílení pomocí příkazů (výchozí)
+- `"auto"` - Automaticky sdílejte nové konverzace
+- `"disabled"` - Úplně zakázat sdílení
+
+Ve výchozím nastavení je sdílení nastaveno na ruční režim, kde potřebujete explicitně sdílet konverzace pomocí příkazu `/share`.
+
+---
+
+### Příkazy
+
+Pomocí volby `command` můžete nakonfigurovat vlastní příkazy pro opakující se úlohy.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-haiku-4-5",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+Můžete také definovat příkazy pomocí souborů markdown v `~/.config/opencode/commands/` nebo `.opencode/commands/`. [Další informace zde](/docs/cs/commands).
+
+---
+
+### Klávesové zkratky
+
+Přizpůsobte si klávesy v `tui.json`.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "keybinds": {}
+}
+```
+
+[Další informace zde](/docs/cs/keybinds).
+
+---
+
+### Snímek
+
+OpenCode používá snímky ke sledování změn souborů během operací agenta, což vám umožňuje vrátit zpět a vrátit změny v rámci relace. Snímky jsou ve výchozím nastavení povoleny.
+
+U velkých repozitářů nebo projektů s mnoha submoduly může systém snímků způsobit pomalé indexování a výrazné využití disku, protože sleduje všechny změny pomocí interního git repozitáře. Snímky můžete zakázat pomocí možnosti `snapshot`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshot": false
+}
+```
+
+Pamatujte, že deaktivace snímků znamená, že změny provedené agentem nelze vrátit zpět prostřednictvím uživatelského rozhraní.
+
+---
+
+### Automatická aktualizace
+
+OpenCode si po spuštění automaticky stáhne všechny nové aktualizace. Toto můžete zakázat pomocí možnosti `autoupdate`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+Pokud nechcete aktualizace, ale chcete být upozorněni, až bude k dispozici nová verze, nastavte `autoupdate` na `"notify"`.
+Všimněte si, že to funguje pouze v případě, že nebyl nainstalován pomocí správce balíčků, jako je Homebrew.
+
+---
+
+### Formátovače
+
+Pomocí možnosti `formatter` můžete nakonfigurovat formátovače kódu.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[Další informace o formátovačích najdete zde](/docs/cs/formatters).
+
+---
+
+### Oprávnění
+
+Ve výchozím nastavení opencode **umožňuje všechny operace** bez nutnosti výslovného schválení. Toto můžete změnit pomocí možnosti `permission`.
+
+Chcete-li například zajistit, aby nástroje `edit` a `bash` vyžadovaly schválení uživatele:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[Další informace o oprávněních najdete zde](/docs/cs/permissions).
+
+---
+
+### Kompakce
+
+Chování kompakce kontextu můžete ovládat pomocí možnosti `compaction`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 10000
+  }
+}
+```
+
+- `auto` - Automaticky komprimovat relaci, když je kontext plný (výchozí: `true`).
+- `prune` - Odeberte staré výstupy nástroje pro uložení tokenů (výchozí: `true`).
+- `reserved` - Tokenová rezerva pro kompakci. Ponechává dostatečné okno, aby se zabránilo přetečení během kompakce.
+
+---
+
+### Sledování souborů
+
+Vzory ignorování hlídače souborů můžete nakonfigurovat pomocí možnosti `watcher`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+Vzory se řídí syntaxí glob. Použijte toto k vyloučení hlučných adresářů ze sledování souborů.
+
+---
+
+### Servery MCP
+
+Servery MCP, které chcete používat, můžete nakonfigurovat pomocí možnosti `mcp`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[Další informace zde](/docs/cs/mcp-servers).
+
+---
+
+### Pluginy
+
+[Pluginy](/docs/cs/plugins) rozšiřují OpenCode o vlastní nástroje, háčky a integrace.
+
+Umístěte soubory pluginu do `.opencode/plugins/` nebo `~/.config/opencode/plugins/`. Pluginy můžete také načíst z npm pomocí možnosti `plugin`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[Další informace zde](/docs/cs/plugins).
+
+---
+
+### Pokyny
+
+Pokyny pro model, který používáte, můžete nakonfigurovat pomocí možnosti `instructions`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+To vyžaduje řadu cest a vzorů glob do instrukčních souborů. [Další informace
+o pravidlech zde](/docs/cs/rules).
+
+---
+
+### Zakázaní poskytovatelé
+
+Poskytovatele, kteří se načítají automaticky, můžete zakázat pomocí možnosti `disabled_providers`. To je užitečné, když chcete zabránit načítání určitých poskytovatelů, i když jsou jejich přihlašovací údaje k dispozici.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+:::note
+`disabled_providers` má přednost před `enabled_providers`.
+:::
+
+Volba `disabled_providers` přijímá pole ID poskytovatelů. Když je poskytovatel deaktivován:
+
+- Nenačte se, i když jsou nastaveny proměnné prostředí.
+- Nenačte se, i když jsou klíče API nakonfigurovány pomocí příkazu `/connect`.
+- Modely poskytovatele se nezobrazí v seznamu pro výběr modelů.
+
+---
+
+### Povolení poskytovatelé
+
+Pomocí volby `enabled_providers` můžete zadat seznam povolených poskytovatelů. Po nastavení budou povoleni pouze uvedení poskytovatelé a všichni ostatní budou ignorováni.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+To je užitečné, když chcete omezit OpenCode na používání pouze konkrétních poskytovatelů, spíše než je deaktivovat jednoho po druhém.
+
+:::note
+`disabled_providers` má přednost před `enabled_providers`.
+:::
+
+Pokud se poskytovatel objeví v `enabled_providers` i `disabled_providers`, `disabled_providers` má prioritu pro zpětnou kompatibilitu.
+
+---
+
+### Experimentální
+
+Klíč `experimental` obsahuje možnosti, které jsou v aktivním vývoji.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+Experimentální možnosti nejsou stabilní. Mohou být změněny nebo odstraněny bez upozornění.
+:::
+
+---
+
+## Proměnné
+
+K odkazování na proměnné prostředí a obsah souborů můžete použít substituci proměnných v konfiguračních souborech.
+
+---
+
+### Proměnné prostředí
+
+Použijte `{env:VARIABLE_NAME}` k nahrazení proměnných prostředí:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Pokud proměnná prostředí není nastavena, bude nahrazena prázdným řetězcem.
+
+---
+
+### Soubory
+
+Použijte `{file:path/to/file}` k nahrazení obsahu souboru:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+Cesty k souborům mohou být:
+
+- Relativní k adresáři konfiguračního souboru
+- Nebo absolutní cesty začínající `/` nebo `~`
+
+Jsou užitečné pro:
+
+- Uchovávání citlivých dat, jako jsou klíče API, v samostatných souborech.
+- Včetně velkých instrukčních souborů bez zahlcení vaší konfigurace.
+- Sdílení společných konfiguračních úryvků ve více konfiguračních souborech.

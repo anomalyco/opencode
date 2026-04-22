@@ -1,0 +1,511 @@
+---
+title: Servery MCP
+description: Přidejte místní a vzdálené nástroje MCP.
+---
+
+Do OpenCode můžete přidat externí nástroje pomocí _Model Context Protocol_ nebo MCP. OpenCode podporuje místní i vzdálené servery.
+
+Po přidání jsou nástroje MCP automaticky dostupné pro LLM spolu s vestavěnými nástroji.
+
+---
+
+#### Upozornění
+
+Když použijete server MCP, přidá se do kontextu. To se může rychle přidat, pokud máte hodně nástrojů. Proto doporučujeme být opatrní, se kterými servery MCP používáte.
+
+:::tip
+Servery MCP přidávají do vašeho kontextu, takže byste měli být opatrní s tím, které povolíte.
+:::
+
+Některé servery MCP, jako je server GitHub MCP, mají tendenci přidávat velké množství tokenů a mohou snadno překročit kontextový limit.
+
+---
+
+## Povolení
+
+Servery MCP můžete definovat ve své [konfiguraci OpenCode](https://opencode.ai/docs/cs/config/) pod `mcp`. Přidejte každý MCP server s jedinečným názvem. LLM pak na něj může odkazovat jménem.
+
+```jsonc title="opencode.jsonc" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "name-of-mcp-server": {
+      // ...
+      "enabled": true,
+    },
+    "name-of-other-mcp-server": {
+      // ...
+    },
+  },
+}
+```
+
+Server můžete také zakázat nastavením `enabled` na `false`. To je užitečné, pokud chcete dočasně zakázat server, aniž byste jej odstranili z vaší konfigurace.
+
+---
+
+### Přepsání vzdálených výchozích nastavení
+
+Organizace mohou poskytovat výchozí servery MCP prostřednictvím svého koncového bodu `.well-known/opencode`. Tyto servery mohou být ve výchozím nastavení zakázány, což uživatelům umožňuje přihlásit se k těm, které potřebují.
+
+Chcete-li povolit konkrétní server ze vzdálené konfigurace vaší organizace, přidejte jej do místní konfigurace pomocí `enabled: true`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+Vaše místní konfigurační hodnoty přepíší vzdálené výchozí hodnoty. Další podrobnosti viz [přednost konfigurace](/docs/cs/config/#přednostní-pořadí).
+
+---
+
+## Místní
+
+Přidejte místní servery MCP pomocí `type` do `"local"` v rámci objektu MCP.
+
+```jsonc title="opencode.jsonc" {15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // Or ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+```
+
+Příkaz je způsob spuštění místního serveru MCP. Můžete také předat seznam proměnných prostředí.
+
+Zde je například uvedeno, jak můžete přidat testovací server [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+```
+
+A abych ji mohl použít, mohu do svých výzev přidat `use the mcp_everything tool`.
+
+```txt "mcp_everything"
+use the mcp_everything tool to add the number 3 and 4
+```
+
+---
+
+#### Možnosti
+
+Zde jsou všechny možnosti pro konfiguraci místního serveru MCP.
+
+| Možnost | Typ | Povinné | Popis |
+| -------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
+| `type` | Řetězec | Y | Typ připojení serveru MCP, musí být `"local"`.                                   |
+| `command` | Pole | Y | Příkaz a argumenty pro spuštění serveru MCP.                                        |
+| `environment` | Objekt |          | Proměnné prostředí, které se mají nastavit při spuštění serveru.                               |
+| `enabled` | Boolean |          | Povolte nebo zakažte server MCP při spuštění.                                        |
+| `timeout` | Číslo |          | Časový limit v ms pro načítání nástrojů ze serveru MCP. Výchozí hodnota je 5000 (5 sekund). |
+
+---
+
+## Vzdálené servery
+
+Přidejte vzdálené servery MCP nastavením `type` na `"remote"`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+`url` je URL vzdáleného serveru MCP as volbou `headers` můžete předat seznam záhlaví.
+
+---
+
+#### Možnosti
+
+| Možnost | Typ | Povinné | Popis |
+| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
+| `type` | Řetězec | Y | Typ připojení serveru MCP, musí být `"remote"`.                                  |
+| `url` | Řetězec | Y | URL vzdáleného serveru MCP.                                                       |
+| `enabled` | Boolean |          | Povolte nebo zakažte server MCP při spuštění.                                        |
+| `headers` | Objekt |          | Záhlaví k odeslání s požadavkem.                                                   |
+| `oauth` | Objekt |          | Konfigurace ověřování OAuth. Viz část [OAuth](#oauth) níže.              |
+| `timeout` | Číslo |          | Časový limit v ms pro načítání nástrojů ze serveru MCP. Výchozí hodnota je 5000 (5 sekund). |
+
+---
+
+## OAuth
+
+OpenCode automaticky zpracovává ověřování OAuth pro vzdálené servery MCP. Když server vyžaduje ověření, OpenCode:
+
+1. Zjistěte odezvu 401 a spusťte tok OAuth
+2. Použijte **Dynamic Client Registration (RFC 7591)**, pokud to server podporuje
+3. Bezpečně ukládejte tokeny pro budoucí požadavky
+
+---
+
+### Automaticky
+
+Pro většinu serverů MCP s povoleným OAuth není potřeba žádná speciální konfigurace. Stačí nakonfigurovat vzdálený server:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+Pokud server vyžaduje ověření, OpenCode vás při prvním pokusu o jeho použití vyzve k ověření. Pokud ne, můžete [ručně spustit průtok](#ověřování) pomocí `opencode mcp auth <server-name>`.
+
+---
+
+### Předběžně zaregistrováno
+
+Pokud máte přihlašovací údaje klienta od poskytovatele serveru MCP, můžete je nakonfigurovat:
+
+```json title="opencode.json" {7-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Ověřování
+
+Můžete ručně spustit ověřování nebo spravovat přihlašovací údaje.
+
+Ověření na konkrétním serveru MCP:
+
+```bash
+opencode mcp auth my-oauth-server
+```
+
+Seznam všech serverů MCP a jejich stav ověření:
+
+```bash
+opencode mcp list
+```
+
+Odebrat uložené přihlašovací údaje:
+
+```bash
+opencode mcp logout my-oauth-server
+```
+
+Příkaz `mcp auth` otevře váš prohlížeč pro autorizaci. Po autorizaci OpenCode bezpečně uloží tokeny do `~/.local/share/opencode/mcp-auth.json`.
+
+---
+
+#### Deaktivace OAuth
+
+Pokud chcete deaktivovat automatické OAuth pro server (např. pro servery, které místo toho používají klíče API), nastavte `oauth` na `false`:
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### Možnosti OAuth
+
+| Možnost | Typ | Popis |
+| --------------- | ---------------- | -------------------------------------------------------------------------------- |
+| `oauth` | Objekt \| nepravda | Konfigurační objekt OAuth nebo `false` pro zakázání automatické detekce OAuth.                 |
+| `clientId` | Řetězec | ID klienta OAuth. Pokud není zadána, dojde k pokusu o dynamickou registraci klienta. |
+| `clientSecret` | Řetězec | Tajný klíč klienta OAuth, pokud to vyžaduje autorizační server.                    |
+| `scope` | Řetězec | Rozsahy OAuth, které je třeba vyžádat během autorizace.                                    |
+
+#### Ladění
+
+Pokud se vzdálenému serveru MCP nedaří ověřit, můžete diagnostikovat problémy pomocí:
+
+```bash
+# View auth status for all OAuth-capable servers
+opencode mcp auth list
+
+# Debug connection and OAuth flow for a specific server
+opencode mcp debug my-oauth-server
+```
+
+Příkaz `mcp debug` zobrazí aktuální stav ověření, otestuje připojení HTTP a pokusí se o tok zjišťování OAuth.
+
+---
+
+## Spravovat
+
+Vaše MCP jsou k dispozici jako nástroje v OpenCode spolu s vestavěnými nástroji. Můžete je tedy spravovat prostřednictvím konfigurace OpenCode jako jakýkoli jiný nástroj.
+
+---
+
+### Globální
+
+To znamená, že je můžete povolit nebo zakázat globálně.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp-foo": false
+  }
+}
+```
+
+Můžeme také použít vzor glob k deaktivaci všech odpovídajících MCP.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+Zde používáme glob vzor `my-mcp*` k deaktivaci všech MCP.
+
+---
+
+### Za agenta
+
+Pokud máte velký počet serverů MCP, možná je budete chtít povolit pouze pro jednoho agenta a deaktivovat je globálně. Postup:
+
+1. Globálně jej deaktivujte jako nástroj.
+2. V [agent config](/docs/cs/agents/#nástroje-zastaralé) povolte server MCP jako nástroj.
+
+```json title="opencode.json" {11, 14-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
+---
+
+#### Vzory koule
+
+Vzor glob používá jednoduché vzory globování podle regulárního výrazu:
+
+- `*` odpovídá nule nebo více libovolných znaků (např. `"my-mcp*"` odpovídá `my-mcp_search`, `my-mcp_list` atd.)
+- `?` odpovídá přesně jednomu znaku
+- Všechny ostatní postavy se shodují doslova
+
+:::note
+Serverové nástroje MCP jsou registrovány s názvem serveru jako prefixem, takže k deaktivaci všech nástrojů pro server jednoduše použijte:
+
+```
+"mymcpservername_*": false
+```
+
+:::
+
+---
+
+## Příklady
+
+Níže jsou uvedeny příklady některých běžných serverů MCP. Pokud chcete dokumentovat další servery, můžete odeslat PR.
+
+---
+
+### Hlídka
+
+Přidejte [Sentry MCP server](https://mcp.sentry.dev), abyste mohli komunikovat s vašimi projekty a problémy Sentry.
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+Po přidání konfigurace se ověřte pomocí Sentry:
+
+```bash
+opencode mcp auth sentry
+```
+
+Tím se otevře okno prohlížeče pro dokončení procesu OAuth a připojení OpenCode k vašemu účtu Sentry.
+
+Po ověření můžete ve výzvách používat nástroje Sentry k dotazování na problémy, projekty a data chyb.
+
+```txt "use sentry"
+Show me the latest unresolved issues in my project. use sentry
+```
+
+---
+
+### Kontext7
+
+Chcete-li prohledávat dokumenty, přidejte [Server Context7 MCP](https://github.com/upstash/context7).
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+Pokud jste se zaregistrovali k bezplatnému účtu, můžete použít klíč API a získat vyšší limity.
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Zde předpokládáme, že máte nastavenou proměnnou prostředí `CONTEXT7_API_KEY`.
+
+Chcete-li používat server Context7 MCP, přidejte do výzev `use context7`.
+
+```txt "use context7"
+Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
+```
+
+Případně můžete něco takového přidat do svého [AGENTS.md](/docs/cs/rules/).
+
+```md title="AGENTS.md"
+When you need to search docs, use `context7` tools.
+```
+
+---
+
+### Grep od Vercel
+
+Přidejte server [Grep by Vercel](https://grep.app) MCP a prohledávejte úryvky kódu na GitHubu.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
+```
+
+Protože jsme náš server MCP pojmenovali `gh_grep`, můžete do výzev přidat `use the gh_grep tool`, abyste agenta přiměli jej používat.
+
+```txt "use the gh_grep tool"
+What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
+```
+
+Případně můžete něco takového přidat do svého [AGENTS.md](/docs/cs/rules/).
+
+```md title="AGENTS.md"
+If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
+```

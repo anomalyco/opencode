@@ -1,0 +1,369 @@
+---
+title: Témata
+description: Vyberte vestavěné téma nebo definujte své vlastní.
+---
+
+S OpenCode si můžete vybrat z několika vestavěných motivů, použít motiv, který se přizpůsobí motivu vašeho terminálu, nebo definovat vlastní motiv.
+
+Ve výchozím nastavení používá OpenCode naše vlastní téma `opencode`.
+
+---
+
+## Požadavky na terminál
+
+Aby se motivy zobrazovaly správně s celou paletou barev, váš terminál musí podporovat **truecolor** (24bitové barvy). Většina moderních terminálů to ve výchozím nastavení podporuje, ale možná ji budete muset povolit:
+
+- **Zkontrolujte podporu**: Spusťte `echo $COLORTERM` - měl by vystupovat `truecolor` nebo `24bit`
+- **Povolit truecolor**: Nastavte proměnnou prostředí `COLORTERM=truecolor` ve svém profilu shellu
+- **Kompatibilita s terminály**: Ujistěte se, že váš emulátor terminálu podporuje 24bitové barvy (většina moderních terminálů jako iTerm2, Alacritty, Kitty, Windows Terminal a nejnovější verze terminálu GNOME ano)
+
+Bez podpory truecolor se mohou motivy zobrazovat se sníženou přesností barev nebo se mohou vrátit k nejbližší aproximaci 256 barev.
+
+---
+
+## Vestavěné motivy
+
+OpenCode přichází s několika vestavěnými motivy.
+
+| Jméno | Popis |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `system` | Přizpůsobí se barvě pozadí vašeho terminálu |
+| `tokyonight` | Na základě tématu [Tokyonight](https://github.com/folke/tokyonight.nvim) |
+| `everforest` | Na základě tématu [Everforest](https://github.com/sainnhe/everforest) |
+| `ayu` | Na základě tmavého motivu [Ayu](https://github.com/ayu-theme) |
+| `catppuccin` | Na základě tématu [Catppuccin](https://github.com/catppuccin) |
+| `catppuccin-macchiato` | Na základě tématu [Catppuccin](https://github.com/catppuccin) |
+| `gruvbox` | Na základě tématu [Gruvbox](https://github.com/morhetz/gruvbox) |
+| `kanagawa` | Na základě tématu [Kanagawa](https://github.com/rebelot/kanagawa.nvim) |
+| `nord` | Na základě tématu [Nord](https://github.com/nordtheme/nord) |
+| `matrix` | Hacker ve stylu zelené na černé téma |
+| `one-dark` | Na základě temného motivu [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) |
+
+A co víc, neustále přidáváme nová témata.
+
+---
+
+## Systémové téma
+
+Motiv `system` je navržen tak, aby se automaticky přizpůsobil barevnému schématu vašeho terminálu. Na rozdíl od tradičních motivů, které používají pevné barvy, motiv _system_:
+
+- **Generuje stupně šedi**: Vytváří vlastní stupně šedi na základě barvy pozadí vašeho terminálu a zajišťuje optimální kontrast.
+- **Používá barvy ANSI**: Využívá standardní barvy ANSI (0-15) pro zvýraznění syntaxe a prvky UI, které respektují barevnou paletu vašeho terminálu.
+- **Zachovává výchozí nastavení terminálu**: Používá `none` pro barvy textu a pozadí, aby byl zachován nativní vzhled vašeho terminálu.
+
+Systémové téma je pro uživatele, kteří:
+
+- Chcete, aby OpenCode odpovídal vzhledu jejich terminálu
+- Použijte vlastní barevná schémata terminálu
+- Preferujte konzistentní vzhled ve všech terminálových aplikacích
+
+---
+
+## Použití motivu
+
+Motiv můžete vybrat vyvoláním výběru motivu příkazem `/theme`. Nebo jej můžete zadat v `tui.json`.
+
+```json title="tui.json" {3}
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
+}
+```
+
+---
+
+## Vlastní motivy
+
+OpenCode podporuje flexibilní systém motivů založený na JSON, který uživatelům umožňuje snadno vytvářet a přizpůsobovat motivy.
+
+---
+
+### Hierarchie
+
+Motivy se načítají z více adresářů v následujícím pořadí, kde novější adresáře přepisují dřívější:
+
+1. **Vestavěná témata** – Jsou vložená do binárního kódu
+2. **Adresář konfigurace uživatele** – Definováno v `~/.config/opencode/themes/*.json` nebo `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Kořenový adresář projektu** – Definován v `<project-root>/.opencode/themes/*.json`
+4. **Aktuální pracovní adresář** - Definováno v `./.opencode/themes/*.json`
+
+Pokud více adresářů obsahuje téma se stejným názvem, bude použito téma z adresáře s vyšší prioritou.
+
+---
+
+### Vytvoření motivu
+
+Chcete-li vytvořit vlastní motiv, vytvořte soubor JSON v jednom z adresářů motivu.
+
+Pro uživatelská témata:
+
+```bash no-frame
+mkdir -p ~/.config/opencode/themes
+vim ~/.config/opencode/themes/my-theme.json
+```
+
+A pro témata konkrétních projektů.
+
+```bash no-frame
+mkdir -p .opencode/themes
+vim .opencode/themes/my-theme.json
+```
+
+---
+
+### Formát JSON
+
+Motivy používají flexibilní formát JSON s podporou:
+
+- **Hexové barvy**: `"#ffffff"`
+- **Barvy ANSI**: `3` (0-255)
+- **Odkazy na barvy**: `"primary"` nebo vlastní definice
+- **Tmavé/světlé varianty**: `{"dark": "#000", "light": "#fff"}`
+- **Bez barvy**: `"none"` - Používá výchozí barvu terminálu nebo průhlednost
+
+---
+
+### Definice barev
+
+Sekce `defs` je volitelná a umožňuje vám definovat opakovaně použitelné barvy, na které lze v motivu odkazovat.
+
+---
+
+### Výchozí nastavení terminálu
+
+Speciální hodnotu `"none"` lze použít pro libovolnou barvu, aby se zdědila výchozí barva terminálu. To je zvláště užitečné pro vytváření motivů, které hladce ladí s barevným schématem vašeho terminálu:
+
+- `"text": "none"` - Používá výchozí barvu popředí terminálu
+- `"background": "none"` - Používá výchozí barvu pozadí terminálu
+
+---
+
+### Příklad
+
+Zde je příklad vlastního motivu:
+
+```json title="my-theme.json"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "nord0": "#2E3440",
+    "nord1": "#3B4252",
+    "nord2": "#434C5E",
+    "nord3": "#4C566A",
+    "nord4": "#D8DEE9",
+    "nord5": "#E5E9F0",
+    "nord6": "#ECEFF4",
+    "nord7": "#8FBCBB",
+    "nord8": "#88C0D0",
+    "nord9": "#81A1C1",
+    "nord10": "#5E81AC",
+    "nord11": "#BF616A",
+    "nord12": "#D08770",
+    "nord13": "#EBCB8B",
+    "nord14": "#A3BE8C",
+    "nord15": "#B48EAD"
+  },
+  "theme": {
+    "primary": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "secondary": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "accent": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "error": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "warning": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "success": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "info": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "text": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "textMuted": {
+      "dark": "nord3",
+      "light": "nord1"
+    },
+    "background": {
+      "dark": "nord0",
+      "light": "nord6"
+    },
+    "backgroundPanel": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "backgroundElement": {
+      "dark": "nord1",
+      "light": "nord4"
+    },
+    "border": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "borderActive": {
+      "dark": "nord3",
+      "light": "nord2"
+    },
+    "borderSubtle": {
+      "dark": "nord2",
+      "light": "nord3"
+    },
+    "diffAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffContext": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHunkHeader": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "diffHighlightAdded": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "diffHighlightRemoved": {
+      "dark": "nord11",
+      "light": "nord11"
+    },
+    "diffAddedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffContextBg": {
+      "dark": "nord1",
+      "light": "nord5"
+    },
+    "diffLineNumber": {
+      "dark": "nord2",
+      "light": "nord4"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#3B4252",
+      "light": "#E5E9F0"
+    },
+    "markdownText": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "markdownHeading": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownLink": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownLinkText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCode": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "markdownBlockQuote": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownEmph": {
+      "dark": "nord12",
+      "light": "nord12"
+    },
+    "markdownStrong": {
+      "dark": "nord13",
+      "light": "nord13"
+    },
+    "markdownHorizontalRule": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "markdownListItem": {
+      "dark": "nord8",
+      "light": "nord10"
+    },
+    "markdownListEnumeration": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownImage": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "markdownImageText": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "markdownCodeBlock": {
+      "dark": "nord4",
+      "light": "nord0"
+    },
+    "syntaxComment": {
+      "dark": "nord3",
+      "light": "nord3"
+    },
+    "syntaxKeyword": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxFunction": {
+      "dark": "nord8",
+      "light": "nord8"
+    },
+    "syntaxVariable": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxString": {
+      "dark": "nord14",
+      "light": "nord14"
+    },
+    "syntaxNumber": {
+      "dark": "nord15",
+      "light": "nord15"
+    },
+    "syntaxType": {
+      "dark": "nord7",
+      "light": "nord7"
+    },
+    "syntaxOperator": {
+      "dark": "nord9",
+      "light": "nord9"
+    },
+    "syntaxPunctuation": {
+      "dark": "nord4",
+      "light": "nord0"
+    }
+  }
+}
+```

@@ -28,6 +28,7 @@
   <a href="README.pl.md">Polski</a> |
   <a href="README.ru.md">Русский</a> |
   <a href="README.bs.md">Bosanski</a> |
+  <a href="README.cs.md">Čeština</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.no.md">Norsk</a> |
   <a href="README.br.md">Português (Brasil)</a> |

@@ -1,0 +1,236 @@
+---
+title: Oprávnění
+description: Určete, které akce vyžadují schválení ke spuštění.
+---
+
+OpenCode používá konfiguraci `permission` k rozhodnutí, zda se má daná akce spustit automaticky, zobrazit výzvu nebo být zablokována.
+
+Od `v1.1.1` je zastaralá booleovská konfigurace `tools` zastaralá a byla začleněna do `permission`. Stará konfigurace `tools` je stále podporována z důvodu zpětné kompatibility.
+
+---
+
+## Akce
+
+Každé pravidlo oprávnění se vyřeší jedním z:
+
+- `"allow"` — spustit bez schválení
+- `"ask"` — výzva ke schválení
+- `"deny"` — zablokujte akci
+
+---
+
+## Konfigurace
+
+Oprávnění můžete nastavit globálně (pomocí `*`) a přepsat konkrétní nástroje.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+Můžete také nastavit všechna oprávnění najednou:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## Podrobná pravidla (syntaxe objektů)
+
+U většiny oprávnění můžete použít objekt k použití různých akcí na základě vstupu nástroje.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+Pravidla se vyhodnocují podle shody vzoru, přičemž vítězí **pravidlo poslední shody**. Běžným vzorem je umístit na první místo univerzální pravidlo `"*"` a za ním konkrétnější pravidla.
+
+### Zástupné znaky
+
+Vzory oprávnění používají jednoduchou shodu zástupných znaků:
+
+- `*` odpovídá nule nebo více libovolných znaků
+- `?` odpovídá přesně jednomu znaku
+- Všechny ostatní postavy se shodují doslova
+
+### Rozšíření domovského adresáře
+
+Můžete použít `~` nebo `$HOME` na začátku vzoru pro odkaz na váš domovský adresář. To je užitečné zejména pro pravidla [`external_directory`](#externí-adresáře).
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+### Externí adresáře
+
+Pomocí `external_directory` povolte volání nástrojů, které se dotýkají cest mimo pracovní adresář, kde byl OpenCode spuštěn. To platí pro jakýkoli nástroj, který přijímá cestu jako vstup (například `read`, `edit`, `glob`, `grep` a mnoho příkazů `bash`).
+
+Rozšíření Home (jako `~/...`) ovlivňuje pouze to, jak je vzor zapsán. Nečiní externí cestu součástí aktuálního pracovního prostoru, takže cesty mimo pracovní adresář musí být stále povoleny přes `external_directory`.
+
+Například to umožňuje přístup ke všemu pod `~/projects/personal/`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+Jakýkoli zde povolený adresář zdědí stejné výchozí hodnoty jako aktuální pracovní prostor. Protože [`read` je výchozí `allow`](#výchozí), čtení je povoleno také pro položky pod `external_directory`, pokud není přepsáno. Přidejte explicitní pravidla, kdy by měl být nástroj v těchto cestách omezen, jako je blokování úprav při zachování čtení:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+Udržujte seznam zaměřený na důvěryhodné cesty a podle potřeby pro další nástroje (například `bash`) přidejte další pravidla pro povolení nebo zakázání.
+
+---
+
+## Dostupná oprávnění
+
+Oprávnění OpenCode jsou klíčována názvem nástroje a několika bezpečnostními kryty:
+
+- `read` — čtení souboru (odpovídá cestě k souboru)
+- `edit` — všechny úpravy souborů (pokrývá `edit`, `write`, `patch`)
+- `glob` — globování souborů (odpovídá vzoru glob)
+- `grep` — vyhledávání obsahu (odpovídá vzoru regulárních výrazů)
+- `bash` — spouštění příkazů shellu (odpovídá analyzovaným příkazům jako `git status --porcelain`)
+- `task` — spouštění subagentů (odpovídá typu subagenta)
+- `skill` — načítání dovednosti (odpovídá názvu dovednosti)
+- `lsp` – spouštění dotazů LSP (v současnosti negranulární)
+- `question` — kladení otázek uživateli během provádění
+- `webfetch` – načtení URL (odpovídá URL)
+- `websearch`, `codesearch` — vyhledávání na webu/kódu (odpovídá dotazu)
+- `external_directory` — spustí se, když se nástroj dotkne cest mimo pracovní adresář projektu
+- `doom_loop` — spustí se, když se stejné volání nástroje opakuje třikrát se stejným vstupem
+
+---
+
+## Výchozí
+
+Pokud nic neurčíte, OpenCode začne z povolených výchozích hodnot:
+
+- Většina oprávnění je výchozí `"allow"`.
+- `doom_loop` a `external_directory` výchozí nastavení na `"ask"`.
+- `read` je `"allow"`, ale soubory `.env` jsou ve výchozím nastavení zakázány:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## Co dělá „Ask“.
+
+Když OpenCode vyzve ke schválení, UI nabízí tři výsledky:
+
+- `once` — schválit pouze tento požadavek
+- `always` – schvalujte budoucí požadavky odpovídající navrhovaným vzorům (pro zbytek aktuální relace OpenCode)
+- `reject` — zamítnout požadavek
+
+Sada vzorů, které by `always` schválila, je poskytována tímto nástrojem (například schválení bash obvykle na whitelistu bezpečného příkazu prefix jako `git status*`).
+
+---
+
+## Agenti
+
+Oprávnění na agenta můžete přepsat. Oprávnění Agent jsou sloučena s globální konfigurací a pravidla agenta mají přednost. [Další informace](/docs/cs/agents/#oprávnění) o oprávněních agentů.
+
+:::note
+Podrobnější příklady porovnávání vzorů najdete v části [Granular Rules (Object Syntax)](#podrobná-pravidla-syntaxe-objektů) výše.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Můžete také nakonfigurovat oprávnění agenta v Markdown:
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+Použijte porovnávání vzorů pro příkazy s argumenty. `"grep *"` umožňuje `grep pattern file.txt`, zatímco samotný `"grep"` by jej zablokoval. Příkazy jako `git status` fungují pro výchozí chování, ale vyžadují výslovné oprávnění (jako `"git status *"`), když jsou předány argumenty.
+:::

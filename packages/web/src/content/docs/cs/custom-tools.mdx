@@ -1,0 +1,196 @@
+---
+title: Vlastní nástroje
+description: Vytvářejte nástroje, které může LLM volat v opencode.
+---
+
+Vlastní nástroje jsou funkce, které vytvoříte a které LLM může volat během konverzace. Pracují spolu s [vestavěnými nástroji](/docs/cs/tools) opencode, jako jsou `read`, `write` a `bash`.
+
+---
+
+## Vytvoření nástroje
+
+Nástroje jsou definovány jako soubory **TypeScript** nebo **JavaScript**. Definice nástroje však může vyvolat skripty napsané v **jakémkoli jazyce** — TypeScript nebo JavaScript se používá pouze pro samotnou definici nástroje.
+
+---
+
+### Umístění
+
+Mohou být definovány:
+
+- Lokálně jejich umístěním do adresáře `.opencode/tools/` vašeho projektu.
+- Nebo globálně jejich umístěním do `~/.config/opencode/tools/`.
+
+---
+
+### Struktura
+
+Nejjednodušší způsob, jak vytvořit nástroje, je použít pomocníka `tool()`, který poskytuje typovou bezpečnost a ověřování.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+Z **název souboru** se stane **název nástroje**. Výše uvedené vytvoří nástroj `database`.
+
+---
+
+#### Více nástrojů na soubor
+
+Můžete také exportovat více nástrojů z jednoho souboru. Každý export se stává **samostatným nástrojem** s názvem **`<filename>_<exportname>`**:
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+Vzniknou tak dva nástroje: `math_add` a `math_multiply`.
+
+---
+
+#### Kolize jmen s vestavěnými nástroji
+
+Vlastní nástroje jsou klíčovány názvem nástroje. Pokud vlastní nástroj používá stejný název jako vestavěný nástroj, má přednost vlastní nástroj.
+
+Tento soubor například nahrazuje vestavěný nástroj `bash`:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Upřednostňujte jedinečné názvy, pokud záměrně nechcete nahradit vestavěný nástroj. Pokud chcete zakázat vestavěný nástroj, ale nepřepsat jej, použijte [oprávnění](/docs/cs/permissions).
+:::
+
+---
+
+### Argumenty
+
+K definování typů argumentů můžete použít `tool.schema`, což je pouze [Zod](https://zod.dev).
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+Můžete také přímo importovat [Zod](https://zod.dev) a vrátit prostý objekt:
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### Kontext
+
+Nástroje obdrží kontext o aktuální relaci:
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+Pro pracovní adresář relace použijte `context.directory`.
+Pro kořen pracovního stromu git použijte `context.worktree`.
+
+---
+
+## Příklady
+
+### Napište nástroj v Python
+
+Své nástroje můžete psát v libovolném jazyce. Zde je příklad, který sčítá dvě čísla pomocí Pythonu.
+
+Nejprve vytvořte nástroj jako skript Python:
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+Poté vytvořte definici nástroje, která jej vyvolá:
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+Zde používáme nástroj [`Bun.$`](https://bun.com/docs/runtime/shell) ke spuštění skriptu Python.

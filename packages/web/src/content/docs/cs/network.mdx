@@ -1,0 +1,57 @@
+---
+title: Síť
+description: Konfigurace proxy a vlastních certifikátů.
+---
+
+OpenCode podporuje standardní proměnné prostředí proxy a vlastní certifikáty pro prostředí podnikových sítí.
+
+---
+
+## Proxy
+
+OpenCode respektuje standardní proměnné prostředí proxy.
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+TUI komunikuje s místním serverem HTTP. Pro toto připojení musíte obejít server proxy, abyste zabránili smyčkám směrování.
+:::
+
+Port serveru a název hostitele můžete nakonfigurovat pomocí [příznaků CLI](/docs/cs/cli/#běžet).
+
+---
+
+### Ověřit
+
+Pokud váš proxy vyžaduje základní ověření, zahrňte do adresy URL přihlašovací údaje.
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+Vyhněte se pevnému kódování hesel. Použijte proměnné prostředí nebo zabezpečené úložiště pověření.
+:::
+
+Pro servery proxy vyžadující pokročilé ověřování, jako je NTLM nebo Kerberos, zvažte použití brány LLM, která podporuje vaši metodu ověřování.
+
+---
+
+## Vlastní certifikáty
+
+Pokud váš podnik používá vlastní CA pro připojení HTTPS, nakonfigurujte OpenCode tak, aby jim důvěřoval.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+To funguje jak pro připojení proxy, tak pro přímý přístup API.

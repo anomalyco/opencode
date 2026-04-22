@@ -1,0 +1,358 @@
+---
+title: Úvod
+description: Začněte s OpenCode.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../../config.mjs"
+export const console = config.console
+
+[**OpenCode**](/) je open source AI agent pro psaní kódu. Je k dispozici jako terminálové rozhraní, desktopová aplikace nebo rozšíření IDE.
+
+![OpenCode TUI s motivem opencode](../../../assets/lander/screenshot.png)
+
+Začněme.
+
+---
+
+#### Předpoklady
+
+Chcete-li použít OpenCode ve svém terminálu, budete potřebovat:
+
+1. Moderní emulátor terminálu jako:
+   - [WezTerm](https://wezterm.org), multiplatformní
+   - [Alacritty](https://alacritty.org), multiplatformní
+   - [Ghostty](https://ghostty.org), Linux a macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux a macOS
+
+2. Klíče API pro poskytovatele LLM, které chcete použít.
+
+---
+
+## Instalace
+
+Nejjednodušší způsob instalace OpenCode je pomocí instalačního skriptu.
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+Můžete jej také nainstalovat pomocí následujících příkazů:
+
+- **Pomocí Node.js**
+
+        <Tabs>
+
+      <TabItem label="npm">
+      ```bash
+      npm install -g opencode-ai
+      ```
+
+          </TabItem>
+
+        <TabItem label="Bun">
+        ```bash
+        bun install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="pnpm">
+        ```bash
+        pnpm install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="Yarn">
+        ```bash
+        yarn global add opencode-ai
+        ```
+
+      </TabItem>
+
+  </Tabs>
+
+- **Pomocí Homebrew na macOS a Linux**
+
+  ```bash
+  brew install anomalyco/tap/opencode
+  ```
+
+> Doporučujeme používat tap OpenCode pro nejaktuálnější verze. Oficiální vzorec `brew install opencode` je udržován týmem Homebrew a je méně často aktualizován.
+
+- **Instalace na Arch Linux**
+
+  ```bash
+  sudo pacman -S opencode           # Arch Linux (Stable)
+  paru -S opencode-bin              # Arch Linux (Latest from AUR)
+  ```
+
+#### Windows
+
+:::tip[Doporučeno: Použijte WSL]
+Pro nejlepší prostředí na Windows doporučujeme používat [Windows Subsystem for Linux (WSL)](/docs/cs/windows-wsl). Poskytuje lepší výkon a plnou kompatibilitu s funkcemi OpenCode.
+:::
+
+- **Pomocí Chocolatey**
+
+  ```bash
+  choco install opencode
+  ```
+
+- **Pomocí Scoop**
+
+  ```bash
+  scoop install opencode
+  ```
+
+- **Pomocí npm**
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+- **Pomocí Mise**
+
+  ```bash
+  mise use -g github:anomalyco/opencode
+  ```
+
+- **Pomocí Dockeru**
+
+  ```bash
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+
+Podpora instalace OpenCode pomocí Bun na Windows se aktuálně připravuje.
+
+Můžete také získat binární soubor z [Releases](https://github.com/anomalyco/opencode/releases).
+
+---
+
+## Konfigurace
+
+S OpenCode můžete použít libovolného poskytovatele LLM nakonfigurováním jejich klíčů API.
+
+Pokud s používáním poskytovatelů LLM začínáte, doporučujeme použít [OpenCode Zen](/docs/cs/zen).
+Je to pečlivě vybraný seznam modelů, které tým OpenCode otestoval a ověřil.
+
+1. Spusťte příkaz `/connect` v TUI, vyberte opencode a přejděte na [opencode.ai/auth](https://opencode.ai/auth).
+
+   ```txt
+   /connect
+   ```
+
+2. Přihlaste se, přidejte své fakturační údaje a zkopírujte klíč API.
+
+3. Vložte klíč API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+Případně si můžete vybrat jednoho z dalších poskytovatelů. [Další informace](/docs/cs/providers/#adresář).
+
+---
+
+## Inicializovat
+
+Teď, když máte nakonfigurovaného poskytovatele, přejděte do projektu, na kterém
+chcete pracovat.
+
+```bash
+cd /path/to/project
+```
+
+A spusťte OpenCode.
+
+```bash
+opencode
+```
+
+Potom pro projekt inicializujte OpenCode spuštěním následujícího příkazu.
+
+```bash frame="none"
+/init
+```
+
+Tím získáte OpenCode k analýze vašeho projektu a vytvoření souboru `AGENTS.md`
+kořen projektu.
+
+:::tip
+Soubor `AGENTS.md` svého projektu byste měli odevzdat do systému Git.
+:::
+
+To pomáhá OpenCode pochopit strukturu projektu a vzory kódování
+použitý.
+
+---
+
+## Použití
+
+Nyní jste připraveni používat OpenCode k práci na vašem projektu. Klidně se na to zeptejte
+cokoliv!
+
+Pokud s používáním kódovacího agenta AI začínáte, zde je několik příkladů, které by mohly
+pomoci.
+
+---
+
+### Ptejte se
+
+Můžete požádat OpenCode, aby vám vysvětlil kódovou základnu.
+
+:::tip
+Použijte klávesu `@` k fuzzy vyhledávání souborů v projektu.
+:::
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+To je užitečné, pokud existuje část kódové základny, na které jste nepracovali.
+
+---
+
+### Přidat funkce
+
+Můžete požádat OpenCode o přidání nových funkcí do vašeho projektu. I když nejprve doporučujeme požádat ji o vytvoření plánu.
+
+1. **Vytvořte plán**
+
+OpenCode má _Plan mode_, který deaktivuje jeho schopnost provádět změny a
+   místo toho navrhněte _jak_ bude funkci implementovat.
+
+Přepněte se na něj pomocí klávesy **Tab**. V pravém dolním rohu uvidíte příslušný indikátor.
+
+   ```bash frame="none" title="Switch to Plan mode"
+   <TAB>
+   ```
+
+   Nyní si popíšeme, co chceme, aby udělal.
+
+   ```txt frame="none"
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
+   ```
+
+   Dejte OpenCode dostatek podrobností, aby pochopil, co chcete. Pomáhá
+   mluvit s ním, jako byste mluvili s juniorním vývojářem ve svém týmu.
+
+   :::tip
+   Dejte OpenCode dostatek kontextu a příkladů, aby pochopil, co chcete.
+   :::
+
+2. **Opakujte plán**
+
+   Jakmile vám poskytne plán, můžete mu dát zpětnou vazbu nebo přidat další podrobnosti.
+
+   ```txt frame="none"
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
+   ```
+
+   :::tip
+   Přetažením obrázků do terminálu je přidáte do promptu.
+   :::
+
+   OpenCode dokáže naskenovat jakékoli obrázky, které mu dáte, a přidat je do promptu.
+   Stačí obrázek přetáhnout do terminálu.
+
+3. **Sestavení funkce**
+
+Až budete s plánem spokojeni, přepněte zpět do _režimu sestavení_ podle
+   opětovným stisknutím klávesy **Tab**.
+
+   ```bash frame="none"
+   <TAB>
+   ```
+
+A požádat ho, aby provedl změny.
+
+   ```bash frame="none"
+   Sounds good! Go ahead and make the changes.
+   ```
+
+---
+
+### Proveďte změny
+
+Pro jednodušší změny můžete požádat OpenCode, aby jej přímo vytvořil
+aniž byste museli plán nejprve přezkoumat.
+
+```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
+```
+
+Chcete se ujistit, že poskytujete dostatečné množství detailů, takže OpenCode dělá správně
+změny.
+
+---
+
+### Vrátit změny
+
+Řekněme, že požádáte OpenCode, aby provedl nějaké změny.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+Ale uvědomíte si, že to není to, co jste chtěli. Změny **můžete vrátit zpět**
+pomocí příkazu `/undo`.
+
+```bash frame="none"
+/undo
+```
+
+OpenCode nyní vrátí provedené změny a zobrazí vaši původní zprávu
+znovu.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+Odtud můžete vyladit výzvu a požádat OpenCode, aby to zkusil znovu.
+
+:::tip
+`/undo` můžete spustit vícekrát a vrátit zpět více změn.
+:::
+
+Nebo můžete změny **zopakovat** pomocí příkazu `/redo`.
+
+```bash frame="none"
+/redo
+```
+
+---
+
+## Sdílejte
+
+Konverzace, které vedete se OpenCode, lze [sdílet s vaším
+tým](/docs/cs/share).
+
+```bash frame="none"
+/share
+```
+
+Tím se vytvoří odkaz na aktuální konverzaci a zkopíruje se do schránky.
+
+:::note
+Konverzace nejsou ve výchozím nastavení sdíleny.
+:::
+
+Zde je [příklad konverzace](https://opencode.ai/s/4XP1fce5) s OpenCode.
+
+---
+
+## Přizpůsobit
+
+Hotovo. Teď už zvládáte základy používání OpenCode.
+
+Chcete-li si jej přizpůsobit, doporučujeme [vybrat téma](/docs/cs/themes), [upravit klávesové zkratky](/docs/cs/keybinds), [nastavit formátovače kódu](/docs/cs/formatters), [vytvořit vlastní příkazy](/docs/cs/commands) nebo si pohrát s [konfigurací OpenCode](/docs/cs/config).

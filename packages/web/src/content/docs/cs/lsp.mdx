@@ -1,0 +1,189 @@
+---
+title: Servery LSP
+description: OpenCode se integruje s vašimi servery LSP.
+---
+
+OpenCode se integruje s vaším protokolem Language Server Protocol (LSP), aby pomohl LLM interagovat s vaší kódovou základnou. K poskytování zpětné vazby LLM využívá diagnostiku.
+
+---
+
+## Vestavěný
+
+OpenCode je dodáván s několika vestavěnými servery LSP pro oblíbené jazyky:
+
+| Server LSP | Rozšíření | Požadavky |
+| ------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
+| astro | .astro | Automatické instalace pro projekty Astro |
+| bash | .sh, .bash, .zsh, .ksh | Automaticky nainstaluje bash-language-server |
+| zvonit | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Automatické instalace pro projekty C/C++ |
+| csharp | .cs | `.NET SDK` nainstalován |
+| clojure-lsp | .clj, .cljs, .cljc, .edn | K dispozici příkaz `clojure-lsp` |
+| šipka | .dart | K dispozici příkaz `dart` |
+| deno | .ts, .tsx, .js, .jsx, .mjs | K dispozici příkaz `deno` (automaticky detekuje deno.json/deno.jsonc) |
+| elixír-ls | .ex, .exs | K dispozici příkaz `elixir` |
+| eslint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue | Závislost `eslint` v projektu |
+| fsharp | .fs, .fsi, .fsx, .fsscript | `.NET SDK` nainstalován |
+| lesk | .záblesk | K dispozici příkaz `gleam` |
+| gopls | .jdi | K dispozici příkaz `go` |
+| hls | .hs, .lhs | K dispozici příkaz `haskell-language-server-wrapper` |
+| jdtls | .java | `Java SDK (version 21+)` nainstalován |
+| julials | .jl | `julia` a `LanguageServer.jl` nainstalovány |
+| kotlin-ls | .kt, .kts | Automatické instalace pro projekty Kotlin |
+| lua-ls | .lua | Automatické instalace pro projekty Lua |
+| nixd | .nix | K dispozici příkaz `nixd` |
+| ocaml-lsp | .ml, .mli | K dispozici příkaz `ocamllsp` |
+| oxlint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | Závislost `oxlint` v projektu |
+| php intelephense | .php | Automatická instalace pro projekty PHP |
+| hranol | .prisma | K dispozici příkaz `prisma` |
+| pyright | .py, .pyi | Závislost `pyright` nainstalována |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru | Dostupné příkazy `ruby` a `gem` |
+| rez | .rs | K dispozici příkaz `rust-analyzer` |
+| sourcekit-lsp | .swift, .objc, .objcpp | `swift` nainstalován (`xcode` na macOS) |
+| štíhlý | .svelte | Automatické instalace pro projekty Svelte |
+| terraform | .tf, .tfvars | Automatické instalace z vydání GitHub |
+| tinymist | .typ, .typc | Automatické instalace z vydání GitHub |
+| strojopis | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | Závislost `typescript` v projektu |
+| pohled | .vue | Automatické instalace pro projekty Vue |
+| yaml-ls | .yaml, .yml | Automaticky instaluje Red Hat yaml-language-server |
+| zls | .zig, .zon | K dispozici příkaz `zig` |
+
+Servery LSP jsou automaticky povoleny, když je detekována jedna z výše uvedených přípon souborů a jsou splněny požadavky.
+
+:::note
+Automatické stahování serveru LSP můžete zakázat nastavením proměnné prostředí `OPENCODE_DISABLE_LSP_DOWNLOAD` na `true`.
+:::
+
+---
+
+## Jak to funguje
+
+Když opencode otevře soubor, bude:
+
+1. Zkontroluje příponu souboru proti všem povoleným serverům LSP.
+2. Spustí příslušný server LSP, pokud již není spuštěn.
+
+---
+
+## Konfigurace
+
+Servery LSP můžete přizpůsobit prostřednictvím sekce `lsp` ve vaší konfiguraci opencode.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+Každý server LSP podporuje následující:
+
+| Nemovitost | Typ | Popis |
+| ----------------- | -------- | -------------------------------------------------- |
+| `disabled` | booleovský | Nastavením na `true` deaktivujete server LSP |
+| `command` | řetězec[] | Příkaz ke spuštění serveru LSP |
+| `extensions` | řetězec[] | Přípony souborů by měl tento server LSP zvládnout |
+| `env` | objekt | Proměnné prostředí pro nastavení při spouštění serveru |
+| `initialization` | objekt | Možnosti inicializace pro odeslání na server LSP |
+
+Podívejme se na některé příklady.
+
+---
+
+### Proměnné prostředí
+
+Použijte vlastnost `env` k nastavení proměnných prostředí při spouštění serveru LSP:
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Možnosti inicializace
+
+Pomocí vlastnosti `initialization` předejte možnosti inicializace serveru LSP. Toto jsou nastavení specifická pro server odeslaná během požadavku LSP `initialize`:
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+Možnosti inicializace se liší podle serveru LSP. Dostupné možnosti naleznete v dokumentaci k serveru LSP.
+:::
+
+---
+
+### Deaktivace serverů LSP
+
+Chcete-li globálně zakázat **všechny** servery LSP, nastavte `lsp` na `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+Chcete-li zakázat **konkrétní** server LSP, nastavte `disabled` na `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### Vlastní servery LSP
+
+Vlastní servery LSP můžete přidat zadáním příkazu a přípon souborů:
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## Další informace
+
+### Intelephense PHP
+
+PHP Intelephense nabízí prémiové funkce prostřednictvím licenčního klíče. Licenční klíč můžete poskytnout umístěním (pouze) klíče do textového souboru na adrese:
+
+- V systému macOS/Linux: `$HOME/intelephense/license.txt`
+- Na Windows: `%USERPROFILE%/intelephense/license.txt`
+
+Soubor by měl obsahovat pouze licenční klíč bez dalšího obsahu.

@@ -1,0 +1,142 @@
+---
+title: Web
+description: Používejte OpenCode v prohlížeči.
+---
+
+OpenCode může běžet jako webová aplikace ve vašem prohlížeči a poskytuje stejně výkonné kódování AI bez nutnosti terminálu.
+
+![OpenCode Web – nová relace](../../../assets/web/web-homepage-new-session.png)
+
+## Začínáme
+
+Spusťte webové rozhraní spuštěním:
+
+```bash
+opencode web
+```
+
+Tím se spustí místní server na `127.0.0.1` s náhodně dostupným portem a automaticky se otevře OpenCode ve vašem výchozím prohlížeči.
+
+:::caution
+Pokud není `OPENCODE_SERVER_PASSWORD` nastaveno, server bude nezabezpečený. To je v pořádku pro místní použití, ale mělo by být nastaveno pro přístup k síti.
+:::
+
+:::tip[Uživatelé Windows]
+Nejlepších výsledků dosáhnete, když `opencode web` spustíte z [WSL](/docs/cs/windows-wsl), nikoli PowerShell. To zajišťuje správný přístup k systému souborů a integraci terminálu.
+:::
+
+---
+
+## Konfigurace
+
+Webový server můžete nakonfigurovat pomocí příznaků příkazového řádku nebo ve vašem [konfiguračním souboru](/docs/cs/config).
+
+### Port
+
+Ve výchozím nastavení vybere OpenCode dostupný port. Můžete zadat port:
+
+```bash
+opencode web --port 4096
+```
+
+### Název hostitele
+
+Ve výchozím nastavení se server váže na `127.0.0.1` (pouze localhost). Jak zpřístupnit OpenCode ve vaší síti:
+
+```bash
+opencode web --hostname 0.0.0.0
+```
+
+Při použití `0.0.0.0` zobrazí OpenCode místní i síťové adresy:
+
+```
+  Local access:       http://localhost:4096
+  Network access:     http://192.168.1.100:4096
+```
+
+### mDNS Discovery
+
+Povolte mDNS, aby byl váš server zjistitelný v místní síti:
+
+```bash
+opencode web --mdns
+```
+
+Tím se automaticky nastaví název hostitele na `0.0.0.0` a server se inzeruje jako `opencode.local`.
+
+Název domény mDNS můžete přizpůsobit tak, aby spouštělo více instancí ve stejné síti:
+
+```bash
+opencode web --mdns --mdns-domain myproject.local
+```
+
+### CORS
+
+Chcete-li povolit další domény pro CORS (užitečné pro vlastní rozhraní):
+
+```bash
+opencode web --cors https://example.com
+```
+
+### Autentizace
+
+Chcete-li chránit přístup, nastavte heslo pomocí proměnné prostředí `OPENCODE_SERVER_PASSWORD`:
+
+```bash
+OPENCODE_SERVER_PASSWORD=secret opencode web
+```
+
+Výchozí uživatelské jméno je `opencode`, ale lze jej změnit pomocí `OPENCODE_SERVER_USERNAME`.
+
+---
+
+## Používání webového rozhraní
+
+Po spuštění poskytuje webové rozhraní přístup k vašim relacím OpenCode.
+
+### relace
+
+Prohlížejte a spravujte své relace z domovské stránky. Můžete vidět aktivní relace a zahájit nové.
+
+![OpenCode Web – aktivní relace](../../../assets/web/web-homepage-active-session.png)
+
+### Stav serveru
+
+Kliknutím na "Zobrazit servery" zobrazíte připojené servery a jejich stav.
+
+![OpenCode Web – viz servery](../../../assets/web/web-homepage-see-servers.png)
+
+---
+
+## Připojení terminálu
+
+Terminál TUI můžete připojit k běžícímu webovému serveru:
+
+```bash
+# Start the web server
+opencode web --port 4096
+
+# In another terminal, attach the TUI
+opencode attach http://localhost:4096
+```
+
+To vám umožňuje používat webové rozhraní i terminál současně a sdílet stejné relace a stav.
+
+---
+
+## Konfigurační soubor
+
+Nastavení serveru můžete také nakonfigurovat v konfiguračním souboru `opencode.json`:
+
+```json
+{
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "cors": ["https://example.com"]
+  }
+}
+```
+
+Příznaky příkazového řádku mají přednost před nastavením konfiguračního souboru.

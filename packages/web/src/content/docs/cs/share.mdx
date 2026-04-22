@@ -1,0 +1,128 @@
+---
+title: Sdílení
+description: Sdílejte své konverzace OpenCode.
+---
+
+Funkce sdílení OpenCode vám umožňuje vytvářet veřejné odkazy na vaše konverzace OpenCode, takže můžete spolupracovat se spoluhráči nebo získat pomoc od ostatních.
+
+:::note
+Sdílené konverzace jsou veřejně přístupné komukoli, kdo má odkaz.
+:::
+
+---
+
+## Jak to funguje
+
+Když sdílíte konverzaci, OpenCode:
+
+1. Vytvoří jedinečný veřejný URL pro vaši relaci
+2. Synchronizuje vaši historii konverzace s našimi servery
+3. Zpřístupní konverzaci prostřednictvím odkazu ke sdílení — `opncd.ai/s/<share-id>`
+
+---
+
+## Sdílení
+
+OpenCode podporuje tři režimy sdílení, které řídí způsob sdílení konverzací:
+
+---
+
+### Manuální (výchozí)
+
+Ve výchozím nastavení používá OpenCode režim ručního sdílení. Relace nejsou sdíleny automaticky, ale můžete je sdílet ručně pomocí příkazu `/share`:
+
+```
+/share
+```
+
+Tím se vygeneruje jedinečný URL, který se zkopíruje do vaší schránky.
+
+Chcete-li explicitně nastavit ruční režim ve vašem [konfiguračním souboru](/docs/cs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### Automatické sdílení
+
+Automatické sdílení pro všechny nové konverzace můžete povolit nastavením možnosti `share` na `"auto"` ve vašem [konfiguračním souboru](/docs/cs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "auto"
+}
+```
+
+Po aktivaci automatického sdílení bude každá nová konverzace automaticky sdílena a bude vygenerován odkaz.
+
+---
+
+### Zakázáno
+
+Sdílení můžete zcela zakázat nastavením možnosti `share` na `"disabled"` ve vašem [konfiguračním souboru](/docs/cs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+Chcete-li to pro daný projekt vynutit ve svém týmu, přidejte jej do `opencode.json` ve svém projektu a zkontrolujte Git.
+
+---
+
+## Zrušení sdílení
+
+Chcete-li ukončit sdílení konverzace a odebrat ji z veřejného přístupu:
+
+```
+/unshare
+```
+
+Tím se odstraní odkaz na sdílení a smažou se data související s konverzací.
+
+---
+
+## Soukromí
+
+Při sdílení konverzace je třeba mít na paměti několik věcí.
+
+---
+
+### Uchovávání dat
+
+Sdílené konverzace zůstávají přístupné, dokud je výslovně nezrušíte. Toto
+zahrnuje:
+
+- Úplná historie konverzace
+- Všechny zprávy a odpovědi
+- Metadata relace
+
+---
+
+### Doporučení
+
+- Sdílejte pouze konverzace, které neobsahují citlivé informace.
+- Před sdílením zkontrolujte obsah konverzace.
+- Po dokončení spolupráce zrušte sdílení konverzací.
+- Vyhněte se sdílení konverzací s proprietárním kódem nebo důvěrnými daty.
+- U citlivých projektů sdílení úplně vypněte.
+
+---
+
+## Pro podniky
+
+U podnikových nasazení může být funkce sdílení:
+
+- **Zakázáno** zcela z důvodu shody se zabezpečením
+- **Omezeno** pouze na uživatele ověřené prostřednictvím SSO
+- **Samohostováno** na vaší vlastní infrastruktuře
+
+[Další informace](/docs/cs/enterprise) o používání opencode ve vaší organizaci.

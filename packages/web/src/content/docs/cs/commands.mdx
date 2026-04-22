@@ -1,0 +1,323 @@
+---
+title: Příkazy
+description: Vytvářejte vlastní příkazy pro opakující se úkoly.
+---
+
+Vlastní příkazy vám umožňují zadat výzvu, kterou chcete spustit, když je tento příkaz spuštěn v TUI.
+
+```bash frame="none"
+/my-command
+```
+
+Vlastní příkazy jsou navíc k vestavěným příkazům jako `/init`, `/undo`, `/redo`, `/share`, `/help`. [Další informace](/docs/cs/tui/#příkazy).
+
+---
+
+## Vytvořte soubory příkazů
+
+Vytvořte soubory markdown v adresáři `commands/` pro definování vlastních příkazů.
+
+Vytvořit `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Frontmatter definuje vlastnosti příkazu. Obsah se stává šablonou.
+
+Použijte příkaz zadáním `/` následovaným názvem příkazu.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## Konfigurace
+
+Vlastní příkazy můžete přidávat prostřednictvím konfigurace OpenCode nebo vytvořením souborů markdown v adresáři `commands/`.
+
+---
+
+### JSON
+
+Použijte možnost `command` ve vaší [konfiguraci OpenCode](/docs/cs/config):
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Nyní můžete tento příkaz spustit v TUI:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+Příkazy můžete také definovat pomocí souborů markdown. Umístěte je do:
+
+- Globální: `~/.config/opencode/commands/`
+- Podle projektu: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Název souboru markdown se stane názvem příkazu. Například `test.md` umožňuje
+běžíš:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## Rychlá konfigurace
+
+Výzvy pro vlastní příkazy podporují několik speciálních zástupných symbolů a syntaxe.
+
+---
+
+### Argumenty
+
+Předejte argumenty příkazům pomocí zástupného symbolu `$ARGUMENTS`.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+Spusťte příkaz s argumenty:
+
+```bash frame="none"
+/component Button
+```
+
+A `$ARGUMENTS` bude nahrazen `Button`.
+
+K jednotlivým argumentům můžete také přistupovat pomocí pozičních parametrů:
+
+- `$1` - První argument
+- `$2` - Druhý argument
+- `$3` - Třetí argument
+- A tak dále...
+
+Například:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Spusťte příkaz:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+Toto nahrazuje:
+
+- `$1` s `config.json`
+- `$2` s `src`
+- `$3` s `{ "key": "value" }`
+
+---
+
+### Výstup shellu
+
+Použijte _!`command`_ k vložení výstupu [příkaz bash](/docs/cs/tui/#bash-příkazy) do vaší výzvy.
+
+Chcete-li například vytvořit vlastní příkaz, který analyzuje pokrytí testem:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+Nebo si prohlédněte nedávné změny:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+Příkazy se spouštějí v kořenovém adresáři vašeho projektu a jejich výstup se stává součástí výzvy.
+
+---
+
+### Referenční soubor
+
+Zahrňte do příkazu soubory pomocí `@` následované názvem souboru.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+Obsah souboru se automaticky zahrne do výzvy.
+
+---
+
+## Možnosti
+
+Podívejme se podrobně na možnosti konfigurace.
+
+---
+
+### Šablona
+
+Volba `template` definuje výzvu, která bude odeslána do LLM při provedení příkazu.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+Toto je **povinná** možnost konfigurace.
+
+---
+
+### Popis
+
+Použijte volbu `description` ke krátkému popisu toho, co příkaz dělá.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+To se zobrazí jako popis v TUI, když zadáte příkaz.
+
+---
+
+### Agent
+
+Pomocí konfigurace `agent` můžete volitelně určit, který [agent](/docs/cs/agents) má tento příkaz provést.
+Pokud se jedná o [subagent](/docs/cs/agents/#subagenti), příkaz ve výchozím nastavení spustí vyvolání subagenta.
+Chcete-li toto chování zakázat, nastavte `subtask` na `false`.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+Toto je **volitelná** možnost konfigurace. Pokud není zadáno, výchozí hodnota je aktuální agent.
+
+---
+
+### Dílčí úkol
+
+Použijte boolean `subtask` k vynucení příkazu ke spuštění vyvolání [subagent](/docs/cs/agents/#subagenti).
+To je užitečné, pokud chcete, aby příkaz neznečišťoval váš primární kontext a **donutí** agenta jednat jako podagent,
+i když je `mode` nastaveno na `primary` v konfiguraci [agent](/docs/cs/agents).
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+Toto je **volitelná** možnost konfigurace.
+
+---
+
+### Model
+
+Použijte konfiguraci `model` k přepsání výchozího modelu pro tento příkaz.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Toto je **volitelná** možnost konfigurace.
+
+---
+
+## Vestavěný
+
+opencode obsahuje několik vestavěných příkazů jako `/init`, `/undo`, `/redo`, `/share`, `/help`; [další informace](/docs/cs/tui/#příkazy).
+
+:::note
+Vlastní příkazy mohou přepsat vestavěné příkazy.
+:::
+
+Pokud definujete vlastní příkaz se stejným názvem, přepíše vestavěný příkaz.
