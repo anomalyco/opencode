@@ -94,6 +94,15 @@ describe("Truncate", () => {
       expect(Truncate.MAX_BYTES).toBe(50 * 1024)
     })
 
+    it.live("limits() falls back to MAX_LINES/MAX_BYTES when Config is not provided", () =>
+      Effect.gen(function* () {
+        const svc = yield* Truncate.Service
+        const resolved = yield* svc.limits()
+        expect(resolved.maxLines).toBe(Truncate.MAX_LINES)
+        expect(resolved.maxBytes).toBe(Truncate.MAX_BYTES)
+      }),
+    )
+
     it.live("large single-line file truncates with byte message", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service

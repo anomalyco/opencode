@@ -420,8 +420,7 @@ export const BashTool = Tool.define(
       },
       ctx: Tool.Context,
     ) {
-      const bytes = Truncate.MAX_BYTES
-      const lines = Truncate.MAX_LINES
+      const { maxLines: lines, maxBytes: bytes } = yield* trunc.limits()
       const keep = bytes * 2
       let full = ""
       let last = ""
@@ -570,7 +569,7 @@ export const BashTool = Tool.define(
     })
 
     return () =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const shell = Shell.acceptable()
         const name = Shell.name(shell)
         const chain =
@@ -579,13 +578,15 @@ export const BashTool = Tool.define(
             : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
         log.info("bash tool using shell", { shell })
 
+        const { maxLines, maxBytes } = yield* trunc.limits()
+
         return {
           description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
             .replaceAll("${os}", process.platform)
             .replaceAll("${shell}", name)
             .replaceAll("${chaining}", chain)
-            .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
-            .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+            .replaceAll("${maxLines}", String(maxLines))
+            .replaceAll("${maxBytes}", String(maxBytes)),
           parameters: Parameters,
           execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
             Effect.gen(function* () {

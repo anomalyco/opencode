@@ -204,6 +204,19 @@ export const Info = Schema.Struct({
       url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }),
     }),
   ),
+  tool_output: Schema.optional(
+    Schema.Struct({
+      max_lines: Schema.optional(PositiveInt).annotate({
+        description: "Maximum lines of tool output before it is truncated and saved to disk (default: 2000)",
+      }),
+      max_bytes: Schema.optional(PositiveInt).annotate({
+        description: "Maximum bytes of tool output before it is truncated and saved to disk (default: 51200)",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Thresholds for truncating tool output. When output exceeds either limit, the full text is written to the truncation directory and a preview is returned.",
+  }),
   compaction: Schema.optional(
     Schema.Struct({
       auto: Schema.optional(Schema.Boolean).annotate({
