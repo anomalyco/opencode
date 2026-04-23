@@ -88,6 +88,7 @@ export const PaymentTable = mysqlTable(
     enrichment: json("enrichment").$type<
       | {
           type: "subscription" | "lite"
+          currency?: "inr"
           couponID?: string
         }
       | {

@@ -1,7 +1,5 @@
 /// <reference path="../env.d.ts" />
 import { tool } from "@opencode-ai/plugin"
-import DESCRIPTION from "./github-pr-search.txt"
-
 async function githubFetch(endpoint: string, options: RequestInit = {}) {
   const response = await fetch(`https://api.github.com${endpoint}`, {
     ...options,
@@ -24,7 +22,16 @@ interface PR {
 }
 
 export default tool({
-  description: DESCRIPTION,
+  description: `Use this tool to search GitHub pull requests by title and description.
+
+This tool searches PRs in the anomalyco/opencode repository and returns LLM-friendly results including:
+- PR number and title
+- Author
+- State (open/closed/merged)
+- Labels
+- Description snippet
+
+Use the query parameter to search for keywords that might appear in PR titles or descriptions.`,
   args: {
     query: tool.schema.string().describe("Search query for PR titles and descriptions"),
     limit: tool.schema.number().describe("Maximum number of results to return").default(10),

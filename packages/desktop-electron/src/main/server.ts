@@ -1,6 +1,4 @@
-import { dialog } from "electron"
-
-import { getConfig, serve, type CommandChild, type Config } from "./cli"
+import { serve, type CommandChild } from "./cli"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
 import { store } from "./store"
 
@@ -29,15 +27,6 @@ export function getWslConfig(): WslConfig {
 
 export function setWslConfig(config: WslConfig) {
   store.set(WSL_ENABLED_KEY, config.enabled)
-}
-
-export async function getSavedServerUrl(): Promise<string | null> {
-  const direct = getDefaultServerUrl()
-  if (direct) return direct
-
-  const config = await getConfig().catch(() => null)
-  if (!config) return null
-  return getServerUrlFromConfig(config)
 }
 
 export function spawnLocalServer(hostname: string, port: number, password: string) {
@@ -92,38 +81,6 @@ export async function checkHealth(url: string, password?: string | null): Promis
   } catch {
     return false
   }
-}
-
-export async function checkHealthOrAskRetry(url: string): Promise<boolean> {
-  while (true) {
-    if (await checkHealth(url)) return true
-
-    const result = await dialog.showMessageBox({
-      type: "warning",
-      message: `Could not connect to configured server:\n${url}\n\nWould you like to retry or start a local server instead?`,
-      title: "Connection Failed",
-      buttons: ["Retry", "Start Local"],
-      defaultId: 0,
-      cancelId: 1,
-    })
-
-    if (result.response === 0) continue
-    return false
-  }
-}
-
-export function normalizeHostnameForUrl(hostname: string) {
-  if (hostname === "0.0.0.0") return "127.0.0.1"
-  if (hostname === "::") return "[::1]"
-  if (hostname.includes(":") && !hostname.startsWith("[")) return `[${hostname}]`
-  return hostname
-}
-
-export function getServerUrlFromConfig(config: Config) {
-  const server = config.server
-  if (!server?.port) return null
-  const host = server.hostname ? normalizeHostnameForUrl(server.hostname) : "127.0.0.1"
-  return `http://${host}:${server.port}`
 }
 
 export type { CommandChild }

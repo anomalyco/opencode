@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { createEffect, createSignal, onCleanup } from "solid-js"
+import { createEffect, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { BasicTool } from "./basic-tool"
 import { animate } from "motion"
 
@@ -138,29 +139,39 @@ function SpringSubmessage(props: { text: string; visible: boolean; visualDuratio
 
 export const Playground = {
   render: () => {
-    const [text, setText] = createSignal("Prints five topic blocks between timed commands")
-    const [show, setShow] = createSignal(true)
-    const [visualDuration, setVisualDuration] = createSignal(0.35)
-    const [bounce, setBounce] = createSignal(0)
-    const [fadeMs, setFadeMs] = createSignal(320)
-    const [blur, setBlur] = createSignal(2)
-    const [fadeEase, setFadeEase] = createSignal<keyof typeof ease>("snappy")
-    const [auto, setAuto] = createSignal(false)
+    const [state, setState] = createStore({
+      text: "Prints five topic blocks between timed commands",
+      show: true,
+      visualDuration: 0.35,
+      bounce: 0,
+      fadeMs: 320,
+      blur: 2,
+      fadeEase: "snappy",
+      auto: false,
+    })
+    const text = () => state.text
+    const show = () => state.show
+    const visualDuration = () => state.visualDuration
+    const bounce = () => state.bounce
+    const fadeMs = () => state.fadeMs
+    const blur = () => state.blur
+    const fadeEase = () => state.fadeEase
+    const auto = () => state.auto
     let replayTimer
     let autoTimer
 
     const replay = () => {
-      setShow(false)
+      setState("show", false)
       if (replayTimer) clearTimeout(replayTimer)
       replayTimer = setTimeout(() => {
-        setShow(true)
+        setState("show", true)
       }, 50)
     }
 
     const stopAuto = () => {
       if (autoTimer) clearInterval(autoTimer)
       autoTimer = undefined
-      setAuto(false)
+      setState("auto", false)
     }
 
     const toggleAuto = () => {
@@ -168,7 +179,7 @@ export const Playground = {
         stopAuto()
         return
       }
-      setAuto(true)
+      setState("auto", true)
       autoTimer = setInterval(replay, 2200)
     }
 
@@ -224,7 +235,7 @@ export const Playground = {
           <button onClick={replay} style={btn()}>
             Replay entry
           </button>
-          <button onClick={() => setShow((v) => !v)} style={btn(show())}>
+          <button onClick={() => setState("show", (value) => !value)} style={btn(show())}>
             {show() ? "Hide subtitle" : "Show subtitle"}
           </button>
           <button onClick={toggleAuto} style={btn(auto())}>
@@ -244,7 +255,7 @@ export const Playground = {
             <span style={sliderLabel}>subtitle</span>
             <input
               value={text()}
-              onInput={(e) => setText(e.currentTarget.value)}
+              onInput={(e) => setState("text", e.currentTarget.value)}
               style={{
                 width: "420px",
                 "max-width": "100%",
@@ -265,7 +276,7 @@ export const Playground = {
               max={1.5}
               step={0.01}
               value={visualDuration()}
-              onInput={(e) => setVisualDuration(Number(e.currentTarget.value))}
+              onInput={(e) => setState("visualDuration", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{visualDuration().toFixed(2)}s</span>
           </div>
@@ -278,7 +289,7 @@ export const Playground = {
               max={0.5}
               step={0.01}
               value={bounce()}
-              onInput={(e) => setBounce(Number(e.currentTarget.value))}
+              onInput={(e) => setState("bounce", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{bounce().toFixed(2)}</span>
           </div>
@@ -287,8 +298,14 @@ export const Playground = {
             <span style={sliderLabel}>fade ease</span>
             <button
               onClick={() =>
-                setFadeEase((v) =>
-                  v === "snappy" ? "smooth" : v === "smooth" ? "standard" : v === "standard" ? "linear" : "snappy",
+                setState("fadeEase", (value) =>
+                  value === "snappy"
+                    ? "smooth"
+                    : value === "smooth"
+                      ? "standard"
+                      : value === "standard"
+                        ? "linear"
+                        : "snappy",
                 )
               }
               style={btn()}
@@ -305,7 +322,7 @@ export const Playground = {
               max={1400}
               step={10}
               value={fadeMs()}
-              onInput={(e) => setFadeMs(Number(e.currentTarget.value))}
+              onInput={(e) => setState("fadeMs", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{fadeMs()}ms</span>
           </div>
@@ -318,7 +335,7 @@ export const Playground = {
               max={14}
               step={0.5}
               value={blur()}
-              onInput={(e) => setBlur(Number(e.currentTarget.value))}
+              onInput={(e) => setState("blur", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{blur()}px</span>
           </div>

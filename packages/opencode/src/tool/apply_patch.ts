@@ -13,6 +13,7 @@ import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
+import { Format } from "../format"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -163,9 +164,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       filePath: change.filePath,
       relativePath: path.relative(Instance.worktree, change.movePath ?? change.filePath).replaceAll("\\", "/"),
       type: change.type,
-      diff: change.diff,
-      before: change.oldContent,
-      after: change.newContent,
+      patch: change.diff,
       additions: change.additions,
       deletions: change.deletions,
       movePath: change.movePath,
@@ -220,9 +219,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       }
 
       if (edited) {
-        await Bus.publish(File.Event.Edited, {
-          file: edited,
-        })
+        await Format.file(edited)
+        Bus.publish(File.Event.Edited, { file: edited })
       }
     }
 

@@ -4,6 +4,7 @@ import { resolver } from "hono-openapi"
 import { Instance } from "../../project/instance"
 import { Project } from "../../project/project"
 import z from "zod"
+import { ProjectID } from "../../project/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { InstanceBootstrap } from "../../project/bootstrap"
@@ -28,7 +29,7 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const projects = await Project.list()
+        const projects = Project.list()
         return c.json(projects)
       },
     )
@@ -105,8 +106,8 @@ export const ProjectRoutes = lazy(() =>
           ...errors(400, 404),
         },
       }),
-      validator("param", z.object({ projectID: z.string() })),
-      validator("json", Project.update.schema.omit({ projectID: true })),
+      validator("param", z.object({ projectID: ProjectID.zod })),
+      validator("json", Project.UpdateInput.omit({ projectID: true })),
       async (c) => {
         const projectID = c.req.valid("param").projectID
         const body = c.req.valid("json")

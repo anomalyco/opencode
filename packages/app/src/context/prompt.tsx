@@ -1,10 +1,10 @@
-import { createStore, type SetStoreFunction } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { checksum } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
+import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
+import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
-import { checksum } from "@opencode-ai/util/encode"
 
 interface PartBase {
   content: string
@@ -151,6 +151,11 @@ const MAX_PROMPT_SESSIONS = 20
 
 type PromptSession = ReturnType<typeof createPromptSession>
 
+type Scope = {
+  dir: string
+  id?: string
+}
+
 type PromptCacheEntry = {
   value: PromptSession
   dispose: VoidFunction
@@ -245,6 +250,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       }
     }
 
+    const owner = getOwner()
     const load = (dir: string, id: string | undefined) => {
       const key = `${dir}:${id ?? WORKSPACE_KEY}`
       const existing = cache.get(key)
@@ -254,10 +260,13 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         return existing.value
       }
 
-      const entry = createRoot((dispose) => ({
-        value: createPromptSession(dir, id),
-        dispose,
-      }))
+      const entry = createRoot(
+        (dispose) => ({
+          value: createPromptSession(dir, id),
+          dispose,
+        }),
+        owner,
+      )
 
       cache.set(key, entry)
       prune()
@@ -265,6 +274,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const session = createMemo(() => load(params.dir!, params.id))
+    const pick = (scope?: Scope) => (scope ? load(scope.dir, scope.id) : session())
 
     return {
       ready: () => session().ready(),
@@ -280,8 +290,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
           session().context.updateComment(path, commentID, next),
         replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
       },
-      set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
-      reset: () => session().reset(),
+      set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => pick(scope).set(prompt, cursorPosition),
+      reset: (scope?: Scope) => pick(scope).reset(),
     }
   },
 })

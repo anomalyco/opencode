@@ -59,8 +59,10 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 ### Using Fixtures
 
 - `page` - Playwright page
-- `sdk` - OpenCode SDK client for API calls
-- `gotoSession(sessionID?)` - Navigate to session
+- `llm` - Mock LLM server for queuing responses (`text`, `tool`, `toolMatch`, `textMatch`, etc.)
+- `project` - Golden-path project fixture (call `project.open()` first, then use `project.sdk`, `project.prompt(...)`, `project.gotoSession(...)`, `project.trackSession(...)`)
+- `sdk` - OpenCode SDK client for API calls (worker-scoped, shared directory)
+- `gotoSession(sessionID?)` - Navigate to session (worker-scoped, shared directory)
 
 ### Helper Functions
 
@@ -70,13 +72,12 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 - `openSettings(page)` - Open settings dialog
 - `closeDialog(page, dialog)` - Close any dialog
 - `openSidebar(page)` / `closeSidebar(page)` - Toggle sidebar
+- `waitTerminalReady(page, { term? })` - Wait for a mounted terminal to connect and finish rendering output
+- `runTerminal(page, { cmd, token, term?, timeout? })` - Type into the terminal via the browser and wait for rendered output
 - `withSession(sdk, title, callback)` - Create temp session
-- `withProject(...)` - Create temp project/workspace
 - `sessionIDFromUrl(url)` - Read session ID from URL
 - `slugFromUrl(url)` - Read workspace slug from URL
 - `waitSlug(page, skip?)` - Wait for resolved workspace slug
-- `trackSession(sessionID, directory?)` - Register session for fixture cleanup
-- `trackDirectory(directory)` - Register directory for fixture cleanup
 - `clickListItem(container, filter)` - Click list item by key/text
 
 **Selectors** (`selectors.ts`):
@@ -126,9 +127,9 @@ test("test with cleanup", async ({ page, sdk, gotoSession }) => {
 })
 ```
 
-- Prefer `withSession(...)` for temp sessions
-- In `withProject(...)` tests that create sessions or extra workspaces, call `trackSession(sessionID, directory?)` and `trackDirectory(directory)`
-- This lets fixture teardown abort, wait for idle, and clean up safely under CI concurrency
+- Prefer the `project` fixture for tests that need a dedicated project with LLM mocking — call `project.open()` then use `project.prompt(...)`, `project.trackSession(...)`, etc.
+- Use `withSession(sdk, title, callback)` for lightweight temp sessions on the shared worker directory
+- Call `project.trackSession(sessionID, directory?)` and `project.trackDirectory(directory)` for any resources created outside the fixture so teardown can clean them up
 - Avoid calling `sdk.session.delete(...)` directly
 
 ### Timeouts
@@ -166,6 +167,42 @@ import { modKey } from "../utils"
 await page.keyboard.press(`${modKey}+B`) // Toggle sidebar
 await page.keyboard.press(`${modKey}+Comma`) // Open settings
 ```
+
+### Terminal Tests
+
+- In terminal tests, type through the browser. Do not write to the PTY through the SDK.
+- Use `waitTerminalReady(page, { term? })` and `runTerminal(page, { cmd, token, term?, timeout? })` from `actions.ts`.
+- These helpers use the fixture-enabled test-only terminal driver and wait for output after the terminal writer settles.
+- After opening the terminal, use `waitTerminalFocusIdle(...)` before the next keyboard action when prompt focus or keyboard routing matters.
+- This avoids racing terminal mount, focus handoff, and prompt readiness when the next step types or sends shortcuts.
+- Avoid `waitForTimeout` and custom DOM or `data-*` readiness checks.
+
+### Wait on state
+
+- Never use wall-clock waits like `page.waitForTimeout(...)` to make a test pass
+- Avoid race-prone flows that assume work is finished after an action
+- Wait or poll on observable state with `expect(...)`, `expect.poll(...)`, or existing helpers
+- Prefer locator assertions like `toBeVisible()`, `toHaveCount(0)`, and `toHaveAttribute(...)` for normal UI state, and reserve `expect.poll(...)` for probe, mock, or backend state
+- Prefer semantic app state over transient DOM visibility when behavior depends on active selection, focus ownership, or async retry loops
+- Do not treat a visible element as proof that the app will route the next action to it
+- When fixing a flake, validate with `--repeat-each` and multiple workers when practical
+
+### Add hooks
+
+- If required state is not observable from the UI, add a small test-only driver or probe in app code instead of sleeps or fragile DOM checks
+- Keep these hooks minimal and purpose-built, following the style of `packages/app/src/testing/terminal.ts`
+- Test-only hooks must be inert unless explicitly enabled; do not add normal-runtime listeners, reactive subscriptions, or per-update allocations for e2e ceremony
+- When mocking routes or APIs, expose explicit mock state and wait on that before asserting post-action UI
+- Add minimal test-only probes for semantic state like the active list item or selected command when DOM intermediates are unstable
+- Prefer probing committed app state over asserting on transient highlight, visibility, or animation states
+
+### Prefer helpers
+
+- Prefer fluent helpers and drivers when they make intent obvious and reduce locator-heavy noise
+- Use direct locators when the interaction is simple and a helper would not add clarity
+- Prefer helpers that both perform an action and verify the app consumed it
+- Avoid composing helpers redundantly when one already includes the other or already waits for the resulting state
+- If a helper already covers the required wait or verification, use it directly instead of layering extra clicks, keypresses, or assertions
 
 ## Writing New Tests
 

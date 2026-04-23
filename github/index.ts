@@ -496,7 +496,6 @@ async function subscribeSessionEvents() {
 
   const TOOL: Record<string, [string, string]> = {
     todowrite: ["Todo", "\x1b[33m\x1b[1m"],
-    todoread: ["Todo", "\x1b[33m\x1b[1m"],
     bash: ["Bash", "\x1b[31m\x1b[1m"],
     edit: ["Edit", "\x1b[32m\x1b[1m"],
     glob: ["Glob", "\x1b[34m\x1b[1m"],

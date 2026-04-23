@@ -90,9 +90,6 @@ export function Part(props: PartProps) {
               <Match when={props.part.type === "tool" && props.part.tool === "todowrite"}>
                 <IconQueueList width={18} height={18} />
               </Match>
-              <Match when={props.part.type === "tool" && props.part.tool === "todoread"}>
-                <IconQueueList width={18} height={18} />
-              </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "bash"}>
                 <IconCommandLine width={18} height={18} />
               </Match>

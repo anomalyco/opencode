@@ -22,14 +22,16 @@ async function seed(sdk: Parameters<typeof withSession>[0], sessionID: string) {
     .toBeGreaterThan(0)
 }
 
-test("/share and /unshare update session share state", async ({ page, sdk, gotoSession }) => {
+test("/share and /unshare update session share state", async ({ page, project }) => {
   test.skip(shareDisabled, "Share is disabled in this environment (OPENCODE_DISABLE_SHARE).")
 
-  await withSession(sdk, `e2e slash share ${Date.now()}`, async (session) => {
+  await project.open()
+  await withSession(project.sdk, `e2e slash share ${Date.now()}`, async (session) => {
+    project.trackSession(session.id)
     const prompt = page.locator(promptSelector)
 
-    await seed(sdk, session.id)
-    await gotoSession(session.id)
+    await seed(project.sdk, session.id)
+    await project.gotoSession(session.id)
 
     await prompt.click()
     await page.keyboard.type("/share")
@@ -39,7 +41,7 @@ test("/share and /unshare update session share state", async ({ page, sdk, gotoS
     await expect
       .poll(
         async () => {
-          const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+          const data = await project.sdk.session.get({ sessionID: session.id }).then((r) => r.data)
           return data?.share?.url || undefined
         },
         { timeout: 30_000 },
@@ -54,7 +56,7 @@ test("/share and /unshare update session share state", async ({ page, sdk, gotoS
     await expect
       .poll(
         async () => {
-          const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+          const data = await project.sdk.session.get({ sessionID: session.id }).then((r) => r.data)
           return data?.share?.url || undefined
         },
         { timeout: 30_000 },

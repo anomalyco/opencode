@@ -12,7 +12,7 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconMiniMax, IconZai } from "~/component/icon"
+import { IconMiniMax, IconMiMo, IconZai } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -45,13 +45,16 @@ function LimitsGraph(props: { href: string }) {
 
   const free = 200
   const models = [
-    { id: "glm", name: "GLM-5", req: 1150, d: "120ms" },
+    { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
+    { id: "glm-5", name: "GLM-5", req: 1150, d: "120ms" },
+    { id: "mimo-v2-pro", name: "MiMo-V2-Pro", req: 1290, d: "150ms" },
     { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
-    { id: "minimax", name: "MiniMax M2.5", req: 20000, d: "360ms" },
+    { id: "minimax-m2.7", name: "MiniMax M2.7", req: 14000, d: "330ms" },
+    { id: "minimax-m2.5", name: "MiniMax M2.5", req: 20000, d: "360ms" },
   ]
 
   const w = 720
-  const h = 220
+  const h = 270
   const left = 40
   const right = 60
   const top = 18
@@ -62,7 +65,7 @@ function LimitsGraph(props: { href: string }) {
   const rmax = Math.max(1, ...models.map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
   const base = 24
-  const p = 2.2
+  const p = 1.8
   const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
   const start = (x(1) / w) * 100
 
@@ -205,7 +208,7 @@ function LimitsGraph(props: { href: string }) {
 
 export default function Home() {
   const workspaceID = createAsync(() => checkLoggedIn())
-  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/billing` : "/auth"))
+  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go` : "/auth"))
   const i18n = useI18n()
   const language = useLanguage()
   return (
@@ -297,6 +300,9 @@ export default function Home() {
                 <div>
                   <IconZai width="24" height="24" />
                 </div>
+                <div>
+                  <IconMiMo width="24" height="24" />
+                </div>
                 {/*
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -320,7 +326,14 @@ export default function Home() {
                   >
                     {(part) => {
                       if (part === "{{text}}") return <span>{i18n.t("go.cta.text")}</span>
-                      if (part === "{{price}}") return <span data-slot="cta-price">{i18n.t("go.cta.price")}</span>
+                      if (part === "{{price}}") {
+                        return (
+                          <span data-slot="cta-price">
+                            <span data-slot="cta-price-old">{i18n.t("go.cta.price")}</span>
+                            <span data-slot="cta-price-new">{i18n.t("go.cta.promo")}</span>
+                          </span>
+                        )
+                      }
                       return part
                     }}
                   </For>
@@ -424,10 +437,7 @@ export default function Home() {
                 </Faq>
               </li>
               <li>
-                <Faq question={i18n.t("go.faq.q5")}>
-                  {i18n.t("go.faq.a5.body")} <a href="mailto:contact@anoma.ly">{i18n.t("common.contactUs")}</a>{" "}
-                  {i18n.t("go.faq.a5.contactAfter")}
-                </Faq>
+                <Faq question={i18n.t("go.faq.q5")}>{i18n.t("go.faq.a5.body")}</Faq>
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q6")}>{i18n.t("go.faq.a6")}</Faq>

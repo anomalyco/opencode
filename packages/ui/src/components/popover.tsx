@@ -1,15 +1,7 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import {
-  ComponentProps,
-  JSXElement,
-  ParentProps,
-  Show,
-  createEffect,
-  createSignal,
-  onCleanup,
-  splitProps,
-  ValidComponent,
-} from "solid-js"
+import { ComponentProps, JSXElement, ParentProps, Show, createEffect, splitProps, ValidComponent } from "solid-js"
+import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 
@@ -46,23 +38,24 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
     "modal",
   ])
 
-  const [contentRef, setContentRef] = createSignal<HTMLElement | undefined>(undefined)
-  const [triggerRef, setTriggerRef] = createSignal<HTMLElement | undefined>(undefined)
-  const [dismiss, setDismiss] = createSignal<"escape" | "outside" | null>(null)
-
-  const [uncontrolledOpen, setUncontrolledOpen] = createSignal<boolean>(local.defaultOpen ?? false)
+  const [state, setState] = createStore({
+    contentRef: undefined as HTMLElement | undefined,
+    triggerRef: undefined as HTMLElement | undefined,
+    dismiss: null as "escape" | "outside" | null,
+    uncontrolledOpen: local.defaultOpen ?? false,
+  })
 
   const controlled = () => local.open !== undefined
   const opened = () => {
     if (controlled()) return local.open ?? false
-    return uncontrolledOpen()
+    return state.uncontrolledOpen
   }
 
   const onOpenChange = (next: boolean) => {
-    if (next) setDismiss(null)
+    if (next) setState("dismiss", null)
     if (local.onOpenChange) local.onOpenChange(next)
     if (controlled()) return
-    setUncontrolledOpen(next)
+    setState("uncontrolledOpen", next)
   }
 
   createEffect(() => {
@@ -70,15 +63,15 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
 
     const inside = (node: Node | null | undefined) => {
       if (!node) return false
-      const content = contentRef()
+      const content = state.contentRef
       if (content && content.contains(node)) return true
-      const trigger = triggerRef()
+      const trigger = state.triggerRef
       if (trigger && trigger.contains(node)) return true
       return false
     }
 
     const close = (reason: "escape" | "outside") => {
-      setDismiss(reason)
+      setState("dismiss", reason)
       onOpenChange(false)
     }
 
@@ -103,20 +96,14 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
       close("outside")
     }
 
-    window.addEventListener("keydown", onKeyDown, true)
-    window.addEventListener("pointerdown", onPointerDown, true)
-    window.addEventListener("focusin", onFocusIn, true)
-
-    onCleanup(() => {
-      window.removeEventListener("keydown", onKeyDown, true)
-      window.removeEventListener("pointerdown", onPointerDown, true)
-      window.removeEventListener("focusin", onFocusIn, true)
-    })
+    makeEventListener(window, "keydown", onKeyDown, { capture: true })
+    makeEventListener(window, "pointerdown", onPointerDown, { capture: true })
+    makeEventListener(window, "focusin", onFocusIn, { capture: true })
   })
 
   const content = () => (
     <Kobalte.Content
-      ref={(el: HTMLElement | undefined) => setContentRef(el)}
+      ref={(el: HTMLElement | undefined) => setState("contentRef", el)}
       data-component="popover-content"
       classList={{
         ...(local.classList ?? {}),
@@ -124,8 +111,8 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
       }}
       style={local.style}
       onCloseAutoFocus={(event: Event) => {
-        if (dismiss() === "outside") event.preventDefault()
-        setDismiss(null)
+        if (state.dismiss === "outside") event.preventDefault()
+        setState("dismiss", null)
       }}
     >
       {/* <Kobalte.Arrow data-slot="popover-arrow" /> */}
@@ -151,7 +138,7 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
   return (
     <Kobalte gutter={4} {...rest} open={opened()} onOpenChange={onOpenChange} modal={local.modal ?? false}>
       <Kobalte.Trigger
-        ref={(el: HTMLElement) => setTriggerRef(el)}
+        ref={(el: HTMLElement) => setState("triggerRef", el)}
         as={local.triggerAs ?? "div"}
         data-slot="popover-trigger"
         {...(local.triggerProps as any)}

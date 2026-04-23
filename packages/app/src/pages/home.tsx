@@ -113,6 +113,14 @@ export default function Home() {
             </ul>
           </div>
         </Match>
+        <Match when={!sync.ready}>
+          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
+            <div class="text-12-regular text-text-weak">{language.t("common.loading")}</div>
+            <Button class="px-3" onClick={chooseProject}>
+              {language.t("command.project.open")}
+            </Button>
+          </div>
+        </Match>
         <Match when={true}>
           <div class="mt-30 mx-auto flex flex-col items-center gap-3">
             <Icon name="folder-add-left" size="large" />

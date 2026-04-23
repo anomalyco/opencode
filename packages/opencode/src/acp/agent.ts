@@ -21,6 +21,9 @@ import {
   type Role,
   type SessionInfo,
   type SetSessionModelRequest,
+  type SessionConfigOption,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
   type ToolCallContent,
@@ -29,12 +32,13 @@ import {
 } from "@agentclientprotocol/sdk"
 
 import { Log } from "../util/log"
-import { pathToFileURL } from "bun"
+import { pathToFileURL } from "url"
 import { Filesystem } from "../util/filesystem"
 import { Hash } from "../util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
+import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
@@ -55,8 +59,8 @@ export namespace ACP {
 
   async function getContextLimit(
     sdk: OpencodeClient,
-    providerID: string,
-    modelID: string,
+    providerID: ProviderID,
+    modelID: ModelID,
     directory: string,
   ): Promise<number | null> {
     const providers = await sdk.config
@@ -96,7 +100,8 @@ export namespace ACP {
     if (!lastAssistant) return
 
     const msg = lastAssistant.info
-    const size = await getContextLimit(sdk, msg.providerID, msg.modelID, directory)
+    if (!msg.providerID || !msg.modelID) return
+    const size = await getContextLimit(sdk, ProviderID.make(msg.providerID), ModelID.make(msg.modelID), directory)
 
     if (!size) {
       // Cannot calculate usage without known context size
@@ -447,6 +452,19 @@ export namespace ACP {
                 return
             }
           }
+          if (part.type !== "text" && part.type !== "file") return
+          const msg = await this.sdk.session
+            .message(
+              { sessionID: part.sessionID, messageID: part.messageID, directory: session.cwd },
+              { throwOnError: true },
+            )
+            .then((x) => x.data)
+            .catch((err) => {
+              log.error("failed to fetch message for user chunk", { error: err })
+              return undefined
+            })
+          if (!msg || msg.info.role !== "user") return
+          await this.processMessage({ info: msg.info, parts: [part] })
           return
         }
 
@@ -482,6 +500,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_message_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -500,6 +519,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -584,13 +604,14 @@ export namespace ACP {
 
         return {
           sessionId,
+          configOptions: load.configOptions,
           models: load.models,
           modes: load.modes,
           _meta: load._meta,
         }
       } catch (e) {
         const error = MessageV2.fromError(e, {
-          providerID: this.config.defaultModel?.providerID ?? "unknown",
+          providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
         })
         if (LoadAPIKeyError.isInstance(error)) {
           throw RequestError.authRequired()
@@ -636,13 +657,18 @@ export namespace ACP {
         if (lastUser?.role === "user") {
           result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
           this.sessionManager.setModel(sessionId, {
-            providerID: lastUser.model.providerID,
-            modelID: lastUser.model.modelID,
+            providerID: ProviderID.make(lastUser.model.providerID),
+            modelID: ModelID.make(lastUser.model.modelID),
           })
           if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent
             this.sessionManager.setMode(sessionId, lastUser.agent)
           }
+          result.configOptions = buildConfigOptions({
+            currentModelId: result.models.currentModelId,
+            availableModels: result.models.availableModels,
+            modes: result.modes,
+          })
         }
 
         for (const msg of messages ?? []) {
@@ -655,7 +681,7 @@ export namespace ACP {
         return result
       } catch (e) {
         const error = MessageV2.fromError(e, {
-          providerID: this.config.defaultModel?.providerID ?? "unknown",
+          providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
         })
         if (LoadAPIKeyError.isInstance(error)) {
           throw RequestError.authRequired()
@@ -664,7 +690,7 @@ export namespace ACP {
       }
     }
 
-    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
       try {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
@@ -700,7 +726,7 @@ export namespace ACP {
         return response
       } catch (e) {
         const error = MessageV2.fromError(e, {
-          providerID: this.config.defaultModel?.providerID ?? "unknown",
+          providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
         })
         if (LoadAPIKeyError.isInstance(error)) {
           throw RequestError.authRequired()
@@ -765,7 +791,7 @@ export namespace ACP {
         return mode
       } catch (e) {
         const error = MessageV2.fromError(e, {
-          providerID: this.config.defaultModel?.providerID ?? "unknown",
+          providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
         })
         if (LoadAPIKeyError.isInstance(error)) {
           throw RequestError.authRequired()
@@ -796,7 +822,7 @@ export namespace ACP {
         return result
       } catch (e) {
         const error = MessageV2.fromError(e, {
-          providerID: this.config.defaultModel?.providerID ?? "unknown",
+          providerID: ProviderID.make(this.config.defaultModel?.providerID ?? "unknown"),
         })
         if (LoadAPIKeyError.isInstance(error)) {
           throw RequestError.authRequired()
@@ -968,6 +994,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -999,6 +1026,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: messageChunk,
+                  messageId: message.info.id,
                   content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
                 },
               })
@@ -1020,6 +1048,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: {
                       type: "image",
                       mimeType: effectiveMime,
@@ -1048,6 +1077,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: { type: "resource", resource },
                   },
                 })
@@ -1064,6 +1094,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -1244,6 +1275,11 @@ export namespace ACP {
           availableModels,
         },
         modes,
+        configOptions: buildConfigOptions({
+          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+          availableModels,
+          modes,
+        }),
         _meta: buildVariantMeta({
           model,
           variant: this.sessionManager.getVariant(sessionId),
@@ -1281,6 +1317,44 @@ export namespace ACP {
         throw new Error(`Agent not found: ${params.modeId}`)
       }
       this.sessionManager.setMode(params.sessionId, params.modeId)
+    }
+
+    async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+      const session = this.sessionManager.get(params.sessionId)
+      const providers = await this.sdk.config
+        .providers({ directory: session.cwd }, { throwOnError: true })
+        .then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+
+      if (params.configId === "model") {
+        if (typeof params.value !== "string") throw RequestError.invalidParams("model value must be a string")
+        const selection = parseModelSelection(params.value, providers)
+        this.sessionManager.setModel(session.id, selection.model)
+        this.sessionManager.setVariant(session.id, selection.variant)
+      } else if (params.configId === "mode") {
+        if (typeof params.value !== "string") throw RequestError.invalidParams("mode value must be a string")
+        const availableModes = await this.loadAvailableModes(session.cwd)
+        if (!availableModes.some((mode) => mode.id === params.value)) {
+          throw RequestError.invalidParams(JSON.stringify({ error: `Mode not found: ${params.value}` }))
+        }
+        this.sessionManager.setMode(session.id, params.value)
+      } else {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Unknown config option: ${params.configId}` }))
+      }
+
+      const updatedSession = this.sessionManager.get(session.id)
+      const model = updatedSession.model ?? (await defaultModel(this.config, session.cwd))
+      const availableVariants = modelVariantsFromProviders(entries, model)
+      const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, true)
+      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const modeState = await this.resolveModeState(session.cwd, session.id)
+      const modes = modeState.currentModeId
+        ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
+        : undefined
+
+      return {
+        configOptions: buildConfigOptions({ currentModelId, availableModels, modes }),
+      }
     }
 
     async prompt(params: PromptRequest) {
@@ -1525,7 +1599,7 @@ export namespace ACP {
     }
   }
 
-  async function defaultModel(config: ACPConfig, cwd?: string) {
+  async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ providerID: ProviderID; modelID: ModelID }> {
     const sdk = config.sdk
     const configured = config.defaultModel
     if (configured) return configured
@@ -1537,11 +1611,7 @@ export namespace ACP {
       .then((resp) => {
         const cfg = resp.data
         if (!cfg || !cfg.model) return undefined
-        const parsed = Provider.parseModel(cfg.model)
-        return {
-          providerID: parsed.providerID,
-          modelID: parsed.modelID,
-        }
+        return Provider.parseModel(cfg.model)
       })
       .catch((error) => {
         log.error("failed to load user config for default model", { error })
@@ -1566,13 +1636,13 @@ export namespace ACP {
     const opencodeProvider = providers.find((p) => p.id === "opencode")
     if (opencodeProvider) {
       if (opencodeProvider.models["big-pickle"]) {
-        return { providerID: "opencode", modelID: "big-pickle" }
+        return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
       }
       const [best] = Provider.sort(Object.values(opencodeProvider.models))
       if (best) {
         return {
-          providerID: best.providerID,
-          modelID: best.id,
+          providerID: ProviderID.make(best.providerID),
+          modelID: ModelID.make(best.id),
         }
       }
     }
@@ -1581,14 +1651,14 @@ export namespace ACP {
     const [best] = Provider.sort(models)
     if (best) {
       return {
-        providerID: best.providerID,
-        modelID: best.id,
+        providerID: ProviderID.make(best.providerID),
+        modelID: ModelID.make(best.id),
       }
     }
 
     if (specified) return specified
 
-    return { providerID: "opencode", modelID: "big-pickle" }
+    return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
   }
 
   function parseUri(
@@ -1651,7 +1721,7 @@ export namespace ACP {
 
   function modelVariantsFromProviders(
     providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
-    model: { providerID: string; modelID: string },
+    model: { providerID: ProviderID; modelID: ModelID },
   ): string[] {
     const provider = providers.find((entry) => entry.id === model.providerID)
     if (!provider) return []
@@ -1666,7 +1736,10 @@ export namespace ACP {
   ): ModelOption[] {
     const includeVariants = options.includeVariants ?? false
     return providers.flatMap((provider) => {
-      const models = Provider.sort(Object.values(provider.models) as any)
+      const unsorted: Array<{ id: string; name: string; variants?: Record<string, any> }> = Object.values(
+        provider.models,
+      )
+      const models = Provider.sort(unsorted)
       return models.flatMap((model) => {
         const base: ModelOption = {
           modelId: `${provider.id}/${model.id}`,
@@ -1684,7 +1757,7 @@ export namespace ACP {
   }
 
   function formatModelIdWithVariant(
-    model: { providerID: string; modelID: string },
+    model: { providerID: ProviderID; modelID: ModelID },
     variant: string | undefined,
     availableVariants: string[],
     includeVariant: boolean,
@@ -1695,7 +1768,7 @@ export namespace ACP {
   }
 
   function buildVariantMeta(input: {
-    model: { providerID: string; modelID: string }
+    model: { providerID: ProviderID; modelID: ModelID }
     variant?: string
     availableVariants: string[]
   }) {
@@ -1711,7 +1784,7 @@ export namespace ACP {
   function parseModelSelection(
     modelId: string,
     providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
-  ): { model: { providerID: string; modelID: string }; variant?: string } {
+  ): { model: { providerID: ProviderID; modelID: ModelID }; variant?: string } {
     const parsed = Provider.parseModel(modelId)
     const provider = providers.find((p) => p.id === parsed.providerID)
     if (!provider) {
@@ -1731,12 +1804,44 @@ export namespace ACP {
       const baseModelInfo = provider.models[baseModelId]
       if (baseModelInfo?.variants && candidateVariant in baseModelInfo.variants) {
         return {
-          model: { providerID: parsed.providerID, modelID: baseModelId },
+          model: { providerID: parsed.providerID, modelID: ModelID.make(baseModelId) },
           variant: candidateVariant,
         }
       }
     }
 
     return { model: parsed, variant: undefined }
+  }
+
+  function buildConfigOptions(input: {
+    currentModelId: string
+    availableModels: ModelOption[]
+    modes?: { availableModes: ModeOption[]; currentModeId: string } | undefined
+  }): SessionConfigOption[] {
+    const options: SessionConfigOption[] = [
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: input.currentModelId,
+        options: input.availableModels.map((m) => ({ value: m.modelId, name: m.name })),
+      },
+    ]
+    if (input.modes) {
+      options.push({
+        id: "mode",
+        name: "Session Mode",
+        category: "mode",
+        type: "select",
+        currentValue: input.modes.currentModeId,
+        options: input.modes.availableModes.map((m) => ({
+          value: m.id,
+          name: m.name,
+          ...(m.description ? { description: m.description } : {}),
+        })),
+      })
+    }
+    return options
   }
 }

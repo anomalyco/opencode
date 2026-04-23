@@ -60,6 +60,8 @@ function toolEvent(
   const payload: EventMessagePartUpdated = {
     type: "message.part.updated",
     properties: {
+      sessionID: sessionId,
+      time: Date.now(),
       part: {
         id: `part_${opts.callID}`,
         sessionID: sessionId,

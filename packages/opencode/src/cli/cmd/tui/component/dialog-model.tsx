@@ -5,8 +5,10 @@ import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
+import { DialogVariant } from "./dialog-variant"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
+import { consoleManagedProviderLabel } from "@tui/util/provider-origin"
 
 export function useConnected() {
   const sync = useSync()
@@ -45,13 +47,16 @@ export function DialogModel(props: { providerID?: string }) {
             key: item,
             value: { providerID: provider.id, modelID: model.id },
             title: model.name ?? item.modelID,
-            description: provider.name,
+            description: consoleManagedProviderLabel(
+              sync.data.console_state.consoleManagedProviders,
+              provider.id,
+              provider.name,
+            ),
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect: () => {
-              dialog.clear()
-              local.model.set({ providerID: provider.id, modelID: model.id }, { recent: true })
+              onSelect(provider.id, model.id)
             },
           },
         ]
@@ -84,12 +89,13 @@ export function DialogModel(props: { providerID?: string }) {
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
               ? "(Favorite)"
               : undefined,
-            category: connected() ? provider.name : undefined,
+            category: connected()
+              ? consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, provider.id, provider.name)
+              : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect() {
-              dialog.clear()
-              local.model.set({ providerID: provider.id, modelID: model }, { recent: true })
+              onSelect(provider.id, model)
             },
           })),
           filter((x) => {
@@ -133,7 +139,26 @@ export function DialogModel(props: { providerID?: string }) {
     props.providerID ? sync.data.provider.find((x) => x.id === props.providerID) : null,
   )
 
-  const title = createMemo(() => provider()?.name ?? "Select model")
+  const title = createMemo(() => {
+    const value = provider()
+    if (!value) return "Select model"
+    return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, value.id, value.name)
+  })
+
+  function onSelect(providerID: string, modelID: string) {
+    local.model.set({ providerID, modelID }, { recent: true })
+    const list = local.model.variant.list()
+    const cur = local.model.variant.selected()
+    if (cur === "default" || (cur && list.includes(cur))) {
+      dialog.clear()
+      return
+    }
+    if (list.length > 0) {
+      dialog.replace(() => <DialogVariant />)
+      return
+    }
+    dialog.clear()
+  }
 
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>

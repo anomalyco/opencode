@@ -1,5 +1,5 @@
 import { DIFFS_TAG_NAME, FileDiff, VirtualizedFileDiff } from "@pierre/diffs"
-import { type PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+import { type PreloadFileDiffResult, type PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createEffect, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
 import { useWorkerPool } from "../context/worker-pool"
@@ -16,8 +16,10 @@ import {
 import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { File, type DiffFileProps, type FileProps } from "./file"
 
+type DiffPreload<T> = PreloadMultiFileDiffResult<T> | PreloadFileDiffResult<T>
+
 type SSRDiffFileProps<T> = DiffFileProps<T> & {
-  preloadedDiff: PreloadMultiFileDiffResult<T>
+  preloadedDiff: DiffPreload<T>
 }
 
 function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
@@ -32,6 +34,7 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
   const [local, others] = splitProps(props, [
     "mode",
     "media",
+    "fileDiff",
     "before",
     "after",
     "class",
@@ -90,12 +93,13 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
     onCleanup(observeViewerScheme(() => fileDiffRef))
 
     const virtualizer = getVirtualizer()
+    const annotations = local.annotations ?? local.preloadedDiff.annotations ?? []
     fileDiffInstance = virtualizer
       ? new VirtualizedFileDiff<T>(
           {
             ...createDefaultOptions(props.diffStyle),
             ...others,
-            ...local.preloadedDiff,
+            ...(local.preloadedDiff.options ?? {}),
           },
           virtualizer,
           virtualMetrics,
@@ -105,7 +109,7 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
           {
             ...createDefaultOptions(props.diffStyle),
             ...others,
-            ...local.preloadedDiff,
+            ...(local.preloadedDiff.options ?? {}),
           },
           workerPool,
         )
@@ -114,13 +118,24 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
 
     // @ts-expect-error private field required for hydration
     fileDiffInstance.fileContainer = fileDiffRef
-    fileDiffInstance.hydrate({
-      oldFile: local.before,
-      newFile: local.after,
-      lineAnnotations: local.annotations ?? [],
-      fileContainer: fileDiffRef,
-      containerWrapper: container,
-    })
+    fileDiffInstance.hydrate(
+      local.fileDiff
+        ? {
+            fileDiff: local.fileDiff,
+            lineAnnotations: annotations,
+            fileContainer: fileDiffRef,
+            containerWrapper: container,
+            prerenderedHTML: local.preloadedDiff.prerenderedHTML,
+          }
+        : {
+            oldFile: local.before,
+            newFile: local.after,
+            lineAnnotations: annotations,
+            fileContainer: fileDiffRef,
+            containerWrapper: container,
+            prerenderedHTML: local.preloadedDiff.prerenderedHTML,
+          },
+    )
 
     notifyRendered()
   })

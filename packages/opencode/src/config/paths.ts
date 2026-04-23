@@ -9,20 +9,13 @@ import { Global } from "@/global"
 
 export namespace ConfigPaths {
   export async function projectFiles(name: string, directory: string, worktree: string) {
-    const files: string[] = []
-    for (const file of [`${name}.jsonc`, `${name}.json`]) {
-      const found = await Filesystem.findUp(file, directory, worktree)
-      for (const resolved of found.toReversed()) {
-        files.push(resolved)
-      }
-    }
-    return files
+    return Filesystem.findUp([`${name}.json`, `${name}.jsonc`], directory, worktree, { rootFirst: true })
   }
 
   export async function directories(directory: string, worktree: string) {
     return [
       Global.Path.config,
-      ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+      ...(!Flag.MAMMOUTH_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
               targets: [".opencode"],
@@ -38,12 +31,12 @@ export namespace ConfigPaths {
           stop: Global.Path.home,
         }),
       )),
-      ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+      ...(Flag.MAMMOUTH_CONFIG_DIR ? [Flag.MAMMOUTH_CONFIG_DIR] : []),
     ]
   }
 
   export function fileInDirectory(dir: string, name: string) {
-    return [path.join(dir, `${name}.jsonc`), path.join(dir, `${name}.json`)]
+    return [path.join(dir, `${name}.json`), path.join(dir, `${name}.jsonc`)]
   }
 
   export const JsonError = NamedError.create(
