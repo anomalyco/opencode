@@ -1,4 +1,4 @@
-import { mysqlTable, int, primaryKey, varchar } from "drizzle-orm/mysql-core"
+import { mysqlTable, int, primaryKey, varchar, bigint } from "drizzle-orm/mysql-core"
 import { timestamps } from "../drizzle/types"
 
 export const IpTable = mysqlTable(
@@ -31,12 +31,12 @@ export const KeyRateLimitTable = mysqlTable(
   (table) => [primaryKey({ columns: [table.key, table.interval] })],
 )
 
-export const ModelRateLimitTable = mysqlTable(
-  "model_rate_limit",
+export const ModelTpmRateLimitTable = mysqlTable(
+  "model_tpm_rate_limit",
   {
-    key: varchar("key", { length: 255 }).notNull(),
-    interval: varchar("interval", { length: 40 }).notNull(),
+    id: varchar("id", { length: 255 }).notNull(),
+    interval: bigint("interval", { mode: "number" }).notNull(),
     count: int("count").notNull(),
   },
-  (table) => [primaryKey({ columns: [table.key, table.interval] })],
+  (table) => [primaryKey({ columns: [table.id, table.interval] })],
 )

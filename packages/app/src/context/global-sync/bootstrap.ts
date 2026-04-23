@@ -19,7 +19,6 @@ import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions, skipToken } from "@tanstack/solid-query"
-import { loadSessionsQuery } from "../global-sync"
 
 type GlobalStore = {
   ready: boolean
@@ -82,6 +81,9 @@ export async function bootstrapGlobal(input: {
           input.setGlobalStore("config", x.data!)
         }),
       ),
+  ]
+
+  const slow = [
     () =>
       input.queryClient.fetchQuery({
         ...loadProvidersQuery(null),
@@ -93,9 +95,6 @@ export async function bootstrapGlobal(input: {
             }),
           ),
       }),
-  ]
-
-  const slow = [
     () =>
       retry(() =>
         input.globalSDK.path.get().then((x) => {
@@ -183,8 +182,43 @@ function warmSessions(input: {
 export const loadProvidersQuery = (directory: string | null) =>
   queryOptions<null>({ queryKey: [directory, "providers"], queryFn: skipToken })
 
-export const loadAgentsQuery = (directory: string | null) =>
-  queryOptions<null>({ queryKey: [directory, "agents"], queryFn: skipToken })
+export const loadAgentsQuery = (
+  directory: string | null,
+  sdk?: OpencodeClient,
+  transform?: (x: Awaited<ReturnType<OpencodeClient["app"]["agents"]>>) => void,
+) =>
+  queryOptions<null>({
+    queryKey: [directory, "agents"],
+    queryFn:
+      sdk && transform
+        ? () =>
+            retry(() =>
+              sdk.app
+                .agents()
+                .then(transform)
+                .then(() => null),
+            )
+        : skipToken,
+  })
+
+export const loadPathQuery = (
+  directory: string | null,
+  sdk?: OpencodeClient,
+  transform?: (x: Awaited<ReturnType<OpencodeClient["path"]["get"]>>) => void,
+) =>
+  queryOptions<Path>({
+    queryKey: [directory, "path"],
+    queryFn:
+      sdk && transform
+        ? () =>
+            retry(() =>
+              sdk.path.get().then(async (x) => {
+                transform(x)
+                return x.data!
+              }),
+            )
+        : skipToken,
+  })
 
 export async function bootstrapDirectory(input: {
   directory: string
@@ -222,45 +256,27 @@ export async function bootstrapDirectory(input: {
   input.setStore("lsp", [])
   if (loading) input.setStore("status", "partial")
 
-  const fast = [() => Promise.resolve(input.loadSessions(input.directory))]
-
-  const errs = errors(await runAll(fast))
-  if (errs.length > 0) {
-    console.error("Failed to bootstrap instance", errs[0])
-    const project = getFilename(input.directory)
-    showToast({
-      variant: "error",
-      title: input.translate("toast.project.reloadFailed.title", { project }),
-      description: formatServerError(errs[0], input.translate),
-    })
-  }
-
+  const rev = (providerRev.get(input.directory) ?? 0) + 1
+  providerRev.set(input.directory, rev)
   ;(async () => {
     const slow = [
+      () => Promise.resolve(input.loadSessions(input.directory)),
       () =>
-        input.queryClient.ensureQueryData({
-          ...loadAgentsQuery(input.directory),
-          queryFn: () =>
-            retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))).then(
-              () => null,
-            ),
-        }),
+        input.queryClient.ensureQueryData(
+          loadAgentsQuery(input.directory, input.sdk, (x) => input.setStore("agent", normalizeAgentList(x.data))),
+        ),
       () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
       () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
-      () =>
-        seededProject
-          ? Promise.resolve()
-          : retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id)),
-      () =>
-        seededPath
-          ? Promise.resolve()
-          : retry(() =>
-              input.sdk.path.get().then((x) => {
-                input.setStore("path", x.data!)
-                const next = projectID(x.data?.directory ?? input.directory, input.global.project)
-                if (next) input.setStore("project", next)
-              }),
-            ),
+      !seededProject &&
+        (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
+      !seededPath &&
+        (() =>
+          input.queryClient.ensureQueryData(
+            loadPathQuery(input.directory, input.sdk, (x) => {
+              const next = projectID(x.data?.directory ?? input.directory, input.global.project)
+              if (next) input.setStore("project", next)
+            }),
+          )),
       () =>
         retry(() =>
           input.sdk.vcs.get().then((x) => {
@@ -330,7 +346,28 @@ export async function bootstrapDirectory(input: {
             input.setStore("mcp_ready", true)
           }),
         ),
-    ]
+      () =>
+        input.queryClient.ensureQueryData({
+          ...loadProvidersQuery(input.directory),
+          queryFn: () =>
+            retry(() => input.sdk.provider.list())
+              .then((x) => {
+                if (providerRev.get(input.directory) !== rev) return
+                input.setStore("provider", normalizeProviderList(x.data!))
+                input.setStore("provider_ready", true)
+              })
+              .catch((err) => {
+                if (providerRev.get(input.directory) !== rev) console.error("Failed to refresh provider list", err)
+                const project = getFilename(input.directory)
+                showToast({
+                  variant: "error",
+                  title: input.translate("toast.project.reloadFailed.title", { project }),
+                  description: formatServerError(err, input.translate),
+                })
+              })
+              .then(() => null),
+        }),
+    ].filter(Boolean) as (() => Promise<any>)[]
 
     await waitForPaint()
     const slowErrs = errors(await runAll(slow))
@@ -344,29 +381,6 @@ export async function bootstrapDirectory(input: {
       })
     }
 
-    if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
-
-    const rev = (providerRev.get(input.directory) ?? 0) + 1
-    providerRev.set(input.directory, rev)
-    void input.queryClient.ensureQueryData({
-      ...loadSessionsQuery(input.directory),
-      queryFn: () =>
-        retry(() => input.sdk.provider.list())
-          .then((x) => {
-            if (providerRev.get(input.directory) !== rev) return
-            input.setStore("provider", normalizeProviderList(x.data!))
-            input.setStore("provider_ready", true)
-          })
-          .catch((err) => {
-            if (providerRev.get(input.directory) !== rev) console.error("Failed to refresh provider list", err)
-            const project = getFilename(input.directory)
-            showToast({
-              variant: "error",
-              title: input.translate("toast.project.reloadFailed.title", { project }),
-              description: formatServerError(err, input.translate),
-            })
-          })
-          .then(() => null),
-    })
+    if (loading && slowErrs.length === 0) input.setStore("status", "complete")
   })()
 }
