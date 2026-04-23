@@ -374,10 +374,21 @@ export function Session() {
     if (indicesAbove.length === 0) return
 
     const currentIndex = userMessageIndex()
-    const targetIndex =
-      currentIndex === -1
-        ? Math.max(0, indicesAbove[indicesAbove.length - 1]! - 1)
-        : Math.max(0, currentIndex - 1)
+    let targetIndex: number
+
+    if (currentIndex === -1) {
+      targetIndex = Math.max(0, indicesAbove[indicesAbove.length - 1]! - 1)
+    } else {
+      const currentMsg = msgs[currentIndex]
+      const currentChild = currentMsg ? childById.get(currentMsg.id) : undefined
+      // If the tracked message is no longer above the viewport (user scrolled down past it),
+      // recalculate from current scroll position instead of blindly decrementing
+      if (!currentChild || currentChild.y >= currentScrollTop) {
+        targetIndex = Math.max(0, indicesAbove[indicesAbove.length - 1]! - 1)
+      } else {
+        targetIndex = Math.max(0, currentIndex - 1)
+      }
+    }
 
     setUserMessageIndex(targetIndex)
 
