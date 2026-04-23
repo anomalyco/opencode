@@ -372,10 +372,11 @@ The model ID in your OpenCode config uses the format `provider/model-id`. For ex
 
 Use the `variant` config to set the default model variant for an agent.
 
-This is useful when the same model supports multiple built-in variants, such as OpenAI reasoning effort levels or Anthropic thinking budgets.
+This is useful when the same model supports multiple built-in variants, such as OpenAI reasoning effort levels or Anthropic thinking budgets. Variants are defined on the model in config; see [Models — Variants](/docs/models#variants).
 
 ```json title="opencode.json"
 {
+  "$schema": "https://opencode.ai/config.json",
   "agent": {
     "build": {
       "model": "openai/gpt-5",
@@ -389,7 +390,20 @@ This is useful when the same model supports multiple built-in variants, such as 
 }
 ```
 
-The variant applies when the agent is using its configured `model`. If you change models in the UI, the available variants and active selection may change too. To switch variants at runtime, use the `variant_cycle` keybind or bind `variant_list` yourself in `tui.json`.
+The variant applies when the agent is using its configured `model`. If you change models in the UI, the available variants and active selection may change too. To switch variants at runtime, use the `variant_cycle` keybind; you can also bind `variant_list` in `tui.json` for a picker ([Keybinds](/docs/keybinds)).
+
+In a Markdown agent, set `variant` in the frontmatter:
+
+```markdown title="~/.config/opencode/agents/fast-plan.md"
+---
+description: Planning with a lighter variant
+mode: primary
+model: openai/gpt-5
+variant: low
+---
+
+You are a planning assistant. Prefer concise plans.
+```
 
 For built-in variants and custom variant definitions, see [Models](/docs/models#variants).
 

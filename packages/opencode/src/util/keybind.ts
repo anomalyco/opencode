@@ -9,6 +9,10 @@ export type Info = Pick<ParsedKey, "name" | "ctrl" | "meta" | "shift" | "super">
   leader: boolean // our custom field
 }
 
+function superDisplayName(): "cmd" | "super" {
+  return process.platform === "darwin" ? "cmd" : "super"
+}
+
 export function match(a: Info | undefined, b: Info): boolean {
   if (!a) return false
   const normalizedA = { ...a, super: a.super ?? false }
@@ -37,7 +41,7 @@ export function toString(info: Info | undefined): string {
 
   if (info.ctrl) parts.push("ctrl")
   if (info.meta) parts.push("alt")
-  if (info.super) parts.push("super")
+  if (info.super) parts.push(superDisplayName())
   if (info.shift) parts.push("shift")
   if (info.name) {
     if (info.name === "delete") parts.push("del")

@@ -155,7 +155,9 @@ You can use variants globally, switch them at runtime from the UI, or pin one on
 
 ## Variants
 
-Many models support multiple variants with different configurations. OpenCode ships with built-in default variants for popular providers.
+A **variant** is a named set of model options for the same underlying model (for example different reasoning budgets or verbosity). You define variants under `provider.<id>.models.<id>.variants` in config, and you can switch between them in the UI or pin a default.
+
+You can set a **per-agent default** with `agent.<name>.variant` so Build and Plan (or custom agents) start on different variants without changing global defaults. See [Agents — Variant](/docs/agents#variant).
 
 Variants are named presets. In practice, they usually map to provider-specific model options like reasoning effort, thinking budgets, or verbosity settings.
 
@@ -217,7 +219,9 @@ You can override existing variants or add your own:
 
 ### Cycle variants
 
-Use the keybind `variant_cycle` to quickly switch between variants. `variant_list` is also available as a picker action, but it is unbound by default and must be mapped in your keybinds. [Learn more](/docs/keybinds).
+Use the keybind `variant_cycle` to cycle the active variant for the current model. [Keybinds](/docs/keybinds) documents the default and how to customize keybinds.
+
+The `variant_list` action opens a variant picker. It is **not bound by default** (`"none"` in the default `tui.json`); assign a shortcut under `keybinds.variant_list` if you want it.
 
 ---
 
