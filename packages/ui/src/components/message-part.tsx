@@ -57,7 +57,17 @@ import { patchFiles } from "./apply-patch-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
-import { editTools, mcpTools, taskAsyncTool, teamTools } from "@opencode-ai/ui-team/message-part-tools"
+import {
+  editTools,
+  mcpTools,
+  taskAsyncTool,
+  teamTools,
+  TeamBatchResultList,
+  discoverBatchSections,
+  getTeamToolGroupKind,
+  getTeamToolInfo,
+  type TeamToolGroupKind,
+} from "@opencode-ai/ui-team/message-part-tools"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -272,154 +282,8 @@ export type ToolInfo = {
   subtitle?: string
 }
 
-const DISCOVERY_TOOLS = new Set([
-  "inspect",
-  "search",
-  "lsp",
-  "discover_batch",
-  "archive_list",
-  "data_query",
-  "dir_tree",
-  "markdown_read",
-  "localgit_state",
-  "localgit_log",
-  "localgit_annotate",
-])
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
-}
-
-function discoveryCallCount(input: Record<string, unknown>) {
-  return Array.isArray(input.calls) ? input.calls.length : 0
-}
-
-function discoveryCallLabel(i18n: UiI18n, count: number) {
-  if (count <= 0) return ""
-  return i18n.t(count === 1 ? "ui.messagePart.discovery.check.one" : "ui.messagePart.discovery.check.other", {
-    count,
-  })
-}
-
-function discoveryToolInfo(i18n: UiI18n, tool: string, input: Record<string, unknown>): ToolInfo | undefined {
-  switch (tool) {
-    case "inspect": {
-      const action = typeof input.action === "string" ? input.action : undefined
-      return {
-        icon:
-          action === "tree" || action === "dir"
-            ? "file-tree"
-            : action === "archive"
-              ? "archive"
-              : action === "structured"
-                ? "code-lines"
-                : action === "markdown"
-                  ? "prompt"
-                  : "glasses",
-        title: i18n.t("ui.tool.inspect"),
-        subtitle:
-          typeof input.filePath === "string"
-            ? getFilename(input.filePath)
-            : typeof input.path === "string"
-              ? getFilename(input.path)
-              : undefined,
-      }
-    }
-    case "search":
-      return {
-        icon: "magnifying-glass",
-        title: i18n.t("ui.tool.search"),
-        subtitle:
-          typeof input.pattern === "string"
-            ? input.pattern
-            : typeof input.path === "string"
-              ? getFilename(input.path)
-              : undefined,
-      }
-    case "lsp":
-      return {
-        icon: "code",
-        title: i18n.t("ui.tool.lsp"),
-        subtitle:
-          typeof input.query === "string"
-            ? input.query
-            : typeof input.filePath === "string"
-              ? getFilename(input.filePath)
-              : typeof input.operation === "string"
-                ? input.operation
-                : undefined,
-      }
-    case "discover_batch":
-      return {
-        icon: "dot-grid",
-        title: i18n.t("ui.tool.discoverBatch"),
-        subtitle: discoveryCallLabel(i18n, discoveryCallCount(input)) || undefined,
-      }
-    case "archive_list":
-      return {
-        icon: "archive",
-        title: i18n.t("ui.tool.archiveList"),
-        subtitle:
-          typeof input.filePath === "string"
-            ? getFilename(input.filePath)
-            : typeof input.path === "string"
-              ? getFilename(input.path)
-              : undefined,
-      }
-    case "data_query":
-      return {
-        icon: "code-lines",
-        title: i18n.t("ui.tool.dataQuery"),
-        subtitle: typeof input.filePath === "string" ? getFilename(input.filePath) : undefined,
-      }
-    case "dir_tree":
-      return {
-        icon: "file-tree",
-        title: i18n.t("ui.tool.dirTree"),
-        subtitle: typeof input.path === "string" ? getFilename(input.path) : undefined,
-      }
-    case "markdown_read":
-      return {
-        icon: "prompt",
-        title: i18n.t("ui.tool.markdownRead"),
-        subtitle: typeof input.filePath === "string" ? getFilename(input.filePath) : undefined,
-      }
-    case "localgit_state":
-      return {
-        icon: "branch",
-        title: i18n.t("ui.tool.localGitState"),
-        subtitle:
-          typeof input.path === "string"
-            ? getFilename(input.path)
-            : typeof input.base === "string"
-              ? input.base
-              : undefined,
-      }
-    case "localgit_log":
-      return {
-        icon: "branch",
-        title: i18n.t("ui.tool.localGitLog"),
-        subtitle:
-          typeof input.path === "string"
-            ? getFilename(input.path)
-            : typeof input.ref === "string"
-              ? input.ref
-              : typeof input.base === "string"
-                ? input.base
-                : undefined,
-      }
-    case "localgit_annotate":
-      return {
-        icon: "branch",
-        title: i18n.t("ui.tool.localGitAnnotate"),
-        subtitle:
-          typeof input.filePath === "string"
-            ? getFilename(input.filePath)
-            : typeof input.pattern === "string"
-              ? input.pattern
-              : undefined,
-      }
-  }
 }
 
 function agentTitle(i18n: UiI18n, type?: string) {
@@ -470,8 +334,8 @@ function taskAgent(
 
 export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   const i18n = useI18n()
-  const discovery = discoveryToolInfo(i18n, tool, isRecord(input) ? input : {})
-  if (discovery) return discovery
+  const team = getTeamToolInfo(i18n, tool, isRecord(input) ? input : {})
+  if (team) return team
   switch (tool) {
     case "read":
       return {
@@ -619,12 +483,10 @@ function taskSession(
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 
-type ToolGroupKind = "context" | "terminal" | "edit" | "research"
+type ToolGroupKind = TeamToolGroupKind | "terminal" | "edit"
 
-const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list", ...DISCOVERY_TOOLS])
 const TERMINAL_GROUP_TOOLS = new Set(["bash"])
 const EDIT_GROUP_TOOLS = new Set(["edit", "write", "apply_patch"])
-const RESEARCH_GROUP_TOOLS = new Set(["websearch", "codesearch", "lib_batch"])
 const HIDDEN_TOOLS = new Set(["todowrite"])
 
 function discoveryToolOutput(part: ToolPart) {
@@ -646,46 +508,12 @@ function discoveryBatchCalls(input: Record<string, unknown>) {
   return input.calls.flatMap((item) => (isRecord(item) ? [item] : []))
 }
 
-function discoveryBatchSections(output: string | undefined) {
-  if (!output) return [] as Array<{ key: string; label: string; output: string }>
-  const hits = [...output.matchAll(/^\[(\d+)\]\s+(.+)$/gm)]
-  if (hits.length === 0) return []
-
-  return hits.flatMap((hit, index) => {
-    const start = hit.index
-    if (start === undefined) return []
-    const lineEnd = output.indexOf("\n", start)
-    const bodyStart = lineEnd === -1 ? output.length : lineEnd + 1
-    const bodyEnd = hits[index + 1]?.index ?? output.length
-    return [
-      {
-        key: `discover-batch-${hit[1] ?? index + 1}`,
-        label: (hit[2] ?? "").trim(),
-        output: output.slice(bodyStart, bodyEnd).trim(),
-      },
-    ]
-  })
-}
-
-function discoveryBatchSectionInfo(i18n: UiI18n, label: string): ToolInfo {
-  const hit = /^([a-z_]+)(?::([a-z_]+))?(?:\s+—\s+(.+))?$/.exec(label)
-  const tool = hit?.[1]
-  const detail = hit?.[3]?.trim() || hit?.[2]?.trim() || label
-  const input = tool === "lsp" ? { operation: hit?.[2] } : { action: hit?.[2] }
-  const info = tool ? discoveryToolInfo(i18n, tool, input) ?? getToolInfo(tool, input) : undefined
-  return {
-    icon: info?.icon ?? "mcp",
-    title: info?.title ?? label,
-    subtitle: detail,
-  }
-}
-
 function toolGroupKind(part: PartType): ToolGroupKind | undefined {
   if (part.type !== "tool") return
-  if (CONTEXT_GROUP_TOOLS.has(part.tool)) return "context"
+  const teamKind = getTeamToolGroupKind(part.tool)
+  if (teamKind) return teamKind
   if (TERMINAL_GROUP_TOOLS.has(part.tool)) return "terminal"
   if (EDIT_GROUP_TOOLS.has(part.tool)) return "edit"
-  if (RESEARCH_GROUP_TOOLS.has(part.tool)) return "research"
 }
 
 function terminalToolText(part: ToolPart) {
@@ -1003,7 +831,7 @@ function contextToolDetail(part: ToolPart): string | undefined {
 
 function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const input = (part.state.input ?? {}) as Record<string, unknown>
-  const discovery = discoveryToolInfo(i18n, part.tool, input)
+  const discovery = getTeamToolInfo(i18n, part.tool, input)
   if (discovery) {
     return {
       ...discovery,
@@ -1080,7 +908,7 @@ function DiscoveryToolGroupItem(props: { part: ToolPart }) {
   })
   const batchSections = createMemo(() => {
     if (props.part.tool !== "discover_batch" || running()) return [] as Array<{ key: string; label: string; output: string }>
-    return discoveryBatchSections(output())
+    return discoverBatchSections(output())
   })
 
   if (batchSections().length > 0) {
@@ -1089,7 +917,18 @@ function DiscoveryToolGroupItem(props: { part: ToolPart }) {
         <For each={batchSections()}>
           {(section) => {
             const [sectionOpen, setSectionOpen] = createSignal(false)
-            const sectionInfo = createMemo(() => discoveryBatchSectionInfo(i18n, section.label))
+            const sectionInfo = createMemo(() => {
+              const hit = /^([a-z_]+)(?::([a-z_]+))?(?:\s+—\s+(.+))?$/.exec(section.label)
+              const tool = hit?.[1]
+              const detail = hit?.[3]?.trim() || hit?.[2]?.trim() || section.label
+              const input = tool === "lsp" ? { operation: hit?.[2] } : { action: hit?.[2] }
+              const info = tool ? getTeamToolInfo(i18n, tool, input) ?? getToolInfo(tool, input) : undefined
+              return {
+                icon: info?.icon ?? "mcp",
+                title: info?.title ?? section.label,
+                subtitle: detail,
+              }
+            })
 
             return (
               <Collapsible open={sectionOpen()} onOpenChange={setSectionOpen} variant="ghost" class="tool-collapsible">
@@ -1162,7 +1001,7 @@ function DiscoveryToolGroupItem(props: { part: ToolPart }) {
                       <For each={batchCalls()}>
                         {(call) => {
                           const tool = typeof call.tool === "string" ? call.tool : "discover_batch"
-                          const info = discoveryToolInfo(i18n, tool, call) ?? {
+                          const info = getTeamToolInfo(i18n, tool, call) ?? {
                             icon: "mcp" as const,
                             title: tool,
                           }
@@ -2163,11 +2002,13 @@ ToolRegistry.register({
   name: "websearch",
   render(props) {
     const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
     const query = createMemo(() => {
       const value = props.input.query
       if (typeof value !== "string") return ""
       return value
     })
+    const estimatedTokens = createMemo(() => estimateTokens(props.output))
 
     return (
       <BasicTool
@@ -2177,6 +2018,17 @@ ToolRegistry.register({
           title: i18n.t("ui.tool.websearch"),
           subtitle: query(),
           subtitleClass: "exa-tool-query",
+          args:
+            !pending() && estimatedTokens() > 0
+              ? [
+                  i18n.t(
+                    estimatedTokens() === 1
+                      ? "ui.messagePart.discovery.tokens.one"
+                      : "ui.messagePart.discovery.tokens.other",
+                    { count: estimatedTokens() },
+                  ),
+                ]
+              : [],
         }}
       >
         <ExaOutput output={props.output} />
@@ -2189,11 +2041,13 @@ ToolRegistry.register({
   name: "codesearch",
   render(props) {
     const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
     const query = createMemo(() => {
       const value = props.input.query
       if (typeof value !== "string") return ""
       return value
     })
+    const estimatedTokens = createMemo(() => estimateTokens(props.output))
 
     return (
       <BasicTool
@@ -2203,6 +2057,17 @@ ToolRegistry.register({
           title: i18n.t("ui.tool.codesearch"),
           subtitle: query(),
           subtitleClass: "exa-tool-query",
+          args:
+            !pending() && estimatedTokens() > 0
+              ? [
+                  i18n.t(
+                    estimatedTokens() === 1
+                      ? "ui.messagePart.discovery.tokens.one"
+                      : "ui.messagePart.discovery.tokens.other",
+                    { count: estimatedTokens() },
+                  ),
+                ]
+              : [],
         }}
       >
         <ExaOutput output={props.output} />
@@ -2828,3 +2693,77 @@ for (const tool of teamTools) ToolRegistry.register(tool)
 for (const tool of editTools) ToolRegistry.register(tool)
 for (const tool of mcpTools) ToolRegistry.register(tool)
 ToolRegistry.register(taskAsyncTool)
+
+ToolRegistry.register({
+  name: "lib_batch",
+  render(props) {
+    const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const calls = createMemo(() => (Array.isArray(props.input.calls) ? props.input.calls.length : 0))
+
+    if (!pending() && Array.isArray(props.metadata.results) && props.metadata.results.length > 0) {
+      return <TeamBatchResultList metadata={props.metadata} format="markdown" getToolInfo={getToolInfo} />
+    }
+
+    return (
+      <BasicTool
+        {...props}
+        icon="window-cursor"
+        trigger={{
+          title: i18n.t("ui.tool.libBatch"),
+          subtitle:
+            calls() > 0
+              ? i18n.t(calls() === 1 ? "ui.messagePart.batch.calls.one" : "ui.messagePart.batch.calls.other", {
+                  count: calls(),
+                })
+              : "",
+        }}
+      >
+        <Show when={props.output}>
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "edit_batch",
+  render(props) {
+    const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const calls = createMemo(() => (Array.isArray(props.input.calls) ? props.input.calls.length : 0))
+
+    if (!pending() && Array.isArray(props.metadata.results) && props.metadata.results.length > 0) {
+      return <TeamBatchResultList metadata={props.metadata} format="term" getToolInfo={getToolInfo} />
+    }
+
+    return (
+      <BasicTool
+        {...props}
+        icon="code-lines"
+        trigger={{
+          title: i18n.t("ui.tool.editBatch"),
+          subtitle:
+            calls() > 0
+              ? i18n.t(calls() === 1 ? "ui.messagePart.batch.calls.one" : "ui.messagePart.batch.calls.other", {
+                  count: calls(),
+                })
+              : "",
+        }}
+      >
+        <Show when={props.output}>
+          <div data-component="bash-output">
+            <div data-slot="bash-scroll" data-scrollable>
+              <pre data-slot="bash-pre">
+                <code>{props.output!}</code>
+              </pre>
+            </div>
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})

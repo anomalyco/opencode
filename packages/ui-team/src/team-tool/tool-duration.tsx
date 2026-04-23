@@ -5,9 +5,9 @@ type ToolTime = {
   end?: number
 }
 
-export function ToolDuration(props: { time?: ToolTime; status?: string }) {
+export function ToolDuration(props: { time?: ToolTime; status?: string; active?: boolean }) {
   const [now, setNow] = createSignal(Date.now())
-  const active = createMemo(() => props.status === "running")
+  const active = createMemo(() => props.active ?? props.status === "running")
 
   createMemo(() => {
     if (!active()) return

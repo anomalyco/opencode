@@ -130,6 +130,59 @@
   line-height: 16px;
 }
 
+[data-component="task-tool-card"].task-async-card {
+  [data-slot="basic-tool-tool-info-structured"] {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  [data-slot="basic-tool-tool-info-main"] {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  [data-slot="basic-tool-tool-title"].task-async-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: none;
+  }
+
+  [data-component="task-async-tool-meta"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  [data-component="tool-duration"] {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+}
+
+[data-component="team-smart-tool-meta"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+[data-component="team-smart-tool-icon"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--icon-weak);
+}
+
 [data-slot="discovery-group-icon"] {
   display: inline-flex;
   align-items: center;
