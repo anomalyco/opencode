@@ -71,7 +71,7 @@ export default [
     const info = data.info
     const row = db
       .update(SessionTable)
-      .set(toPartialRow(info))
+      .set(toPartialRow(info as Session.Patch))
       .where(eq(SessionTable.id, data.sessionID))
       .returning()
       .get()

@@ -1,5 +1,4 @@
 import z from "zod"
-import type { ZodObject } from "zod"
 import { Database, eq } from "@/storage"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
@@ -9,8 +8,18 @@ import { EventSequenceTable, EventTable } from "./event.sql"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { EventID } from "./schema"
 import { Flag } from "@/flag/flag"
+import { Schema as EffectSchema } from "effect"
+import { zodObject } from "@/util/effect-zod"
+import { isRecord } from "@/util/record"
 
-export type Definition = {
+type ObjectSchema = z.ZodObject<any> | EffectSchema.Top
+type SchemaData<S extends ObjectSchema> = S extends z.ZodObject<any>
+  ? z.infer<S>
+  : S extends EffectSchema.Top
+    ? EffectSchema.Schema.Type<S>
+    : never
+
+export type Definition<Data = unknown, PropertiesData = Data> = {
   type: string
   version: number
   aggregate: string
@@ -19,14 +28,20 @@ export type Definition = {
   // This is temporary and only exists for compatibility with bus
   // event definitions
   properties: z.ZodObject
+
+  readonly _data?: Data
+  readonly _propertiesData?: PropertiesData
 }
 
 export type Event<Def extends Definition = Definition> = {
   id: string
   seq: number
   aggregateID: string
-  data: z.infer<Def["schema"]>
+  data: Def extends Definition<infer Data> ? Data : never
 }
+
+export type Properties<Def extends Definition = Definition> =
+  Def extends Definition<any, infer PropertiesData> ? PropertiesData : never
 
 export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
@@ -36,7 +51,12 @@ export const registry = new Map<string, Definition>()
 let projectors: Map<Definition, ProjectorFunc> | undefined
 const versions = new Map<string, number>()
 let frozen = false
-let convertEvent: (type: string, event: Event["data"]) => Promise<Record<string, unknown>> | Record<string, unknown>
+let convertEvent: (type: string, event: Event["data"]) => Promise<unknown> | unknown
+
+function asRecord(input: unknown) {
+  if (isRecord(input)) return input
+  throw new Error(`SyncEvent.convertEvent must return an object, got: ${JSON.stringify(input)}`)
+}
 
 export function reset() {
   frozen = false
@@ -69,12 +89,23 @@ export function versionedType(type: string, version?: number) {
   return version ? `${type}.${version}` : type
 }
 
+function normalizeSchema(schema: ObjectSchema) {
+  return isZodObject(schema) ? schema : zodObject(schema)
+}
+
+function isZodObject(schema: ObjectSchema): schema is z.ZodObject<any> {
+  return typeof schema === "object" && schema !== null && "_zod" in schema && "shape" in schema
+}
+
 export function define<
   Type extends string,
   Agg extends string,
-  Schema extends ZodObject<Record<Agg, z.ZodType<string>>>,
-  BusSchema extends ZodObject = Schema,
->(input: { type: Type; version: number; aggregate: Agg; schema: Schema; busSchema?: BusSchema }) {
+  Schema extends ObjectSchema,
+  BusSchema extends ObjectSchema = Schema,
+>(input: { type: Type; version: number; aggregate: Agg; schema: Schema; busSchema?: BusSchema }): Definition<
+  SchemaData<Schema>,
+  SchemaData<BusSchema>
+> {
   if (frozen) {
     throw new Error("Error defining sync event: sync system has been frozen")
   }
@@ -83,8 +114,8 @@ export function define<
     type: input.type,
     version: input.version,
     aggregate: input.aggregate,
-    schema: input.schema,
-    properties: input.busSchema ? input.busSchema : input.schema,
+    schema: normalizeSchema(input.schema),
+    properties: normalizeSchema(input.busSchema ? input.busSchema : input.schema),
   }
 
   versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
@@ -143,10 +174,10 @@ function process<Def extends Definition>(def: Def, event: Event<Def>, options: {
         const result = convertEvent(def.type, event.data)
         if (result instanceof Promise) {
           void result.then((data) => {
-            void ProjectBus.publish({ type: def.type, properties: def.schema }, data)
+            void ProjectBus.publish({ type: def.type, properties: def.properties }, asRecord(data))
           })
         } else {
-          void ProjectBus.publish({ type: def.type, properties: def.schema }, result)
+          void ProjectBus.publish({ type: def.type, properties: def.properties }, asRecord(result))
         }
 
         GlobalBus.emit("event", {

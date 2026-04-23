@@ -1058,31 +1058,31 @@ export type SyncEventSessionUpdated = {
   data: {
     sessionID: string
     info: {
-      id: string | null
-      slug: string | null
-      projectID: string | null
-      workspaceID: string | null
-      directory: string | null
-      parentID: string | null
-      summary: {
+      id?: string | null
+      slug?: string | null
+      projectID?: string | null
+      workspaceID?: string | null
+      directory?: string | null
+      parentID?: string | null
+      summary?: {
         additions: number
         deletions: number
         files: number
         diffs?: Array<SnapshotFileDiff>
       } | null
       share?: {
-        url: string | null
+        url?: string | null
       }
-      title: string | null
-      version: string | null
+      title?: string | null
+      version?: string | null
       time?: {
-        created: number | null
-        updated: number | null
-        compacting: number | null
-        archived: number | null
+        created?: number | null
+        updated?: number | null
+        compacting?: number | null
+        archived?: number | null
       }
-      permission: PermissionRuleset | null
-      revert: {
+      permission?: PermissionRuleset | null
+      revert?: {
         messageID: string
         partID?: string
         snapshot?: string
