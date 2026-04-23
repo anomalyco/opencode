@@ -1,6 +1,16 @@
 import { Schema } from "effect"
 
 /**
+ * Integer greater than zero.
+ */
+export const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
+
+/**
+ * Integer greater than or equal to zero.
+ */
+export const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+
+/**
  * Attach static methods to a schema object. Designed to be used with `.pipe()`:
  *
  * @example

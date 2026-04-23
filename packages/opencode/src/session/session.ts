@@ -15,7 +15,6 @@ import { PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage"
 import { Log } from "../util"
-import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { InstanceState } from "@/effect"
@@ -28,7 +27,7 @@ import type { Provider } from "@/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
-import { zod, zodObject } from "@/util/effect-zod"
+import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "session" })
@@ -215,40 +214,62 @@ export const MessagesInput = Schema.Struct({
   limit: Schema.optional(Schema.Number),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 
+const CreatedEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  info: Info,
+})
+
+const UpdatedShare = Schema.Struct({
+  url: Schema.optional(Schema.NullOr(Schema.String)),
+})
+
+const UpdatedTime = Schema.Struct({
+  created: Schema.optional(Schema.NullOr(Schema.Number)),
+  updated: Schema.optional(Schema.NullOr(Schema.Number)),
+  compacting: Schema.optional(Schema.NullOr(Schema.Number)),
+  archived: Schema.optional(Schema.NullOr(Schema.Number)),
+})
+
+const UpdatedInfo = Schema.Struct({
+  id: Schema.optional(Schema.NullOr(SessionID)),
+  slug: Schema.optional(Schema.NullOr(Schema.String)),
+  projectID: Schema.optional(Schema.NullOr(ProjectID)),
+  workspaceID: Schema.optional(Schema.NullOr(WorkspaceID)),
+  directory: Schema.optional(Schema.NullOr(Schema.String)),
+  parentID: Schema.optional(Schema.NullOr(SessionID)),
+  summary: Schema.optional(Schema.NullOr(Summary)),
+  share: Schema.optional(UpdatedShare),
+  title: Schema.optional(Schema.NullOr(Schema.String)),
+  version: Schema.optional(Schema.NullOr(Schema.String)),
+  time: Schema.optional(UpdatedTime),
+  permission: Schema.optional(Schema.NullOr(Permission.Ruleset)),
+  revert: Schema.optional(Schema.NullOr(Revert)),
+})
+
+const UpdatedEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  info: UpdatedInfo,
+})
+
 export const Event = {
   Created: SyncEvent.define({
     type: "session.created",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      info: Info.zod,
-    }),
+    schema: CreatedEventSchema,
   }),
   Updated: SyncEvent.define({
     type: "session.updated",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      info: updateSchema(zodObject(Info)).extend({
-        share: updateSchema(zodObject(Share)).optional(),
-        time: updateSchema(zodObject(Time)).optional(),
-      }),
-    }),
-    busSchema: z.object({
-      sessionID: SessionID.zod,
-      info: Info.zod,
-    }),
+    schema: UpdatedEventSchema,
+    busSchema: CreatedEventSchema,
   }),
   Deleted: SyncEvent.define({
     type: "session.deleted",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      info: Info.zod,
-    }),
+    schema: CreatedEventSchema,
   }),
   Diff: BusEvent.define(
     "session.diff",
@@ -394,7 +415,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
 
-type Patch = z.infer<typeof Event.Updated.schema>["info"]
+export type Patch = Types.DeepMutable<SyncEvent.Event<typeof Event.Updated>["data"]["info"]>
 
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
   Effect.sync(() => Database.use(fn))
