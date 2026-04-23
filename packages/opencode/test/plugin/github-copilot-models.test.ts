@@ -117,6 +117,103 @@ test("preserves temperature support from existing provider models", async () => 
   expect(models["brand-new"].capabilities.temperature).toBe(true)
 })
 
+test("preserves cost from existing provider models", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "gpt-5-mini",
+              name: "GPT-5 Mini",
+              version: "gpt-5-mini-2026-04-01",
+              capabilities: {
+                family: "gpt",
+                limits: {
+                  max_context_window_tokens: 128000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 128000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = await CopilotModels.get(
+    "https://api.githubcopilot.com",
+    {},
+    {
+      "gpt-5-mini": {
+        id: "gpt-5-mini",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5-mini",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+        name: "GPT-5 Mini",
+        family: "gpt",
+        capabilities: {
+          temperature: true,
+          reasoning: false,
+          attachment: true,
+          toolcall: true,
+          input: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          output: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          interleaved: false,
+        },
+        cost: {
+          input: 0.25,
+          output: 2,
+          cache: {
+            read: 0.025,
+            write: 0,
+          },
+        },
+        limit: {
+          context: 128000,
+          output: 16384,
+        },
+        options: {},
+        headers: {},
+        release_date: "2026-04-01",
+        variants: {},
+        status: "active",
+      },
+    },
+  )
+
+  expect(models["gpt-5-mini"].cost).toEqual({
+    input: 0.25,
+    output: 2,
+    cache: {
+      read: 0.025,
+      write: 0,
+    },
+  })
+})
+
 test("remaps fallback oauth model urls to the enterprise host", async () => {
   globalThis.fetch = mock(() => Promise.reject(new Error("timeout"))) as unknown as typeof fetch
 

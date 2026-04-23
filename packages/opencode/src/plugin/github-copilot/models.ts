@@ -97,11 +97,12 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
     // existing wins
     family: prev?.family ?? remote.capabilities.family,
     name: prev?.name ?? remote.name,
-    cost: {
-      input: 0,
-      output: 0,
-      cache: { read: 0, write: 0 },
-    },
+    cost:
+      prev?.cost ?? {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
     options: prev?.options ?? {},
     headers: prev?.headers ?? {},
     release_date:
