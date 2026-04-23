@@ -274,9 +274,9 @@ Possible later tightening after the Schema-first migration is stable:
 
 ### Provider domain
 
-- [ ] `src/provider/auth.ts`
-- [ ] `src/provider/models.ts`
-- [ ] `src/provider/provider.ts`
+- [x] `src/provider/auth.ts`
+- [x] `src/provider/models.ts`
+- [x] `src/provider/provider.ts`
 
 ### Tool schemas
 
