@@ -1,6 +1,11 @@
 import { describe, test, expect } from "bun:test"
 import { Keybind } from "../src/util"
 
+/** Mirrors how `Keybind.toString` labels the super modifier; keep in sync with `src/util/keybind.ts`. */
+function superDisplay(): "cmd" | "super" {
+  return process.platform === "darwin" ? "cmd" : "super"
+}
+
 describe("Keybind.toString", () => {
   test("should convert simple key to string", () => {
     const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "f" }
@@ -71,28 +76,22 @@ describe("Keybind.toString", () => {
 
   test("should convert super modifier to string", () => {
     const info: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "z" }
-    if (process.platform === "darwin") {
-      expect(Keybind.toString(info)).toBe("cmd+z")
-    } else {
-      expect(Keybind.toString(info)).toBe("super+z")
-    }
+    expect(Keybind.toString(info)).toBe(`${superDisplay()}+z`)
   })
 
   test("should convert super+shift modifier to string", () => {
     const info: Keybind.Info = { ctrl: false, meta: false, shift: true, super: true, leader: false, name: "z" }
-    expect(Keybind.toString(info)).toBe(process.platform === "darwin" ? "cmd+shift+z" : "super+shift+z")
+    expect(Keybind.toString(info)).toBe(`${superDisplay()}+shift+z`)
   })
 
   test("should handle super with ctrl modifier", () => {
     const info: Keybind.Info = { ctrl: true, meta: false, shift: false, super: true, leader: false, name: "a" }
-    expect(Keybind.toString(info)).toBe(process.platform === "darwin" ? "ctrl+cmd+a" : "ctrl+super+a")
+    expect(Keybind.toString(info)).toBe(`ctrl+${superDisplay()}+a`)
   })
 
   test("should handle super with all modifiers", () => {
     const info: Keybind.Info = { ctrl: true, meta: true, shift: true, super: true, leader: false, name: "x" }
-    expect(Keybind.toString(info)).toBe(
-      process.platform === "darwin" ? "ctrl+alt+cmd+shift+x" : "ctrl+alt+super+shift+x",
-    )
+    expect(Keybind.toString(info)).toBe(`ctrl+alt+${superDisplay()}+shift+x`)
   })
 
   test("should handle undefined super field (omitted)", () => {
