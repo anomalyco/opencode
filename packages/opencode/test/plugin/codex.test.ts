@@ -3,6 +3,7 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  filterCodexOAuthModels,
   type IdTokenClaims,
 } from "../../src/plugin/codex"
 
@@ -118,6 +119,36 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("filterCodexOAuthModels", () => {
+    test("keeps gpt-5.5 for ChatGPT OAuth", () => {
+      const provider = {
+        models: {
+          "gpt-5.5": { api: { id: "gpt-5.5" } },
+          "gpt-5.4-nano": { api: { id: "gpt-5.4-nano" } },
+          "gpt-4.1": { api: { id: "gpt-4.1" } },
+        },
+      }
+
+      filterCodexOAuthModels(provider)
+
+      expect(Object.keys(provider.models)).toEqual(["gpt-5.5"])
+    })
+
+    test("keeps codex models and newer gpt-5 point releases", () => {
+      const provider = {
+        models: {
+          "gpt-5.3-codex": { api: { id: "gpt-5.3-codex" } },
+          "gpt-5.6": { api: { id: "gpt-5.6" } },
+          "gpt-5.4-pro": { api: { id: "gpt-5.4-pro" } },
+        },
+      }
+
+      filterCodexOAuthModels(provider)
+
+      expect(Object.keys(provider.models)).toEqual(["gpt-5.3-codex", "gpt-5.6"])
     })
   })
 })
