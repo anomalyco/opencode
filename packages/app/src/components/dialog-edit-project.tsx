@@ -12,6 +12,7 @@ import { type LocalProject, getAvatarColors } from "@/context/layout"
 import { getFilename } from "@opencode-ai/shared/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { useLanguage } from "@/context/language"
+import { getProjectAvatarSource } from "@/pages/layout/sidebar-items"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 
@@ -144,7 +145,11 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   }}
                 >
                   <Show
-                    when={store.iconOverride || (!store.color && props.project.icon?.url)}
+                    when={getProjectAvatarSource(props.project.id, {
+                      color: store.color,
+                      url: props.project.icon?.url,
+                      override: store.iconOverride,
+                    })}
                     fallback={
                       <div class="size-full flex items-center justify-center">
                         <Avatar
@@ -155,11 +160,13 @@ export function DialogEditProject(props: { project: LocalProject }) {
                       </div>
                     }
                   >
-                    <img
-                      src={store.iconOverride || props.project.icon?.url}
-                      alt={language.t("dialog.project.edit.icon.alt")}
-                      class="size-full object-cover"
-                    />
+                    {(src) => (
+                      <img
+                        src={src()}
+                        alt={language.t("dialog.project.edit.icon.alt")}
+                        class="size-full object-cover"
+                      />
+                    )}
                   </Show>
                 </div>
                 <div
@@ -216,6 +223,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                           store.color !== color,
                       }}
                       onClick={() => {
+                        if (store.color === color && !props.project.icon?.url) return
                         setStore("color", store.color === color ? undefined : color)
                       }}
                     >

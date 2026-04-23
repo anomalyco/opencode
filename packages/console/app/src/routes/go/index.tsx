@@ -29,6 +29,8 @@ const models = [
   { name: "Kimi K2.6", provider: "Moonshot AI" },
   { name: "MiMo-V2-Pro", provider: "Xiaomi MiMo" },
   { name: "MiMo-V2-Omni", provider: "Xiaomi MiMo" },
+  { name: "MiMo-V2.5-Pro", provider: "Xiaomi MiMo" },
+  { name: "MiMo-V2.5", provider: "Xiaomi MiMo" },
   { name: "Qwen3.5 Plus", provider: "Alibaba Cloud Model Studio" },
   { name: "Qwen3.6 Plus", provider: "Alibaba Cloud Model Studio" },
   { name: "MiniMax M2.7", provider: "MiniMax" },
@@ -60,7 +62,7 @@ function LimitsGraph(props: { href: string }) {
   const graph = [
     { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
     { id: "kimi-k2.6", name: "Kimi K2.6 (3x usage)", req: 3450, baseReq: 1150, d: "150ms" },
-    { id: "mimo-v2-pro", name: "MiMo-V2-Pro", req: 1290, d: "150ms" },
+    { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 1290, d: "150ms" },
     { id: "qwen3.6-plus", name: "Qwen3.6 Plus", req: 3300, d: "280ms" },
     { id: "minimax-m2.7", name: "MiniMax M2.7", req: 3400, d: "300ms" },
     { id: "qwen3.5-plus", name: "Qwen3.5 Plus", req: 10200, d: "360ms" },
