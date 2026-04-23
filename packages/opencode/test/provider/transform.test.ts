@@ -3148,3 +3148,441 @@ describe("ProviderTransform.variants", () => {
     })
   })
 })
+describe("ProviderTransform.message - preserve redacted_thinking blocks", () => {
+  const anthropicModel = {
+    id: "anthropic/claude-sonnet-4",
+    providerID: "anthropic",
+    api: {
+      id: "claude-sonnet-4-20250514",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude Sonnet 4",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: true,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("preserves redacted_thinking blocks (empty text with providerOptions)", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Let me think about this...",
+            providerOptions: { anthropic: { signature: "sig_abc123" } },
+          },
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { anthropic: { redactedData: "opaque_encrypted_data_blob" } },
+          },
+          { type: "text", text: "Here is my answer." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(3)
+    expect(result[0].content[0]).toEqual({
+      type: "reasoning",
+      text: "Let me think about this...",
+      providerOptions: { anthropic: { signature: "sig_abc123" } },
+    })
+    expect(result[0].content[1]).toEqual({
+      type: "reasoning",
+      text: "",
+      providerOptions: { anthropic: { redactedData: "opaque_encrypted_data_blob" } },
+    })
+    expect(result[0].content[2]).toEqual({ type: "text", text: "Here is my answer." })
+  })
+
+  test("still filters empty reasoning parts without providerOptions", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  test("preserves multiple redacted_thinking blocks interleaved with thinking blocks", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "First thought",
+            providerOptions: { anthropic: { signature: "sig_1" } },
+          },
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { anthropic: { redactedData: "redacted_1" } },
+          },
+          {
+            type: "reasoning",
+            text: "Second thought",
+            providerOptions: { anthropic: { signature: "sig_2" } },
+          },
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { anthropic: { redactedData: "redacted_2" } },
+          },
+          { type: "text", text: "Final answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(5)
+    expect(result[0].content[1].type).toBe("reasoning")
+    expect(result[0].content[1].text).toBe("")
+    expect(result[0].content[1].providerOptions.anthropic.redactedData).toBe("redacted_1")
+    expect(result[0].content[3].type).toBe("reasoning")
+    expect(result[0].content[3].text).toBe("")
+    expect(result[0].content[3].providerOptions.anthropic.redactedData).toBe("redacted_2")
+  })
+
+  test("preserves redacted_thinking on bedrock provider", () => {
+    const bedrockModel = {
+      ...anthropicModel,
+      id: "amazon-bedrock/anthropic.claude-sonnet-4",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "anthropic.claude-sonnet-4",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { anthropic: { redactedData: "opaque_data" } },
+          },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({
+      type: "reasoning",
+      text: "",
+      providerOptions: { anthropic: { redactedData: "opaque_data" } },
+    })
+  })
+})
+
+describe("ProviderTransform.message - preserve thinking blocks during tool-use reordering", () => {
+  const anthropicModel = {
+    id: "anthropic/claude-sonnet-4",
+    providerID: "anthropic",
+    api: {
+      id: "claude-sonnet-4-20250514",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude Sonnet 4",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: true,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("does not split assistant message when reasoning blocks are present with trailing tool calls", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "I need to check the file...",
+            providerOptions: { anthropic: { signature: "sig_abc" } },
+          },
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "text", text: "Let me check that for you." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    // Should NOT be split — message must remain intact to preserve thinking block positions
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(3)
+    expect(result[0].content[0].type).toBe("reasoning")
+    expect(result[0].content[1].type).toBe("tool-call")
+    expect(result[0].content[2].type).toBe("text")
+  })
+
+  test("does not split when redacted_thinking blocks are present", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { anthropic: { redactedData: "opaque_data" } },
+          },
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "bash", input: { command: "ls" } },
+          { type: "text", text: "Done." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(3)
+  })
+
+  test("still splits messages without reasoning blocks", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+          { type: "text", text: "I checked the file." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    // Should still split when no reasoning blocks present
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toEqual([{ type: "text", text: "I checked the file." }])
+    expect(result[1].content).toEqual([
+      { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/root" } },
+    ])
+  })
+
+  test("works on vertex anthropic with reasoning blocks", () => {
+    const vertexModel = {
+      ...anthropicModel,
+      providerID: "google-vertex-anthropic",
+      api: {
+        id: "claude-sonnet-4@20250514",
+        url: "https://us-central1-aiplatform.googleapis.com",
+        npm: "@ai-sdk/google-vertex/anthropic",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Thinking...",
+            providerOptions: { anthropic: { signature: "sig_xyz" } },
+          },
+          { type: "tool-call", toolCallId: "toolu_1", toolName: "read", input: { filePath: "/tmp" } },
+          { type: "text", text: "Here are the results." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, vertexModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(3)
+  })
+})
+
+describe("ProviderTransform.message - cache control skips reasoning blocks", () => {
+  test("cache hint is applied to non-reasoning block when reasoning is last", () => {
+    // This tests providers where cache control is applied at the content-part level
+    // (not message level), e.g. openrouter routing to Anthropic
+    const openrouterModel = {
+      id: "openrouter/anthropic/claude-sonnet-4",
+      providerID: "openrouter",
+      api: {
+        id: "anthropic/claude-sonnet-4",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+      name: "Claude Sonnet 4",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: true,
+      },
+      cost: {
+        input: 0.003,
+        output: 0.015,
+        cache: { read: 0.0003, write: 0.00375 },
+      },
+      limit: {
+        context: 200000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    } as any
+
+    const msgs = [
+      {
+        role: "system",
+        content: [{ type: "text", text: "You are a helpful assistant." }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "I'll help you." },
+          {
+            type: "reasoning",
+            text: "Thinking about next steps...",
+            providerOptions: { anthropic: { signature: "sig_123" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openrouterModel, {}) as any[]
+
+    // The last message is in the "final" set for caching.
+    // Cache hint should be on the text block, NOT the reasoning block.
+    const assistantMsg = result[result.length - 1]
+    const reasoningPart = assistantMsg.content.find((p: any) => p.type === "reasoning")
+    const textPart = assistantMsg.content.find((p: any) => p.type === "text")
+
+    // Reasoning block should not have cache control added
+    expect(reasoningPart.providerOptions?.anthropic?.cacheControl).toBeUndefined()
+    expect(reasoningPart.providerOptions?.openrouter?.cacheControl).toBeUndefined()
+    // The text block should receive the cache hint instead
+    expect(textPart.providerOptions).toBeDefined()
+  })
+
+  test("cache hint falls back to message level when all content blocks are reasoning", () => {
+    const openrouterModel = {
+      id: "openrouter/anthropic/claude-sonnet-4",
+      providerID: "openrouter",
+      api: {
+        id: "anthropic/claude-sonnet-4",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+      name: "Claude Sonnet 4",
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: true,
+      },
+      cost: {
+        input: 0.003,
+        output: 0.015,
+        cache: { read: 0.0003, write: 0.00375 },
+      },
+      limit: {
+        context: 200000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    } as any
+
+    const msgs = [
+      {
+        role: "system",
+        content: [{ type: "text", text: "You are a helpful assistant." }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Only reasoning here...",
+            providerOptions: { anthropic: { signature: "sig_only" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openrouterModel, {}) as any[]
+
+    // When no suitable content block is found, cache hint should go to message level
+    const assistantMsg = result[result.length - 1]
+    const reasoningPart = assistantMsg.content[0]
+
+    // Reasoning block must NOT be modified
+    expect(reasoningPart.providerOptions?.openrouter?.cacheControl).toBeUndefined()
+    // Cache falls back to message-level providerOptions
+    expect(assistantMsg.providerOptions).toBeDefined()
+  })
+})
