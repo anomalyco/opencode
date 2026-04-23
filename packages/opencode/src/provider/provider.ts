@@ -31,6 +31,76 @@ import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
 
+const proxyKeys = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"] as const
+const noProxyKeys = ["NO_PROXY", "no_proxy"] as const
+
+function privateIPv4(hostname: string) {
+  const match = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(hostname)
+  if (!match) return false
+
+  const a = Number.parseInt(match[1], 10)
+  const b = Number.parseInt(match[2], 10)
+  if (Number.isNaN(a) || Number.isNaN(b)) return false
+  if (a === 10 || a === 127) return true
+  if (a === 192 && b === 168) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 169 && b === 254) return true
+  return false
+}
+
+function privateIPv6(hostname: string) {
+  const host = hostname.toLowerCase()
+  if (host === "::1") return true
+  if (host.startsWith("fc") || host.startsWith("fd")) return true
+  if (host.startsWith("fe8") || host.startsWith("fe9") || host.startsWith("fea") || host.startsWith("feb"))
+    return true
+  return false
+}
+
+function bypassProxy(hostname: string) {
+  if (hostname === "localhost") return true
+  if (!hostname.includes(".")) return true
+  if (hostname.endsWith(".local")) return true
+  if (privateIPv4(hostname)) return true
+  if (privateIPv6(hostname)) return true
+  return false
+}
+
+function coveredByNoProxy(hostname: string, item: string) {
+  const next = item.trim().toLowerCase()
+  if (!next) return false
+  if (next === "*" || next === hostname) return true
+  if (!next.startsWith(".")) return false
+  return hostname.endsWith(next)
+}
+
+export function ensureNoProxyForBaseURL(baseURL: string | undefined) {
+  if (!baseURL) return
+  if (!proxyKeys.some((key) => Boolean(process.env[key]))) return
+
+  let url: URL
+  try {
+    url = new URL(baseURL)
+  } catch {
+    return
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") return
+
+  const hostname = url.hostname.trim().toLowerCase()
+  if (!hostname || !bypassProxy(hostname)) return
+
+  for (const key of noProxyKeys) {
+    const existing = (process.env[key] ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    if (existing.some((item) => coveredByNoProxy(hostname, item))) continue
+    process.env[key] = [...existing, hostname].join(",")
+  }
+}
+
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
   if (!match) return false
@@ -1420,7 +1490,10 @@ const layer: Layer.Layer<
           return url
         })
 
-        if (baseURL !== undefined) options["baseURL"] = baseURL
+        if (baseURL !== undefined) {
+          options["baseURL"] = baseURL
+          ensureNoProxyForBaseURL(baseURL)
+        }
         if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
         if (model.headers)
           options["headers"] = {

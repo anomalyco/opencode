@@ -8,6 +8,7 @@ import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin/index"
 import { ModelsDev } from "../../src/provider"
 import { Provider } from "../../src/provider"
+import { ensureNoProxyForBaseURL } from "../../src/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util"
 import { Env } from "../../src/env"
@@ -60,6 +61,52 @@ function paid(providers: Awaited<ReturnType<typeof list>>) {
   expect(item).toBeDefined()
   return Object.values(item.models).filter((model) => model.cost.input > 0).length
 }
+
+test("ensureNoProxyForBaseURL adds private host when proxy is configured", () => {
+  const previous = {
+    HTTP_PROXY: process.env.HTTP_PROXY,
+    HTTPS_PROXY: process.env.HTTPS_PROXY,
+    NO_PROXY: process.env.NO_PROXY,
+    no_proxy: process.env.no_proxy,
+  }
+  process.env.HTTP_PROXY = "http://proxy.internal:8080"
+  process.env.HTTPS_PROXY = "http://proxy.internal:8080"
+  process.env.NO_PROXY = "localhost"
+  process.env.no_proxy = "127.0.0.1"
+
+  ensureNoProxyForBaseURL("http://192.168.0.100:1234/v1")
+
+  expect(process.env.NO_PROXY?.split(",")).toContain("192.168.0.100")
+  expect(process.env.no_proxy?.split(",")).toContain("192.168.0.100")
+
+  process.env.HTTP_PROXY = previous.HTTP_PROXY
+  process.env.HTTPS_PROXY = previous.HTTPS_PROXY
+  process.env.NO_PROXY = previous.NO_PROXY
+  process.env.no_proxy = previous.no_proxy
+})
+
+test("ensureNoProxyForBaseURL keeps public hosts proxied", () => {
+  const previous = {
+    HTTP_PROXY: process.env.HTTP_PROXY,
+    HTTPS_PROXY: process.env.HTTPS_PROXY,
+    NO_PROXY: process.env.NO_PROXY,
+    no_proxy: process.env.no_proxy,
+  }
+  process.env.HTTP_PROXY = "http://proxy.internal:8080"
+  process.env.HTTPS_PROXY = "http://proxy.internal:8080"
+  process.env.NO_PROXY = "localhost"
+  process.env.no_proxy = "127.0.0.1"
+
+  ensureNoProxyForBaseURL("https://api.openai.com/v1")
+
+  expect(process.env.NO_PROXY).toBe("localhost")
+  expect(process.env.no_proxy).toBe("127.0.0.1")
+
+  process.env.HTTP_PROXY = previous.HTTP_PROXY
+  process.env.HTTPS_PROXY = previous.HTTPS_PROXY
+  process.env.NO_PROXY = previous.NO_PROXY
+  process.env.no_proxy = previous.no_proxy
+})
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
