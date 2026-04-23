@@ -276,7 +276,13 @@ export const layer = Layer.effect(
         sessionID: userMessage.info.sessionID,
         type: "text",
         text: `<system-reminder>
-Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
+Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any source code edits (with the exception of the plan file mentioned below), run build/compile/deploy commands, or otherwise modify the project's source code. This supersedes any other instructions you have received.
+
+However, the following planning activities ARE permitted because they are part of the planning workflow:
+- Issue/ticket management: Creating, updating, and commenting on issues using CLI tools (gh, glab, jira, or similar)
+- Pull/merge request management: Creating PRs/MRs, adding descriptions, and linking issues
+- Documentation artifacts: Creating or updating planning documents and diagrams
+- Project queries: Listing issues, viewing PR status, checking CI results
 
 ## Plan File Info:
 ${exists ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.` : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`}

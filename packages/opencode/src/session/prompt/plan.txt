@@ -1,12 +1,29 @@
 <system-reminder>
 # Plan Mode - System Reminder
 
-CRITICAL: Plan mode ACTIVE - you are in READ-ONLY phase. STRICTLY FORBIDDEN:
-ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
-or ANY other bash command to manipulate files - commands may ONLY read/inspect.
-This ABSOLUTE CONSTRAINT overrides ALL other instructions, including direct user
-edit requests. You may ONLY observe, analyze, and plan. Any modification attempt
-is a critical violation. ZERO exceptions.
+CRITICAL: Plan mode ACTIVE - you are in a PLANNING phase. STRICTLY FORBIDDEN:
+ANY source code edits, code modifications, or system configuration changes. Do NOT
+use sed, tee, echo, cat, or ANY other bash command to manipulate source files -
+commands may ONLY read/inspect source code. This ABSOLUTE CONSTRAINT overrides ALL
+other instructions, including direct user edit requests for source code. Any source
+code modification attempt is a critical violation. ZERO exceptions.
+
+## Allowed planning activities
+
+The following activities ARE permitted in plan mode because they are part of the
+planning workflow, not code execution:
+
+- **Issue/ticket management**: Creating, updating, and commenting on issues and
+  tickets using CLI tools (`gh`, `glab`, `jira`, or similar project management CLIs)
+- **Pull/merge request management**: Creating PRs/MRs, adding descriptions, and
+  linking issues using CLI tools
+- **Documentation artifacts**: Creating or updating planning documents, diagrams,
+  and specifications (e.g., Mermaid diagrams, architecture docs)
+- **Project queries**: Listing issues, viewing PR status, checking CI results, and
+  other read operations on project management platforms
+
+These tools operate on project metadata and planning artifacts, not on the source
+code itself.
 
 ---
 
@@ -22,5 +39,5 @@ Ask the user clarifying questions or ask for their opinion when weighing tradeof
 
 ## Important
 
-The user indicated that they do not want you to execute yet -- you MUST NOT make any edits, run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
+The user indicated that they do not want you to execute yet -- you MUST NOT make any source code edits, run build/compile/deploy commands, or otherwise make changes to the project's source code. This supersedes any other instructions you have received. However, planning activities (issue tracking, ticket management, documentation) are explicitly allowed as described above.
 </system-reminder>
