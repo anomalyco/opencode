@@ -166,10 +166,10 @@ export const WorkspaceRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ id: zodObject(Workspace.Info).shape.id })),
-      validator("json", Workspace.sessionRestore.schema.omit({ workspaceID: true })),
+      validator("json", Workspace.SessionRestoreInput.zodObject.omit({ workspaceID: true })),
       async (c) => {
         const { id } = c.req.valid("param")
-        const body = c.req.valid("json")
+        const body = c.req.valid("json") as Omit<Workspace.SessionRestoreInput, "workspaceID">
         log.info("session restore route requested", {
           workspaceID: id,
           sessionID: body.sessionID,

@@ -1,4 +1,3 @@
-import z from "zod"
 import { Schema } from "effect"
 import { setTimeout as sleep } from "node:timers/promises"
 import { fn } from "@/util/fn"
@@ -139,12 +138,13 @@ export const create = fn(CreateInput.zod, async (input) => {
   return info
 })
 
-const SessionRestoreInput = z.object({
-  workspaceID: WorkspaceID.zod,
-  sessionID: SessionID.zod,
-})
+export const SessionRestoreInput = Schema.Struct({
+  workspaceID: WorkspaceID,
+  sessionID: SessionID,
+}).pipe(withStatics((s) => ({ zod: effectZod(s), zodObject: zodObject(s) })))
+export type SessionRestoreInput = Schema.Schema.Type<typeof SessionRestoreInput>
 
-export const sessionRestore = fn(SessionRestoreInput, async (input) => {
+export const sessionRestore = fn(SessionRestoreInput.zod, async (input) => {
   log.info("session restore requested", {
     workspaceID: input.workspaceID,
     sessionID: input.sessionID,

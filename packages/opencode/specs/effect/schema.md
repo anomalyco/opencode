@@ -354,9 +354,9 @@ piecewise.
 - [ ] `src/cli/cmd/tui/event.ts`
 - [ ] `src/cli/ui.ts`
 - [ ] `src/command/index.ts`
-- [ ] `src/control-plane/adaptors/worktree.ts`
+- [x] `src/control-plane/adaptors/worktree.ts`
 - [x] `src/control-plane/types.ts`
-- [ ] `src/control-plane/workspace.ts`
+- [x] `src/control-plane/workspace.ts`
 - [ ] `src/file/index.ts`
 - [ ] `src/file/ripgrep.ts`
 - [ ] `src/file/watcher.ts`
