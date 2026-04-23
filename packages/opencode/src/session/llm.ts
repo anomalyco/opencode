@@ -29,6 +29,14 @@ const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 type Result = Awaited<ReturnType<typeof streamText>>
 
+function hasUserAgent(headers: unknown): boolean {
+  if (!headers || typeof headers !== "object") return false
+  for (const key of Object.keys(headers as Record<string, unknown>)) {
+    if (key.toLowerCase() === "user-agent") return true
+  }
+  return false
+}
+
 export type StreamInput = {
   user: MessageV2.User
   sessionID: string
@@ -377,7 +385,13 @@ const live: Layer.Layer<
             : {
                 "x-session-affinity": input.sessionID,
                 ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-                "User-Agent": `opencode/${InstallationVersion}`,
+                // Only set the default User-Agent when the user has not configured
+                // one on the provider. Per-request headers are merged AFTER the
+                // SDK's config headers, so setting it unconditionally would override
+                // a custom User-Agent from provider.options.headers. See #22608.
+                ...(hasUserAgent(item.options?.headers)
+                  ? {}
+                  : { "User-Agent": `opencode/${InstallationVersion}` }),
               }),
           ...input.model.headers,
           ...headers,

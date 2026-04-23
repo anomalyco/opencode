@@ -1269,4 +1269,91 @@ describe("session.llm.stream", () => {
       },
     })
   })
+
+  // Regression test for https://github.com/anomalyco/opencode/issues/22608
+  test("preserves custom User-Agent from provider.options.headers", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "alibaba"
+    const modelID = "qwen-plus"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                  headers: {
+                    "User-Agent": "KimiCLI/1.30.0",
+                    "X-Custom-Trace": "trace-123",
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-custom-ua")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-custom-ua"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const capture = await request
+        const userAgent = capture.headers.get("user-agent") ?? ""
+        // Custom User-Agent from provider.options.headers must be preserved (possibly
+        // with ai-sdk suffixes). It must not be replaced by opencode's default.
+        expect(userAgent).toInclude("KimiCLI/1.30.0")
+        expect(userAgent).not.toInclude("opencode/")
+        // Other custom headers should also be forwarded.
+        expect(capture.headers.get("x-custom-trace")).toBe("trace-123")
+      },
+    })
+  })
 })
