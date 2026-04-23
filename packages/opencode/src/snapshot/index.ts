@@ -459,9 +459,13 @@ export const layer: Layer.Layer<
                 if (list.length) {
                   log.info("reverting", { hash: first.hash, files: list.length })
                   const result = yield* git(
-                    [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
+                    [
+                      ...core,
+                      ...args(["checkout", "--pathspec-from-file=-", "--pathspec-file-nul", first.hash]),
+                    ],
                     {
                       cwd: state.worktree,
+                      stdin: feed(list.map((item) => item.rel)),
                     },
                   )
                   if (result.code !== 0) {
