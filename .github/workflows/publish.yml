@@ -414,19 +414,15 @@ jobs:
           - host: "windows-2025"
             target: aarch64-pc-windows-msvc
             platform_flag: --win --arm64
-            bun_install_flags: --os=win32 --cpu=arm64
           - host: "blacksmith-4vcpu-windows-2025"
             target: x86_64-pc-windows-msvc
             platform_flag: --win
-            bun_install_flags: --os=win32 --cpu=x64
           - host: "blacksmith-4vcpu-ubuntu-2404"
             target: x86_64-unknown-linux-gnu
             platform_flag: --linux
-            bun_install_flags: --os=linux --cpu=x64
           - host: "blacksmith-4vcpu-ubuntu-2404"
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux
-            bun_install_flags: --os=linux --cpu=arm64
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v3
