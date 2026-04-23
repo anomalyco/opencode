@@ -25,7 +25,7 @@ import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "e
 import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
 import { InstanceRef } from "@/effect/instance-ref"
 import { zod, ZodOverride } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, PositiveInt, withStatics } from "@/util/schema"
 import { ConfigAgent } from "./agent"
 import { ConfigCommand } from "./command"
 import { ConfigFormatter } from "./formatter"
@@ -87,9 +87,6 @@ export type Layout = ConfigLayout.Layout
 // exact zod directly, preserving component $refs.
 const AgentRef = Schema.Any.annotate({ [ZodOverride]: ConfigAgent.Info })
 const LogLevelRef = Schema.Any.annotate({ [ZodOverride]: Log.Level })
-
-const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
-const NonNegativeInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))
 
 // The Effect Schema is the canonical source of truth. The `.zod` compatibility
 // surface is derived so existing Hono validators keep working without a parallel
