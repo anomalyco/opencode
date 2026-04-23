@@ -1,7 +1,5 @@
 [data-component="message-nav-hovercard"] {
   position: relative;
-  display: flex;
-  align-self: flex-start;
   z-index: 1000;
 }
 
@@ -40,7 +38,6 @@
   justify-content: flex-start;
   height: 12px;
   width: 24px;
-  cursor: pointer;
   border: none;
   background: none;
   padding: 0;
@@ -72,7 +69,7 @@
   align-self: stretch;
   width: 100%;
   column-gap: 12px;
-  cursor: pointer;
+  cursor: default;
   border: none;
   background: none;
   padding: 4px 12px;
@@ -122,18 +119,11 @@
   padding: 4px 4px 6px 4px;
   justify-content: center;
   align-items: start;
-  min-width: 248px;
-  border: 1px solid var(--border-weak-base);
   border-radius: var(--radius-md);
-  background-color: var(--surface-raised-stronger-non-alpha);
+  background: var(--surface-raised-stronger-non-alpha);
   max-height: min(480px, calc(100vh - 6rem));
   overflow-y: auto;
   overflow-x: hidden;
-  overscroll-behavior: contain;
-
-  [data-component="message-nav"][data-size="normal"] {
-    width: 100%;
-  }
 
   /* border/shadow-xs/base */
   box-shadow:
