@@ -71,7 +71,7 @@ const elog = EffectLogger.create({ service: "session.prompt" })
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
-  readonly loop: (input: Schema.Schema.Type<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
+  readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
   readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
@@ -1534,9 +1534,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     )
 
-    const loop: (input: Schema.Schema.Type<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts> = Effect.fn(
-      "SessionPrompt.loop",
-    )(function* (input: Schema.Schema.Type<typeof LoopInput>) {
+    const loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
+      input: LoopInput,
+    ) {
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
     })
 
@@ -1743,9 +1743,11 @@ export type PromptInput = Omit<Schema.Schema.Type<typeof PromptInput>, "parts"> 
   parts: PartInputUnion[]
 }
 
-export const LoopInput = Schema.Struct({
+export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+}) {
+  static readonly zod = zod(this)
+}
 
 export const ShellInput = Schema.Struct({
   sessionID: SessionID,

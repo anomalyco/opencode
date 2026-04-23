@@ -24,6 +24,13 @@ const OutputLengthErrorEffect = Schema.Struct({
   data: Schema.Struct({}),
 })
 
+const UnknownErrorEffect = Schema.Struct({
+  name: Schema.Literal("UnknownError"),
+  data: Schema.Struct({
+    message: Schema.String,
+  }),
+})
+
 export const ToolCall = Schema.Struct({
   state: Schema.Literal("call"),
   step: Schema.optional(Schema.Number),
@@ -137,18 +144,21 @@ export const Info = Schema.Struct({
       created: Schema.Number,
       completed: Schema.optional(Schema.Number),
     }),
-    error: Schema.optional(Schema.Union([AuthErrorEffect, OutputLengthErrorEffect])),
+    error: Schema.optional(Schema.Union([AuthErrorEffect, UnknownErrorEffect, OutputLengthErrorEffect])),
     sessionID: SessionID,
     tool: Schema.Record(
       Schema.String,
-      Schema.Struct({
-        title: Schema.String,
-        snapshot: Schema.optional(Schema.String),
-        time: Schema.Struct({
-          start: Schema.Number,
-          end: Schema.Number,
+      Schema.StructWithRest(
+        Schema.Struct({
+          title: Schema.String,
+          snapshot: Schema.optional(Schema.String),
+          time: Schema.Struct({
+            start: Schema.Number,
+            end: Schema.Number,
+          }),
         }),
-      }),
+        [Schema.Record(Schema.String, Schema.Unknown)],
+      ),
     ),
     assistant: Schema.optional(
       Schema.Struct({
