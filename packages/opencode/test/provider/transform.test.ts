@@ -977,6 +977,73 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
   })
+
+  test("Bedrock providers keep reasoning metadata even if interleaved is configured", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Thinking...",
+            providerMetadata: {
+              bedrock: { signature: "sig-123" },
+            },
+          },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: ModelID.make("bedrock/anthropic-claude-opus-4-7"),
+        providerID: ProviderID.make("bedrock"),
+        api: {
+          id: "anthropic.claude-opus-4-7",
+          url: "https://bedrock.amazonaws.com",
+          npm: "@ai-sdk/amazon-bedrock",
+        },
+        name: "Claude Opus 4.7",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: { text: true, audio: false, image: true, video: false, pdf: true },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: {
+            field: "reasoning_content",
+          },
+        },
+        cost: {
+          input: 0.001,
+          output: 0.002,
+          cache: { read: 0.0001, write: 0.0002 },
+        },
+        limit: {
+          context: 200_000,
+          output: 64_000,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2024-01-01",
+      },
+      {},
+    )
+
+    expect(result[0].content[0]).toMatchObject({
+      type: "reasoning",
+      text: "Thinking...",
+      providerMetadata: {
+        bedrock: { signature: "sig-123" },
+      },
+    })
+    expect(result[0].content[1]).toEqual({ type: "text", text: "Answer" })
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
 })
 
 describe("ProviderTransform.message - empty image handling", () => {
