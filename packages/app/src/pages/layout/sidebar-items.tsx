@@ -22,9 +22,7 @@ const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
   return id === OPENCODE_PROJECT_ID
     ? "https://opencode.ai/favicon.svg"
-    : icon?.color
-      ? undefined
-      : icon?.override || icon?.url
+    : (icon?.override ?? (icon?.color ? undefined : icon?.url))
 }
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
@@ -269,10 +267,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </Show>
         </div>
       </div>
-      <Show when={currentChild()}>
+      <Show when={currentChild()} keyed>
         {(child) => (
           <div class="w-full">
-            <SessionItem {...props} session={child()} level={(props.level ?? 0) + 1} />
+            <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
           </div>
         )}
       </Show>

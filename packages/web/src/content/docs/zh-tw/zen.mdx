@@ -85,8 +85,8 @@ OpenCode Zen 的運作方式和 OpenCode 中的其他供應商一樣。
 | Claude Haiku 3.5      | claude-3-5-haiku      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Gemini 3.1 Pro        | gemini-3.1-pro        | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
 | Gemini 3 Flash        | gemini-3-flash        | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
+| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7          | minimax-m2.7          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5          | minimax-m2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5 Free     | minimax-m2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
@@ -96,6 +96,7 @@ OpenCode Zen 的運作方式和 OpenCode 中的其他供應商一樣。
 | Kimi K2.6             | kimi-k2.6             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle            | big-pickle            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Ling 2.6 Flash        | ling-2.6-flash        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Hy3 Preview Free      | hy3-preview-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 OpenCode 設定中的 [模型 ID](/docs/config/#models) 會使用 `opencode/<model-id>`
@@ -122,6 +123,7 @@ https://opencode.ai/zen/v1/models
 | Big Pickle                        | Free   | Free    | Free     | -        |
 | MiniMax M2.5 Free                 | Free   | Free    | Free     | -        |
 | Ling 2.6 Flash Free               | Free   | Free    | Free     | -        |
+| Hy3 Preview Free                  | Free   | Free    | Free     | -        |
 | Nemotron 3 Super Free             | Free   | Free    | Free     | -        |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06    | $0.375   |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06    | $0.375   |
@@ -172,6 +174,7 @@ https://opencode.ai/zen/v1/models
 
 - MiniMax M2.5 Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
 - Ling 2.6 Flash Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
+- Hy3 Preview Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
 - Nemotron 3 Super Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
 - Big Pickle 是一個隱身模型，在 OpenCode 上限時免費提供。團隊正在利用這段時間收集回饋並改進模型。
 
@@ -217,6 +220,7 @@ https://opencode.ai/zen/v1/models
 - Big Pickle: 在免費期間，收集到的資料可能會用於改進模型。
 - MiniMax M2.5 Free: 在免費期間，收集到的資料可能會用於改進模型。
 - Ling 2.6 Flash Free: 在免費期間，收集到的資料可能會用於改進模型。
+- Hy3 Preview Free: 在免費期間，收集到的資料可能會用於改進模型。
 - Nemotron 3 Super Free（NVIDIA 免費端點）：依據 [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) 提供。僅供試用，不適用於正式環境或敏感資料。NVIDIA 會記錄提示詞與輸出內容，以改進其模型與服務。請勿提交個人或機密資料。
 - OpenAI APIs: 請求會依據 [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) 保留 30 天。
 - Anthropic APIs: 請求會依據 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) 保留 30 天。

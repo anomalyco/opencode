@@ -67,7 +67,7 @@ export const WriteTool = Tool.define(
           })
 
           let output = "Wrote file successfully."
-          yield* lsp.touchFile(filepath, true)
+          yield* lsp.touchFile(filepath, "document")
           const diagnostics = yield* lsp.diagnostics()
           const normalizedFilepath = AppFileSystem.normalizePath(filepath)
           let projectDiagnosticsCount = 0
