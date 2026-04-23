@@ -21,22 +21,6 @@ const filepath = path.join(
 )
 const ttl = 5 * 60 * 1000
 
-type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[]
-
-// Declared with a mutable type because `Types.DeepMutable` cannot walk a
-// self-recursive readonly type — it trips TS2589. The derived Schema.Type
-// is readonly, so we cast at the Schema boundary.
-const JsonValue: Schema.Schema<JsonValue> = Schema.suspend(() =>
-  Schema.Union([
-    Schema.String,
-    Schema.Number,
-    Schema.Boolean,
-    Schema.Null,
-    Schema.Array(JsonValue),
-    Schema.Record(Schema.String, JsonValue),
-  ]),
-) as Schema.Schema<JsonValue>
-
 const Cost = Schema.Struct({
   input: Schema.Number,
   output: Schema.Number,
@@ -90,7 +74,7 @@ export const Model = Schema.Struct({
             cost: Schema.optional(Cost),
             provider: Schema.optional(
               Schema.Struct({
-                body: Schema.optional(Schema.Record(Schema.String, JsonValue)),
+                body: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
                 headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
               }),
             ),
