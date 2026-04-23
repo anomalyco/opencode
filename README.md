@@ -116,6 +116,30 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
+### Quick "red vs green" health check
+
+If you're not technical, here is the simplest way to "activate everything" and confirm your setup is healthy:
+
+```bash
+# 1) Install dependencies
+bun install
+
+# 2) Run lint checks (green = good, red = needs attention)
+bun run lint
+
+# 3) Run type checks
+bun --cwd packages/opencode typecheck
+
+# 4) Start the app
+bun run dev
+```
+
+How to read results:
+
+- **Green / success / exit code 0**: that step is healthy.
+- **Red / error / non-zero exit code**: that step needs fixing before continuing.
+- If you're stuck, copy the first red error block and ask for help with that exact message.
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
