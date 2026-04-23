@@ -306,6 +306,22 @@ render(() => {
     const cmd = useCommand()
     menuTrigger = (id) => cmd.trigger(id)
 
+    // Translate commands
+    cmd.register("translate.selection", () => {
+      const text = window.getSelection()?.toString().trim()
+      if (!text) return
+      const lang = prompt("Target language (e.g. zh, en, ja):", "zh")
+      if (!lang) return
+      window.open(`https://translate.google.com/?sl=auto&tl=${encodeURIComponent(lang)}&text=${encodeURIComponent(text)}`, "_blank")
+    })
+
+    cmd.register("translate.page", () => {
+      const lang = prompt("Target language (e.g. zh, en, ja):", "zh")
+      if (!lang) return
+      const url = encodeURIComponent(location.href)
+      window.open(`https://translate.google.com/translate?sl=auto&tl=${encodeURIComponent(lang)}&u=${url}`, "_blank")
+    })
+
     const theme = useTheme()
 
     createEffect(() => {

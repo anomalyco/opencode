@@ -65,23 +65,39 @@ export function createMenu(deps: Deps) {
         { role: "selectAll" },
       ],
     },
-    {
-      label: "View",
-      submenu: [
-        { label: "Toggle Sidebar", accelerator: "Cmd+B", click: () => deps.trigger("sidebar.toggle") },
-        { label: "Toggle Terminal", accelerator: "Ctrl+`", click: () => deps.trigger("terminal.toggle") },
-        { label: "Toggle File Tree", click: () => deps.trigger("fileTree.toggle") },
-        { type: "separator" },
-        { role: "reload" },
-        { role: "toggleDevTools" },
-        { type: "separator" },
-        { role: "resetZoom" },
-        { role: "zoomIn" },
-        { role: "zoomOut" },
-        { type: "separator" },
-        { role: "togglefullscreen" },
-      ],
-    },
+     {
+       label: "View",
+       submenu: [
+         { label: "Toggle Sidebar", accelerator: "Cmd+B", click: () => deps.trigger("sidebar.toggle") },
+         { label: "Toggle Terminal", accelerator: "Ctrl+`", click: () => deps.trigger("terminal.toggle") },
+         { label: "Toggle File Tree", click: () => deps.trigger("fileTree.toggle") },
+         { type: "separator" },
+         {
+           label: "More Tools",
+           submenu: [
+             { role: "toggleDevTools" },
+             { type: "separator" },
+             {
+               label: "Translate Selection",
+               accelerator: "CmdOrCtrl+Shift+T",
+               click: () => deps.trigger("translate.selection"),
+             },
+             {
+               label: "Translate Page",
+               click: () => deps.trigger("translate.page"),
+             },
+           ],
+         },
+         { type: "separator" },
+         { role: "reload" },
+         { type: "separator" },
+         { role: "resetZoom" },
+         { role: "zoomIn" },
+         { role: "zoomOut" },
+         { type: "separator" },
+         { role: "togglefullscreen" },
+       ],
+     },
     {
       label: "Go",
       submenu: [
