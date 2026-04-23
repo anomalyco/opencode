@@ -2,6 +2,9 @@ import { PlanExitTool } from "./plan"
 import { Session } from "../session"
 import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
+import { BashOutputTool } from "./bash-output"
+import { KillShellTool } from "./kill-shell"
+import { BackgroundShell } from "../shell/background"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -87,6 +90,7 @@ export const layer: Layer.Layer<
   | Ripgrep.Service
   | Format.Service
   | Truncate.Service
+  | BackgroundShell.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -106,6 +110,8 @@ export const layer: Layer.Layer<
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
     const bash = yield* BashTool
+    const bashOutput = yield* BashOutputTool
+    const killShell = yield* KillShellTool
     const codesearch = yield* CodeSearchTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
@@ -179,6 +185,8 @@ export const layer: Layer.Layer<
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
           bash: Tool.init(bash),
+          bashOutput: Tool.init(bashOutput),
+          killShell: Tool.init(killShell),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -202,6 +210,8 @@ export const layer: Layer.Layer<
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
             tool.bash,
+            tool.bashOutput,
+            tool.killShell,
             tool.read,
             tool.glob,
             tool.grep,
@@ -335,5 +345,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
+    Layer.provide(BackgroundShell.defaultLayer),
   ),
 )

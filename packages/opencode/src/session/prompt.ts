@@ -1277,6 +1277,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       function* (input: PromptInput) {
         const session = yield* sessions.get(input.sessionID)
         yield* revert.cleanup(session)
+
+        // Allow plugins to inject context parts or block the prompt before
+        // the LLM is called. Mutations to `parts` are merged in; setting
+        // `block` short-circuits with an error.
+        const submit = yield* plugin.trigger(
+          "chat.prompt.submit",
+          { sessionID: input.sessionID, agent: input.agent, messageID: input.messageID },
+          { parts: [] as PromptInput["parts"], block: undefined as string | undefined },
+        )
+        if (submit.block) {
+          throw new NamedError.Unknown({ message: `Prompt blocked by plugin: ${submit.block}` })
+        }
+        if (submit.parts.length > 0) {
+          input = { ...input, parts: [...input.parts, ...submit.parts] }
+        }
+
         const message = yield* createUserMessage(input)
         yield* sessions.touch(input.sessionID)
 
@@ -1290,7 +1306,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         if (input.noReply === true) return message
-        return yield* loop({ sessionID: input.sessionID })
+
+        const stop = (msgID: string, aborted: boolean) =>
+          plugin.trigger(
+            "chat.stop",
+            {
+              sessionID: input.sessionID,
+              messageID: msgID,
+              agent: input.agent ?? "",
+              aborted,
+            },
+            {},
+          )
+
+        return yield* loop({ sessionID: input.sessionID }).pipe(
+          Effect.tap((result) => stop(result.info.id, false)),
+          Effect.tapError(() => stop(message.info.id, true).pipe(Effect.ignore)),
+        )
       },
     )
 

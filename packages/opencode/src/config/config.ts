@@ -216,6 +216,23 @@ const InfoSchema = Schema.Struct({
       }),
     }),
   ),
+  statusLine: Schema.optional(
+    Schema.Struct({
+      type: Schema.Literals(["command"]).annotate({
+        description: "Status line source type. Currently only 'command' is supported.",
+      }),
+      command: Schema.String.annotate({
+        description:
+          "Shell command whose stdout becomes the status line. Runs in the session's working directory and is refreshed on a throttle. Keep output to a single short line.",
+      }),
+      padding: Schema.optional(NonNegativeInt).annotate({
+        description: "Horizontal padding around the rendered status line, in cells.",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Custom status line. Mirrors the Claude Code statusLine config — stdout of the command becomes the status line text.",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
@@ -231,6 +248,10 @@ const InfoSchema = Schema.Struct({
       }),
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
+      }),
+      defer_tools: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Defer loading of non-core tool schemas until requested via a ToolSearch tool. Mirrors Claude Code's deferred-tool pattern to reduce prompt tokens when many MCP tools are available. Opt-in; the core set (Read/Edit/Write/Bash/Grep/Glob/Task) stays always-on.",
       }),
     }),
   ),

@@ -246,6 +246,34 @@ export const layer = Layer.effect(
             Effect.sync(() => {
               for (const hook of hooks) {
                 void hook["event"]?.({ event: input as any })
+
+                // Bridge bus events to convenience lifecycle hooks. These
+                // mirror the Claude Code SessionStart / SessionEnd hook
+                // semantics so plugin authors can subscribe by name without
+                // pattern-matching on the event stream.
+                const evt = input as { type?: string; properties?: any }
+                if (evt?.type === "session.created" && evt.properties?.info) {
+                  const info = evt.properties.info
+                  void hook["session.start"]?.(
+                    {
+                      sessionID: info.id,
+                      parentID: info.parentID,
+                      directory: info.directory ?? "",
+                    },
+                    {},
+                  )
+                }
+                if (evt?.type === "session.deleted" && evt.properties?.info) {
+                  const info = evt.properties.info
+                  void hook["session.end"]?.(
+                    {
+                      sessionID: info.id,
+                      parentID: info.parentID,
+                      directory: info.directory ?? "",
+                    },
+                    {},
+                  )
+                }
               }
             }),
           ),
