@@ -43,7 +43,9 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Truncate } from "@/tool"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util"
-import { Cause, Effect, Exit, Layer, Option, Scope, Context } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Scope, Context, Schema } from "effect"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 import { EffectLogger } from "@/effect"
 import { InstanceState } from "@/effect"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
@@ -69,7 +71,7 @@ const elog = EffectLogger.create({ service: "session.prompt" })
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
-  readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
+  readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
   readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
@@ -1532,9 +1534,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     )
 
-    const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts> = Effect.fn(
-      "SessionPrompt.loop",
-    )(function* (input: z.infer<typeof LoopInput>) {
+    const loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
+      input: LoopInput,
+    ) {
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
     })
 
@@ -1701,91 +1703,88 @@ export const defaultLayer = Layer.suspend(() =>
     ),
   ),
 )
-export const PromptInput = z.object({
-  sessionID: SessionID.zod,
-  messageID: MessageID.zod.optional(),
-  model: z
-    .object({
-      providerID: ProviderID.zod,
-      modelID: ModelID.zod,
-    })
-    .optional(),
-  agent: z.string().optional(),
-  noReply: z.boolean().optional(),
-  tools: z
-    .record(z.string(), z.boolean())
-    .optional()
-    .describe("@deprecated tools and permissions have been merged, you can set permissions on the session itself now"),
-  format: MessageV2.Format.zod.optional(),
-  system: z.string().optional(),
-  variant: z.string().optional(),
-  parts: z.array(
-    z.discriminatedUnion("type", [
-      MessageV2.TextPartInput.zod as unknown as z.ZodObject<any>,
-      MessageV2.FilePartInput.zod as unknown as z.ZodObject<any>,
-      MessageV2.AgentPartInput.zod as unknown as z.ZodObject<any>,
-      MessageV2.SubtaskPartInput.zod as unknown as z.ZodObject<any>,
-    ]),
-  ),
+const ModelRef = Schema.Struct({
+  providerID: ProviderID,
+  modelID: ModelID,
 })
+
+export const PromptInput = Schema.Struct({
+  sessionID: SessionID,
+  messageID: Schema.optional(MessageID),
+  model: Schema.optional(ModelRef),
+  agent: Schema.optional(Schema.String),
+  noReply: Schema.optional(Schema.Boolean),
+  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
+    description:
+      "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+  }),
+  format: Schema.optional(MessageV2.Format),
+  system: Schema.optional(Schema.String),
+  variant: Schema.optional(Schema.String),
+  parts: Schema.Array(
+    Schema.Union([
+      MessageV2.TextPartInput,
+      MessageV2.FilePartInput,
+      MessageV2.AgentPartInput,
+      MessageV2.SubtaskPartInput,
+    ]).annotate({ discriminator: "type" }),
+  ),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
 // `z.discriminatedUnion` erases the discriminated members' shapes back to
-// `{}` because the derived `.zod` on each input is typed as an opaque
-// `z.ZodType`. Restore the precise `parts` type from the exported Schema
-// input types so callers see a proper tagged union.
+// `{}` when walked from the generic `z.ZodType` input. Restore the precise
+// `parts` type from the exported Schema input types so callers see a proper
+// tagged union.
 type PartInputUnion =
   | MessageV2.TextPartInput
   | MessageV2.FilePartInput
   | MessageV2.AgentPartInput
   | MessageV2.SubtaskPartInput
-export type PromptInput = Omit<z.infer<typeof PromptInput>, "parts"> & {
+export type PromptInput = Omit<Schema.Schema.Type<typeof PromptInput>, "parts"> & {
   parts: PartInputUnion[]
 }
 
-export const LoopInput = z.object({
-  sessionID: SessionID.zod,
-})
+export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
+  sessionID: SessionID,
+}) {
+  static readonly zod = zod(this)
+}
 
-export const ShellInput = z.object({
-  sessionID: SessionID.zod,
-  messageID: MessageID.zod.optional(),
-  agent: z.string(),
-  model: z
-    .object({
-      providerID: ProviderID.zod,
-      modelID: ModelID.zod,
-    })
-    .optional(),
-  command: z.string(),
-})
-export type ShellInput = z.infer<typeof ShellInput>
+export const ShellInput = Schema.Struct({
+  sessionID: SessionID,
+  messageID: Schema.optional(MessageID),
+  agent: Schema.String,
+  model: Schema.optional(ModelRef),
+  command: Schema.String,
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ShellInput = Schema.Schema.Type<typeof ShellInput>
 
-export const CommandInput = z.object({
-  messageID: MessageID.zod.optional(),
-  sessionID: SessionID.zod,
-  agent: z.string().optional(),
-  model: z.string().optional(),
-  arguments: z.string(),
-  command: z.string(),
-  variant: z.string().optional(),
-  // Inlined (no `.meta({ ref })`) to keep the original SDK output — the
+export const CommandInput = Schema.Struct({
+  messageID: Schema.optional(MessageID),
+  sessionID: SessionID,
+  agent: Schema.optional(Schema.String),
+  model: Schema.optional(Schema.String),
+  arguments: Schema.String,
+  command: Schema.String,
+  variant: Schema.optional(Schema.String),
+  // Inlined (no identifier annotation) to keep the original SDK output — the
   // PromptInput call site below references FilePartInput by ref via the
   // Schema export in message-v2.ts.
-  parts: z
-    .array(
-      z.discriminatedUnion("type", [
-        z.object({
-          id: PartID.zod.optional(),
-          type: z.literal("file"),
-          mime: z.string(),
-          filename: z.string().optional(),
-          url: z.string(),
-          source: MessageV2.FilePartSource.zod.optional(),
+  parts: Schema.optional(
+    Schema.Array(
+      Schema.Union([
+        Schema.Struct({
+          id: Schema.optional(PartID),
+          type: Schema.Literal("file"),
+          mime: Schema.String,
+          filename: Schema.optional(Schema.String),
+          url: Schema.String,
+          source: Schema.optional(MessageV2.FilePartSource),
         }),
-      ]),
-    )
-    .optional(),
-})
-export type CommandInput = z.infer<typeof CommandInput>
+      ]).annotate({ discriminator: "type" }),
+    ),
+  ),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type CommandInput = Schema.Schema.Type<typeof CommandInput>
 
 /** @internal Exported for testing */
 export function createStructuredOutputTool(input: {

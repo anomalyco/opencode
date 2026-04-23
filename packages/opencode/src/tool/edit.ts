@@ -186,7 +186,7 @@ export const EditTool = Tool.define(
           })
 
           let output = "Edit applied successfully."
-          yield* lsp.touchFile(filePath, true)
+          yield* lsp.touchFile(filePath, "document")
           const diagnostics = yield* lsp.diagnostics()
           const normalizedFilePath = AppFileSystem.normalizePath(filePath)
           const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])

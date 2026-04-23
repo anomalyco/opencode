@@ -10,9 +10,8 @@ import type {
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/shared/util/path"
 import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
-import { createStore, produce, reconcile, unwrap } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
 import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-sync/bootstrap"
@@ -24,7 +23,6 @@ import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, skipToken, useQueryClient } from "@tanstack/solid-query"
 
@@ -56,15 +54,10 @@ function createGlobalSync() {
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
-  const [projectCache, setProjectCache, projectInit] = persisted(
-    Persist.global("globalSync.project", ["globalSync.project.v1"]),
-    createStore({ value: [] as Project[] }),
-  )
-
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
-    project: projectCache.value,
+    project: [],
     session_todo: {},
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
@@ -73,32 +66,18 @@ function createGlobalSync() {
   })
   const queryClient = useQueryClient()
 
-  let active = true
-  let projectWritten = false
   let bootedAt = 0
   let bootingRoot = false
   let eventFrame: number | undefined
   let eventTimer: ReturnType<typeof setTimeout> | undefined
 
   onCleanup(() => {
-    active = false
-  })
-  onCleanup(() => {
     if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
     if (eventTimer !== undefined) clearTimeout(eventTimer)
   })
 
-  const cacheProjects = () => {
-    setProjectCache(
-      "value",
-      untrack(() => globalStore.project.map(sanitizeProject)),
-    )
-  }
-
   const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
-    projectWritten = true
     setGlobalStore("project", next)
-    cacheProjects()
   }
 
   const setBootStore = ((...input: unknown[]) => {
@@ -116,16 +95,6 @@ function createGlobalSync() {
     }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
   }) as typeof setGlobalStore
-
-  if (projectInit instanceof Promise) {
-    void projectInit.then(() => {
-      if (!active) return
-      if (projectWritten) return
-      const cached = projectCache.value
-      if (cached.length === 0) return
-      setGlobalStore("project", cached)
-    })
-  }
 
   const setSessionTodo = (sessionID: string, todos: Todo[] | undefined) => {
     if (!sessionID) return
@@ -294,6 +263,19 @@ function createGlobalSync() {
     const directory = e.name
     const event = e.details
     const recent = bootingRoot || Date.now() - bootedAt < 1500
+
+    if (event.type === "session.error") {
+      const error = event.properties.error
+      if (error?.name !== "MessageAbortedError") {
+        console.error("[global-sync] session error", {
+          scope: directory === "global" ? "global" : "workspace",
+          directory: directory === "global" ? undefined : directory,
+          project: directory === "global" ? undefined : getFilename(directory),
+          sessionID: event.properties.sessionID,
+          error,
+        })
+      }
+    }
 
     if (directory === "global") {
       applyGlobalEvent({
