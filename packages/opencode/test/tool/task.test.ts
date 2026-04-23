@@ -274,6 +274,165 @@ describe("tool.task", () => {
     ),
   )
 
+  it.live("execute accepts agent and agent_type aliases for subagent_type", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const promptOps = stubOps({ text: "aliased" })
+
+        const exec = (input: Record<string, unknown>) =>
+          def.execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              ...input,
+            } as any,
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+
+        const viaAgent = yield* exec({ agent: "general" })
+        const viaAgentType = yield* exec({ agent_type: "general" })
+
+        expect(viaAgent.output).toContain("aliased")
+        expect(viaAgentType.output).toContain("aliased")
+      }),
+    ),
+  )
+
+  it.live("execute retries blank text results before failing open", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let promptCount = 0
+        const promptOps = stubOps({
+          onPrompt: () => {
+            promptCount += 1
+          },
+          text: "",
+        })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ).pipe(Effect.exit)
+
+        expect(promptCount).toBe(2)
+        expect(result._tag).toBe("Failure")
+        expect(String(result)).toContain("produced no text output")
+      }),
+    ),
+  )
+
+  it.live("execute does not retry blank results after tool activity", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let promptCount = 0
+        const promptOps: TaskPromptOps = {
+          cancel() {},
+          resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+          prompt: (input) =>
+            Effect.sync(() => {
+              promptCount += 1
+              const id = MessageID.ascending()
+              return {
+                info: {
+                  id,
+                  role: "assistant",
+                  parentID: input.messageID ?? MessageID.ascending(),
+                  sessionID: input.sessionID,
+                  mode: input.agent ?? "general",
+                  agent: input.agent ?? "general",
+                  cost: 0,
+                  path: { cwd: "/tmp", root: "/tmp" },
+                  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                  modelID: input.model?.modelID ?? ref.modelID,
+                  providerID: input.model?.providerID ?? ref.providerID,
+                  time: { created: Date.now() },
+                  finish: "stop",
+                },
+                parts: [
+                  {
+                    id: PartID.ascending(),
+                    messageID: id,
+                    sessionID: input.sessionID,
+                    type: "tool" as const,
+                    callID: "call_1",
+                    tool: "bash",
+                    state: {
+                      status: "completed" as const,
+                      input: {},
+                      output: "done",
+                      title: "Run bash",
+                      metadata: {},
+                      time: { start: Date.now(), end: Date.now() },
+                    },
+                  },
+                  {
+                    id: PartID.ascending(),
+                    messageID: id,
+                    sessionID: input.sessionID,
+                    type: "text" as const,
+                    text: "",
+                  },
+                ],
+              }
+            }),
+        }
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ).pipe(Effect.exit)
+
+        expect(promptCount).toBe(1)
+        expect(result._tag).toBe("Failure")
+        expect(String(result)).toContain("automatic retry is not safe")
+      }),
+    ),
+  )
+
   it.live("execute creates a child when task_id does not exist", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {

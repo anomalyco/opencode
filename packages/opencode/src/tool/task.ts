@@ -8,6 +8,7 @@ import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "../config"
 import { Effect } from "effect"
+import { TaskAgentSelectorFields, resolveAgentType, validateTaskResult } from "./task-runtime"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): void
@@ -16,11 +17,12 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
+const MAX_EMPTY_RESULT_ATTEMPTS = 2
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
-  subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+  ...TaskAgentSelectorFields,
   task_id: z
     .string()
     .describe(
@@ -29,6 +31,15 @@ const parameters = z.object({
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
+  .superRefine((value, ctx) => {
+    if (resolveAgentType(value)) return
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["subagent_type"],
+      message: "Expected one of subagent_type, agent, or agent_type",
+    })
+  })
 
 export const TaskTool = Tool.define(
   id,
@@ -39,22 +50,26 @@ export const TaskTool = Tool.define(
 
     const run = Effect.fn("TaskTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
       const cfg = yield* config.get()
+      const subagentType = resolveAgentType(params)
+      if (!subagentType) {
+        return yield* Effect.fail(new Error("Expected one of subagent_type, agent, or agent_type"))
+      }
 
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
           permission: id,
-          patterns: [params.subagent_type],
+          patterns: [subagentType],
           always: ["*"],
           metadata: {
             description: params.description,
-            subagent_type: params.subagent_type,
+            subagent_type: subagentType,
           },
         })
       }
 
-      const next = yield* agent.get(params.subagent_type)
+      const next = yield* agent.get(subagentType)
       if (!next) {
-        return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
+        return yield* Effect.fail(new Error(`Unknown agent type: ${subagentType} is not a valid agent type`))
       }
 
       const canTask = next.permission.some((rule) => rule.permission === id)
@@ -115,6 +130,28 @@ export const TaskTool = Tool.define(
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
+      const promptWithRetry = (
+        input: SessionPrompt.PromptInput,
+        attempt = 1,
+      ): Effect.Effect<{ result: MessageV2.WithParts; outputText: string }, Error> =>
+        Effect.gen(function* () {
+          const result = yield* ops.prompt(input)
+          const validation = validateTaskResult(result)
+
+          if (validation.valid) {
+            return {
+              result,
+              outputText: validation.outputText,
+            }
+          }
+
+          if (!validation.retryable || attempt >= MAX_EMPTY_RESULT_ATTEMPTS) {
+            return yield* Effect.fail(new Error(validation.reason))
+          }
+
+          return yield* promptWithRetry(input, attempt + 1)
+        })
+
       const messageID = MessageID.ascending()
 
       function cancel() {
@@ -128,7 +165,7 @@ export const TaskTool = Tool.define(
         () =>
           Effect.gen(function* () {
             const parts = yield* ops.resolvePromptParts(params.prompt)
-            const result = yield* ops.prompt({
+            const { outputText } = yield* promptWithRetry({
               messageID,
               sessionID: nextSession.id,
               model: {
@@ -154,7 +191,7 @@ export const TaskTool = Tool.define(
                 `task_id: ${nextSession.id} (for resuming to continue this task if needed)`,
                 "",
                 "<task_result>",
-                result.parts.findLast((item) => item.type === "text")?.text ?? "",
+                outputText,
                 "</task_result>",
               ].join("\n"),
             }
@@ -169,6 +206,8 @@ export const TaskTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters,
+      formatValidationError: (error) =>
+        `The task tool was called with invalid arguments: ${error}. Use subagent_type, agent, or agent_type to identify the delegated agent and ensure exactly one of them contains a non-empty string.`,
       execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
     }
   }),
