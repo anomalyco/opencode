@@ -214,6 +214,49 @@ This title reinforces bilingual identity branding (Hebrew + Latin-script naming)
 
 ---
 
+## Hardcore Massive Promotion Mode
+
+Use this mode when the objective is maximum reach and aggressive traffic capture for a specific campaign window.
+
+### Activation trigger
+
+- Turn on when launching a major story asset, offer, or collaboration.
+- Run for 7, 14, or 30 days with a clearly defined conversion goal.
+- Keep one command CTA across every touchpoint: `Manage 7ya.io` -> `https://7ya.io`.
+
+### Execution rules
+
+- Publish daily on at least 3 active platforms.
+- Ship one high-intensity creative variant per day (new hook, angle, or edit).
+- Repost winning clips in 48-hour cycles with updated captions/thumbnails.
+- Pin CTA comments/posts that route directly to the campaign page on 7ya.io.
+- Route all bios, link-in-bio tools, and channel descriptions to the same campaign URL.
+
+### Budget + distribution
+
+- Boost top organic posts within 12-24 hours if engagement velocity is above baseline.
+- Split paid distribution by intent:
+  - 60% retargeting warm audiences
+  - 30% lookalike/prospecting
+  - 10% experimental creative tests
+- Cut underperforming ad sets fast and reallocate to top CTR + conversion performers.
+
+### Daily operating loop
+
+1. Review previous 24h metrics (reach, watch time, CTR, landing conversion).
+2. Select top 1-2 assets and clone them into new platform-native versions.
+3. Publish new variants with consistent CTA.
+4. Respond to comments/DMs within the first hour for algorithmic lift.
+5. Update the 7ya.io campaign page using objections/questions from community feedback.
+
+### Exit criteria
+
+- Campaign conversion rate is stable and predictable for 5+ consecutive days.
+- A clear top channel mix is identified and documented.
+- Winning messaging is folded back into always-on platform baseline content.
+
+---
+
 ## God-Level YouTube System (`@igor.vepretski`)
 
 This section upgrades the channel workflow into an execution system that turns each upload into a multi-platform campaign and routes attention back to **7ya.io**.
