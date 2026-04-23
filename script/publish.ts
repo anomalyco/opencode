@@ -24,6 +24,20 @@ async function prepareReleaseFiles() {
     await Bun.file(file).write(pkg)
   }
 
+  const appstreamXml = fileURLToPath(
+    new URL("../packages/desktop/src-tauri/release/appstream.metainfo.xml", import.meta.url),
+  )
+  let xml = await Bun.file(appstreamXml).text()
+  const today = new Date().toISOString().slice(0, 10)
+  const releaseEntry = `    <release version="${Script.version}" date="${today}">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v${Script.version}</url>
+    </release>`
+  if (!xml.includes(`version="${Script.version}"`)) {
+    xml = xml.replace("<releases>", `<releases>\n${releaseEntry}`)
+    console.log("updated:", appstreamXml)
+    await Bun.file(appstreamXml).write(xml)
+  }
+
   const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
   let toml = await Bun.file(extensionToml).text()
   toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
