@@ -32,7 +32,7 @@ export function getMessageStats(messages: readonly MessageItem[]) {
 
 const MESSAGE_TOTAL_WIDTH = 28
 
-function StatRow(props: { label: string; value: string; theme: ReturnType<TuiPluginApi["theme"]["current"]> }) {
+function StatRow(props: { label: string; value: string; theme: TuiPluginApi["theme"]["current"] }) {
   const label = () => props.label
   const value = () => props.value
   const pad = () => Math.max(0, MESSAGE_TOTAL_WIDTH - label().length - value().length)
