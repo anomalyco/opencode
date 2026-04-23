@@ -38,6 +38,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
+import { DialogProviderDisconnect } from "@tui/component/dialog-provider-disconnect"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -561,6 +562,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
+      title: "Disconnect provider",
+      value: "provider.disconnect",
+      suggested: sync.data.provider_next.connected.length > 0,
+      enabled: sync.data.provider_next.connected.length > 0,
+      slash: {
+        name: "disconnect",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogProviderDisconnect />)
       },
       category: "Provider",
     },
