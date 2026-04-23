@@ -469,7 +469,7 @@ export function persisted<T>(
     state,
     setState,
     init,
-    Object.assign(() => ready() === true, {
+    Object.assign(() => (ready.loading ? false : ready.latest === true), {
       promise: init instanceof Promise ? init : undefined,
     }),
   ]

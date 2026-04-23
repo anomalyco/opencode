@@ -644,7 +644,9 @@ export const dict = {
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.theme.description": "OpenCode'un temasını özelleştirin.",
   "settings.general.row.font.title": "Kod Yazı Tipi",
-  "settings.general.row.font.description": "Kod bloklarında ve terminallerde kullanılan yazı tipini özelleştirin",
+  "settings.general.row.font.description": "Kod bloklarında kullanılan yazı tipini özelleştirin",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "Arayüz Yazı Tipi",
   "settings.general.row.uiFont.description": "Arayüz genelinde kullanılan yazı tipini özelleştirin",
   "settings.general.row.followup.title": "Takip davranışı",
@@ -660,6 +662,10 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Düzenleme araç bileşenlerini genişlet",
   "settings.general.row.editToolPartsExpanded.description":
     "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
+
+  "settings.general.row.showSessionProgressBar.title": "Oturum ilerleme çubuğunu göster",
+  "settings.general.row.showSessionProgressBar.description":
+    "Ajan çalışırken oturumun üst kısmında animasyonlu ilerleme çubuğunu göster",
 
   "settings.general.row.wayland.title": "Yerel Wayland kullan",
   "settings.general.row.wayland.description":

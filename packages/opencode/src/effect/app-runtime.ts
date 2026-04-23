@@ -1,15 +1,14 @@
 import { Layer, ManagedRuntime } from "effect"
-import { attach, memoMap } from "./run-service"
+import { attach } from "./run-service"
 import * as Observability from "./observability"
 
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
-import { Account } from "@/account"
+import { Account } from "@/account/account"
 import { Config } from "@/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@/file/ripgrep"
-import { FileTime } from "@/file/time"
 import { File } from "@/file"
 import { FileWatcher } from "@/file/watcher"
 import { Storage } from "@/storage"
@@ -47,7 +46,8 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share"
 import { SessionShare } from "@/share"
-import { Npm } from "@opencode-ai/shared/npm"
+import { Npm } from "@/npm"
+import { memoMap } from "./memo-map"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -58,7 +58,6 @@ export const AppLayer = Layer.mergeAll(
   Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
-  FileTime.defaultLayer,
   File.defaultLayer,
   FileWatcher.defaultLayer,
   Storage.defaultLayer,
