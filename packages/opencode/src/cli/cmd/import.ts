@@ -140,9 +140,16 @@ export const ImportCommand = cmd({
 
         exportData = transformed
       } else {
+        const fileExists = await Filesystem.exists(args.file)
+        if (!fileExists) {
+          process.stdout.write(`File not found: ${args.file}`)
+          process.stdout.write(EOL)
+          return
+        }
+
         exportData = await Filesystem.readJson<NonNullable<typeof exportData>>(args.file).catch(() => undefined)
         if (!exportData) {
-          process.stdout.write(`File not found: ${args.file}`)
+          process.stdout.write(`Unsupported format: ${args.file} is not a valid JSON session file`)
           process.stdout.write(EOL)
           return
         }
