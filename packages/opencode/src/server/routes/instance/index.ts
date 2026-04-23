@@ -260,7 +260,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "LSP server status",
             content: {
               "application/json": {
-                schema: resolver(LSP.Status.array()),
+                schema: resolver(LSP.Status.zod.array()),
               },
             },
           },

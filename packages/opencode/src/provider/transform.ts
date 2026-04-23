@@ -408,7 +408,6 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("deepseek") ||
     id.includes("minimax") ||
     id.includes("glm") ||
-    id.includes("mistral") ||
     id.includes("kimi") ||
     id.includes("k2p") ||
     id.includes("qwen") ||
@@ -713,7 +712,14 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
     case "@ai-sdk/mistral":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
-      return {}
+      // https://docs.mistral.ai/capabilities/reasoning/adjustable
+      if (!model.capabilities.reasoning) return {}
+      // Only Mistral Small 4 supports reasoning (mistral-small-2603, mistral-small-latest)
+      const mistralId = model.api.id.toLowerCase()
+      if (!mistralId.includes("mistral-small-2603") && !mistralId.includes("mistral-small-latest")) return {}
+      return {
+        high: { reasoningEffort: "high" },
+      }
 
     case "@ai-sdk/cohere":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere

@@ -249,7 +249,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
   "go.meta.description":
-    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7.",
+    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
@@ -300,7 +300,7 @@ export const dict = {
   "go.problem.item2": "حدود سخية ووصول موثوق",
   "go.problem.item3": "مصمم لأكبر عدد ممكن من المبرمجين",
   "go.problem.item4":
-    "يتضمن GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7",
+    "يتضمن GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7",
   "go.how.title": "كيف يعمل Go",
   "go.how.body": "يبدأ Go من $5 للشهر الأول، ثم $10/شهر. يمكنك استخدامه مع OpenCode أو أي وكيل.",
   "go.how.step1.title": "أنشئ حسابًا",
@@ -324,7 +324,7 @@ export const dict = {
   "go.faq.a2": "يتضمن Go النماذج المدرجة أدناه، مع حدود سخية وإتاحة موثوقة.",
   "go.faq.q3": "هل Go هو نفسه Zen؟",
   "go.faq.a3":
-    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7.",
+    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7.",
   "go.faq.q4": "كم تكلفة Go؟",
   "go.faq.a4.p1.beforePricing": "تكلفة Go",
   "go.faq.a4.p1.pricingLink": "$5 للشهر الأول",
@@ -347,7 +347,7 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5.1 وGLM-5 وKimi K2.5 وKimi K2.6 وMiMo-V2-Pro وMiMo-V2-Omni وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.5 Plus وQwen3.6 Plus وMiniMax M2.5 وMiniMax M2.7 مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
 
   "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
   "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",

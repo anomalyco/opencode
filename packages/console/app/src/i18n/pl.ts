@@ -252,7 +252,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
   "go.meta.description":
-    "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi 5-godzinnymi limitami zapytań dla GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 i MiniMax M2.7.",
+    "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi 5-godzinnymi limitami zapytań dla GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 i MiniMax M2.7.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
   "go.hero.body":
     "Go udostępnia programowanie z agentami programistom na całym świecie. Oferuje hojne limity i niezawodny dostęp do najzdolniejszych modeli open source, dzięki czemu możesz budować za pomocą potężnych agentów, nie martwiąc się o koszty czy dostępność.",
@@ -303,7 +303,7 @@ export const dict = {
   "go.problem.item2": "Hojne limity i niezawodny dostęp",
   "go.problem.item3": "Stworzony dla jak największej liczby programistów",
   "go.problem.item4":
-    "Zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 i MiniMax M2.7",
+    "Zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 i MiniMax M2.7",
   "go.how.title": "Jak działa Go",
   "go.how.body":
     "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc. Możesz go używać z OpenCode lub dowolnym agentem.",
@@ -329,7 +329,7 @@ export const dict = {
   "go.faq.a2": "Go obejmuje poniższe modele z wysokimi limitami i niezawodnym dostępem.",
   "go.faq.q3": "Czy Go to to samo co Zen?",
   "go.faq.a3":
-    "Nie. Zen to model płatności za użycie, podczas gdy Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi limitami i niezawodnym dostępem do modeli open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 i MiniMax M2.7.",
+    "Nie. Zen to model płatności za użycie, podczas gdy Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi limitami i niezawodnym dostępem do modeli open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 i MiniMax M2.7.",
   "go.faq.q4": "Ile kosztuje Go?",
   "go.faq.a4.p1.beforePricing": "Go kosztuje",
   "go.faq.a4.p1.pricingLink": "$5 za pierwszy miesiąc",
@@ -353,7 +353,7 @@ export const dict = {
 
   "go.faq.q9": "Jaka jest różnica między darmowymi modelami a Go?",
   "go.faq.a9":
-    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 i MiniMax M2.7 z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), w przybliżeniu równoważnymi $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie (rzeczywista liczba zapytań zależy od modelu i użycia).",
+    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 i MiniMax M2.7 z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), w przybliżeniu równoważnymi $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie (rzeczywista liczba zapytań zależy od modelu i użycia).",
 
   "zen.api.error.rateLimitExceeded": "Przekroczono limit zapytań. Spróbuj ponownie później.",
   "zen.api.error.modelNotSupported": "Model {{model}} nie jest obsługiwany",
