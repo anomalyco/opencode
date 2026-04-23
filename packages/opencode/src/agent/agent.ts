@@ -137,6 +137,7 @@ export const layer = Layer.effect(
                   "*": "deny",
                   [path.join(".opencode", "plans", "*.md")]: "allow",
                   [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+                  [path.join("packages", "opencode", "src", "tool", "plan.ts")]: "allow",
                 },
               }),
               user,

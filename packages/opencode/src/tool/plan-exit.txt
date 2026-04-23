@@ -1,6 +1,12 @@
 Use this tool when you have completed the planning phase and are ready to exit plan agent.
 
-This tool will ask the user if they want to switch to build agent to start implementing the plan.
+This tool will:
+1. Validate the plan file exists and meets minimum requirements:
+   - Must be at least 50 characters
+   - Must contain at least one step (numbered list or bullet points)
+   - Should include a verification/testing section
+2. Show plan changes since last review (if any)
+3. Ask the user if they want to switch to build agent
 
 Call this tool:
 - After you have written a complete plan to the plan file
@@ -11,3 +17,4 @@ Do NOT call this tool:
 - Before you have created or finalized the plan
 - If you still have unanswered questions about the implementation
 - If the user has indicated they want to continue planning
+- If the plan validation fails (fix validation errors first)
