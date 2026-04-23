@@ -2,6 +2,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
 import z from "zod"
 
+export const TOAST_DEFAULT_DURATION_MS = 5000
+
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
   CommandExecute: BusEvent.define(
@@ -36,7 +38,7 @@ export const TuiEvent = {
       title: z.string().optional(),
       message: z.string(),
       variant: z.enum(["info", "success", "warning", "error"]),
-      duration: z.number().default(5000).optional().describe("Duration in milliseconds"),
+      duration: z.number().default(TOAST_DEFAULT_DURATION_MS).optional().describe("Duration in milliseconds"),
     }),
   ),
   SessionSelect: BusEvent.define(
