@@ -60,7 +60,13 @@ type Row = typeof ProjectTable.$inferSelect
 
 export function fromRow(row: Row): Info {
   const icon =
-    row.icon_url || row.icon_color ? { url: row.icon_url ?? undefined, color: row.icon_color ?? undefined } : undefined
+    row.icon_url || row.icon_url_override || row.icon_color
+      ? {
+          url: row.icon_url ?? undefined,
+          override: row.icon_url_override ?? undefined,
+          color: row.icon_color ?? undefined,
+        }
+      : undefined
   return {
     id: row.id,
     worktree: row.worktree,
@@ -289,6 +295,7 @@ export const layer: Layer.Layer<
             vcs: result.vcs ?? null,
             name: result.name,
             icon_url: result.icon?.url,
+            icon_url_override: result.icon?.override,
             icon_color: result.icon?.color,
             time_created: result.time.created,
             time_updated: result.time.updated,
@@ -303,6 +310,7 @@ export const layer: Layer.Layer<
               vcs: result.vcs ?? null,
               name: result.name,
               icon_url: result.icon?.url,
+              icon_url_override: result.icon?.override,
               icon_color: result.icon?.color,
               time_updated: result.time.updated,
               time_initialized: result.time.initialized,
@@ -365,6 +373,7 @@ export const layer: Layer.Layer<
           .set({
             name: input.name,
             icon_url: input.icon?.url,
+            icon_url_override: input.icon?.override,
             icon_color: input.icon?.color,
             commands: input.commands,
             time_updated: Date.now(),
