@@ -1,10 +1,11 @@
-import z from "zod"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { Bus } from "../bus"
 import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage"
 import { SyncEvent } from "../sync"
 import { Log } from "../util"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -13,12 +14,12 @@ import { SessionSummary } from "./summary"
 
 const log = Log.create({ service: "session.revert" })
 
-export const RevertInput = z.object({
-  sessionID: SessionID.zod,
-  messageID: MessageID.zod,
-  partID: PartID.zod.optional(),
-})
-export type RevertInput = z.infer<typeof RevertInput>
+export const RevertInput = Schema.Struct({
+  sessionID: SessionID,
+  messageID: MessageID,
+  partID: Schema.optional(PartID),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
 export interface Interface {
   readonly revert: (input: RevertInput) => Effect.Effect<Session.Info>

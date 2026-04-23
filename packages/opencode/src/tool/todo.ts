@@ -4,8 +4,21 @@ import * as Tool from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Todo } from "../session/todo"
 
+// Parameters are kept inline rather than derived from Todo.Info because
+// Tool.define requires z.ZodObject-typed parameters for execute() inference,
+// and zodObject(Todo.Info) returns ZodObject<any> — reaching into .shape would
+// erase field types. Tool schemas migrate to Effect Schema as a separate slice
+// per specs/effect/schema.md.
 const parameters = z.object({
-  todos: z.array(z.object(Todo.Info.shape)).describe("The updated todo list"),
+  todos: z
+    .array(
+      z.object({
+        content: z.string().describe("Brief description of the task"),
+        status: z.string().describe("Current status of the task: pending, in_progress, completed, cancelled"),
+        priority: z.string().describe("Priority level of the task: high, medium, low"),
+      }),
+    )
+    .describe("The updated todo list"),
 })
 
 type Metadata = {

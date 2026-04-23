@@ -278,6 +278,31 @@ describe("Project.discover", () => {
     expect(updated).toBeDefined()
     expect(updated!.icon).toBeUndefined()
   })
+
+  test("should not discover favicon when override is set", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path))
+
+    await run((svc) =>
+      svc.update({
+        projectID: project.id,
+        icon: { override: "data:image/png;base64,override" },
+      }),
+    )
+
+    const updatedProject = await run((svc) => svc.get(project.id))
+    if (!updatedProject) throw new Error("Project not found")
+
+    const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await Bun.write(path.join(tmp.path, "favicon.png"), pngData)
+
+    await run((svc) => svc.discover(updatedProject))
+
+    const updated = Project.get(project.id)
+    expect(updated).toBeDefined()
+    expect(updated!.icon?.override).toBe("data:image/png;base64,override")
+    expect(updated!.icon?.url).toBeUndefined()
+  })
 })
 
 describe("Project.update", () => {
@@ -330,6 +355,23 @@ describe("Project.update", () => {
 
     const fromDb = Project.get(project.id)
     expect(fromDb?.icon?.color).toBe("#ff0000")
+  })
+
+  test("should update icon override", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path))
+
+    const updated = await run((svc) =>
+      svc.update({
+        projectID: project.id,
+        icon: { override: "data:image/png;base64,abc123" },
+      }),
+    )
+
+    expect(updated.icon?.override).toBe("data:image/png;base64,abc123")
+
+    const fromDb = Project.get(project.id)
+    expect(fromDb?.icon?.override).toBe("data:image/png;base64,abc123")
   })
 
   test("should update commands", async () => {
@@ -389,13 +431,14 @@ describe("Project.update", () => {
       svc.update({
         projectID: project.id,
         name: "Multi Update",
-        icon: { url: "https://example.com/favicon.ico", color: "#00ff00" },
+        icon: { url: "https://example.com/favicon.ico", override: "data:image/png;base64,abc123", color: "#00ff00" },
         commands: { start: "make start" },
       }),
     )
 
     expect(updated.name).toBe("Multi Update")
     expect(updated.icon?.url).toBe("https://example.com/favicon.ico")
+    expect(updated.icon?.override).toBe("data:image/png;base64,abc123")
     expect(updated.icon?.color).toBe("#00ff00")
     expect(updated.commands?.start).toBe("make start")
   })
@@ -470,5 +513,89 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
 
     GlobalBus.off("event", on)
     expect(events.some((e) => e.payload.type === Project.Event.Updated.type)).toBe(true)
+  })
+})
+
+describe("Project.fromDirectory with bare repos", () => {
+  test("worktree from bare repo should cache in bare repo, not parent", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const parentDir = path.dirname(tmp.path)
+    const barePath = path.join(parentDir, `bare-${Date.now()}.git`)
+    const worktreePath = path.join(parentDir, `worktree-${Date.now()}`)
+
+    try {
+      await $`git clone --bare ${tmp.path} ${barePath}`.quiet()
+      await $`git worktree add ${worktreePath} HEAD`.cwd(barePath).quiet()
+
+      const { project } = await run((svc) => svc.fromDirectory(worktreePath))
+
+      expect(project.id).not.toBe(ProjectID.global)
+      expect(project.worktree).toBe(barePath)
+
+      const correctCache = path.join(barePath, "opencode")
+      const wrongCache = path.join(parentDir, ".git", "opencode")
+
+      expect(await Bun.file(correctCache).exists()).toBe(true)
+      expect(await Bun.file(wrongCache).exists()).toBe(false)
+    } finally {
+      await $`rm -rf ${barePath} ${worktreePath}`.quiet().nothrow()
+    }
+  })
+
+  test("different bare repos under same parent should not share project ID", async () => {
+    await using tmp1 = await tmpdir({ git: true })
+    await using tmp2 = await tmpdir({ git: true })
+
+    const parentDir = path.dirname(tmp1.path)
+    const bareA = path.join(parentDir, `bare-a-${Date.now()}.git`)
+    const bareB = path.join(parentDir, `bare-b-${Date.now()}.git`)
+    const worktreeA = path.join(parentDir, `wt-a-${Date.now()}`)
+    const worktreeB = path.join(parentDir, `wt-b-${Date.now()}`)
+
+    try {
+      await $`git clone --bare ${tmp1.path} ${bareA}`.quiet()
+      await $`git clone --bare ${tmp2.path} ${bareB}`.quiet()
+      await $`git worktree add ${worktreeA} HEAD`.cwd(bareA).quiet()
+      await $`git worktree add ${worktreeB} HEAD`.cwd(bareB).quiet()
+
+      const { project: projA } = await run((svc) => svc.fromDirectory(worktreeA))
+      const { project: projB } = await run((svc) => svc.fromDirectory(worktreeB))
+
+      expect(projA.id).not.toBe(projB.id)
+
+      const cacheA = path.join(bareA, "opencode")
+      const cacheB = path.join(bareB, "opencode")
+      const wrongCache = path.join(parentDir, ".git", "opencode")
+
+      expect(await Bun.file(cacheA).exists()).toBe(true)
+      expect(await Bun.file(cacheB).exists()).toBe(true)
+      expect(await Bun.file(wrongCache).exists()).toBe(false)
+    } finally {
+      await $`rm -rf ${bareA} ${bareB} ${worktreeA} ${worktreeB}`.quiet().nothrow()
+    }
+  })
+
+  test("bare repo without .git suffix is still detected via core.bare", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const parentDir = path.dirname(tmp.path)
+    const barePath = path.join(parentDir, `bare-no-suffix-${Date.now()}`)
+    const worktreePath = path.join(parentDir, `worktree-${Date.now()}`)
+
+    try {
+      await $`git clone --bare ${tmp.path} ${barePath}`.quiet()
+      await $`git worktree add ${worktreePath} HEAD`.cwd(barePath).quiet()
+
+      const { project } = await run((svc) => svc.fromDirectory(worktreePath))
+
+      expect(project.id).not.toBe(ProjectID.global)
+      expect(project.worktree).toBe(barePath)
+
+      const correctCache = path.join(barePath, "opencode")
+      expect(await Bun.file(correctCache).exists()).toBe(true)
+    } finally {
+      await $`rm -rf ${barePath} ${worktreePath}`.quiet().nothrow()
+    }
   })
 })
