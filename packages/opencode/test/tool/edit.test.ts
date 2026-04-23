@@ -29,11 +29,6 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
-async function touch(file: string, time: number) {
-  const date = new Date(time)
-  await fs.utimes(file, date, date)
-}
-
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     LSP.defaultLayer,
@@ -97,6 +92,37 @@ describe("tool.edit", () => {
 
           const content = await fs.readFile(filepath, "utf-8")
           expect(content).toBe("new content")
+        },
+      })
+    })
+
+    test("preserves BOM when oldString is empty on existing files", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "existing.cs")
+      const bom = String.fromCharCode(0xfeff)
+      await fs.writeFile(filepath, `${bom}using System;\n`, "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await resolve()
+          const result = await Effect.runPromise(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "",
+                newString: "using Up;\n",
+              },
+              ctx,
+            ),
+          )
+
+          expect(result.metadata.diff).toContain("-using System;")
+          expect(result.metadata.diff).toContain("+using Up;")
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content.charCodeAt(0)).toBe(0xfeff)
+          expect(content.slice(1)).toBe("using Up;\n")
         },
       })
     })
@@ -184,6 +210,38 @@ describe("tool.edit", () => {
 
           const content = await fs.readFile(filepath, "utf-8")
           expect(content).toBe("new content here")
+        },
+      })
+    })
+
+    test("replaces the first visible line in BOM files", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "existing.cs")
+      const bom = String.fromCharCode(0xfeff)
+      await fs.writeFile(filepath, `${bom}using System;\nclass Test {}\n`, "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await resolve()
+          const result = await Effect.runPromise(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "using System;",
+                newString: "using Up;",
+              },
+              ctx,
+            ),
+          )
+
+          expect(result.metadata.diff).toContain("-using System;")
+          expect(result.metadata.diff).toContain("+using Up;")
+          expect(result.metadata.diff).not.toContain(bom)
+
+          const content = await fs.readFile(filepath, "utf-8")
+          expect(content.charCodeAt(0)).toBe(0xfeff)
+          expect(content.slice(1)).toBe("using Up;\nclass Test {}\n")
         },
       })
     })
@@ -639,42 +697,56 @@ describe("tool.edit", () => {
   })
 
   describe("concurrent editing", () => {
-    test("serializes concurrent edits to same file", async () => {
+    test("preserves concurrent edits to different sections of the same file", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
-      await fs.writeFile(filepath, "0", "utf-8")
+      await fs.writeFile(filepath, "top = 0\nmiddle = keep\nbottom = 0\n", "utf-8")
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
           const edit = await resolve()
+          let asks = 0
+          const firstAsk = Promise.withResolvers<void>()
+          const delayedCtx = {
+            ...ctx,
+            ask: () =>
+              Effect.gen(function* () {
+                asks++
+                if (asks !== 1) return
+                firstAsk.resolve()
+                yield* Effect.promise(() => Bun.sleep(50))
+              }),
+          }
 
-          // Two concurrent edits
           const promise1 = Effect.runPromise(
             edit.execute(
               {
                 filePath: filepath,
-                oldString: "0",
-                newString: "1",
+                oldString: "top = 0",
+                newString: "top = 1",
               },
-              ctx,
+              delayedCtx,
             ),
           )
+
+          await firstAsk.promise
 
           const promise2 = Effect.runPromise(
             edit.execute(
               {
                 filePath: filepath,
-                oldString: "0",
-                newString: "2",
+                oldString: "bottom = 0",
+                newString: "bottom = 2",
               },
-              ctx,
+              delayedCtx,
             ),
           )
 
-          // Both should complete without error (though one might fail due to content mismatch)
           const results = await Promise.allSettled([promise1, promise2])
-          expect(results.some((r) => r.status === "fulfilled")).toBe(true)
+          expect(results[0]?.status).toBe("fulfilled")
+          expect(results[1]?.status).toBe("fulfilled")
+          expect(await fs.readFile(filepath, "utf-8")).toBe("top = 1\nmiddle = keep\nbottom = 2\n")
         },
       })
     })

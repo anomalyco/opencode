@@ -70,7 +70,7 @@ export const Model = Schema.Struct({
   ),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 
-export class Info extends Schema.Class<Info>("ProviderConfig")({
+export const Info = Schema.Struct({
   api: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
   env: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
@@ -107,8 +107,9 @@ export class Info extends Schema.Class<Info>("ProviderConfig")({
     ),
   ),
   models: Schema.optional(Schema.Record(Schema.String, Model)),
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "ProviderConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
 export * as ConfigProvider from "./provider"
