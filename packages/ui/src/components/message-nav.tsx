@@ -1,7 +1,6 @@
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import { ComponentProps, For, Match, Show, splitProps, Switch } from "solid-js"
+import { ComponentProps, For, Match, Show, createSignal, onCleanup, splitProps, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
-import { Tooltip } from "./tooltip"
 import { useI18n } from "../context/i18n"
 
 export function MessageNav(
@@ -14,18 +13,48 @@ export function MessageNav(
   },
 ) {
   const i18n = useI18n()
-  const [local, others] = splitProps(props, ["messages", "current", "size", "onMessageSelect", "getLabel"])
+  const [local, others] = splitProps(props, ["messages", "current", "size", "onMessageSelect", "getLabel", "class"])
+  let closeTimer: number | undefined
 
-  const content = () => (
-    <ul role="list" data-component="message-nav" data-size={local.size} {...others}>
+  const clearCloseTimer = () => {
+    if (!closeTimer) return
+    clearTimeout(closeTimer)
+    closeTimer = undefined
+  }
+
+  const [hovercardOpen, setHovercardOpen] = createSignal(false)
+
+  onCleanup(clearCloseTimer)
+
+  const showHovercard = () => {
+    clearCloseTimer()
+    setHovercardOpen(true)
+  }
+
+  const hideHovercard = () => {
+    clearCloseTimer()
+    closeTimer = window.setTimeout(() => {
+      setHovercardOpen(false)
+      closeTimer = undefined
+    }, 120) as unknown as number
+  }
+
+  const selectMessage = (message: UserMessage) => {
+    clearCloseTimer()
+    setHovercardOpen(false)
+    local.onMessageSelect(message)
+  }
+
+  const content = (className?: string) => (
+    <ul role="list" data-component="message-nav" data-size={local.size} class={className} {...others}>
       <For each={local.messages}>
         {(message) => {
-          const handleClick = () => local.onMessageSelect(message)
+          const handleClick = () => selectMessage(message)
 
           const handleKeyPress = (event: KeyboardEvent) => {
             if (event.key !== "Enter" && event.key !== " ") return
             event.preventDefault()
-            local.onMessageSelect(message)
+            selectMessage(message)
           }
 
           return (
@@ -70,23 +99,27 @@ export function MessageNav(
   return (
     <Switch>
       <Match when={local.size === "compact"}>
-        <Tooltip
-          openDelay={0}
-          placement="right-start"
-          gutter={-40}
-          shift={-10}
-          overlap
-          contentClass="message-nav-tooltip"
-          value={
-            <div data-slot="message-nav-tooltip-content">
-              <MessageNav {...props} size="normal" class="" />
-            </div>
-          }
+        <div
+          data-component="message-nav-hovercard"
+          class={local.class}
+          onPointerEnter={showHovercard}
+          onPointerLeave={hideHovercard}
+          onFocusIn={showHovercard}
+          onFocusOut={(event) => {
+            const next = event.relatedTarget
+            if (next instanceof Node && event.currentTarget.contains(next)) return
+            hideHovercard()
+          }}
         >
           {content()}
-        </Tooltip>
+          <Show when={hovercardOpen()}>
+            <div class="message-nav-tooltip" data-slot="message-nav-tooltip-content">
+              <MessageNav {...props} size="normal" class="" onMessageSelect={selectMessage} />
+            </div>
+          </Show>
+        </div>
       </Match>
-      <Match when={local.size === "normal"}>{content()}</Match>
+      <Match when={local.size === "normal"}>{content(local.class)}</Match>
     </Switch>
   )
 }
