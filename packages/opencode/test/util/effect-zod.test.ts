@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
 import z from "zod"
 
-import { zod, ZodOverride, ZodPreprocess } from "../../src/util/effect-zod"
+import { zod, ZodOverride } from "../../src/util/effect-zod"
 
 function json(schema: z.ZodTypeAny) {
   const { $schema: _, ...rest } = z.toJSONSchema(schema)
@@ -749,121 +749,6 @@ describe("util.effect-zod", () => {
       const schema = zod(Schema.Struct({ foo: Schema.optional(Schema.String) }))
       expect(schema.parse({})).toEqual({})
       expect(schema.parse({ foo: "hi" })).toEqual({ foo: "hi" })
-    })
-  })
-
-  describe("ZodPreprocess annotation", () => {
-    test("preprocess runs on raw input before the inner schema parses", () => {
-      // Models the permission.ts __originalKeys pattern: capture the original
-      // insertion order of a user-provided object BEFORE Schema parsing
-      // canonicalises the keys.
-      const preprocess = (val: unknown) => {
-        if (typeof val === "object" && val !== null && !Array.isArray(val)) {
-          return { __keys: Object.keys(val), ...(val as Record<string, unknown>) }
-        }
-        return val
-      }
-      const Inner = Schema.Struct({
-        __keys: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-        a: Schema.optional(Schema.String),
-        b: Schema.optional(Schema.String),
-      }).annotate({ [ZodPreprocess]: preprocess })
-
-      const schema = zod(Inner)
-      const parsed = schema.parse({ b: "1", a: "2" }) as {
-        __keys?: string[]
-        a?: string
-        b?: string
-      }
-      expect(parsed.__keys).toEqual(["b", "a"])
-      expect(parsed.a).toBe("2")
-      expect(parsed.b).toBe("1")
-    })
-
-    test("preprocess does not transform already-shaped input", () => {
-      // When the user passes an object that already has __keys, preprocess
-      // returns it unchanged because spreading preserves any existing key.
-      const preprocess = (val: unknown) => {
-        if (typeof val === "object" && val !== null && !("__keys" in val)) {
-          return { __keys: Object.keys(val), ...(val as Record<string, unknown>) }
-        }
-        return val
-      }
-      const Inner = Schema.Struct({
-        __keys: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-        a: Schema.optional(Schema.String),
-      }).annotate({ [ZodPreprocess]: preprocess })
-
-      const schema = zod(Inner)
-      const parsed = schema.parse({ __keys: ["existing"], a: "hi" }) as {
-        __keys?: string[]
-        a?: string
-      }
-      expect(parsed.__keys).toEqual(["existing"])
-    })
-
-    test("preprocess composes with a union (either object or string)", () => {
-      // Mirrors permission.ts exactly: input can be either an object (with
-      // preprocess injecting metadata) or a plain string action.
-      const Action = Schema.Literals(["ask", "allow", "deny"])
-      const Obj = Schema.Struct({
-        __keys: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-        read: Schema.optional(Action),
-        write: Schema.optional(Action),
-      })
-      const preprocess = (val: unknown) => {
-        if (typeof val === "object" && val !== null && !Array.isArray(val)) {
-          return { __keys: Object.keys(val), ...(val as Record<string, unknown>) }
-        }
-        return val
-      }
-      const Inner = Schema.Union([Obj, Action]).annotate({ [ZodPreprocess]: preprocess })
-      const schema = zod(Inner)
-
-      // String branch — passes through preprocess unchanged
-      expect(schema.parse("allow")).toBe("allow")
-
-      // Object branch — __keys injected, preserves order
-      const parsed = schema.parse({ write: "allow", read: "deny" }) as {
-        __keys?: string[]
-        read?: string
-        write?: string
-      }
-      expect(parsed.__keys).toEqual(["write", "read"])
-      expect(parsed.write).toBe("allow")
-      expect(parsed.read).toBe("deny")
-    })
-
-    test("JSON Schema output comes from the inner schema — preprocess is runtime-only", () => {
-      const Inner = Schema.Struct({
-        a: Schema.optional(Schema.String),
-        b: Schema.optional(Schema.Number),
-      }).annotate({ [ZodPreprocess]: (v: unknown) => v })
-      const shape = json(zod(Inner)) as any
-      expect(shape.type).toBe("object")
-      expect(shape.properties.a.type).toBe("string")
-      expect(shape.properties.b.type).toBe("number")
-    })
-
-    test("identifier + description propagate through the preprocess wrapper", () => {
-      const Inner = Schema.Struct({
-        x: Schema.optional(Schema.String),
-      }).annotate({
-        identifier: "WithPreproc",
-        description: "A schema with preprocess",
-        [ZodPreprocess]: (v: unknown) => v,
-      })
-      const schema = zod(Inner)
-      expect(schema.meta()?.ref).toBe("WithPreproc")
-      expect(schema.meta()?.description).toBe("A schema with preprocess")
-    })
-
-    test("preprocess inside a struct field applies only to that field", () => {
-      const Inner = Schema.String.annotate({
-        [ZodPreprocess]: (v: unknown) => (typeof v === "number" ? String(v) : v),
-      })
-      const schema = zod(Schema.Struct({ name: Inner, raw: Schema.Number }))
-      expect(schema.parse({ name: 42, raw: 7 })).toEqual({ name: "42", raw: 7 })
     })
   })
 })

@@ -3,7 +3,7 @@ import { InstanceState } from "@/effect"
 
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Git } from "@/git"
-import { Effect, Layer, Context, Scope } from "effect"
+import { Effect, Layer, Context, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
@@ -76,8 +76,8 @@ export type Content = z.infer<typeof Content>
 export const Event = {
   Edited: BusEvent.define(
     "file.edited",
-    z.object({
-      file: z.string(),
+    Schema.Struct({
+      file: Schema.String,
     }),
   ),
 }
