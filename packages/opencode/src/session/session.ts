@@ -6,7 +6,6 @@ import { Decimal } from "decimal.js"
 import z from "zod"
 import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "../flag/flag"
-import { Installation } from "../installation"
 import { InstallationVersion } from "../installation/version"
 
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage"
@@ -128,7 +127,7 @@ export const Info = z
         additions: z.number(),
         deletions: z.number(),
         files: z.number(),
-        diffs: Snapshot.FileDiff.array().optional(),
+        diffs: Snapshot.FileDiff.zod.array().optional(),
       })
       .optional(),
     share: z
@@ -240,14 +239,15 @@ export const Event = {
     "session.diff",
     z.object({
       sessionID: SessionID.zod,
-      diff: Snapshot.FileDiff.array(),
+      diff: Snapshot.FileDiff.zod.array(),
     }),
   ),
   Error: BusEvent.define(
     "session.error",
     z.object({
       sessionID: SessionID.zod.optional(),
-      error: MessageV2.Assistant.shape.error,
+      // z.lazy defers access to break circular dep: session → message-v2 → provider → plugin → session
+      error: z.lazy(() => (MessageV2.Assistant.zod as unknown as z.ZodObject<any>).shape.error),
     }),
   ),
 }
@@ -272,16 +272,18 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
     input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
   )
   const cacheWriteInputTokens = safe(
-    (input.usage.inputTokenDetails?.cacheWriteTokens ??
-      input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-      // google-vertex-anthropic returns metadata under "vertex" key
-      // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
-      input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
-      // @ts-expect-error
-      input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-      // @ts-expect-error
-      input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-      0) as number,
+    Number(
+      input.usage.inputTokenDetails?.cacheWriteTokens ??
+        input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        // google-vertex-anthropic returns metadata under "vertex" key
+        // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
+        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
+        // @ts-expect-error
+        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+        // @ts-expect-error
+        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        0,
+    ),
   )
 
   // AI SDK v6 normalized inputTokens to include cached tokens across all providers
@@ -648,7 +650,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       return input.partID
     })
 
-    const updatePartDelta = Effect.fn("Session.updatePartDelta")(function* (input: {
+    const updatePartDelta = Effect.fnUntraced(function* (input: {
       sessionID: SessionID
       messageID: MessageID
       partID: PartID
@@ -711,8 +713,10 @@ export function* list(input?: {
   if (input?.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
   }
-  if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+  if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+    if (input?.directory) {
+      conditions.push(eq(SessionTable.directory, input.directory))
+    }
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))

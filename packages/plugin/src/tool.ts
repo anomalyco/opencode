@@ -27,10 +27,12 @@ type AskInput = {
   metadata: { [key: string]: any }
 }
 
+export type ToolResult = string | { output: string; metadata?: { [key: string]: any } }
+
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
   args: Args
-  execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<string>
+  execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<ToolResult>
 }) {
   return input
 }

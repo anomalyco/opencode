@@ -14,7 +14,6 @@ import { ConfigMCP } from "../config/mcp"
 import { Log } from "../util"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import z from "zod/v4"
-import { Instance } from "../project/instance"
 import { Installation } from "../installation"
 import { InstallationVersion } from "../installation/version"
 import { withTimeout } from "@/util/timeout"
@@ -391,7 +390,7 @@ export const layer = Layer.effect(
       mcp: ConfigMCP.Info & { type: "local" },
     ) {
       const [cmd, ...args] = mcp.command
-      const cwd = Instance.directory
+      const cwd = yield* InstanceState.directory
       const transport = new StdioClientTransport({
         stderr: "pipe",
         command: cmd,
