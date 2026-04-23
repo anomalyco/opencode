@@ -162,7 +162,7 @@ export function createChildStoreManager(input: {
           const pathQuery = useQuery(() => loadPathQuery(directory))
           const child = createStore<State>({
             project: "",
-            projectMeta: initialMeta,
+            projectMeta: undefined, // initialMeta,
             icon: initialIcon,
             provider_ready: false,
             provider: { all: [], connected: [], default: {} },
@@ -208,10 +208,10 @@ export function createChildStoreManager(input: {
             child[1]("vcs", (value) => value ?? cached)
           })
 
-          onPersistedInit(meta[2], () => {
-            if (child[0].projectMeta !== initialMeta) return
-            child[1]("projectMeta", meta[0].value)
-          })
+          // onPersistedInit(meta[2], () => {
+          //   if (child[0].projectMeta !== initialMeta) return
+          //   child[1]("projectMeta", meta[0].value)
+          // })
 
           onPersistedInit(icon[2], () => {
             if (child[0].icon !== initialIcon) return
