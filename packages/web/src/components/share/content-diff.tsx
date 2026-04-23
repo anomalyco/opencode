@@ -1,5 +1,5 @@
 import { parsePatch } from "diff"
-import { createMemo } from "solid-js"
+import { createMemo, For } from "solid-js"
 import { ContentCode } from "./content-code"
 import styles from "./content-diff.module.css"
 
@@ -160,28 +160,37 @@ export function ContentDiff(props: Props) {
   return (
     <div class={styles.root}>
       <div data-component="desktop">
-        {rows().map((r) => (
-          <div data-component="diff-row" data-type={r.type}>
-            <div data-slot="before" data-diff-type={r.type === "removed" || r.type === "modified" ? "removed" : ""}>
-              <ContentCode code={r.left} flush lang={props.lang} />
+        <For each={rows()}>
+          {(row) => (
+            <div data-component="diff-row" data-type={row.type}>
+              <div
+                data-slot="before"
+                data-diff-type={row.type === "removed" || row.type === "modified" ? "removed" : ""}
+              >
+                <ContentCode code={row.left} flush lang={props.lang} />
+              </div>
+              <div data-slot="after" data-diff-type={row.type === "added" || row.type === "modified" ? "added" : ""}>
+                <ContentCode code={row.right} lang={props.lang} flush />
+              </div>
             </div>
-            <div data-slot="after" data-diff-type={r.type === "added" || r.type === "modified" ? "added" : ""}>
-              <ContentCode code={r.right} lang={props.lang} flush />
-            </div>
-          </div>
-        ))}
+          )}
+        </For>
       </div>
 
       <div data-component="mobile">
-        {mobileRows().map((block) => (
-          <div data-component="diff-block" data-type={block.type}>
-            {block.lines.map((line) => (
-              <div data-diff-type={block.type === "removed" ? "removed" : block.type === "added" ? "added" : ""}>
-                <ContentCode code={line} lang={props.lang} flush />
-              </div>
-            ))}
-          </div>
-        ))}
+        <For each={mobileRows()}>
+          {(block) => (
+            <div data-component="diff-block" data-type={block.type}>
+              <For each={block.lines}>
+                {(line) => (
+                  <div data-diff-type={block.type === "removed" ? "removed" : block.type === "added" ? "added" : ""}>
+                    <ContentCode code={line} lang={props.lang} flush />
+                  </div>
+                )}
+              </For>
+            </div>
+          )}
+        </For>
       </div>
     </div>
   )

@@ -14,6 +14,8 @@ import {
   type VcsCache,
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
+import { useQuery } from "@tanstack/solid-query"
+import { loadPathQuery } from "./bootstrap"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -156,13 +158,20 @@ export function createChildStoreManager(input: {
         createRoot((dispose) => {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
+
+          const pathQuery = useQuery(() => loadPathQuery(directory))
           const child = createStore<State>({
             project: "",
             projectMeta: initialMeta,
             icon: initialIcon,
+            provider_ready: false,
             provider: { all: [], connected: [], default: {} },
             config: {},
-            path: { state: "", config: "", worktree: "", directory: "", home: "" },
+            get path() {
+              if (pathQuery.isLoading || !pathQuery.data)
+                return { state: "", config: "", worktree: "", directory: "", home: "" }
+              return pathQuery.data
+            },
             status: "loading" as const,
             agent: [],
             command: [],
@@ -173,7 +182,9 @@ export function createChildStoreManager(input: {
             todo: {},
             permission: {},
             question: {},
+            mcp_ready: false,
             mcp: {},
+            lsp_ready: false,
             lsp: [],
             vcs: vcsStore.value,
             limit: 5,
@@ -226,13 +237,22 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
+  function peek(directory: string, options: ChildOptions = {}) {
+    const childStore = ensureChild(directory)
+    const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap && childStore[0].status === "loading") {
+      input.onBootstrap(directory)
+    }
+    return childStore
+  }
+
   function projectMeta(directory: string, patch: ProjectMeta) {
     const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(directory)
     if (!cached) return
     const previous = store.projectMeta ?? {}
-    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
-    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const icon = patch.icon ? { ...previous.icon, ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...previous.commands, ...patch.commands } : previous.commands
     const next = {
       ...previous,
       ...patch,
@@ -256,6 +276,7 @@ export function createChildStoreManager(input: {
     children,
     ensureChild,
     child,
+    peek,
     projectMeta,
     projectIcon,
     mark,

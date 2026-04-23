@@ -8,12 +8,15 @@ import { querySessionInfo } from "../common"
 import {
   IconAlibaba,
   IconAnthropic,
+  IconArcee,
   IconGemini,
   IconMiniMax,
   IconMoonshotAI,
+  IconNvidia,
   IconOpenAI,
   IconStealth,
   IconXai,
+  IconXiaomi,
   IconZai,
 } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
@@ -29,6 +32,9 @@ const getModelLab = (modelId: string) => {
   if (modelId.startsWith("qwen")) return "Alibaba"
   if (modelId.startsWith("minimax")) return "MiniMax"
   if (modelId.startsWith("grok")) return "xAI"
+  if (modelId.startsWith("mimo")) return "Xiaomi"
+  if (modelId.startsWith("nemotron")) return "NVIDIA"
+  if (modelId.startsWith("trinity")) return "Arcee"
   return "Stealth"
 }
 
@@ -61,11 +67,11 @@ const getModelsInfo = query(async (workspaceID: string) => {
 
 const updateModel = action(async (form: FormData) => {
   "use server"
-  const model = form.get("model")?.toString()
+  const model = form.get("model") as string | null
   if (!model) return { error: formError.modelRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
-  const enabled = form.get("enabled")?.toString() === "true"
+  const enabled = (form.get("enabled") as string | null) === "true"
   return json(
     withActor(async () => {
       if (enabled) {
@@ -139,6 +145,12 @@ export function ModelSection() {
                                   return <IconXai width={16} height={16} />
                                 case "MiniMax":
                                   return <IconMiniMax width={16} height={16} />
+                                case "Xiaomi":
+                                  return <IconXiaomi width={16} height={16} />
+                                case "NVIDIA":
+                                  return <IconNvidia width={16} height={16} />
+                                case "Arcee":
+                                  return <IconArcee width={16} height={16} />
                                 default:
                                   return <IconStealth width={16} height={16} />
                               }
@@ -151,7 +163,7 @@ export function ModelSection() {
                           <form action={updateModel} method="post">
                             <input type="hidden" name="model" value={id} />
                             <input type="hidden" name="workspaceID" value={params.id} />
-                            <input type="hidden" name="enabled" value={isEnabled().toString()} />
+                            <input type="hidden" name="enabled" value={String(isEnabled())} />
                             <label data-slot="model-toggle-label">
                               <input
                                 type="checkbox"

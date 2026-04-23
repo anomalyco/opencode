@@ -14,6 +14,15 @@ interface CheckServerHealthOptions {
 const defaultTimeoutMs = 3000
 const defaultRetryCount = 2
 const defaultRetryDelayMs = 100
+const cacheMs = 750
+const healthCache = new Map<
+  string,
+  { at: number; done: boolean; fetch: typeof globalThis.fetch; promise: Promise<ServerHealth> }
+>()
+
+function cacheKey(server: ServerConnection.HttpBase) {
+  return `${server.url}\n${server.username ?? ""}\n${server.password ?? ""}`
+}
 
 function timeoutSignal(timeoutMs: number) {
   const timeout = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout
@@ -87,5 +96,18 @@ export function useCheckServerHealth() {
   const platform = usePlatform()
   const fetcher = platform.fetch ?? globalThis.fetch
 
-  return (http: ServerConnection.HttpBase) => checkServerHealth(http, fetcher)
+  return (http: ServerConnection.HttpBase) => {
+    const key = cacheKey(http)
+    const hit = healthCache.get(key)
+    const now = Date.now()
+    if (hit && hit.fetch === fetcher && (!hit.done || now - hit.at < cacheMs)) return hit.promise
+    const promise = checkServerHealth(http, fetcher).finally(() => {
+      const next = healthCache.get(key)
+      if (!next || next.promise !== promise) return
+      next.done = true
+      next.at = Date.now()
+    })
+    healthCache.set(key, { at: now, done: false, fetch: fetcher, promise })
+    return promise
+  }
 }

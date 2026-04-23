@@ -9,7 +9,8 @@
   overflow: visible;
 
   &.tool-collapsible {
-    gap: 8px;
+    --tool-content-gap: 4px;
+    gap: var(--tool-content-gap);
   }
 
   [data-slot="collapsible-trigger"] {
@@ -59,6 +60,11 @@
     }
     &[data-disabled] {
       cursor: not-allowed;
+    }
+
+    &[data-hide-details="true"] {
+      height: auto;
+      align-items: stretch;
     }
 
     [data-slot="collapsible-arrow"] {

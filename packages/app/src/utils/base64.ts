@@ -1,4 +1,4 @@
-import { base64Decode } from "@opencode-ai/util/encode"
+import { base64Decode } from "@opencode-ai/shared/util/encode"
 
 export function decode64(value: string | undefined) {
   if (value === undefined) return

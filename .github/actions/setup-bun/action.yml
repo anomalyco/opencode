@@ -41,5 +41,13 @@ runs:
       shell: bash
 
     - name: Install dependencies
-      run: bun install
+      run: |
+        # Workaround for patched peer variants
+        # e.g. ./patches/ for standard-openapi
+        # https://github.com/oven-sh/bun/issues/28147
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          bun install --linker hoisted
+        else
+          bun install
+        fi
       shell: bash

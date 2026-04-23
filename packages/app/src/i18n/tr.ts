@@ -225,6 +225,7 @@ export const dict = {
   "common.cancel": "İptal",
   "common.connect": "Bağlan",
   "common.disconnect": "Bağlantı Kes",
+  "common.continue": "Gönder",
   "common.submit": "Gönder",
   "common.save": "Kaydet",
   "common.saving": "Kaydediliyor...",
@@ -642,8 +643,12 @@ export const dict = {
     "OpenCode'un sistem, açık veya koyu temayı takip etip etmeyeceğini seçin",
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.theme.description": "OpenCode'un temasını özelleştirin.",
-  "settings.general.row.font.title": "Yazı Tipi",
-  "settings.general.row.font.description": "Kod bloklarında kullanılan monospace yazı tipini özelleştirin",
+  "settings.general.row.font.title": "Kod Yazı Tipi",
+  "settings.general.row.font.description": "Kod bloklarında kullanılan yazı tipini özelleştirin",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
+  "settings.general.row.uiFont.title": "Arayüz Yazı Tipi",
+  "settings.general.row.uiFont.description": "Arayüz genelinde kullanılan yazı tipini özelleştirin",
   "settings.general.row.followup.title": "Takip davranışı",
   "settings.general.row.followup.description":
     "Takip komutlarının hemen yönlendirilmesini mi yoksa sırada beklemesini mi istediğinizi seçin",
@@ -657,6 +662,10 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Düzenleme araç bileşenlerini genişlet",
   "settings.general.row.editToolPartsExpanded.description":
     "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
+
+  "settings.general.row.showSessionProgressBar.title": "Oturum ilerleme çubuğunu göster",
+  "settings.general.row.showSessionProgressBar.description":
+    "Ajan çalışırken oturumun üst kısmında animasyonlu ilerleme çubuğunu göster",
 
   "settings.general.row.wayland.title": "Yerel Wayland kullan",
   "settings.general.row.wayland.description":
@@ -675,20 +684,6 @@ export const dict = {
   "settings.updates.action.checking": "Kontrol ediliyor...",
   "settings.updates.toast.latest.title": "Güncelsiniz",
   "settings.updates.toast.latest.description": "OpenCode'un en son sürümünü kullanıyorsunuz.",
-
-  "font.option.ibmPlexMono": "IBM Plex Mono",
-  "font.option.cascadiaCode": "Cascadia Code",
-  "font.option.firaCode": "Fira Code",
-  "font.option.hack": "Hack",
-  "font.option.inconsolata": "Inconsolata",
-  "font.option.intelOneMono": "Intel One Mono",
-  "font.option.iosevka": "Iosevka",
-  "font.option.jetbrainsMono": "JetBrains Mono",
-  "font.option.mesloLgs": "Meslo LGS",
-  "font.option.robotoMono": "Roboto Mono",
-  "font.option.sourceCodePro": "Source Code Pro",
-  "font.option.ubuntuMono": "Ubuntu Mono",
-  "font.option.geistMono": "Geist Mono",
 
   "sound.option.none": "Yok",
   "sound.option.alert01": "Uyarı 01",
@@ -815,8 +810,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Ada göre bir beceri yükle",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Dil sunucusu sorguları çalıştır",
-  "settings.permissions.tool.todoread.title": "Görev Oku",
-  "settings.permissions.tool.todoread.description": "Görev listesini oku",
   "settings.permissions.tool.todowrite.title": "Görev Yaz",
   "settings.permissions.tool.todowrite.description": "Görev listesini güncelle",
   "settings.permissions.tool.webfetch.title": "Web Getir",
