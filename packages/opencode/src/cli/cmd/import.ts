@@ -154,7 +154,7 @@ export const ImportCommand = cmd({
         return
       }
 
-      const info = Session.Info.parse({
+      const info = Session.Info.zod.parse({
         ...exportData.info,
         projectID: Instance.project.id,
       })

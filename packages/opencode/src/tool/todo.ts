@@ -5,7 +5,15 @@ import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Todo } from "../session/todo"
 
 const parameters = z.object({
-  todos: z.array(z.object(Todo.Info.shape)).describe("The updated todo list"),
+  todos: z
+    .array(
+      z.object({
+        content: z.string().describe("Brief description of the task"),
+        status: z.string().describe("Current status of the task: pending, in_progress, completed, cancelled"),
+        priority: z.string().describe("Priority level of the task: high, medium, low"),
+      }),
+    )
+    .describe("The updated todo list"),
 })
 
 type Metadata = {

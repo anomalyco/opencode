@@ -335,7 +335,7 @@ export const ExperimentalRoutes = lazy(() =>
             description: "List of sessions",
             content: {
               "application/json": {
-                schema: resolver(Session.GlobalInfo.array()),
+                schema: resolver(Session.GlobalInfo.zod.array()),
               },
             },
           },

@@ -27,7 +27,9 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
-import { Effect, Layer, Option, Context } from "effect"
+import { Effect, Layer, Option, Context, Schema } from "effect"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "session" })
 
@@ -80,7 +82,7 @@ export function fromRow(row: SessionRow): Info {
   }
 }
 
-export function toRow(info: Info) {
+export function toRow(info: Schema.Schema.Type<typeof Info>) {
   return {
     id: info.id,
     project_id: info.projectID,
@@ -94,9 +96,9 @@ export function toRow(info: Info) {
     summary_additions: info.summary?.additions,
     summary_deletions: info.summary?.deletions,
     summary_files: info.summary?.files,
-    summary_diffs: info.summary?.diffs,
-    revert: info.revert ?? null,
-    permission: info.permission,
+    summary_diffs: info.summary?.diffs as Snapshot.FileDiff[] | undefined,
+    revert: (info.revert ?? null) as Info["revert"] | null,
+    permission: info.permission as Info["permission"],
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
@@ -114,91 +116,126 @@ function getForkedTitle(title: string): string {
   return `${title} (fork #1)`
 }
 
-export const Info = z
-  .object({
-    id: SessionID.zod,
-    slug: z.string(),
-    projectID: ProjectID.zod,
-    workspaceID: WorkspaceID.zod.optional(),
-    directory: z.string(),
-    parentID: SessionID.zod.optional(),
-    summary: z
-      .object({
-        additions: z.number(),
-        deletions: z.number(),
-        files: z.number(),
-        diffs: Snapshot.FileDiff.zod.array().optional(),
-      })
-      .optional(),
-    share: z
-      .object({
-        url: z.string(),
-      })
-      .optional(),
-    title: z.string(),
-    version: z.string(),
-    time: z.object({
-      created: z.number(),
-      updated: z.number(),
-      compacting: z.number().optional(),
-      archived: z.number().optional(),
-    }),
-    permission: Permission.Ruleset.zod.optional(),
-    revert: z
-      .object({
-        messageID: MessageID.zod,
-        partID: PartID.zod.optional(),
-        snapshot: z.string().optional(),
-        diff: z.string().optional(),
-      })
-      .optional(),
-  })
-  .meta({
-    ref: "Session",
-  })
-export type Info = z.output<typeof Info>
-
-export const ProjectInfo = z
-  .object({
-    id: ProjectID.zod,
-    name: z.string().optional(),
-    worktree: z.string(),
-  })
-  .meta({
-    ref: "ProjectSummary",
-  })
-export type ProjectInfo = z.output<typeof ProjectInfo>
-
-export const GlobalInfo = Info.extend({
-  project: ProjectInfo.nullable(),
-}).meta({
-  ref: "GlobalSession",
+const Summary = Schema.Struct({
+  additions: Schema.Number,
+  deletions: Schema.Number,
+  files: Schema.Number,
+  diffs: Schema.optional(Schema.Array(Snapshot.FileDiff)),
 })
-export type GlobalInfo = z.output<typeof GlobalInfo>
 
-export const CreateInput = z
-  .object({
-    parentID: SessionID.zod.optional(),
-    title: z.string().optional(),
-    permission: Info.shape.permission,
-    workspaceID: WorkspaceID.zod.optional(),
-  })
-  .optional()
-export type CreateInput = z.output<typeof CreateInput>
-
-export const ForkInput = z.object({ sessionID: SessionID.zod, messageID: MessageID.zod.optional() })
-export const GetInput = SessionID.zod
-export const ChildrenInput = SessionID.zod
-export const RemoveInput = SessionID.zod
-export const SetTitleInput = z.object({ sessionID: SessionID.zod, title: z.string() })
-export const SetArchivedInput = z.object({ sessionID: SessionID.zod, time: z.number().optional() })
-export const SetPermissionInput = z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset.zod })
-export const SetRevertInput = z.object({
-  sessionID: SessionID.zod,
-  revert: Info.shape.revert,
-  summary: Info.shape.summary,
+const Share = Schema.Struct({
+  url: Schema.String,
 })
-export const MessagesInput = z.object({ sessionID: SessionID.zod, limit: z.number().optional() })
+
+const Time = Schema.Struct({
+  created: Schema.Number,
+  updated: Schema.Number,
+  compacting: Schema.optional(Schema.Number),
+  archived: Schema.optional(Schema.Number),
+})
+
+const Revert = Schema.Struct({
+  messageID: MessageID,
+  partID: Schema.optional(PartID),
+  snapshot: Schema.optional(Schema.String),
+  diff: Schema.optional(Schema.String),
+})
+
+// Mirror effect-smol's Types.DeepMutable. Used to strip readonly from
+// Schema-derived types so consumer code can continue mutating Info fields
+// (e.g. session.revert.snapshot = ...) the way the original zod-derived
+// types allowed. See specs/effect/schema.md "Local DeepMutable".
+//
+// The primitive guard preserves branded scalars like `string & Brand<"SessionID">`,
+// which extend `object` via the brand intersection and would otherwise get
+// walked into the mapped-type branch and explode to the prototype methods.
+type DeepMutable<T> = T extends string | number | boolean | bigint | symbol | null | undefined
+  ? T
+  : T extends readonly [unknown, ...unknown[]]
+    ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
+    : T extends readonly (infer U)[]
+      ? DeepMutable<U>[]
+      : T extends object
+        ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
+        : T
+
+export const Info = Schema.Struct({
+  id: SessionID,
+  slug: Schema.String,
+  projectID: ProjectID,
+  workspaceID: Schema.optional(WorkspaceID),
+  directory: Schema.String,
+  parentID: Schema.optional(SessionID),
+  summary: Schema.optional(Summary),
+  share: Schema.optional(Share),
+  title: Schema.String,
+  version: Schema.String,
+  time: Time,
+  permission: Schema.optional(Permission.Ruleset),
+  revert: Schema.optional(Revert),
+})
+  .annotate({ identifier: "Session" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+
+export const ProjectInfo = Schema.Struct({
+  id: ProjectID,
+  name: Schema.optional(Schema.String),
+  worktree: Schema.String,
+})
+  .annotate({ identifier: "ProjectSummary" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ProjectInfo = DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
+
+export const GlobalInfo = Schema.Struct({
+  ...Info.fields,
+  project: Schema.NullOr(ProjectInfo),
+})
+  .annotate({ identifier: "GlobalSession" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type GlobalInfo = DeepMutable<Schema.Schema.Type<typeof GlobalInfo>>
+
+export const CreateInput = Schema.optional(
+  Schema.Struct({
+    parentID: Schema.optional(SessionID),
+    title: Schema.optional(Schema.String),
+    permission: Schema.optional(Permission.Ruleset),
+    workspaceID: Schema.optional(WorkspaceID),
+  }),
+).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type CreateInput = DeepMutable<Schema.Schema.Type<typeof CreateInput>>
+
+export const ForkInput = Schema.Struct({
+  sessionID: SessionID,
+  messageID: Schema.optional(MessageID),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const GetInput = SessionID
+export const ChildrenInput = SessionID
+export const RemoveInput = SessionID
+export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema.String }).pipe(
+  withStatics((s) => ({ zod: zod(s) })),
+)
+export const SetArchivedInput = Schema.Struct({
+  sessionID: SessionID,
+  time: Schema.optional(Schema.Number),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const SetPermissionInput = Schema.Struct({
+  sessionID: SessionID,
+  permission: Permission.Ruleset,
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const SetRevertInput = Schema.Struct({
+  sessionID: SessionID,
+  revert: Schema.optional(Revert),
+  summary: Schema.optional(Summary),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const MessagesInput = Schema.Struct({
+  sessionID: SessionID,
+  limit: Schema.optional(Schema.Number),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+
+const InfoZod = Info.zod as unknown as z.ZodObject<any>
+const ShareZod = zod(Share) as unknown as z.ZodObject<any>
+const TimeZod = zod(Time) as unknown as z.ZodObject<any>
 
 export const Event = {
   Created: SyncEvent.define({
@@ -207,7 +244,7 @@ export const Event = {
     aggregate: "sessionID",
     schema: z.object({
       sessionID: SessionID.zod,
-      info: Info,
+      info: Info.zod,
     }),
   }),
   Updated: SyncEvent.define({
@@ -216,14 +253,14 @@ export const Event = {
     aggregate: "sessionID",
     schema: z.object({
       sessionID: SessionID.zod,
-      info: updateSchema(Info).extend({
-        share: updateSchema(Info.shape.share.unwrap()).optional(),
-        time: updateSchema(Info.shape.time).optional(),
+      info: updateSchema(InfoZod).extend({
+        share: updateSchema(ShareZod).optional(),
+        time: updateSchema(TimeZod).optional(),
       }),
     }),
     busSchema: z.object({
       sessionID: SessionID.zod,
-      info: Info,
+      info: Info.zod,
     }),
   }),
   Deleted: SyncEvent.define({
@@ -232,7 +269,7 @@ export const Event = {
     aggregate: "sessionID",
     schema: z.object({
       sessionID: SessionID.zod,
-      info: Info,
+      info: Info.zod,
     }),
   }),
   Diff: BusEvent.define(
