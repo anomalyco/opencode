@@ -409,7 +409,7 @@ Current instance route inventory:
 - `project` - `bridged` (partial)
   bridged endpoints: `GET /project`, `GET /project/current`
   defer git-init mutation first
-- `workspace` - `next`
+- `workspace` - `bridged`
   best small reads: `GET /experimental/workspace/adaptor`, `GET /experimental/workspace`, `GET /experimental/workspace/status`
   defer create/remove mutations first
 - `file` - `later`
@@ -448,7 +448,7 @@ Recommended near-term sequence:
 - [x] port `config` providers read endpoint
 - [x] port `project` read endpoints (`GET /project`, `GET /project/current`)
 - [x] port `GET /config` full read endpoint
-- [ ] port `workspace` read endpoints
+- [x] port `workspace` read endpoints
 - [ ] port `file` JSON read endpoints
 - [ ] decide when to remove the flag and make Effect routes the default
 

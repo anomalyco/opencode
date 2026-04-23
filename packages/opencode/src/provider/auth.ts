@@ -1,13 +1,12 @@
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
-import { NamedError } from "@opencode-ai/shared/util/error"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect"
 import { zod } from "@/util/effect-zod"
+import { namedSchemaError } from "@/util/named-schema-error"
 import { withStatics } from "@/util/schema"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
 import { Array as Arr, Effect, Layer, Record, Result, Context, Schema } from "effect"
-import z from "zod"
 
 const When = Schema.Struct({
   key: Schema.String,
@@ -70,22 +69,16 @@ export const CallbackInput = Schema.Struct({
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
 
-export const OauthMissing = NamedError.create("ProviderAuthOauthMissing", z.object({ providerID: ProviderID.zod }))
+export const OauthMissing = namedSchemaError("ProviderAuthOauthMissing", { providerID: ProviderID })
 
-export const OauthCodeMissing = NamedError.create(
-  "ProviderAuthOauthCodeMissing",
-  z.object({ providerID: ProviderID.zod }),
-)
+export const OauthCodeMissing = namedSchemaError("ProviderAuthOauthCodeMissing", { providerID: ProviderID })
 
-export const OauthCallbackFailed = NamedError.create("ProviderAuthOauthCallbackFailed", z.object({}))
+export const OauthCallbackFailed = namedSchemaError("ProviderAuthOauthCallbackFailed", {})
 
-export const ValidationFailed = NamedError.create(
-  "ProviderAuthValidationFailed",
-  z.object({
-    field: z.string(),
-    message: z.string(),
-  }),
-)
+export const ValidationFailed = namedSchemaError("ProviderAuthValidationFailed", {
+  field: Schema.String,
+  message: Schema.String,
+})
 
 export type Error =
   | Auth.AuthError

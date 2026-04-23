@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Context } from "effect"
+import { Cause, Effect, Layer, Context, Schema } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
@@ -25,9 +25,9 @@ const SUBSCRIBE_TIMEOUT_MS = 10_000
 export const Event = {
   Updated: BusEvent.define(
     "file.watcher.updated",
-    z.object({
-      file: z.string(),
-      event: z.union([z.literal("add"), z.literal("change"), z.literal("unlink")]),
+    Schema.Struct({
+      file: Schema.String,
+      event: Schema.Literals(["add", "change", "unlink"]),
     }),
   ),
 }
