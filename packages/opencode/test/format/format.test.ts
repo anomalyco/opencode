@@ -126,6 +126,24 @@ describe("Format", () => {
 
   it.live("service initializes without error", () => provideTmpdirInstance(() => Format.Service.use(() => Effect.void)))
 
+  it.live("file() returns false when no formatter runs", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const file = `${dir}/test.txt`
+          yield* Effect.promise(() => Bun.write(file, "x"))
+
+          const formatted = yield* Format.Service.use((fmt) => fmt.file(file))
+          expect(formatted).toBe(false)
+        }),
+      {
+        config: {
+          formatter: false,
+        },
+      },
+    ),
+  )
+
   it.live("status() initializes formatter state per directory", () =>
     Effect.gen(function* () {
       const a = yield* provideTmpdirInstance(() => Format.Service.use((fmt) => fmt.status()), {
@@ -219,7 +237,7 @@ describe("Format", () => {
           yield* Format.Service.use((fmt) =>
             Effect.gen(function* () {
               yield* fmt.init()
-              yield* fmt.file(file)
+              expect(yield* fmt.file(file)).toBe(true)
             }),
           )
 
@@ -229,11 +247,21 @@ describe("Format", () => {
         config: {
           formatter: {
             first: {
-              command: ["sh", "-c", 'sleep 0.05; v=$(cat "$1"); printf \'%sA\' "$v" > "$1"', "sh", "$FILE"],
+              command: [
+                "node",
+                "-e",
+                "const fs = require('fs'); const file = process.argv[1]; fs.writeFileSync(file, fs.readFileSync(file, 'utf8') + 'A')",
+                "$FILE",
+              ],
               extensions: [".seq"],
             },
             second: {
-              command: ["sh", "-c", 'v=$(cat "$1"); printf \'%sB\' "$v" > "$1"', "sh", "$FILE"],
+              command: [
+                "node",
+                "-e",
+                "const fs = require('fs'); const file = process.argv[1]; fs.writeFileSync(file, fs.readFileSync(file, 'utf8') + 'B')",
+                "$FILE",
+              ],
               extensions: [".seq"],
             },
           },

@@ -372,7 +372,7 @@ export class Agent implements ACPAgent {
               }
 
               if (part.tool === "todowrite") {
-                const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
+                const parsedTodos = z.array(Todo.Info.zod).safeParse(JSON.parse(part.state.output))
                 if (parsedTodos.success) {
                   await this.connection
                     .sessionUpdate({
@@ -901,7 +901,7 @@ export class Agent implements ACPAgent {
             }
 
             if (part.tool === "todowrite") {
-              const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
+              const parsedTodos = z.array(Todo.Info.zod).safeParse(JSON.parse(part.state.output))
               if (parsedTodos.success) {
                 await this.connection
                   .sessionUpdate({

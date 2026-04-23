@@ -168,6 +168,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
         vcs: data.vcs,
         name: data.name ?? undefined,
         icon_url: data.icon?.url,
+        icon_url_override: data.icon?.override,
         icon_color: data.icon?.color,
         time_created: data.time?.created ?? now,
         time_updated: data.time?.updated ?? now,

@@ -837,6 +837,70 @@ describe("MessageV2.filterCompacted", () => {
     })
   })
 
+  test("retains an assistant tail when compaction starts inside a turn", async () => {
+    await Instance.provide({
+      directory: root,
+      fn: async () => {
+        const session = await svc.create({})
+
+        const u1 = await addUser(session.id, "first")
+        const a1 = await addAssistant(session.id, u1, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a1,
+          type: "text",
+          text: "first reply",
+        })
+
+        const u2 = await addUser(session.id, "second")
+        const a2 = await addAssistant(session.id, u2, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a2,
+          type: "text",
+          text: "second reply",
+        })
+        const a3 = await addAssistant(session.id, u2, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a3,
+          type: "text",
+          text: "tail reply",
+        })
+
+        const c1 = await addUser(session.id)
+        await addCompactionPart(session.id, c1, a3)
+        const s1 = await addAssistant(session.id, c1, { summary: true, finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: s1,
+          type: "text",
+          text: "summary",
+        })
+
+        const u3 = await addUser(session.id, "third")
+        const a4 = await addAssistant(session.id, u3, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a4,
+          type: "text",
+          text: "third reply",
+        })
+
+        const result = MessageV2.filterCompacted(MessageV2.stream(session.id))
+
+        expect(result.map((item) => item.info.id)).toEqual([a3, c1, s1, u3, a4])
+
+        await svc.remove(session.id)
+      },
+    })
+  })
+
   test("prefers latest compaction boundary when repeated compactions exist", async () => {
     await Instance.provide({
       directory: root,

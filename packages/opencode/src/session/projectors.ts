@@ -62,14 +62,16 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
 
 export default [
   SyncEvent.project(Session.Event.Created, (db, data) => {
-    db.insert(SessionTable).values(Session.toRow(data.info)).run()
+    db.insert(SessionTable)
+      .values(Session.toRow(data.info as Session.Info))
+      .run()
   }),
 
   SyncEvent.project(Session.Event.Updated, (db, data) => {
     const info = data.info
     const row = db
       .update(SessionTable)
-      .set(toPartialRow(info))
+      .set(toPartialRow(info as Session.Patch))
       .where(eq(SessionTable.id, data.sessionID))
       .returning()
       .get()

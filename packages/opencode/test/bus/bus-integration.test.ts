@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import z from "zod"
+import { Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
-const TestEvent = BusEvent.define("test.integration", z.object({ value: z.number() }))
+const TestEvent = BusEvent.define("test.integration", Schema.Struct({ value: Schema.Number }))
 
 function withInstance(directory: string, fn: () => Promise<void>) {
   return Instance.provide({ directory, fn })
@@ -42,7 +42,7 @@ describe("Bus integration: acquireRelease subscriber pattern", () => {
     await using tmp = await tmpdir()
     const received: Array<{ type: string; value?: number }> = []
 
-    const OtherEvent = BusEvent.define("test.other", z.object({ value: z.number() }))
+    const OtherEvent = BusEvent.define("test.other", Schema.Struct({ value: Schema.Number }))
 
     await withInstance(tmp.path, async () => {
       Bus.subscribeAll((evt) => {
