@@ -1,8 +1,11 @@
 export * as Npm from "."
 
 import path from "path"
+import { fileURLToPath } from "url"
 import npa from "npm-package-arg"
 import semver from "semver"
+import Config from "@npmcli/config"
+import { definitions, flatten, nerfDarts, shorthands } from "@npmcli/config/lib/definitions/index.js"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -40,11 +43,38 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
 
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
+const npmPath = fileURLToPath(new URL("../..", import.meta.url))
 
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
 }
+
+const loadOptions = (dir: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const config = new Config({
+        npmPath,
+        cwd: dir,
+        env: { ...process.env },
+        argv: [process.execPath, process.execPath],
+        execPath: process.execPath,
+        platform: process.platform,
+        definitions,
+        flatten,
+        nerfDarts,
+        shorthands,
+        warn: false,
+      })
+      await config.load()
+      return config.flat
+    },
+    catch: (cause) =>
+      new InstallFailedError({
+        cause,
+        dir,
+      }),
+  })
 
 const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
   let entrypoint: Option.Option<string>
@@ -81,7 +111,10 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
         const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
+        const add = input.add ?? []
+        const npmOptions = yield* loadOptions(input.dir)
         const arborist = new Arborist({
+          ...npmOptions,
           path: input.dir,
           binLinks: true,
           progress: false,
@@ -91,14 +124,15 @@ export const layer = Layer.effect(
         return yield* Effect.tryPromise({
           try: () =>
             arborist.reify({
-              add: input?.add || [],
+              ...npmOptions,
+              add,
               save: true,
               saveType: "prod",
             }),
           catch: (cause) =>
             new InstallFailedError({
               cause,
-              add: input?.add,
+              add,
               dir: input.dir,
             }),
         }) as Effect.Effect<ArboristTree, InstallFailedError>
