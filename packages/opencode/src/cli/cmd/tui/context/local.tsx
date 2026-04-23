@@ -46,6 +46,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
+        pending: undefined as string | undefined,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -57,6 +58,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
+      // Resolve a pending agent name once the async agent list arrives.
+      // Callers (e.g. CLI --agent flag handled in onMount) may invoke set()
+      // before sync.data.agent has loaded; without this the initial set is
+      // dropped and the user sees "Agent not found".
+      createEffect(() => {
+        const name = agentStore.pending
+        if (!name) return
+        const list = agents()
+        if (list.length === 0) return
+        if (list.some((x) => x.name === name)) {
+          setAgentStore({ current: name, pending: undefined })
+          return
+        }
+        toast.show({
+          variant: "warning",
+          message: `Agent not found: ${name}`,
+          duration: 3000,
+        })
+        setAgentStore("pending", undefined)
+      })
       return {
         list() {
           return agents()
@@ -65,13 +86,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
         },
         set(name: string) {
+          if (agents().length === 0) {
+            setAgentStore("pending", name)
+            return
+          }
           if (!agents().some((x) => x.name === name))
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${name}`,
               duration: 3000,
             })
-          setAgentStore("current", name)
+          setAgentStore({ current: name, pending: undefined })
         },
         move(direction: 1 | -1) {
           batch(() => {
