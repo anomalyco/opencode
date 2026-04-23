@@ -6,6 +6,7 @@ import { Log } from "@/util"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { AsyncQueue } from "@/util/queue"
+import { MAX_QUEUE_SIZE, WRITE_TIMEOUT_MS, writeSSEWithTimeout } from "@/util/sse"
 
 const log = Log.create({ service: "server" })
 
@@ -47,9 +48,21 @@ export const EventRoutes = () =>
           }),
         )
 
+        const enqueue = (payload: string) => {
+          if (done) return
+          // Guard against CLOSE_WAIT zombie sockets where `stream.onAbort` never
+          // fires: if the consumer stops draining, the queue grows unbounded.
+          if (q.size >= MAX_QUEUE_SIZE) {
+            log.warn("event queue overflow, closing stream", { size: q.size })
+            stop()
+            return
+          }
+          q.push(payload)
+        }
+
         // Send heartbeat every 10s to prevent stalled proxy streams.
         const heartbeat = setInterval(() => {
-          q.push(
+          enqueue(
             JSON.stringify({
               type: "server.heartbeat",
               properties: {},
@@ -62,12 +75,12 @@ export const EventRoutes = () =>
           done = true
           clearInterval(heartbeat)
           unsub()
-          q.push(null)
+          q.close(null)
           log.info("event disconnected")
         }
 
         const unsub = Bus.subscribeAll((event) => {
-          q.push(JSON.stringify(event))
+          enqueue(JSON.stringify(event))
           if (event.type === Bus.InstanceDisposed.type) {
             stop()
           }
@@ -78,7 +91,10 @@ export const EventRoutes = () =>
         try {
           for await (const data of q) {
             if (data === null) return
-            await stream.writeSSE({ data })
+            await writeSSEWithTimeout(stream, data, WRITE_TIMEOUT_MS).catch((err) => {
+              log.info("event write failed, closing stream", { error: String(err) })
+              stop()
+            })
           }
         } finally {
           stop()

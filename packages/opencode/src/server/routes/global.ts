@@ -8,6 +8,7 @@ import { SyncEvent } from "@/sync"
 import { GlobalBus } from "@/bus/global"
 import { AppRuntime } from "@/effect/app-runtime"
 import { AsyncQueue } from "@/util/queue"
+import { MAX_QUEUE_SIZE, WRITE_TIMEOUT_MS, writeSSEWithTimeout } from "@/util/sse"
 import { Instance } from "../../project/instance"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@/installation/version"
@@ -20,7 +21,7 @@ const log = Log.create({ service: "server" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
 
-async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
+async function streamEvents(c: Context, subscribe: (push: (data: string) => void) => () => void) {
   return streamSSE(c, async (stream) => {
     const q = new AsyncQueue<string | null>()
     let done = false
@@ -34,9 +35,21 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       }),
     )
 
+    const enqueue = (payload: string) => {
+      if (done) return
+      // Guard against CLOSE_WAIT zombie sockets where `stream.onAbort` never
+      // fires: if the consumer stops draining, the queue grows unbounded.
+      if (q.size >= MAX_QUEUE_SIZE) {
+        log.warn("global event queue overflow, closing stream", { size: q.size })
+        stop()
+        return
+      }
+      q.push(payload)
+    }
+
     // Send heartbeat every 10s to prevent stalled proxy streams.
     const heartbeat = setInterval(() => {
-      q.push(
+      enqueue(
         JSON.stringify({
           payload: {
             type: "server.heartbeat",
@@ -51,18 +64,21 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       done = true
       clearInterval(heartbeat)
       unsub()
-      q.push(null)
+      q.close(null)
       log.info("global event disconnected")
     }
 
-    const unsub = subscribe(q)
+    const unsub = subscribe(enqueue)
 
     stream.onAbort(stop)
 
     try {
       for await (const data of q) {
         if (data === null) return
-        await stream.writeSSE({ data })
+        await writeSSEWithTimeout(stream, data, WRITE_TIMEOUT_MS).catch((err) => {
+          log.info("global event write failed, closing stream", { error: String(err) })
+          stop()
+        })
       }
     } finally {
       stop()
@@ -127,9 +143,9 @@ export const GlobalRoutes = lazy(() =>
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
 
-        return streamEvents(c, (q) => {
+        return streamEvents(c, (push) => {
           async function handler(event: any) {
-            q.push(JSON.stringify(event))
+            push(JSON.stringify(event))
           }
           GlobalBus.on("event", handler)
           return () => GlobalBus.off("event", handler)
