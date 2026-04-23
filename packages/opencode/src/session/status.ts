@@ -2,35 +2,35 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect"
 import { SessionID } from "./schema"
-import { Effect, Layer, Context } from "effect"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
+import { Effect, Layer, Context, Schema } from "effect"
 import z from "zod"
 
-export const Info = z
-  .union([
-    z.object({
-      type: z.literal("idle"),
-    }),
-    z.object({
-      type: z.literal("retry"),
-      attempt: z.number(),
-      message: z.string(),
-      next: z.number(),
-    }),
-    z.object({
-      type: z.literal("busy"),
-    }),
-  ])
-  .meta({
-    ref: "SessionStatus",
-  })
-export type Info = z.infer<typeof Info>
+export const Info = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("idle"),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("retry"),
+    attempt: Schema.Number,
+    message: Schema.String,
+    next: Schema.Number,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("busy"),
+  }),
+])
+  .annotate({ identifier: "SessionStatus" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
 export const Event = {
   Status: BusEvent.define(
     "session.status",
     z.object({
       sessionID: SessionID.zod,
-      status: Info,
+      status: Info.zod,
     }),
   ),
   // deprecated

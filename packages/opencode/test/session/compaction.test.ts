@@ -38,7 +38,7 @@ const svc = {
   create(input?: SessionNs.CreateInput) {
     return run(SessionNs.Service.use((svc) => svc.create(input)))
   },
-  messages(input: z.output<typeof SessionNs.MessagesInput>) {
+  messages(input: z.output<typeof SessionNs.MessagesInput.zod>) {
     return run(SessionNs.Service.use((svc) => svc.messages(input)))
   },
   updateMessage<T extends MessageV2.Info>(msg: T) {

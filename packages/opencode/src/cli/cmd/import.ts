@@ -11,6 +11,7 @@ import { ShareNext } from "../../share"
 import { EOL } from "os"
 import { Filesystem } from "../../util"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Schema } from "effect"
 
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
@@ -154,10 +155,10 @@ export const ImportCommand = cmd({
         return
       }
 
-      const info = Session.Info.parse({
+      const info = Schema.decodeUnknownSync(Session.Info)({
         ...exportData.info,
         projectID: Instance.project.id,
-      })
+      }) as Session.Info
       const row = Session.toRow(info)
       Database.use((db) =>
         db
