@@ -71,22 +71,28 @@ describe("Keybind.toString", () => {
 
   test("should convert super modifier to string", () => {
     const info: Keybind.Info = { ctrl: false, meta: false, shift: false, super: true, leader: false, name: "z" }
-    expect(Keybind.toString(info)).toMatch(/^(cmd|super)\+z$/)
+    if (process.platform === "darwin") {
+      expect(Keybind.toString(info)).toBe("cmd+z")
+    } else {
+      expect(Keybind.toString(info)).toBe("super+z")
+    }
   })
 
   test("should convert super+shift modifier to string", () => {
     const info: Keybind.Info = { ctrl: false, meta: false, shift: true, super: true, leader: false, name: "z" }
-    expect(Keybind.toString(info)).toBe("super+shift+z")
+    expect(Keybind.toString(info)).toBe(process.platform === "darwin" ? "cmd+shift+z" : "super+shift+z")
   })
 
   test("should handle super with ctrl modifier", () => {
     const info: Keybind.Info = { ctrl: true, meta: false, shift: false, super: true, leader: false, name: "a" }
-    expect(Keybind.toString(info)).toBe("ctrl+super+a")
+    expect(Keybind.toString(info)).toBe(process.platform === "darwin" ? "ctrl+cmd+a" : "ctrl+super+a")
   })
 
   test("should handle super with all modifiers", () => {
     const info: Keybind.Info = { ctrl: true, meta: true, shift: true, super: true, leader: false, name: "x" }
-    expect(Keybind.toString(info)).toBe("ctrl+alt+super+shift+x")
+    expect(Keybind.toString(info)).toBe(
+      process.platform === "darwin" ? "ctrl+alt+cmd+shift+x" : "ctrl+alt+super+shift+x",
+    )
   })
 
   test("should handle undefined super field (omitted)", () => {
@@ -384,6 +390,34 @@ describe("Keybind.parse", () => {
     ])
   })
 
+  test("should parse cmd as alias for super", () => {
+    const result = Keybind.parse("cmd+k")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        super: true,
+        leader: false,
+        name: "k",
+      },
+    ])
+  })
+
+  test("should parse command as alias for super", () => {
+    const result = Keybind.parse("command+shift+a")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: true,
+        super: true,
+        leader: false,
+        name: "a",
+      },
+    ])
+  })
+
   test("should parse super with shift modifier", () => {
     const result = Keybind.parse("super+shift+z")
     expect(result).toEqual([
@@ -415,34 +449,6 @@ describe("Keybind.parse", () => {
         super: true,
         leader: false,
         name: "z",
-      },
-    ])
-  })
-
-  test("should parse cmd as alias for super", () => {
-    const result = Keybind.parse("cmd+k")
-    expect(result).toEqual([
-      {
-        ctrl: false,
-        meta: false,
-        shift: false,
-        super: true,
-        leader: false,
-        name: "k",
-      },
-    ])
-  })
-
-  test("should parse command as alias for super", () => {
-    const result = Keybind.parse("command+shift+a")
-    expect(result).toEqual([
-      {
-        ctrl: false,
-        meta: false,
-        shift: true,
-        super: true,
-        leader: false,
-        name: "a",
       },
     ])
   })

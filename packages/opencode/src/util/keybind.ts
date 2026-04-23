@@ -31,6 +31,7 @@ export function fromParsedKey(key: ParsedKey, leader = false): Info {
   }
 }
 
+/** Human-readable shortcut label for the TUI (dialogs, hints). Not used for matching parsed keys. */
 export function toString(info: Info | undefined): string {
   if (!info) return ""
   const parts: string[] = []
