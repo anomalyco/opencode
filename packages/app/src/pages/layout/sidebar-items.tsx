@@ -269,10 +269,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </Show>
         </div>
       </div>
-      <Show when={currentChild()}>
+      <Show when={currentChild()} keyed>
         {(child) => (
           <div class="w-full">
-            <SessionItem {...props} session={child()} level={(props.level ?? 0) + 1} />
+            <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
           </div>
         )}
       </Show>
