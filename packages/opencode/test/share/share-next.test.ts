@@ -3,8 +3,8 @@ import { beforeEach, describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
-import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account"
-import { Account } from "../../src/account"
+import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
+import { Account } from "../../src/account/account"
 import { AccountRepo } from "../../src/account/repo"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
@@ -72,7 +72,7 @@ const share = (id: SessionID) =>
   Database.use((db) => db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, id)).get())
 
 const seed = (url: string, org?: string) =>
-  AccountRepo.use((repo) =>
+  AccountRepo.Service.use((repo) =>
     repo.persistAccount({
       id: AccountID.make("account-1"),
       email: "user@example.com",

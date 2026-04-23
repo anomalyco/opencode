@@ -918,113 +918,113 @@ async function installPluginBySpec(
   }
 }
 
-export namespace TuiPluginRuntime {
-  let dir = ""
-  let loaded: Promise<void> | undefined
-  let runtime: RuntimeState | undefined
-  export const Slot = View
+let dir = ""
+let loaded: Promise<void> | undefined
+let runtime: RuntimeState | undefined
+export const Slot = View
 
-  export async function init(input: { api: HostPluginApi; config: TuiConfig.Info }) {
-    const cwd = process.cwd()
-    if (loaded) {
-      if (dir !== cwd) {
-        throw new Error(`TuiPluginRuntime.init() called with a different working directory. expected=${dir} got=${cwd}`)
-      }
-      return loaded
+export async function init(input: { api: HostPluginApi; config: TuiConfig.Info }) {
+  const cwd = process.cwd()
+  if (loaded) {
+    if (dir !== cwd) {
+      throw new Error(`TuiPluginRuntime.init() called with a different working directory. expected=${dir} got=${cwd}`)
     }
-
-    dir = cwd
-    loaded = load(input)
     return loaded
   }
 
-  export function list() {
-    if (!runtime) return []
-    return listPluginStatus(runtime)
-  }
+  dir = cwd
+  loaded = load(input)
+  return loaded
+}
 
-  export async function activatePlugin(id: string) {
-    return activatePluginById(runtime, id, true)
-  }
+export function list() {
+  if (!runtime) return []
+  return listPluginStatus(runtime)
+}
 
-  export async function deactivatePlugin(id: string) {
-    return deactivatePluginById(runtime, id, true)
-  }
+export async function activatePlugin(id: string) {
+  return activatePluginById(runtime, id, true)
+}
 
-  export async function addPlugin(spec: string) {
-    return addPluginBySpec(runtime, spec)
-  }
+export async function deactivatePlugin(id: string) {
+  return deactivatePluginById(runtime, id, true)
+}
 
-  export async function installPlugin(spec: string, options?: { global?: boolean }) {
-    return installPluginBySpec(runtime, spec, options?.global)
-  }
+export async function addPlugin(spec: string) {
+  return addPluginBySpec(runtime, spec)
+}
 
-  export async function dispose() {
-    const task = loaded
-    loaded = undefined
-    dir = ""
-    if (task) await task
-    const state = runtime
-    runtime = undefined
-    if (!state) return
-    const queue = [...state.plugins].reverse()
-    for (const plugin of queue) {
-      await deactivatePluginEntry(state, plugin, false)
-    }
-  }
+export async function installPlugin(spec: string, options?: { global?: boolean }) {
+  return installPluginBySpec(runtime, spec, options?.global)
+}
 
-  async function load(input: { api: Api; config: TuiConfig.Info }) {
-    const { api, config } = input
-    const cwd = process.cwd()
-    const slots = setupSlots(api)
-    const next: RuntimeState = {
-      directory: cwd,
-      api,
-      slots,
-      plugins: [],
-      plugins_by_id: new Map(),
-      pending: new Map(),
-    }
-    runtime = next
-    try {
-      await Instance.provide({
-        directory: cwd,
-        fn: async () => {
-          const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])
-          if (Flag.OPENCODE_PURE && config.plugin_origins?.length) {
-            log.info("skipping external tui plugins in pure mode", { count: config.plugin_origins.length })
-          }
-
-          for (const item of INTERNAL_TUI_PLUGINS) {
-            log.info("loading internal tui plugin", { id: item.id })
-            const entry = loadInternalPlugin(item)
-            const meta = createMeta(entry.source, entry.spec, entry.target, undefined, entry.id)
-            addPluginEntry(next, {
-              id: entry.id,
-              load: entry,
-              meta,
-              themes: {},
-              plugin: entry.module.tui,
-              enabled: true,
-            })
-          }
-
-          const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
-          await addExternalPluginEntries(next, ready)
-
-          applyInitialPluginEnabledState(next, config)
-          for (const plugin of next.plugins) {
-            if (!plugin.enabled) continue
-            // Keep plugin execution sequential for deterministic side effects:
-            // command registration order affects keybind/command precedence,
-            // route registration is last-wins when ids collide,
-            // and hook chains rely on stable plugin ordering.
-            await activatePluginEntry(next, plugin, false)
-          }
-        },
-      })
-    } catch (error) {
-      fail("failed to load tui plugins", { directory: cwd, error })
-    }
+export async function dispose() {
+  const task = loaded
+  loaded = undefined
+  dir = ""
+  if (task) await task
+  const state = runtime
+  runtime = undefined
+  if (!state) return
+  const queue = [...state.plugins].reverse()
+  for (const plugin of queue) {
+    await deactivatePluginEntry(state, plugin, false)
   }
 }
+
+async function load(input: { api: Api; config: TuiConfig.Info }) {
+  const { api, config } = input
+  const cwd = process.cwd()
+  const slots = setupSlots(api)
+  const next: RuntimeState = {
+    directory: cwd,
+    api,
+    slots,
+    plugins: [],
+    plugins_by_id: new Map(),
+    pending: new Map(),
+  }
+  runtime = next
+  try {
+    await Instance.provide({
+      directory: cwd,
+      fn: async () => {
+        const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])
+        if (Flag.OPENCODE_PURE && config.plugin_origins?.length) {
+          log.info("skipping external tui plugins in pure mode", { count: config.plugin_origins.length })
+        }
+
+        for (const item of INTERNAL_TUI_PLUGINS) {
+          log.info("loading internal tui plugin", { id: item.id })
+          const entry = loadInternalPlugin(item)
+          const meta = createMeta(entry.source, entry.spec, entry.target, undefined, entry.id)
+          addPluginEntry(next, {
+            id: entry.id,
+            load: entry,
+            meta,
+            themes: {},
+            plugin: entry.module.tui,
+            enabled: true,
+          })
+        }
+
+        const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
+        await addExternalPluginEntries(next, ready)
+
+        applyInitialPluginEnabledState(next, config)
+        for (const plugin of next.plugins) {
+          if (!plugin.enabled) continue
+          // Keep plugin execution sequential for deterministic side effects:
+          // command registration order affects keybind/command precedence,
+          // route registration is last-wins when ids collide,
+          // and hook chains rely on stable plugin ordering.
+          await activatePluginEntry(next, plugin, false)
+        }
+      },
+    })
+  } catch (error) {
+    fail("failed to load tui plugins", { directory: cwd, error })
+  }
+}
+
+export * as TuiPluginRuntime from "./runtime"
