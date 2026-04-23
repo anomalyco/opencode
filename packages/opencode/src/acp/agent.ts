@@ -286,6 +286,7 @@ export class Agent implements ACPAgent {
               return
 
             case "running":
+              const input = this.toolInput(part)
               const output = this.bashOutput(part)
               const content: ToolCallContent[] = []
               if (output) {
@@ -300,9 +301,9 @@ export class Agent implements ACPAgent {
                           toolCallId: part.callID,
                           status: "in_progress",
                           kind: toToolKind(part.tool),
-                          title: part.tool,
-                          locations: toLocations(part.tool, part.state.input),
-                          rawInput: part.state.input,
+                          title: this.toolTitle(part),
+                          locations: toLocations(part.tool, input),
+                          rawInput: input,
                         },
                       })
                       .catch((error) => {
@@ -328,9 +329,9 @@ export class Agent implements ACPAgent {
                     toolCallId: part.callID,
                     status: "in_progress",
                     kind: toToolKind(part.tool),
-                    title: part.tool,
-                    locations: toLocations(part.tool, part.state.input),
-                    rawInput: part.state.input,
+                    title: this.toolTitle(part),
+                    locations: toLocations(part.tool, input),
+                    rawInput: input,
                     ...(content.length > 0 && { content }),
                   },
                 })
@@ -431,8 +432,8 @@ export class Agent implements ACPAgent {
                     toolCallId: part.callID,
                     status: "failed",
                     kind: toToolKind(part.tool),
-                    title: part.tool,
-                    rawInput: part.state.input,
+                    title: this.toolTitle(part),
+                    rawInput: this.toolInput(part),
                     content: [
                       {
                         type: "content",
@@ -839,6 +840,7 @@ export class Agent implements ACPAgent {
             this.bashSnapshots.delete(part.callID)
             break
           case "running":
+            const input = this.toolInput(part)
             const output = this.bashOutput(part)
             const runningContent: ToolCallContent[] = []
             if (output) {
@@ -858,9 +860,9 @@ export class Agent implements ACPAgent {
                   toolCallId: part.callID,
                   status: "in_progress",
                   kind: toToolKind(part.tool),
-                  title: part.tool,
-                  locations: toLocations(part.tool, part.state.input),
-                  rawInput: part.state.input,
+                  title: this.toolTitle(part),
+                  locations: toLocations(part.tool, input),
+                  rawInput: input,
                   ...(runningContent.length > 0 && { content: runningContent }),
                 },
               })
@@ -959,8 +961,8 @@ export class Agent implements ACPAgent {
                   toolCallId: part.callID,
                   status: "failed",
                   kind: toToolKind(part.tool),
-                  title: part.tool,
-                  rawInput: part.state.input,
+                  title: this.toolTitle(part),
+                  rawInput: this.toolInput(part),
                   content: [
                     {
                       type: "content",
@@ -1112,20 +1114,30 @@ export class Agent implements ACPAgent {
     return output
   }
 
+  private toolInput(part: ToolPart) {
+    return part.state.input ?? {}
+  }
+
+  private toolTitle(part: ToolPart) {
+    if ("title" in part.state && typeof part.state.title === "string") return part.state.title
+    return part.tool
+  }
+
   private async toolStart(sessionId: string, part: ToolPart) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
+    const input = this.toolInput(part)
     await this.connection
       .sessionUpdate({
         sessionId,
         update: {
           sessionUpdate: "tool_call",
           toolCallId: part.callID,
-          title: part.tool,
+          title: this.toolTitle(part),
           kind: toToolKind(part.tool),
           status: "pending",
-          locations: [],
-          rawInput: {},
+          locations: toLocations(part.tool, input),
+          rawInput: input,
         },
       })
       .catch((error) => {

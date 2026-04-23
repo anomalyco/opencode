@@ -35,6 +35,12 @@ function isToolCallUpdate(
   return update.sessionUpdate === "tool_call_update"
 }
 
+function isToolCall(
+  update: SessionUpdateParams["update"],
+): update is Extract<SessionUpdateParams["update"], { sessionUpdate: "tool_call" }> {
+  return update.sessionUpdate === "tool_call"
+}
+
 function toolEvent(
   sessionId: string,
   cwd: string,
@@ -609,6 +615,67 @@ describe("acp.agent event subscription", () => {
         expect(pendings.every((p) => p.update.sessionUpdate === "tool_call" && p.update.status === "pending")).toBe(
           true,
         )
+        stop()
+      },
+    })
+  })
+
+  test("prefers semantic title and input for pending and running tool events", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const input = { filePath: "/tmp/semantic.txt" }
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: sessionId,
+              time: Date.now(),
+              part: {
+                id: "part_call_semantic",
+                sessionID: sessionId,
+                messageID: "msg_call_semantic",
+                type: "tool",
+                callID: "call_semantic",
+                tool: "read",
+                state: {
+                  status: "running",
+                  title: "Fetch cluster metadata",
+                  input,
+                  time: { start: Date.now() },
+                },
+              },
+            },
+          },
+        })
+        await new Promise((r) => setTimeout(r, 20))
+
+        const semanticUpdates = sessionUpdates
+          .filter((u) => u.sessionId === sessionId)
+          .map((u) => u.update)
+          .filter((u) => "toolCallId" in u && u.toolCallId === "call_semantic")
+
+        expect(semanticUpdates).toHaveLength(2)
+
+        const pending = semanticUpdates.find(isToolCall)
+        expect(pending).toBeDefined()
+        expect(pending?.title).toBe("Fetch cluster metadata")
+        expect(pending?.rawInput).toEqual(input)
+        expect(pending?.locations).toEqual([{ path: "/tmp/semantic.txt" }])
+
+        const running = semanticUpdates.find(isToolCallUpdate)
+        expect(running).toBeDefined()
+        expect(running?.status).toBe("in_progress")
+        expect(running?.title).toBe("Fetch cluster metadata")
+        expect(running?.rawInput).toEqual(input)
+        expect(running?.locations).toEqual([{ path: "/tmp/semantic.txt" }])
+
         stop()
       },
     })
