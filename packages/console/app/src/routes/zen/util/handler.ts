@@ -461,7 +461,8 @@ export async function handler(
       }
 
       if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
-        const allProviders = modelInfo.providers
+        let topPriority = Infinity
+        const providers = modelInfo.providers
           .filter((provider) => !provider.disabled)
           .filter((provider) => provider.weight !== 0)
           .filter((provider) => !retry.excludeProviders.includes(provider.id))
@@ -470,9 +471,10 @@ export async function handler(
             const usage = modelTpmLimits?.[`${provider.id}/${provider.model}`] ?? 0
             return usage < provider.tpmLimit * 1_000_000
           })
-
-        const topPriority = Math.min(...allProviders.map((p) => p.priority))
-        const providers = allProviders
+          .map((provider) => {
+            topPriority = Math.min(topPriority, provider.priority)
+            return provider
+          })
           .filter((p) => p.priority <= topPriority)
           .flatMap((provider) => Array<typeof provider>(provider.weight).fill(provider))
 
@@ -762,7 +764,8 @@ export async function handler(
     const billing = authInfo.billing
     const billingUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/billing`
     const membersUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/members`
-    if (!billing.paymentMethodID) throw new CreditsError(t("zen.api.error.noPaymentMethod", { billingUrl }))
+    if (!billing.paymentMethodID && billing.balance <= 0)
+      throw new CreditsError(t("zen.api.error.noPaymentMethod", { billingUrl }))
     if (billing.balance <= 0) throw new CreditsError(t("zen.api.error.insufficientBalance", { billingUrl }))
 
     const now = new Date()

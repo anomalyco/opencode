@@ -3,7 +3,7 @@ export * as ConfigAgent from "./agent"
 import { Schema } from "effect"
 import z from "zod"
 import { Bus } from "@/bus"
-import { zod, ZodOverride } from "@/util/effect-zod"
+import { zod } from "@/util/effect-zod"
 import { Log } from "../util"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { Glob } from "@opencode-ai/shared/util/glob"
@@ -21,12 +21,6 @@ const Color = Schema.Union([
   Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
   Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
 ])
-
-// ConfigPermission.Info is a zod schema (its `.preprocess(...).transform(...)`
-// shape lives outside the Effect Schema type system), so the walker reaches it
-// via ZodOverride rather than a pure Schema reference.  This preserves the
-// `$ref: PermissionConfig` emitted in openapi.json.
-const PermissionRef = Schema.Any.annotate({ [ZodOverride]: ConfigPermission.Info })
 
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
@@ -54,7 +48,7 @@ const AgentSchema = Schema.StructWithRest(
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
-    permission: Schema.optional(PermissionRef),
+    permission: Schema.optional(ConfigPermission.Info),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 )
@@ -93,7 +87,7 @@ const normalize = (agent: z.infer<typeof Info>) => {
   const permission: ConfigPermission.Info = {}
   for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
     const action = enabled ? "allow" : "deny"
-    if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+    if (tool === "write" || tool === "edit" || tool === "patch") {
       permission.edit = action
       continue
     }
@@ -101,7 +95,8 @@ const normalize = (agent: z.infer<typeof Info>) => {
   }
   globalThis.Object.assign(permission, agent.permission)
 
-  return { ...agent, options, permission, steps: agent.steps ?? agent.maxSteps }
+  const steps = agent.steps ?? agent.maxSteps
+  return { ...agent, options, permission, ...(steps !== undefined ? { steps } : {}) }
 }
 
 export const Info = zod(AgentSchema).transform(normalize).meta({ ref: "AgentConfig" }) as unknown as z.ZodType<

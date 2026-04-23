@@ -1316,30 +1316,57 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
-### Mistral AI
+### NVIDIA
 
-1.  Head over to the [Mistral AI console](https://console.mistral.ai/), create an account, and generate an API key.
+NVIDIA provides access to Nemotron models and many other open models through [build.nvidia.com](https://build.nvidia.com) for free.
 
-2.  Run the `/connect` command and search for **Mistral AI**.
+1. Head over to [build.nvidia.com](https://build.nvidia.com), create an account, and generate an API key.
 
-    ```txt
-    /connect
-    ```
+2. Run the `/connect` command and search for **NVIDIA**.
 
-3.  Enter your Mistral API key.
+   ```txt
+   /connect
+   ```
 
-    ```txt
-    ┌ API key
-    │
-    │
-    └ enter
-    ```
+3. Enter your NVIDIA API key.
 
-4.  Run the `/models` command to select a model like _Mistral Medium_.
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
 
-    ```txt
-    /models
-    ```
+4. Run the `/models` command to select a model like nemotron-3-super-120b-a12b.
+
+   ```txt
+   /models
+   ```
+
+#### On-Prem / NIM
+
+You can also use NVIDIA models locally via [NVIDIA NIM](https://docs.nvidia.com/nim/) by setting a custom base URL.
+
+```json title="opencode.json" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "nvidia": {
+      "options": {
+        "baseURL": "http://localhost:8000/v1"
+      }
+    }
+  }
+}
+```
+
+#### Environment Variable
+
+Alternatively, set your API key as an environment variable.
+
+```bash frame="none"
+export NVIDIA_API_KEY=nvapi-your-key-here
+```
 
 ---
 
