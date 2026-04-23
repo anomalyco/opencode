@@ -30,9 +30,12 @@ function parse(tip: string): TipPart[] {
   return parts
 }
 
-export function Tips() {
+const NO_MODELS_TIP = "Run {highlight}/connect{/highlight} to add an AI provider and start coding"
+
+export function Tips(props: { connected?: boolean }) {
   const theme = useTheme().theme
-  const parts = parse(TIPS[Math.floor(Math.random() * TIPS.length)])
+  const tip = props.connected === false ? NO_MODELS_TIP : TIPS[Math.floor(Math.random() * TIPS.length)]
+  const parts = parse(tip)
 
   return (
     <box flexDirection="row" maxWidth="100%">
