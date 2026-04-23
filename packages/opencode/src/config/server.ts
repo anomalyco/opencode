@@ -1,7 +1,8 @@
 import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
-export class Server extends Schema.Class<Server>("ServerConfig")({
+export const Server = Schema.Struct({
   port: Schema.optional(Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))).annotate({
     description: "Port to listen on",
   }),
@@ -13,8 +14,9 @@ export class Server extends Schema.Class<Server>("ServerConfig")({
   cors: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Additional domains to allow for CORS",
   }),
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "ServerConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Server = Schema.Schema.Type<typeof Server>
 
 export * as ConfigServer from "./server"

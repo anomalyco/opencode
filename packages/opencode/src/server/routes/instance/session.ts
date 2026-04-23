@@ -476,7 +476,7 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully retrieved diff",
             content: {
               "application/json": {
-                schema: resolver(Snapshot.FileDiff.array()),
+                schema: resolver(Snapshot.FileDiff.zod.array()),
               },
             },
           },
@@ -616,7 +616,7 @@ export const SessionRoutes = lazy(() =>
             description: "List of messages",
             content: {
               "application/json": {
-                schema: resolver(MessageV2.WithParts.array()),
+                schema: resolver(MessageV2.WithParts.zod.array()),
               },
             },
           },
@@ -706,8 +706,8 @@ export const SessionRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    info: MessageV2.Info,
-                    parts: MessageV2.Part.array(),
+                    info: MessageV2.Info.zod,
+                    parts: MessageV2.Part.zod.array(),
                   }),
                 ),
               },
@@ -818,7 +818,7 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully updated part",
             content: {
               "application/json": {
-                schema: resolver(MessageV2.Part),
+                schema: resolver(MessageV2.Part.zod),
               },
             },
           },
@@ -833,7 +833,7 @@ export const SessionRoutes = lazy(() =>
           partID: PartID.zod,
         }),
       ),
-      validator("json", MessageV2.Part),
+      validator("json", MessageV2.Part.zod),
       async (c) => {
         const params = c.req.valid("param")
         const body = c.req.valid("json")
@@ -861,8 +861,8 @@ export const SessionRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    info: MessageV2.Assistant,
-                    parts: MessageV2.Part.array(),
+                    info: MessageV2.Assistant.zod,
+                    parts: MessageV2.Part.zod.array(),
                   }),
                 ),
               },
@@ -887,7 +887,9 @@ export const SessionRoutes = lazy(() =>
           const msg = await runRequest(
             "SessionRoutes.prompt",
             c,
-            SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
+            SessionPrompt.Service.use((svc) =>
+              svc.prompt({ ...body, sessionID } as unknown as SessionPrompt.PromptInput),
+            ),
           )
           void stream.write(JSON.stringify(msg))
         })
@@ -920,7 +922,9 @@ export const SessionRoutes = lazy(() =>
         void runRequest(
           "SessionRoutes.prompt_async",
           c,
-          SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
+          SessionPrompt.Service.use((svc) =>
+            svc.prompt({ ...body, sessionID } as unknown as SessionPrompt.PromptInput),
+          ),
         ).catch((err) => {
           log.error("prompt_async failed", { sessionID, error: err })
           void Bus.publish(Session.Event.Error, {
@@ -945,8 +949,8 @@ export const SessionRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    info: MessageV2.Assistant,
-                    parts: MessageV2.Part.array(),
+                    info: MessageV2.Assistant.zod,
+                    parts: MessageV2.Part.zod.array(),
                   }),
                 ),
               },
@@ -981,7 +985,7 @@ export const SessionRoutes = lazy(() =>
             description: "Created message",
             content: {
               "application/json": {
-                schema: resolver(MessageV2.WithParts),
+                schema: resolver(MessageV2.WithParts.zod),
               },
             },
           },
