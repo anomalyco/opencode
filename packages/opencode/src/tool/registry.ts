@@ -39,7 +39,6 @@ import { InstanceState } from "@/effect"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "../lsp"
-import { FileTime } from "../file/time"
 import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Bus } from "../bus"
@@ -80,7 +79,6 @@ export const layer: Layer.Layer<
   | Session.Service
   | Provider.Service
   | LSP.Service
-  | FileTime.Service
   | Instruction.Service
   | AppFileSystem.Service
   | Bus.Service
@@ -135,14 +133,17 @@ export const layer: Layer.Layer<
                   worktree: ctx.worktree,
                 }
                 const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                const output = typeof result === "string" ? result : result.output
+                const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const info = yield* agent.get(toolCtx.agent)
-                const out = yield* truncate.output(result, {}, info)
+                const out = yield* truncate.output(output, {}, info)
                 return {
                   title: "",
-                  output: out.truncated ? out.content : result,
+                  output: out.truncated ? out.content : output,
                   metadata: {
+                    ...metadata,
                     truncated: out.truncated,
-                    outputPath: out.truncated ? out.outputPath : undefined,
+                    ...(out.truncated && { outputPath: out.outputPath }),
                   },
                 }
               }),
@@ -156,9 +157,9 @@ export const layer: Layer.Layer<
         if (matches.length) yield* config.waitForDependencies()
         for (const match of matches) {
           const namespace = path.basename(match, path.extname(match))
-          const mod = yield* Effect.promise(
-            () => import(process.platform === "win32" ? match : pathToFileURL(match).href),
-          )
+          // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
+          // Import it as `file://` so Node on Windows accepts the dynamic import.
+          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
           for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
           }
@@ -326,7 +327,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(LSP.defaultLayer),
-    Layer.provide(FileTime.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),

@@ -54,6 +54,16 @@ type State = {
   dirs: Set<string>
 }
 
+type DiscoveryState = {
+  matches: string[]
+  dirs: string[]
+}
+
+type ScanState = {
+  matches: Set<string>
+  dirs: Set<string>
+}
+
 export interface Interface {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly all: () => Effect.Effect<Info[]>
@@ -102,8 +112,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
 })
 
 const scan = Effect.fnUntraced(function* (
-  state: State,
-  bus: Bus.Interface,
+  state: ScanState,
   root: string,
   pattern: string,
   opts?: { dot?: boolean; scope?: string },
@@ -126,26 +135,26 @@ const scan = Effect.fnUntraced(function* (
     }),
   )
 
-  yield* Effect.forEach(matches, (match) => add(state, match, bus), {
-    concurrency: "unbounded",
-    discard: true,
-  })
+  for (const match of matches) {
+    state.matches.add(match)
+    state.dirs.add(path.dirname(match))
+  }
 })
 
-const loadSkills = Effect.fnUntraced(function* (
-  state: State,
+const discoverSkills = Effect.fnUntraced(function* (
   config: Config.Interface,
   discovery: Discovery.Interface,
-  bus: Bus.Interface,
   fsys: AppFileSystem.Interface,
   directory: string,
   worktree: string,
 ) {
+  const state: ScanState = { matches: new Set(), dirs: new Set() }
+
   if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
     for (const dir of EXTERNAL_DIRS) {
       const root = path.join(Global.Path.home, dir)
       if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
     }
 
     const upDirs = yield* fsys
@@ -153,13 +162,13 @@ const loadSkills = Effect.fnUntraced(function* (
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
-      yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
     }
   }
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, bus, dir, OPENCODE_SKILL_PATTERN)
+    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
   }
 
   const cfg = yield* config.get()
@@ -171,16 +180,27 @@ const loadSkills = Effect.fnUntraced(function* (
       continue
     }
 
-    yield* scan(state, bus, dir, SKILL_PATTERN)
+    yield* scan(state, dir, SKILL_PATTERN)
   }
 
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
-      state.dirs.add(dir)
-      yield* scan(state, bus, dir, SKILL_PATTERN)
+      yield* scan(state, dir, SKILL_PATTERN)
     }
   }
+
+  return {
+    matches: Array.from(state.matches),
+    dirs: Array.from(state.dirs),
+  }
+})
+
+const loadSkills = Effect.fnUntraced(function* (state: State, discovered: DiscoveryState, bus: Bus.Interface) {
+  yield* Effect.forEach(discovered.matches, (match) => add(state, match, bus), {
+    concurrency: "unbounded",
+    discard: true,
+  })
 
   log.info("init", { count: Object.keys(state.skills).length })
 })
@@ -194,10 +214,15 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const bus = yield* Bus.Service
     const fsys = yield* AppFileSystem.Service
+    const discovered = yield* InstanceState.make(
+      Effect.fn("Skill.discovery")(function* (ctx) {
+        return yield* discoverSkills(config, discovery, fsys, ctx.directory, ctx.worktree)
+      }),
+    )
     const state = yield* InstanceState.make(
       Effect.fn("Skill.state")(function* (ctx) {
         const s: State = { skills: {}, dirs: new Set() }
-        yield* loadSkills(s, config, discovery, bus, fsys, ctx.directory, ctx.worktree)
+        yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
         return s
       }),
     )
@@ -213,8 +238,7 @@ export const layer = Layer.effect(
     })
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
-      const s = yield* InstanceState.get(state)
-      return Array.from(s.dirs)
+      return (yield* InstanceState.get(discovered)).dirs
     })
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {

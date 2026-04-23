@@ -16,6 +16,11 @@ type ParseSource =
       dir: string
     }
 
+type SubstituteInput = ParseSource & {
+  text: string
+  missing?: "error" | "empty"
+}
+
 function source(input: ParseSource) {
   return input.type === "path" ? input.path : input.source
 }
@@ -25,8 +30,9 @@ function dir(input: ParseSource) {
 }
 
 /** Apply {env:VAR} and {file:path} substitutions to config text. */
-export async function substitute(text: string, input: ParseSource, missing: "error" | "empty" = "error") {
-  text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
+export async function substitute(input: SubstituteInput) {
+  const missing = input.missing ?? "error"
+  let text = input.text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
     return process.env[varName] || ""
   })
 

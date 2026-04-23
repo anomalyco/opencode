@@ -125,8 +125,8 @@ export function tui(input: {
 
     const mode = await Terminal.getTerminalBackgroundColor()
 
-    // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
-    // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
+    // Re-clear after getTerminalBackgroundColor() because setRawMode(false)
+    // restores the original console mode, including processed input on Windows.
     win32DisableProcessedInput()
 
     const onExit = async () => {
@@ -151,7 +151,16 @@ export function tui(input: {
             <ExitProvider onBeforeExit={onBeforeExit} onExit={onExit}>
               <KVProvider>
                 <ToastProvider>
-                  <RouteProvider>
+                  <RouteProvider
+                    initialRoute={
+                      input.args.continue
+                        ? {
+                            type: "session",
+                            sessionID: "dummy",
+                          }
+                        : undefined
+                    }
+                  >
                     <TuiConfigProvider config={input.config}>
                       <SDKProvider
                         url={input.url}
@@ -336,7 +345,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
-      // Handle --session without --fork immediately (fork is handled in createEffect below)
       if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
@@ -423,12 +431,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         aliases: ["clear"],
       },
       onSelect: () => {
-        const current = promptRef.current
-        // Don't require focus - if there's any text, preserve it
-        const currentPrompt = current?.current?.input ? current.current : undefined
         route.navigate({
           type: "home",
-          initialPrompt: currentPrompt,
         })
         dialog.clear()
       },
@@ -605,7 +609,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: "Toggle theme mode",
+      title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")

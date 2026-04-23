@@ -6,7 +6,6 @@ import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { LSP } from "../../src/lsp"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { FileTime } from "../../src/file/time"
 import { Bus } from "../../src/bus"
 import { Format } from "../../src/format"
 import { Truncate } from "../../src/tool"
@@ -36,7 +35,6 @@ const it = testEffect(
   Layer.mergeAll(
     LSP.defaultLayer,
     AppFileSystem.defaultLayer,
-    FileTime.defaultLayer,
     Bus.layer,
     Format.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
@@ -56,11 +54,6 @@ const run = Effect.fn("WriteToolTest.run")(function* (
 ) {
   const tool = yield* init()
   return yield* tool.execute(args, next)
-})
-
-const markRead = Effect.fn("WriteToolTest.markRead")(function* (sessionID: string, filepath: string) {
-  const ft = yield* FileTime.Service
-  yield* ft.read(sessionID as any, filepath)
 })
 
 describe("tool.write", () => {
@@ -110,8 +103,6 @@ describe("tool.write", () => {
         Effect.gen(function* () {
           const filepath = path.join(dir, "existing.txt")
           yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf-8"))
-          yield* markRead(ctx.sessionID, filepath)
-
           const result = yield* run({ filePath: filepath, content: "new content" })
 
           expect(result.output).toContain("Wrote file successfully")
@@ -123,13 +114,59 @@ describe("tool.write", () => {
       ),
     )
 
+    it.live("preserves BOM when overwriting existing files", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const filepath = path.join(dir, "existing.cs")
+          const bom = String.fromCharCode(0xfeff)
+          yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
+
+          yield* run({ filePath: filepath, content: "using Up;\n" })
+
+          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+          expect(content.charCodeAt(0)).toBe(0xfeff)
+          expect(content.slice(1)).toBe("using Up;\n")
+        }),
+      ),
+    )
+
+    it.live("restores BOM after formatter strips it", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const filepath = path.join(dir, "formatted.cs")
+            const bom = String.fromCharCode(0xfeff)
+            yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
+
+            yield* run({ filePath: filepath, content: "using Up;\n" })
+
+            const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+            expect(content.charCodeAt(0)).toBe(0xfeff)
+            expect(content.slice(1)).toBe("using Up;\n")
+          }),
+        {
+          config: {
+            formatter: {
+              stripbom: {
+                extensions: [".cs"],
+                command: [
+                  "node",
+                  "-e",
+                  "const fs = require('fs'); const file = process.argv[1]; let text = fs.readFileSync(file, 'utf8'); if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); fs.writeFileSync(file, text, 'utf8')",
+                  "$FILE",
+                ],
+              },
+            },
+          },
+        },
+      ),
+    )
+
     it.live("returns diff in metadata for existing files", () =>
       provideTmpdirInstance((dir) =>
         Effect.gen(function* () {
           const filepath = path.join(dir, "file.txt")
           yield* Effect.promise(() => fs.writeFile(filepath, "old", "utf-8"))
-          yield* markRead(ctx.sessionID, filepath)
-
           const result = yield* run({ filePath: filepath, content: "new" })
 
           expect(result.metadata).toHaveProperty("filepath", filepath)
@@ -231,8 +268,6 @@ describe("tool.write", () => {
           const readonlyPath = path.join(dir, "readonly.txt")
           yield* Effect.promise(() => fs.writeFile(readonlyPath, "test", "utf-8"))
           yield* Effect.promise(() => fs.chmod(readonlyPath, 0o444))
-          yield* markRead(ctx.sessionID, readonlyPath)
-
           const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(Effect.exit)
           expect(exit._tag).toBe("Failure")
         }),

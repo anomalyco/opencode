@@ -4,7 +4,6 @@ import path from "path"
 import { Agent } from "../../src/agent/agent"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { FileTime } from "../../src/file/time"
 import { LSP } from "../../src/lsp"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
@@ -16,7 +15,6 @@ import { Tool } from "../../src/tool"
 import { Filesystem } from "../../src/util"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Npm } from "@opencode-ai/shared/npm"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -40,7 +38,6 @@ const it = testEffect(
     Agent.defaultLayer,
     AppFileSystem.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
-    FileTime.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
     Truncate.defaultLayer,
@@ -394,6 +391,19 @@ describe("tool.read truncation", () => {
       expect(result.attachments?.[0]).not.toHaveProperty("id")
       expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
       expect(result.attachments?.[0]).not.toHaveProperty("messageID")
+    }),
+  )
+
+  it.live("detects attachment media from file contents", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01])
+      yield* put(path.join(dir, "image.bin"), jpeg)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "image.bin") })
+      expect(result.output).toBe("Image read successfully")
+      expect(result.attachments?.[0].mime).toBe("image/jpeg")
+      expect(result.attachments?.[0].url.startsWith("data:image/jpeg;base64,")).toBe(true)
     }),
   )
 

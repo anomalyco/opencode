@@ -15,12 +15,10 @@ const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 beforeEach(() => {
   Database.close()
 
-  // @ts-expect-error don't do this normally, but it works
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
 })
 
 afterEach(() => {
-  // @ts-expect-error don't do this normally, but it works
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
 })
 
