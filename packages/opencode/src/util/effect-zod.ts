@@ -59,8 +59,17 @@ function walk(ast: SchemaAST.AST): z.ZodTypeAny {
 
 function walkUncached(ast: SchemaAST.AST): z.ZodTypeAny {
   const override = (ast.annotations as any)?.[ZodOverride] as z.ZodTypeAny | undefined
-  if (override) return override
+  // `description` annotations layer on top of an override so callers can
+  // reuse a shared override schema (e.g. `SessionID`) and still add a
+  // per-field description on the outer wrapper.
+  const base = override ?? bodyWithChecks(ast)
+  const desc = SchemaAST.resolveDescription(ast)
+  const ref = SchemaAST.resolveIdentifier(ast)
+  const described = desc ? base.describe(desc) : base
+  return ref ? described.meta({ ref }) : described
+}
 
+function bodyWithChecks(ast: SchemaAST.AST): z.ZodTypeAny {
   // Schema.Class wraps its fields in a Declaration AST plus an encoding that
   // constructs the class instance. For the Zod derivation we want the plain
   // field shape (the decoded/consumer view), not the class instance — so
@@ -74,11 +83,7 @@ function walkUncached(ast: SchemaAST.AST): z.ZodTypeAny {
   const hasEncoding = ast.encoding?.length && ast._tag !== "Declaration"
   const hasTransform = hasEncoding && !(SchemaAST.isOptional(ast) && extractDefault(ast) !== undefined)
   const base = hasTransform ? encoded(ast) : body(ast)
-  const checked = ast.checks?.length ? applyChecks(base, ast.checks, ast) : base
-  const desc = SchemaAST.resolveDescription(ast)
-  const ref = SchemaAST.resolveIdentifier(ast)
-  const described = desc ? checked.describe(desc) : checked
-  return ref ? described.meta({ ref }) : described
+  return ast.checks?.length ? applyChecks(base, ast.checks, ast) : base
 }
 
 // Walk the encoded side and apply each link's decode to produce the decoded

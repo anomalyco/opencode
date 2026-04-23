@@ -3,6 +3,7 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { listAdaptors } from "@/control-plane/adaptors"
 import { Workspace } from "@/control-plane/workspace"
+import { zodObject } from "@/util/effect-zod"
 import { Instance } from "@/project/instance"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
@@ -107,7 +108,7 @@ export const WorkspaceRoutes = lazy(() =>
             description: "Workspace status",
             content: {
               "application/json": {
-                schema: resolver(z.array(Workspace.ConnectionStatus)),
+                schema: resolver(z.array(zodObject(Workspace.ConnectionStatus))),
               },
             },
           },

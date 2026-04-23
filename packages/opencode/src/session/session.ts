@@ -273,17 +273,18 @@ export const Event = {
   }),
   Diff: BusEvent.define(
     "session.diff",
-    z.object({
-      sessionID: SessionID.zod,
-      diff: Snapshot.FileDiff.zod.array(),
+    Schema.Struct({
+      sessionID: SessionID,
+      diff: Schema.Array(Snapshot.FileDiff),
     }),
   ),
   Error: BusEvent.define(
     "session.error",
-    z.object({
-      sessionID: SessionID.zod.optional(),
-      // z.lazy defers access to break circular dep: session → message-v2 → provider → plugin → session
-      error: z.lazy(() => (MessageV2.Assistant.zod as unknown as z.ZodObject<any>).shape.error),
+    Schema.Struct({
+      sessionID: Schema.optional(SessionID),
+      // Reuses MessageV2.Assistant.fields.error (already Schema.optional) so
+      // the derived zod keeps the same discriminated-union shape on the bus.
+      error: MessageV2.Assistant.fields.error,
     }),
   ),
 }

@@ -617,12 +617,12 @@ export const Event = {
   }),
   PartDelta: BusEvent.define(
     "message.part.delta",
-    z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-      partID: PartID.zod,
-      field: z.string(),
-      delta: z.string(),
+    Schema.Struct({
+      sessionID: SessionID,
+      messageID: MessageID,
+      partID: PartID,
+      field: Schema.String,
+      delta: Schema.String,
     }),
   ),
   PartRemoved: SyncEvent.define({

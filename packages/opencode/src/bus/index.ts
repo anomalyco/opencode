@@ -1,5 +1,4 @@
-import z from "zod"
-import { Effect, Exit, Layer, PubSub, Scope, Context, Stream, Schema as EffectSchema, Types } from "effect"
+import { Effect, Exit, Layer, PubSub, Scope, Context, Stream, Schema } from "effect"
 import { EffectBridge } from "@/effect"
 import { Log } from "../util"
 import { BusEvent } from "./bus-event"
@@ -9,16 +8,12 @@ import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "bus" })
 
-type BusProperties<D extends BusEvent.Definition = BusEvent.Definition> = D extends {
-  effectProperties: infer Properties extends EffectSchema.Top
-}
-  ? Types.DeepMutable<EffectSchema.Schema.Type<Properties>>
-  : z.infer<D["properties"]>
+type BusProperties<D extends BusEvent.Definition<string, Schema.Top>> = Schema.Schema.Type<D["properties"]>
 
 export const InstanceDisposed = BusEvent.define(
   "server.instance.disposed",
-  z.object({
-    directory: z.string(),
+  Schema.Struct({
+    directory: Schema.String,
   }),
 )
 

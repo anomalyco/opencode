@@ -1,4 +1,5 @@
 import z from "zod"
+import { Schema } from "effect"
 import { setTimeout as sleep } from "node:timers/promises"
 import { fn } from "@/util/fn"
 import { Database, asc, eq, inArray } from "@/storage"
@@ -25,36 +26,37 @@ import { errorData } from "@/util/error"
 import { AppRuntime } from "@/effect/app-runtime"
 import { waitEvent } from "./util"
 import { WorkspaceContext } from "./workspace-context"
+import { NonNegativeInt } from "@/util/schema"
 
 export const Info = WorkspaceInfo.meta({
   ref: "Workspace",
 })
 export type Info = z.infer<typeof Info>
 
-export const ConnectionStatus = z.object({
-  workspaceID: WorkspaceID.zod,
-  status: z.enum(["connected", "connecting", "disconnected", "error"]),
+export const ConnectionStatus = Schema.Struct({
+  workspaceID: WorkspaceID,
+  status: Schema.Literals(["connected", "connecting", "disconnected", "error"]),
 })
-export type ConnectionStatus = z.infer<typeof ConnectionStatus>
+export type ConnectionStatus = Schema.Schema.Type<typeof ConnectionStatus>
 
-const Restore = z.object({
-  workspaceID: WorkspaceID.zod,
-  sessionID: SessionID.zod,
-  total: z.number().int().min(0),
-  step: z.number().int().min(0),
+const Restore = Schema.Struct({
+  workspaceID: WorkspaceID,
+  sessionID: SessionID,
+  total: NonNegativeInt,
+  step: NonNegativeInt,
 })
 
 export const Event = {
   Ready: BusEvent.define(
     "workspace.ready",
-    z.object({
-      name: z.string(),
+    Schema.Struct({
+      name: Schema.String,
     }),
   ),
   Failed: BusEvent.define(
     "workspace.failed",
-    z.object({
-      message: z.string(),
+    Schema.Struct({
+      message: Schema.String,
     }),
   ),
   Restore: BusEvent.define("workspace.restore", Restore),

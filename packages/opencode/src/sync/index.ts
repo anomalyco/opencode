@@ -8,51 +8,48 @@ import { EventSequenceTable, EventTable } from "./event.sql"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { EventID } from "./schema"
 import { Flag } from "@/flag/flag"
-import { Schema as EffectSchema, Types } from "effect"
+import { Schema as EffectSchema } from "effect"
 import { zodObject } from "@/util/effect-zod"
-import { isRecord } from "@/util/record"
+import type { DeepMutable } from "@/util/schema"
+
+// Keep `Event["data"]` mutable because projectors mutate the persisted shape
+// when writing to the database. Bus payloads (`Properties`) stay readonly —
+// subscribers only read.
 
 export type Definition<
+  Type extends string = string,
   Schema extends EffectSchema.Top = EffectSchema.Top,
   BusSchema extends EffectSchema.Top = Schema,
 > = {
-  type: string
+  type: Type
   version: number
   aggregate: string
-  effectSchema: Schema
-  effectProperties: BusSchema
-  schema: z.ZodObject
-
-  // This is temporary and only exists for compatibility with bus
-  // event definitions
-  properties: z.ZodObject
+  schema: Schema
+  // Bus event payload schema. Defaults to `schema` unless `busSchema` was
+  // passed at definition time (see `session.updated`, whose projector
+  // expands the persisted data to a `{ sessionID, info }` bus payload).
+  properties: BusSchema
 }
 
 export type Event<Def extends Definition = Definition> = {
   id: string
   seq: number
   aggregateID: string
-  data: Types.DeepMutable<EffectSchema.Schema.Type<Def["effectSchema"]>>
+  data: DeepMutable<EffectSchema.Schema.Type<Def["schema"]>>
 }
 
-export type Properties<Def extends Definition = Definition> = Types.DeepMutable<
-  EffectSchema.Schema.Type<Def["effectProperties"]>
->
+export type Properties<Def extends Definition = Definition> = EffectSchema.Schema.Type<Def["properties"]>
 
 export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
 type ProjectorFunc = (db: Database.TxOrDb, data: unknown) => void
+type ConvertEvent = (type: string, data: Event["data"]) => unknown | Promise<unknown>
 
 export const registry = new Map<string, Definition>()
 let projectors: Map<Definition, ProjectorFunc> | undefined
 const versions = new Map<string, number>()
 let frozen = false
-let convertEvent: (type: string, event: Event["data"]) => Promise<unknown> | unknown
-
-function asRecord(input: unknown) {
-  if (isRecord(input)) return input
-  throw new Error(`SyncEvent.convertEvent must return an object, got: ${JSON.stringify(input)}`)
-}
+let convertEvent: ConvertEvent
 
 export function reset() {
   frozen = false
@@ -60,7 +57,7 @@ export function reset() {
   convertEvent = (_, data) => data
 }
 
-export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: typeof convertEvent }) {
+export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: ConvertEvent }) {
   projectors = new Map(input.projectors)
 
   // Install all the latest event defs to the bus. We only ever emit
@@ -76,7 +73,7 @@ export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; co
   // Freeze the system so it clearly errors if events are defined
   // after `init` which would cause bugs
   frozen = true
-  convertEvent = input.convertEvent || ((_, data) => data)
+  convertEvent = input.convertEvent ?? ((_, data) => data)
 }
 
 export function versionedType<A extends string>(type: A): A
@@ -96,21 +93,17 @@ export function define<
   aggregate: Agg
   schema: Schema
   busSchema?: BusSchema
-}): Definition<Schema, BusSchema> {
+}): Definition<Type, Schema, BusSchema> {
   if (frozen) {
     throw new Error("Error defining sync event: sync system has been frozen")
   }
-
-  const effectProperties = (input.busSchema ?? input.schema) as BusSchema
 
   const def = {
     type: input.type,
     version: input.version,
     aggregate: input.aggregate,
-    effectSchema: input.schema,
-    effectProperties,
-    schema: zodObject(input.schema),
-    properties: zodObject(effectProperties),
+    schema: input.schema,
+    properties: (input.busSchema ?? input.schema) as BusSchema,
   }
 
   versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
@@ -167,12 +160,11 @@ function process<Def extends Definition>(def: Def, event: Event<Def>, options: {
     Database.effect(() => {
       if (options?.publish) {
         const result = convertEvent(def.type, event.data)
+        const publish = (data: unknown) => ProjectBus.publish(def, data as Properties<Def>)
         if (result instanceof Promise) {
-          void result.then((data) => {
-            void ProjectBus.publish({ type: def.type, properties: def.properties }, asRecord(data))
-          })
+          void result.then(publish)
         } else {
-          void ProjectBus.publish({ type: def.type, properties: def.properties }, asRecord(result))
+          void publish(result)
         }
 
         GlobalBus.emit("event", {
@@ -292,7 +284,7 @@ export function payloads() {
           id: z.string(),
           seq: z.number(),
           aggregateID: z.literal(def.aggregate),
-          data: def.schema,
+          data: zodObject(def.schema),
         })
         .meta({
           ref: `SyncEvent.${def.type}`,

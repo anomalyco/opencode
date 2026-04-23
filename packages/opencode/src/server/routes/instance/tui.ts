@@ -1,9 +1,12 @@
 import { Hono, type Context } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
+import { Schema } from "effect"
 import z from "zod"
 import { Bus } from "@/bus"
 import { Session } from "@/session"
+import type { SessionID } from "@/session/schema"
 import { TuiEvent } from "@/cli/cmd/tui/event"
+import { zodObject } from "@/util/effect-zod"
 import { AsyncQueue } from "@/util/queue"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
@@ -96,9 +99,9 @@ export const TuiRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", TuiEvent.PromptAppend.properties),
+      validator("json", zodObject(TuiEvent.PromptAppend.properties)),
       async (c) => {
-        await Bus.publish(TuiEvent.PromptAppend, c.req.valid("json"))
+        await Bus.publish(TuiEvent.PromptAppend, c.req.valid("json") as { text: string })
         return c.json(true)
       },
     )
@@ -305,9 +308,9 @@ export const TuiRoutes = lazy(() =>
           },
         },
       }),
-      validator("json", TuiEvent.ToastShow.properties),
+      validator("json", zodObject(TuiEvent.ToastShow.properties)),
       async (c) => {
-        await Bus.publish(TuiEvent.ToastShow, c.req.valid("json"))
+        await Bus.publish(TuiEvent.ToastShow, c.req.valid("json") as Schema.Schema.Type<typeof TuiEvent.ToastShow.properties>)
         return c.json(true)
       },
     )
@@ -336,7 +339,7 @@ export const TuiRoutes = lazy(() =>
             return z
               .object({
                 type: z.literal(def.type),
-                properties: def.properties,
+                properties: zodObject(def.properties),
               })
               .meta({
                 ref: `Event.${def.type}`,
@@ -345,8 +348,9 @@ export const TuiRoutes = lazy(() =>
         ),
       ),
       async (c) => {
-        const evt = c.req.valid("json")
-        await Bus.publish(Object.values(TuiEvent).find((def) => def.type === evt.type)!, evt.properties)
+        const evt = c.req.valid("json") as { type: string; properties: Record<string, unknown> }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await Bus.publish(Object.values(TuiEvent).find((def) => def.type === evt.type)! as any, evt.properties as any)
         return c.json(true)
       },
     )
@@ -368,9 +372,9 @@ export const TuiRoutes = lazy(() =>
           ...errors(400, 404),
         },
       }),
-      validator("json", TuiEvent.SessionSelect.properties),
+      validator("json", zodObject(TuiEvent.SessionSelect.properties)),
       async (c) => {
-        const { sessionID } = c.req.valid("json")
+        const { sessionID } = c.req.valid("json") as { sessionID: SessionID }
         await runRequest(
           "TuiRoutes.sessionSelect",
           c,
