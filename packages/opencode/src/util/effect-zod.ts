@@ -22,6 +22,33 @@ export function zod<S extends Schema.Top>(schema: S): z.ZodType<Schema.Schema.Ty
   return walk(schema.ast) as z.ZodType<Schema.Schema.Type<S>>
 }
 
+/**
+ * Derive a Zod value from an Effect Schema (or a Schema-backed export with a
+ * `.zod` static) and narrow the result to `z.ZodObject<any>` so `.shape`,
+ * `.omit`, `.extend`, and friends are accessible.
+ *
+ * The `zod()` walker returns `z.ZodType<T>` because not every AST node decodes
+ * to an object; this helper keeps the "I started from a `Schema.Struct`" cast
+ * in one place instead of sprinkling `as unknown as z.ZodObject<any>` across
+ * call sites.
+ *
+ * The return is intentionally loose — carrying Schema field types through the
+ * mapped `.omit()` / `.extend()` surface triggers brand-intersection
+ * explosions for branded primitives (`string & Brand<"SessionID">` extends
+ * `object` via the brand and gets walked into the prototype by `DeepPartial`,
+ * `updateSchema`, etc.), and zod's inference through `z.ZodType<T | undefined>`
+ * wrappers also can't reconstruct `T` cleanly. Consumers that care about the
+ * post-`.omit()` shape should cast `c.req.valid(...)` to the expected type.
+ */
+export function zodObject<S extends Schema.Top>(schema: S): z.ZodObject<any> {
+  const derived: z.ZodTypeAny = "zod" in schema && isZodType(schema.zod) ? schema.zod : walk(schema.ast)
+  return derived as unknown as z.ZodObject<any>
+}
+
+function isZodType(value: unknown): value is z.ZodTypeAny {
+  return typeof value === "object" && value !== null && "_zod" in value
+}
+
 function walk(ast: SchemaAST.AST): z.ZodTypeAny {
   const cached = walkCache.get(ast)
   if (cached) return cached

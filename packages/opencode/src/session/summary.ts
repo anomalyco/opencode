@@ -160,5 +160,6 @@ export const DiffInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 
 export * as SessionSummary from "./summary"

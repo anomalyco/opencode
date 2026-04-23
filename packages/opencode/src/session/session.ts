@@ -27,8 +27,8 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
-import { Effect, Layer, Option, Context, Schema } from "effect"
-import { zod } from "@/util/effect-zod"
+import { Effect, Layer, Option, Context, Schema, Types } from "effect"
+import { zod, zodObject } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "session" })
@@ -82,7 +82,7 @@ export function fromRow(row: SessionRow): Info {
   }
 }
 
-export function toRow(info: Schema.Schema.Type<typeof Info>) {
+export function toRow(info: Info) {
   return {
     id: info.id,
     project_id: info.projectID,
@@ -96,9 +96,9 @@ export function toRow(info: Schema.Schema.Type<typeof Info>) {
     summary_additions: info.summary?.additions,
     summary_deletions: info.summary?.deletions,
     summary_files: info.summary?.files,
-    summary_diffs: info.summary?.diffs as Snapshot.FileDiff[] | undefined,
-    revert: (info.revert ?? null) as Info["revert"] | null,
-    permission: info.permission as Info["permission"],
+    summary_diffs: info.summary?.diffs,
+    revert: info.revert ?? null,
+    permission: info.permission,
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
@@ -141,24 +141,6 @@ const Revert = Schema.Struct({
   diff: Schema.optional(Schema.String),
 })
 
-// Mirror effect-smol's Types.DeepMutable. Used to strip readonly from
-// Schema-derived types so consumer code can continue mutating Info fields
-// (e.g. session.revert.snapshot = ...) the way the original zod-derived
-// types allowed. See specs/effect/schema.md "Local DeepMutable".
-//
-// The primitive guard preserves branded scalars like `string & Brand<"SessionID">`,
-// which extend `object` via the brand intersection and would otherwise get
-// walked into the mapped-type branch and explode to the prototype methods.
-type DeepMutable<T> = T extends string | number | boolean | bigint | symbol | null | undefined
-  ? T
-  : T extends readonly [unknown, ...unknown[]]
-    ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
-    : T extends readonly (infer U)[]
-      ? DeepMutable<U>[]
-      : T extends object
-        ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
-        : T
-
 export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
@@ -176,7 +158,7 @@ export const Info = Schema.Struct({
 })
   .annotate({ identifier: "Session" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
-export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const ProjectInfo = Schema.Struct({
   id: ProjectID,
@@ -185,7 +167,7 @@ export const ProjectInfo = Schema.Struct({
 })
   .annotate({ identifier: "ProjectSummary" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
-export type ProjectInfo = DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
+export type ProjectInfo = Types.DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
 
 export const GlobalInfo = Schema.Struct({
   ...Info.fields,
@@ -193,7 +175,7 @@ export const GlobalInfo = Schema.Struct({
 })
   .annotate({ identifier: "GlobalSession" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
-export type GlobalInfo = DeepMutable<Schema.Schema.Type<typeof GlobalInfo>>
+export type GlobalInfo = Types.DeepMutable<Schema.Schema.Type<typeof GlobalInfo>>
 
 export const CreateInput = Schema.optional(
   Schema.Struct({
@@ -203,7 +185,7 @@ export const CreateInput = Schema.optional(
     workspaceID: Schema.optional(WorkspaceID),
   }),
 ).pipe(withStatics((s) => ({ zod: zod(s) })))
-export type CreateInput = DeepMutable<Schema.Schema.Type<typeof CreateInput>>
+export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
 
 export const ForkInput = Schema.Struct({
   sessionID: SessionID,
@@ -233,10 +215,6 @@ export const MessagesInput = Schema.Struct({
   limit: Schema.optional(Schema.Number),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 
-const InfoZod = Info.zod as unknown as z.ZodObject<any>
-const ShareZod = zod(Share) as unknown as z.ZodObject<any>
-const TimeZod = zod(Time) as unknown as z.ZodObject<any>
-
 export const Event = {
   Created: SyncEvent.define({
     type: "session.created",
@@ -253,9 +231,9 @@ export const Event = {
     aggregate: "sessionID",
     schema: z.object({
       sessionID: SessionID.zod,
-      info: updateSchema(InfoZod).extend({
-        share: updateSchema(ShareZod).optional(),
-        time: updateSchema(TimeZod).optional(),
+      info: updateSchema(zodObject(Info)).extend({
+        share: updateSchema(zodObject(Share)).optional(),
+        time: updateSchema(zodObject(Time)).optional(),
       }),
     }),
     busSchema: z.object({

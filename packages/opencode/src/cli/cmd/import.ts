@@ -157,7 +157,7 @@ export const ImportCommand = cmd({
       const info = Session.Info.zod.parse({
         ...exportData.info,
         projectID: Instance.project.id,
-      })
+      }) as Session.Info
       const row = Session.toRow(info)
       Database.use((db) =>
         db

@@ -23,6 +23,7 @@ import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
+import { zodObject } from "@/util/effect-zod"
 import { Bus } from "@/bus"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { jsonRequest, runRequest } from "./trace"
@@ -387,16 +388,11 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator(
-        "json",
-        z.object({
-          messageID: MessageID.zod.optional(),
-        }),
-      ),
+      validator("json", zodObject(Session.ForkInput).omit({ sessionID: true })),
       async (c) =>
         jsonRequest("SessionRoutes.fork", c, function* () {
           const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
+          const body = c.req.valid("json") as { messageID?: MessageID }
           const svc = yield* Session.Service
           return yield* svc.fork({ ...body, sessionID })
         }),
@@ -488,15 +484,10 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator(
-        "query",
-        z.object({
-          messageID: MessageID.zod.optional(),
-        }),
-      ),
+      validator("query", zodObject(SessionSummary.DiffInput).omit({ sessionID: true })),
       async (c) =>
         jsonRequest("SessionRoutes.diff", c, function* () {
-          const query = c.req.valid("query")
+          const query = c.req.valid("query") as Omit<SessionSummary.DiffInput, "sessionID">
           const params = c.req.valid("param")
           const summary = yield* SessionSummary.Service
           return yield* summary.diff({
@@ -877,7 +868,7 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", (SessionPrompt.PromptInput.zod as unknown as z.ZodObject<any>).omit({ sessionID: true })),
+      validator("json", zodObject(SessionPrompt.PromptInput).omit({ sessionID: true })),
       async (c) => {
         c.status(200)
         c.header("Content-Type", "application/json")
@@ -915,7 +906,7 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", (SessionPrompt.PromptInput.zod as unknown as z.ZodObject<any>).omit({ sessionID: true })),
+      validator("json", zodObject(SessionPrompt.PromptInput).omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
@@ -965,7 +956,7 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", (SessionPrompt.CommandInput.zod as unknown as z.ZodObject<any>).omit({ sessionID: true })),
+      validator("json", zodObject(SessionPrompt.CommandInput).omit({ sessionID: true })),
       async (c) =>
         jsonRequest("SessionRoutes.command", c, function* () {
           const sessionID = c.req.valid("param").sessionID
@@ -998,7 +989,7 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", (SessionPrompt.ShellInput.zod as unknown as z.ZodObject<any>).omit({ sessionID: true })),
+      validator("json", zodObject(SessionPrompt.ShellInput).omit({ sessionID: true })),
       async (c) =>
         jsonRequest("SessionRoutes.shell", c, function* () {
           const sessionID = c.req.valid("param").sessionID
@@ -1031,22 +1022,14 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator(
-        "json",
-        z.object({
-          messageID: MessageID.zod,
-          partID: PartID.zod.optional(),
-        }),
-      ),
+      validator("json", zodObject(SessionRevert.RevertInput).omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        log.info("revert", c.req.valid("json"))
+        const body = c.req.valid("json") as Omit<SessionRevert.RevertInput, "sessionID">
+        log.info("revert", body)
         return jsonRequest("SessionRoutes.revert", c, function* () {
           const svc = yield* SessionRevert.Service
-          return yield* svc.revert({
-            sessionID,
-            ...c.req.valid("json"),
-          })
+          return yield* svc.revert({ sessionID, ...body })
         })
       },
     )
