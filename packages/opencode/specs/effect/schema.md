@@ -147,6 +147,17 @@ import `z` do so only for local `ZodOverride` bridges or for `z.ZodType`
 type annotations — the `export const <Info|Spec>` values are all Effect
 Schema at source.
 
+A file is considered "done" when:
+
+- its exported schema values (`Info`, `Input`, `Event`, `Definition`, etc.)
+  are authored as Effect Schema
+- any remaining zod is either a derived compat bridge (via `zod()` /
+  `zodObject()`), a `z.ZodType` type annotation, or a documented
+  `ZodOverride` escape hatch — never a hand-written parallel source of truth
+
+Files that meet this bar but still carry a compat bridge are checked off
+with an inline note describing the bridge and what unblocks its removal.
+
 - [x] skills, formatter, console-state, mcp, lsp, permission (leaves), model-id, command, plugin, provider
 - [x] server, layout
 - [x] keybinds
@@ -365,7 +376,7 @@ piecewise.
 - [ ] `src/snapshot/index.ts`
 - [ ] `src/storage/db.ts`
 - [ ] `src/storage/storage.ts`
-- [ ] `src/sync/index.ts`
+- [x] `src/sync/index.ts` — public API (`SyncEvent.define`) is Schema-first; still stores derived zod `schema`/`properties` on each `Definition` as a compat bridge for `BusEvent` until `bus/bus-event.ts` migrates
 - [ ] `src/util/fn.ts`
 - [ ] `src/util/log.ts`
 - [ ] `src/util/update-schema.ts`
