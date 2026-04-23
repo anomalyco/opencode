@@ -90,7 +90,7 @@ export namespace SystemPrompt {
   }
 
   export function hosted() {
-    if (!process.env.VERITLY_EXECUTOR_URL?.trim() && !process.env.OPENCODE_HOSTED_MODE?.trim()) return []
+    if (!process.env.VERITLY_EXECUTOR_URL?.trim()) return []
 
     const lines = [
       "Shell commands run inside an isolated executor workspace, not on the API container.",

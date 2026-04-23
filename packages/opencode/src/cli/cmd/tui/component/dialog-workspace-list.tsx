@@ -31,7 +31,6 @@ async function openWorkspace(input: {
   const client = createOpencodeClient({
     baseUrl: input.sdk.url,
     fetch: input.sdk.fetch,
-    directory: input.sync.data.path.directory || input.sdk.directory,
     experimental_workspaceID: input.workspaceID,
   })
   const listed = input.forceCreate ? undefined : await client.session.list({ roots: true, limit: 1 })
@@ -189,7 +188,6 @@ export function DialogWorkspaceList() {
     const client = createOpencodeClient({
       baseUrl: sdk.url,
       fetch: sdk.fetch,
-      directory: sync.data.path.directory || sdk.directory,
       experimental_workspaceID: workspaceID,
     })
     const listed = await client.session.list({ roots: true, limit: 1 }).catch(() => undefined)
@@ -225,7 +223,6 @@ export function DialogWorkspaceList() {
         const client = createOpencodeClient({
           baseUrl: sdk.url,
           fetch: sdk.fetch,
-          directory: sync.data.path.directory || sdk.directory,
           experimental_workspaceID: workspace.id,
         })
         const result = await client.session.list({ roots: true }).catch(() => undefined)

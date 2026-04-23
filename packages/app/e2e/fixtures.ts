@@ -1,96 +1,105 @@
 import { test as base, expect, type Page } from "@playwright/test"
 import type { E2EWindow } from "../src/testing/terminal"
-import { cleanupSession, cleanupTestProject, createTestProject, seedProjects, sessionIDFromUrl } from "./actions"
+import { cleanupSession, seedProjects, sessionIDFromUrl } from "./actions"
 import { promptSelector } from "./selectors"
-import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
+import { createSdk, projectPath, sessionPath, getCurrentProject } from "./utils"
+import {
+  applyE2eWorkosSession,
+  clearE2eWorkosSession,
+  e2eAppOrigin,
+  mintE2eSealedSessionFromWorkos,
+  withAuth,
+} from "./workos-auth"
 
 export const settingsKey = "settings.v3"
 
 type TestFixtures = {
   sdk: ReturnType<typeof createSdk>
+  project: { id: string; directory: string }
   gotoSession: (sessionID?: string) => Promise<void>
   withProject: <T>(
     callback: (project: {
+      id: string
       directory: string
-      slug: string
       gotoSession: (sessionID?: string) => Promise<void>
-      trackSession: (sessionID: string, directory?: string) => void
-      trackDirectory: (directory: string) => void
+      trackSession: (sessionID: string) => void
     }) => Promise<T>,
-    options?: { extra?: string[] },
   ) => Promise<T>
 }
 
 type WorkerFixtures = {
-  directory: string
-  slug: string
+  project: { id: string; directory: string }
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
-  directory: [
+  // Project is determined once per worker from the seeded environment
+  project: [
     async ({}, use) => {
-      const directory = await getWorktree()
-      await use(directory)
+      const project = await getCurrentProject()
+      await use(project)
     },
     { scope: "worker" },
   ],
-  slug: [
-    async ({ directory }, use) => {
-      await use(dirSlug(directory))
-    },
-    { scope: "worker" },
-  ],
-  sdk: async ({ directory }, use) => {
-    await use(createSdk(directory))
+  
+  sdk: async ({ project }, use) => {
+    await use(createSdk())
   },
-  gotoSession: async ({ page, directory }, use) => {
-    await seedStorage(page, { directory })
+  
+  gotoSession: async ({ page, project }, use) => {
+    await seedStorage(page, { projectId: project.id })
 
     const gotoSession = async (sessionID?: string) => {
-      await page.goto(sessionPath(directory, sessionID))
+      await page.goto(sessionPath(project.id, sessionID))
       await expect(page.locator(promptSelector)).toBeVisible()
     }
     await use(gotoSession)
   },
-  withProject: async ({ page }, use) => {
-    await use(async (callback, options) => {
-      const root = await createTestProject()
-      const slug = dirSlug(root)
-      const sessions = new Map<string, string>()
-      const dirs = new Set<string>()
-      await seedStorage(page, { directory: root, extra: options?.extra })
-
+  
+  withProject: async ({ page, sdk }, use) => {
+    await use(async (callback) => {
+      // Create a fresh database project for this test
+      const result = await sdk.project.create({ name: "E2E Test Project" })
+      if (!result.data?.id) throw new Error("Failed to create project")
+      
+      const project = {
+        id: result.data.id,
+        directory: `/projects/${result.data.id}`,
+      }
+      
+      await seedStorage(page, { projectId: project.id })
+      
+      const sessions = new Set<string>()
+      
       const gotoSession = async (sessionID?: string) => {
-        await page.goto(sessionPath(root, sessionID))
+        await page.goto(sessionPath(project.id, sessionID))
         await expect(page.locator(promptSelector)).toBeVisible()
         const current = sessionIDFromUrl(page.url())
-        if (current) trackSession(current)
+        if (current) sessions.add(current)
       }
 
-      const trackSession = (sessionID: string, directory?: string) => {
-        sessions.set(sessionID, directory ?? root)
-      }
-
-      const trackDirectory = (directory: string) => {
-        if (directory !== root) dirs.add(directory)
+      const trackSession = (sessionID: string) => {
+        sessions.add(sessionID)
       }
 
       try {
-        await gotoSession()
-        return await callback({ directory: root, slug, gotoSession, trackSession, trackDirectory })
+        return await callback({ 
+          id: project.id, 
+          directory: project.directory, 
+          gotoSession, 
+          trackSession 
+        })
       } finally {
+        // Cleanup all tracked sessions
         await Promise.allSettled(
-          Array.from(sessions, ([sessionID, directory]) => cleanupSession({ sessionID, directory })),
+          Array.from(sessions).map((sessionID) => cleanupSession({ sdk, sessionID })),
         )
-        await Promise.allSettled(Array.from(dirs, (directory) => cleanupTestProject(directory)))
-        await cleanupTestProject(root)
       }
     })
   },
 })
 
-async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
-  await seedProjects(page, input)
+async function seedStorage(page: Page, input: { projectId: string }) {
+  await seedProjects(page, { projectId: input.projectId })
   await page.addInitScript(() => {
     const win = window as E2EWindow
     win.__opencode_e2e = {
@@ -103,7 +112,7 @@ async function seedStorage(page: Page, input: { directory: string; extra?: strin
     localStorage.setItem(
       "opencode.global.dat:model",
       JSON.stringify({
-        recent: [{ providerID: "opencode", modelID: "big-pickle" }],
+        recent: [{ providerID: "openai", modelID: "llama3.2:1b" }],
         user: [],
         variant: {},
       }),
@@ -112,3 +121,4 @@ async function seedStorage(page: Page, input: { directory: string; extra?: strin
 }
 
 export { expect }
+export { applyE2eWorkosSession, clearE2eWorkosSession, e2eAppOrigin, mintE2eSealedSessionFromWorkos, withAuth }

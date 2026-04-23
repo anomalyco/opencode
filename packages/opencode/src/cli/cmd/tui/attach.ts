@@ -81,9 +81,9 @@ export const AttachCommand = cmd({
         return { Authorization: auth }
       })()
       const effectiveDir = directory && existsSync(directory) ? directory : process.cwd()
+      const project = localProject(effectiveDir)
       const config = await Instance.provide({
-        directory: effectiveDir,
-        project: localProject(effectiveDir),
+        project,
         fn: () => TuiConfig.get(),
       })
       await tui({

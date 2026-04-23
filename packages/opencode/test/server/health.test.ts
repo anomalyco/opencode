@@ -6,7 +6,6 @@ describe("instructionCheck", () => {
 
   beforeEach(() => {
     env = {
-      OPENCODE_HOSTED_MODE: process.env["OPENCODE_HOSTED_MODE"],
       UNIVER_SDK_WS: process.env["UNIVER_SDK_WS"],
       VERITLY_EXECUTOR_URL: process.env["VERITLY_EXECUTOR_URL"],
       VITE_UNIVER_SDK_WS: process.env["VITE_UNIVER_SDK_WS"],
@@ -34,7 +33,6 @@ describe("instructionCheck", () => {
   })
 
   test("skips when hosted executor instructions are not needed", () => {
-    delete process.env["OPENCODE_HOSTED_MODE"]
     delete process.env["UNIVER_SDK_WS"]
     delete process.env["VERITLY_EXECUTOR_URL"]
     delete process.env["VITE_UNIVER_SDK_WS"]

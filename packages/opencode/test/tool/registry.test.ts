@@ -39,11 +39,12 @@ describe.skip("tool.registry (needs testcontainer)", () => {
       },
     })
 
+    const project = { id: "test-project", time: { created: 0, updated: 0 } }
     await Instance.provide({
-      directory: tmp.path,
+      project,
       fn: async () => {
         const ids = await ToolRegistry.ids()
-        expect(ids).toContain("hello")
+        expect(ids).toContain("cowsay")
       },
     })
   })
@@ -73,8 +74,9 @@ describe.skip("tool.registry (needs testcontainer)", () => {
       },
     })
 
+    const project = { id: "test-project", time: { created: 0, updated: 0 } }
     await Instance.provide({
-      directory: tmp.path,
+      project,
       fn: async () => {
         const ids = await ToolRegistry.ids()
         expect(ids).toContain("hello")
@@ -119,11 +121,12 @@ describe.skip("tool.registry (needs testcontainer)", () => {
       },
     })
 
+    const project = { id: "test-project", time: { created: 0, updated: 0 } }
     await Instance.provide({
-      directory: tmp.path,
+      project,
       fn: async () => {
         const ids = await ToolRegistry.ids()
-        expect(ids).toContain("cowsay")
+        expect(ids).toContain("hello")
       },
     })
   })

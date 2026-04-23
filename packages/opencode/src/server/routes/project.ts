@@ -16,6 +16,7 @@ import { which } from "../../util/which";
 import { assertHostedFilesystemEnabled } from "../hosted";
 import { createProjectSimple, listProjectsSimple } from "../../storage/project-pg";
 import { getRequestUser } from "./auth";
+import { isOpencodeWorkosEnabled } from "../workos-env";
 
 const CreateProjectInput = z.object({
 	name: z.string().trim().min(1).max(120),
@@ -41,6 +42,9 @@ function projectRoot() {
 }
 
 async function tenant(c: Pick<Context, "req">) {
+	if (!isOpencodeWorkosEnabled()) {
+		return process.env["OPENCODE_E2E_USER_ID"] || "e2e-test-user";
+	}
 	const user = await getRequestUser(c);
 	if (user?.id) return user.id;
 	return;

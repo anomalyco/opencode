@@ -36,8 +36,9 @@ describe("tool.webfetch", () => {
     await withFetch(
       async () => new Response(bytes, { status: 200, headers: { "content-type": "IMAGE/PNG; charset=binary" } }),
       async () => {
+        const project = { id: "test-project", time: { created: 0, updated: 0 } }
         await Instance.provide({
-          directory: projectRoot,
+          project,
           fn: async () => {
             const webfetch = await WebFetchTool.init()
             const result = await webfetch.execute({ url: "https://example.com/image.png", format: "markdown" }, ctx)
@@ -65,8 +66,9 @@ describe("tool.webfetch", () => {
           headers: { "content-type": "image/svg+xml; charset=UTF-8" },
         }),
       async () => {
+        const project = { id: "test-project", time: { created: 0, updated: 0 } }
         await Instance.provide({
-          directory: projectRoot,
+          project,
           fn: async () => {
             const webfetch = await WebFetchTool.init()
             const result = await webfetch.execute({ url: "https://example.com/image.svg", format: "html" }, ctx)
@@ -86,8 +88,9 @@ describe("tool.webfetch", () => {
           headers: { "content-type": "text/plain; charset=utf-8" },
         }),
       async () => {
+        const project = { id: "test-project", time: { created: 0, updated: 0 } }
         await Instance.provide({
-          directory: projectRoot,
+          project,
           fn: async () => {
             const webfetch = await WebFetchTool.init()
             const result = await webfetch.execute({ url: "https://example.com/file.txt", format: "text" }, ctx)

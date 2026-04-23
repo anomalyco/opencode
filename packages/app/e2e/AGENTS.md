@@ -61,6 +61,7 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 - `page` - Playwright page
 - `sdk` - OpenCode SDK client for API calls
 - `gotoSession(sessionID?)` - Navigate to session
+- `withAuth(page, fn)` — use **real WorkOS** in tests: `authenticateWithPassword` (same as `bun run staging:test-session` in `packages/opencode`) mints a sealed `wos-session` and sets the cookie for `PLAYWRIGHT_BASE_URL`, then removes it in `finally`. Set `E2E_WORKOS_EMAIL` / `E2E_WORKOS_PASSWORD` (or `STAGING_TEST_*`) plus `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, and `COOKIE_PASSWORD`. Re-exported from `fixtures.ts`.
 
 ### Helper Functions
 

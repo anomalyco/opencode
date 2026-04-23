@@ -223,6 +223,11 @@ export namespace Ripgrep {
   }) {
     input.signal?.throwIfAborted()
 
+    // Virtual projects don't have local filesystem - return empty
+    if (input.cwd.startsWith("/projects/")) {
+      return
+    }
+
     const args = [await filepath(), "--files", "--glob=!.git/*"]
     if (input.follow) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
@@ -231,15 +236,6 @@ export namespace Ripgrep {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)
       }
-    }
-
-    // Guard against invalid cwd to provide a consistent ENOENT error.
-    if (!(await fs.stat(input.cwd).catch(() => undefined))?.isDirectory()) {
-      throw Object.assign(new Error(`No such file or directory: '${input.cwd}'`), {
-        code: "ENOENT",
-        errno: -2,
-        path: input.cwd,
-      })
     }
 
     const proc = Process.spawn(args, {

@@ -19,13 +19,12 @@ describe("control-plane/workspace-server SSE", () => {
     const stop = new AbortController()
     const seen: unknown[] = []
     try {
-      const response = await app.request("/event", {
-        signal: stop.signal,
-        headers: {
-          "x-opencode-workspace": "wrk_test_workspace",
-          "x-opencode-directory": tmp.path,
-        },
-      })
+      const response = await app.request(
+        `/event?workspace=wrk_test_workspace`,
+        {
+          signal: stop.signal,
+        }
+      )
 
       expect(response.status).toBe(200)
       expect(response.body).toBeDefined()

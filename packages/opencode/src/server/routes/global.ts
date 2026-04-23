@@ -5,7 +5,7 @@ import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../project/instance"
-import { Installation } from "@/installation"
+
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"

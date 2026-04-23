@@ -42,8 +42,6 @@ spec:
                 secretKeyRef:
                   name: veritly-secrets
                   key: OPENCODE_SERVER_PASSWORD
-            - name: OPENCODE_DISABLE_LOCAL_FILESYSTEM
-              value: "false"
             - name: DEPLOYMENT_ENVIRONMENT
               valueFrom:
                 configMapKeyRef:

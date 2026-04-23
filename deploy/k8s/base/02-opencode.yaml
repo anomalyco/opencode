@@ -35,16 +35,6 @@ spec:
             secretKeyRef:
               name: veritly-secrets
               key: OPENCODE_SERVER_PASSWORD
-        - name: OPENCODE_HOSTED_MODE
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: OPENCODE_HOSTED_MODE
-        - name: OPENCODE_DISABLE_LOCAL_FILESYSTEM
-          valueFrom:
-            configMapKeyRef:
-              name: veritly-config
-              key: OPENCODE_DISABLE_LOCAL_FILESYSTEM
         - name: DEPLOYMENT_ENVIRONMENT
           valueFrom:
             configMapKeyRef:

@@ -1,4 +1,4 @@
-import { Installation } from "./installation"
+
 import { Server } from "./server/server"
 import { Log } from "./util/log"
 
@@ -21,8 +21,8 @@ process.on("SIGHUP", () => process.exit())
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
-  dev: Installation.isLocal(),
-  level: Installation.isLocal() ? "DEBUG" : "INFO",
+  dev: process.env.NODE_ENV === "development",
+  level: process.env.NODE_ENV === "development" ? "DEBUG" : "INFO",
 })
 
 process.env.AGENT = "1"

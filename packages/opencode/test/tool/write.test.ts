@@ -5,6 +5,7 @@ import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { ProjectID } from "../../src/project/schema"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-write-session"),
@@ -23,8 +24,9 @@ describe("tool.write", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "newfile.txt")
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           const result = await write.execute(
@@ -48,8 +50,9 @@ describe("tool.write", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "nested", "deep", "file.txt")
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -69,8 +72,9 @@ describe("tool.write", () => {
     test("handles relative paths by resolving to instance directory", async () => {
       await using tmp = await tmpdir()
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -95,8 +99,9 @@ describe("tool.write", () => {
       await fs.writeFile(filepath, "old content", "utf-8")
 
       // First read the file to satisfy FileTime requirement
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
           FileTime.read(ctx.sessionID, filepath)
@@ -124,8 +129,9 @@ describe("tool.write", () => {
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "old", "utf-8")
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
           FileTime.read(ctx.sessionID, filepath)
@@ -152,8 +158,9 @@ describe("tool.write", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "sensitive.json")
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -180,8 +187,9 @@ describe("tool.write", () => {
       const filepath = path.join(tmp.path, "data.json")
       const data = { key: "value", nested: { array: [1, 2, 3] } }
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -203,8 +211,9 @@ describe("tool.write", () => {
       const filepath = path.join(tmp.path, "binary.bin")
       const content = "Hello\x00World\x01\x02\x03"
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -225,8 +234,9 @@ describe("tool.write", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "empty.txt")
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -251,8 +261,9 @@ describe("tool.write", () => {
       const filepath = path.join(tmp.path, "multiline.txt")
       const lines = ["Line 1", "Line 2", "Line 3", ""].join("\n")
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -274,8 +285,9 @@ describe("tool.write", () => {
       const filepath = path.join(tmp.path, "crlf.txt")
       const content = "Line 1\r\nLine 2\r\nLine 3"
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -302,8 +314,9 @@ describe("tool.write", () => {
       await fs.writeFile(readonlyPath, "test", "utf-8")
       await fs.chmod(readonlyPath, 0o444)
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
           FileTime.read(ctx.sessionID, readonlyPath)
@@ -329,8 +342,9 @@ describe("tool.write", () => {
       const filepath = path.join(tmp.path, "src", "components", "Button.tsx")
       await fs.mkdir(path.dirname(filepath), { recursive: true })
 
+      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        directory: tmp.path,
+        project,
         fn: async () => {
           const write = await WriteTool.init()
           const result = await write.execute(

@@ -10,7 +10,7 @@ import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
-import { Installation } from "./installation"
+
 import { NamedError } from "@opencode-ai/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
@@ -49,7 +49,7 @@ let cli = yargs(hideBin(process.argv))
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
-  .version("version", "show version number", Installation.VERSION)
+  .version("version", "show version number", process.env.OPENCODE_VERSION ?? "dev")
   .alias("version", "v")
   .option("print-logs", {
     describe: "print logs to stderr",
@@ -63,10 +63,10 @@ let cli = yargs(hideBin(process.argv))
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),
-      dev: Installation.isLocal(),
+      dev: process.env.NODE_ENV === "development",
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level
-        if (Installation.isLocal()) return "DEBUG"
+        if (process.env.NODE_ENV === "development") return "DEBUG"
         return "INFO"
       })(),
     })
@@ -76,7 +76,7 @@ let cli = yargs(hideBin(process.argv))
     process.env.OPENCODE_PID = String(process.pid)
 
     Log.Default.info("opencode", {
-      version: Installation.VERSION,
+      version: process.env.OPENCODE_VERSION ?? "dev",
       args: process.argv.slice(2),
     })
 
@@ -116,7 +116,7 @@ let cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
 
-if (Installation.isLocal()) {
+if (process.env.NODE_ENV === "development") {
   cli = cli.command(WorkspaceServeCommand)
 }
 

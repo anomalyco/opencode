@@ -18,7 +18,7 @@ describe("Session.create with virtual project handle", () => {
     })
     const project = projectResult.project
 
-    // Simulate the request coming in with x-opencode-directory: /projects/<id>
+    // Simulate the request coming in with directory query param: /projects/<id>
     // This is how the web UI calls the API for DB-backed projects
     const virtualHandle = `/projects/${project.id}`
 

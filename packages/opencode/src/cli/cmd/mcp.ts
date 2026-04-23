@@ -9,26 +9,13 @@ import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
-import { Project } from "../../project/project"
-import { ProjectID } from "../../project/schema"
-import { Installation } from "../../installation"
+import { localProject } from "../../project/local-project"
+
 import path from "path"
 import { Global } from "../../global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "../../util/filesystem"
 import { Bus } from "../../bus"
-
-function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
-  const now = Date.now()
-  return {
-    id: ProjectID.make(directory),
-    time: {
-      created: now,
-      updated: now,
-    },
-    vcs: "git" as const,
-  }
-}
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
   switch (status) {
@@ -84,9 +71,9 @@ export const McpListCommand = cmd({
   describe: "list MCP servers and their status",
   async handler() {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         UI.empty()
         prompts.intro("MCP Servers")
@@ -163,9 +150,9 @@ export const McpAuthCommand = cmd({
       .command(McpAuthListCommand),
   async handler(args) {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         UI.empty()
         prompts.intro("MCP OAuth Authentication")
@@ -302,9 +289,9 @@ export const McpAuthListCommand = cmd({
   describe: "list OAuth-capable MCP servers and their auth status",
   async handler() {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         UI.empty()
         prompts.intro("MCP OAuth Status")
@@ -348,9 +335,9 @@ export const McpLogoutCommand = cmd({
     }),
   async handler(args) {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         UI.empty()
         prompts.intro("MCP OAuth Logout")
@@ -442,42 +429,38 @@ export const McpAddCommand = cmd({
   describe: "add an MCP server",
   async handler() {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         UI.empty()
         prompts.intro("Add MCP server")
 
-        const project = Instance.project
-
         // Resolve config paths eagerly for hints
         const [projectConfigPath, globalConfigPath] = await Promise.all([
-          resolveConfigPath(Instance.directory),
+          resolveConfigPath(dir),
           resolveConfigPath(Global.Path.config, true),
         ])
 
         // Determine scope
         let configPath = globalConfigPath
-        if (project.vcs === "git") {
-          const scopeResult = await prompts.select({
-            message: "Location",
-            options: [
-              {
-                label: "Current project",
-                value: projectConfigPath,
-                hint: projectConfigPath,
-              },
-              {
-                label: "Global",
-                value: globalConfigPath,
-                hint: globalConfigPath,
-              },
-            ],
-          })
-          if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
-          configPath = scopeResult
-        }
+        const scopeResult = await prompts.select({
+          message: "Location",
+          options: [
+            {
+              label: "Current project",
+              value: projectConfigPath,
+              hint: projectConfigPath,
+            },
+            {
+              label: "Global",
+              value: globalConfigPath,
+              hint: globalConfigPath,
+            },
+          ],
+        })
+        if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
+        configPath = scopeResult
 
         const name = await prompts.text({
           message: "Enter MCP server name",
@@ -615,7 +598,6 @@ export const McpDebugCommand = cmd({
   async handler(args) {
     const dir = process.cwd()
     await Instance.provide({
-      directory: dir,
       project: localProject(dir),
       async fn() {
         UI.empty()
@@ -688,7 +670,7 @@ export const McpDebugCommand = cmd({
               params: {
                 protocolVersion: "2024-11-05",
                 capabilities: {},
-                clientInfo: { name: "opencode-debug", version: Installation.VERSION },
+                clientInfo: { name: "opencode-debug", version: process.env.OPENCODE_VERSION ?? "dev" },
               },
               id: 1,
             }),
@@ -730,7 +712,7 @@ export const McpDebugCommand = cmd({
             try {
               const client = new Client({
                 name: "opencode-debug",
-                version: Installation.VERSION,
+                version: process.env.OPENCODE_VERSION ?? "dev",
               })
               await client.connect(transport)
               prompts.log.success("Connection successful (already authenticated)")

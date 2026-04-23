@@ -77,17 +77,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       scope,
       normalizeDir: path.normalizeDir,
       list: async (dir) => {
-        const [opencodeNodes, officeNodes] = await Promise.all([
-          sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
-          listOfficeFiles(dir, { projectId: univerProjectId() }).catch(() => []),
-        ])
-        const byPath = new Map<string, (typeof opencodeNodes)[number]>()
-        for (const n of opencodeNodes) byPath.set(n.path, n)
-        for (const n of officeNodes) {
-          if (byPath.has(n.path)) continue
-          byPath.set(n.path, n as (typeof opencodeNodes)[number])
-        }
-        return [...byPath.values()]
+        return listOfficeFiles(dir, { projectId: univerProjectId() }).catch(() => [])
       },
       onError: (message) => {
         showToast({
@@ -186,9 +176,20 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
-      const promise = (isUniverOfficePath(file)
-        ? readOfficeFile(file, { projectId: univerProjectId() })
-        : sdk.client.file.read({ path: file }))
+      if (!isUniverOfficePath(file)) {
+        const p = Promise.resolve()
+          .then(() => {
+            if (scope() !== directory) return
+            setLoadError(file, language.t("file.hostFilesystemDisabled"))
+          })
+          .finally(() => {
+            inflight.delete(key)
+          })
+        inflight.set(key, p)
+        return p
+      }
+
+      const promise = readOfficeFile(file, { projectId: univerProjectId() })
         .then((x) => {
           if (scope() !== directory) return
           const content = ("data" in x ? x.data : x)
@@ -210,38 +211,28 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return promise
     }
 
-    const search = (query: string, dirs: "true" | "false") =>
-      sdk.client.find.files({ query, dirs }).then(
-        (x) => (x.data ?? []).map(path.normalize),
-        () => [],
-      )
+    const search = (_query: string, _dirs: "true" | "false") => Promise.resolve([] as string[])
 
     const upload = async (filepath: string, content: Uint8Array) => {
       const normalized = path.normalize(filepath)
+      if (!isUniverOfficePath(normalized)) {
+        throw new Error(language.t("file.hostFilesystemDisabled"))
+      }
       const base64 = base64FromBytes(content)
-      const result = isUniverOfficePath(normalized)
-        ? { data: await uploadOfficeFile(normalized, base64, undefined, { projectId: univerProjectId() }), error: undefined }
-        : await sdk.client.file.upload({ path: normalized, content: base64 })
-      if (result.error) throw new Error("Upload failed")
+      const data = await uploadOfficeFile(normalized, base64, undefined, { projectId: univerProjectId() })
       void tree.listDir(path.dirname(normalized), { force: true })
-      return result.data
+      return data
     }
 
     const mkdir = async (dirpath: string) => {
-      const normalized = path.normalize(dirpath)
-      const result = await sdk.client.directory.create({ path: normalized })
-      if (result.error) throw new Error("Create directory failed")
-      const parent = path.dirname(normalized)
-      void tree.listDir(parent || normalized, { force: true })
-      return result.data
+      void dirpath
+      throw new Error(language.t("file.hostFilesystemDisabled"))
     }
 
     const remove = async (filepath: string, recursive = false) => {
-      const normalized = path.normalize(filepath)
-      const result = await sdk.client.file.delete({ path: normalized, recursive: recursive ? "true" : "false" })
-      if (result.error) throw new Error("Delete failed")
-      void tree.listDir(path.dirname(normalized), { force: true })
-      return result.data
+      void filepath
+      void recursive
+      throw new Error(language.t("file.hostFilesystemDisabled"))
     }
 
     const stop = sdk.event.listen((e) => {

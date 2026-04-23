@@ -404,8 +404,8 @@ export namespace SessionPrompt {
           id: MessageID.ascending(),
           parentID: lastUser.id,
           role: "assistant",
-          mode: agent.name,
-          agent: agent.name,
+          mode: lastUser.agent,
+          agent: lastUser.agent,
           variant: lastUser.variant,
           path: {
             cwd: Instance.directory,
@@ -436,7 +436,7 @@ export namespace SessionPrompt {
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
       const tools = await resolveTools({
-        agent,
+        agent: lastUser.agent,
         session,
         model,
         tools: lastUser.tools,
@@ -461,6 +461,8 @@ export namespace SessionPrompt {
           messageID: lastUser.id,
         })
       }
+
+      const isLastStep = step >= 50 // Prevent infinite loops
 
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
@@ -492,7 +494,7 @@ export namespace SessionPrompt {
 
       const result = await processor.process({
         user: lastUser,
-        agent,
+        agent: lastUser.agent,
         abort,
         sessionID,
         system,
@@ -606,11 +608,13 @@ export namespace SessionPrompt {
         }
       },
       async ask(req) {
+        const merged = PermissionNext.merge(input.agent.permission, input.session.permission ?? [])
+        const cleanRuleset = merged.filter((r): r is PermissionNext.Rule => r != null && typeof r === "object" && "permission" in r)
         await PermissionNext.ask({
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: PermissionNext.merge(input.agent.permission, input.session.permission ?? []),
+          ruleset: cleanRuleset,
         })
       },
     })

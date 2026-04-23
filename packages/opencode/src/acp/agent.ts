@@ -36,7 +36,7 @@ import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
 import { Agent as AgentModule } from "../agent/agent"
-import { Installation } from "@/installation"
+
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
@@ -556,7 +556,7 @@ export namespace ACP {
         authMethods: [authMethod],
         agentInfo: {
           name: "OpenCode",
-          version: Installation.VERSION,
+          version: process.env.OPENCODE_VERSION ?? "dev",
         },
       }
     }

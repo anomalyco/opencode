@@ -71,9 +71,9 @@ const AgentCreateCommand = cmd({
       }),
   async handler(args) {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         const cliPath = args.path
         const cliDescription = args.description
@@ -95,27 +95,25 @@ const AgentCreateCommand = cmd({
           targetPath = path.join(cliPath, "agent")
         } else {
           let scope: "global" | "project" = "global"
-          if (project.vcs === "git") {
-            const scopeResult = await prompts.select({
-              message: "Location",
-              options: [
-                {
-                  label: "Current project",
-                  value: "project" as const,
-                  hint: Instance.directory,
-                },
-                {
-                  label: "Global",
-                  value: "global" as const,
-                  hint: Global.Path.config,
-                },
-              ],
-            })
-            if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
-            scope = scopeResult
-          }
+          const scopeResult = await prompts.select({
+            message: "Location",
+            options: [
+              {
+                label: "Current project",
+                value: "project" as const,
+                hint: dir,
+              },
+              {
+                label: "Global",
+                value: "global" as const,
+                hint: Global.Path.config,
+              },
+            ],
+          })
+          if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
+          scope = scopeResult
           targetPath = path.join(
-            scope === "global" ? Global.Path.config : path.join(Instance.directory, ".opencode"),
+            scope === "global" ? Global.Path.config : path.join(dir, ".opencode"),
             "agent",
           )
         }
@@ -246,9 +244,9 @@ const AgentListCommand = cmd({
   describe: "list all available agents",
   async handler() {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         const agents = await Agent.list()
         const sortedAgents = agents.sort((a, b) => {

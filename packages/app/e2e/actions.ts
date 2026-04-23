@@ -171,9 +171,13 @@ export async function openSettings(page: Page) {
   return dialog
 }
 
-export async function seedProjects(page: Page, input: { directory: string; extra?: string[] }) {
+// Stateless architecture: Seed project using database project ID
+// The directory is now a virtual path like /projects/<id>
+export async function seedProjects(page: Page, input: { projectId: string }) {
+  const directory = `/projects/${input.projectId}`
+  
   await page.addInitScript(
-    (args: { directory: string; serverUrl: string; extra: string[] }) => {
+    (args: { directory: string; serverUrl: string }) => {
       const key = "opencode.global.dat:server"
       const raw = localStorage.getItem(key)
       const parsed = (() => {
@@ -191,7 +195,8 @@ export async function seedProjects(page: Page, input: { directory: string; extra
       const projects = store.projects && typeof store.projects === "object" ? store.projects : {}
       const nextProjects = { ...(projects as Record<string, unknown>) }
 
-      const add = (origin: string, directory: string) => {
+      // In stateless architecture, worktree is the virtual directory path
+      const add = (origin: string, dir: string) => {
         const current = nextProjects[origin]
         const items = Array.isArray(current) ? current : []
         const existing = items.filter(
@@ -202,50 +207,41 @@ export async function seedProjects(page: Page, input: { directory: string; extra
             typeof (p as { worktree?: unknown }).worktree === "string",
         )
 
-        if (existing.some((p) => p.worktree === directory)) return
-        nextProjects[origin] = [{ worktree: directory, expanded: true }, ...existing]
+        if (existing.some((p) => p.worktree === dir)) return
+        nextProjects[origin] = [{ worktree: dir, expanded: true }, ...existing]
       }
 
-      const directories = [args.directory, ...args.extra]
-      for (const directory of directories) {
-        add("local", directory)
-        add(args.serverUrl, directory)
-      }
+      add("local", args.directory)
+      add(args.serverUrl, args.directory)
 
       localStorage.setItem(
         key,
         JSON.stringify({
           list,
           projects: nextProjects,
-          lastProject,
+          lastProject: { worktree: args.directory },
         }),
       )
     },
-    { directory: input.directory, serverUrl, extra: input.extra ?? [] },
+    { directory, serverUrl },
   )
 }
 
-export async function createTestProject() {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-project-"))
-
-  await fs.writeFile(path.join(root, "README.md"), "# e2e\n")
-
-  execSync("git init", { cwd: root, stdio: "ignore" })
-  execSync("git config core.fsmonitor false", { cwd: root, stdio: "ignore" })
-  execSync("git add -A", { cwd: root, stdio: "ignore" })
-  execSync('git -c user.name="e2e" -c user.email="e2e@example.com" commit -m "init" --allow-empty', {
-    cwd: root,
-    stdio: "ignore",
-  })
-
-  return resolveDirectory(root)
+// Stateless Architecture: createTestProject creates a database project, not a filesystem directory
+export async function createTestProject(name = "E2E Test Project") {
+  const sdk = createSdk()
+  const result = await sdk.project.create({ name })
+  if (!result.data?.id) throw new Error("Failed to create test project")
+  
+  // Return virtual directory path like /projects/<id> for backward compatibility
+  return `/projects/${result.data.id}`
 }
 
-export async function cleanupTestProject(directory: string) {
-  try {
-    execSync("git fsmonitor--daemon stop", { cwd: directory, stdio: "ignore" })
-  } catch {}
-  await fs.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => undefined)
+// Stateless Architecture: cleanupTestProject is a no-op since there's no filesystem
+export async function cleanupTestProject(_directory: string) {
+  // In stateless architecture, projects are database records
+  // They don't have local filesystem directories to clean up
+  // Projects can be deleted via API if needed, but typically tests share a seeded project
 }
 
 export function slugFromUrl(url: string) {
@@ -418,11 +414,9 @@ export async function waitSessionIdle(sdk: ReturnType<typeof createSdk>, session
 
 export async function cleanupSession(input: {
   sessionID: string
-  directory?: string
-  sdk?: ReturnType<typeof createSdk>
+  sdk: ReturnType<typeof createSdk>
 }) {
-  const sdk = input.sdk ?? (input.directory ? createSdk(input.directory) : undefined)
-  if (!sdk) throw new Error("cleanupSession requires sdk or directory")
+  const sdk = input.sdk
   await waitSessionIdle(sdk, input.sessionID, 5_000).catch(() => undefined)
   const current = await status(sdk, input.sessionID).catch(() => undefined)
   if (current && current.type !== "idle") {

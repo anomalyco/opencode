@@ -16,7 +16,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const directory = createMemo(props.directory)
     const client = createMemo(() =>
       globalSDK.createClient({
-        directory: directory(),
         throwOnError: true,
       }),
     )

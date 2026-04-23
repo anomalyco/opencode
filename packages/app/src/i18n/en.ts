@@ -425,6 +425,7 @@ export const dict = {
   "toast.model.none.description": "Connect a provider to summarize this session",
 
   "toast.file.loadFailed.title": "Failed to load file",
+  "file.hostFilesystemDisabled": "This server has no on-disk project. Only Office files (Univer) can be opened here.",
   "toast.file.listFailed.title": "Failed to list files",
 
   "toast.context.noLineSelection.title": "No line selection",

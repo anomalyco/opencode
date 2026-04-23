@@ -182,9 +182,9 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
+      const project = localProject(cwd)
       const config = await Instance.provide({
-        directory: cwd,
-        project: localProject(cwd),
+        project,
         fn: () => TuiConfig.get(),
       })
 

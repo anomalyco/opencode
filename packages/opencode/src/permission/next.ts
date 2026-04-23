@@ -238,7 +238,7 @@ export namespace PermissionNext {
   )
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-    const merged = merge(...rulesets)
+    const merged = merge(...rulesets).filter((rule): rule is Rule => rule != null && typeof rule === "object" && "permission" in rule)
     log.info("evaluate", { permission, pattern, ruleset: merged })
     const match = merged.findLast(
       (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
@@ -250,10 +250,11 @@ export namespace PermissionNext {
 
   export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
     const result = new Set<string>()
+    if (!ruleset || !Array.isArray(ruleset)) return result
     for (const tool of tools) {
       const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
 
-      const rule = ruleset.findLast((r) => Wildcard.match(permission, r.permission))
+      const rule = ruleset.findLast((r) => r != null && Wildcard.match(permission, r.permission))
       if (!rule) continue
       if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
     }

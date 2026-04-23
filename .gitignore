@@ -29,6 +29,8 @@ target
 
 # Local dev files
 opencode-dev
+workos-session.local.json
+my-auth.json
 logs/
 *.bun-build
 .local-dev/

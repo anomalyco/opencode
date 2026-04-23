@@ -1,8 +1,9 @@
 import { test, expect } from "../fixtures"
 import { cleanupSession, closeSidebar, hoverSessionItem } from "../actions"
 import { projectSwitchSelector } from "../selectors"
+import { base64Encode } from "@opencode-ai/util/encode"
 
-test("collapsed sidebar popover stays open when archiving a session", async ({ page, slug, sdk, gotoSession }) => {
+test("collapsed sidebar popover stays open when archiving a session", async ({ page, project, sdk, gotoSession }) => {
   const stamp = Date.now()
 
   const one = await sdk.session.create({ title: `e2e sidebar popover archive 1 ${stamp}` }).then((r) => r.data)
@@ -18,9 +19,9 @@ test("collapsed sidebar popover stays open when archiving a session", async ({ p
     const oneItem = page.locator(`[data-session-id="${one.id}"]`).last()
     const twoItem = page.locator(`[data-session-id="${two.id}"]`).last()
 
-    const project = page.locator(projectSwitchSelector(slug)).first()
-    await expect(project).toBeVisible()
-    await project.hover()
+    const projectButton = page.locator(projectSwitchSelector(base64Encode(`/projects/${project.id}`))).first()
+    await expect(projectButton).toBeVisible()
+    await projectButton.hover()
 
     await expect(oneItem).toBeVisible()
     await expect(twoItem).toBeVisible()

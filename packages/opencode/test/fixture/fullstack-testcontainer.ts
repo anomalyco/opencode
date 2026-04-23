@@ -84,8 +84,9 @@ export async function startFullStack(): Promise<FullStackContext> {
       DATABASE_URL: dbUrl,
       PORT: "4096",
       NODE_ENV: "test",
-      // Disable auth for testing
+      // No WorkOS in container; open API (no OPENCODE_SERVER_PASSWORD) + PG tenant id
       OPENCODE_WORKOS_ENABLED: "false",
+      OPENCODE_E2E_USER_ID: "testcontainer-user",
       OPENCODE_SERVER_PASSWORD: "",
     })
     .withNetwork(network)

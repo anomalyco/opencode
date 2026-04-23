@@ -1,4 +1,4 @@
-import { Installation } from "@/installation"
+
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import {
@@ -215,7 +215,7 @@ export namespace LLM {
             }
           : input.model.providerID !== "anthropic"
             ? {
-                "User-Agent": `opencode/${Installation.VERSION}`,
+                "User-Agent": `opencode/${process.env.OPENCODE_VERSION ?? "dev"}`,
               }
             : undefined),
         ...input.model.headers,

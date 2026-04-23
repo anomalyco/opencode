@@ -215,9 +215,9 @@ export const GithubInstallCommand = cmd({
   describe: "install the GitHub agent",
   async handler() {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         {
           UI.empty()
@@ -266,20 +266,14 @@ export const GithubInstallCommand = cmd({
           }
 
           async function getAppInfo() {
-            const project = Instance.project
-            if (project.vcs !== "git") {
-              prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
-              throw new UI.CancelledError()
-            }
-
             // Get repo info
-            const info = (await git(["remote", "get-url", "origin"], { cwd: Instance.directory })).text().trim()
+            const info = (await git(["remote", "get-url", "origin"], { cwd: dir })).text().trim()
             const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
-            return { owner: parsed.owner, repo: parsed.repo, root: Instance.directory }
+            return { owner: parsed.owner, repo: parsed.repo, root: dir }
           }
 
           async function promptProvider() {
@@ -512,20 +506,20 @@ export const GithubRunCommand = cmd({
           : "issue"
         : undefined
       const gitText = async (args: string[]) => {
-        const result = await git(args, { cwd: Instance.directory })
+        const result = await git(args, { cwd: dir })
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result.text().trim()
       }
       const gitRun = async (args: string[]) => {
-        const result = await git(args, { cwd: Instance.directory })
+        const result = await git(args, { cwd: dir })
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result
       }
-      const gitStatus = (args: string[]) => git(args, { cwd: Instance.directory })
+      const gitStatus = (args: string[]) => git(args, { cwd: dir })
       const commitChanges = async (summary: string, actor?: string) => {
         const args = ["commit", "-m", summary]
         if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)

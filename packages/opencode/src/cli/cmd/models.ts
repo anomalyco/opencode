@@ -46,9 +46,9 @@ export const ModelsCommand = cmd({
     }
 
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         const providers = await Provider.list()
 

@@ -1,8 +1,18 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { cleanupSession, sessionIDFromUrl, withSession } from "../actions"
+import { cleanupSession, sessionIDFromUrl } from "../actions"
 
-test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession }) => {
+/**
+ * E2E test for stateless architecture with database projects
+ * 
+ * In the new architecture:
+ * - Projects are database entities with UUIDs, not filesystem directories
+ * - Sessions belong to projects (via project_id foreign key)
+ * - URLs use /projects/<id>/session/<session-id> format
+ * - Files are not persisted locally (eventually will be in S3)
+ * - Code execution happens in executor containers
+ */
+test("can send a prompt and receive a reply", async ({ page, sdk, project, gotoSession }) => {
   test.setTimeout(120_000)
 
   const pageErrors: string[] = []
@@ -11,7 +21,17 @@ test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession })
   }
   page.on("pageerror", onPageError)
 
-  await gotoSession()
+  console.log(`Using project: ${project.id}`)
+
+  // Create a session via SDK - it will be associated with the seeded project
+  const sessionResult = await sdk.session.create({})
+  if (!sessionResult.data) throw new Error("Failed to create session")
+  const session = sessionResult.data
+  const sessionID = session.id
+
+  console.log(`Created session: ${sessionID}`)
+
+  await gotoSession(sessionID)
 
   const token = `E2E_OK_${Date.now()}`
 
@@ -20,13 +40,8 @@ test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession })
   await page.keyboard.type(`Reply with exactly: ${token}`)
   await page.keyboard.press("Enter")
 
-  await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
-
-  const sessionID = (() => {
-    const id = sessionIDFromUrl(page.url())
-    if (!id) throw new Error(`Failed to parse session id from url: ${page.url()}`)
-    return id
-  })()
+  // Wait a bit for the LLM request to be initiated
+  await page.waitForTimeout(2000)
 
   try {
     await expect
@@ -40,10 +55,11 @@ test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession })
             .map((p) => p.text)
             .join("\n")
         },
-        { timeout: 90_000 },
+        { timeout: 90_000, intervals: [1000, 2000, 2000] },
       )
-
       .toContain(token)
+    
+    console.log("✓ Received AI reply with expected token")
   } finally {
     page.off("pageerror", onPageError)
     await cleanupSession({ sdk, sessionID })

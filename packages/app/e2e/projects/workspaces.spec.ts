@@ -236,7 +236,7 @@ test("can delete a workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+    const sdk = createSdk()
     const { rootSlug, slug, directory } = await setupWorkspaceTest(page, project)
 
     await expect

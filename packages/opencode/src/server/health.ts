@@ -1,4 +1,4 @@
-import { Installation } from "@/installation"
+
 import { Log } from "@/util/log"
 import { SystemPrompt } from "../session/system"
 import { getPool } from "../storage/db.pg"
@@ -77,18 +77,14 @@ function localDev() {
   return !!process.env.DEV_BACKEND_HOST?.trim()
 }
 
-function relayHealthUrl() {
-  const explicit = process.env.VERITLY_HEALTH_RELAY_URL?.trim()
-  if (explicit) return explicit
-  if (explicit === "") return undefined
-
+/** `http(s)://.../health` from VITE_UNIVER_SDK_WS; relay serves this in `packages/relay/server.ts`. */
+function relayHttpHealthFromViteUniverSdkWs(): string | undefined {
   const ws = process.env.VITE_UNIVER_SDK_WS?.trim()
   if (!ws) return undefined
-
   try {
     const url = new URL(ws)
     url.protocol = url.protocol === "wss:" ? "https:" : "http:"
-    url.pathname = "/healthz"
+    url.pathname = "/health"
     url.search = ""
     url.hash = ""
     return url.toString()
@@ -136,7 +132,11 @@ async function checkHttpTarget(name: string, target: string) {
 }
 
 async function checkOptionalRelay() {
-  const target = relayHealthUrl()
+  const explicit = process.env.VERITLY_HEALTH_RELAY_URL?.trim()
+  if (explicit) {
+    return checkHttpTarget("relay", explicit)
+  }
+  const target = relayHttpHealthFromViteUniverSdkWs()
   if (!target) {
     return {
       name: "relay",
@@ -296,7 +296,7 @@ export async function apiHealthReportSimple(): Promise<ApiHealthReport> {
   return {
     service: "opencode-api",
     ok: checks.every((check) => check.ok),
-    version: Installation.VERSION,
+    version: process.env.OPENCODE_VERSION ?? "dev",
     checks,
   }
 }
@@ -313,7 +313,7 @@ export async function apiHealthReport(): Promise<ApiHealthReport> {
   return {
     service: "opencode-api",
     ok: checks.every((check) => check.ok),
-    version: Installation.VERSION,
+    version: process.env.OPENCODE_VERSION ?? "dev",
     checks,
   }
 }

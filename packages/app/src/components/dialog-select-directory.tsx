@@ -129,12 +129,7 @@ function uniqueRows(rows: Row[]) {
   })
 }
 
-function useDirectorySearch(args: {
-  sdk: ReturnType<typeof useGlobalSDK>
-  start: () => string | undefined
-  home: () => string
-}) {
-  const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
+function useDirectorySearch(args: { start: () => string | undefined; home: () => string }) {
   let current = 0
 
   const scoped = (value: string) => {
@@ -153,27 +148,7 @@ function useDirectorySearch(args: {
     return { directory: trimTrailing(base), path: raw }
   }
 
-  const dirs = async (dir: string) => {
-    const key = trimTrailing(dir)
-    const existing = cache.get(key)
-    if (existing) return existing
-
-    const request = args.sdk.client.file
-      .list({ directory: key, path: "" })
-      .then((x) => x.data ?? [])
-      .catch(() => [])
-      .then((nodes) =>
-        nodes
-          .filter((n) => n.type === "directory")
-          .map((n) => ({
-            name: n.name,
-            absolute: trimTrailing(normalizeDriveRoot(n.absolute)),
-          })),
-      )
-
-    cache.set(key, request)
-    return request
-  }
+  const dirs = async (_dir: string) => [] as Array<{ name: string; absolute: string }>
 
   const match = async (dir: string, query: string, limit: number) => {
     const items = await dirs(dir)
@@ -193,11 +168,7 @@ function useDirectorySearch(args: {
     const isPath = raw.startsWith("~") || !!rootOf(raw) || raw.includes("/")
     const query = normalizeDriveRoot(scopedInput.path)
 
-    const find = () =>
-      args.sdk.client.find
-        .files({ directory: scopedInput.directory, query, type: "directory", limit: 50 })
-        .then((x) => x.data ?? [])
-        .catch(() => [])
+    const find = () => Promise.resolve([] as string[])
 
     if (!isPath) {
       const results = await find()
@@ -275,7 +246,6 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   )
 
   const directories = useDirectorySearch({
-    sdk,
     home,
     start,
   })

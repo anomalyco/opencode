@@ -1,6 +1,7 @@
 import z from "zod"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { ProjectID } from "../project/schema"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 
@@ -11,7 +12,7 @@ export namespace Bus {
   export const InstanceDisposed = BusEvent.define(
     "server.instance.disposed",
     z.object({
-      directory: z.string(),
+      projectID: ProjectID.zod,
     }),
   )
 
@@ -29,7 +30,7 @@ export namespace Bus {
       const event = {
         type: InstanceDisposed.type,
         properties: {
-          directory: Instance.directory,
+          projectID: Instance.projectID,
         },
       }
       for (const sub of [...wildcard]) {
@@ -57,6 +58,7 @@ export namespace Bus {
       }
     }
     GlobalBus.emit("event", {
+      projectID: Instance.projectID,
       directory: Instance.directory,
       payload,
     })

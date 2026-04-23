@@ -2,7 +2,7 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
-import { Installation } from "../installation"
+
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util/filesystem"
@@ -106,7 +106,7 @@ export namespace ModelsDev {
   export async function refresh() {
     const result = await fetch(`${url()}/api.json`, {
       headers: {
-        "User-Agent": Installation.USER_AGENT,
+        "User-Agent": `opencode/${process.env.OPENCODE_VERSION ?? "dev"}`,
       },
       signal: AbortSignal.timeout(10 * 1000),
     }).catch((e) => {

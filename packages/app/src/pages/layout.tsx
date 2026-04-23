@@ -1513,16 +1513,7 @@ export default function Layout(props: ParentProps) {
     })
 
     onMount(() => {
-      globalSDK.client.file
-        .status({ directory: props.directory })
-        .then((x) => {
-          const files = x.data ?? []
-          const dirty = files.length > 0
-          setData({ status: "ready", dirty })
-        })
-        .catch(() => {
-          setData({ status: "error", dirty: false })
-        })
+      setData({ status: "ready", dirty: false })
     })
 
     const handleDelete = () => {
@@ -1581,17 +1572,8 @@ export default function Layout(props: ParentProps) {
     }
 
     onMount(() => {
-      globalSDK.client.file
-        .status({ directory: props.directory })
-        .then((x) => {
-          const files = x.data ?? []
-          const dirty = files.length > 0
-          setState({ status: "ready", dirty })
-          void refresh()
-        })
-        .catch(() => {
-          setState({ status: "error", dirty: false })
-        })
+      setState({ status: "ready", dirty: false })
+      void refresh()
     })
 
     const handleReset = () => {

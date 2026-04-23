@@ -14,7 +14,7 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod/v4"
 import { Instance } from "../project/instance"
-import { Installation } from "../installation"
+
 import { withTimeout } from "@/util/timeout"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
@@ -385,7 +385,7 @@ export namespace MCP {
         try {
           const client = new Client({
             name: "opencode",
-            version: Installation.VERSION,
+            version: process.env.OPENCODE_VERSION ?? "dev",
           })
           await withTimeout(client.connect(transport), connectTimeout)
           registerNotificationHandlers(client, key)
@@ -470,7 +470,7 @@ export namespace MCP {
       try {
         const client = new Client({
           name: "opencode",
-          version: Installation.VERSION,
+          version: process.env.OPENCODE_VERSION ?? "dev",
         })
         await withTimeout(client.connect(transport), connectTimeout)
         registerNotificationHandlers(client, key)
@@ -807,7 +807,7 @@ export namespace MCP {
     try {
       const client = new Client({
         name: "opencode",
-        version: Installation.VERSION,
+        version: process.env.OPENCODE_VERSION ?? "dev",
       })
       await client.connect(transport)
       // If we get here, we're already authenticated

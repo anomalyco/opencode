@@ -14,22 +14,10 @@ import { LSP } from "../lsp"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
-import { Project } from "../project/project"
 import { ProjectID } from "../project/schema"
 import { Vcs } from "../project/vcs"
 
-function localProject(directory: string): Project.Info & { vcs: "git" | undefined } {
-  const now = Date.now()
-  const match = /^\/projects\/(.+)$/.exec(directory)
-  return {
-    id: ProjectID.make(match ? match[1] : directory),
-    time: {
-      created: now,
-      updated: now,
-    },
-    vcs: match ? undefined : ("git" as const),
-  }
-}
+import { localProject } from "../project/local-project"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
@@ -62,6 +50,7 @@ import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry
 import path from "path"
 import { apiHealthReport, apiHealthReportSimple, isPublicHealthPath } from "./health"
 import { AuthRoutes, getCookieOptions, type SessionUser } from "./routes/auth"
+import { isOpencodeWorkosEnabled } from "./workos-env"
 import {
   createWorkOSClient,
   requireCookiePassword,
@@ -74,7 +63,9 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 initVeritlyTracer({
   serviceName: "veritly-opencode",
-  useAsyncLocalStorage: false,
+  // OpenTelemetry's context.with must use AsyncLocalStorage in Node/Bun so it nests correctly with
+  // Instance (AsyncLocalStorage from util/context) across await boundaries in route handlers.
+  useAsyncLocalStorage: true,
 })
 
 export namespace Server {
@@ -167,7 +158,7 @@ export namespace Server {
           )
             return next()
 
-          const workosConfigured = Flag.OPENCODE_WORKOS_ENABLED
+          const workosConfigured = isOpencodeWorkosEnabled()
           if (!workosConfigured) {
             const password = Flag.OPENCODE_SERVER_PASSWORD
             if (!password) return next()
@@ -289,23 +280,17 @@ export namespace Server {
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
           const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
-          const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-          const directory = Filesystem.resolve(
-            (() => {
-              try {
-                return decodeURIComponent(raw)
-              } catch {
-                return raw
-              }
-            })(),
-          )
-
+          const root = (() => {
+            const fromEnv = process.env.OPENCODE_INSTANCE_ROOT?.trim()
+            if (fromEnv) return Filesystem.resolve(fromEnv)
+            return Filesystem.resolve(process.cwd())
+          })()
+          const project = localProject(root)
           return WorkspaceContext.provide({
             workspaceID: rawWorkspaceID ? WorkspaceID.make(rawWorkspaceID) : undefined,
             async fn() {
               return Instance.provide({
-                directory,
-                project: localProject(directory),
+                project,
                 init: InstanceBootstrap,
                 async fn() {
                   return next()
@@ -332,7 +317,6 @@ export namespace Server {
           validator(
             "query",
             z.object({
-              directory: z.string().optional(),
               workspace: z.string().optional(),
             }),
           ),
@@ -388,7 +372,7 @@ export namespace Server {
                           home: z.string(),
                           state: z.string(),
                           config: z.string(),
-                          directory: z.string(),
+                          projectID: ProjectID.zod,
                         })
                         .meta({
                           ref: "Path",
@@ -404,7 +388,7 @@ export namespace Server {
               home: Global.Path.home,
               state: Global.Path.state,
               config: Global.Path.config,
-              directory: Instance.directory,
+              projectID: Instance.projectID,
             })
           },
         )

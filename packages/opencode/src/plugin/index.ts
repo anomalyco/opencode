@@ -24,7 +24,6 @@ export namespace Plugin {
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      directory: Instance.directory,
       fetch: async (...args) => Server.Default().fetch(...args),
     })
     const config = await Config.get()
@@ -32,7 +31,6 @@ export namespace Plugin {
     const input: PluginInput = {
       client,
       project: Instance.project,
-      directory: Instance.directory,
       get serverUrl(): URL {
         return Server.url ?? new URL("http://localhost:4096")
       },

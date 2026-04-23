@@ -3,7 +3,6 @@ import z from "zod"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
-import ignore from "ignore"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
@@ -345,10 +344,22 @@ export namespace File {
     let fetching = false
 
     const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
+    
+    // Virtual projects (e.g., /projects/<id>) don't have a local filesystem
+    const isVirtualProject = Instance.directory.startsWith("/projects/") && !isGlobalHome
 
     const fn = async (result: Entry) => {
       // Disable scanning if in root of file system
       if (Instance.directory === path.parse(Instance.directory).root) return
+      
+      // Virtual projects have no local files - files come from executor
+      if (isVirtualProject) {
+        result.files = []
+        result.dirs = []
+        cache = result
+        return
+      }
+      
       fetching = true
 
       if (isGlobalHome) {
@@ -420,8 +431,8 @@ export namespace File {
   }
 
   export async function status() {
-    const project = Instance.project
-    if (project.vcs !== "git") return []
+    // VCS removed - stateless architecture
+    return []
 
     const diffOutput = (
       await git(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", "HEAD"], {
@@ -579,54 +590,9 @@ export namespace File {
     return { type: "text", content }
   }
 
-  export async function list(dir?: string) {
-    const exclude = [".git", ".DS_Store"]
-    const project = Instance.project
-    let ignored = (_: string) => false
-    if (project.vcs === "git") {
-      const ig = ignore()
-      const gitignorePath = path.join(Instance.directory, ".gitignore")
-      if (await Filesystem.exists(gitignorePath)) {
-        ig.add(await Filesystem.readText(gitignorePath))
-      }
-      const ignorePath = path.join(Instance.directory, ".ignore")
-      if (await Filesystem.exists(ignorePath)) {
-        ig.add(await Filesystem.readText(ignorePath))
-      }
-      ignored = ig.ignores.bind(ig)
-    }
-    const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
-
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Instance.containsPath(resolved)) {
-      throw new Error(`Access denied: path escapes project directory`)
-    }
-
-    const nodes: Node[] = []
-    for (const entry of await fs.promises
-      .readdir(resolved, {
-        withFileTypes: true,
-      })
-      .catch(() => [])) {
-      if (exclude.includes(entry.name)) continue
-      const fullPath = path.join(resolved, entry.name)
-      const relativePath = path.relative(Instance.directory, fullPath)
-      const type = entry.isDirectory() ? "directory" : "file"
-      nodes.push({
-        name: entry.name,
-        path: relativePath,
-        absolute: fullPath,
-        type,
-        ignored: ignored(type === "directory" ? relativePath + "/" : relativePath),
-      })
-    }
-    return nodes.sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type === "directory" ? -1 : 1
-      }
-      return a.name.localeCompare(b.name)
-    })
+  /** No host project directory is exposed; listing is not supported. */
+  export async function list(_dir?: string) {
+    return [] as Node[]
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {

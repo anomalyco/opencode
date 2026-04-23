@@ -300,17 +300,14 @@ export const RunCommand = cmd({
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
 
-    const directory = (() => {
-      if (!args.dir) return undefined
-      if (args.attach) return args.dir
+    if (args.dir && !args.attach) {
       try {
         process.chdir(args.dir)
-        return process.cwd()
       } catch {
         UI.error("Failed to change directory to " + args.dir)
         process.exit(1)
       }
-    })()
+    }
 
     const files: { type: "file"; url: string; filename: string; mime: string }[] = []
     if (args.file) {
@@ -651,7 +648,7 @@ export const RunCommand = cmd({
         const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
         return { Authorization: auth }
       })()
-      const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
+      const sdk = createOpencodeClient({ baseUrl: args.attach, headers })
       return await execute(sdk)
     }
 

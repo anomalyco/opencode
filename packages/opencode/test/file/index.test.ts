@@ -199,9 +199,8 @@ describe("file/index Filesystem patterns", () => {
           const gitignorePath = path.join(tmp.path, ".gitignore")
           expect(await Filesystem.exists(gitignorePath)).toBe(false)
 
-          // File.list() should still work
           const nodes = await File.list()
-          expect(Array.isArray(nodes)).toBe(true)
+          expect(nodes).toEqual([])
         },
       })
     })

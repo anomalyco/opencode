@@ -1,4 +1,4 @@
-import { Installation } from "@/installation"
+
 import { Server } from "@/server/server"
 import { Log } from "@/util/log"
 import { Instance } from "@/project/instance"
@@ -28,9 +28,9 @@ function localProject(directory: string): Project.Info & { vcs: "git" | undefine
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
-  dev: Installation.isLocal(),
+  dev: process.env.NODE_ENV === "development",
   level: (() => {
-    if (Installation.isLocal()) return "DEBUG"
+    if (process.env.NODE_ENV === "development") return "DEBUG"
     return "INFO"
   })(),
 })
@@ -73,7 +73,6 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
 
   const sdk = createOpencodeClient({
     baseUrl: "http://opencode.internal",
-    directory: input.directory,
     experimental_workspaceID: input.workspaceID,
     fetch: fetchFn,
     signal,
@@ -138,9 +137,9 @@ export const rpc = {
     return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
+    const project = localProject(input.directory)
     await Instance.provide({
-      directory: input.directory,
-      project: localProject(input.directory),
+      project,
       init: InstanceBootstrap,
       fn: async () => {
         await upgrade().catch(() => {})

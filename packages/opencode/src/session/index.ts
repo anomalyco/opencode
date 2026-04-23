@@ -7,7 +7,7 @@ import z from "zod"
 import { type ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
-import { Installation } from "../installation"
+
 
 import { Database, NotFoundError } from "../storage/db.pg"
 import { eq, and, or, gte, isNull, desc, like, inArray, lt } from "drizzle-orm"
@@ -297,7 +297,7 @@ export namespace Session {
     const result: Info = {
       id: SessionID.descending(input.id),
       slug: Slug.create(),
-      version: Installation.VERSION,
+      version: process.env.OPENCODE_VERSION ?? "dev",
       projectID: Instance.project.id,
       workspaceID: input.workspaceID,
       parentID: input.parentID,

@@ -104,7 +104,7 @@ export namespace Agent {
             edit: {
               "*": "deny",
               [path.join(".opencode", "plans", "*.md")]: "allow",
-              [path.relative(Instance.directory, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+              [path.join(Global.Path.data, path.join("plans", "*.md"))]: "allow",
             },
           }),
           user,

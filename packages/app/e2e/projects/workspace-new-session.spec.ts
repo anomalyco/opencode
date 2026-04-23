@@ -70,7 +70,7 @@ async function createSessionFromWorkspace(page: Page, slug: string, text: string
 }
 
 async function sessionDirectory(directory: string, sessionID: string) {
-  const info = await createSdk(directory)
+  const info = await createSdk()
     .session.get({ sessionID })
     .then((x) => x.data)
     .catch(() => undefined)

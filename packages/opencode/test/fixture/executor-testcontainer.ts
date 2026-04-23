@@ -1,113 +1,59 @@
 /**
- * Executor Testcontainer Fixture
+ * Executor Test Fixture - Docker Compose Edition
  * 
- * Provides isolated executor instances for tests using testcontainers.
- * This builds from the actual Dockerfile.executor to ensure tests run
- * against the real executor image with Python and Univer SDK.
+ * Connects to the executor service running in Docker Compose.
+ * This is NOT a testcontainer - it assumes the infrastructure is already running.
+ * 
+ * PREREQUISITE: docker compose -f docker-compose.e2e.yml up -d executor
  */
 
-import { GenericContainer, GenericContainerBuilder, StartedTestContainer, Wait } from "testcontainers"
 import { Log } from "../../src/util/log"
 import { Executor } from "../../src/executor/sdk"
-import path from "path"
 
-const log = Log.create({ service: "executor-testcontainer" })
+const log = Log.create({ service: "executor-fixture" })
+
+const EXECUTOR_URL = process.env.VERITLY_EXECUTOR_URL ?? "http://localhost:8080"
 
 export interface ExecutorTestContext {
-  container: StartedTestContainer
   sdk: ReturnType<typeof Executor.create>
   url: string
-  host: string
-  port: number
 }
 
-// Track active containers for cleanup
-const activeContainers: StartedTestContainer[] = []
+/**
+ * Check if executor is available
+ * Fails fast if executor is not running
+ */
+export async function checkExecutor(): Promise<void> {
+  log.info("Checking executor availability...", { url: EXECUTOR_URL })
+  
+  try {
+    const res = await fetch(`${EXECUTOR_URL}/health`)
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+    log.info("✓ Executor is available")
+  } catch (error) {
+    log.error("✗ Executor is not available", { url: EXECUTOR_URL, error })
+    throw new Error(
+      `Executor not available at ${EXECUTOR_URL}. ` +
+      "Run: docker compose -f docker-compose.e2e.yml up -d executor"
+    )
+  }
+}
 
 /**
- * Start an executor container for testing
- * 
- * Builds from the actual Dockerfile.executor to ensure tests run against
- * the real executor image with Python and Univer SDK pre-installed.
+ * Get executor SDK client
+ * Use this in tests - it assumes executor is already running
  */
-export async function startExecutorContainer(): Promise<ExecutorTestContext> {
-  log.info("Building and starting executor container from Dockerfile.executor...")
-
-  // Get repo root: from packages/opencode/test/fixture -> repo root is 4 levels up
-  const repoRoot = path.resolve(__dirname, "../../../..")
-  
-  log.debug("Building from", { repoRoot })
-
-  // Build from the actual Dockerfile.executor
-  // This creates a real executor image with Python and Univer SDK
-  const builder = new GenericContainerBuilder(repoRoot, "docker/Dockerfile.executor")
-  const imageName = await builder.build()
-  
-  log.info("Docker image built", { image: String(imageName) })
-  
-  const container = await new GenericContainer(String(imageName))
-    .withExposedPorts(7777)
-    .withEnvironment({
-      PORT: "7777",
-      VM_DATA_DIR: "/tmp/veritly-vms",
-    })
-    .withPrivilegedMode() // Required for Firecracker (even if not used in container mode)
-    .withWaitStrategy(Wait.forHttp("/health", 7777))
-    .withStartupTimeout(30000) // 30s for container startup
-    .start()
-
-  activeContainers.push(container)
-
-  const host = container.getHost()
-  const port = container.getMappedPort(7777)
-  const url = `http://${host}:${port}`
-
-  log.info("Executor container started", { host, port, url })
-
-  const sdk = Executor.create({ baseUrl: url })
-
+export function getExecutor(): ExecutorTestContext {
   return {
-    container,
-    sdk,
-    url,
-    host,
-    port,
+    sdk: Executor.create({ baseUrl: EXECUTOR_URL }),
+    url: EXECUTOR_URL,
   }
 }
 
 /**
- * Stop an executor container
- */
-export async function stopExecutorContainer(ctx: ExecutorTestContext): Promise<void> {
-  if (ctx?.container) {
-    log.info("Stopping executor container...")
-    await ctx.container.stop()
-    const index = activeContainers.indexOf(ctx.container)
-    if (index > -1) {
-      activeContainers.splice(index, 1)
-    }
-    log.info("Executor container stopped")
-  }
-}
-
-/**
- * Cleanup all active containers (call in global teardown)
- */
-export async function cleanupAllContainers(): Promise<void> {
-  log.info(`Cleaning up ${activeContainers.length} active containers...`)
-  for (const container of [...activeContainers]) {
-    try {
-      await container.stop()
-    } catch (error) {
-      log.error("Failed to stop container", { error })
-    }
-  }
-  activeContainers.length = 0
-}
-
-/**
- * Test helper that provides an executor container to tests
- * Automatically handles setup and teardown
+ * Test helper that verifies executor is available
  * 
  * Usage:
  * ```typescript
@@ -122,10 +68,7 @@ export async function cleanupAllContainers(): Promise<void> {
 export async function withExecutor<T>(
   fn: (ctx: ExecutorTestContext) => Promise<T>,
 ): Promise<T> {
-  const ctx = await startExecutorContainer()
-  try {
-    return await fn(ctx)
-  } finally {
-    await stopExecutorContainer(ctx)
-  }
+  await checkExecutor()
+  const ctx = getExecutor()
+  return await fn(ctx)
 }

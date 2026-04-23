@@ -282,9 +282,9 @@ export const ProvidersLoginCommand = cmd({
       }),
   async handler(args) {
     const dir = process.cwd()
+    const project = localProject(dir)
     await Instance.provide({
-      directory: dir,
-      project: localProject(dir),
+      project,
       async fn() {
         UI.empty()
         prompts.intro("Add credential")

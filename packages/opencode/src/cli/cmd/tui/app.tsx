@@ -5,7 +5,7 @@ import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
-import { Installation } from "@/installation"
+
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
@@ -743,14 +743,15 @@ function App() {
     })
   })
 
-  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
-    toast.show({
-      variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
-      duration: 10000,
-    })
-  })
+  // Update notifications disabled - managed by deployment
+  // sdk.event.on("installation.update_available", (evt) => {
+  //   toast.show({
+  //     variant: "info",
+  //     title: "Update Available",
+  //     message: `OpenCode v${evt.properties.version} is available.`,
+  //     duration: 10000,
+  //   })
+  // })
 
   return (
     <box
@@ -824,7 +825,7 @@ function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("opencode-version", Installation.VERSION)
+  issueURL.searchParams.set("opencode-version", process.env.OPENCODE_VERSION ?? "dev")
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {

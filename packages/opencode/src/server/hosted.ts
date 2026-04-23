@@ -1,16 +1,15 @@
-import { Flag } from "@/flag/flag"
+const API_HOST_PROJECT_DIR_DISABLED =
+  "This server does not expose a host project directory. Work happens in the database and executor, not the API’s filesystem."
 
-const HOSTED_FILESYSTEM_DISABLED_MESSAGE =
-  "Hosted local filesystem access is disabled in this deployment."
-
+/** Veritly: the API has no on-disk “project” for clients to list or read. */
 export function localFilesystemDisabled() {
-  return Flag.OPENCODE_DISABLE_LOCAL_FILESYSTEM
+  return true
 }
 
 export function hostedFilesystemDisabledResponse() {
   return new Response(
     JSON.stringify({
-      error: HOSTED_FILESYSTEM_DISABLED_MESSAGE,
+      error: API_HOST_PROJECT_DIR_DISABLED,
     }),
     {
       status: 501,
@@ -21,7 +20,8 @@ export function hostedFilesystemDisabledResponse() {
   )
 }
 
-export function assertHostedFilesystemEnabled() {
-  if (!localFilesystemDisabled()) return
-  throw new Error(HOSTED_FILESYSTEM_DISABLED_MESSAGE)
-}
+/**
+ * No-op. Legacy guard for OpenCode’s local-directory project model; Veritly uses PostgreSQL
+ * and optional on-disk work only on non-Postgres `project.create` paths in development.
+ */
+export function assertHostedFilesystemEnabled() {}

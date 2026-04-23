@@ -18,7 +18,7 @@ const headerGetterSetter = {
   },
 }
 
-export function createOpencodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
+export function createOpencodeClient(config?: Config & { experimental_workspaceID?: string }) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
       if (req instanceof Request && trace.getActiveSpan()) {
@@ -26,6 +26,7 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
         propagation.inject(context.active(), headers, headerGetterSetter)
         req = new Request(req, { headers })
       }
+      
       // @ts-ignore
       req.timeout = false
       return fetch(req)
@@ -33,15 +34,6 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
     config = {
       ...config,
       fetch: customFetch,
-    }
-  }
-
-  if (config?.directory) {
-    const isNonASCII = /[^\x00-\x7F]/.test(config.directory)
-    const encodedDirectory = isNonASCII ? encodeURIComponent(config.directory) : config.directory
-    config.headers = {
-      ...config.headers,
-      "x-opencode-directory": encodedDirectory,
     }
   }
 

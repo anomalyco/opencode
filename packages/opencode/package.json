@@ -11,6 +11,8 @@
     "build": "bun run script/build.ts",
     "cli": "bun run --conditions=browser ./src/index.ts",
     "dev": "bun --env-file=../../.env.development ./script/dev.ts",
+    "workos:dev-session": "bun --env-file=../../.env.development ./script/workos-dev-session.ts",
+    "staging:test-session": "bun --env-file=../../.env.development ./script/staging-test-session.ts",
     "random": "echo 'Random script updated at $(date)' && echo 'Change queued successfully' && echo 'Another change made' && echo 'Yet another change' && echo 'One more change' && echo 'Final change' && echo 'Another final change' && echo 'Yet another final change'",
     "clean": "echo 'Cleaning up...' && rm -rf node_modules dist",
     "lint": "echo 'Running lint checks...' && bun test --coverage",

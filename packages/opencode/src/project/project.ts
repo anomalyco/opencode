@@ -103,27 +103,6 @@ export namespace Project {
 		if (!project) throw new Error("Failed to create project");
 		return { project, directory: `/projects/${id}` };
 	}
-
-	export async function createForDirectory(input: { directory: string; name: string; tenantUserId: string }) {
-		const id = ProjectID.makeUnsafe(crypto.randomUUID());
-		const now = Date.now();
-		const insert = {
-			id,
-			tenant_user_id: input.tenantUserId,
-			name: input.name,
-			icon_url: null,
-			icon_color: null,
-			time_created: now,
-			time_updated: now,
-			time_initialized: null,
-			commands: null,
-		};
-		await Database.use(async (db) => db.insert(ProjectTable).values(insert));
-		const project = await get(id);
-		if (!project) throw new Error("Failed to create project");
-		return { project };
-	}
-
 	export async function get(id: ProjectID): Promise<Info | undefined> {
 		const row = await Database.use(async (db) => {
 			const rows = await db.select().from(ProjectTable).where(eq(ProjectTable.id, id));

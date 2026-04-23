@@ -35,7 +35,7 @@ describe("Filesystem.contains", () => {
  * Integration tests for File.read() and File.list() path traversal protection.
  *
  * These tests verify the HTTP API code path is protected. The HTTP endpoints
- * in server.ts (GET /file/content, GET /file) call File.read()/File.list()
+ * File.read() is unchanged; File.list is always [].
  * directly - they do NOT go through ReadTool or the agent permission layer.
  *
  * This is a SEPARATE code path from ReadTool, which has its own checks.
@@ -86,30 +86,16 @@ describe("File.read path traversal protection", () => {
   })
 })
 
-describe("File.list path traversal protection", () => {
-  test("rejects ../ traversal attempting to list /etc", async () => {
+describe("File.list", () => {
+  test("always returns an empty list (no host project directory in this product)", async () => {
     await using tmp = await tmpdir()
 
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await expect(File.list("../../../etc")).rejects.toThrow("Access denied: path escapes project directory")
-      },
-    })
-  })
-
-  test("allows valid subdirectory listing", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "subdir", "file.txt"), "content")
-      },
-    })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const result = await File.list("subdir")
-        expect(Array.isArray(result)).toBe(true)
+        expect(await File.list("../../../etc")).toEqual([])
+        expect(await File.list("")).toEqual([])
+        expect(await File.list("subdir")).toEqual([])
       },
     })
   })

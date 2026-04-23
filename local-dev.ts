@@ -23,10 +23,11 @@ file.split(/\r?\n/).forEach((line) => {
 })
 
 if (idx === -1 || !name) {
-  console.error("Usage: bun local-dev.ts --service <backend|frontend|relay|executor>")
+  console.error("Usage: bun local-dev.ts --service <backend|frontend|relay|executor|all>")
   process.exit(1)
 }
 
+const skipInfra = process.env["VERITLY_DEV_SKIP_INFRA"] === "1"
 mkdirSync(state, { recursive: true })
 
 function env(name: string) {
@@ -184,12 +185,90 @@ const svc = {
   },
 } as const
 
+if (name === "all") {
+  if (skipInfra) {
+    console.error("use --service all from the top-level dev:all only (children have VERITLY_DEV_SKIP_INFRA=1).")
+    process.exit(1)
+  }
+  ensureInfra()
+  const self = import.meta.path
+  const bun = process.execPath
+  const order = ["backend", "relay", "executor", "frontend"] as const
+  console.log("[dev:all] Starting backend, relay, executor, and frontend (Postgres: docker/infra-deps-local-debugging.yml).")
+  const childRest = rest.filter((a) => a !== "all")
+  const children: ReturnType<typeof spawn>[] = []
+  for (const s of order) {
+    const child = spawn(
+      bun,
+      [self, "--service", s, ...childRest],
+      {
+        cwd: root,
+        env: { ...process.env, VERITLY_DEV_SKIP_INFRA: "1" },
+        stdio: "inherit",
+      },
+    )
+    children.push(child)
+  }
+  let stopping = false
+  const stopAllFromFailure = (source: string, code: number | null) => {
+    if (stopping) return
+    if (code === 0) return
+    stopping = true
+    console.error(`[dev:all] child "${source}" exited with ${code}; stopping other services.`)
+    for (const c of children) {
+      try {
+        c.kill("SIGTERM")
+      } catch {
+        /* ignore */
+      }
+    }
+    process.exit(typeof code === "number" && code > 0 ? code : 1)
+  }
+  for (let i = 0; i < order.length; i++) {
+    const s = order[i]!
+    const c = children[i]!
+    c.on("error", (err) => {
+      console.error(`[dev:all] child "${s}" error:`, err)
+      stopAllFromFailure(s, 1)
+    })
+    c.on("exit", (code, signal) => {
+      if (stopping) return
+      if (signal) {
+        if (signal === "SIGINT" || signal === "SIGTERM") return
+        stopAllFromFailure(s, 1)
+        return
+      }
+      if (code != null) {
+        stopAllFromFailure(s, code)
+      }
+    })
+  }
+  const sig = () => {
+    if (stopping) return
+    stopping = true
+    for (const c of children) {
+      try {
+        c.kill("SIGINT")
+      } catch {
+        /* ignore */
+      }
+    }
+    process.exit(130)
+  }
+  process.on("SIGINT", sig)
+  process.on("SIGTERM", sig)
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  await new Promise<void>(() => {})
+}
+
 if (!(name in svc)) {
-  console.error(`Unknown service "${name}". Choose: ${Object.keys(svc).join(", ")}`)
+  console.error(`Unknown service "${name}". Choose: ${Object.keys(svc).join(", ")}, or all`)
   process.exit(1)
 }
 
-ensureInfra()
+if (!skipInfra) {
+  ensureInfra()
+}
 await svc[name as keyof typeof svc]()
 
 if (name === "frontend") {

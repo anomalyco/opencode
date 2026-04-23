@@ -5,7 +5,7 @@ import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
 export { type Config as OpencodeClientConfig, OpencodeClient }
 
-export function createOpencodeClient(config?: Config & { directory?: string }) {
+export function createOpencodeClient(config?: Config) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
       // @ts-ignore
@@ -15,13 +15,6 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
     config = {
       ...config,
       fetch: customFetch,
-    }
-  }
-
-  if (config?.directory) {
-    config.headers = {
-      ...config.headers,
-      "x-opencode-directory": encodeURIComponent(config.directory),
     }
   }
 
