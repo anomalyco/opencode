@@ -28,14 +28,17 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
         shell: bash
     steps:
+      - name: JFrog FastCI
+        uses: jfrog-fastci/fastci@v0
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -95,9 +98,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
@@ -105,6 +108,9 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: JFrog FastCI
+        uses: jfrog-fastci/fastci@v0
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
