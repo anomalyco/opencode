@@ -230,6 +230,26 @@ describe("session.retry.retryable", () => {
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Response decompression failed")
   })
+
+  test("does not retry weekly rate limit errors", () => {
+    const error = new MessageV2.APIError({
+      message: "Too Many Requests: Sorry, you've exceeded your weekly rate limit. Please review ...",
+      isRetryable: true,
+      statusCode: 429,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("does not retry monthly quota errors", () => {
+    const error = new MessageV2.APIError({
+      message: "You have exceeded your monthly usage quota",
+      isRetryable: true,
+      statusCode: 429,
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
 })
 
 describe("session.message-v2.fromError", () => {

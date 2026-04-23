@@ -60,6 +60,15 @@ export function retryable(error: Err) {
     // even when the provider SDK doesn't explicitly mark them as retryable.
     if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) return GO_UPSELL_MESSAGE
+    // Non-transient rate limits (weekly/monthly quotas) should not be retried
+    // they won't resolve with backoff and can take days to reset.
+    const lower = error.data.message.toLowerCase()
+    if (
+      lower.includes("weekly") ||
+      lower.includes("monthly") ||
+      lower.includes("exceeded your")
+    )
+      return undefined
     return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
   }
 
