@@ -68,6 +68,7 @@ import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import * as Clipboard from "../../util/clipboard"
+import { errorMessage } from "@/util/error"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import * as Editor from "../../util/editor"
@@ -180,31 +181,43 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
 
-  createEffect(async () => {
-    const previousWorkspace = project.workspace.current()
-    const result = await sdk.client.session.get({ sessionID: route.sessionID }, { throwOnError: true })
-    if (!result.data) {
+  createEffect(() => {
+    const sessionID = route.sessionID
+    void (async () => {
+      const previousWorkspace = project.workspace.current()
+      const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
+      if (!result.data) {
+        toast.show({
+          message: `Session not found: ${sessionID}`,
+          variant: "error",
+          duration: 5000,
+        })
+        navigate({ type: "home" })
+        return
+      }
+
+      if (result.data.workspaceID !== previousWorkspace) {
+        project.workspace.set(result.data.workspaceID)
+
+        // Sync all the data for this workspace. Note that this
+        // workspace may not exist anymore which is why this is not
+        // fatal. If it doesn't we still want to show the session
+        // (which will be non-interactive)
+        try {
+          await sync.bootstrap({ fatal: false })
+        } catch {}
+      }
+      await sync.session.sync(sessionID)
+      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+    })().catch((error) => {
+      if (route.sessionID !== sessionID) return
       toast.show({
-        message: `Session not found: ${route.sessionID}`,
+        message: errorMessage(error),
         variant: "error",
+        duration: 5000,
       })
       navigate({ type: "home" })
-      return
-    }
-
-    if (result.data.workspaceID !== previousWorkspace) {
-      project.workspace.set(result.data.workspaceID)
-
-      // Sync all the data for this workspace. Note that this
-      // workspace may not exist anymore which is why this is not
-      // fatal. If it doesn't we still want to show the session
-      // (which will be non-interactive)
-      try {
-        await sync.bootstrap({ fatal: false })
-      } catch (e) {}
-    }
-    await sync.session.sync(route.sessionID)
-    if (scroll) scroll.scrollBy(100_000)
+    })
   })
 
   let lastSwitch: string | undefined = undefined

@@ -55,7 +55,7 @@ export const LspTool = Tool.define(
           const available = yield* lsp.hasClients(file)
           if (!available) throw new Error("No LSP server available for this file type.")
 
-          yield* lsp.touchFile(file, true)
+          yield* lsp.touchFile(file, "document")
 
           const result: unknown[] = yield* (() => {
             switch (args.operation) {

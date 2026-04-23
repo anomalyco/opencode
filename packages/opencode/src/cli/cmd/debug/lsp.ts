@@ -23,8 +23,7 @@ const DiagnosticsCommand = cmd({
       const out = await AppRuntime.runPromise(
         LSP.Service.use((lsp) =>
           Effect.gen(function* () {
-            yield* lsp.touchFile(args.file, true)
-            yield* Effect.sleep(1000)
+            yield* lsp.touchFile(args.file, "full")
             return yield* lsp.diagnostics()
           }),
         ),

@@ -15,7 +15,10 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect } from "effect"
+import { Effect, Schema, Types } from "effect"
+import { zod, ZodOverride } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
+import { namedSchemaError } from "@/util/named-schema-error"
 import { EffectLogger } from "@/effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
@@ -28,432 +31,550 @@ interface FetchDecompressionError extends Error {
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached image(s) from tool result:"
 export { isMedia }
 
-export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
-export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
-export const StructuredOutputError = NamedError.create(
-  "StructuredOutputError",
-  z.object({
-    message: z.string(),
-    retries: z.number(),
-  }),
-)
-export const AuthError = NamedError.create(
-  "ProviderAuthError",
-  z.object({
-    providerID: z.string(),
-    message: z.string(),
-  }),
-)
-export const APIError = NamedError.create(
-  "APIError",
-  z.object({
-    message: z.string(),
-    statusCode: z.number().optional(),
-    isRetryable: z.boolean(),
-    responseHeaders: z.record(z.string(), z.string()).optional(),
-    responseBody: z.string().optional(),
-    metadata: z.record(z.string(), z.string()).optional(),
-  }),
-)
+export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
+export const AbortedError = namedSchemaError("MessageAbortedError", { message: Schema.String })
+export const StructuredOutputError = namedSchemaError("StructuredOutputError", {
+  message: Schema.String,
+  retries: Schema.Number,
+})
+export const AuthError = namedSchemaError("ProviderAuthError", {
+  providerID: Schema.String,
+  message: Schema.String,
+})
+export const APIError = namedSchemaError("APIError", {
+  message: Schema.String,
+  statusCode: Schema.optional(Schema.Number),
+  isRetryable: Schema.Boolean,
+  responseHeaders: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  responseBody: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
 export type APIError = z.infer<typeof APIError.Schema>
-export const ContextOverflowError = NamedError.create(
-  "ContextOverflowError",
-  z.object({ message: z.string(), responseBody: z.string().optional() }),
-)
-
-export const OutputFormatText = z
-  .object({
-    type: z.literal("text"),
-  })
-  .meta({
-    ref: "OutputFormatText",
-  })
-
-export const OutputFormatJsonSchema = z
-  .object({
-    type: z.literal("json_schema"),
-    schema: z.record(z.string(), z.any()).meta({ ref: "JSONSchema" }),
-    retryCount: z.number().int().min(0).default(2),
-  })
-  .meta({
-    ref: "OutputFormatJsonSchema",
-  })
-
-export const Format = z.discriminatedUnion("type", [OutputFormatText, OutputFormatJsonSchema]).meta({
-  ref: "OutputFormat",
-})
-export type OutputFormat = z.infer<typeof Format>
-
-const PartBase = z.object({
-  id: PartID.zod,
-  sessionID: SessionID.zod,
-  messageID: MessageID.zod,
+export const ContextOverflowError = namedSchemaError("ContextOverflowError", {
+  message: Schema.String,
+  responseBody: Schema.optional(Schema.String),
 })
 
-export const SnapshotPart = PartBase.extend({
-  type: z.literal("snapshot"),
-  snapshot: z.string(),
-}).meta({
-  ref: "SnapshotPart",
-})
-export type SnapshotPart = z.infer<typeof SnapshotPart>
+export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
+  type: Schema.Literal("text"),
+}) {
+  static readonly zod = zod(this)
+}
 
-export const PatchPart = PartBase.extend({
-  type: z.literal("patch"),
-  hash: z.string(),
-  files: z.string().array(),
-}).meta({
-  ref: "PatchPart",
-})
-export type PatchPart = z.infer<typeof PatchPart>
+export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
+  type: Schema.Literal("json_schema"),
+  schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
+  retryCount: Schema.Number.check(Schema.isInt())
+    .check(Schema.isGreaterThanOrEqualTo(0))
+    .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
+}) {
+  static readonly zod = zod(this)
+}
 
-export const TextPart = PartBase.extend({
-  type: z.literal("text"),
-  text: z.string(),
-  synthetic: z.boolean().optional(),
-  ignored: z.boolean().optional(),
-  time: z
-    .object({
-      start: z.number(),
-      end: z.number().optional(),
-    })
-    .optional(),
-  metadata: z.record(z.string(), z.any()).optional(),
-}).meta({
-  ref: "TextPart",
+const _Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
+  discriminator: "type",
+  identifier: "OutputFormat",
 })
-export type TextPart = z.infer<typeof TextPart>
+export const Format = Object.assign(_Format, { zod: zod(_Format) })
+export type OutputFormat = Schema.Schema.Type<typeof _Format>
 
-export const ReasoningPart = PartBase.extend({
-  type: z.literal("reasoning"),
-  text: z.string(),
-  metadata: z.record(z.string(), z.any()).optional(),
-  time: z.object({
-    start: z.number(),
-    end: z.number().optional(),
-  }),
-}).meta({
-  ref: "ReasoningPart",
+const partBase = {
+  id: PartID,
+  sessionID: SessionID,
+  messageID: MessageID,
+}
+
+export const SnapshotPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("snapshot"),
+  snapshot: Schema.String,
 })
-export type ReasoningPart = z.infer<typeof ReasoningPart>
+  .annotate({ identifier: "SnapshotPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type SnapshotPart = Types.DeepMutable<Schema.Schema.Type<typeof SnapshotPart>>
 
-const FilePartSourceBase = z.object({
-  text: z
-    .object({
-      value: z.string(),
-      start: z.number().int(),
-      end: z.number().int(),
-    })
-    .meta({
-      ref: "FilePartSourceText",
+export const PatchPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("patch"),
+  hash: Schema.String,
+  files: Schema.Array(Schema.String),
+})
+  .annotate({ identifier: "PatchPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type PatchPart = Types.DeepMutable<Schema.Schema.Type<typeof PatchPart>>
+
+export const TextPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("text"),
+  text: Schema.String,
+  synthetic: Schema.optional(Schema.Boolean),
+  ignored: Schema.optional(Schema.Boolean),
+  time: Schema.optional(
+    Schema.Struct({
+      start: Schema.Number,
+      end: Schema.optional(Schema.Number),
     }),
+  ),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
 })
+  .annotate({ identifier: "TextPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type TextPart = Types.DeepMutable<Schema.Schema.Type<typeof TextPart>>
 
-export const FileSource = FilePartSourceBase.extend({
-  type: z.literal("file"),
-  path: z.string(),
-}).meta({
-  ref: "FileSource",
+export const ReasoningPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("reasoning"),
+  text: Schema.String,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+  time: Schema.Struct({
+    start: Schema.Number,
+    end: Schema.optional(Schema.Number),
+  }),
 })
+  .annotate({ identifier: "ReasoningPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ReasoningPart = Types.DeepMutable<Schema.Schema.Type<typeof ReasoningPart>>
 
-export const SymbolSource = FilePartSourceBase.extend({
-  type: z.literal("symbol"),
-  path: z.string(),
+const filePartSourceBase = {
+  text: Schema.Struct({
+    value: Schema.String,
+    start: Schema.Number.check(Schema.isInt()),
+    end: Schema.Number.check(Schema.isInt()),
+  }).annotate({ identifier: "FilePartSourceText" }),
+}
+
+export const FileSource = Schema.Struct({
+  ...filePartSourceBase,
+  type: Schema.Literal("file"),
+  path: Schema.String,
+})
+  .annotate({ identifier: "FileSource" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+
+export const SymbolSource = Schema.Struct({
+  ...filePartSourceBase,
+  type: Schema.Literal("symbol"),
+  path: Schema.String,
   range: LSP.Range,
-  name: z.string(),
-  kind: z.number().int(),
-}).meta({
-  ref: "SymbolSource",
+  name: Schema.String,
+  kind: Schema.Number.check(Schema.isInt()),
 })
+  .annotate({ identifier: "SymbolSource" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
 
-export const ResourceSource = FilePartSourceBase.extend({
-  type: z.literal("resource"),
-  clientName: z.string(),
-  uri: z.string(),
-}).meta({
-  ref: "ResourceSource",
+export const ResourceSource = Schema.Struct({
+  ...filePartSourceBase,
+  type: Schema.Literal("resource"),
+  clientName: Schema.String,
+  uri: Schema.String,
 })
+  .annotate({ identifier: "ResourceSource" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
 
-export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource, ResourceSource]).meta({
-  ref: "FilePartSource",
+const _FilePartSource = Schema.Union([FileSource, SymbolSource, ResourceSource]).annotate({
+  discriminator: "type",
+  identifier: "FilePartSource",
 })
+export const FilePartSource = Object.assign(_FilePartSource, { zod: zod(_FilePartSource) })
 
-export const FilePart = PartBase.extend({
-  type: z.literal("file"),
-  mime: z.string(),
-  filename: z.string().optional(),
-  url: z.string(),
-  source: FilePartSource.optional(),
-}).meta({
-  ref: "FilePart",
+export const FilePart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("file"),
+  mime: Schema.String,
+  filename: Schema.optional(Schema.String),
+  url: Schema.String,
+  source: Schema.optional(_FilePartSource),
 })
-export type FilePart = z.infer<typeof FilePart>
+  .annotate({ identifier: "FilePart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type FilePart = Types.DeepMutable<Schema.Schema.Type<typeof FilePart>>
 
-export const AgentPart = PartBase.extend({
-  type: z.literal("agent"),
-  name: z.string(),
-  source: z
-    .object({
-      value: z.string(),
-      start: z.number().int(),
-      end: z.number().int(),
-    })
-    .optional(),
-}).meta({
-  ref: "AgentPart",
+export const AgentPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("agent"),
+  name: Schema.String,
+  source: Schema.optional(
+    Schema.Struct({
+      value: Schema.String,
+      start: Schema.Number.check(Schema.isInt()),
+      end: Schema.Number.check(Schema.isInt()),
+    }),
+  ),
 })
-export type AgentPart = z.infer<typeof AgentPart>
+  .annotate({ identifier: "AgentPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type AgentPart = Types.DeepMutable<Schema.Schema.Type<typeof AgentPart>>
 
-export const CompactionPart = PartBase.extend({
-  type: z.literal("compaction"),
-  auto: z.boolean(),
-  overflow: z.boolean().optional(),
-  tail_start_id: MessageID.zod.optional(),
-}).meta({
-  ref: "CompactionPart",
+export const CompactionPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("compaction"),
+  auto: Schema.Boolean,
+  overflow: Schema.optional(Schema.Boolean),
+  tail_start_id: Schema.optional(MessageID),
 })
-export type CompactionPart = z.infer<typeof CompactionPart>
+  .annotate({ identifier: "CompactionPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type CompactionPart = Types.DeepMutable<Schema.Schema.Type<typeof CompactionPart>>
 
-export const SubtaskPart = PartBase.extend({
-  type: z.literal("subtask"),
-  prompt: z.string(),
-  description: z.string(),
-  agent: z.string(),
-  model: z
-    .object({
-      providerID: ProviderID.zod,
-      modelID: ModelID.zod,
-    })
-    .optional(),
-  command: z.string().optional(),
-}).meta({
-  ref: "SubtaskPart",
+export const SubtaskPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("subtask"),
+  prompt: Schema.String,
+  description: Schema.String,
+  agent: Schema.String,
+  model: Schema.optional(
+    Schema.Struct({
+      providerID: ProviderID,
+      modelID: ModelID,
+    }),
+  ),
+  command: Schema.optional(Schema.String),
 })
-export type SubtaskPart = z.infer<typeof SubtaskPart>
+  .annotate({ identifier: "SubtaskPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type SubtaskPart = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPart>>
 
-export const RetryPart = PartBase.extend({
-  type: z.literal("retry"),
-  attempt: z.number(),
-  error: APIError.Schema,
-  time: z.object({
-    created: z.number(),
+export const RetryPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("retry"),
+  attempt: Schema.Number,
+  // APIError is still NamedError-based Zod; bridge via ZodOverride until errors migrate.
+  error: Schema.Any.annotate({ [ZodOverride]: APIError.Schema }),
+  time: Schema.Struct({
+    created: Schema.Number,
   }),
-}).meta({
-  ref: "RetryPart",
 })
-export type RetryPart = z.infer<typeof RetryPart>
+  .annotate({ identifier: "RetryPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type RetryPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof RetryPart>>, "error"> & {
+  error: APIError
+}
 
-export const StepStartPart = PartBase.extend({
-  type: z.literal("step-start"),
-  snapshot: z.string().optional(),
-}).meta({
-  ref: "StepStartPart",
+export const StepStartPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("step-start"),
+  snapshot: Schema.optional(Schema.String),
 })
-export type StepStartPart = z.infer<typeof StepStartPart>
+  .annotate({ identifier: "StepStartPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type StepStartPart = Types.DeepMutable<Schema.Schema.Type<typeof StepStartPart>>
 
-export const StepFinishPart = PartBase.extend({
-  type: z.literal("step-finish"),
-  reason: z.string(),
-  snapshot: z.string().optional(),
-  cost: z.number(),
-  tokens: z.object({
-    total: z.number().optional(),
-    input: z.number(),
-    output: z.number(),
-    reasoning: z.number(),
-    cache: z.object({
-      read: z.number(),
-      write: z.number(),
+export const StepFinishPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("step-finish"),
+  reason: Schema.String,
+  snapshot: Schema.optional(Schema.String),
+  cost: Schema.Number,
+  tokens: Schema.Struct({
+    total: Schema.optional(Schema.Number),
+    input: Schema.Number,
+    output: Schema.Number,
+    reasoning: Schema.Number,
+    cache: Schema.Struct({
+      read: Schema.Number,
+      write: Schema.Number,
     }),
   }),
-}).meta({
-  ref: "StepFinishPart",
 })
-export type StepFinishPart = z.infer<typeof StepFinishPart>
+  .annotate({ identifier: "StepFinishPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type StepFinishPart = Types.DeepMutable<Schema.Schema.Type<typeof StepFinishPart>>
 
-export const ToolStatePending = z
-  .object({
-    status: z.literal("pending"),
-    input: z.record(z.string(), z.any()),
-    raw: z.string(),
-  })
-  .meta({
-    ref: "ToolStatePending",
-  })
-
-export type ToolStatePending = z.infer<typeof ToolStatePending>
-
-export const ToolStateRunning = z
-  .object({
-    status: z.literal("running"),
-    input: z.record(z.string(), z.any()),
-    title: z.string().optional(),
-    metadata: z.record(z.string(), z.any()).optional(),
-    time: z.object({
-      start: z.number(),
-    }),
-  })
-  .meta({
-    ref: "ToolStateRunning",
-  })
-export type ToolStateRunning = z.infer<typeof ToolStateRunning>
-
-export const ToolStateCompleted = z
-  .object({
-    status: z.literal("completed"),
-    input: z.record(z.string(), z.any()),
-    output: z.string(),
-    title: z.string(),
-    metadata: z.record(z.string(), z.any()),
-    time: z.object({
-      start: z.number(),
-      end: z.number(),
-      compacted: z.number().optional(),
-    }),
-    attachments: FilePart.array().optional(),
-  })
-  .meta({
-    ref: "ToolStateCompleted",
-  })
-export type ToolStateCompleted = z.infer<typeof ToolStateCompleted>
-
-export const ToolStateError = z
-  .object({
-    status: z.literal("error"),
-    input: z.record(z.string(), z.any()),
-    error: z.string(),
-    metadata: z.record(z.string(), z.any()).optional(),
-    time: z.object({
-      start: z.number(),
-      end: z.number(),
-    }),
-  })
-  .meta({
-    ref: "ToolStateError",
-  })
-export type ToolStateError = z.infer<typeof ToolStateError>
-
-export const ToolState = z
-  .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
-  .meta({
-    ref: "ToolState",
-  })
-
-export const ToolPart = PartBase.extend({
-  type: z.literal("tool"),
-  callID: z.string(),
-  tool: z.string(),
-  state: ToolState,
-  metadata: z.record(z.string(), z.any()).optional(),
-}).meta({
-  ref: "ToolPart",
+export const ToolStatePending = Schema.Struct({
+  status: Schema.Literal("pending"),
+  input: Schema.Record(Schema.String, Schema.Any),
+  raw: Schema.String,
 })
-export type ToolPart = z.infer<typeof ToolPart>
+  .annotate({ identifier: "ToolStatePending" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolStatePending = Types.DeepMutable<Schema.Schema.Type<typeof ToolStatePending>>
 
-const Base = z.object({
-  id: MessageID.zod,
-  sessionID: SessionID.zod,
-})
-
-export const User = Base.extend({
-  role: z.literal("user"),
-  time: z.object({
-    created: z.number(),
+export const ToolStateRunning = Schema.Struct({
+  status: Schema.Literal("running"),
+  input: Schema.Record(Schema.String, Schema.Any),
+  title: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+  time: Schema.Struct({
+    start: Schema.Number,
   }),
-  format: Format.optional(),
-  summary: z
-    .object({
-      title: z.string().optional(),
-      body: z.string().optional(),
-      diffs: Snapshot.FileDiff.array(),
-    })
-    .optional(),
-  agent: z.string(),
-  model: z.object({
-    providerID: ProviderID.zod,
-    modelID: ModelID.zod,
-    variant: z.string().optional(),
-  }),
-  system: z.string().optional(),
-  tools: z.record(z.string(), z.boolean()).optional(),
-}).meta({
-  ref: "UserMessage",
 })
-export type User = z.infer<typeof User>
+  .annotate({ identifier: "ToolStateRunning" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolStateRunning = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateRunning>>
 
-export const Part = z
-  .discriminatedUnion("type", [
-    TextPart,
-    SubtaskPart,
-    ReasoningPart,
-    FilePart,
-    ToolPart,
-    StepStartPart,
-    StepFinishPart,
-    SnapshotPart,
-    PatchPart,
-    AgentPart,
-    RetryPart,
-    CompactionPart,
-  ])
-  .meta({
-    ref: "Part",
-  })
-export type Part = z.infer<typeof Part>
-
-export const Assistant = Base.extend({
-  role: z.literal("assistant"),
-  time: z.object({
-    created: z.number(),
-    completed: z.number().optional(),
+export const ToolStateCompleted = Schema.Struct({
+  status: Schema.Literal("completed"),
+  input: Schema.Record(Schema.String, Schema.Any),
+  output: Schema.String,
+  title: Schema.String,
+  metadata: Schema.Record(Schema.String, Schema.Any),
+  time: Schema.Struct({
+    start: Schema.Number,
+    end: Schema.Number,
+    compacted: Schema.optional(Schema.Number),
   }),
-  error: z
-    .discriminatedUnion("name", [
-      AuthError.Schema,
-      NamedError.Unknown.Schema,
-      OutputLengthError.Schema,
-      AbortedError.Schema,
-      StructuredOutputError.Schema,
-      ContextOverflowError.Schema,
-      APIError.Schema,
-    ])
-    .optional(),
-  parentID: MessageID.zod,
-  modelID: ModelID.zod,
-  providerID: ProviderID.zod,
+  attachments: Schema.optional(Schema.Array(FilePart)),
+})
+  .annotate({ identifier: "ToolStateCompleted" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolStateCompleted = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateCompleted>>
+
+function truncateToolOutput(text: string, maxChars?: number) {
+  if (!maxChars || text.length <= maxChars) return text
+  const omitted = text.length - maxChars
+  return `${text.slice(0, maxChars)}\n[Tool output truncated for compaction: omitted ${omitted} chars]`
+}
+
+export const ToolStateError = Schema.Struct({
+  status: Schema.Literal("error"),
+  input: Schema.Record(Schema.String, Schema.Any),
+  error: Schema.String,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+  time: Schema.Struct({
+    start: Schema.Number,
+    end: Schema.Number,
+  }),
+})
+  .annotate({ identifier: "ToolStateError" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolStateError = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateError>>
+
+const _ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).annotate({
+  discriminator: "status",
+  identifier: "ToolState",
+})
+// Cast the derived zod so downstream z.infer sees the same mutable shape that
+// our exported TS types expose (the pre-migration Zod inferences were mutable).
+export const ToolState = Object.assign(_ToolState, {
+  zod: zod(_ToolState) as unknown as z.ZodType<
+    ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
+  >,
+})
+export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
+
+export const ToolPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("tool"),
+  callID: Schema.String,
+  tool: Schema.String,
+  state: _ToolState,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+})
+  .annotate({ identifier: "ToolPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof ToolPart>>, "state"> & {
+  state: ToolState
+}
+
+const messageBase = {
+  id: MessageID,
+  sessionID: SessionID,
+}
+
+export const User = Schema.Struct({
+  ...messageBase,
+  role: Schema.Literal("user"),
+  time: Schema.Struct({
+    created: Schema.Number,
+  }),
+  format: Schema.optional(_Format),
+  summary: Schema.optional(
+    Schema.Struct({
+      title: Schema.optional(Schema.String),
+      body: Schema.optional(Schema.String),
+      diffs: Schema.Array(Snapshot.FileDiff),
+    }),
+  ),
+  agent: Schema.String,
+  model: Schema.Struct({
+    providerID: ProviderID,
+    modelID: ModelID,
+    variant: Schema.optional(Schema.String),
+  }),
+  system: Schema.optional(Schema.String),
+  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+})
+  .annotate({ identifier: "UserMessage" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
+
+const _Part = Schema.Union([
+  TextPart,
+  SubtaskPart,
+  ReasoningPart,
+  FilePart,
+  ToolPart,
+  StepStartPart,
+  StepFinishPart,
+  SnapshotPart,
+  PatchPart,
+  AgentPart,
+  RetryPart,
+  CompactionPart,
+]).annotate({ discriminator: "type", identifier: "Part" })
+export const Part = Object.assign(_Part, {
+  zod: zod(_Part) as unknown as z.ZodType<
+    | TextPart
+    | SubtaskPart
+    | ReasoningPart
+    | FilePart
+    | ToolPart
+    | StepStartPart
+    | StepFinishPart
+    | SnapshotPart
+    | PatchPart
+    | AgentPart
+    | RetryPart
+    | CompactionPart
+  >,
+})
+export type Part =
+  | TextPart
+  | SubtaskPart
+  | ReasoningPart
+  | FilePart
+  | ToolPart
+  | StepStartPart
+  | StepFinishPart
+  | SnapshotPart
+  | PatchPart
+  | AgentPart
+  | RetryPart
+  | CompactionPart
+
+// Errors are still NamedError-based Zod; bridge via ZodOverride so the derived
+// Zod + JSON Schema emit the original discriminatedUnion shape. Migrating the
+// error classes to Schema.TaggedErrorClass is a separate slice.
+const AssistantErrorZod = z.discriminatedUnion("name", [
+  AuthError.Schema,
+  NamedError.Unknown.Schema,
+  OutputLengthError.Schema,
+  AbortedError.Schema,
+  StructuredOutputError.Schema,
+  ContextOverflowError.Schema,
+  APIError.Schema,
+])
+type AssistantError = z.infer<typeof AssistantErrorZod>
+
+// ── Prompt input schemas ─────────────────────────────────────────────────────
+//
+// Consumers of `SessionPrompt.PromptInput.parts` send part drafts without the
+// ambient IDs (`messageID`, `sessionID`) that live on stored parts, and may
+// omit `id` to let the server allocate one.  These Schema-Struct variants
+// carry that shape, and `SessionPrompt.PromptInput` just references the
+// derived `.zod` (no omit/partial gymnastics needed at the call site).
+
+export const TextPartInput = Schema.Struct({
+  id: Schema.optional(PartID),
+  type: Schema.Literal("text"),
+  text: Schema.String,
+  synthetic: Schema.optional(Schema.Boolean),
+  ignored: Schema.optional(Schema.Boolean),
+  time: Schema.optional(
+    Schema.Struct({
+      start: Schema.Number,
+      end: Schema.optional(Schema.Number),
+    }),
+  ),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+})
+  .annotate({ identifier: "TextPartInput" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type TextPartInput = Types.DeepMutable<Schema.Schema.Type<typeof TextPartInput>>
+
+export const FilePartInput = Schema.Struct({
+  id: Schema.optional(PartID),
+  type: Schema.Literal("file"),
+  mime: Schema.String,
+  filename: Schema.optional(Schema.String),
+  url: Schema.String,
+  source: Schema.optional(_FilePartSource),
+})
+  .annotate({ identifier: "FilePartInput" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type FilePartInput = Types.DeepMutable<Schema.Schema.Type<typeof FilePartInput>>
+
+export const AgentPartInput = Schema.Struct({
+  id: Schema.optional(PartID),
+  type: Schema.Literal("agent"),
+  name: Schema.String,
+  source: Schema.optional(
+    Schema.Struct({
+      value: Schema.String,
+      start: Schema.Number.check(Schema.isInt()),
+      end: Schema.Number.check(Schema.isInt()),
+    }),
+  ),
+})
+  .annotate({ identifier: "AgentPartInput" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type AgentPartInput = Types.DeepMutable<Schema.Schema.Type<typeof AgentPartInput>>
+
+export const SubtaskPartInput = Schema.Struct({
+  id: Schema.optional(PartID),
+  type: Schema.Literal("subtask"),
+  prompt: Schema.String,
+  description: Schema.String,
+  agent: Schema.String,
+  model: Schema.optional(
+    Schema.Struct({
+      providerID: ProviderID,
+      modelID: ModelID,
+    }),
+  ),
+  command: Schema.optional(Schema.String),
+})
+  .annotate({ identifier: "SubtaskPartInput" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type SubtaskPartInput = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPartInput>>
+
+export const Assistant = Schema.Struct({
+  ...messageBase,
+  role: Schema.Literal("assistant"),
+  time: Schema.Struct({
+    created: Schema.Number,
+    completed: Schema.optional(Schema.Number),
+  }),
+  error: Schema.optional(Schema.Any.annotate({ [ZodOverride]: AssistantErrorZod })),
+  parentID: MessageID,
+  modelID: ModelID,
+  providerID: ProviderID,
   /**
    * @deprecated
    */
-  mode: z.string(),
-  agent: z.string(),
-  path: z.object({
-    cwd: z.string(),
-    root: z.string(),
+  mode: Schema.String,
+  agent: Schema.String,
+  path: Schema.Struct({
+    cwd: Schema.String,
+    root: Schema.String,
   }),
-  summary: z.boolean().optional(),
-  cost: z.number(),
-  tokens: z.object({
-    total: z.number().optional(),
-    input: z.number(),
-    output: z.number(),
-    reasoning: z.number(),
-    cache: z.object({
-      read: z.number(),
-      write: z.number(),
+  summary: Schema.optional(Schema.Boolean),
+  cost: Schema.Number,
+  tokens: Schema.Struct({
+    total: Schema.optional(Schema.Number),
+    input: Schema.Number,
+    output: Schema.Number,
+    reasoning: Schema.Number,
+    cache: Schema.Struct({
+      read: Schema.Number,
+      write: Schema.Number,
     }),
   }),
-  structured: z.any().optional(),
-  variant: z.string().optional(),
-  finish: z.string().optional(),
-}).meta({
-  ref: "AssistantMessage",
+  structured: Schema.optional(Schema.Any),
+  variant: Schema.optional(Schema.String),
+  finish: Schema.optional(Schema.String),
 })
-export type Assistant = z.infer<typeof Assistant>
+  .annotate({ identifier: "AssistantMessage" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {
+  error?: AssistantError
+}
 
-export const Info = z.discriminatedUnion("role", [User, Assistant]).meta({
-  ref: "Message",
+const _Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "Message" })
+export const Info = Object.assign(_Info, {
+  zod: zod(_Info) as unknown as z.ZodType<User | Assistant>,
 })
-export type Info = z.infer<typeof Info>
+export type Info = User | Assistant
 
 export const Event = {
   Updated: SyncEvent.define({
@@ -462,7 +583,7 @@ export const Event = {
     aggregate: "sessionID",
     schema: z.object({
       sessionID: SessionID.zod,
-      info: Info,
+      info: Info.zod,
     }),
   }),
   Removed: SyncEvent.define({
@@ -480,7 +601,7 @@ export const Event = {
     aggregate: "sessionID",
     schema: z.object({
       sessionID: SessionID.zod,
-      part: Part,
+      part: Part.zod,
       time: z.number(),
     }),
   }),
@@ -506,24 +627,29 @@ export const Event = {
   }),
 }
 
-export const WithParts = z.object({
-  info: Info,
-  parts: z.array(Part),
-})
-export type WithParts = z.infer<typeof WithParts>
+export const WithParts = Schema.Struct({
+  info: _Info,
+  parts: Schema.Array(_Part),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type WithParts = {
+  info: Info
+  parts: Part[]
+}
 
-const Cursor = z.object({
-  id: MessageID.zod,
-  time: z.number(),
+const Cursor = Schema.Struct({
+  id: MessageID,
+  time: Schema.Number,
 })
-type Cursor = z.infer<typeof Cursor>
+type Cursor = typeof Cursor.Type
+
+const decodeCursor = Schema.decodeUnknownSync(Cursor)
 
 export const cursor = {
   encode(input: Cursor) {
     return Buffer.from(JSON.stringify(input)).toString("base64url")
   },
   decode(input: string) {
-    return Cursor.parse(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
+    return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
   },
 }
 
@@ -580,7 +706,7 @@ function providerMeta(metadata: Record<string, any> | undefined) {
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean },
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
@@ -719,7 +845,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         if (part.type === "tool") {
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
-            const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+            const outputText = part.state.time.compacted
+              ? "[Old tool result content cleared]"
+              : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
             const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
             // For providers that don't support media in tool results, extract media files
@@ -835,7 +963,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 export function toModelMessages(
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean },
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
 }
