@@ -729,6 +729,59 @@ test("git info exclude keeps global excludes", async () => {
   })
 })
 
+test("untracked files retroactively gitignored are evicted from shadow index", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      // First snapshot: an untracked directory that is NOT yet gitignored
+      // gets staged into the shadow repo. Simulates e.g. a `.android-sdk` or
+      // `node_modules` directory the user created before updating .gitignore.
+      await $`mkdir -p ${tmp.path}/cache`.quiet()
+      await Filesystem.write(`${tmp.path}/cache/big.bin`, "X".repeat(100_000))
+      await Filesystem.write(`${tmp.path}/cache/other.bin`, "Y".repeat(100_000))
+
+      const before = await run(tmp.path, (snapshot) => snapshot.track())
+      expect(before).toBeTruthy()
+
+      // Between snapshots the user adds cache/ to .gitignore. The files
+      // themselves are NOT touched, so they will not appear in diff-files or
+      // ls-files --others on the second track() call. Prior to the fix this
+      // left them permanently staged in the shadow repo, growing memory and
+      // on-disk size on every subsequent snapshot.
+      await Filesystem.write(`${tmp.path}/.gitignore`, "cache/\n")
+      await Filesystem.write(`${tmp.path}/other.txt`, "unrelated change")
+
+      const after = await run(tmp.path, (snapshot) => snapshot.track())
+      expect(after).toBeTruthy()
+
+      // Directly inspect the shadow tree (diffFull filters gitignored paths
+      // for the UI, which is the right UX but the wrong signal for this bug).
+      // The shadow gitdir is {Global.Path.data}/snapshot/{projectId}/{Hash.fast(worktree)};
+      // locate it by finding the one whose `git ls-tree` contains the hash we
+      // wrote. Matching on worktree hash alone is brittle because multiple
+      // tests may share an XDG dir.
+      const { Global } = await import("../../src/global")
+      const root = `${Global.Path.data}/snapshot`
+      const candidates = await Array.fromAsync(new Bun.Glob("*/*").scan({ cwd: root, onlyFiles: false }))
+      const hits = await Promise.all(
+        candidates.map(async (rel) => {
+          const result = await $`git --git-dir=${root}/${rel} ls-tree -r ${after}`
+            .nothrow()
+            .quiet()
+          return result.exitCode === 0 ? result.stdout.toString() : null
+        }),
+      )
+      const list = hits.find((x): x is string => x !== null)
+      expect(list).toBeDefined()
+      expect(list!).not.toContain("cache/big.bin")
+      expect(list!).not.toContain("cache/other.bin")
+      expect(list!).toContain(".gitignore")
+      expect(list!).toContain("other.txt")
+    },
+  })
+})
+
 test("concurrent file operations during patch", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({

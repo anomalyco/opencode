@@ -209,7 +209,7 @@ export const layer: Layer.Layer<
 
         const add = Effect.fnUntraced(function* () {
           yield* sync()
-          const [diff, other] = yield* Effect.all(
+          const [diff, other, cached] = yield* Effect.all(
             [
               git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
                 cwd: state.directory,
@@ -217,27 +217,41 @@ export const layer: Layer.Layer<
               git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
                 cwd: state.directory,
               }),
+              // Files already staged in the shadow repo's index. We need this
+              // to catch paths that once passed --exclude-standard but are now
+              // gitignored: those drop out of `other` above, so without this
+              // they'd stay staged forever and every write-tree would keep
+              // rehashing them. See the "retroactively gitignored" test.
+              git([...quote, ...args(["ls-files", "--cached", "-z", "--", "."])], {
+                cwd: state.directory,
+              }),
             ],
-            { concurrency: 2 },
+            { concurrency: 3 },
           )
-          if (diff.code !== 0 || other.code !== 0) {
+          if (diff.code !== 0 || other.code !== 0 || cached.code !== 0) {
             log.warn("failed to list snapshot files", {
               diffCode: diff.code,
               diffStderr: diff.stderr,
               otherCode: other.code,
               otherStderr: other.stderr,
+              cachedCode: cached.code,
+              cachedStderr: cached.stderr,
             })
             return
           }
 
           const tracked = diff.text.split("\0").filter(Boolean)
           const untracked = other.text.split("\0").filter(Boolean)
+          const staged = cached.text.split("\0").filter(Boolean)
           const all = Array.from(new Set([...tracked, ...untracked]))
-          if (!all.length) return
+          // Check everything the shadow knows about, not just the new candidate
+          // set, so previously-staged files that are now gitignored get evicted.
+          const check = Array.from(new Set([...all, ...staged]))
+          if (!check.length) return
 
           // Resolve source-repo ignore rules against the exact candidate set.
           // --no-index keeps this pattern-based even when a path is already tracked.
-          const ignored = yield* ignore(all)
+          const ignored = yield* ignore(check)
 
           // Remove newly-ignored files from snapshot index to prevent re-adding
           if (ignored.size > 0) {
