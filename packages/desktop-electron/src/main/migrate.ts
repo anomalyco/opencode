@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { CHANNEL } from "./constants"
-import { getStore, store } from "./store"
+import { getStore } from "./store"
 
 const TAURI_MIGRATED_KEY = "tauriMigrated"
 
@@ -67,7 +67,7 @@ function migrateFile(datPath: string, filename: string) {
 }
 
 export function migrate() {
-  if (store.get(TAURI_MIGRATED_KEY)) {
+  if (getStore().get(TAURI_MIGRATED_KEY)) {
     log.log("tauri migration: already done, skipping")
     return
   }
@@ -77,7 +77,7 @@ export function migrate() {
 
   if (!existsSync(dir)) {
     log.log("tauri migration: no tauri data directory found, nothing to migrate")
-    store.set(TAURI_MIGRATED_KEY, true)
+    getStore().set(TAURI_MIGRATED_KEY, true)
     return
   }
 
@@ -87,5 +87,5 @@ export function migrate() {
   }
 
   log.log("tauri migration: complete")
-  store.set(TAURI_MIGRATED_KEY, true)
+  getStore().set(TAURI_MIGRATED_KEY, true)
 }

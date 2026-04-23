@@ -224,7 +224,7 @@ When to use each:
 
 Promoting a previously-anonymous schema to Schema.Class is acceptable when it is top-level or endpoint-facing, but call it out in the PR — it is an additive SDK change (`export type Foo = ...` newly appears) even if it preserves the JSON shape.
 
-Schemas that are **not** pure objects (enums, unions, records, tuples) cannot use Schema.Class. For those, add `.annotate({ identifier: "FooName" })` to get the same named-ref behavior:
+Schemas that are **not** pure objects (enums, unions, records, tuples) cannot use Schema.Class. For those — and for pure-object schemas where handlers populate plain objects rather than class instances — add `.annotate({ identifier: "FooName" })` to get the same named-ref behavior without the `instanceof` requirement:
 
 ```ts
 export const Action = Schema.Literals(["ask", "allow", "deny"]).annotate({ identifier: "PermissionActionConfig" })
@@ -373,9 +373,9 @@ The first slice is successful if:
 
 - `Schema.Class` works well for route DTOs such as `Question.Request`, `Question.Info`, and `Question.Reply`.
 - scalar or collection schemas such as `Question.Answer` should stay as schemas and use helpers like `withStatics(...)` instead of being forced into classes.
-- if an `HttpApi` success schema uses `Schema.Class`, the handler or underlying service needs to return real schema instances rather than plain objects.
+- if an `HttpApi` success schema uses `Schema.Class`, the handler or underlying service needs to return real schema instances rather than plain objects. `Schema.Class`'s Declaration AST enforces `input instanceof self || input.[ClassTypeId]` during encode (see effect-smol `Schema.ts:10479-10484`). Plain objects from zod parse fail with `Expected Foo, got {...}`. This surfaced on `GET /config` where the service returns zod-parsed plain objects and `Config.InfoSchema` referenced `ConfigProvider.Info` (class). The fix was to convert pure-object classes to `Schema.Struct(...).annotate({ identifier: "..." })` — same named SDK `$ref`, no instance requirement. Verified byte-identical `types.gen.ts` vs `dev`.
 - internal event payloads can stay anonymous when we want to avoid adding extra named OpenAPI component churn for non-route shapes.
-- `Schema.Class` emits named `$ref` in OpenAPI — only use it for types that already had `.meta({ ref })` in the old Zod schema. Inner/nested types should stay as `Schema.Struct` to avoid SDK shape changes.
+- `Schema.Class` emits named `$ref` in OpenAPI — only use it for types that already had `.meta({ ref })` in the old Zod schema **and** when the handler/service returns real instances. For schemas that need a named `$ref` but are populated from plain objects, use `Schema.Struct(...).annotate({ identifier: "..." })` instead. Inner/nested types should stay as `Schema.Struct` to avoid SDK shape changes.
 
 ### Integration
 
@@ -404,8 +404,7 @@ Current instance route inventory:
 - `provider` - `bridged`
   endpoints: `GET /provider`, `GET /provider/auth`, `POST /provider/:providerID/oauth/authorize`, `POST /provider/:providerID/oauth/callback`
 - `config` - `bridged` (partial)
-  bridged endpoint: `GET /config/providers`
-  later endpoint: `GET /config`
+  bridged endpoints: `GET /config`, `GET /config/providers`
   defer `PATCH /config` for now
 - `project` - `bridged` (partial)
   bridged endpoints: `GET /project`, `GET /project/current`
@@ -431,9 +430,8 @@ Current instance route inventory:
 Recommended near-term sequence:
 
 1. `workspace` read endpoints (`GET /experimental/workspace/adaptor`, `GET /experimental/workspace`, `GET /experimental/workspace/status`)
-2. `config` full read endpoint (`GET /config`)
-3. `file` JSON read endpoints
-4. `mcp` JSON read endpoints
+2. `file` JSON read endpoints
+3. `mcp` JSON read endpoints
 
 ## Checklist
 
@@ -449,8 +447,8 @@ Recommended near-term sequence:
 - [x] port remaining provider endpoints (`GET /provider`, OAuth mutations)
 - [x] port `config` providers read endpoint
 - [x] port `project` read endpoints (`GET /project`, `GET /project/current`)
+- [x] port `GET /config` full read endpoint
 - [ ] port `workspace` read endpoints
-- [ ] port `GET /config` full read endpoint
 - [ ] port `file` JSON read endpoints
 - [ ] decide when to remove the flag and make Effect routes the default
 

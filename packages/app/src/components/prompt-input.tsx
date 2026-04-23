@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -55,7 +55,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import { useQuery } from "@tanstack/solid-query"
+import { useQueries } from "@tanstack/solid-query"
 import { loadAgentsQuery, loadProvidersQuery } from "@/context/global-sync/bootstrap"
 
 interface PromptInputProps {
@@ -1253,16 +1253,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const agentsQuery = useQuery(() => loadAgentsQuery(sdk.directory))
+  const [agentsQuery, globalProvidersQuery, providersQuery] = useQueries(() => ({
+    queries: [loadAgentsQuery(sdk.directory), loadProvidersQuery(null), loadProvidersQuery(sdk.directory)],
+  }))
+
   const agentsLoading = () => agentsQuery.isLoading
-
-  const globalProvidersQuery = useQuery(() => loadProvidersQuery(null))
-  const providersQuery = useQuery(() => loadProvidersQuery(sdk.directory))
-
+  const agentsShouldFadeIn = createMemo((prev) => prev ?? agentsLoading())
   const providersLoading = () => agentsLoading() || providersQuery.isLoading || globalProvidersQuery.isLoading
+  const providersShouldFadeIn = createMemo((prev) => prev ?? providersLoading())
+
+  const [promptReady] = createResource(
+    () => prompt.ready().promise,
+    (p) => p,
+  )
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
+      {(promptReady(), null)}
       <PromptPopover
         popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
@@ -1359,15 +1366,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
               style={{ "padding-bottom": space }}
             />
-            <Show when={!prompt.dirty()}>
-              <div
-                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
-                classList={{ "font-mono!": store.mode === "shell" }}
-                style={{ "padding-bottom": space }}
-              >
-                {placeholder()}
-              </div>
-            </Show>
+            <div
+              class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+              classList={{ "font-mono!": store.mode === "shell" }}
+              style={{ "padding-bottom": space, display: prompt.dirty() ? "none" : undefined }}
+            >
+              {placeholder()}
+            </div>
           </div>
 
           <div
@@ -1458,7 +1463,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </div>
               <div class="flex items-center gap-1.5 min-w-0 flex-1 h-7">
                 <Show when={!agentsLoading()}>
-                  <div data-component="prompt-agent-control">
+                  <div
+                    data-component="prompt-agent-control"
+                    style={agentsShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                  >
                     <TooltipKeybind
                       placement="top"
                       gutter={4}
@@ -1484,7 +1492,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Show>
                 <Show when={!providersLoading()}>
                   <Show when={store.mode !== "shell"}>
-                    <div data-component="prompt-model-control">
+                    <div
+                      data-component="prompt-model-control"
+                      style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                    >
                       <Show
                         when={providers.paid().length > 0}
                         fallback={
@@ -1555,7 +1566,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </TooltipKeybind>
                       </Show>
                     </div>
-                    <div data-component="prompt-variant-control">
+                    <div
+                      data-component="prompt-variant-control"
+                      style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+                    >
                       <TooltipKeybind
                         placement="top"
                         gutter={4}

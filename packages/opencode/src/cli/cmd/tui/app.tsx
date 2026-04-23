@@ -122,8 +122,8 @@ export function tui(input: {
 
     const mode = await Terminal.getTerminalBackgroundColor()
 
-    // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
-    // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
+    // Re-clear after getTerminalBackgroundColor() because setRawMode(false)
+    // restores the original console mode, including processed input on Windows.
     win32DisableProcessedInput()
 
     const onExit = async () => {
