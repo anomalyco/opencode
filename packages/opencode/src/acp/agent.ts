@@ -1448,8 +1448,9 @@ export class Agent implements ACPAgent {
 
       if (!text.startsWith("/")) return
 
-      const [name, ...rest] = text.slice(1).split(/\s+/)
-      return { name, args: rest.join(" ").trim() }
+      const match = text.slice(1).match(/^(\S+)(?:\s([\s\S]*))?$/)
+      if (!match) return
+      return { name: match[1], args: (match[2] ?? "").trim() }
     })()
 
     const buildUsage = (msg: AssistantMessage): Usage => ({
