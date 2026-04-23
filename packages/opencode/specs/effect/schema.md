@@ -355,7 +355,7 @@ piecewise.
 - [ ] `src/cli/ui.ts`
 - [ ] `src/command/index.ts`
 - [ ] `src/control-plane/adaptors/worktree.ts`
-- [ ] `src/control-plane/types.ts`
+- [x] `src/control-plane/types.ts`
 - [ ] `src/control-plane/workspace.ts`
 - [ ] `src/file/index.ts`
 - [ ] `src/file/ripgrep.ts`

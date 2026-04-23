@@ -2,11 +2,12 @@ import z from "zod"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Worktree } from "@/worktree"
 import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
+import { zodObject } from "@/util/effect-zod"
 
 const WorktreeConfig = z.object({
-  name: WorkspaceInfo.shape.name,
-  branch: WorkspaceInfo.shape.branch.unwrap(),
-  directory: WorkspaceInfo.shape.directory.unwrap(),
+  name: zodObject(WorkspaceInfo).shape.name,
+  branch: zodObject(WorkspaceInfo).shape.branch.unwrap(),
+  directory: zodObject(WorkspaceInfo).shape.directory.unwrap(),
 })
 
 export const WorktreeAdaptor: WorkspaceAdaptor = {
