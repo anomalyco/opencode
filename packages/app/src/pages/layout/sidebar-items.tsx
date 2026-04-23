@@ -22,11 +22,7 @@ const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
   return id === OPENCODE_PROJECT_ID
     ? "https://opencode.ai/favicon.svg"
-    : icon?.override
-      ? icon.override
-      : icon?.color
-        ? undefined
-        : icon?.url
+    : (icon?.override ?? (icon?.color ? undefined : icon?.url))
 }
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
