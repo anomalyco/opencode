@@ -1,5 +1,4 @@
 import z from "zod"
-import type { ZodObject } from "zod"
 import { Database, eq } from "@/storage"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
@@ -9,11 +8,19 @@ import { EventSequenceTable, EventTable } from "./event.sql"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { EventID } from "./schema"
 import { Flag } from "@/flag/flag"
+import { Schema as EffectSchema, Types } from "effect"
+import { zodObject } from "@/util/effect-zod"
+import { isRecord } from "@/util/record"
 
-export type Definition = {
+export type Definition<
+  Schema extends EffectSchema.Top = EffectSchema.Top,
+  BusSchema extends EffectSchema.Top = Schema,
+> = {
   type: string
   version: number
   aggregate: string
+  effectSchema: Schema
+  effectProperties: BusSchema
   schema: z.ZodObject
 
   // This is temporary and only exists for compatibility with bus
@@ -25,8 +32,12 @@ export type Event<Def extends Definition = Definition> = {
   id: string
   seq: number
   aggregateID: string
-  data: z.infer<Def["schema"]>
+  data: Types.DeepMutable<EffectSchema.Schema.Type<Def["effectSchema"]>>
 }
+
+export type Properties<Def extends Definition = Definition> = Types.DeepMutable<
+  EffectSchema.Schema.Type<Def["effectProperties"]>
+>
 
 export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
@@ -36,7 +47,12 @@ export const registry = new Map<string, Definition>()
 let projectors: Map<Definition, ProjectorFunc> | undefined
 const versions = new Map<string, number>()
 let frozen = false
-let convertEvent: (type: string, event: Event["data"]) => Promise<Record<string, unknown>> | Record<string, unknown>
+let convertEvent: (type: string, event: Event["data"]) => Promise<unknown> | unknown
+
+function asRecord(input: unknown) {
+  if (isRecord(input)) return input
+  throw new Error(`SyncEvent.convertEvent must return an object, got: ${JSON.stringify(input)}`)
+}
 
 export function reset() {
   frozen = false
@@ -54,7 +70,7 @@ export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; co
   for (let [type, version] of versions.entries()) {
     let def = registry.get(versionedType(type, version))!
 
-    BusEvent.define(def.type, def.properties || def.schema)
+    BusEvent.define(def.type, def.properties)
   }
 
   // Freeze the system so it clearly errors if events are defined
@@ -72,19 +88,29 @@ export function versionedType(type: string, version?: number) {
 export function define<
   Type extends string,
   Agg extends string,
-  Schema extends ZodObject<Record<Agg, z.ZodType<string>>>,
-  BusSchema extends ZodObject = Schema,
->(input: { type: Type; version: number; aggregate: Agg; schema: Schema; busSchema?: BusSchema }) {
+  Schema extends EffectSchema.Top,
+  BusSchema extends EffectSchema.Top = Schema,
+>(input: {
+  type: Type
+  version: number
+  aggregate: Agg
+  schema: Schema
+  busSchema?: BusSchema
+}): Definition<Schema, BusSchema> {
   if (frozen) {
     throw new Error("Error defining sync event: sync system has been frozen")
   }
+
+  const effectProperties = (input.busSchema ?? input.schema) as BusSchema
 
   const def = {
     type: input.type,
     version: input.version,
     aggregate: input.aggregate,
-    schema: input.schema,
-    properties: input.busSchema ? input.busSchema : input.schema,
+    effectSchema: input.schema,
+    effectProperties,
+    schema: zodObject(input.schema),
+    properties: zodObject(effectProperties),
   }
 
   versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
@@ -143,10 +169,10 @@ function process<Def extends Definition>(def: Def, event: Event<Def>, options: {
         const result = convertEvent(def.type, event.data)
         if (result instanceof Promise) {
           void result.then((data) => {
-            void ProjectBus.publish({ type: def.type, properties: def.schema }, data)
+            void ProjectBus.publish({ type: def.type, properties: def.properties }, asRecord(data))
           })
         } else {
-          void ProjectBus.publish({ type: def.type, properties: def.schema }, result)
+          void ProjectBus.publish({ type: def.type, properties: def.properties }, asRecord(result))
         }
 
         GlobalBus.emit("event", {

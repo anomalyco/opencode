@@ -576,34 +576,46 @@ export const Info = Object.assign(_Info, {
 })
 export type Info = User | Assistant
 
+const UpdatedEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  info: _Info,
+})
+
+const RemovedEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  messageID: MessageID,
+})
+
+const PartUpdatedEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  part: _Part,
+  time: Schema.Number,
+})
+
+const PartRemovedEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  messageID: MessageID,
+  partID: PartID,
+})
+
 export const Event = {
   Updated: SyncEvent.define({
     type: "message.updated",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      info: Info.zod,
-    }),
+    schema: UpdatedEventSchema,
   }),
   Removed: SyncEvent.define({
     type: "message.removed",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-    }),
+    schema: RemovedEventSchema,
   }),
   PartUpdated: SyncEvent.define({
     type: "message.part.updated",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      part: Part.zod,
-      time: z.number(),
-    }),
+    schema: PartUpdatedEventSchema,
   }),
   PartDelta: BusEvent.define(
     "message.part.delta",
@@ -619,11 +631,7 @@ export const Event = {
     type: "message.part.removed",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-      partID: PartID.zod,
-    }),
+    schema: PartRemovedEventSchema,
   }),
 }
 
