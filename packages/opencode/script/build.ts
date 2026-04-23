@@ -230,7 +230,7 @@ for (const item of targets) {
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
-    plugins: [plugin],
+    plugins: [plugin, y18nPatchPlugin],
     external: ["node-gyp"],
     compile: {
       autoloadBunfig: false,
