@@ -590,6 +590,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expandir partes da ferramenta de edição",
   "settings.general.row.editToolPartsExpanded.description":
     "Mostrar partes das ferramentas de edição, escrita e patch expandidas por padrão na linha do tempo",
+  "settings.general.row.showSessionProgressBar.title": "Mostrar barra de progresso da sessão",
+  "settings.general.row.showSessionProgressBar.description":
+    "Exibir a barra de progresso animada no topo da sessão quando o agente estiver trabalhando",
   "settings.general.row.wayland.title": "Usar Wayland nativo",
   "settings.general.row.wayland.description": "Desabilitar fallback X11 no Wayland. Requer reinicialização.",
   "settings.general.row.wayland.tooltip":

@@ -241,7 +241,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
   "go.meta.description":
-    "Go 首月 $5，之后 $10/月，提供对 GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5 和 MiniMax M2.7 的 5 小时充裕请求额度。",
+    "Go 首月 $5，之后 $10/月，提供对 GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5 和 MiniMax M2.7 的 5 小时充裕请求额度。",
   "go.hero.title": "人人可用的低成本编程模型",
   "go.hero.body":
     "Go 将代理编程带给全世界的程序员。提供充裕的限额和对最强大的开源模型的可靠访问，让您可以利用强大的代理进行构建，而无需担心成本或可用性。",
@@ -252,6 +252,8 @@ export const dict = {
   "go.cta.price": "$10/月",
   "go.cta.promo": "首月 $5",
   "go.pricing.body": "可配合任何代理使用。首月 $5，之后 $10/月。如有需要可充值。随时取消。",
+  "go.banner.badge": "3x",
+  "go.banner.text": "Kimi K2.6 使用额度提升至 3 倍，限时至 4 月 27 日",
   "go.graph.free": "免费",
   "go.graph.freePill": "Big Pickle 和免费模型",
   "go.graph.go": "Go",
@@ -289,7 +291,7 @@ export const dict = {
   "go.problem.item2": "充裕的限额和可靠的访问",
   "go.problem.item3": "为尽可能多的程序员打造",
   "go.problem.item4":
-    "包含 GLM-5.1, GLM-5, Kimi K2.5、Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 和 MiniMax M2.7",
+    "包含 GLM-5.1, GLM-5, Kimi K2.5、Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 和 MiniMax M2.7",
   "go.how.title": "Go 如何工作",
   "go.how.body": "Go 起价为首月 $5，之后 $10/月。您可以将其与 OpenCode 或任何代理搭配使用。",
   "go.how.step1.title": "创建账户",
@@ -311,7 +313,7 @@ export const dict = {
   "go.faq.a2": "Go 包含下方列出的模型，提供充足的限额和可靠的访问。",
   "go.faq.q3": "Go 和 Zen 一样吗？",
   "go.faq.a3":
-    "不。Zen 是按量付费，而 Go 首月 $5，之后 $10/月，提供充裕的额度，并可可靠地访问 GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5 和 MiniMax M2.7 等开源模型。",
+    "不。Zen 是按量付费，而 Go 首月 $5，之后 $10/月，提供充裕的额度，并可可靠地访问 GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5 和 MiniMax M2.7 等开源模型。",
   "go.faq.q4": "Go 多少钱？",
   "go.faq.a4.p1.beforePricing": "Go 费用为",
   "go.faq.a4.p1.pricingLink": "首月 $5",
@@ -333,7 +335,7 @@ export const dict = {
 
   "go.faq.q9": "免费模型和 Go 之间的区别是什么？",
   "go.faq.a9":
-    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 包含 GLM-5.1, GLM-5, Kimi K2.5、Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 和 MiniMax M2.7，并在滚动窗口（5 小时、每周和每月）内执行更高的请求配额，大致相当于每 5 小时 $12、每周 $30 和每月 $60（实际请求计数因模型和使用情况而异）。",
+    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 包含 GLM-5.1, GLM-5, Kimi K2.5、Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 和 MiniMax M2.7，并在滚动窗口（5 小时、每周和每月）内执行更高的请求配额，大致相当于每 5 小时 $12、每周 $30 和每月 $60（实际请求计数因模型和使用情况而异）。",
 
   "zen.api.error.rateLimitExceeded": "超出速率限制。请稍后重试。",
   "zen.api.error.modelNotSupported": "不支持模型 {{model}}",

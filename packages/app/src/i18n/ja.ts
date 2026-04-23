@@ -587,6 +587,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "edit ツールパーツを展開",
   "settings.general.row.editToolPartsExpanded.description":
     "タイムラインで edit、write、patch ツールパーツをデフォルトで展開して表示します",
+  "settings.general.row.showSessionProgressBar.title": "セッション進行状況バーを表示",
+  "settings.general.row.showSessionProgressBar.description":
+    "エージェントの作業中に、セッション上部にアニメーション付きの進行状況バーを表示します",
   "settings.general.row.wayland.title": "ネイティブWaylandを使用",
   "settings.general.row.wayland.description": "WaylandでのX11フォールバックを無効にします。再起動が必要です。",
   "settings.general.row.wayland.tooltip":

@@ -97,7 +97,7 @@ creating a parallel schema source of truth.
 
 ## Escape hatches
 
-The walker in `@/util/effect-zod` exposes three explicit escape hatches for
+The walker in `@/util/effect-zod` exposes two explicit escape hatches for
 cases the pure-Schema path cannot express. Each one stays in the codebase
 only as long as its upstream or local dependency requires it — inline
 comments document when each can be deleted.
@@ -109,19 +109,7 @@ Replaces the entire derivation with a hand-crafted zod schema. Used when:
 - the target carries external `$ref` metadata (e.g.
   `config/model-id.ts` points at `https://models.dev/...`)
 - the target is a zod-only schema that cannot yet be expressed as Schema
-  (e.g. `ConfigAgent.Info`, `ConfigPermission.Info`, `Log.Level`)
-
-### `ZodPreprocess` annotation
-
-Wraps the derived zod schema with `z.preprocess(fn, inner)`. Used by
-`config/permission.ts` to inject `__originalKeys` before parsing, because
-`Schema.StructWithRest` canonicalises output (known fields first, catchall
-after) and destroys the user's original property order — which permission
-rule precedence depends on.
-
-Tracked upstream as `effect:core/wlh553`: "Schema: add preserveInputOrder
-(or pre-parse hook) for open structs." Once that lands, `ZodPreprocess` and
-the `__originalKeys` hack can both be deleted.
+  (e.g. `ConfigAgent.Info`, `Log.Level`)
 
 ### Local `DeepMutable<T>` in `config/config.ts`
 
@@ -171,20 +159,94 @@ Schema at source.
 These are the highest-priority next targets. Each is a small, self-contained
 schema module with a clear domain.
 
-- [ ] `src/control-plane/schema.ts`
-- [ ] `src/permission/schema.ts`
-- [ ] `src/project/schema.ts`
-- [ ] `src/provider/schema.ts`
-- [ ] `src/pty/schema.ts`
-- [ ] `src/question/schema.ts`
-- [ ] `src/session/schema.ts`
-- [ ] `src/sync/schema.ts`
-- [ ] `src/tool/schema.ts`
+- [x] `src/control-plane/schema.ts`
+- [x] `src/permission/schema.ts`
+- [x] `src/project/schema.ts`
+- [x] `src/provider/schema.ts`
+- [x] `src/pty/schema.ts`
+- [x] `src/question/schema.ts`
+- [x] `src/session/schema.ts`
+- [x] `src/sync/schema.ts`
+- [x] `src/tool/schema.ts`
 
 ### Session domain
 
 Major cluster. Message + event types flow through the SSE API and every SDK
 output, so byte-identical SDK surface is critical.
+
+Suggested order for this cluster, starting from the leaves that `session.ts`
+and the SSE/event surface depend on:
+
+1. `src/session/schema.ts` ✅ already migrated
+2. `src/provider/schema.ts` if `message-v2.ts` still relies on zod-first IDs
+3. `src/lsp/*` schema leaves needed by `LSP.Range`
+4. `src/snapshot/*` leaves used by `Snapshot.FileDiff`
+5. `src/session/message-v2.ts`
+6. `src/session/message.ts`
+7. `src/session/prompt.ts`
+8. `src/session/revert.ts`
+9. `src/session/summary.ts`
+10. `src/session/status.ts`
+11. `src/session/todo.ts`
+12. `src/session/session.ts`
+13. `src/session/compaction.ts`
+
+Dependency sketch:
+
+```text
+session.ts
+|- project/schema.ts
+|- control-plane/schema.ts
+|- permission/schema.ts
+|- snapshot/*
+|- message-v2.ts
+|  |- provider/schema.ts
+|  |- lsp/*
+|  |- snapshot/*
+|  |- sync/index.ts
+|  `- bus/bus-event.ts
+|- sync/index.ts
+|- bus/bus-event.ts
+`- util/update-schema.ts
+```
+
+Working rule for this cluster:
+
+- migrate reusable leaf schemas and nested payload objects first
+- migrate aggregate DTOs like `Session.Info` after their nested pieces exist as
+  named Schema values
+- leave zod-only event/update helpers in place temporarily when converting
+  them would force unrelated churn across sync/bus boundaries
+
+`message-v2.ts` first-pass outline:
+
+1. Schema-backed imports already available
+   - `SessionID`, `MessageID`, `PartID`
+   - `ProviderID`, `ModelID`
+2. Local leaf objects to extract and migrate first
+   - output format payloads
+   - common part bases like `PartBase`
+   - timestamp/range helper objects like `time.start/end`
+   - file/source helper objects
+   - token/cost/model helper objects
+3. Part variants built from those leaves
+   - `SnapshotPart`, `PatchPart`, `TextPart`, `ReasoningPart`
+   - `FilePart`, `AgentPart`, `CompactionPart`, `SubtaskPart`
+   - retry/step/tool related parts
+4. Higher-level unions and DTOs
+   - `FilePartSource`
+   - part unions
+   - message unions and assistant/user payloads
+5. Errors and event payloads last
+   - `NamedError.create(...)` shapes can stay temporarily if converting them to
+     `Schema.TaggedErrorClass` would force unrelated churn
+   - `SyncEvent.define(...)` and `BusEvent.define(...)` payloads can keep using
+     derived `.zod` until the sync/bus layers are migrated
+
+Possible later tightening after the Schema-first migration is stable:
+
+- promote repeated opaque strings and timestamp numbers into branded/newtype
+  leaf schemas where that adds domain value without changing the wire format
 
 - [ ] `src/session/compaction.ts`
 - [ ] `src/session/message-v2.ts`
@@ -216,7 +278,6 @@ emitted JSON Schema must stay byte-identical.
 - [ ] `src/tool/grep.ts`
 - [ ] `src/tool/invalid.ts`
 - [ ] `src/tool/lsp.ts`
-- [ ] `src/tool/multiedit.ts`
 - [ ] `src/tool/plan.ts`
 - [ ] `src/tool/question.ts`
 - [ ] `src/tool/read.ts`

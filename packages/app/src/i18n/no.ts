@@ -656,6 +656,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Utvid edit-verktøydeler",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-verktøydeler utvidet som standard i tidslinjen",
+  "settings.general.row.showSessionProgressBar.title": "Vis fremdriftslinje for sesjonen",
+  "settings.general.row.showSessionProgressBar.description":
+    "Vis den animerte fremdriftslinjen øverst i sesjonen når agenten jobber",
   "settings.general.row.wayland.title": "Bruk innebygd Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Krever omstart.",
   "settings.general.row.wayland.tooltip":

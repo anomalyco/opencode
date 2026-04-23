@@ -42,7 +42,13 @@ import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
-import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
+import {
+  createLoadingWindow,
+  createMainWindow,
+  registerRendererProtocol,
+  setBackgroundColor,
+  setDockIcon,
+} from "./windows"
 import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import type { Server } from "virtual:opencode-server"
 
@@ -106,6 +112,7 @@ function setupApp() {
 
   void app.whenReady().then(async () => {
     app.setAsDefaultProtocolClient("opencode")
+    registerRendererProtocol()
     setDockIcon()
     setupAutoUpdater()
     await initialize()
@@ -188,15 +195,10 @@ async function initialize() {
     logger.log("loading task finished")
   })()
 
-  const globals = {
-    updaterEnabled: UPDATER_ENABLED,
-    deepLinks: pendingDeepLinks,
-  }
-
   if (needsMigration) {
     const show = await Promise.race([loadingTask.then(() => false), delay(1_000).then(() => true)])
     if (show) {
-      overlay = createLoadingWindow(globals)
+      overlay = createLoadingWindow()
       await delay(1_000)
     }
   }
@@ -208,7 +210,7 @@ async function initialize() {
     await loadingComplete.promise
   }
 
-  mainWindow = createMainWindow(globals)
+  mainWindow = createMainWindow()
   wireMenu()
 
   overlay?.close()
@@ -245,6 +247,8 @@ registerIpcHandlers({
       initEmitter.off("step", listener)
     }
   },
+  getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
+  consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
   getDefaultServerUrl: () => getDefaultServerUrl(),
   setDefaultServerUrl: (url) => setDefaultServerUrl(url),
   getWslConfig: () => Promise.resolve(getWslConfig()),
