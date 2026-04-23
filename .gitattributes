@@ -1,0 +1,64 @@
+# ============================================================
+# opencode-fork 跨平台 .gitattributes
+# 管理者：lizhe666@gmail.com (gitee.com/zoulukuang)
+# upstream: github.com/sst/opencode (该文件不会回流上游)
+# ============================================================
+
+* text=auto eol=lf
+
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.svg text eol=lf
+*.vue text eol=lf
+
+*.rs text eol=lf
+*.go text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+
+bun.lock text eol=lf
+package-lock.json text eol=lf
+Cargo.lock text eol=lf
+flake.lock text eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.webp binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
