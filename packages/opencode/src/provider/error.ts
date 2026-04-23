@@ -147,11 +147,7 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
     const nestedType = typeof nested.type === "string" ? nested.type : undefined
     const retryAfterSeconds = nestedMessage ? parseRetryAfterSeconds(nestedMessage) : undefined
 
-    if (
-      nestedCode === "insufficient_quota" ||
-      nestedCode === "user_quota_exceeded" ||
-      nestedType === "rate_limit_error"
-    ) {
+    if (nestedCode === "user_quota_exceeded" || nestedType === "rate_limit_error") {
       return {
         type: "api_error",
         message: retryAfterSeconds
