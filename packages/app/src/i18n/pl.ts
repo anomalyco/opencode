@@ -571,7 +571,9 @@ export const dict = {
   "settings.general.row.theme.title": "Motyw",
   "settings.general.row.theme.description": "Dostosuj motyw OpenCode.",
   "settings.general.row.font.title": "Czcionka kodu",
-  "settings.general.row.font.description": "Dostosuj czcionkę używaną w blokach kodu i terminalach",
+  "settings.general.row.font.description": "Dostosuj czcionkę używaną w blokach kodu",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "Czcionka interfejsu",
   "settings.general.row.uiFont.description": "Dostosuj czcionkę używaną w całym interfejsie",
   "settings.general.row.followup.title": "Zachowanie kontynuacji",
@@ -586,6 +588,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Rozwijaj elementy narzędzia edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Domyślnie pokazuj rozwinięte elementy narzędzi edit, write i patch na osi czasu",
+  "settings.general.row.showSessionProgressBar.title": "Pokazuj pasek postępu sesji",
+  "settings.general.row.showSessionProgressBar.description":
+    "Wyświetlaj animowany pasek postępu u góry sesji, gdy agent pracuje",
   "settings.general.row.wayland.title": "Użyj natywnego Wayland",
   "settings.general.row.wayland.description": "Wyłącz fallback X11 na Wayland. Wymaga restartu.",
   "settings.general.row.wayland.tooltip":

@@ -39,7 +39,7 @@ export async function readText(p: string): Promise<string> {
   return readFile(p, "utf-8")
 }
 
-export async function readJson<T = any>(p: string): Promise<T> {
+export async function readJson<T = unknown>(p: string): Promise<T> {
   return JSON.parse(await readFile(p, "utf-8"))
 }
 

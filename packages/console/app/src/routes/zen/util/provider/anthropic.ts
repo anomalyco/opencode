@@ -148,11 +148,13 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       return {
         parse: (chunk: string) => {
           const data = chunk.split("\n")[1]
-          if (!data.startsWith("data: ")) return
+          // Claude models start with "data: {"
+          // Alibaba models start with "data:{"
+          if (!data.startsWith("data:")) return
 
           let json
           try {
-            json = JSON.parse(data.slice(6))
+            json = JSON.parse(data.replace(/^data:\s*/, ""))
           } catch {
             return
           }

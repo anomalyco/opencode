@@ -259,7 +259,7 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync.data.session_status[id] ?? idle
   })
-  const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+  const working = createMemo(() => sessionStatus().type !== "idle")
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
@@ -721,7 +721,7 @@ export function MessageTimeline(props: {
                   "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
                 }}
               >
-                <Show when={workingStatus() !== "hidden"}>
+                <Show when={workingStatus() !== "hidden" && settings.general.showSessionProgressBar()}>
                   <div
                     data-component="session-progress"
                     data-state={workingStatus()}
