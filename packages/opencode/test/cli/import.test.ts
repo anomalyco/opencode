@@ -1,10 +1,12 @@
 import { test, expect } from "bun:test"
 import {
+  readSessionImportFile,
   parseShareUrl,
   shouldAttachShareAuthHeaders,
   transformShareData,
   type ShareData,
 } from "../../src/cli/cmd/import"
+import { tmpdir } from "../fixture/fixture"
 
 // parseShareUrl tests
 test("parses valid share URLs", () => {
@@ -51,4 +53,32 @@ test("returns null for invalid share data", () => {
   expect(transformShareData([])).toBeNull()
   expect(transformShareData([{ type: "message", data: {} as any }])).toBeNull()
   expect(transformShareData([{ type: "session", data: { id: "s" } as any }])).toBeNull() // no messages
+})
+
+test("reports existing markdown import files as unsupported format", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = `${dir}/session-ses_24ad.md`
+      await Bun.write(file, "# Session transcript")
+      return file
+    },
+  })
+
+  const result = await readSessionImportFile(tmp.extra)
+
+  expect(result).toEqual({
+    type: "unsupported",
+    file: tmp.extra,
+  })
+})
+
+test("reports missing import files as not found", async () => {
+  await using tmp = await tmpdir()
+  const file = `${tmp.path}/missing-session-file.json`
+  const result = await readSessionImportFile(file)
+
+  expect(result).toEqual({
+    type: "not_found",
+    file,
+  })
 })

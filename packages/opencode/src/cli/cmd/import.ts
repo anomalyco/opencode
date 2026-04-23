@@ -20,6 +20,39 @@ export type ShareData =
   | { type: "session_diff"; data: unknown }
   | { type: "model"; data: unknown }
 
+type SessionImportData = {
+  info: SDKSession
+  messages: Array<{
+    info: Message
+    parts: Part[]
+  }>
+}
+
+export async function readSessionImportFile(file: string) {
+  if (!(await Filesystem.exists(file))) {
+    return {
+      type: "not_found" as const,
+      file,
+    }
+  }
+
+  const content = await Filesystem.readText(file)
+  const data = await Promise.resolve()
+    .then(() => JSON.parse(content) as SessionImportData)
+    .catch(() => undefined)
+  if (!data) {
+    return {
+      type: "unsupported" as const,
+      file,
+    }
+  }
+
+  return {
+    type: "data" as const,
+    data,
+  }
+}
+
 /** Extract share ID from a share URL like https://opncd.ai/share/abc123 */
 export function parseShareUrl(url: string): string | null {
   const match = url.match(/^https?:\/\/[^/]+\/share\/([a-zA-Z0-9_-]+)$/)
@@ -86,15 +119,7 @@ export const ImportCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      let exportData:
-        | {
-            info: SDKSession
-            messages: Array<{
-              info: Message
-              parts: Part[]
-            }>
-          }
-        | undefined
+      let exportData: SessionImportData | undefined
 
       const isUrl = args.file.startsWith("http://") || args.file.startsWith("https://")
 
@@ -140,12 +165,18 @@ export const ImportCommand = cmd({
 
         exportData = transformed
       } else {
-        exportData = await Filesystem.readJson<NonNullable<typeof exportData>>(args.file).catch(() => undefined)
-        if (!exportData) {
+        const result = await readSessionImportFile(args.file)
+        if (result.type === "not_found") {
           process.stdout.write(`File not found: ${args.file}`)
           process.stdout.write(EOL)
           return
         }
+        if (result.type === "unsupported") {
+          process.stdout.write(`Unsupported format: ${args.file}. Session data must be a JSON file.`)
+          process.stdout.write(EOL)
+          return
+        }
+        exportData = result.data
       }
 
       if (!exportData) {
