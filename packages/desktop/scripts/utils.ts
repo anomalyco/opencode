@@ -8,7 +8,12 @@ export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; ass
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    ocBinary: "opencode-darwin-x64",
+    ocBinary: "opencode-darwin-x64-baseline",
+    assetExt: "zip",
+  },
+  {
+    rustTarget: "aarch64-pc-windows-msvc",
+    ocBinary: "opencode-windows-arm64",
     assetExt: "zip",
   },
   {
@@ -43,6 +48,9 @@ export async function copyBinaryToSidecarFolder(source: string, target = RUST_TA
   await $`mkdir -p src-tauri/sidecars`
   const dest = windowsify(`src-tauri/sidecars/opencode-cli-${target}`)
   await $`cp ${source} ${dest}`
+  if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
+    await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
+  }
 
   console.log(`Copied ${source} to ${dest}`)
 }

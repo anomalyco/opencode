@@ -9,24 +9,7 @@ import { Resource } from "@opencode-ai/console-resource"
 
 export namespace ZenData {
   const FormatSchema = z.enum(["anthropic", "google", "openai", "oa-compat"])
-  const TrialSchema = z.object({
-    provider: z.string(),
-    limits: z.array(
-      z.object({
-        limit: z.number(),
-        client: z.enum(["cli", "desktop"]).optional(),
-      }),
-    ),
-  })
-  const RateLimitSchema = z.object({
-    period: z.enum(["day", "rolling"]),
-    value: z.number().int(),
-    checkHeader: z.string().optional(),
-    fallbackValue: z.number().int().optional(),
-  })
   export type Format = z.infer<typeof FormatSchema>
-  export type Trial = z.infer<typeof TrialSchema>
-  export type RateLimit = z.infer<typeof RateLimitSchema>
 
   const ModelCostSchema = z.object({
     input: z.number(),
@@ -43,39 +26,46 @@ export namespace ZenData {
     allowAnonymous: z.boolean().optional(),
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
-    trial: TrialSchema.optional(),
-    rateLimit: RateLimitSchema.optional(),
+    trialProvider: z.string().optional(),
+    trialEnded: z.boolean().optional(),
     fallbackProvider: z.string().optional(),
+    rateLimit: z.number().optional(),
     providers: z.array(
       z.object({
         id: z.string(),
         model: z.string(),
+        priority: z.number().optional(),
+        tpmLimit: z.number().optional(),
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
+        payloadModifier: z.record(z.string(), z.any()).optional(),
+        safetyIdentifier: z.boolean().optional(),
       }),
     ),
   })
 
   const ProviderSchema = z.object({
+    displayName: z.string().optional(),
     api: z.string(),
-    apiKey: z.string(),
+    apiKey: z.union([z.string(), z.record(z.string(), z.string())]),
     format: FormatSchema.optional(),
     headerMappings: z.record(z.string(), z.string()).optional(),
     payloadModifier: z.record(z.string(), z.any()).optional(),
-    family: z.string().optional(),
-  })
-
-  const ProviderFamilySchema = z.object({
-    headers: z.record(z.string(), z.string()).optional(),
-    responseModifier: z.record(z.string(), z.string()).optional(),
+    payloadMappings: z.record(z.string(), z.string()).optional(),
+    adjustCacheUsage: z.boolean().optional(),
   })
 
   const ModelsSchema = z.object({
-    models: z.record(z.string(), z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))])),
-    liteModels: z.record(z.string(), ModelSchema),
+    zenModels: z.record(
+      z.string(),
+      z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))]),
+    ),
+    liteModels: z.record(
+      z.string(),
+      z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))]),
+    ),
     providers: z.record(z.string(), ProviderSchema),
-    providerFamilies: z.record(z.string(), ProviderFamilySchema),
   })
 
   export const validate = fn(ModelsSchema, (input) => {
@@ -115,15 +105,71 @@ export namespace ZenData {
         Resource.ZEN_MODELS29.value +
         Resource.ZEN_MODELS30.value,
     )
-    const { models, liteModels, providers, providerFamilies } = ModelsSchema.parse(json)
+    const { zenModels, liteModels, providers } = ModelsSchema.parse(json)
+    const compositeProviders = Object.fromEntries(
+      Object.entries(providers).map(([id, provider]) => [
+        id,
+        typeof provider.apiKey === "string"
+          ? [{ id: id, key: provider.apiKey }]
+          : Object.entries(provider.apiKey).map(([kid, key]) => ({
+              id: `${id}.${kid}`,
+              key,
+            })),
+      ]),
+    )
     return {
-      models: modelList === "lite" ? liteModels : models,
       providers: Object.fromEntries(
-        Object.entries(providers).map(([id, provider]) => [
-          id,
-          { ...provider, ...(provider.family ? providerFamilies[provider.family] : {}) },
-        ]),
+        Object.entries(providers).flatMap(([providerId, provider]) =>
+          compositeProviders[providerId].map((p) => [p.id, { ...provider, apiKey: p.key }]),
+        ),
       ),
+      models: (() => {
+        const normalize = (model: z.infer<typeof ModelSchema>) => {
+          const providers = model.providers.map((p) => ({
+            ...p,
+            priority: p.priority ?? Infinity,
+            weight: p.weight ?? 1,
+          }))
+          const composite = providers.find((p) => compositeProviders[p.id].length > 1)
+          if (!composite)
+            return {
+              trialProvider: model.trialProvider ? [model.trialProvider] : undefined,
+              providers,
+            }
+
+          const weightMulti = compositeProviders[composite.id].length
+
+          return {
+            trialProvider: (() => {
+              if (!model.trialProvider) return undefined
+              if (model.trialProvider === composite.id) return compositeProviders[composite.id].map((p) => p.id)
+              return [model.trialProvider]
+            })(),
+            providers: providers.flatMap((p) =>
+              p.id === composite.id
+                ? compositeProviders[p.id].map((sub) => ({
+                    ...p,
+                    id: sub.id,
+                  }))
+                : [
+                    {
+                      ...p,
+                      weight: p.weight * weightMulti,
+                    },
+                  ],
+            ),
+          }
+        }
+
+        return Object.fromEntries(
+          Object.entries(modelList === "lite" ? liteModels : zenModels).map(([modelId, model]) => {
+            const n = Array.isArray(model)
+              ? model.map((m) => ({ ...m, ...normalize(m) }))
+              : { ...model, ...normalize(model) }
+            return [modelId, n]
+          }),
+        )
+      })(),
     }
   })
 }

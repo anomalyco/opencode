@@ -9,13 +9,14 @@ import type {
   Message,
   Part,
   Auth,
-  Config,
+  Config as SDKConfig,
 } from "@opencode-ai/sdk"
+import type { Provider as ProviderV2, Model as ModelV2 } from "@opencode-ai/sdk/v2"
 
-import type { BunShell } from "./shell"
-import { type ToolDefinition } from "./tool"
+import type { BunShell } from "./shell.js"
+import { type ToolDefinition } from "./tool.js"
 
-export * from "./tool"
+export * from "./tool.js"
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -23,16 +24,67 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+export type WorkspaceInfo = {
+  id: string
+  type: string
+  name: string
+  branch: string | null
+  directory: string | null
+  extra: unknown | null
+  projectID: string
+}
+
+export type WorkspaceTarget =
+  | {
+      type: "local"
+      directory: string
+    }
+  | {
+      type: "remote"
+      url: string | URL
+      headers?: HeadersInit
+    }
+
+export type WorkspaceAdaptor = {
+  name: string
+  description: string
+  configure(config: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
+  create(config: WorkspaceInfo, env: Record<string, string | undefined>, from?: WorkspaceInfo): Promise<void>
+  remove(config: WorkspaceInfo): Promise<void>
+  target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
   directory: string
   worktree: string
+  experimental_workspace: {
+    register(type: string, adaptor: WorkspaceAdaptor): void
+  }
   serverUrl: URL
   $: BunShell
 }
 
-export type Plugin = (input: PluginInput) => Promise<Hooks>
+export type PluginOptions = Record<string, unknown>
+
+export type Config = Omit<SDKConfig, "plugin"> & {
+  plugin?: Array<string | [string, PluginOptions]>
+}
+
+export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Hooks>
+
+export type PluginModule = {
+  id?: string
+  server: Plugin
+  tui?: never
+}
+
+type Rule = {
+  key: string
+  op: "eq" | "neq"
+  value: string
+}
 
 export type AuthHook = {
   provider: string
@@ -48,7 +100,9 @@ export type AuthHook = {
               message: string
               placeholder?: string
               validate?: (value: string) => string | undefined
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
           | {
               type: "select"
@@ -59,10 +113,12 @@ export type AuthHook = {
                 value: string
                 hint?: string
               }>
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
         >
-        authorize(inputs?: Record<string, string>): Promise<AuthOuathResult>
+        authorize(inputs?: Record<string, string>): Promise<AuthOAuthResult>
       }
     | {
         type: "api"
@@ -74,7 +130,9 @@ export type AuthHook = {
               message: string
               placeholder?: string
               validate?: (value: string) => string | undefined
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
           | {
               type: "select"
@@ -85,7 +143,9 @@ export type AuthHook = {
                 value: string
                 hint?: string
               }>
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
         >
         authorize?(inputs?: Record<string, string>): Promise<
@@ -102,7 +162,7 @@ export type AuthHook = {
   )[]
 }
 
-export type AuthOuathResult = { url: string; instructions: string } & (
+export type AuthOAuthResult = { url: string; instructions: string } & (
   | {
       method: "auto"
       callback(): Promise<
@@ -115,6 +175,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 access: string
                 expires: number
                 accountId?: string
+                enterpriseUrl?: string
               }
             | { key: string }
           ))
@@ -135,6 +196,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 access: string
                 expires: number
                 accountId?: string
+                enterpriseUrl?: string
               }
             | { key: string }
           ))
@@ -145,6 +207,18 @@ export type AuthOuathResult = { url: string; instructions: string } & (
     }
 )
 
+export type ProviderHookContext = {
+  auth?: Auth
+}
+
+export type ProviderHook = {
+  id: string
+  models?: (provider: ProviderV2, ctx: ProviderHookContext) => Promise<Record<string, ModelV2>>
+}
+
+/** @deprecated Use AuthOAuthResult instead. */
+export type AuthOuathResult = AuthOAuthResult
+
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
@@ -152,6 +226,7 @@ export interface Hooks {
     [key: string]: ToolDefinition
   }
   auth?: AuthHook
+  provider?: ProviderHook
   /**
    * Called when a new message is received
    */
@@ -170,7 +245,13 @@ export interface Hooks {
    */
   "chat.params"?: (
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
-    output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
+    output: {
+      temperature: number
+      topP: number
+      topK: number
+      maxOutputTokens: number | undefined
+      options: Record<string, any>
+    },
   ) => Promise<void>
   "chat.headers"?: (
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
@@ -222,6 +303,24 @@ export interface Hooks {
   "experimental.session.compacting"?: (
     input: { sessionID: string },
     output: { context: string[]; prompt?: string },
+  ) => Promise<void>
+  /**
+   * Called after compaction succeeds and before a synthetic user
+   * auto-continue message is added.
+   *
+   * - `enabled`: Defaults to `true`. Set to `false` to skip the synthetic
+   *   user "continue" turn.
+   */
+  "experimental.compaction.autocontinue"?: (
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      provider: ProviderContext
+      message: UserMessage
+      overflow: boolean
+    },
+    output: { enabled: boolean },
   ) => Promise<void>
   "experimental.text.complete"?: (
     input: { sessionID: string; messageID: string; partID: string },

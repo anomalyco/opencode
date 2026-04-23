@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "version": "1.14.20",
+  "name": "@opencode-ai/shared",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsgo --noEmit"
+  },
+  "bin": {
+    "opencode": "./bin/opencode"
+  },
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "imports": {},
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/semver": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/npmcli__arborist": "6.3.3"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@npmcli/arborist": "catalog:",
+    "effect": "catalog:",
+    "glob": "13.0.5",
+    "mime-types": "3.0.2",
+    "minimatch": "10.2.5",
+    "semver": "catalog:",
+    "xdg-basedir": "5.1.0",
+    "zod": "catalog:"
+  },
+  "overrides": {
+    "drizzle-orm": "catalog:"
+  }
+}

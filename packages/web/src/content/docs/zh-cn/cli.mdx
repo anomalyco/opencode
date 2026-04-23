@@ -558,6 +558,7 @@ OpenCode 可以通过环境变量进行配置。
 | `OPENCODE_AUTO_SHARE`                 | boolean | 自动分享会话                            |
 | `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径    |
 | `OPENCODE_CONFIG`                     | string  | 配置文件路径                            |
+| `OPENCODE_TUI_CONFIG`                 | string  | TUI 配置文件路径                        |
 | `OPENCODE_CONFIG_DIR`                 | string  | 配置目录路径                            |
 | `OPENCODE_CONFIG_CONTENT`             | string  | 内联 JSON 配置内容                      |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 禁用自动更新检查                        |
@@ -573,7 +574,6 @@ OpenCode 可以通过环境变量进行配置。
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | 禁用加载 `.claude/skills`               |
 | `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 禁用从远程源获取模型                    |
 | `OPENCODE_FAKE_VCS`                   | string  | 用于测试目的的模拟 VCS 提供商           |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | 禁用文件时间检查优化                    |
 | `OPENCODE_CLIENT`                     | string  | 客户端标识符（默认为 `cli`）            |
 | `OPENCODE_ENABLE_EXA`                 | boolean | 启用 Exa 网络搜索工具                   |
 | `OPENCODE_SERVER_PASSWORD`            | string  | 为 `serve`/`web` 启用基本认证           |
@@ -587,7 +587,7 @@ OpenCode 可以通过环境变量进行配置。
 这些环境变量用于启用可能会更改或移除的实验性功能。
 
 | 变量                                            | 类型    | 描述                            |
-| ----------------------------------------------- | ------- | ------------------------------- |
+| ----------------------------------------------- | ------- | ------------------------------- | --- | -------------------------------- | ------- | ------------------------ |
 | `OPENCODE_EXPERIMENTAL`                         | boolean | 启用所有实验性功能              |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                    |
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 禁用 TUI 中的选中即复制         |
@@ -598,6 +598,5 @@ OpenCode 可以通过环境变量进行配置。
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 启用实验性 LSP 工具             |
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 禁用文件监听器                  |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 启用实验性 Exa 功能             |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 启用实验性 LSP 类型检查         |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | 启用实验性 Markdown 功能        |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 为 python 文件启用 TY LSP       |     | `OPENCODE_EXPERIMENTAL_MARKDOWN` | boolean | 启用实验性 Markdown 功能 |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | 启用计划模式                    |
