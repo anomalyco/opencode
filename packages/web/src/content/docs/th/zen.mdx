@@ -83,8 +83,8 @@ OpenCode Zen ทำงานเหมือน provider อื่น ๆ ใน 
 | Claude Haiku 3.5      | claude-3-5-haiku      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Gemini 3.1 Pro        | gemini-3.1-pro        | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
 | Gemini 3 Flash        | gemini-3-flash        | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
+| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5          | minimax-m2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5 Free     | minimax-m2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7          | minimax-m2.7          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
@@ -94,6 +94,7 @@ OpenCode Zen ทำงานเหมือน provider อื่น ๆ ใน 
 | Kimi K2.6             | kimi-k2.6             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle            | big-pickle            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Ling 2.6 Flash        | ling-2.6-flash        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Hy3 Preview Free      | hy3-preview-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 [model id](/docs/config/#models) ใน OpenCode config ของคุณใช้รูปแบบ `opencode/<model-id>` ตัวอย่างเช่น สำหรับ GPT 5.4 คุณจะใช้ `opencode/gpt-5.4` ใน config ของคุณ
@@ -119,6 +120,7 @@ https://opencode.ai/zen/v1/models
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | MiniMax M2.5 Free                 | Free   | Free    | Free        | -            |
 | Ling 2.6 Flash Free               | Free   | Free    | Free        | -            |
+| Hy3 Preview Free                  | Free   | Free    | Free        | -            |
 | Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
@@ -168,6 +170,7 @@ https://opencode.ai/zen/v1/models
 
 - MiniMax M2.5 Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
 - Ling 2.6 Flash Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
+- Hy3 Preview Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
 - Nemotron 3 Super Free เปิดให้ใช้บน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
 - Big Pickle เป็น stealth model ที่ใช้งานฟรีบน OpenCode ในช่วงเวลาจำกัด ทีมกำลังใช้ช่วงเวลานี้เพื่อเก็บ feedback และปรับปรุงโมเดล
 
@@ -212,6 +215,7 @@ https://opencode.ai/zen/v1/models
 - Big Pickle: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
 - MiniMax M2.5 Free: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
 - Ling 2.6 Flash Free: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
+- Hy3 Preview Free: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
 - Nemotron 3 Super Free (endpoint ฟรีของ NVIDIA): ให้บริการภายใต้ [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) ใช้สำหรับการทดลองเท่านั้น ไม่เหมาะสำหรับ production หรือข้อมูลที่อ่อนไหว NVIDIA จะบันทึก prompt และ output เพื่อนำไปปรับปรุงโมเดลและบริการของตน โปรดอย่าส่งข้อมูลส่วนบุคคลหรือข้อมูลลับ.
 - OpenAI APIs: คำขอจะถูกเก็บไว้เป็นเวลา 30 วันตาม [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: คำขอจะถูกเก็บไว้เป็นเวลา 30 วันตาม [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).

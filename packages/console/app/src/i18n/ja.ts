@@ -250,7 +250,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
   "go.meta.description":
-    "Goは最初の月$5、その後$10/月で、GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7に対して5時間のゆとりあるリクエスト上限があります。",
+    "Goは最初の月$5、その後$10/月で、GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7に対して5時間のゆとりあるリクエスト上限があります。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
   "go.hero.body":
     "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
@@ -302,7 +302,7 @@ export const dict = {
   "go.problem.item2": "十分な制限と安定したアクセス",
   "go.problem.item3": "できるだけ多くのプログラマーのために構築",
   "go.problem.item4":
-    "GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7を含む",
+    "GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7を含む",
   "go.how.title": "Goの仕組み",
   "go.how.body": "Goは最初の月$5、その後$10/月で始まります。OpenCodeまたは任意のエージェントで使えます。",
   "go.how.step1.title": "アカウントを作成",
@@ -327,7 +327,7 @@ export const dict = {
   "go.faq.a2": "Go には、十分な利用上限と安定したアクセスを備えた、以下のモデルが含まれます。",
   "go.faq.q3": "GoはZenと同じですか？",
   "go.faq.a3":
-    "いいえ。Zenは従量課金制ですが、Goは最初の月$5、その後$10/月で始まり、GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7のオープンソースモデルに対して、ゆとりある上限と信頼できるアクセスを提供します。",
+    "いいえ。Zenは従量課金制ですが、Goは最初の月$5、その後$10/月で始まり、GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7のオープンソースモデルに対して、ゆとりある上限と信頼できるアクセスを提供します。",
   "go.faq.q4": "Goの料金は？",
   "go.faq.a4.p1.beforePricing": "Goは",
   "go.faq.a4.p1.pricingLink": "最初の月$5",
@@ -351,7 +351,7 @@ export const dict = {
 
   "go.faq.q9": "無料モデルとGoの違いは何ですか？",
   "go.faq.a9":
-    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。GoにはGLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7が含まれ、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。GoにはGLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2-Pro、MiMo-V2-Omni、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.5 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7が含まれ、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
 
   "zen.api.error.rateLimitExceeded": "レート制限を超えました。後でもう一度お試しください。",
   "zen.api.error.modelNotSupported": "モデル {{model}} はサポートされていません",

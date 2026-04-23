@@ -1,191 +1,192 @@
-import z from "zod"
+import { Schema } from "effect"
 import { SessionID } from "./schema"
 import { ModelID, ProviderID } from "../provider/schema"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
+import { namedSchemaError } from "@/util/named-schema-error"
 
-export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
-export const AuthError = NamedError.create(
-  "ProviderAuthError",
-  z.object({
-    providerID: z.string(),
-    message: z.string(),
-  }),
-)
-
-export const ToolCall = z
-  .object({
-    state: z.literal("call"),
-    step: z.number().optional(),
-    toolCallId: z.string(),
-    toolName: z.string(),
-    args: z.custom<Required<unknown>>(),
-  })
-  .meta({
-    ref: "ToolCall",
-  })
-export type ToolCall = z.infer<typeof ToolCall>
-
-export const ToolPartialCall = z
-  .object({
-    state: z.literal("partial-call"),
-    step: z.number().optional(),
-    toolCallId: z.string(),
-    toolName: z.string(),
-    args: z.custom<Required<unknown>>(),
-  })
-  .meta({
-    ref: "ToolPartialCall",
-  })
-export type ToolPartialCall = z.infer<typeof ToolPartialCall>
-
-export const ToolResult = z
-  .object({
-    state: z.literal("result"),
-    step: z.number().optional(),
-    toolCallId: z.string(),
-    toolName: z.string(),
-    args: z.custom<Required<unknown>>(),
-    result: z.string(),
-  })
-  .meta({
-    ref: "ToolResult",
-  })
-export type ToolResult = z.infer<typeof ToolResult>
-
-export const ToolInvocation = z.discriminatedUnion("state", [ToolCall, ToolPartialCall, ToolResult]).meta({
-  ref: "ToolInvocation",
+export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
+export const AuthError = namedSchemaError("ProviderAuthError", {
+  providerID: Schema.String,
+  message: Schema.String,
 })
-export type ToolInvocation = z.infer<typeof ToolInvocation>
 
-export const TextPart = z
-  .object({
-    type: z.literal("text"),
-    text: z.string(),
-  })
-  .meta({
-    ref: "TextPart",
-  })
-export type TextPart = z.infer<typeof TextPart>
+const AuthErrorEffect = Schema.Struct({
+  name: Schema.Literal("ProviderAuthError"),
+  data: Schema.Struct({
+    providerID: Schema.String,
+    message: Schema.String,
+  }),
+})
 
-export const ReasoningPart = z
-  .object({
-    type: z.literal("reasoning"),
-    text: z.string(),
-    providerMetadata: z.record(z.string(), z.any()).optional(),
-  })
-  .meta({
-    ref: "ReasoningPart",
-  })
-export type ReasoningPart = z.infer<typeof ReasoningPart>
+const OutputLengthErrorEffect = Schema.Struct({
+  name: Schema.Literal("MessageOutputLengthError"),
+  data: Schema.Struct({}),
+})
 
-export const ToolInvocationPart = z
-  .object({
-    type: z.literal("tool-invocation"),
-    toolInvocation: ToolInvocation,
-  })
-  .meta({
-    ref: "ToolInvocationPart",
-  })
-export type ToolInvocationPart = z.infer<typeof ToolInvocationPart>
+const UnknownErrorEffect = Schema.Struct({
+  name: Schema.Literal("UnknownError"),
+  data: Schema.Struct({
+    message: Schema.String,
+  }),
+})
 
-export const SourceUrlPart = z
-  .object({
-    type: z.literal("source-url"),
-    sourceId: z.string(),
-    url: z.string(),
-    title: z.string().optional(),
-    providerMetadata: z.record(z.string(), z.any()).optional(),
-  })
-  .meta({
-    ref: "SourceUrlPart",
-  })
-export type SourceUrlPart = z.infer<typeof SourceUrlPart>
+export const ToolCall = Schema.Struct({
+  state: Schema.Literal("call"),
+  step: Schema.optional(Schema.Number),
+  toolCallId: Schema.String,
+  toolName: Schema.String,
+  args: Schema.Unknown,
+})
+  .annotate({ identifier: "ToolCall" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 
-export const FilePart = z
-  .object({
-    type: z.literal("file"),
-    mediaType: z.string(),
-    filename: z.string().optional(),
-    url: z.string(),
-  })
-  .meta({
-    ref: "FilePart",
-  })
-export type FilePart = z.infer<typeof FilePart>
+export const ToolPartialCall = Schema.Struct({
+  state: Schema.Literal("partial-call"),
+  step: Schema.optional(Schema.Number),
+  toolCallId: Schema.String,
+  toolName: Schema.String,
+  args: Schema.Unknown,
+})
+  .annotate({ identifier: "ToolPartialCall" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolPartialCall = Schema.Schema.Type<typeof ToolPartialCall>
 
-export const StepStartPart = z
-  .object({
-    type: z.literal("step-start"),
-  })
-  .meta({
-    ref: "StepStartPart",
-  })
-export type StepStartPart = z.infer<typeof StepStartPart>
+export const ToolResult = Schema.Struct({
+  state: Schema.Literal("result"),
+  step: Schema.optional(Schema.Number),
+  toolCallId: Schema.String,
+  toolName: Schema.String,
+  args: Schema.Unknown,
+  result: Schema.String,
+})
+  .annotate({ identifier: "ToolResult" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolResult = Schema.Schema.Type<typeof ToolResult>
 
-export const MessagePart = z
-  .discriminatedUnion("type", [TextPart, ReasoningPart, ToolInvocationPart, SourceUrlPart, FilePart, StepStartPart])
-  .meta({
-    ref: "MessagePart",
-  })
-export type MessagePart = z.infer<typeof MessagePart>
+export const ToolInvocation = Schema.Union([ToolCall, ToolPartialCall, ToolResult])
+  .annotate({ identifier: "ToolInvocation", discriminator: "state" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolInvocation = Schema.Schema.Type<typeof ToolInvocation>
 
-export const Info = z
-  .object({
-    id: z.string(),
-    role: z.enum(["user", "assistant"]),
-    parts: z.array(MessagePart),
-    metadata: z
-      .object({
-        time: z.object({
-          created: z.number(),
-          completed: z.number().optional(),
+export const TextPart = Schema.Struct({
+  type: Schema.Literal("text"),
+  text: Schema.String,
+})
+  .annotate({ identifier: "TextPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type TextPart = Schema.Schema.Type<typeof TextPart>
+
+export const ReasoningPart = Schema.Struct({
+  type: Schema.Literal("reasoning"),
+  text: Schema.String,
+  providerMetadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+})
+  .annotate({ identifier: "ReasoningPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
+
+export const ToolInvocationPart = Schema.Struct({
+  type: Schema.Literal("tool-invocation"),
+  toolInvocation: ToolInvocation,
+})
+  .annotate({ identifier: "ToolInvocationPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ToolInvocationPart = Schema.Schema.Type<typeof ToolInvocationPart>
+
+export const SourceUrlPart = Schema.Struct({
+  type: Schema.Literal("source-url"),
+  sourceId: Schema.String,
+  url: Schema.String,
+  title: Schema.optional(Schema.String),
+  providerMetadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+})
+  .annotate({ identifier: "SourceUrlPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type SourceUrlPart = Schema.Schema.Type<typeof SourceUrlPart>
+
+export const FilePart = Schema.Struct({
+  type: Schema.Literal("file"),
+  mediaType: Schema.String,
+  filename: Schema.optional(Schema.String),
+  url: Schema.String,
+})
+  .annotate({ identifier: "FilePart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type FilePart = Schema.Schema.Type<typeof FilePart>
+
+export const StepStartPart = Schema.Struct({
+  type: Schema.Literal("step-start"),
+})
+  .annotate({ identifier: "StepStartPart" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type StepStartPart = Schema.Schema.Type<typeof StepStartPart>
+
+export const MessagePart = Schema.Union([
+  TextPart,
+  ReasoningPart,
+  ToolInvocationPart,
+  SourceUrlPart,
+  FilePart,
+  StepStartPart,
+])
+  .annotate({ identifier: "MessagePart", discriminator: "type" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type MessagePart = Schema.Schema.Type<typeof MessagePart>
+
+export const Info = Schema.Struct({
+  id: Schema.String,
+  role: Schema.Literals(["user", "assistant"]),
+  parts: Schema.Array(MessagePart),
+  metadata: Schema.Struct({
+    time: Schema.Struct({
+      created: Schema.Number,
+      completed: Schema.optional(Schema.Number),
+    }),
+    error: Schema.optional(Schema.Union([AuthErrorEffect, UnknownErrorEffect, OutputLengthErrorEffect])),
+    sessionID: SessionID,
+    tool: Schema.Record(
+      Schema.String,
+      Schema.StructWithRest(
+        Schema.Struct({
+          title: Schema.String,
+          snapshot: Schema.optional(Schema.String),
+          time: Schema.Struct({
+            start: Schema.Number,
+            end: Schema.Number,
+          }),
         }),
-        error: z
-          .discriminatedUnion("name", [AuthError.Schema, NamedError.Unknown.Schema, OutputLengthError.Schema])
-          .optional(),
-        sessionID: SessionID.zod,
-        tool: z.record(
-          z.string(),
-          z
-            .object({
-              title: z.string(),
-              snapshot: z.string().optional(),
-              time: z.object({
-                start: z.number(),
-                end: z.number(),
-              }),
-            })
-            .catchall(z.any()),
-        ),
-        assistant: z
-          .object({
-            system: z.string().array(),
-            modelID: ModelID.zod,
-            providerID: ProviderID.zod,
-            path: z.object({
-              cwd: z.string(),
-              root: z.string(),
-            }),
-            cost: z.number(),
-            summary: z.boolean().optional(),
-            tokens: z.object({
-              input: z.number(),
-              output: z.number(),
-              reasoning: z.number(),
-              cache: z.object({
-                read: z.number(),
-                write: z.number(),
-              }),
-            }),
-          })
-          .optional(),
-        snapshot: z.string().optional(),
-      })
-      .meta({ ref: "MessageMetadata" }),
-  })
-  .meta({
-    ref: "Message",
-  })
-export type Info = z.infer<typeof Info>
+        [Schema.Record(Schema.String, Schema.Unknown)],
+      ),
+    ),
+    assistant: Schema.optional(
+      Schema.Struct({
+        system: Schema.Array(Schema.String),
+        modelID: ModelID,
+        providerID: ProviderID,
+        path: Schema.Struct({
+          cwd: Schema.String,
+          root: Schema.String,
+        }),
+        cost: Schema.Number,
+        summary: Schema.optional(Schema.Boolean),
+        tokens: Schema.Struct({
+          input: Schema.Number,
+          output: Schema.Number,
+          reasoning: Schema.Number,
+          cache: Schema.Struct({
+            read: Schema.Number,
+            write: Schema.Number,
+          }),
+        }),
+      }),
+    ),
+    snapshot: Schema.optional(Schema.String),
+  }).annotate({ identifier: "MessageMetadata" }),
+})
+  .annotate({ identifier: "Message" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
 export * as Message from "./message"
