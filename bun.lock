@@ -359,6 +359,7 @@
         "@octokit/rest": "catalog:",
         "@openauthjs/openauth": "catalog:",
         "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/relay": "workspace:*",
         "@opencode-ai/script": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.5.1",
@@ -481,6 +482,19 @@
         "@opentui/core",
         "@opentui/solid",
       ],
+    },
+    "packages/relay": {
+      "name": "@opencode-ai/relay",
+      "version": "0.0.1",
+      "dependencies": {
+        "hono": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
     },
     "packages/script": {
       "name": "@opencode-ai/script",
@@ -1561,6 +1575,8 @@
     "@opencode-ai/function": ["@opencode-ai/function@workspace:packages/function"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
+
+    "@opencode-ai/relay": ["@opencode-ai/relay@workspace:packages/relay"],
 
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
