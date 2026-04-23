@@ -20,7 +20,11 @@ import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
-export function DialogSessionList() {
+interface DialogSessionListProps {
+  initialAction?: "rename"
+}
+
+export function DialogSessionList(props: DialogSessionListProps) {
   const dialog = useDialog()
   const route = useRoute()
   const sync = useSync()
@@ -172,6 +176,16 @@ export function DialogSessionList() {
 
   onMount(() => {
     dialog.setSize("large")
+    if (props.initialAction === "rename" && sync.data.session.length > 0) {
+      const currentId = currentSessionID()
+      const firstSessionId = sync.data.session.find((s) => s.id !== currentId)?.id
+      const targetId = currentId ?? firstSessionId
+      if (targetId) {
+        setTimeout(() => {
+          dialog.replace(() => <DialogSessionRename session={targetId} />)
+        }, 0)
+      }
+    }
   })
 
   return (

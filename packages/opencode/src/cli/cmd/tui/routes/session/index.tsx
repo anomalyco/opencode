@@ -429,18 +429,6 @@ export function Session() {
       },
     },
     {
-      title: "Rename session",
-      value: "session.rename",
-      keybind: "session_rename",
-      category: "Session",
-      slash: {
-        name: "rename",
-      },
-      onSelect: (dialog) => {
-        dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
-      },
-    },
-    {
       title: "Jump to message",
       value: "session.timeline",
       keybind: "session_timeline",

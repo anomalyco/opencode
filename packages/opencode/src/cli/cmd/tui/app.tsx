@@ -37,6 +37,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogSessionRename } from "@tui/component/dialog-session-rename"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
@@ -432,6 +433,22 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           type: "home",
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Rename session",
+      value: "session.rename",
+      keybind: "session_rename",
+      category: "Session",
+      slash: {
+        name: "rename",
+      },
+      onSelect: (dialog) => {
+        if (route.data.type === "session" && (route.data as { sessionID?: string }).sessionID) {
+          dialog.replace(() => <DialogSessionRename session={(route.data as { sessionID: string }).sessionID} />)
+        } else {
+          dialog.replace(() => <DialogSessionList initialAction="rename" />)
+        }
       },
     },
     {
