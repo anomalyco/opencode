@@ -90,8 +90,8 @@ También puedes acceder a nuestros modelos a través de los siguientes endpoints
 | Claude Haiku 3.5      | claude-3-5-haiku      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Gemini 3.1 Pro        | gemini-3.1-pro        | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
 | Gemini 3 Flash        | gemini-3-flash        | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
+| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5          | minimax-m2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5 Free     | minimax-m2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7          | minimax-m2.7          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
@@ -101,6 +101,7 @@ También puedes acceder a nuestros modelos a través de los siguientes endpoints
 | Kimi K2.6             | kimi-k2.6             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle            | big-pickle            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Ling 2.6 Flash        | ling-2.6-flash        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Hy3 Preview Free      | hy3-preview-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 El [identificador del modelo](/docs/config/#models) en tu configuración de OpenCode
@@ -128,6 +129,7 @@ Admitimos un modelo de pago por uso. A continuación se muestran los precios **p
 | Big Pickle                        | Free    | Free    | Free             | -                  |
 | MiniMax M2.5 Free                 | Free    | Free    | Free             | -                  |
 | Ling 2.6 Flash Free               | Free    | Free    | Free             | -                  |
+| Hy3 Preview Free                  | Free    | Free    | Free             | -                  |
 | Nemotron 3 Super Free             | Free    | Free    | Free             | -                  |
 | MiniMax M2.7                      | $0.30   | $1.20   | $0.06            | $0.375             |
 | MiniMax M2.5                      | $0.30   | $1.20   | $0.06            | $0.375             |
@@ -177,6 +179,7 @@ Los modelos gratuitos:
 
 - MiniMax M2.5 Free está disponible en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
 - Ling 2.6 Flash Free está disponible en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
+- Hy3 Preview Flash Free está disponible en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
 - Nemotron 3 Super Free está disponible en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
 - Big Pickle es un modelo stealth que es gratuito en OpenCode por tiempo limitado. El equipo está usando este tiempo para recopilar comentarios y mejorar el modelo.
 
@@ -224,6 +227,7 @@ Todos nuestros modelos están alojados en US. Nuestros proveedores siguen una po
 - Big Pickle: Durante su período gratuito, los datos recopilados pueden usarse para mejorar el modelo.
 - MiniMax M2.5 Free: Durante su período gratuito, los datos recopilados pueden usarse para mejorar el modelo.
 - Ling 2.6 Flash Free: Durante su período gratuito, los datos recopilados pueden usarse para mejorar el modelo.
+- Hy3 Preview Free: Durante su período gratuito, los datos recopilados pueden usarse para mejorar el modelo.
 - Nemotron 3 Super Free (endpoints gratuitos de NVIDIA): Se ofrece bajo los [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Solo para uso de prueba, no para producción ni datos sensibles. NVIDIA registra los prompts y las salidas para mejorar sus modelos y servicios. No envíes datos personales ni confidenciales.
 - OpenAI APIs: Las solicitudes se conservan durante 30 días de acuerdo con [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Las solicitudes se conservan durante 30 días de acuerdo con [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).

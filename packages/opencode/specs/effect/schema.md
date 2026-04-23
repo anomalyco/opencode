@@ -159,6 +159,7 @@ Schema at source.
 These are the highest-priority next targets. Each is a small, self-contained
 schema module with a clear domain.
 
+- [x] `src/account/schema.ts`
 - [x] `src/control-plane/schema.ts`
 - [x] `src/permission/schema.ts`
 - [x] `src/project/schema.ts`
@@ -166,8 +167,10 @@ schema module with a clear domain.
 - [x] `src/pty/schema.ts`
 - [x] `src/question/schema.ts`
 - [x] `src/session/schema.ts`
+- [x] `src/storage/schema.ts`
 - [x] `src/sync/schema.ts`
 - [x] `src/tool/schema.ts`
+- [x] `src/util/schema.ts`
 
 ### Session domain
 
@@ -248,15 +251,15 @@ Possible later tightening after the Schema-first migration is stable:
 - promote repeated opaque strings and timestamp numbers into branded/newtype
   leaf schemas where that adds domain value without changing the wire format
 
-- [ ] `src/session/compaction.ts`
-- [ ] `src/session/message-v2.ts`
-- [ ] `src/session/message.ts`
-- [ ] `src/session/prompt.ts`
-- [ ] `src/session/revert.ts`
-- [ ] `src/session/session.ts`
-- [ ] `src/session/status.ts`
-- [ ] `src/session/summary.ts`
-- [ ] `src/session/todo.ts`
+- [x] `src/session/compaction.ts`
+- [x] `src/session/message-v2.ts`
+- [x] `src/session/message.ts`
+- [x] `src/session/prompt.ts`
+- [x] `src/session/revert.ts`
+- [x] `src/session/session.ts`
+- [x] `src/session/status.ts`
+- [x] `src/session/summary.ts`
+- [x] `src/session/todo.ts`
 
 ### Provider domain
 

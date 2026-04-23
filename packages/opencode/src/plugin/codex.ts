@@ -379,6 +379,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         for (const [modelId, model] of Object.entries(provider.models)) {
           if (modelId.includes("codex")) continue
           if (allowedModels.has(model.api.id)) continue
+          const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
+          if (match && parseFloat(match[1]) > 5.4) continue
           delete provider.models[modelId]
         }
 
