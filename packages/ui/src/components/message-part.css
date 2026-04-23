@@ -909,6 +909,13 @@
     gap: 4px;
     flex: 1;
     min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   [data-slot="question-text"] {
@@ -936,14 +943,6 @@
     margin-top: 12px;
     padding: 1px 1px 8px;
     flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
   }
 
   [data-slot="question-option"] {
