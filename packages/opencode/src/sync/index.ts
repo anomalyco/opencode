@@ -8,40 +8,33 @@ import { EventSequenceTable, EventTable } from "./event.sql"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { EventID } from "./schema"
 import { Flag } from "@/flag/flag"
-import { Schema as EffectSchema } from "effect"
+import { Schema as EffectSchema, Types } from "effect"
 import { zodObject } from "@/util/effect-zod"
 import { isRecord } from "@/util/record"
 
-type ObjectSchema = z.ZodObject<any> | EffectSchema.Top
-type SchemaData<S extends ObjectSchema> = S extends z.ZodObject<any>
-  ? z.infer<S>
-  : S extends EffectSchema.Top
-    ? EffectSchema.Schema.Type<S>
-    : never
-
-export type Definition<Data = unknown, PropertiesData = Data> = {
+export type Definition<Schema extends EffectSchema.Top = EffectSchema.Top, BusSchema extends EffectSchema.Top = Schema> = {
   type: string
   version: number
   aggregate: string
+  effectSchema: Schema
+  effectProperties: BusSchema
   schema: z.ZodObject
 
   // This is temporary and only exists for compatibility with bus
   // event definitions
   properties: z.ZodObject
-
-  readonly _data?: Data
-  readonly _propertiesData?: PropertiesData
 }
 
 export type Event<Def extends Definition = Definition> = {
   id: string
   seq: number
   aggregateID: string
-  data: Def extends Definition<infer Data> ? Data : never
+  data: Types.DeepMutable<EffectSchema.Schema.Type<Def["effectSchema"]>>
 }
 
-export type Properties<Def extends Definition = Definition> =
-  Def extends Definition<any, infer PropertiesData> ? PropertiesData : never
+export type Properties<Def extends Definition = Definition> = Types.DeepMutable<
+  EffectSchema.Schema.Type<Def["effectProperties"]>
+>
 
 export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
@@ -74,7 +67,7 @@ export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; co
   for (let [type, version] of versions.entries()) {
     let def = registry.get(versionedType(type, version))!
 
-    BusEvent.define(def.type, def.properties || def.schema)
+    BusEvent.define(def.type, def.properties)
   }
 
   // Freeze the system so it clearly errors if events are defined
@@ -89,33 +82,29 @@ export function versionedType(type: string, version?: number) {
   return version ? `${type}.${version}` : type
 }
 
-function normalizeSchema(schema: ObjectSchema) {
-  return isZodObject(schema) ? schema : zodObject(schema)
-}
-
-function isZodObject(schema: ObjectSchema): schema is z.ZodObject<any> {
-  return typeof schema === "object" && schema !== null && "_zod" in schema && "shape" in schema
-}
-
 export function define<
   Type extends string,
   Agg extends string,
-  Schema extends ObjectSchema,
-  BusSchema extends ObjectSchema = Schema,
+  Schema extends EffectSchema.Top,
+  BusSchema extends EffectSchema.Top = Schema,
 >(input: { type: Type; version: number; aggregate: Agg; schema: Schema; busSchema?: BusSchema }): Definition<
-  SchemaData<Schema>,
-  SchemaData<BusSchema>
+  Schema,
+  BusSchema
 > {
   if (frozen) {
     throw new Error("Error defining sync event: sync system has been frozen")
   }
 
+  const effectProperties = (input.busSchema ?? input.schema) as BusSchema
+
   const def = {
     type: input.type,
     version: input.version,
     aggregate: input.aggregate,
-    schema: normalizeSchema(input.schema),
-    properties: normalizeSchema(input.busSchema ? input.busSchema : input.schema),
+    effectSchema: input.schema,
+    effectProperties,
+    schema: zodObject(input.schema),
+    properties: zodObject(effectProperties),
   }
 
   versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
