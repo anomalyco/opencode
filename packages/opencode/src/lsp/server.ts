@@ -27,6 +27,8 @@ const output = (cmd: string[], opts: Process.RunOptions = {}) => Process.text(cm
 export interface Handle {
   process: ChildProcessWithoutNullStreams
   initialization?: Record<string, any>
+  /** Override the default 45 s initialize-request timeout (ms). */
+  initializeTimeout?: number
 }
 
 type RootFunction = (file: string, ctx: InstanceContext) => Promise<string | undefined>
@@ -1182,6 +1184,7 @@ export const JDTLS: Info = {
           cwd: root,
         },
       ),
+      initializeTimeout: 180_000,
     }
   },
 }
@@ -1281,6 +1284,7 @@ export const KotlinLS: Info = {
       process: spawn(launcherScript, ["--stdio"], {
         cwd: root,
       }),
+      initializeTimeout: 180_000,
     }
   },
 }
