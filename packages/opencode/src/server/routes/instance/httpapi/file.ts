@@ -1,9 +1,9 @@
 import { File } from "@/file"
 import { Ripgrep } from "@/file/ripgrep"
-import { LSP } from "@/lsp"
 import * as InstanceState from "@/effect/instance-state"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { LSP } from "@/lsp"
 
 const FileQuery = Schema.Struct({
   path: Schema.String,
@@ -43,7 +43,7 @@ export const FileApi = HttpApi.make("file")
       .add(
         HttpApiEndpoint.get("find", FilePaths.find, {
           query: FindTextQuery,
-          success: Schema.Array(Ripgrep.MatchData),
+          success: Schema.Array(Ripgrep.SearchMatch),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.text",
@@ -120,10 +120,11 @@ export const fileHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const svc = yield* File.Service
     const ripgrep = yield* Ripgrep.Service
+    const lsp = yield* LSP.Service
 
     const find = Effect.fn("FileHttpApi.find")(function* (ctx: { query: { pattern: string } }) {
       return yield* ripgrep
-        .search({ cwd: (yield* InstanceState.context).directory, pattern: ctx.query.pattern, limit: 10 })
+        .search({ cwd: yield* InstanceState.directory, pattern: ctx.query.pattern, limit: 10 })
         .pipe(
           Effect.map((result) => result.items),
           Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))),
@@ -141,8 +142,8 @@ export const fileHandlers = Layer.unwrap(
       })
     })
 
-    const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
-      return []
+    const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* (ctx: { query: { query: string } }) {
+      return yield* lsp.workspaceSymbol(ctx.query.query)
     })
 
     const list = Effect.fn("FileHttpApi.list")(function* (ctx: { query: { path: string } }) {
@@ -167,4 +168,4 @@ export const fileHandlers = Layer.unwrap(
         .handle("status", status),
     )
   }),
-).pipe(Layer.provide(File.defaultLayer), Layer.provide(Ripgrep.defaultLayer))
+).pipe(Layer.provide(File.defaultLayer), Layer.provide(Ripgrep.defaultLayer), Layer.provide(LSP.defaultLayer))

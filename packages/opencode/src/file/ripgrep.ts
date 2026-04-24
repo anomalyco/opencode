@@ -53,7 +53,7 @@ const Begin = Schema.Struct({
   }),
 })
 
-export const MatchData = Schema.Struct({
+export const SearchMatch = Schema.Struct({
   path: PathText,
   lines: Schema.Struct({
     text: Schema.String,
@@ -73,7 +73,7 @@ export const MatchData = Schema.Struct({
 
 export const Match = Schema.Struct({
   type: Schema.Literal("match"),
-  data: MatchData,
+  data: SearchMatch,
 })
 
 const End = Schema.Struct({

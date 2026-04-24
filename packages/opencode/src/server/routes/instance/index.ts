@@ -37,26 +37,38 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
     const handler = ExperimentalHttpApiServer.webHandler().handler
     const context = Context.empty() as Context.Context<unknown>
-    app.get("/question", (c) => handler(c.req.raw, context))
-    app.post("/question/:requestID/reply", (c) => handler(c.req.raw, context))
-    app.post("/question/:requestID/reject", (c) => handler(c.req.raw, context))
-    app.get("/permission", (c) => handler(c.req.raw, context))
-    app.post("/permission/:requestID/reply", (c) => handler(c.req.raw, context))
-    app.get("/config", (c) => handler(c.req.raw, context))
-    app.get("/config/providers", (c) => handler(c.req.raw, context))
-    app.get("/provider", (c) => handler(c.req.raw, context))
-    app.get("/provider/auth", (c) => handler(c.req.raw, context))
-    app.post("/provider/:providerID/oauth/authorize", (c) => handler(c.req.raw, context))
-    app.post("/provider/:providerID/oauth/callback", (c) => handler(c.req.raw, context))
-    app.get("/project", (c) => handler(c.req.raw, context))
-    app.get("/project/current", (c) => handler(c.req.raw, context))
-    app.get(FilePaths.find, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.findFile, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.findSymbol, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.list, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.content, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.status, (c) => handler(c.req.raw, context))
-    app.get(McpPaths.status, (c) => handler(c.req.raw, context))
+    app.on(
+      "GET",
+      [
+        "/question",
+        "/permission",
+        "/config",
+        "/config/providers",
+        "/provider",
+        "/provider/auth",
+        "/project",
+        "/project/current",
+        FilePaths.find,
+        FilePaths.findFile,
+        FilePaths.findSymbol,
+        FilePaths.list,
+        FilePaths.content,
+        FilePaths.status,
+        McpPaths.status,
+      ],
+      (c) => handler(c.req.raw, context),
+    )
+    app.on(
+      "POST",
+      [
+        "/question/:requestID/reply",
+        "/question/:requestID/reject",
+        "/permission/:requestID/reply",
+        "/provider/:providerID/oauth/authorize",
+        "/provider/:providerID/oauth/callback",
+      ],
+      (c) => handler(c.req.raw, context),
+    )
   }
 
   return app

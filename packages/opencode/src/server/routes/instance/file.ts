@@ -21,7 +21,7 @@ export const FileRoutes = lazy(() =>
             description: "Matches",
             content: {
               "application/json": {
-                schema: resolver(Ripgrep.MatchData.zod.array()),
+                schema: resolver(Ripgrep.SearchMatch.zod.array()),
               },
             },
           },
