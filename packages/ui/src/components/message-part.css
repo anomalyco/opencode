@@ -1090,7 +1090,8 @@
     min-width: 0;
     cursor: text;
     resize: none;
-    overflow: hidden;
+    overflow-y: auto;
+    max-height: 120px;
     overflow-wrap: anywhere;
 
     &::placeholder {
