@@ -412,8 +412,9 @@ Current instance route inventory:
 - `workspace` - `bridged`
   best small reads: `GET /experimental/workspace/adaptor`, `GET /experimental/workspace`, `GET /experimental/workspace/status`
   defer create/remove mutations first
-- `file` - `later`
-  good JSON-only candidate set, but larger than the current first-wave slices
+- `file` - `bridged` (partial)
+  bridged endpoints: `GET /file`, `GET /file/content`, `GET /file/status`
+  defer search endpoints first
 - `mcp` - `later`
   has JSON-only endpoints, but interactive OAuth/auth flows make it a worse early fit
 - `session` - `defer`
@@ -449,7 +450,7 @@ Recommended near-term sequence:
 - [x] port `project` read endpoints (`GET /project`, `GET /project/current`)
 - [x] port `GET /config` full read endpoint
 - [x] port `workspace` read endpoints
-- [ ] port `file` JSON read endpoints
+- [x] port `file` JSON read endpoints
 - [ ] decide when to remove the flag and make Effect routes the default
 
 ## Rule of thumb
