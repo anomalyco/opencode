@@ -1,7 +1,7 @@
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, For, Show, createSignal, createEffect } from "solid-js"
-import { formatDateUTC, formatDateForTable } from "../../common"
+import { formatDateUTC, formatDateForTable } from "../../../common"
 import { withActor } from "~/context/auth.withActor"
 import { IconChevronLeft, IconChevronRight, IconBreakdown } from "~/component/icon"
 import styles from "./models-section.module.css"
@@ -94,10 +94,10 @@ export function ModelsSection() {
         </select>
       </div>
 
-      <div data-slot="summary-cards}>
+      <div data-slot="summary-cards">
         <div class={styles.summaryCard}>
           <span class={styles.summaryLabel}>Total Cost</span>
-          <span class={styles.summaryValue}>${formatCost(totalCost())}</span>
+          <span class={styles.summaryValue}>{formatCost(totalCost())}</span>
         </div>
         <div class={styles.summaryCard}>
           <span class={styles.summaryLabel}>Total Requests</span>
@@ -117,7 +117,7 @@ export function ModelsSection() {
         </div>
         <div class={styles.summaryCard + " " + styles.savingsCard}>
           <span class={styles.summaryLabel}>Est. Cache Savings</span>
-          <span class={styles.summaryValue}>${formatCost(cacheSavings())}</span>
+          <span class={styles.summaryValue}>{formatCost(cacheSavings())}</span>
         </div>
       </div>
 
@@ -162,9 +162,9 @@ export function ModelsSection() {
                       <span class={styles.cacheValue}>{formatTokens(stat.totalCacheWriteTokens)}</span>
                     </td>
                     <td data-slot="cost" class={styles.costCell}>
-                      ${formatCost(stat.totalCost)}
+                      {formatCost(stat.totalCost)}
                     </td>
-                    <td data-slot="avg-cost">${(stat.avgCostPerRequest / 100).toFixed(4)}</td>
+                    <td data-slot="avg-cost">{(stat.avgCostPerRequest / 100).toFixed(4)}</td>
                   </tr>
                 )}
               </For>
