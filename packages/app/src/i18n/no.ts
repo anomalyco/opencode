@@ -230,7 +230,7 @@ export const dict = {
   "common.default": "Standard",
   "common.attachment": "vedlegg",
 
-  "prompt.placeholder.shell": "Skriv inn shell-kommando...",
+  "prompt.placeholder.shell": "Skriv inn shell-kommando... {{example}}",
   "prompt.placeholder.normal": 'Spør om hva som helst... "{{example}}"',
   "prompt.placeholder.simple": "Spør om hva som helst...",
   "prompt.placeholder.summarizeComments": "Oppsummer kommentarer…",

@@ -21,14 +21,14 @@ export type ReleaseType = "patch" | "minor" | "major"
 export const Event = {
   Updated: BusEvent.define(
     "installation.updated",
-    z.object({
-      version: z.string(),
+    Schema.Struct({
+      version: Schema.String,
     }),
   ),
   UpdateAvailable: BusEvent.define(
     "installation.update-available",
-    z.object({
-      version: z.string(),
+    Schema.Struct({
+      version: Schema.String,
     }),
   ),
 }

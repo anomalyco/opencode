@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach, afterAll } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
-import z from "zod"
+import { Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
 import { SyncEvent } from "../../src/sync"
@@ -43,13 +43,13 @@ describe("SyncEvent", () => {
       type: "item.created",
       version: 1,
       aggregate: "id",
-      schema: z.object({ id: z.string(), name: z.string() }),
+      schema: Schema.Struct({ id: Schema.String, name: Schema.String }),
     })
     const Sent = SyncEvent.define({
       type: "item.sent",
       version: 1,
       aggregate: "item_id",
-      schema: z.object({ item_id: z.string(), to: z.string() }),
+      schema: Schema.Struct({ item_id: Schema.String, to: Schema.String }),
     })
 
     SyncEvent.init({

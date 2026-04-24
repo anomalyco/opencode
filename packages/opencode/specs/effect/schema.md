@@ -147,6 +147,17 @@ import `z` do so only for local `ZodOverride` bridges or for `z.ZodType`
 type annotations — the `export const <Info|Spec>` values are all Effect
 Schema at source.
 
+A file is considered "done" when:
+
+- its exported schema values (`Info`, `Input`, `Event`, `Definition`, etc.)
+  are authored as Effect Schema
+- any remaining zod is either a derived compat bridge (via `zod()` /
+  `zodObject()`), a `z.ZodType` type annotation, or a documented
+  `ZodOverride` escape hatch — never a hand-written parallel source of truth
+
+Files that meet this bar but still carry a compat bridge are checked off
+with an inline note describing the bridge and what unblocks its removal.
+
 - [x] skills, formatter, console-state, mcp, lsp, permission (leaves), model-id, command, plugin, provider
 - [x] server, layout
 - [x] keybinds
@@ -243,8 +254,8 @@ Working rule for this cluster:
 5. Errors and event payloads last
    - `NamedError.create(...)` shapes can stay temporarily if converting them to
      `Schema.TaggedErrorClass` would force unrelated churn
-   - `SyncEvent.define(...)` and `BusEvent.define(...)` payloads can keep using
-     derived `.zod` until the sync/bus layers are migrated
+   - `SyncEvent.define(...)` and `BusEvent.define(...)` payloads can use
+     derived `.zod` at remaining zod-based HTTP/OpenAPI boundaries
 
 Possible later tightening after the Schema-first migration is stable:
 
@@ -263,9 +274,9 @@ Possible later tightening after the Schema-first migration is stable:
 
 ### Provider domain
 
-- [ ] `src/provider/auth.ts`
-- [ ] `src/provider/models.ts`
-- [ ] `src/provider/provider.ts`
+- [x] `src/provider/auth.ts`
+- [x] `src/provider/models.ts`
+- [x] `src/provider/provider.ts`
 
 ### Tool schemas
 
@@ -273,25 +284,25 @@ Each tool declares its parameters via a zod schema. Tools are consumed by
 both the in-process runtime and the AI SDK's tool-calling layer, so the
 emitted JSON Schema must stay byte-identical.
 
-- [ ] `src/tool/apply_patch.ts`
-- [ ] `src/tool/bash.ts`
-- [ ] `src/tool/codesearch.ts`
-- [ ] `src/tool/edit.ts`
-- [ ] `src/tool/glob.ts`
-- [ ] `src/tool/grep.ts`
-- [ ] `src/tool/invalid.ts`
-- [ ] `src/tool/lsp.ts`
-- [ ] `src/tool/plan.ts`
-- [ ] `src/tool/question.ts`
-- [ ] `src/tool/read.ts`
-- [ ] `src/tool/registry.ts`
-- [ ] `src/tool/skill.ts`
-- [ ] `src/tool/task.ts`
-- [ ] `src/tool/todo.ts`
-- [ ] `src/tool/tool.ts`
-- [ ] `src/tool/webfetch.ts`
-- [ ] `src/tool/websearch.ts`
-- [ ] `src/tool/write.ts`
+- [x] `src/tool/apply_patch.ts`
+- [x] `src/tool/bash.ts`
+- [x] `src/tool/codesearch.ts`
+- [x] `src/tool/edit.ts`
+- [x] `src/tool/glob.ts`
+- [x] `src/tool/grep.ts`
+- [x] `src/tool/invalid.ts`
+- [x] `src/tool/lsp.ts`
+- [x] `src/tool/plan.ts`
+- [x] `src/tool/question.ts`
+- [x] `src/tool/read.ts`
+- [x] `src/tool/registry.ts`
+- [x] `src/tool/skill.ts`
+- [x] `src/tool/task.ts`
+- [x] `src/tool/todo.ts`
+- [x] `src/tool/tool.ts`
+- [x] `src/tool/webfetch.ts`
+- [x] `src/tool/websearch.ts`
+- [x] `src/tool/write.ts`
 
 ### HTTP route boundaries
 
@@ -302,8 +313,8 @@ which means touching them is largely mechanical once the domain side is
 done.
 
 - [ ] `src/server/error.ts`
-- [ ] `src/server/event.ts`
-- [ ] `src/server/projectors.ts`
+- [x] `src/server/event.ts`
+- [x] `src/server/projectors.ts`
 - [ ] `src/server/routes/control/index.ts`
 - [ ] `src/server/routes/control/workspace.ts`
 - [ ] `src/server/routes/global.ts`
@@ -335,7 +346,7 @@ piecewise.
 
 - [ ] `src/acp/agent.ts`
 - [ ] `src/agent/agent.ts`
-- [ ] `src/bus/bus-event.ts`
+- [x] `src/bus/bus-event.ts`
 - [ ] `src/bus/index.ts`
 - [ ] `src/cli/cmd/tui/config/tui-migrate.ts`
 - [ ] `src/cli/cmd/tui/config/tui-schema.ts`
@@ -343,9 +354,9 @@ piecewise.
 - [ ] `src/cli/cmd/tui/event.ts`
 - [ ] `src/cli/ui.ts`
 - [ ] `src/command/index.ts`
-- [ ] `src/control-plane/adaptors/worktree.ts`
-- [ ] `src/control-plane/types.ts`
-- [ ] `src/control-plane/workspace.ts`
+- [x] `src/control-plane/adaptors/worktree.ts`
+- [x] `src/control-plane/types.ts`
+- [x] `src/control-plane/workspace.ts`
 - [ ] `src/file/index.ts`
 - [ ] `src/file/ripgrep.ts`
 - [ ] `src/file/watcher.ts`
@@ -365,7 +376,7 @@ piecewise.
 - [ ] `src/snapshot/index.ts`
 - [ ] `src/storage/db.ts`
 - [ ] `src/storage/storage.ts`
-- [ ] `src/sync/index.ts`
+- [x] `src/sync/index.ts` — public API (`SyncEvent.define`) is Schema-first; `payloads()` still derives zod for the remaining HTTP/OpenAPI boundary
 - [ ] `src/util/fn.ts`
 - [ ] `src/util/log.ts`
 - [ ] `src/util/update-schema.ts`

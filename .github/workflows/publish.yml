@@ -402,12 +402,14 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          - host: macos-latest
+          - host: macos-26-intel
             target: x86_64-apple-darwin
             platform_flag: --mac --x64
-          - host: macos-latest
+            bun_install_flags: --os=darwin --cpu=x64
+          - host: macos-26
             target: aarch64-apple-darwin
             platform_flag: --mac --arm64
+            bun_install_flags: --os=darwin --cpu=arm64
           # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
           - host: "windows-2025"
             target: aarch64-pc-windows-msvc
@@ -437,6 +439,8 @@ jobs:
         run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
 
       - uses: ./.github/actions/setup-bun
+        with:
+          install-flags: ${{ matrix.settings.bun_install_flags }}
 
       - name: Azure login
         if: runner.os == 'Windows'
