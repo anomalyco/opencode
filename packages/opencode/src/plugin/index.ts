@@ -51,6 +51,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<Hooks[]>
   readonly init: () => Effect.Effect<void>
   readonly waitForPendingEvents: (timeoutMs?: number) => Effect.Effect<void>
+  readonly hasPendingEvents: () => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
@@ -301,6 +302,10 @@ export const layer = Layer.effect(
           const pending = Array.from(s.pendingEvents)
           if (pending.length === 0) return
           await Promise.race([Promise.all(pending), new Promise<void>((resolve) => setTimeout(resolve, timeout))])
+          // Wait a tick to allow any new event handlers triggered during the wait
+          // (e.g. reprompts that caused new session.idle events) to be registered
+          // before the caller checks hasPendingEvents()
+          await Promise.resolve()
         },
         catch: (err) => {
           log.error("failed to wait for pending plugin events", { error: err })
@@ -308,7 +313,12 @@ export const layer = Layer.effect(
       }).pipe(Effect.ignore)
     })
 
-    return Service.of({ trigger, list, init, waitForPendingEvents })
+    const hasPendingEvents = Effect.fn("Plugin.hasPendingEvents")(function* () {
+      const s = yield* InstanceState.get(state)
+      return s.pendingEvents.size > 0
+    })
+
+    return Service.of({ trigger, list, init, waitForPendingEvents, hasPendingEvents })
   }),
 )
 

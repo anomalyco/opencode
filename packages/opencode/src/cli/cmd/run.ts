@@ -540,6 +540,14 @@ export const RunCommand = cmd({
               await AppRuntime.runPromise(Plugin.Service.use((svc) => svc.waitForPendingEvents())).catch((e) => {
                 console.error("Failed to wait for pending plugin events:", e)
               })
+              // If a plugin reprompted the session during handling, new plugin event handlers
+              // were queued (and the SSE stream has buffered new events including another
+              // session.idle). Continue the loop to consume those buffered events.
+              // Only break when there are truly no more pending plugin events.
+              const hasPending = await AppRuntime.runPromise(Plugin.Service.use((svc) => svc.hasPendingEvents())).catch(
+                () => false,
+              )
+              if (hasPending) continue
             }
             break
           }
@@ -683,7 +691,17 @@ export const RunCommand = cmd({
         const request = new Request(input, init)
         return Server.Default().app.fetch(request)
       }) as typeof globalThis.fetch
-      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
+      const inProcessPassword = Flag.OPENCODE_SERVER_PASSWORD
+      const inProcessHeaders = inProcessPassword
+        ? {
+            Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${inProcessPassword}`).toString("base64")}`,
+          }
+        : undefined
+      const sdk = createOpencodeClient({
+        baseUrl: "http://opencode.internal",
+        fetch: fetchFn,
+        headers: inProcessHeaders,
+      })
       await execute(sdk)
     })
   },
