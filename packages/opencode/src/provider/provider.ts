@@ -420,6 +420,115 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    edenai: Effect.fnUntraced(function* (input: Info) {
+      const envKey = yield* dep.get("EDENAI_API_KEY")
+      const auth = yield* dep.auth(input.id)
+      const apiKey = envKey ?? (auth?.type === "api" ? auth.key : undefined)
+
+      if (!apiKey) return { autoload: false }
+
+      return {
+        autoload: true,
+        options: {
+          apiKey,
+          baseURL: "https://api.edenai.run/v3/llm",
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          try {
+            log.info("edenai model discovery starting")
+            const response = await fetch("https://api.edenai.run/v3/models", {
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+              },
+            })
+
+            if (!response.ok) {
+              log.warn("edenai model discovery failed", { status: response.status })
+              return {}
+            }
+
+            const data = (await response.json()) as {
+              object: string
+              data: Array<{
+                id?: string
+                model_name?: string
+                owned_by?: string
+                context_length?: number
+                capabilities?: Record<string, boolean>
+                pricing?: {
+                  input?: number
+                  output?: number
+                  cache_read?: number
+                  cache_write?: number
+                }
+              }>
+            }
+
+            const items = Array.isArray(data?.data) ? data.data : []
+            const models: Record<string, Model> = {}
+            for (const m of items) {
+              const modelId = m.id
+              if (!modelId) continue
+              if (input.models[modelId]) continue
+
+              models[modelId] = {
+                id: ModelID.make(modelId),
+                providerID: ProviderID.edenai,
+                name: m.model_name ?? modelId,
+                family: m.owned_by,
+                api: {
+                  id: modelId,
+                  url: "https://api.edenai.run/v3/llm",
+                  npm: "@ai-sdk/openai-compatible",
+                },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: {
+                  input: m.pricing?.input ?? 0,
+                  output: m.pricing?.output ?? 0,
+                  cache: {
+                    read: m.pricing?.cache_read ?? 0,
+                    write: m.pricing?.cache_write ?? 0,
+                  },
+                },
+                limit: {
+                  context: m.context_length ?? 128000,
+                  output: 4096,
+                },
+                capabilities: {
+                  temperature: true,
+                  reasoning: m.capabilities?.["reasoning"] ?? false,
+                  attachment: m.capabilities?.["vision"] ?? false,
+                  toolcall: m.capabilities?.["tool_choice"] ?? true,
+                  input: {
+                    text: true,
+                    audio: false,
+                    image: m.capabilities?.["vision"] ?? false,
+                    video: false,
+                    pdf: false,
+                  },
+                  output: { text: true, audio: false, image: false, video: false, pdf: false },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+            }
+
+            log.info("edenai model discovery complete", {
+              count: Object.keys(models).length,
+              models: Object.keys(models).slice(0, 10),
+            })
+            return models
+          } catch (e) {
+            log.warn("edenai model discovery failed", { error: e })
+            return {}
+          }
+        },
+      }
+    }),
     vercel: () =>
       Effect.succeed({
         autoload: false,
@@ -1296,6 +1405,22 @@ const layer: Layer.Layer<
               }
             } catch (e) {
               log.warn("state discovery error", { id: "gitlab", error: e })
+            }
+          })
+        }
+
+        const edenai = ProviderID.edenai
+        if (discoveryLoaders[edenai] && providers[edenai] && isProviderAllowed(edenai)) {
+          yield* Effect.promise(async () => {
+            try {
+              const discovered = await discoveryLoaders[edenai]()
+              for (const [modelID, model] of Object.entries(discovered)) {
+                if (!providers[edenai].models[modelID]) {
+                  providers[edenai].models[modelID] = model
+                }
+              }
+            } catch (e) {
+              log.warn("state discovery error", { id: "edenai", error: e })
             }
           })
         }

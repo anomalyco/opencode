@@ -1672,6 +1672,56 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Eden AI
+
+[Eden AI](https://app.edenai.run) is a European LLM gateway providing access to 500+ models from
+OpenAI, Anthropic, Google, Mistral, Meta, xAI, and more — through a single API key. All infrastructure
+is hosted in Europe, making it a strong choice for teams with data residency or compliance requirements.
+
+1. Head over to [app.edenai.run](https://app.edenai.run) → **API Keys**, create a key, and copy it.
+
+2. Run the `/connect` command and search for **Eden AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Eden AI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command — Eden AI's available models are fetched automatically from their API.
+
+   ```txt
+   /models
+   ```
+
+Eden AI supports **automatic model fallbacks** via their API. You can configure fallbacks in your opencode config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "edenai": {
+      "models": {
+        "openai/gpt-4o": {
+          "options": {
+            "fallbacks": "openai/gpt-4o-mini,anthropic/claude-haiku-4-5"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
