@@ -23,7 +23,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             description: "List of sessions",
             content: {
               "application/json": {
-                schema: resolver(Pty.Info.array()),
+                schema: resolver(Pty.Info.zod.array()),
               },
             },
           },
@@ -46,18 +46,18 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             description: "Created session",
             content: {
               "application/json": {
-                schema: resolver(Pty.Info),
+                schema: resolver(Pty.Info.zod),
               },
             },
           },
           ...errors(400),
         },
       }),
-      validator("json", Pty.CreateInput),
+      validator("json", Pty.CreateInput.zod),
       async (c) =>
         jsonRequest("PtyRoutes.create", c, function* () {
           const pty = yield* Pty.Service
-          return yield* pty.create(c.req.valid("json"))
+          return yield* pty.create(c.req.valid("json") as Pty.CreateInput)
         }),
     )
     .get(
@@ -71,7 +71,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             description: "Session info",
             content: {
               "application/json": {
-                schema: resolver(Pty.Info),
+                schema: resolver(Pty.Info.zod),
               },
             },
           },
@@ -105,7 +105,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             description: "Updated session",
             content: {
               "application/json": {
-                schema: resolver(Pty.Info),
+                schema: resolver(Pty.Info.zod),
               },
             },
           },
@@ -113,11 +113,11 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
         },
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
-      validator("json", Pty.UpdateInput),
+      validator("json", Pty.UpdateInput.zod),
       async (c) =>
         jsonRequest("PtyRoutes.update", c, function* () {
           const pty = yield* Pty.Service
-          return yield* pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
+          return yield* pty.update(c.req.valid("param").ptyID, c.req.valid("json") as Pty.UpdateInput)
         }),
     )
     .delete(
