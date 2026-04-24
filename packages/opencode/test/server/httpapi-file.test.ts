@@ -54,4 +54,24 @@ describe("file HttpApi", () => {
     expect(status.status).toBe(200)
     expect(await status.json()).toContainEqual({ path: "hello.txt", added: 1, removed: 0, status: "added" })
   })
+
+  test("serves search endpoints", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Bun.write(path.join(tmp.path, "hello.txt"), "hello search target")
+
+    const [find, findFile, findSymbol] = await Promise.all([
+      request(FilePaths.find, tmp.path, { pattern: "search target" }),
+      request(FilePaths.findFile, tmp.path, { query: "hello", limit: "10" }),
+      request(FilePaths.findSymbol, tmp.path, { query: "anything" }),
+    ])
+
+    expect(find.status).toBe(200)
+    expect(await find.json()).toContainEqual(expect.objectContaining({ path: { text: "hello.txt" } }))
+
+    expect(findFile.status).toBe(200)
+    expect(await findFile.json()).toContain("hello.txt")
+
+    expect(findSymbol.status).toBe(200)
+    expect(await findSymbol.json()).toEqual([])
+  })
 })

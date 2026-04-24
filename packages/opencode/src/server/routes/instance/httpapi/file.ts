@@ -1,12 +1,37 @@
 import { File } from "@/file"
+import { Ripgrep } from "@/file/ripgrep"
+import { LSP } from "@/lsp"
+import * as InstanceState from "@/effect/instance-state"
 import { Effect, Layer, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
 const FileQuery = Schema.Struct({
   path: Schema.String,
 })
 
+const FindTextQuery = Schema.Struct({
+  pattern: Schema.String,
+})
+
+const FindFileQuery = Schema.Struct({
+  query: Schema.String,
+  dirs: Schema.optional(Schema.Literals(["true", "false"])),
+  type: Schema.optional(Schema.Literals(["file", "directory"])),
+  limit: Schema.optional(
+    Schema.NumberFromString.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(1)).check(
+      Schema.isLessThanOrEqualTo(200),
+    ),
+  ),
+})
+
+const FindSymbolQuery = Schema.Struct({
+  query: Schema.String,
+})
+
 export const FilePaths = {
+  find: "/find",
+  findFile: "/find/file",
+  findSymbol: "/find/symbol",
   list: "/file",
   content: "/file/content",
   status: "/file/status",
@@ -16,6 +41,36 @@ export const FileApi = HttpApi.make("file")
   .add(
     HttpApiGroup.make("file")
       .add(
+        HttpApiEndpoint.get("find", FilePaths.find, {
+          query: FindTextQuery,
+          success: Schema.Array(Ripgrep.MatchData),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "find.text",
+            summary: "Find text",
+            description: "Search for text patterns across files in the project using ripgrep.",
+          }),
+        ),
+        HttpApiEndpoint.get("findFile", FilePaths.findFile, {
+          query: FindFileQuery,
+          success: Schema.Array(Schema.String),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "find.files",
+            summary: "Find files",
+            description: "Search for files or directories by name or pattern in the project directory.",
+          }),
+        ),
+        HttpApiEndpoint.get("findSymbol", FilePaths.findSymbol, {
+          query: FindSymbolQuery,
+          success: Schema.Array(LSP.Symbol),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "find.symbols",
+            summary: "Find symbols",
+            description: "Search for workspace symbols like functions, classes, and variables using LSP.",
+          }),
+        ),
         HttpApiEndpoint.get("list", FilePaths.list, {
           query: FileQuery,
           success: Schema.Array(File.Node),
@@ -64,6 +119,31 @@ export const FileApi = HttpApi.make("file")
 export const fileHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const svc = yield* File.Service
+    const ripgrep = yield* Ripgrep.Service
+
+    const find = Effect.fn("FileHttpApi.find")(function* (ctx: { query: { pattern: string } }) {
+      return yield* ripgrep
+        .search({ cwd: (yield* InstanceState.context).directory, pattern: ctx.query.pattern, limit: 10 })
+        .pipe(
+          Effect.map((result) => result.items),
+          Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))),
+        )
+    })
+
+    const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
+      query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
+    }) {
+      return yield* svc.search({
+        query: ctx.query.query,
+        limit: ctx.query.limit ?? 10,
+        dirs: ctx.query.dirs !== "false",
+        type: ctx.query.type,
+      })
+    })
+
+    const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
+      return []
+    })
 
     const list = Effect.fn("FileHttpApi.list")(function* (ctx: { query: { path: string } }) {
       return yield* svc.list(ctx.query.path)
@@ -78,7 +158,13 @@ export const fileHandlers = Layer.unwrap(
     })
 
     return HttpApiBuilder.group(FileApi, "file", (handlers) =>
-      handlers.handle("list", list).handle("content", content).handle("status", status),
+      handlers
+        .handle("find", find)
+        .handle("findFile", findFile)
+        .handle("findSymbol", findSymbol)
+        .handle("list", list)
+        .handle("content", content)
+        .handle("status", status),
     )
   }),
-).pipe(Layer.provide(File.defaultLayer))
+).pipe(Layer.provide(File.defaultLayer), Layer.provide(Ripgrep.defaultLayer))
