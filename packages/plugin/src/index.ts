@@ -330,4 +330,27 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Called before message parts are resolved. Allows plugins to transform,
+   * resize, or replace file parts (images, audio, video) before they are
+   * processed and sent to the LLM. This is the plugin integration point
+   * for multimodal preflight tools like SHIFT (https://shift-ai.dev/).
+   *
+   * Runs server-side inside createUserMessage(), before resolvePart().
+   * Plugins mutate output.parts in place.
+   *
+   * @see https://github.com/anomalyco/opencode/issues/24125
+   */
+  "message.parts.before"?: (
+    input: {
+      sessionID: string
+      agent?: string
+      model?: { providerID: string; modelID: string }
+      messageID?: string
+      variant?: string
+    },
+    output: {
+      parts: Array<{ type: string; [key: string]: unknown }>
+    },
+  ) => Promise<void>
 }

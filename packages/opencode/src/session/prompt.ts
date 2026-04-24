@@ -1061,6 +1061,20 @@ export const layer = Layer.effect(
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
+      // Allow plugins to transform parts before resolution (e.g. image optimization).
+      // See https://github.com/anomalyco/opencode/issues/24125
+      yield* plugin.trigger(
+        "message.parts.before",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent,
+          model: input.model,
+          messageID: input.messageID,
+          variant: input.variant,
+        },
+        { parts: input.parts },
+      )
+
       const resolvedParts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
         Effect.map((x) => x.flat().map(assign)),
       )
