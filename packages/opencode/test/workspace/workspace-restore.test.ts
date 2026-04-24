@@ -25,14 +25,12 @@ const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
 beforeEach(() => {
   Database.close()
-  // @ts-expect-error test override
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
 })
 
 afterEach(async () => {
   mock.restore()
   await Instance.disposeAll()
-  // @ts-expect-error test override
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
   await resetDatabase()
 })
@@ -143,8 +141,11 @@ describe("Workspace.sessionRestore", () => {
       Object.assign(
         async (input: URL | RequestInfo, init?: BunFetchRequestInit | RequestInit) => {
           const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url)
-          if (url.pathname !== "/base/sync/replay") {
+          if (url.pathname === "/base/global/event") {
             return eventStreamResponse()
+          }
+          if (url.pathname === "/base/sync/history") {
+            return Response.json([])
           }
           const body = JSON.parse(String(init?.body))
           posts.push({

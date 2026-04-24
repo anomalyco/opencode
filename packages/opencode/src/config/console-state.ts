@@ -1,15 +1,16 @@
-import z from "zod"
+import { Schema } from "effect"
+import { zod } from "@/util/effect-zod"
 
-export const ConsoleState = z.object({
-  consoleManagedProviders: z.array(z.string()),
-  activeOrgName: z.string().optional(),
-  switchableOrgCount: z.number().int().nonnegative(),
-})
+export class ConsoleState extends Schema.Class<ConsoleState>("ConsoleState")({
+  consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
+  activeOrgName: Schema.optional(Schema.String),
+  switchableOrgCount: Schema.Number,
+}) {
+  static readonly zod = zod(this)
+}
 
-export type ConsoleState = z.infer<typeof ConsoleState>
-
-export const emptyConsoleState: ConsoleState = {
+export const emptyConsoleState: ConsoleState = ConsoleState.make({
   consoleManagedProviders: [],
   activeOrgName: undefined,
   switchableOrgCount: 0,
-}
+})

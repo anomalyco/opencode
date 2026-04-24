@@ -1,5 +1,6 @@
 import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
+import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
@@ -44,6 +45,7 @@ const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
 export function Header() {
   const route = useRouteData("session")
   const sync = useSync()
+  const project = useProject()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
@@ -74,7 +76,7 @@ export function Header() {
   const workspace = createMemo(() => {
     const id = session()?.workspaceID
     if (!id) return "Workspace local"
-    const info = sync.workspace.get(id)
+    const info = project.workspace.get(id)
     if (!info) return `Workspace ${id}`
     return `Workspace ${id} (${info.type})`
   })

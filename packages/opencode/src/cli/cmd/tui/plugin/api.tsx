@@ -91,7 +91,7 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
       name: "session",
       params: {
         sessionID: route.data.sessionID,
-        initialPrompt: route.data.initialPrompt,
+        prompt: route.data.prompt,
       },
     }
   }
