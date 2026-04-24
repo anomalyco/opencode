@@ -18,7 +18,7 @@ import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { Bus } from "@/bus"
 import { Wildcard } from "@/util"
-import { SessionID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@/installation/version"
@@ -206,7 +206,13 @@ const live: Layer.Layer<
                 patterns: request.patterns,
                 metadata: request.metadata,
                 always: request.always,
-                tool: request.tool,
+                tool:
+                  request.tool?.messageID != null
+                    ? {
+                        callID: request.tool.callID,
+                        messageID: MessageID.make(request.tool.messageID),
+                      }
+                    : undefined,
                 ruleset,
               }),
             )
