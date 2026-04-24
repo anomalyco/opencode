@@ -374,6 +374,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
       bypassAgentCheck: boolean
       messages: MessageV2.WithParts[]
+      parentAgent?: string
     }) {
       using _ = log.time("resolveTools")
       const tools: Record<string, AITool> = {}
@@ -387,6 +388,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         callID: options.toolCallId,
         extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
         agent: input.agent.name,
+        parentAgent: input.parentAgent,
         messages: input.messages,
         metadata: (val) =>
           input.processor.updateToolCall(options.toolCallId, (match) => {
@@ -428,7 +430,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const ctx = context(args, options)
                 yield* plugin.trigger(
                   "tool.execute.before",
-                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
+                  {
+                    tool: item.id,
+                    sessionID: ctx.sessionID,
+                    messageID: input.processor.message.id,
+                    callID: ctx.callID,
+                    agent: ctx.agent,
+                    parentAgent: input.parentAgent,
+                  },
                   { args },
                 )
                 const result = yield* item.execute(args, ctx)
@@ -443,7 +452,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 }
                 yield* plugin.trigger(
                   "tool.execute.after",
-                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+                  {
+                    tool: item.id,
+                    sessionID: ctx.sessionID,
+                    messageID: input.processor.message.id,
+                    callID: ctx.callID,
+                    args,
+                    agent: ctx.agent,
+                    parentAgent: input.parentAgent,
+                  },
                   output,
                 )
                 if (options.abortSignal?.aborted) {
@@ -469,7 +486,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const ctx = context(args, opts)
               yield* plugin.trigger(
                 "tool.execute.before",
-                { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
+                {
+                  tool: key,
+                  sessionID: ctx.sessionID,
+                  messageID: input.processor.message.id,
+                  callID: opts.toolCallId,
+                  agent: ctx.agent,
+                  parentAgent: input.parentAgent,
+                },
                 { args },
               )
               const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
@@ -487,7 +511,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               )
               yield* plugin.trigger(
                 "tool.execute.after",
-                { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+                {
+                  tool: key,
+                  sessionID: ctx.sessionID,
+                  messageID: input.processor.message.id,
+                  callID: opts.toolCallId,
+                  args,
+                  agent: ctx.agent,
+                  parentAgent: input.parentAgent,
+                },
                 result,
               )
 
@@ -600,7 +632,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       yield* plugin.trigger(
         "tool.execute.before",
-        { tool: TaskTool.id, sessionID, callID: part.id },
+        {
+          tool: TaskTool.id,
+          sessionID,
+          messageID: assistantMessage.id,
+          callID: part.id,
+          agent: lastUser.agent,
+          parentAgent: lastUser.parentAgent,
+        },
         { args: taskArgs },
       )
 
@@ -618,6 +657,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const result = yield* taskTool
         .execute(taskArgs, {
           agent: task.agent,
+          parentAgent: lastUser.agent,
           messageID: assistantMessage.id,
           sessionID,
           abort: taskAbort.signal,
@@ -679,7 +719,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       yield* plugin.trigger(
         "tool.execute.after",
-        { tool: TaskTool.id, sessionID, callID: part.id, args: taskArgs },
+        {
+          tool: TaskTool.id,
+          sessionID,
+          messageID: assistantMessage.id,
+          callID: part.id,
+          args: taskArgs,
+          agent: lastUser.agent,
+          parentAgent: lastUser.parentAgent,
+        },
         result,
       )
 
@@ -726,6 +774,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         role: "user",
         time: { created: Date.now() },
         agent: lastUser.agent,
+        parentAgent: lastUser.parentAgent,
         model: lastUser.model,
       }
       yield* sessions.updateMessage(summaryUserMsg)
@@ -764,6 +813,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               time: { created: Date.now() },
               role: "user",
               agent: input.agent,
+              parentAgent: input.parentAgent,
               model: { providerID: model.providerID, modelID: model.modelID },
             }
             yield* sessions.updateMessage(userMsg)
@@ -857,7 +907,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             Effect.gen(function* () {
               const shellEnv = yield* plugin.trigger(
                 "shell.env",
-                { cwd, sessionID: input.sessionID, callID: part.callID },
+                {
+                  cwd,
+                  sessionID: input.sessionID,
+                  messageID: part.messageID,
+                  callID: part.callID,
+                  agent: input.agent,
+                  parentAgent: input.parentAgent,
+                },
                 { env: {} },
               )
               const cmd = ChildProcess.make(sh, args, {
@@ -947,6 +1004,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         time: { created: Date.now() },
         tools: input.tools,
         agent: ag.name,
+        parentAgent: input.parentAgent,
         model: {
           providerID: model.providerID,
           modelID: model.modelID,
@@ -1529,6 +1587,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               tools: lastUser.tools,
               processor: handle,
               bypassAgentCheck,
+              parentAgent: lastUser.parentAgent,
               messages: msgs,
             })
 
@@ -1811,6 +1870,7 @@ export const PromptInput = Schema.Struct({
   messageID: Schema.optional(MessageID),
   model: Schema.optional(ModelRef),
   agent: Schema.optional(Schema.String),
+  parentAgent: Schema.optional(Schema.String),
   noReply: Schema.optional(Schema.Boolean),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
     description:
@@ -1840,6 +1900,7 @@ export const ShellInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
   agent: Schema.String,
+  parentAgent: Schema.optional(Schema.String),
   model: Schema.optional(ModelRef),
   command: Schema.String,
 }).pipe(withStatics((s) => ({ zod: zod(s) })))

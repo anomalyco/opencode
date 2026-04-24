@@ -140,6 +140,7 @@ export const TaskTool = Tool.define(
                 providerID: model.providerID,
               },
               agent: next.name,
+              parentAgent: ctx.agent,
               tools: {
                 ...(canTodo ? {} : { todowrite: false }),
                 ...(canTask ? {} : { task: false }),

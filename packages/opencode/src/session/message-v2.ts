@@ -390,6 +390,7 @@ export const User = Schema.Struct({
     }),
   ),
   agent: Schema.String,
+  parentAgent: Schema.optional(Schema.String),
   model: Schema.Struct({
     providerID: ProviderID,
     modelID: ModelID,
