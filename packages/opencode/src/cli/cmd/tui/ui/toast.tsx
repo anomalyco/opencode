@@ -4,10 +4,10 @@ import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
-import z from "zod"
+import { Schema } from "effect"
 import { type TuiEvent } from "../event"
 
-export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
+export type ToastOptions = Schema.Schema.Type<typeof TuiEvent.ToastShow.properties>
 
 export function Toast() {
   const toast = useToast()

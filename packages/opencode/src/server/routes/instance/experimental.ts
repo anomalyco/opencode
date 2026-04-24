@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
+import * as EffectZod from "@/util/effect-zod"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolRegistry } from "@/tool"
 import { Worktree } from "@/worktree"
@@ -213,7 +214,7 @@ export const ExperimentalRoutes = lazy(() =>
           tools.map((t) => ({
             id: t.id,
             description: t.description,
-            parameters: z.toJSONSchema(t.parameters),
+            parameters: EffectZod.toJsonSchema(t.parameters),
           })),
         )
       },

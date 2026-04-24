@@ -22,9 +22,9 @@ export type Info = Schema.Schema.Type<typeof Info>
 export const Event = {
   Updated: BusEvent.define(
     "todo.updated",
-    z.object({
-      sessionID: SessionID.zod,
-      todos: z.array(Info.zod),
+    Schema.Struct({
+      sessionID: SessionID,
+      todos: Schema.Array(Info),
     }),
   ),
 }
