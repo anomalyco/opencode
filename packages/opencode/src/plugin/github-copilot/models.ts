@@ -10,6 +10,11 @@ export const schema = z.object({
       // every version looks like: `{model.id}-YYYY-MM-DD`
       version: z.string(),
       supported_endpoints: z.array(z.string()).optional(),
+      policy: z
+        .object({
+          state: z.string().optional(),
+        })
+        .optional(),
       capabilities: z.object({
         family: z.string(),
         limits: z.object({
@@ -122,7 +127,9 @@ export async function get(
   })
 
   const result = { ...existing }
-  const remote = new Map(data.data.filter((m) => m.model_picker_enabled).map((m) => [m.id, m] as const))
+  const remote = new Map(
+    data.data.filter((m) => m.model_picker_enabled && m.policy?.state !== "disabled").map((m) => [m.id, m] as const),
+  )
 
   // prune existing models whose api.id isn't in the endpoint response
   for (const [key, model] of Object.entries(result)) {

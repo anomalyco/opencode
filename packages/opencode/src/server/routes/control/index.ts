@@ -7,7 +7,6 @@ import { Hono } from "hono"
 import { describeRoute, resolver, validator, openAPIRouteHandler } from "hono-openapi"
 import z from "zod"
 import { errors } from "../../error"
-import { WorkspaceRoutes } from "./workspace"
 
 export function ControlPlaneRoutes(): Hono {
   const app = new Hono()
@@ -158,5 +157,4 @@ export function ControlPlaneRoutes(): Hono {
         return c.json(true)
       },
     )
-    .route("/experimental/workspace", WorkspaceRoutes())
 }

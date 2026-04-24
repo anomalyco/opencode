@@ -16,6 +16,8 @@ import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
 import { Flag } from "@/flag/flag"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { FilePaths } from "./httpapi/file"
+import { McpPaths } from "./httpapi/mcp"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -26,7 +28,8 @@ import { ExperimentalRoutes } from "./experimental"
 import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
-import { AppRuntime } from "@/effect/app-runtime"
+import { InstanceMiddleware } from "./middleware"
+import { jsonRequest } from "./trace"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   const app = new Hono()
@@ -39,6 +42,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post("/question/:requestID/reject", (c) => handler(c.req.raw, context))
     app.get("/permission", (c) => handler(c.req.raw, context))
     app.post("/permission/:requestID/reply", (c) => handler(c.req.raw, context))
+    app.get("/config", (c) => handler(c.req.raw, context))
     app.get("/config/providers", (c) => handler(c.req.raw, context))
     app.get("/provider", (c) => handler(c.req.raw, context))
     app.get("/provider/auth", (c) => handler(c.req.raw, context))
@@ -46,6 +50,10 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post("/provider/:providerID/oauth/callback", (c) => handler(c.req.raw, context))
     app.get("/project", (c) => handler(c.req.raw, context))
     app.get("/project/current", (c) => handler(c.req.raw, context))
+    app.get(FilePaths.list, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.content, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.status, (c) => handler(c.req.raw, context))
+    app.get(McpPaths.status, (c) => handler(c.req.raw, context))
   }
 
   return app
@@ -140,19 +148,14 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           },
         },
       }),
-      async (c) => {
-        return c.json(
-          await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const vcs = yield* Vcs.Service
-              const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
-                concurrency: 2,
-              })
-              return { branch, default_branch }
-            }),
-          ),
-        )
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.vcs.get", c, function* () {
+          const vcs = yield* Vcs.Service
+          const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
+            concurrency: 2,
+          })
+          return { branch, default_branch }
+        }),
     )
     .get(
       "/vcs/diff",
@@ -177,16 +180,11 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           mode: Vcs.Mode,
         }),
       ),
-      async (c) => {
-        return c.json(
-          await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const vcs = yield* Vcs.Service
-              return yield* vcs.diff(c.req.valid("query").mode)
-            }),
-          ),
-        )
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.vcs.diff", c, function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff(c.req.valid("query").mode)
+        }),
     )
     .get(
       "/command",
@@ -205,10 +203,11 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           },
         },
       }),
-      async (c) => {
-        const commands = await AppRuntime.runPromise(Command.Service.use((svc) => svc.list()))
-        return c.json(commands)
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.command.list", c, function* () {
+          const svc = yield* Command.Service
+          return yield* svc.list()
+        }),
     )
     .get(
       "/agent",
@@ -227,10 +226,11 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           },
         },
       }),
-      async (c) => {
-        const modes = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))
-        return c.json(modes)
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.agent.list", c, function* () {
+          const svc = yield* Agent.Service
+          return yield* svc.list()
+        }),
     )
     .get(
       "/skill",
@@ -249,15 +249,11 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           },
         },
       }),
-      async (c) => {
-        const skills = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const skill = yield* Skill.Service
-            return yield* skill.all()
-          }),
-        )
-        return c.json(skills)
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.skill.list", c, function* () {
+          const skill = yield* Skill.Service
+          return yield* skill.all()
+        }),
     )
     .get(
       "/lsp",
@@ -270,16 +266,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "LSP server status",
             content: {
               "application/json": {
-                schema: resolver(LSP.Status.array()),
+                schema: resolver(LSP.Status.zod.array()),
               },
             },
           },
         },
       }),
-      async (c) => {
-        const items = await AppRuntime.runPromise(LSP.Service.use((lsp) => lsp.status()))
-        return c.json(items)
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.lsp.status", c, function* () {
+          const lsp = yield* LSP.Service
+          return yield* lsp.status()
+        }),
     )
     .get(
       "/formatter",
@@ -298,8 +295,10 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           },
         },
       }),
-      async (c) => {
-        return c.json(await AppRuntime.runPromise(Format.Service.use((svc) => svc.status())))
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.formatter.status", c, function* () {
+          const svc = yield* Format.Service
+          return yield* svc.status()
+        }),
     )
 }

@@ -227,7 +227,7 @@ export const dict = {
   "common.default": "По умолчанию",
   "common.attachment": "вложение",
 
-  "prompt.placeholder.shell": "Введите команду оболочки...",
+  "prompt.placeholder.shell": "Введите команду оболочки... {{example}}",
   "prompt.placeholder.normal": 'Спросите что угодно... "{{example}}"',
   "prompt.placeholder.simple": "Спросите что угодно...",
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",
@@ -637,7 +637,9 @@ export const dict = {
   "settings.general.row.theme.title": "Тема",
   "settings.general.row.theme.description": "Настройте оформление OpenCode.",
   "settings.general.row.font.title": "Шрифт кода",
-  "settings.general.row.font.description": "Настройте шрифт, используемый в блоках кода и терминалах",
+  "settings.general.row.font.description": "Настройте шрифт, используемый в блоках кода",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "Шрифт интерфейса",
   "settings.general.row.uiFont.description": "Настройте шрифт, используемый во всем интерфейсе",
   "settings.general.row.followup.title": "Поведение уточняющих вопросов",
@@ -654,6 +656,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
+  "settings.general.row.showSessionProgressBar.title": "Показывать индикатор прогресса сессии",
+  "settings.general.row.showSessionProgressBar.description":
+    "Показывать анимированный индикатор прогресса вверху сессии, когда агент работает",
   "settings.general.row.wayland.title": "Использовать нативный Wayland",
   "settings.general.row.wayland.description": "Отключить X11 fallback на Wayland. Требуется перезапуск.",
   "settings.general.row.wayland.tooltip":

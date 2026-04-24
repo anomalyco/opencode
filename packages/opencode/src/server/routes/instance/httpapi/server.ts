@@ -4,17 +4,20 @@ import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Observability } from "@/effect"
-import { memoMap } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util"
 import { ConfigApi, configHandlers } from "./config"
+import { FileApi, fileHandlers } from "./file"
+import { McpApi, mcpHandlers } from "./mcp"
 import { PermissionApi, permissionHandlers } from "./permission"
 import { ProjectApi, projectHandlers } from "./project"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
+import { WorkspaceApi, workspaceHandlers } from "./workspace"
+import { memoMap } from "@/effect/memo-map"
 
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
@@ -112,13 +115,19 @@ const PermissionSecured = PermissionApi.middleware(Authorization)
 const ProjectSecured = ProjectApi.middleware(Authorization)
 const ProviderSecured = ProviderApi.middleware(Authorization)
 const ConfigSecured = ConfigApi.middleware(Authorization)
+const WorkspaceSecured = WorkspaceApi.middleware(Authorization)
+const FileSecured = FileApi.middleware(Authorization)
+const McpSecured = McpApi.middleware(Authorization)
 
 export const routes = Layer.mergeAll(
   HttpApiBuilder.layer(ConfigSecured).pipe(Layer.provide(configHandlers)),
+  HttpApiBuilder.layer(FileSecured).pipe(Layer.provide(fileHandlers)),
+  HttpApiBuilder.layer(McpSecured).pipe(Layer.provide(mcpHandlers)),
   HttpApiBuilder.layer(ProjectSecured).pipe(Layer.provide(projectHandlers)),
   HttpApiBuilder.layer(QuestionSecured).pipe(Layer.provide(questionHandlers)),
   HttpApiBuilder.layer(PermissionSecured).pipe(Layer.provide(permissionHandlers)),
   HttpApiBuilder.layer(ProviderSecured).pipe(Layer.provide(providerHandlers)),
+  HttpApiBuilder.layer(WorkspaceSecured).pipe(Layer.provide(workspaceHandlers)),
 ).pipe(
   Layer.provide(auth),
   Layer.provide(normalize),

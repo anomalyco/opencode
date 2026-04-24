@@ -1,7 +1,6 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
-import * as Terminal from "@tui/util/terminal"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
@@ -24,6 +23,7 @@ import { DialogProvider as DialogProviderList } from "@tui/component/dialog-prov
 import { ErrorComponent } from "@tui/component/error-component"
 import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
 import { ProjectProvider } from "@tui/context/project"
+import { EditorContextProvider } from "@tui/context/editor"
 import { useEvent } from "@tui/context/event"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { StartupLoading } from "@tui/component/startup-loading"
@@ -120,12 +120,6 @@ export function tui(input: {
     const unguard = win32InstallCtrlCGuard()
     win32DisableProcessedInput()
 
-    const mode = await Terminal.getTerminalBackgroundColor()
-
-    // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
-    // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
-    win32DisableProcessedInput()
-
     const onExit = async () => {
       unguard?.()
       resolve()
@@ -135,9 +129,8 @@ export function tui(input: {
       await TuiPluginRuntime.dispose()
     }
 
-    console.log("starting renderer")
     const renderer = await createCliRenderer(rendererConfig(input.config))
-    console.log("renderer started")
+    const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
 
     await render(() => {
       return (
@@ -152,7 +145,7 @@ export function tui(input: {
                 <ToastProvider>
                   <RouteProvider
                     initialRoute={
-                      (input.args.sessionID || input.args.continue) && !input.args.fork
+                      input.args.continue
                         ? {
                             type: "session",
                             sessionID: "dummy",
@@ -179,7 +172,9 @@ export function tui(input: {
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
-                                              <App onSnapshot={input.onSnapshot} />
+                                              <EditorContextProvider>
+                                                <App onSnapshot={input.onSnapshot} />
+                                              </EditorContextProvider>
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
                                         </FrecencyProvider>
@@ -343,6 +338,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             duration: 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
+      }
+      if (args.sessionID && !args.fork) {
+        route.navigate({
+          type: "session",
+          sessionID: args.sessionID,
+        })
       }
     })
   })
@@ -602,7 +603,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: "Toggle theme mode",
+      title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")

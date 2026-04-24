@@ -1,198 +1,345 @@
-import semver from "semver"
-import z from "zod"
-import { NamedError } from "@opencode-ai/shared/util/error"
-import { Global } from "../global"
-import { Log } from "../util"
+export * as Npm from "."
+
 import path from "path"
-import { readdir, rm } from "fs/promises"
-import { Filesystem } from "@/util"
-import { Flock } from "@opencode-ai/shared/util/flock"
+import { fileURLToPath } from "url"
+import npa from "npm-package-arg"
+import semver from "semver"
+import Config from "@npmcli/config"
+import { definitions, flatten, nerfDarts, shorthands } from "@npmcli/config/lib/definitions/index.js"
+import { Effect, Schema, Context, Layer, Option, FileSystem, Stream } from "effect"
+import { NodeFileSystem } from "@effect/platform-node"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Global } from "@opencode-ai/shared/global"
+import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
-const log = Log.create({ service: "npm" })
+import * as CrossSpawnSpawner from "../effect/cross-spawn-spawner"
+import { makeRuntime } from "../effect/runtime"
+
+export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
+  add: Schema.Array(Schema.String).pipe(Schema.optional),
+  dir: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
+export interface EntryPoint {
+  readonly directory: string
+  readonly entrypoint: Option.Option<string>
+}
+
+export interface Interface {
+  readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+  readonly install: (
+    dir: string,
+    input?: {
+      add: {
+        name: string
+        version?: string
+      }[]
+    },
+  ) => Effect.Effect<void, EffectFlock.LockError | InstallFailedError>
+  readonly outdated: (pkg: string, cachedVersion: string) => Effect.Effect<boolean>
+  readonly which: (pkg: string, bin?: string) => Effect.Effect<Option.Option<string>>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
+
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
-
-export const InstallFailedError = NamedError.create(
-  "NpmInstallFailedError",
-  z.object({
-    pkg: z.string(),
-  }),
-)
+const npmPath = fileURLToPath(new URL("../..", import.meta.url))
 
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
 }
 
-function directory(pkg: string) {
-  return path.join(Global.Path.cache, "packages", sanitize(pkg))
-}
+const loadOptions = (dir: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const config = new Config({
+        npmPath,
+        cwd: dir,
+        env: { ...process.env },
+        argv: [process.execPath, process.execPath],
+        execPath: process.execPath,
+        platform: process.platform,
+        definitions,
+        flatten,
+        nerfDarts,
+        shorthands,
+        warn: false,
+      })
+      await config.load()
+      return config.flat
+    },
+    catch: (cause) =>
+      new InstallFailedError({
+        cause,
+        dir,
+      }),
+  })
 
-function resolveEntryPoint(name: string, dir: string) {
-  let entrypoint: string | undefined
+const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
+  let entrypoint: Option.Option<string>
   try {
-    entrypoint = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
-  } catch {}
-  const result = {
+    const resolved = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
+    entrypoint = Option.some(resolved)
+  } catch {
+    entrypoint = Option.none()
+  }
+  return {
     directory: dir,
     entrypoint,
   }
-  return result
 }
 
-export async function outdated(pkg: string, cachedVersion: string): Promise<boolean> {
-  const response = await fetch(`https://registry.npmjs.org/${pkg}`)
-  if (!response.ok) {
-    log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
-    return false
-  }
-
-  const data = (await response.json()) as { "dist-tags"?: { latest?: string } }
-  const latestVersion = data?.["dist-tags"]?.latest
-  if (!latestVersion) {
-    log.warn("No latest version found, using cached", { pkg, cachedVersion })
-    return false
-  }
-
-  const range = /[\s^~*xX<>|=]/.test(cachedVersion)
-  if (range) return !semver.satisfies(latestVersion, cachedVersion)
-
-  return semver.lt(cachedVersion, latestVersion)
+interface ArboristNode {
+  name: string
+  path: string
 }
 
-export async function add(pkg: string) {
-  const { Arborist } = await import("@npmcli/arborist")
-  const dir = directory(pkg)
-  await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
-  log.info("installing package", {
-    pkg,
-  })
+interface ArboristTree {
+  edgesOut: Map<string, { to?: ArboristNode }>
+}
 
-  const arborist = new Arborist({
-    path: dir,
-    binLinks: true,
-    progress: false,
-    savePrefix: "",
-    ignoreScripts: true,
-  })
-  const tree = await arborist.loadVirtual().catch(() => {})
-  if (tree) {
-    const first = tree.edgesOut.values().next().value?.to
-    if (first) {
-      return resolveEntryPoint(first.name, first.path)
-    }
-  }
-
-  const result = await arborist
-    .reify({
-      add: [pkg],
-      save: true,
-      saveType: "prod",
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const afs = yield* AppFileSystem.Service
+    const global = yield* Global.Service
+    const fs = yield* FileSystem.FileSystem
+    const flock = yield* EffectFlock.Service
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
+    const runView = Effect.fnUntraced(function* (cmd: string[]) {
+      const handle = yield* spawner.spawn(
+        ChildProcess.make(cmd[0], cmd.slice(1), {
+          extendEnv: true,
+        }),
+      )
+      const [stdout, stderr] = yield* Effect.all(
+        [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
+        { concurrency: 2 },
+      )
+      const code = yield* handle.exitCode
+      if (code !== 0 || !stdout.trim()) {
+        return yield* Effect.fail(stderr || stdout || `Failed to run ${cmd.join(" ")}`)
+      }
+      return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.String))(stdout)
+    }, Effect.scoped)
+    const viewLatestVersion = Effect.fnUntraced(function* (pkg: string) {
+      return yield* runView(["npm", "view", pkg, "dist-tags.latest", "--json"]).pipe(
+        Effect.catch(() =>
+          runView(["pnpm", "view", pkg, "dist-tags.latest", "--json"]).pipe(
+            Effect.catch(() => runView(["bun", "pm", "view", pkg, "dist-tags.latest", "--json"])),
+          ),
+        ),
+      )
     })
-    .catch((cause) => {
-      throw new InstallFailedError(
-        { pkg },
-        {
-          cause,
-        },
+    const reify = (input: { dir: string; add?: string[] }) =>
+      Effect.gen(function* () {
+        yield* flock.acquire(`npm-install:${input.dir}`)
+        const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
+        const add = input.add ?? []
+        const npmOptions = yield* loadOptions(input.dir)
+        const arborist = new Arborist({
+          ...npmOptions,
+          path: input.dir,
+          binLinks: true,
+          progress: false,
+          savePrefix: "",
+          ignoreScripts: true,
+        })
+        return yield* Effect.tryPromise({
+          try: () =>
+            arborist.reify({
+              ...npmOptions,
+              add,
+              save: true,
+              saveType: "prod",
+            }),
+          catch: (cause) =>
+            new InstallFailedError({
+              cause,
+              add,
+              dir: input.dir,
+            }),
+        }) as Effect.Effect<ArboristTree, InstallFailedError>
+      }).pipe(
+        Effect.withSpan("Npm.reify", {
+          attributes: input,
+        }),
+      )
+
+    const outdated = Effect.fn("Npm.outdated")(function* (pkg: string, cachedVersion: string) {
+      const latestVersion = yield* viewLatestVersion(pkg).pipe(Effect.option)
+      if (Option.isNone(latestVersion)) {
+        return false
+      }
+
+      const range = /[\s^~*xX<>|=]/.test(cachedVersion)
+      if (range) return !semver.satisfies(latestVersion.value, cachedVersion)
+
+      return semver.lt(cachedVersion, latestVersion.value)
+    })
+
+    const add = Effect.fn("Npm.add")(function* (pkg: string) {
+      const dir = directory(pkg)
+      const name = (() => {
+        try {
+          return npa(pkg).name ?? pkg
+        } catch {
+          return pkg
+        }
+      })()
+
+      if (yield* afs.existsSafe(dir)) {
+        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      }
+
+      const tree = yield* reify({ dir, add: [pkg] })
+      const first = tree.edgesOut.values().next().value?.to
+      if (!first) return yield* new InstallFailedError({ add: [pkg], dir })
+      return resolveEntryPoint(first.name, first.path)
+    }, Effect.scoped)
+
+    const install: Interface["install"] = Effect.fn("Npm.install")(function* (dir, input) {
+      const canWrite = yield* afs.access(dir, { writable: true }).pipe(
+        Effect.as(true),
+        Effect.orElseSucceed(() => false),
+      )
+      if (!canWrite) return
+
+      const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
+      if (
+        yield* Effect.gen(function* () {
+          const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
+          if (!nodeModulesExists) {
+            yield* reify({ add, dir })
+            return true
+          }
+          return false
+        }).pipe(Effect.withSpan("Npm.checkNodeModules"))
+      )
+        return
+
+      yield* Effect.gen(function* () {
+        const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))
+        const lock = yield* afs.readJson(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => ({})))
+
+        const pkgAny = pkg as any
+        const lockAny = lock as any
+        const declared = new Set([
+          ...Object.keys(pkgAny?.dependencies || {}),
+          ...Object.keys(pkgAny?.devDependencies || {}),
+          ...Object.keys(pkgAny?.peerDependencies || {}),
+          ...Object.keys(pkgAny?.optionalDependencies || {}),
+          ...(input?.add || []).map((pkg) => pkg.name),
+        ])
+
+        const root = lockAny?.packages?.[""] || {}
+        const locked = new Set([
+          ...Object.keys(root?.dependencies || {}),
+          ...Object.keys(root?.devDependencies || {}),
+          ...Object.keys(root?.peerDependencies || {}),
+          ...Object.keys(root?.optionalDependencies || {}),
+        ])
+
+        for (const name of declared) {
+          if (!locked.has(name)) {
+            yield* reify({ dir, add })
+            return
+          }
+        }
+      }).pipe(Effect.withSpan("Npm.checkDirty"))
+
+      return
+    }, Effect.scoped)
+
+    const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
+      const dir = directory(pkg)
+      const binDir = path.join(dir, "node_modules", ".bin")
+
+      const pick = Effect.fnUntraced(function* () {
+        const files = yield* fs.readDirectory(binDir).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+
+        if (files.length === 0) return Option.none<string>()
+        // Caller picked a specific bin (e.g. pyright exposes both `pyright` and
+        // `pyright-langserver`); trust the hint if the package provides it.
+        if (bin) return files.includes(bin) ? Option.some(bin) : Option.none<string>()
+        if (files.length === 1) return Option.some(files[0])
+
+        const pkgJson = yield* afs.readJson(path.join(dir, "node_modules", pkg, "package.json")).pipe(Effect.option)
+
+        if (Option.isSome(pkgJson)) {
+          const parsed = pkgJson.value as { bin?: string | Record<string, string> }
+          if (parsed?.bin) {
+            const unscoped = pkg.startsWith("@") ? pkg.split("/")[1] : pkg
+            const parsedBin = parsed.bin
+            if (typeof parsedBin === "string") return Option.some(unscoped)
+            const keys = Object.keys(parsedBin)
+            if (keys.length === 1) return Option.some(keys[0])
+            return parsedBin[unscoped] ? Option.some(unscoped) : Option.some(keys[0])
+          }
+        }
+
+        return Option.some(files[0])
+      })
+
+      return yield* Effect.gen(function* () {
+        const bin = yield* pick()
+        if (Option.isSome(bin)) {
+          return Option.some(path.join(binDir, bin.value))
+        }
+
+        yield* fs.remove(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => {}))
+
+        yield* add(pkg)
+
+        const resolved = yield* pick()
+        if (Option.isNone(resolved)) return Option.none<string>()
+        return Option.some(path.join(binDir, resolved.value))
+      }).pipe(
+        Effect.scoped,
+        Effect.orElseSucceed(() => Option.none<string>()),
       )
     })
 
-  const first = result.edgesOut.values().next().value?.to
-  if (!first) throw new InstallFailedError({ pkg })
-  return resolveEntryPoint(first.name, first.path)
-}
-
-export async function install(dir: string) {
-  await using _ = await Flock.acquire(`npm-install:${dir}`)
-  log.info("checking dependencies", { dir })
-
-  const reify = async () => {
-    const { Arborist } = await import("@npmcli/arborist")
-    const arb = new Arborist({
-      path: dir,
-      binLinks: true,
-      progress: false,
-      savePrefix: "",
-      ignoreScripts: true,
+    return Service.of({
+      add,
+      install,
+      outdated,
+      which,
     })
-    await arb.reify().catch(() => {})
-  }
+  }),
+)
 
-  if (!(await Filesystem.exists(path.join(dir, "node_modules")))) {
-    log.info("node_modules missing, reifying")
-    await reify()
-    return
-  }
+export const defaultLayer = layer.pipe(
+  Layer.provide(EffectFlock.layer),
+  Layer.provide(AppFileSystem.layer),
+  Layer.provide(Global.layer),
+  Layer.provide(NodeFileSystem.layer),
+  Layer.provide(CrossSpawnSpawner.defaultLayer),
+)
 
-  type PackageDeps = Record<string, string>
-  type PackageJson = {
-    dependencies?: PackageDeps
-    devDependencies?: PackageDeps
-    peerDependencies?: PackageDeps
-    optionalDependencies?: PackageDeps
-  }
-  const pkg: PackageJson = await Filesystem.readJson<PackageJson>(path.join(dir, "package.json")).catch(() => ({}))
-  const lock: { packages?: Record<string, PackageJson> } = await Filesystem.readJson<{
-    packages?: Record<string, PackageJson>
-  }>(path.join(dir, "package-lock.json")).catch(() => ({}))
+const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  const declared = new Set([
-    ...Object.keys(pkg.dependencies || {}),
-    ...Object.keys(pkg.devDependencies || {}),
-    ...Object.keys(pkg.peerDependencies || {}),
-    ...Object.keys(pkg.optionalDependencies || {}),
-  ])
-
-  const root = lock.packages?.[""] || {}
-  const locked = new Set([
-    ...Object.keys(root.dependencies || {}),
-    ...Object.keys(root.devDependencies || {}),
-    ...Object.keys(root.peerDependencies || {}),
-    ...Object.keys(root.optionalDependencies || {}),
-  ])
-
-  for (const name of declared) {
-    if (!locked.has(name)) {
-      log.info("dependency not in lock file, reifying", { name })
-      await reify()
-      return
-    }
-  }
-
-  log.info("dependencies in sync")
+export async function install(...args: Parameters<Interface["install"]>) {
+  return runPromise((svc) => svc.install(...args))
 }
 
-export async function which(pkg: string) {
-  const dir = directory(pkg)
-  const binDir = path.join(dir, "node_modules", ".bin")
-
-  const pick = async () => {
-    const files = await readdir(binDir).catch(() => [])
-    if (files.length === 0) return undefined
-    if (files.length === 1) return files[0]
-    // Multiple binaries — resolve from package.json bin field like npx does
-    const pkgJson = await Filesystem.readJson<{ bin?: string | Record<string, string> }>(
-      path.join(dir, "node_modules", pkg, "package.json"),
-    ).catch(() => undefined)
-    if (pkgJson?.bin) {
-      const unscoped = pkg.startsWith("@") ? pkg.split("/")[1] : pkg
-      const bin = pkgJson.bin
-      if (typeof bin === "string") return unscoped
-      const keys = Object.keys(bin)
-      if (keys.length === 1) return keys[0]
-      return bin[unscoped] ? unscoped : keys[0]
-    }
-    return files[0]
+export async function add(...args: Parameters<Interface["add"]>) {
+  const entry = await runPromise((svc) => svc.add(...args))
+  return {
+    directory: entry.directory,
+    entrypoint: Option.getOrUndefined(entry.entrypoint),
   }
-
-  const bin = await pick()
-  if (bin) return path.join(binDir, bin)
-
-  await rm(path.join(dir, "package-lock.json"), { force: true })
-  await add(pkg)
-  const resolved = await pick()
-  if (!resolved) return
-  return path.join(binDir, resolved)
 }
 
-export * as Npm from "."
+export async function outdated(...args: Parameters<Interface["outdated"]>) {
+  return runPromise((svc) => svc.outdated(...args))
+}
+
+export async function which(...args: Parameters<Interface["which"]>) {
+  const resolved = await runPromise((svc) => svc.which(...args))
+  return Option.getOrUndefined(resolved)
+}

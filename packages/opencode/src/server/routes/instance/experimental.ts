@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
+import * as EffectZod from "@/util/effect-zod"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolRegistry } from "@/tool"
 import { Worktree } from "@/worktree"
@@ -12,11 +13,11 @@ import { Config } from "@/config"
 import { ConsoleState } from "@/config/console-state"
 import { Account } from "@/account/account"
 import { AccountID, OrgID } from "@/account/schema"
-import { AppRuntime } from "@/effect/app-runtime"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { Effect, Option } from "effect"
 import { Agent } from "@/agent/agent"
+import { jsonRequest, runRequest } from "./trace"
 
 const ConsoleOrgOption = z.object({
   accountID: z.string(),
@@ -49,28 +50,24 @@ export const ExperimentalRoutes = lazy(() =>
             description: "Active Console provider metadata",
             content: {
               "application/json": {
-                schema: resolver(ConsoleState),
+                schema: resolver(ConsoleState.zod),
               },
             },
           },
         },
       }),
-      async (c) => {
-        const result = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const config = yield* Config.Service
-            const account = yield* Account.Service
-            const [state, groups] = yield* Effect.all([config.getConsoleState(), account.orgsByAccount()], {
-              concurrency: "unbounded",
-            })
-            return {
-              ...state,
-              switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
-            }
-          }),
-        )
-        return c.json(result)
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.console.get", c, function* () {
+          const config = yield* Config.Service
+          const account = yield* Account.Service
+          const [state, groups] = yield* Effect.all([config.getConsoleState(), account.orgsByAccount()], {
+            concurrency: "unbounded",
+          })
+          return {
+            ...state,
+            switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
+          }
+        }),
     )
     .get(
       "/console/orgs",
@@ -89,28 +86,25 @@ export const ExperimentalRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => {
-        const orgs = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const account = yield* Account.Service
-            const [groups, active] = yield* Effect.all([account.orgsByAccount(), account.active()], {
-              concurrency: "unbounded",
-            })
-            const info = Option.getOrUndefined(active)
-            return groups.flatMap((group) =>
-              group.orgs.map((org) => ({
-                accountID: group.account.id,
-                accountEmail: group.account.email,
-                accountUrl: group.account.url,
-                orgID: org.id,
-                orgName: org.name,
-                active: !!info && info.id === group.account.id && info.active_org_id === org.id,
-              })),
-            )
-          }),
-        )
-        return c.json({ orgs })
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.console.listOrgs", c, function* () {
+          const account = yield* Account.Service
+          const [groups, active] = yield* Effect.all([account.orgsByAccount(), account.active()], {
+            concurrency: "unbounded",
+          })
+          const info = Option.getOrUndefined(active)
+          const orgs = groups.flatMap((group) =>
+            group.orgs.map((org) => ({
+              accountID: group.account.id,
+              accountEmail: group.account.email,
+              accountUrl: group.account.url,
+              orgID: org.id,
+              orgName: org.name,
+              active: !!info && info.id === group.account.id && info.active_org_id === org.id,
+            })),
+          )
+          return { orgs }
+        }),
     )
     .post(
       "/console/switch",
@@ -130,16 +124,13 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       validator("json", ConsoleSwitchBody),
-      async (c) => {
-        const body = c.req.valid("json")
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const account = yield* Account.Service
-            yield* account.use(AccountID.make(body.accountID), Option.some(OrgID.make(body.orgID)))
-          }),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.console.switchOrg", c, function* () {
+          const body = c.req.valid("json")
+          const account = yield* Account.Service
+          yield* account.use(AccountID.make(body.accountID), Option.some(OrgID.make(body.orgID)))
+          return true
+        }),
     )
     .get(
       "/tool/ids",
@@ -160,15 +151,11 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      async (c) => {
-        const ids = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const registry = yield* ToolRegistry.Service
-            return yield* registry.ids()
-          }),
-        )
-        return c.json(ids)
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.tool.ids", c, function* () {
+          const registry = yield* ToolRegistry.Service
+          return yield* registry.ids()
+        }),
     )
     .get(
       "/tool",
@@ -210,7 +197,9 @@ export const ExperimentalRoutes = lazy(() =>
       ),
       async (c) => {
         const { provider, model } = c.req.valid("query")
-        const tools = await AppRuntime.runPromise(
+        const tools = await runRequest(
+          "ExperimentalRoutes.tool.list",
+          c,
           Effect.gen(function* () {
             const agents = yield* Agent.Service
             const registry = yield* ToolRegistry.Service
@@ -225,7 +214,7 @@ export const ExperimentalRoutes = lazy(() =>
           tools.map((t) => ({
             id: t.id,
             description: t.description,
-            parameters: z.toJSONSchema(t.parameters),
+            parameters: EffectZod.toJsonSchema(t.parameters),
           })),
         )
       },
@@ -249,11 +238,12 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       validator("json", Worktree.CreateInput.optional()),
-      async (c) => {
-        const body = c.req.valid("json")
-        const worktree = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.create(body)))
-        return c.json(worktree)
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.worktree.create", c, function* () {
+          const body = c.req.valid("json")
+          const svc = yield* Worktree.Service
+          return yield* svc.create(body)
+        }),
     )
     .get(
       "/worktree",
@@ -272,10 +262,11 @@ export const ExperimentalRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => {
-        const sandboxes = await AppRuntime.runPromise(Project.Service.use((svc) => svc.sandboxes(Instance.project.id)))
-        return c.json(sandboxes)
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.worktree.list", c, function* () {
+          const svc = yield* Project.Service
+          return yield* svc.sandboxes(Instance.project.id)
+        }),
     )
     .delete(
       "/worktree",
@@ -296,14 +287,15 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       validator("json", Worktree.RemoveInput),
-      async (c) => {
-        const body = c.req.valid("json")
-        await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove(body)))
-        await AppRuntime.runPromise(
-          Project.Service.use((svc) => svc.removeSandbox(Instance.project.id, body.directory)),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.worktree.remove", c, function* () {
+          const body = c.req.valid("json")
+          const worktree = yield* Worktree.Service
+          const project = yield* Project.Service
+          yield* worktree.remove(body)
+          yield* project.removeSandbox(Instance.project.id, body.directory)
+          return true
+        }),
     )
     .post(
       "/worktree/reset",
@@ -324,11 +316,13 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       validator("json", Worktree.ResetInput),
-      async (c) => {
-        const body = c.req.valid("json")
-        await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.reset(body)))
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.worktree.reset", c, function* () {
+          const body = c.req.valid("json")
+          const svc = yield* Worktree.Service
+          yield* svc.reset(body)
+          return true
+        }),
     )
     .get(
       "/session",
@@ -342,7 +336,7 @@ export const ExperimentalRoutes = lazy(() =>
             description: "List of sessions",
             content: {
               "application/json": {
-                schema: resolver(Session.GlobalInfo.array()),
+                schema: resolver(Session.GlobalInfo.zod.array()),
               },
             },
           },
@@ -406,15 +400,10 @@ export const ExperimentalRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => {
-        return c.json(
-          await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const mcp = yield* MCP.Service
-              return yield* mcp.resources()
-            }),
-          ),
-        )
-      },
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.resource.list", c, function* () {
+          const mcp = yield* MCP.Service
+          return yield* mcp.resources()
+        }),
     ),
 )
