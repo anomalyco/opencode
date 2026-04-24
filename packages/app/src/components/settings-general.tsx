@@ -375,10 +375,11 @@ export const SettingsGeneral: Component = () => {
           </div>
         </SettingsRow>
 
-        <SettingsRow
-          title={language.t("settings.general.row.showSessionProgressBar.title")}
-          description={language.t("settings.general.row.showSessionProgressBar.description")}
-        >
+        <div class="hidden">
+          <SettingsRow
+            title={language.t("settings.general.row.showSessionProgressBar.title")}
+            description={language.t("settings.general.row.showSessionProgressBar.description")}
+          >
           <div data-action="settings-show-session-progress-bar">
             <Switch
               checked={settings.general.showSessionProgressBar()}
@@ -386,6 +387,7 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+        </div>
       </SettingsList>
     </div>
   )
@@ -592,10 +594,12 @@ export const SettingsGeneral: Component = () => {
           <Select
             data-action="settings-agent-progress-indicator"
             options={[
+              { value: "none", label: language.t("settings.general.row.agentProgressIndicator.option.none") },
               { value: "border", label: language.t("settings.general.row.agentProgressIndicator.option.border") },
               { value: "bar", label: language.t("settings.general.row.agentProgressIndicator.option.bar") },
             ]}
             current={[
+              { value: "none", label: language.t("settings.general.row.agentProgressIndicator.option.none") },
               { value: "border", label: language.t("settings.general.row.agentProgressIndicator.option.border") },
               { value: "bar", label: language.t("settings.general.row.agentProgressIndicator.option.bar") },
             ].find((o) => o.value === settings.appearance.agentProgressIndicator())}
