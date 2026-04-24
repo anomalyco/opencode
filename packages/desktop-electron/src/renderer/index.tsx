@@ -141,7 +141,11 @@ const createPlatform = (): Platform => {
     },
     async openPath(path: string, app?: string) {
       if (os === "windows") {
-        const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
+        const resolvedApp = app
+          ? ["wt", "wt.exe"].includes(app.toLowerCase())
+            ? app
+            : await window.api.resolveAppPath(app).catch(() => null)
+          : null
         const resolvedPath = await (async () => {
           if (await isWslEnabled()) {
             const converted = await window.api.wslPath(path, "windows").catch(() => null)

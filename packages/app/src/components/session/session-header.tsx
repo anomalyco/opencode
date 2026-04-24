@@ -39,6 +39,7 @@ const OPEN_APPS = [
   "warp",
   "xcode",
   "android-studio",
+  "windows-terminal",
   "powershell",
   "sublime-text",
 ] as const
@@ -85,6 +86,12 @@ const WINDOWS_APPS = [
   { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
+  {
+    id: "windows-terminal",
+    label: "session.header.open.app.terminal",
+    icon: "windows-terminal",
+    openWith: "wt.exe",
+  },
   {
     id: "powershell",
     label: "session.header.open.app.powershell",

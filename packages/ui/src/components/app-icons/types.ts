@@ -14,6 +14,7 @@ export const iconNames = [
   "android-studio",
   "antigravity",
   "textmate",
+  "windows-terminal",
   "powershell",
   "sublime-text",
 ] as const

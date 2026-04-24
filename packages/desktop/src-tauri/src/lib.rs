@@ -178,9 +178,21 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
                         || name.eq_ignore_ascii_case("powershell.exe")
                 })
         });
+        let is_windows_terminal = app_name.as_ref().is_some_and(|v| {
+            std::path::Path::new(v)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.eq_ignore_ascii_case("wt") || name.eq_ignore_ascii_case("wt.exe")
+                })
+        });
 
         if is_powershell {
             return os::windows::open_in_powershell(path);
+        }
+
+        if is_windows_terminal {
+            return os::windows::open_in_windows_terminal(path);
         }
 
         return tauri_plugin_opener::open_path(path, app_name.as_deref())
@@ -546,7 +558,6 @@ fn spawn_cli_sync_task(app: AppHandle) {
         }
     });
 }
-
 
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")
