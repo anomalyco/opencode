@@ -38,7 +38,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
-        position="relative"
+        position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox
           flexGrow={1}
