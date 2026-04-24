@@ -36,6 +36,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import * as Editor from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import * as Clipboard from "../../util/clipboard"
+import { optimizeParts, isAttachable } from "../../util/media-optimize"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
@@ -1174,6 +1175,19 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      const assembledParts = [
+        ...editorParts,
+        {
+          id: PartID.ascending(),
+          type: "text" as const,
+          text: inputText,
+        },
+        ...nonTextParts.map(assign),
+      ]
+      // Optimize media parts before sending to server (image resize, audio
+      // transcode, video decomposition). Plugins can override per-modality
+      // via registerOptimizer(). See #24125.
+      const optimized = await optimizeParts(assembledParts)
       sdk.client.session
         .prompt({
           sessionID,
@@ -1182,15 +1196,7 @@ export function Prompt(props: PromptProps) {
           agent: agent.name,
           model: selectedModel,
           variant,
-          parts: [
-            ...editorParts,
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map(assign),
-          ],
+          parts: optimized.parts,
         })
         .catch(() => {})
       if (editorParts.length > 0) editor.markSelectionSent()
@@ -1281,7 +1287,7 @@ export function Prompt(props: PromptProps) {
             return
           }
         }
-        if (mime.startsWith("image/") || mime === "application/pdf") {
+        if (isAttachable(mime)) {
           const content = await Filesystem.readArrayBuffer(filepath)
             .then((buffer) => Buffer.from(buffer).toString("base64"))
             .catch(() => {})
@@ -1319,13 +1325,21 @@ export function Prompt(props: PromptProps) {
   async function pasteAttachment(file: { filename?: string; filepath?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
-    const pdf = file.mime === "application/pdf"
+    const label = file.mime === "application/pdf"
+      ? "PDF"
+      : file.mime.startsWith("audio/")
+        ? "Audio"
+        : file.mime.startsWith("video/")
+          ? "Video"
+          : "Image"
     const count = store.prompt.parts.filter((x) => {
       if (x.type !== "file") return false
-      if (pdf) return x.mime === "application/pdf"
+      if (file.mime === "application/pdf") return x.mime === "application/pdf"
+      if (file.mime.startsWith("audio/")) return x.mime.startsWith("audio/")
+      if (file.mime.startsWith("video/")) return x.mime.startsWith("video/")
       return x.mime.startsWith("image/")
     }).length
-    const virtualText = pdf ? `[PDF ${count + 1}]` : `[Image ${count + 1}]`
+    const virtualText = `[${label} ${count + 1}]`
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
 
