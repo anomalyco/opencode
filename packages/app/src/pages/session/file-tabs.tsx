@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -12,6 +12,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
+import { invoke } from "@tauri-apps/api/core"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
@@ -19,6 +20,8 @@ import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import CodeMirrorView from "@/components/code-mirror-view"
+import { langFromExt } from "@/utils/lang-from-ext"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -200,6 +203,48 @@ export function FileTabContent(props: { tab: string }) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+
+  // === editable viewer state (Phase 2 editable file viewer) ===
+  const [editing, setEditing] = createSignal(false)
+  const [draft, setDraft] = createSignal<string | null>(null)
+  const dirty = createMemo(() => {
+    const d = draft()
+    return d !== null && d !== contents()
+  })
+  const canEdit = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+  const startEdit = () => {
+    setDraft(contents())
+    setEditing(true)
+  }
+  const cancelEdit = () => {
+    setEditing(false)
+    setDraft(null)
+  }
+  const saveEdit = async () => {
+    const p = path()
+    if (!p || draft() === null) return
+    try {
+      await invoke("write_text_file", { path: p, content: draft() ?? "" })
+      setEditing(false)
+      setDraft(null)
+      showToast({ variant: "success", title: "Saved" })
+    } catch (e) {
+      showToast({ variant: "error", title: `Save failed: ${e}` })
+    }
+  }
+  // close editing when tab/path switches
+  createEffect(
+    on(
+      path,
+      () => {
+        if (editing()) {
+          setEditing(false)
+          setDraft(null)
+        }
+      },
+      { defer: true },
+    ),
+  )
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -441,9 +486,46 @@ export function FileTabContent(props: { tab: string }) {
   )
 
   return (
-    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+    <Tabs.Content value={props.tab} class="mt-3 relative h-full flex flex-col">
+      <div class="flex items-center gap-2 px-4 py-1 border-b border-border">
+        <Show
+          when={!editing()}
+          fallback={
+            <>
+              <button
+                onClick={saveEdit}
+                disabled={!dirty()}
+                class="text-xs px-2 py-1 rounded border disabled:opacity-50"
+              >
+                Save{dirty() ? " *" : ""}
+              </button>
+              <button onClick={cancelEdit} class="text-xs px-2 py-1 rounded border">
+                Cancel
+              </button>
+            </>
+          }
+        >
+          <button
+            onClick={startEdit}
+            disabled={!canEdit() || !state()?.loaded}
+            class="text-xs px-2 py-1 rounded border disabled:opacity-50"
+            title={canEdit() ? undefined : "Edit only available in desktop app"}
+          >
+            Edit
+          </button>
+        </Show>
+      </div>
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
+          <Match when={editing() && state()?.loaded}>
+            <div class="relative overflow-hidden p-2" style={{ "min-height": "300px" }}>
+              <CodeMirrorView
+                value={contents()}
+                language={langFromExt(path() ?? "")}
+                onChange={setDraft}
+              />
+            </div>
+          </Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>

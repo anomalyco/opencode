@@ -8,6 +8,7 @@ mod logging;
 mod markdown;
 mod os;
 mod server;
+mod text_file;
 mod window_customizer;
 mod windows;
 
@@ -387,7 +388,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             check_app_exists,
             wsl_path,
             resolve_app_path,
-            open_path
+            open_path,
+            text_file::write_text_file
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
