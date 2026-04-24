@@ -244,7 +244,14 @@ export interface Hooks {
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
-    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    input: {
+      sessionID: string
+      agent: string
+      parentAgent?: string
+      model: Model
+      provider: ProviderContext
+      message: UserMessage
+    },
     output: {
       temperature: number
       topP: number
@@ -254,7 +261,14 @@ export interface Hooks {
     },
   ) => Promise<void>
   "chat.headers"?: (
-    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    input: {
+      sessionID: string
+      agent: string
+      parentAgent?: string
+      model: Model
+      provider: ProviderContext
+      message: UserMessage
+    },
     output: { headers: Record<string, string> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
@@ -263,15 +277,30 @@ export interface Hooks {
     output: { parts: Part[] },
   ) => Promise<void>
   "tool.execute.before"?: (
-    input: { tool: string; sessionID: string; callID: string },
+    input: { tool: string; sessionID: string; messageID: string; callID: string; agent?: string; parentAgent?: string },
     output: { args: any },
   ) => Promise<void>
   "shell.env"?: (
-    input: { cwd: string; sessionID?: string; callID?: string },
+    input: {
+      cwd: string
+      sessionID?: string
+      messageID?: string
+      callID?: string
+      agent?: string
+      parentAgent?: string
+    },
     output: { env: Record<string, string> },
   ) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string; args: any },
+    input: {
+      tool: string
+      sessionID: string
+      messageID: string
+      callID: string
+      args: any
+      agent?: string
+      parentAgent?: string
+    },
     output: {
       title: string
       output: string

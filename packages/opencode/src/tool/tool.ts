@@ -16,6 +16,7 @@ export type Context<M extends Metadata = Metadata> = {
   sessionID: SessionID
   messageID: MessageID
   agent: string
+  parentAgent?: string
   abort: AbortSignal
   callID?: string
   extra?: { [key: string]: unknown }
