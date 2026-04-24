@@ -93,7 +93,7 @@ const Summary = Schema.Struct({
   }),
 })
 
-const Result = Schema.Union([Begin, Match, End, Summary]).pipe(withStatics((s) => ({ zod: zod(s) })))
+const Result = Schema.Union([Begin, Match, End, Summary])
 
 export type Result = Schema.Schema.Type<typeof Result>
 export type Match = Schema.Schema.Type<typeof Match>
@@ -186,10 +186,9 @@ function row(data: Row): Row {
 }
 
 function parse(line: string) {
-  return Effect.try({
-    try: () => Result.zod.parse(JSON.parse(line)),
-    catch: (cause) => new Error("invalid ripgrep output", { cause }),
-  })
+  return Schema.decodeUnknownEffect(Schema.fromJsonString(Result))(line).pipe(
+    Effect.mapError((cause) => new Error("invalid ripgrep output", { cause })),
+  )
 }
 
 function fail(queue: Queue.Queue<string, PlatformError | Error | Cause.Done>, err: PlatformError | Error) {
