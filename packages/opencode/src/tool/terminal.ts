@@ -34,19 +34,7 @@ type SessionState = {
   createdAt: number
   exitCode: number | null
   buffer: string
-}  
-
-/* ... */
-
-        sessions.set(info.id, {
-          ptyId: info.id,
-          lastCursor: 0,
-          description: desc,
-          shell,
-          createdAt: Date.now(),
-          exitCode: null,
-          buffer: "",
-        })
+}
 
 // ---------------------------------------------------------------------------
 // Sentinel command helper (shell-aware)
@@ -125,6 +113,7 @@ export const Parameters = z.preprocess(
  * matches the command (trimmed), we remove it.
  */
 export function filterEcho(text: string, command: string): string {
+  const lines = text.split("\n")
   if (lines.length === 0) return text
   const firstLine = lines[0].replace(/\r$/, "").trim()
   if (firstLine === command.trim()) {
@@ -477,6 +466,7 @@ export const TerminalTool = Tool.define(
               shell,
               createdAt: Date.now(),
               exitCode: null,
+              buffer: "",
             })
 
             // Subscribe to PTY exit event to capture the exit code

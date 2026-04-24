@@ -67,7 +67,7 @@ export const Info = Schema.Struct({
   .annotate({ identifier: "Pty" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 
-export type Info = Types.DeepMutable<Schema.Schema.Type<typof Info>>
+export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const CreateInput = Schema.Struct({
   command: Schema.optional(Schema.String),
