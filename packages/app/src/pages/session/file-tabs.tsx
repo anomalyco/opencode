@@ -23,6 +23,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import CodeMirrorView from "@/components/code-mirror-view"
 import { langFromExt } from "@/utils/lang-from-ext"
+import { isBinary, tooLarge } from "@/utils/file-limits"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -206,34 +207,93 @@ export function FileTabContent(props: { tab: string }) {
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
 
-  // === editable viewer state (Phase 2 editable file viewer) ===
+  // === editable viewer state (Phase 2 editable file viewer + Phase 3 guardrails) ===
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal<string | null>(null)
+  const [loadedMtime, setLoadedMtime] = createSignal<number | null>(null)
   const dirty = createMemo(() => {
     const d = draft()
     return d !== null && d !== contents()
   })
-  const canEdit = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
-  const startEdit = () => {
+  const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+  const canEdit = () => {
+    if (!isTauri()) return false
+    const p = path()
+    if (!p) return false
+    if (isBinary(p)) return false
+    if (tooLarge(contents())) return false
+    return true
+  }
+  const editDisabledReason = () => {
+    if (!isTauri()) return "Edit only available in desktop app"
+    const p = path()
+    if (!p) return undefined
+    if (isBinary(p)) return "Binary file cannot be edited"
+    if (tooLarge(contents())) return "File >10MB, editing disabled"
+    return undefined
+  }
+  const startEdit = async () => {
+    const p = path()
+    const root = sdk.directory
+    if (!p || !root) return
+    try {
+      const mtime = await invoke<number>("get_file_mtime", { root, path: p })
+      setLoadedMtime(mtime)
+    } catch (e) {
+      // 拿不到 mtime(文件可能不存在、权限问题)→ mtime 检测跳过(传 null)
+      setLoadedMtime(null)
+      console.warn("get_file_mtime failed, skipping mtime check:", e)
+    }
     setDraft(contents())
     setEditing(true)
   }
   const cancelEdit = () => {
     setEditing(false)
     setDraft(null)
+    setLoadedMtime(null)
+  }
+  const performWrite = async (root: string, p: string, content: string, expectedMtime: number | null) => {
+    await invoke("write_text_file", { root, path: p, content, expectedMtime })
+  }
+  const reloadAndExitEdit = async (p: string) => {
+    setEditing(false)
+    setDraft(null)
+    setLoadedMtime(null)
+    await file.load(p, { force: true })
   }
   const saveEdit = async () => {
     const p = path()
     const root = sdk.directory
     if (!p || !root || draft() === null) return
     try {
-      await invoke("write_text_file", { root, path: p, content: draft() ?? "" })
-      setEditing(false)
-      setDraft(null)
-      await file.load(p, { force: true })
+      await performWrite(root, p, draft() ?? "", loadedMtime())
+      await reloadAndExitEdit(p)
       showToast({ variant: "success", title: "Saved" })
     } catch (e) {
-      showToast({ variant: "error", title: `Save failed: ${e}` })
+      const msg = String(e)
+      if (msg.includes("mtime_conflict")) {
+        const overwrite = window.confirm(
+          "⚠ 磁盘上的这个文件已被其他程序修改(可能是 AI 或外部编辑器)。\n\n" +
+            "[确定] 覆盖磁盘版本,保存我的改动\n" +
+            "[取消] 丢弃我的改动,重新加载磁盘版本",
+        )
+        if (overwrite) {
+          try {
+            await performWrite(root, p, draft() ?? "", null)
+            await reloadAndExitEdit(p)
+            showToast({ variant: "success", title: "Overwritten" })
+          } catch (e2) {
+            showToast({ variant: "error", title: `Overwrite failed: ${e2}` })
+          }
+        } else {
+          await reloadAndExitEdit(p)
+          showToast({ variant: "success", title: "Reloaded from disk" })
+        }
+      } else if (msg.includes("readonly:")) {
+        showToast({ variant: "error", title: "File is read-only, cannot save" })
+      } else {
+        showToast({ variant: "error", title: `Save failed: ${e}` })
+      }
     }
   }
   // close editing when tab/path switches
@@ -513,7 +573,7 @@ export function FileTabContent(props: { tab: string }) {
             onClick={startEdit}
             disabled={!canEdit() || !state()?.loaded}
             class="text-xs px-2 py-1 rounded border disabled:opacity-50"
-            title={canEdit() ? undefined : "Edit only available in desktop app"}
+            title={editDisabledReason()}
           >
             Edit
           </button>

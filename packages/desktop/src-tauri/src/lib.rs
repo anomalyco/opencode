@@ -389,7 +389,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             wsl_path,
             resolve_app_path,
             open_path,
-            text_file::write_text_file
+            text_file::write_text_file,
+            text_file::get_file_mtime
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
