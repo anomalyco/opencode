@@ -14,13 +14,14 @@ import { sanitizedProcessEnv } from "@/util/opencode-process"
 import { which } from "@/util/which"
 
 const log = Log.create({ service: "ripgrep" })
-const VERSION = "14.1.1"
+const VERSION = "15.1.0"
 const PLATFORM = {
   "arm64-darwin": { platform: "aarch64-apple-darwin", extension: "tar.gz" },
   "arm64-linux": { platform: "aarch64-unknown-linux-gnu", extension: "tar.gz" },
   "x64-darwin": { platform: "x86_64-apple-darwin", extension: "tar.gz" },
   "x64-linux": { platform: "x86_64-unknown-linux-musl", extension: "tar.gz" },
   "arm64-win32": { platform: "aarch64-pc-windows-msvc", extension: "zip" },
+  "ia32-win32": { platform: "i686-pc-windows-msvc", extension: "zip" },
   "x64-win32": { platform: "x86_64-pc-windows-msvc", extension: "zip" },
 } as const
 
@@ -247,17 +248,20 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
         return { stdout, stderr, code }
       }, Effect.scoped)
 
-      const extract = Effect.fnUntraced(function* (archive: string, config: (typeof PLATFORM)[keyof typeof PLATFORM]) {
+      const extract = Effect.fnUntraced(function* (
+        archive: string,
+        config: (typeof PLATFORM)[keyof typeof PLATFORM],
+        target: string,
+      ) {
         const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: "ripgrep-" })
 
         if (config.extension === "zip") {
           const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
           const result = yield* run(shell, [
             "-NoProfile",
+            "-NonInteractive",
             "-Command",
-            "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
-            archive,
-            dir,
+            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
           ])
           if (result.code !== 0) {
             return yield* Effect.fail(error(result.stderr || result.stdout, result.code))
@@ -271,12 +275,23 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
           }
         }
 
-        return path.join(dir, `ripgrep-${VERSION}-${config.platform}`, process.platform === "win32" ? "rg.exe" : "rg")
+        const extracted = path.join(
+          dir,
+          `ripgrep-${VERSION}-${config.platform}`,
+          process.platform === "win32" ? "rg.exe" : "rg",
+        )
+        if (!(yield* fs.isFile(extracted))) {
+          return yield* Effect.fail(new Error(`ripgrep archive did not contain executable: ${extracted}`))
+        }
+
+        yield* fs.copyFile(extracted, target)
+        if (process.platform === "win32") return
+        yield* fs.chmod(target, 0o755)
       }, Effect.scoped)
 
       const filepath = yield* Effect.cached(
         Effect.gen(function* () {
-          const system = yield* Effect.sync(() => which("rg"))
+          const system = yield* Effect.sync(() => which(process.platform === "win32" ? "rg.exe" : "rg"))
           if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
 
           const target = path.join(Global.Path.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
@@ -304,17 +319,8 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
             return yield* Effect.fail(new Error(`failed to download ripgrep from ${url}`))
           }
 
-          yield* fs.writeWithDirs(archive, new Uint8Array(bytes)).pipe(Effect.orDie)
-          const extracted = yield* extract(archive, config)
-          const exists = yield* fs.exists(extracted).pipe(Effect.orDie)
-          if (!exists) {
-            return yield* Effect.fail(new Error(`ripgrep archive did not contain executable: ${extracted}`))
-          }
-
-          yield* fs.copyFile(extracted, target).pipe(Effect.orDie)
-          if (process.platform !== "win32") {
-            yield* fs.chmod(target, 0o755).pipe(Effect.orDie)
-          }
+          yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
+          yield* extract(archive, config, target)
           yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
           return target
         }),

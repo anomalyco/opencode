@@ -1,5 +1,4 @@
-import z from "zod"
-import { Effect, Exit, Layer, PubSub, Scope, Context, Stream } from "effect"
+import { Effect, Exit, Layer, PubSub, Scope, Context, Stream, Schema } from "effect"
 import { EffectBridge } from "@/effect"
 import { Log } from "../util"
 import { BusEvent } from "./bus-event"
@@ -9,16 +8,18 @@ import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "bus" })
 
+type BusProperties<D extends BusEvent.Definition<string, Schema.Top>> = Schema.Schema.Type<D["properties"]>
+
 export const InstanceDisposed = BusEvent.define(
   "server.instance.disposed",
-  z.object({
-    directory: z.string(),
+  Schema.Struct({
+    directory: Schema.String,
   }),
 )
 
 type Payload<D extends BusEvent.Definition = BusEvent.Definition> = {
   type: D["type"]
-  properties: z.infer<D["properties"]>
+  properties: BusProperties<D>
 }
 
 type State = {
@@ -27,10 +28,7 @@ type State = {
 }
 
 export interface Interface {
-  readonly publish: <D extends BusEvent.Definition>(
-    def: D,
-    properties: z.output<D["properties"]>,
-  ) => Effect.Effect<void>
+  readonly publish: <D extends BusEvent.Definition>(def: D, properties: BusProperties<D>) => Effect.Effect<void>
   readonly subscribe: <D extends BusEvent.Definition>(def: D) => Stream.Stream<Payload<D>>
   readonly subscribeAll: () => Stream.Stream<Payload>
   readonly subscribeCallback: <D extends BusEvent.Definition>(
@@ -79,7 +77,7 @@ export const layer = Layer.effect(
       })
     }
 
-    function publish<D extends BusEvent.Definition>(def: D, properties: z.output<D["properties"]>) {
+    function publish<D extends BusEvent.Definition>(def: D, properties: BusProperties<D>) {
       return Effect.gen(function* () {
         const s = yield* InstanceState.get(state)
         const payload: Payload = { type: def.type, properties }
@@ -175,14 +173,11 @@ const { runPromise, runSync } = makeRuntime(Service, layer)
 
 // runSync is safe here because the subscribe chain (InstanceState.get, PubSub.subscribe,
 // Scope.make, Effect.forkScoped) is entirely synchronous. If any step becomes async, this will throw.
-export async function publish<D extends BusEvent.Definition>(def: D, properties: z.output<D["properties"]>) {
+export async function publish<D extends BusEvent.Definition>(def: D, properties: BusProperties<D>) {
   return runPromise((svc) => svc.publish(def, properties))
 }
 
-export function subscribe<D extends BusEvent.Definition>(
-  def: D,
-  callback: (event: { type: D["type"]; properties: z.infer<D["properties"]> }) => unknown,
-) {
+export function subscribe<D extends BusEvent.Definition>(def: D, callback: (event: Payload<D>) => unknown) {
   return runSync((svc) => svc.subscribeCallback(def, callback))
 }
 

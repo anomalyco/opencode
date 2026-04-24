@@ -1,4 +1,4 @@
-import { Effect, Layer, Context, Stream, Scope } from "effect"
+import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import { Bus } from "@/bus"
@@ -107,8 +107,8 @@ export type Mode = z.infer<typeof Mode>
 export const Event = {
   BranchUpdated: BusEvent.define(
     "vcs.branch.updated",
-    z.object({
-      branch: z.string().optional(),
+    Schema.Struct({
+      branch: Schema.optional(Schema.String),
     }),
   ),
 }

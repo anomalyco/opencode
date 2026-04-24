@@ -39,6 +39,7 @@ export async function spawnLocalServer(hostname: string, port: number, password:
     hostname,
     username: "opencode",
     password,
+    cors: ["oc://renderer"],
   })
 
   const wait = (async () => {
