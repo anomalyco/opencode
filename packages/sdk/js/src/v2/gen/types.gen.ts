@@ -568,6 +568,7 @@ export type UserMessage = {
     diffs: Array<SnapshotFileDiff>
   }
   agent: string
+  parentAgent?: string
   model: {
     providerID: string
     modelID: string
@@ -3796,6 +3797,7 @@ export type SessionPromptData = {
       modelID: string
     }
     agent?: string
+    parentAgent?: string
     noReply?: boolean
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
@@ -3996,6 +3998,7 @@ export type SessionPromptAsyncData = {
       modelID: string
     }
     agent?: string
+    parentAgent?: string
     noReply?: boolean
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
@@ -4096,6 +4099,7 @@ export type SessionShellData = {
   body?: {
     messageID?: string
     agent: string
+    parentAgent?: string
     model?: {
       providerID: string
       modelID: string
