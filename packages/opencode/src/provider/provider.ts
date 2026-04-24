@@ -1327,6 +1327,52 @@ const layer: Layer.Layer<
           })
         }
 
+        const BEDROCK_ALLOWED_MODELS = new Set([
+          // Anthropic / Claude
+          "us.anthropic.claude-sonnet-4-6",
+          "us.anthropic.claude-opus-4-6-v1",
+          "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+          // Google Gemma (Bedrock)
+          "google.gemma-3-27b-it",
+          "google.gemma-3-12b-it",
+          "google.gemma-3-4b-it",
+          // OpenAI / GPT (Bedrock)
+          "openai.gpt-oss-safeguard-120b",
+          "openai.gpt-oss-safeguard-20b",
+          // Amazon Nova
+          "amazon.nova-2-lite-v1:0",
+          // Qwen
+          "qwen.qwen3-235b-a22b-2507-v1:0",
+          "qwen.qwen3-next-80b-a3b",
+          "qwen.qwen3-32b-v1:0",
+          "qwen.qwen3-coder-30b-a3b-v1:0",
+          // NVIDIA Nemotron
+          "nvidia.nemotron-nano-3-30b",
+          "nvidia.nemotron-nano-12b-v2",
+          "nvidia.nemotron-nano-9b-v2",
+          // Mistral
+          "mistral.mistral-large-3-675b-instruct",
+          "mistral.magistral-small-2509",
+          "mistral.ministral-3-14b-instruct",
+          "mistral.ministral-3-8b-instruct",
+          "mistral.voxtral-small-24b-2507",
+          // DeepSeek
+          "deepseek.r1-v1:0",
+          // Minimax
+          "minimax.minimax-m2",
+          // Moonshot / Kimi
+          "moonshotai.kimi-k2.5",
+          "moonshot.kimi-k2-thinking",
+          // ZAI / GLM
+          "zai.glm-4.7",
+          "zai.glm-4.7-flash",
+          // Writer / Palmyra
+          "writer.palmyra-x5-v1:0",
+          "writer.palmyra-x4-v1:0",
+          // Meta / Llama
+          "meta.llama3-1-8b-instruct-v1:0",
+        ])
+
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderID.make(id)
           if (!isProviderAllowed(providerID)) {
@@ -1345,6 +1391,8 @@ const layer: Layer.Layer<
               delete provider.models[modelID]
             if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
             if (model.status === "deprecated") delete provider.models[modelID]
+            if (providerID === ProviderID.amazonBedrock && !BEDROCK_ALLOWED_MODELS.has(modelID))
+              delete provider.models[modelID]
             if (
               (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
               (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
