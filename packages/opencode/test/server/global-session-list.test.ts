@@ -18,7 +18,7 @@ const svc = {
   create(input?: SessionNs.CreateInput) {
     return run(SessionNs.Service.use((svc) => svc.create(input)))
   },
-  setArchived(input: z.output<typeof SessionNs.SetArchivedInput>) {
+  setArchived(input: z.output<typeof SessionNs.SetArchivedInput.zod>) {
     return run(SessionNs.Service.use((svc) => svc.setArchived(input)))
   },
 }

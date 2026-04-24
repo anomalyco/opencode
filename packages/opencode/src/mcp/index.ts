@@ -25,7 +25,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Exit, Layer, Option, Context, Stream } from "effect"
+import { Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -47,16 +47,16 @@ export type Resource = z.infer<typeof Resource>
 
 export const ToolsChanged = BusEvent.define(
   "mcp.tools.changed",
-  z.object({
-    server: z.string(),
+  Schema.Struct({
+    server: Schema.String,
   }),
 )
 
 export const BrowserOpenFailed = BusEvent.define(
   "mcp.browser.open.failed",
-  z.object({
-    mcpName: z.string(),
-    url: z.string(),
+  Schema.Struct({
+    mcpName: Schema.String,
+    url: Schema.String,
   }),
 )
 

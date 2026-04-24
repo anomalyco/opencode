@@ -226,7 +226,7 @@ export const dict = {
   "common.default": "Standard",
   "common.attachment": "vedhæftning",
 
-  "prompt.placeholder.shell": "Indtast shell-kommando...",
+  "prompt.placeholder.shell": "Indtast shell-kommando... {{example}}",
   "prompt.placeholder.normal": 'Spørg om hvad som helst... "{{example}}"',
   "prompt.placeholder.simple": "Spørg om hvad som helst...",
   "prompt.placeholder.summarizeComments": "Opsummér kommentarer…",
