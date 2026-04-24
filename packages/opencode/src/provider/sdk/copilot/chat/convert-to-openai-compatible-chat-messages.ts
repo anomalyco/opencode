@@ -95,7 +95,9 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
               break
             }
             case "reasoning": {
-              if (part.text) reasoningText = part.text
+              // Preserve empty reasoning text — some providers (e.g. DeepSeek V4)
+              // require reasoning_content: "" to be sent back in multi-turn chains.
+              reasoningText = part.text ?? ""
               break
             }
             case "tool-call": {

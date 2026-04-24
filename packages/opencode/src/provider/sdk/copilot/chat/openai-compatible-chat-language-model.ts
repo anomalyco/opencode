@@ -227,8 +227,10 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
     }
 
     // reasoning content (Copilot uses reasoning_text):
+    // Preserve empty reasoning_text (e.g. DeepSeek V4 returns reasoning_content: "")
+    // because some providers require it to be sent back verbatim in multi-turn chains.
     const reasoning = choice.message.reasoning_text
-    if (reasoning != null && reasoning.length > 0) {
+    if (reasoning != null) {
       content.push({
         type: "reasoning",
         text: reasoning,
@@ -477,9 +479,10 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
               reasoningOpaque = delta.reasoning_opaque
             }
 
-            // enqueue reasoning before text deltas (Copilot uses reasoning_text):
+            // enqueue reasoning before text deltas (Copilot uses reasoning_text).
+            // Handle empty reasoning_text (e.g. DeepSeek V4 may stream reasoning_content: "").
             const reasoningContent = delta.reasoning_text
-            if (reasoningContent) {
+            if ("reasoning_text" in delta) {
               if (!isActiveReasoning) {
                 controller.enqueue({
                   type: "reasoning-start",
@@ -487,12 +490,13 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                 })
                 isActiveReasoning = true
               }
-
-              controller.enqueue({
-                type: "reasoning-delta",
-                id: "reasoning-0",
-                delta: reasoningContent,
-              })
+              if (reasoningContent) {
+                controller.enqueue({
+                  type: "reasoning-delta",
+                  id: "reasoning-0",
+                  delta: reasoningContent,
+                })
+              }
             }
 
             if (delta.content) {
