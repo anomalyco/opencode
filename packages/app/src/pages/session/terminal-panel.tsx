@@ -80,6 +80,17 @@ export function TerminalPanel() {
     ),
   )
 
+  // Close terminal panel when last terminal disappears
+  createEffect(
+    on(
+      () => terminal.all().length,
+      (count, prevCount) => {
+        if (prevCount === undefined || count !== 0 || prevCount === 0) return
+        if (opened()) view().terminal.close()
+      },
+    ),
+  )
+
   createEffect(
     on(
       () => [opened(), terminal.active()] as const,
