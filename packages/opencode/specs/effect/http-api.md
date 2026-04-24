@@ -415,8 +415,9 @@ Current instance route inventory:
 - `file` - `bridged` (partial)
   bridged endpoints: `GET /file`, `GET /file/content`, `GET /file/status`
   defer search endpoints first
-- `mcp` - `later`
-  has JSON-only endpoints, but interactive OAuth/auth flows make it a worse early fit
+- `mcp` - `bridged` (partial)
+  bridged endpoints: `GET /mcp`
+  defer interactive OAuth/auth flows first
 - `session` - `defer`
   large, stateful, mixes CRUD with prompt/shell/command/share/revert flows and a streaming route
 - `event` - `defer`
@@ -451,6 +452,7 @@ Recommended near-term sequence:
 - [x] port `GET /config` full read endpoint
 - [x] port `workspace` read endpoints
 - [x] port `file` JSON read endpoints
+- [x] port `mcp` status read endpoint
 - [ ] decide when to remove the flag and make Effect routes the default
 
 ## Rule of thumb

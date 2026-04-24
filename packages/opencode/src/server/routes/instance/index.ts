@@ -17,6 +17,7 @@ import { PermissionRoutes } from "./permission"
 import { Flag } from "@/flag/flag"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
 import { FilePaths } from "./httpapi/file"
+import { McpPaths } from "./httpapi/mcp"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -52,6 +53,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(FilePaths.list, (c) => handler(c.req.raw, context))
     app.get(FilePaths.content, (c) => handler(c.req.raw, context))
     app.get(FilePaths.status, (c) => handler(c.req.raw, context))
+    app.get(McpPaths.status, (c) => handler(c.req.raw, context))
   }
 
   return app
