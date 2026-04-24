@@ -209,7 +209,7 @@ export const dict = {
   "common.saving": "저장 중...",
   "common.default": "기본값",
   "common.attachment": "첨부 파일",
-  "prompt.placeholder.shell": "셸 명령어 입력...",
+  "prompt.placeholder.shell": "셸 명령어 입력... {{example}}",
   "prompt.placeholder.normal": '무엇이든 물어보세요... "{{example}}"',
   "prompt.placeholder.simple": "무엇이든 물어보세요...",
   "prompt.placeholder.summarizeComments": "댓글 요약…",
