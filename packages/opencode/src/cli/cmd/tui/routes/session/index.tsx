@@ -61,7 +61,6 @@ import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
-import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { Flag } from "@/flag/flag"
@@ -426,18 +425,6 @@ export function Session() {
             })
           })
         dialog.clear()
-      },
-    },
-    {
-      title: "Rename session",
-      value: "session.rename",
-      keybind: "session_rename",
-      category: "Session",
-      slash: {
-        name: "rename",
-      },
-      onSelect: (dialog) => {
-        dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
       },
     },
     {
