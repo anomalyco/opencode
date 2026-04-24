@@ -175,6 +175,24 @@ function normalizeMessages(
     return result
   }
 
+  // Deepseek requires all assistant messages to have reasoning on them
+  if (model.api.id.includes("deepseek")) {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant") return msg
+      if (Array.isArray(msg.content)) {
+        if (msg.content.some((part) => part.type === "reasoning")) return msg
+        return { ...msg, content: [...msg.content, { type: "reasoning", text: "" }] }
+      }
+      return {
+        ...msg,
+        content: [
+          ...(msg.content ? [{ type: "text" as const, text: msg.content }] : []),
+          { type: "reasoning" as const, text: "" },
+        ],
+      }
+    })
+  }
+
   if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
