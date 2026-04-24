@@ -395,7 +395,14 @@ export const BashTool = Tool.define(
     const shellEnv = Effect.fn("BashTool.shellEnv")(function* (ctx: Tool.Context, cwd: string) {
       const extra = yield* plugin.trigger(
         "shell.env",
-        { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
+        {
+          cwd,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          agent: ctx.agent,
+          parentAgent: ctx.parentAgent,
+        },
         { env: {} },
       )
       return {

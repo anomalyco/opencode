@@ -164,6 +164,7 @@ const live: Layer.Layer<
         {
           sessionID: input.sessionID,
           agent: input.agent.name,
+          parentAgent: input.user.parentAgent,
           model: input.model,
           provider: item,
           message: input.user,
@@ -184,6 +185,7 @@ const live: Layer.Layer<
         {
           sessionID: input.sessionID,
           agent: input.agent.name,
+          parentAgent: input.user.parentAgent,
           model: input.model,
           provider: item,
           message: input.user,
