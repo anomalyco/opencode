@@ -718,11 +718,7 @@ export function MessageTimeline(props: {
                   "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
                 }}
               >
-<<<<<<< HEAD
-                <Show when={workingStatus() !== "hidden" && settings.general.showSessionProgressBar()}>
-=======
-                <Show when={settings.appearance.agentProgressIndicator() === "bar" && workingStatus() !== "hidden"}>
->>>>>>> ce4e44ccc (chore(improve-ux): improve UX and design)
+<Show when={settings.appearance.agentProgressIndicator() === "bar" && workingStatus() !== "hidden"}>
                   <div
                     data-component="session-progress"
                     data-state={workingStatus()}
