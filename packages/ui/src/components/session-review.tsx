@@ -387,6 +387,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                   {(diff) => {
                     const file = diff.file
 
+                    const diffCanRender = () => diff.additions !== 0 || diff.deletions !== 0
 
                     const expanded = createMemo(() => open().includes(file))
                     const mounted = createMemo(() => expanded() && (!!store.visible[file] || pinned(file)))
