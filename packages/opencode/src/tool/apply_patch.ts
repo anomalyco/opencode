@@ -1,6 +1,5 @@
-import z from "zod"
 import * as path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
@@ -16,8 +15,8 @@ import { File } from "../file"
 import { Format } from "../format"
 import * as Bom from "@/util/bom"
 
-const PatchParams = z.object({
-  patchText: z.string().describe("The full patch text that describes all changes to be made"),
+export const Parameters = Schema.Struct({
+  patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
 })
 
 export const ApplyPatchTool = Tool.define(
@@ -28,7 +27,10 @@ export const ApplyPatchTool = Tool.define(
     const format = yield* Format.Service
     const bus = yield* Bus.Service
 
-    const run = Effect.fn("ApplyPatchTool.execute")(function* (params: z.infer<typeof PatchParams>, ctx: Tool.Context) {
+    const run = Effect.fn("ApplyPatchTool.execute")(function* (
+      params: Schema.Schema.Type<typeof Parameters>,
+      ctx: Tool.Context,
+    ) {
       if (!params.patchText) {
         return yield* Effect.fail(new Error("patchText is required"))
       }
@@ -258,7 +260,7 @@ export const ApplyPatchTool = Tool.define(
       for (const change of fileChanges) {
         if (change.type === "delete") continue
         const target = change.movePath ?? change.filePath
-        yield* lsp.touchFile(target, true)
+        yield* lsp.touchFile(target, "document")
       }
       const diagnostics = yield* lsp.diagnostics()
 
@@ -297,8 +299,9 @@ export const ApplyPatchTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters: PatchParams,
-      execute: (params: z.infer<typeof PatchParams>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+        run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )
