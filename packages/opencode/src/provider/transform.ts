@@ -185,24 +185,19 @@ function normalizeMessages(
         // Filter out reasoning parts from content
         const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-        // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-        if (reasoningText) {
-          return {
-            ...msg,
-            content: filteredContent,
-            providerOptions: {
-              ...msg.providerOptions,
-              openaiCompatible: {
-                ...msg.providerOptions?.openaiCompatible,
-                [field]: reasoningText,
-              },
-            },
-          }
-        }
-
+        // Include reasoning_content | reasoning_details directly on the message for all assistant messages.
+        // Always set the field even when empty — some providers (e.g. DeepSeek) may return empty
+        // reasoning_content which still needs to be sent back in subsequent requests.
         return {
           ...msg,
           content: filteredContent,
+          providerOptions: {
+            ...msg.providerOptions,
+            openaiCompatible: {
+              ...msg.providerOptions?.openaiCompatible,
+              [field]: reasoningText,
+            },
+          },
         }
       }
 
