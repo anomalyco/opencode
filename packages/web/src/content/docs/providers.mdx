@@ -278,18 +278,44 @@ For custom inference profiles, use the model and provider name in the key and se
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
+  "model": "amazon-bedrock/anthropic-claude-sonnet-4.5",
   "provider": {
     "amazon-bedrock": {
-      // ...
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "setCacheKey": true
+      },
       "models": {
         "anthropic-claude-sonnet-4.5": {
-          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy"
+          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy",
+          "name": "Claude Sonnet custom Bedrock profile"
         }
       }
     }
   }
 }
 ```
+
+The important part is that the custom model key still looks like a Claude model name, while the underlying `id` is the full Bedrock application inference profile ARN.
+
+If you are creating the application profile yourself, the most reliable pattern is:
+
+1. Find the matching system-defined inference profile for the model
+2. Create your application inference profile from that system-defined profile
+3. Put the returned application inference profile ARN in `provider.amazon-bedrock.models.<name>.id`
+
+```bash
+aws bedrock create-inference-profile \
+  --inference-profile-name my-claude-profile \
+  --model-source copyFrom=arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6 \
+  --region us-east-1 \
+  --profile my-aws-profile
+```
+
+:::tip
+If Bedrock rejects a raw foundation model ARN with an on-demand inference error, use the matching system-defined inference profile ARN as `copyFrom` instead.
+:::
 
 ---
 

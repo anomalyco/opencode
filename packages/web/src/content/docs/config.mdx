@@ -401,6 +401,32 @@ Amazon Bedrock supports AWS-specific configuration:
 Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over profile-based authentication. See [authentication precedence](/docs/providers#authentication-precedence) for details.
 :::
 
+For custom Bedrock application inference profiles, define a custom model and set its `id` to the full profile ARN:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "amazon-bedrock/claude-sonnet-custom",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "setCacheKey": true
+      },
+      "models": {
+        "claude-sonnet-custom": {
+          "id": "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123example",
+          "name": "Claude Sonnet custom Bedrock profile"
+        }
+      }
+    }
+  }
+}
+```
+
+Use the full ARN in `id`, not the human-readable profile name. Keeping the custom model key Claude-like also helps Bedrock prompt caching apply correctly.
+
 [Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
 
 ---
