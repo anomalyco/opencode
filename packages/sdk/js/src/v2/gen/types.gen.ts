@@ -391,6 +391,7 @@ export type UserMessage = {
     diffs: Array<SnapshotFileDiff>
   }
   agent: string
+  parentAgent?: string
   model: {
     providerID: string
     modelID: string
@@ -5243,6 +5244,7 @@ export type SessionPromptData = {
       modelID: string
     }
     agent?: string
+    parentAgent?: string
     noReply?: boolean
     tools?: {
       [key: string]: boolean
@@ -5569,6 +5571,7 @@ export type SessionPromptAsyncData = {
       modelID: string
     }
     agent?: string
+    parentAgent?: string
     noReply?: boolean
     tools?: {
       [key: string]: boolean
@@ -5666,6 +5669,7 @@ export type SessionShellData = {
   body?: {
     messageID?: string
     agent: string
+    parentAgent?: string
     model?: {
       providerID: string
       modelID: string

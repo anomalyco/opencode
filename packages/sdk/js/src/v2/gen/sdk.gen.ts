@@ -3141,6 +3141,7 @@ export class Session2 extends HeyApiClient {
         modelID: string
       }
       agent?: string
+      parentAgent?: string
       noReply?: boolean
       tools?: {
         [key: string]: boolean
@@ -3163,6 +3164,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "messageID" },
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
+            { in: "body", key: "parentAgent" },
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
@@ -3494,6 +3496,7 @@ export class Session2 extends HeyApiClient {
         modelID: string
       }
       agent?: string
+      parentAgent?: string
       noReply?: boolean
       tools?: {
         [key: string]: boolean
@@ -3516,6 +3519,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "messageID" },
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
+            { in: "body", key: "parentAgent" },
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
@@ -3608,6 +3612,7 @@ export class Session2 extends HeyApiClient {
       workspace?: string
       messageID?: string
       agent?: string
+      parentAgent?: string
       model?: {
         providerID: string
         modelID: string
@@ -3626,6 +3631,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "messageID" },
             { in: "body", key: "agent" },
+            { in: "body", key: "parentAgent" },
             { in: "body", key: "model" },
             { in: "body", key: "command" },
           ],
