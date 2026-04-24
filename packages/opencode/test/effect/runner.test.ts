@@ -428,7 +428,7 @@ describe("Runner", () => {
             },
             { once: true },
           )
-          yield* Effect.never
+          return yield* Effect.never.pipe(Effect.as("aborted"))
         })
 
       const sh = yield* runner.startShell(work).pipe(Effect.forkChild)
