@@ -92,17 +92,29 @@ pub fn spawn_local_server(
 ) -> (CommandChild, HealthCheck) {
     let (child, exit) = cli::serve(&app, &hostname, port, &password);
 
+    tracing::info!(
+        hostname = %hostname,
+        port = %port,
+        "Sidecar process spawned, waiting for server to become healthy"
+    );
+
     let health_check = HealthCheck(tokio::spawn(async move {
         let url = format!("http://{hostname}:{port}");
         let timestamp = Instant::now();
 
-        let ready = async {
-            loop {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+        tracing::debug!("Health check loop starting");
 
-                if check_health(&url, Some(&password)).await {
-                    tracing::info!(elapsed = ?timestamp.elapsed(), "Server ready");
-                    return Ok(());
+        let ready = async {
+            tracing::info!("Starting health check loop for server at {}", url);
+
+            match check_health_with_retry(&url, Some(&password)).await {
+                Ok(()) => {
+                    tracing::info!(elapsed = ?timestamp.elapsed(), "Server ready after health checks");
+                    Ok(())
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Server failed health checks");
+                    Err(e)
                 }
             }
         };
@@ -128,43 +140,72 @@ pub fn spawn_local_server(
 
 pub struct HealthCheck(pub JoinHandle<Result<(), String>>);
 
-async fn check_health(url: &str, password: Option<&str>) -> bool {
-    let Ok(url) = reqwest::Url::parse(url) else {
-        return false;
+// Configuration for health check retries with exponential backoff.
+// Total max duration: 500+1000+2000+4000+4000=11.5s delays + 6*2000ms=12s timeouts = ~23.5s
+// This fits within the caller's 30s timeout and allows retries on transient failures.
+const HEALTH_CHECK_BASE_INTERVAL_MS: u64 = 500;
+const HEALTH_CHECK_MAX_INTERVAL_MS: u64 = 4000;
+const HEALTH_CHECK_MAX_ATTEMPTS: u32 = 6;
+
+#[inline]
+fn backoff_interval(attempt: u32) -> u64 {
+    HEALTH_CHECK_BASE_INTERVAL_MS
+        .saturating_mul(2_u64.saturating_pow(attempt.min(3)))
+        .min(HEALTH_CHECK_MAX_INTERVAL_MS)
+}
+
+async fn check_health_with_retry(url: &str, password: Option<&str>) -> Result<(), String> {
+    let url_owned = url.to_string();
+    let password_owned = password.map(|p| p.to_string());
+
+    let health_url = reqwest::Url::parse(&url_owned)
+        .and_then(|u| u.join("/global/health"))
+        .map_err(|_| "Invalid health check URL".to_string())?;
+
+    let client = {
+        let builder = reqwest::Client::builder()
+            .timeout(Duration::from_secs(7))
+            .no_proxy(); // always skip proxy for localhost health checks
+        builder.build().map_err(|e| format!("Failed to build HTTP client: {}", e))?
     };
 
-    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(7));
+    for attempt in 0..HEALTH_CHECK_MAX_ATTEMPTS {
+        if attempt > 0 {
+            let wait_ms = backoff_interval(attempt - 1);
+            tracing::debug!(
+                attempt,
+                wait_ms,
+                "Health check failed, retrying after backoff"
+            );
+            tokio::time::sleep(Duration::from_millis(wait_ms)).await;
+        }
 
-    if url
-        .host_str()
-        .is_some_and(|host| {
-            host.eq_ignore_ascii_case("localhost")
-                || host
-                    .parse::<std::net::IpAddr>()
-                    .is_ok_and(|ip| ip.is_loopback())
-        })
-    {
-        // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
-        // excluding loopback. reqwest respects these by default, which can prevent the desktop
-        // app from reaching its own local sidecar server.
-        builder = builder.no_proxy();
+        let mut req = client.get(health_url.clone());
+        if let Some(ref pw) = password_owned {
+            req = req.basic_auth("opencode", Some(pw));
+        }
+
+        let result = tokio::time::timeout(Duration::from_millis(2000), req.send()).await;
+
+        let success = match result {
+            Ok(Ok(resp)) => resp.status().is_success(),
+            Ok(Err(e)) => {
+                tracing::debug!(error = %e, attempt, "Request failed, will retry");
+                false
+            }
+            Err(_) => {
+                tracing::debug!(attempt, "Request timed out, will retry");
+                false
+            }
+        };
+
+        if success {
+            return Ok(());
+        }
+
+        // If this is the last attempt, return the failure error
+        if attempt + 1 >= HEALTH_CHECK_MAX_ATTEMPTS {
+            return Err("Health check failed after all retries".to_string());
+        }
     }
-
-    let Ok(client) = builder.build() else {
-        return false;
-    };
-    let Ok(health_url) = url.join("/global/health") else {
-        return false;
-    };
-
-    let mut req = client.get(health_url);
-
-    if let Some(password) = password {
-        req = req.basic_auth("opencode", Some(password));
-    }
-
-    req.send()
-        .await
-        .map(|r| r.status().is_success())
-        .unwrap_or(false)
 }
