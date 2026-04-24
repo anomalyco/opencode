@@ -67,6 +67,11 @@ export interface Interface {
 
 type State = Omit<Interface, "generate">
 
+export function permissions(agent: Pick<Info, "name" | "permission">, session: Permission.Ruleset = []) {
+  if (agent.name === "plan") return Permission.merge(session, agent.permission)
+  return Permission.merge(agent.permission, session)
+}
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/Agent") {}
 
 export const layer = Layer.effect(
@@ -260,6 +265,31 @@ export const layer = Layer.effect(
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+        }
+
+        if (agents.plan?.native) {
+          agents.plan.permission = Permission.merge(
+            agents.plan.permission,
+            Permission.fromConfig({
+              bash: {
+                "*": "deny",
+                "git status *": "allow",
+                "git log *": "allow",
+                "git diff *": "allow",
+                "git show *": "allow",
+                "git branch": "allow",
+                "git stash list *": "allow",
+                "ls *": "allow",
+                "cat *": "allow",
+                "grep *": "allow",
+                "rg *": "allow",
+                "find *": "allow",
+                "wc *": "allow",
+                "head *": "allow",
+                "tail *": "allow",
+              },
+            }),
+          )
         }
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured

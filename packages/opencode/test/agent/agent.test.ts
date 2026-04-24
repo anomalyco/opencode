@@ -68,6 +68,92 @@ test("plan agent denies edits except .opencode/plans/*", async () => {
   })
 })
 
+test("plan agent only allows read-only bash commands", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const plan = await load(tmp.path, (svc) => svc.get("plan"))
+      expect(plan).toBeDefined()
+      const allowed = [
+        "git status",
+        "git status --short",
+        "git log --oneline -5",
+        "git diff -- src/index.ts",
+        "git show HEAD",
+        "git branch",
+        "git stash list",
+        "ls -la",
+        "cat package.json",
+        "grep -R todo src",
+        "rg todo src",
+        "find src -type f",
+        "wc -l README.md",
+        "head -20 README.md",
+        "tail -20 README.md",
+      ]
+      allowed.forEach((command) => {
+        expect(Permission.evaluate("bash", command, plan!.permission).action).toBe("allow")
+      })
+      const denied = [
+        "git reset --hard",
+        "git push --force-with-lease",
+        "git push -f origin dev",
+        "git rebase origin/dev",
+        "git cherry-pick abc123",
+        "git branch -D stale",
+        "rm -rf tmp",
+        "chmod -R 777 tmp",
+        "sudo apt-get install foo",
+        "npm install",
+        "python -c 'open(\"x\", \"w\").write(\"y\")'",
+      ]
+      denied.forEach((command) => {
+        expect(Permission.evaluate("bash", command, plan!.permission).action).toBe("deny")
+      })
+    },
+  })
+})
+
+test("plan bash allowlist overrides configured and session permissions", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        plan: {
+          permission: {
+            bash: {
+              "npm install *": "allow",
+            },
+          },
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const plan = await load(tmp.path, (svc) => svc.get("plan"))
+      expect(plan).toBeDefined()
+      expect(Permission.evaluate("bash", "npm install left-pad", plan!.permission).action).toBe("deny")
+      expect(Permission.evaluate("bash", "git status", plan!.permission).action).toBe("allow")
+      expect(
+        Permission.evaluate(
+          "bash",
+          "npm install left-pad",
+          Agent.permissions(plan!, [{ permission: "bash", pattern: "npm install *", action: "allow" }]),
+        ).action,
+      ).toBe("deny")
+      expect(
+        Permission.evaluate(
+          "bash",
+          "git status",
+          Agent.permissions(plan!, [{ permission: "bash", pattern: "*", action: "deny" }]),
+        ).action,
+      ).toBe("allow")
+    },
+  })
+})
+
 test("explore agent denies edit and write", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

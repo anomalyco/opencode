@@ -393,7 +393,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               ...req,
               sessionID: input.session.id,
               tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-              ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+              ruleset: Agent.permissions(input.agent, input.session.permission ?? []),
             })
             .pipe(Effect.orDie),
       })
@@ -613,7 +613,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               .ask({
                 ...req,
                 sessionID,
-                ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                ruleset: Agent.permissions(taskAgent, session.permission ?? []),
               })
               .pipe(Effect.orDie),
         })

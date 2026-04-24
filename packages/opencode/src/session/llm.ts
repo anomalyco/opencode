@@ -8,7 +8,7 @@ import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider"
 import { Config } from "@/config"
 import { Instance } from "@/project/instance"
-import type { Agent } from "@/agent/agent"
+import { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
@@ -260,7 +260,7 @@ const live: Layer.Layer<
           }
         }
 
-        const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
+        const ruleset = Agent.permissions(input.agent, input.permission ?? [])
         workflowModel.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
           const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
           return !match || match.action !== "ask"
@@ -445,7 +445,7 @@ export const defaultLayer = Layer.suspend(() =>
 function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
   const disabled = Permission.disabled(
     Object.keys(input.tools),
-    Permission.merge(input.agent.permission, input.permission ?? []),
+    Agent.permissions(input.agent, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
 }
