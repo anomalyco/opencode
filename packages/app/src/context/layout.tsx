@@ -391,37 +391,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
 
-      const local = childStore.projectMeta
-      const localOverride =
-        local?.name !== undefined ||
-        local?.commands?.start !== undefined ||
-        local?.icon?.override !== undefined ||
-        local?.icon?.color !== undefined
-
-      const base = {
-        ...metadata,
-        ...project,
-        icon: {
-          url: metadata?.icon?.url,
-          override: metadata?.icon?.override ?? childStore.icon,
-          color: metadata?.icon?.color,
-        },
-      }
-
-      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
-      if (!isGlobal) return base
-
-      return {
-        ...base,
-        id: base.id ?? "global",
-        name: local?.name,
-        commands: local?.commands,
-        icon: {
-          url: base.icon?.url,
-          override: local?.icon?.override,
-          color: local?.icon?.color,
-        },
-      }
+      return { ...metadata, ...project }
     }
 
     const roots = createMemo(() => {
@@ -516,7 +486,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
 
       for (const project of projects) {
-        if (project.icon?.color) continue
+        if (project.icon?.color || project.icon?.override || project.icon?.url) continue
         const worktree = project.worktree
         const existing = colors[worktree]
         const color = existing ?? pickAvailableColor(used)

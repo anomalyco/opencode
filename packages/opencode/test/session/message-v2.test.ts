@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
+import { ProviderTransform } from "../../src/provider"
 import type { Provider } from "../../src/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
@@ -359,6 +360,89 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("preserves jpeg tool-result media for anthropic models", async () => {
+    const anthropicModel: Provider.Model = {
+      ...model,
+      id: ModelID.make("anthropic/claude-opus-4-7"),
+      providerID: ProviderID.make("anthropic"),
+      api: {
+        id: "claude-opus-4-7-20250805",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+          pdf: true,
+        },
+      },
+    }
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]).toString(
+      "base64",
+    )
+    const userID = "m-user-anthropic"
+    const assistantID = "m-assistant-anthropic"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1-anthropic"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-anthropic"),
+            type: "tool",
+            callID: "call-anthropic-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/rails-demo.png" },
+              output: "Image read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-anthropic-1"),
+                  type: "file",
+                  mime: "image/jpeg",
+                  filename: "rails-demo.png",
+                  url: `data:image/jpeg;base64,${jpeg}`,
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = ProviderTransform.message(await MessageV2.toModelMessages(input, anthropicModel), anthropicModel, {})
+    expect(result).toHaveLength(3)
+    expect(result[2].role).toBe("tool")
+    expect(result[2].content[0]).toMatchObject({
+      type: "tool-result",
+      toolCallId: "call-anthropic-1",
+      toolName: "read",
+      output: {
+        type: "content",
+        value: [
+          { type: "text", text: "Image read successfully" },
+          { type: "media", mediaType: "image/jpeg", data: jpeg },
+        ],
+      },
+    })
+  })
+
   test("omits provider metadata when assistant model differs", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
@@ -495,6 +579,76 @@ describe("session.message-v2.toModelMessage", () => {
             toolCallId: "call-1",
             toolName: "bash",
             output: { type: "text", value: "[Old tool result content cleared]" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("truncates tool output when requested", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "abcdefghij",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model, { toolOutputMaxChars: 4 })).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: {
+              type: "text",
+              value: "abcd\n[Tool output truncated for compaction: omitted 6 chars]",
+            },
           },
         ],
       },
@@ -918,6 +1072,30 @@ describe("session.message-v2.fromError", () => {
           responseBody: JSON.stringify(input),
         },
       })
+    })
+  })
+
+  test("serializes OpenAI response server_error stream chunks as retryable APIError", () => {
+    const body = {
+      type: "error",
+      sequence_number: 2,
+      error: {
+        type: "server_error",
+        code: "server_error",
+        message:
+          "An error occurred while processing your request. You can retry your request, or contact us through our help center at help.openai.com if the error persists. Please include the request ID req_77eccd008d984bf6bf82d1b2c2b68715 in your message.",
+        param: null,
+      },
+    }
+    const result = MessageV2.fromError({ message: JSON.stringify(body) }, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: body.error.message,
+        isRetryable: true,
+        responseBody: JSON.stringify(body),
+      },
     })
   })
 

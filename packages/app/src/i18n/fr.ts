@@ -579,7 +579,9 @@ export const dict = {
   "settings.general.row.theme.title": "Thème",
   "settings.general.row.theme.description": "Personnaliser le thème d'OpenCode.",
   "settings.general.row.font.title": "Police de code",
-  "settings.general.row.font.description": "Personnaliser la police utilisée dans les blocs de code et les terminaux",
+  "settings.general.row.font.description": "Personnaliser la police utilisée dans les blocs de code",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "Police de l'interface",
   "settings.general.row.uiFont.description": "Personnaliser la police utilisée dans toute l'interface",
   "settings.general.row.followup.title": "Comportement de suivi",
@@ -596,6 +598,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Développer les parties de l'outil edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Afficher les parties des outils edit, write et patch développées par défaut dans la chronologie",
+  "settings.general.row.showSessionProgressBar.title": "Afficher la barre de progression de la session",
+  "settings.general.row.showSessionProgressBar.description":
+    "Afficher la barre de progression animée en haut de la session lorsque l'agent travaille",
   "settings.general.row.wayland.title": "Utiliser Wayland natif",
   "settings.general.row.wayland.description": "Désactiver le repli X11 sur Wayland. Nécessite un redémarrage.",
   "settings.general.row.wayland.tooltip":
