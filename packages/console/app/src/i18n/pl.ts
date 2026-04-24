@@ -13,7 +13,7 @@ export const dict = {
   "nav.free": "Pobierz",
   "nav.home": "Strona główna",
   "nav.openMenu": "Otwórz menu",
-  "nav.getStartedFree": "Zacznij za darmo",
+  "nav.getStartedFree": "Zacznij bez opłat",
   "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Skopiuj logo jako SVG",
@@ -71,7 +71,7 @@ export const dict = {
   "error.workspaceNameRequired": "Nazwa obszaru roboczego jest wymagana.",
   "error.nameTooLong": "Nazwa musi mieć 255 znaków lub mniej.",
   "error.emailRequired": "E-mail jest wymagany",
-  "error.roleRequired": "Rola jest wymagana",
+  "error.roleRequired": "Stanowisko jest wymagane",
   "error.idRequired": "ID jest wymagane",
   "error.nameRequired": "Nazwa jest wymagana",
   "error.providerRequired": "Dostawca jest wymagany",
@@ -107,7 +107,7 @@ export const dict = {
   "home.banner.downloadBetaNow": "Pobierz betę wersji desktopowej",
 
   "home.hero.title": "Open source'owy agent AI do kodowania",
-  "home.hero.subtitle.a": "Darmowe modele w zestawie lub podłącz dowolny model od dowolnego dostawcy,",
+  "home.hero.subtitle.a": "Dołączone bezpłatne modele lub podłącz dowolny model od dowolnego dostawcy,",
   "home.hero.subtitle.b": "w tym Claude, GPT, Gemini i inne.",
 
   "home.install.ariaLabel": "Opcje instalacji",
@@ -146,7 +146,7 @@ export const dict = {
 
   "home.faq.q1": "Czym jest OpenCode?",
   "home.faq.a1":
-    "OpenCode to open source'owy agent, który pomaga pisać i uruchamiać kod z dowolnym modelem AI. Jest dostępny jako interfejs terminalowy, aplikacja desktopowa lub rozszerzenie IDE.",
+    "OpenCode to open source'owy agent, który pomaga tworzyć i uruchamiać kod z dowolnym modelem AI. Jest dostępny jako interfejs terminalowy, aplikacja desktopowa lub rozszerzenie IDE.",
   "home.faq.q2": "Jak korzystać z OpenCode?",
   "home.faq.a2.before": "Najłatwiej zacząć od przeczytania",
   "home.faq.a2.link": "wprowadzenia",
@@ -156,8 +156,8 @@ export const dict = {
   "home.faq.a3.p2.beforeZen": "Poza tym możesz używać dowolnych popularnych modeli do kodowania, tworząc konto",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Chociaż zachęcamy do korzystania z Zen, OpenCode działa również ze wszystkimi popularnymi dostawcami, takimi jak OpenAI, Anthropic, xAI itp.",
-  "home.faq.a3.p4.beforeLocal": "Możesz nawet podłączyć swoje",
+    "Choć zachęcamy do korzystania z Zen, OpenCode działa również ze wszystkimi popularnymi dostawcami, takimi jak OpenAI, Anthropic, xAI itp.",
+  "home.faq.a3.p4.beforeLocal": "Możesz podłączyć też swoje",
   "home.faq.a3.p4.localLink": "lokalne modele",
   "home.faq.q4": "Czy mogę używać moich istniejących subskrypcji AI z OpenCode?",
   "home.faq.a4.p1":
@@ -199,7 +199,7 @@ export const dict = {
     "Zen to wyselekcjonowany zestaw modeli AI przetestowanych i sprawdzonych pod kątem agentów kodujących, stworzony przez zespół stojący za OpenCode.",
   "zen.faq.q2": "Co sprawia, że Zen jest bardziej precyzyjny?",
   "zen.faq.a2":
-    "Zen oferuje tylko modele, które zostały specjalnie przetestowane i sprawdzone dla agentów kodujących. Nie używasz noża do masła do krojenia steku, więc nie używaj słabych modeli do kodowania.",
+    "Zen oferuje tylko modele, które zostały specjalnie przetestowane i sprawdzone dla agentów kodujących. Nie używasz noża do masła, żeby kroić stek, więc nie używaj słabych modeli do kodowania.",
   "zen.faq.q3": "Czy Zen jest tańszy?",
   "zen.faq.a3":
     "Zen nie jest nastawiony na zysk. Zen przekazuje koszty od dostawców modeli bezpośrednio do Ciebie. Im większe użycie Zen, tym lepsze stawki OpenCode może wynegocjować i przekazać Tobie.",
@@ -261,11 +261,11 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Zasubskrybuj Go",
   "go.cta.price": "$10/miesiąc",
-  "go.cta.promo": "$5 pierwszy miesiąc",
+  "go.cta.promo": "$5 za pierwszy miesiąc",
   "go.pricing.body":
     "Używaj z dowolnym agentem. $5 za pierwszy miesiąc, potem $10/miesiąc. Doładuj konto w razie potrzeby. Anuluj w dowolnym momencie.",
   "go.banner.badge": "3x",
-  "go.banner.text": "Kimi K2.6: limit użycia zwiększony 3× do 27 kwietnia",
+  "go.banner.text": "Kimi K2.6: 3x większy limit użycia do 27 kwietnia",
   "go.graph.free": "Darmowe",
   "go.graph.freePill": "Big Pickle i darmowe modele",
   "go.graph.go": "Go",
@@ -460,7 +460,7 @@ export const dict = {
   "workspace.models.table.model": "Model",
   "workspace.models.table.enabled": "Włączony",
 
-  "workspace.providers.title": "Przynieś własny klucz (BYOK)",
+  "workspace.providers.title": "Własny klucz API (BYOK)",
   "workspace.providers.subtitle": "Skonfiguruj własne klucze API od dostawców AI.",
   "workspace.providers.placeholder": "Wprowadź klucz API {{provider}} ({{prefix}}...)",
   "workspace.providers.configure": "Konfiguruj",
@@ -481,8 +481,8 @@ export const dict = {
   "workspace.usage.table.cost": "Koszt",
   "workspace.usage.table.session": "Sesja",
   "workspace.usage.breakdown.input": "Wejście",
-  "workspace.usage.breakdown.cacheRead": "Odczyt Cache",
-  "workspace.usage.breakdown.cacheWrite": "Zapis Cache",
+  "workspace.usage.breakdown.cacheRead": "Odczyt z cache",
+  "workspace.usage.breakdown.cacheWrite": "Zapis do cache",
   "workspace.usage.breakdown.output": "Wyjście",
   "workspace.usage.breakdown.reasoning": "Rozumowanie",
   "workspace.usage.subscription": "Black (${{amount}})",
