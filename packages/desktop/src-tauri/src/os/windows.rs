@@ -8,8 +8,8 @@ use windows_sys::Win32::{
     Foundation::ERROR_SUCCESS,
     System::{
         Registry::{
-            HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_SZ, RRF_RT_REG_EXPAND_SZ,
-            RRF_RT_REG_SZ, RegGetValueW,
+            RegGetValueW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_SZ,
+            RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
         },
         Threading::{CREATE_NEW_CONSOLE, CREATE_NO_WINDOW},
     },
@@ -475,6 +475,7 @@ pub fn open_in_windows_terminal(path: String) -> Result<(), String> {
 
     Command::new("wt.exe")
         .creation_flags(CREATE_NEW_CONSOLE)
+        .args(["-d", &dir.to_string_lossy()])
         .current_dir(dir)
         .spawn()
         .map_err(|e| format!("Failed to start Windows Terminal: {e}"))?;

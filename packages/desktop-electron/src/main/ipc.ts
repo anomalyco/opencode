@@ -143,7 +143,7 @@ export function registerIpcHandlers(deps: Deps) {
     if (!app) return shell.openPath(path)
     await new Promise<void>((resolve, reject) => {
       if (process.platform === "win32" && ["wt", "wt.exe"].includes(app.toLowerCase())) {
-        execFile("wt.exe", [], { cwd: path }, (err) => (err ? reject(err) : resolve()))
+        execFile("wt.exe", ["-d", path], { cwd: path }, (err) => (err ? reject(err) : resolve()))
         return
       }
 
