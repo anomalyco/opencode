@@ -2,6 +2,7 @@ import { Instance } from "@/project/instance"
 import { Project } from "@/project"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "./auth"
 
 const root = "/project"
 
@@ -33,7 +34,8 @@ export const ProjectApi = HttpApi.make("project")
           title: "project",
           description: "Experimental HttpApi project routes.",
         }),
-      ),
+      )
+      .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({

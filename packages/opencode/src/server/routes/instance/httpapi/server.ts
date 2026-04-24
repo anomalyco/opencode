@@ -1,14 +1,14 @@
-import { Effect, Layer, Redacted, Schema } from "effect"
-import { HttpApiBuilder, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
+import { Effect, Layer, Schema } from "effect"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Observability } from "@/effect"
-import { Flag } from "@/flag/flag"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util"
+import { authorizationLayer } from "./auth"
 import { ConfigApi, configHandlers } from "./config"
 import { FileApi, fileHandlers } from "./file"
 import { McpApi, mcpHandlers } from "./mcp"
@@ -38,56 +38,6 @@ function decode(input: string) {
   }
 }
 
-class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
-  "Unauthorized",
-  { message: Schema.String },
-  { httpApiStatus: 401 },
-) {}
-
-class Authorization extends HttpApiMiddleware.Service<Authorization>()("@opencode/ExperimentalHttpApiAuthorization", {
-  error: Unauthorized,
-  security: {
-    basic: HttpApiSecurity.basic,
-  },
-}) {}
-
-const normalize = HttpRouter.middleware()(
-  Effect.gen(function* () {
-    return (effect) =>
-      Effect.gen(function* () {
-        const query = yield* HttpServerRequest.schemaSearchParams(Query)
-        if (!query.auth_token) return yield* effect
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const next = req.modify({
-          headers: {
-            ...req.headers,
-            authorization: `Basic ${query.auth_token}`,
-          },
-        })
-        return yield* effect.pipe(Effect.provideService(HttpServerRequest.HttpServerRequest, next))
-      })
-  }),
-).layer
-
-const auth = Layer.succeed(
-  Authorization,
-  Authorization.of({
-    basic: (effect, { credential }) =>
-      Effect.gen(function* () {
-        if (!Flag.OPENCODE_SERVER_PASSWORD) return yield* effect
-
-        const user = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-        if (credential.username !== user) {
-          return yield* new Unauthorized({ message: "Unauthorized" })
-        }
-        if (Redacted.value(credential.password) !== Flag.OPENCODE_SERVER_PASSWORD) {
-          return yield* new Unauthorized({ message: "Unauthorized" })
-        }
-        return yield* effect
-      }),
-  }),
-)
-
 const instance = HttpRouter.middleware()(
   Effect.gen(function* () {
     return (effect) =>
@@ -110,27 +60,17 @@ const instance = HttpRouter.middleware()(
   }),
 ).layer
 
-const QuestionSecured = QuestionApi.middleware(Authorization)
-const PermissionSecured = PermissionApi.middleware(Authorization)
-const ProjectSecured = ProjectApi.middleware(Authorization)
-const ProviderSecured = ProviderApi.middleware(Authorization)
-const ConfigSecured = ConfigApi.middleware(Authorization)
-const WorkspaceSecured = WorkspaceApi.middleware(Authorization)
-const FileSecured = FileApi.middleware(Authorization)
-const McpSecured = McpApi.middleware(Authorization)
-
 export const routes = Layer.mergeAll(
-  HttpApiBuilder.layer(ConfigSecured).pipe(Layer.provide(configHandlers)),
-  HttpApiBuilder.layer(FileSecured).pipe(Layer.provide(fileHandlers)),
-  HttpApiBuilder.layer(McpSecured).pipe(Layer.provide(mcpHandlers)),
-  HttpApiBuilder.layer(ProjectSecured).pipe(Layer.provide(projectHandlers)),
-  HttpApiBuilder.layer(QuestionSecured).pipe(Layer.provide(questionHandlers)),
-  HttpApiBuilder.layer(PermissionSecured).pipe(Layer.provide(permissionHandlers)),
-  HttpApiBuilder.layer(ProviderSecured).pipe(Layer.provide(providerHandlers)),
-  HttpApiBuilder.layer(WorkspaceSecured).pipe(Layer.provide(workspaceHandlers)),
+  HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
+  HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),
+  HttpApiBuilder.layer(McpApi).pipe(Layer.provide(mcpHandlers)),
+  HttpApiBuilder.layer(ProjectApi).pipe(Layer.provide(projectHandlers)),
+  HttpApiBuilder.layer(QuestionApi).pipe(Layer.provide(questionHandlers)),
+  HttpApiBuilder.layer(PermissionApi).pipe(Layer.provide(permissionHandlers)),
+  HttpApiBuilder.layer(ProviderApi).pipe(Layer.provide(providerHandlers)),
+  HttpApiBuilder.layer(WorkspaceApi).pipe(Layer.provide(workspaceHandlers)),
 ).pipe(
-  Layer.provide(auth),
-  Layer.provide(normalize),
+  Layer.provide(authorizationLayer),
   Layer.provide(instance),
   Layer.provide(HttpServer.layerServices),
   Layer.provideMerge(Observability.layer),
