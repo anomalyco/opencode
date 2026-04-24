@@ -16,6 +16,7 @@ export function Dialog(
   const dimensions = useTerminalDimensions()
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const toast = useToast()
 
   let dismiss = false
   const width = () => {
@@ -54,6 +55,11 @@ export function Dialog(
       <box
         onMouseUp={(e) => {
           dismiss = false
+          // Copy-on-select: the DialogProvider wraps us in a copy handler, but
+          // our stopPropagation below prevents the event from reaching it.
+          // Trigger the copy directly so drag-selecting text inside the
+          // dialog auto-copies just like in the main session view.
+          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) Selection.copy(renderer, toast)
           e.stopPropagation()
         }}
         width={width()}

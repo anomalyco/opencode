@@ -136,7 +136,7 @@ export function DialogSessionContext(props: DialogSessionContextProps) {
 
               <box flexDirection="row" justifyContent="space-between">
                 <text fg={theme.textMuted}>Breakdown (estimated · chars/4)</text>
-                <text fg={theme.textMuted}>↑↓ pgup pgdn scroll · hold ⌥/shift to select text</text>
+                <text fg={theme.textMuted}>↑↓ pgup pgdn scroll</text>
               </box>
 
               {/* Scrollable diagnostic breakdown. */}
