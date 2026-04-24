@@ -172,7 +172,9 @@ export function DialogSessionContext(props: DialogSessionContextProps) {
                             </text>
                             <text fg={theme.textMuted}>
                               ~{formatTokens(section.tokens)}
-                              {section.key === "messages" ? "" : ` · ${section.items.length}`}
+                              {section.key === "messages" || section.key === "full_session"
+                                ? ""
+                                : ` · ${section.items.length}`}
                             </text>
                           </box>
                           <Show
@@ -187,9 +189,8 @@ export function DialogSessionContext(props: DialogSessionContextProps) {
                                     <text fg={theme.text} wrapMode="word">
                                       {shortenPath(item.label, itemLabelMax())}
                                       <span style={{ fg: theme.textMuted }}>
-                                        {"  ~"}
-                                        {formatTokens(item.tokens)}
-                                        {item.detail ? ` — ${item.detail}` : ""}
+                                        {item.tokens > 0 ? `  ~${formatTokens(item.tokens)}` : ""}
+                                        {item.detail ? `${item.tokens > 0 ? " — " : "  "}${item.detail}` : ""}
                                       </span>
                                     </text>
                                   </box>

@@ -40,7 +40,7 @@ export const ContextItem = Schema.Struct({
 export type ContextItem = Schema.Schema.Type<typeof ContextItem>
 
 export const ContextSection = Schema.Struct({
-  key: Schema.Literals(["system", "rules", "skills", "tools", "mcp_tools", "agent", "messages"]),
+  key: Schema.Literals(["system", "rules", "skills", "tools", "mcp_tools", "agent", "messages", "full_session"]),
   label: Schema.String,
   tokens: Schema.Number,
   chars: Schema.Number,
@@ -171,10 +171,12 @@ export const layer = Layer.effect(
 
     const compute = Effect.fn("SessionContext.compute")(function* (input: GetInput) {
       const model = yield* provider.getModel(input.providerID, input.modelID)
-      // Raw history from the store. Walked via filterCompacted to select only
-      // messages the LLM actually sees this turn (post any compaction rollups).
+      // Raw history (oldest-first) plus the compaction-filtered active
+      // window. filterCompactedEffect walks the newest-first stream and
+      // reverses internally, matching exactly what session/prompt.ts feeds
+      // into the LLM, so token totals align with what the model sees.
       const allMsgs = yield* sessions.messages({ sessionID: input.sessionID })
-      const msgs = MessageV2.filterCompacted(allMsgs)
+      const msgs = yield* MessageV2.filterCompactedEffect(input.sessionID)
 
       // Agent resolution mirrors session/prompt.ts behavior.
       const defaultAgentName = yield* agents.defaultAgent()
@@ -258,17 +260,20 @@ export const layer = Layer.effect(
         })
       }
 
-      // Pure-estimate messages block, always rendered as a diagnostic. When
-      // the authoritative usage supersedes it, the UI can use `detail` to
-      // explain that the line is not the top-line number.
-      const messagesSerialized = JSON.stringify(msgs.map((m) => ({ info: m.info, parts: m.parts })))
-
-      // --- Authoritative usage ---------------------------------------------
+      // Authoritative usage --------------------------------------------------      // --- Authoritative usage ---------------------------------------------
       // Walk backwards for the last assistant turn that reported usage. Gate
       // on `SessionOverflow.currentTokens > 0` (same expression overflow uses
       // to decide compaction) so the /context view can never disagree about
       // whether an authoritative number exists.
-      const lastAssistant = msgs.findLast((m) => m.info.role === "assistant")
+      // Authoritative usage: pick the most recent assistant turn that
+      // produced output, matching the sidebar's selection rule. Walking the
+      // *unfiltered* history makes the figure consistent with the sidebar
+      // even when the active window has been compacted (the compaction
+      // summary writer's reported usage IS the last live snapshot of the
+      // pre-compaction prefix).
+      const lastAssistant = allMsgs.findLast(
+        (m) => m.info.role === "assistant" && m.info.tokens.output > 0,
+      )
       const t =
         lastAssistant && lastAssistant.info.role === "assistant" && SessionOverflow.currentTokens(lastAssistant.info.tokens) > 0
           ? lastAssistant.info.tokens
@@ -317,22 +322,15 @@ export const layer = Layer.effect(
         const userText = sizeOf(userMsgs)
         const asstText = sizeOf(asstMsgs)
         const compactedOut = allMsgs.length - msgs.length
-        const totalDetail = usage.authoritative ? "superseded by usage above" : "estimated"
-        const compactedNote = compactedOut > 0 ? ` · ${compactedOut} older compacted out` : ""
-        const items: ContextItem[] = [
-          {
-            label: `Total ${msgs.length} message(s) in context`,
-            tokens: Token.estimate(messagesSerialized),
-            chars: messagesSerialized.length,
-            detail: totalDetail + compactedNote,
-          },
-        ]
+        const items: ContextItem[] = []
+        // Each role row is sized independently so the section subtotal in the
+        // header matches reality (no double-counting via a redundant Total).
         if (userMsgs.length > 0) {
           items.push({
             label: `User (${userMsgs.length})`,
             tokens: Token.estimate(userText),
             chars: userText.length,
-            detail: "prompts + attached parts (current session, post-compaction)",
+            detail: "prompts + attached parts",
           })
         }
         if (asstMsgs.length > 0) {
@@ -340,9 +338,69 @@ export const layer = Layer.effect(
             label: `Assistant (${asstMsgs.length}) — ${agent.name}`,
             tokens: Token.estimate(asstText),
             chars: asstText.length,
-            detail: "responses + tool calls + tool results (current session, post-compaction)",
+            detail: "responses + tool calls + tool results",
           })
         }
+        // Zero-token info row that explains scope + how many were rolled up
+        // by compaction. Estimated, current session only.
+        const scopeBits = [
+          `${msgs.length} in context`,
+          compactedOut > 0 ? `${compactedOut} compacted out` : null,
+          usage.authoritative ? "superseded by usage above" : "estimated",
+        ].filter((x): x is string => !!x)
+        items.push({
+          label: "Scope",
+          tokens: 0,
+          chars: 0,
+          detail: scopeBits.join(" · "),
+        })
+        return items
+      })()
+
+      // Full session: pre-compaction totals over the raw transcript. Lets the
+      // user see the cumulative size of everything ever written to this
+      // session, regardless of what's currently in the live context window.
+      const fullSessionItems: ContextItem[] = (() => {
+        if (allMsgs.length === 0) return []
+        const userAll = allMsgs.filter((m) => m.info.role === "user")
+        const asstAll = allMsgs.filter((m) => m.info.role === "assistant")
+        const sizeOf = (list: typeof allMsgs) =>
+          JSON.stringify(list.map((m) => ({ info: m.info, parts: m.parts })))
+        const userText = sizeOf(userAll)
+        const asstText = sizeOf(asstAll)
+        const totalCost = asstAll.reduce(
+          (acc, m) => acc + (m.info.role === "assistant" ? (m.info.cost ?? 0) : 0),
+          0,
+        )
+        const items: ContextItem[] = []
+        if (userAll.length > 0) {
+          items.push({
+            label: `User (${userAll.length})`,
+            tokens: Token.estimate(userText),
+            chars: userText.length,
+            detail: "all user prompts ever sent",
+          })
+        }
+        if (asstAll.length > 0) {
+          items.push({
+            label: `Assistant (${asstAll.length}) — ${agent.name}`,
+            tokens: Token.estimate(asstText),
+            chars: asstText.length,
+            detail: "all assistant turns + tool calls + results",
+          })
+        }
+        const compactedOut = allMsgs.length - msgs.length
+        const scopeBits = [
+          `${allMsgs.length} total message(s)`,
+          compactedOut > 0 ? `${compactedOut} rolled up by compaction` : "no compaction yet",
+          totalCost > 0 ? `$${totalCost.toFixed(4)} spent` : null,
+        ].filter((x): x is string => !!x)
+        items.push({
+          label: "Lifetime",
+          tokens: 0,
+          chars: 0,
+          detail: scopeBits.join(" · "),
+        })
         return items
       })()
 
@@ -353,7 +411,10 @@ export const layer = Layer.effect(
         buildSection("agent", "Agent", agentItems),
         buildSection("tools", "Built-in tools", toolItems),
         buildSection("mcp_tools", "MCP tools", mcpItems),
-        buildSection("messages", "Messages", messagesItems),
+        buildSection("messages", "Messages (in context)", messagesItems),
+        ...(fullSessionItems.length > 0
+          ? [buildSection("full_session", "Full session (raw, pre-compaction)", fullSessionItems)]
+          : []),
       ]
 
       return {

@@ -1938,7 +1938,7 @@ export type SessionContextItem = {
 }
 
 export type SessionContextSection = {
-  key: "system" | "rules" | "skills" | "tools" | "mcp_tools" | "agent" | "messages"
+  key: "system" | "rules" | "skills" | "tools" | "mcp_tools" | "agent" | "messages" | "full_session"
   label: string
   tokens: number
   chars: number
