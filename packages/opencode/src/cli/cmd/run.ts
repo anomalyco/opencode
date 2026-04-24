@@ -674,7 +674,15 @@ export const RunCommand = cmd({
         const request = new Request(input, init)
         return Server.Default().app.fetch(request)
       }) as typeof globalThis.fetch
-      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
+      const headers = (() => {
+        // Match the in-process server auth config; --password is only for --attach.
+        const password = Flag.OPENCODE_SERVER_PASSWORD
+        if (!password) return undefined
+        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+        const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+        return { Authorization: auth }
+      })()
+      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn, headers })
       await execute(sdk)
     })
   },
