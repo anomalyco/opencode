@@ -1177,7 +1177,7 @@ const layer: Layer.Layer<
                     model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
                   pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
                 },
-                interleaved: model.interleaved ?? false,
+                interleaved: model.interleaved ?? existingModel?.capabilities.interleaved ?? false,
               },
               cost: {
                 input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,

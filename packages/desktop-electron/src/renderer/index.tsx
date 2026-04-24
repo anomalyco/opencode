@@ -170,7 +170,7 @@ const createPlatform = (): Platform => {
       return window.api.checkUpdate()
     },
 
-    update: async () => {
+    updateAndRestart: async () => {
       const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
       if (!config.updaterEnabled) return
       await window.api.installUpdate()

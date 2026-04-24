@@ -117,7 +117,7 @@ export const FileRoutes = lazy(() =>
             description: "Files and directories",
             content: {
               "application/json": {
-                schema: resolver(File.Node.array()),
+                schema: resolver(File.Node.zod.array()),
               },
             },
           },
@@ -146,7 +146,7 @@ export const FileRoutes = lazy(() =>
             description: "File content",
             content: {
               "application/json": {
-                schema: resolver(File.Content),
+                schema: resolver(File.Content.zod),
               },
             },
           },
@@ -175,7 +175,7 @@ export const FileRoutes = lazy(() =>
             description: "File status",
             content: {
               "application/json": {
-                schema: resolver(File.Info.array()),
+                schema: resolver(File.Info.zod.array()),
               },
             },
           },
