@@ -95,6 +95,7 @@ export function SessionTodoDock(props: {
   return (
     <DockTray
       data-component="session-todo-dock"
+      class="bg-background-base"
       style={{
         "overflow-x": "visible",
         "overflow-y": "hidden",
