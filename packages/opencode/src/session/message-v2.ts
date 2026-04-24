@@ -28,6 +28,17 @@ interface FetchDecompressionError extends Error {
   path: string
 }
 
+/** Detect Bun fetch() stream connection errors (incomplete chunked read, peer closed, etc.) */
+function isStreamConnectionError(e: Error): boolean {
+  const msg = e.message.toLowerCase()
+  return (
+    msg.includes("peer closed connection") ||
+    msg.includes("incomplete chunked read") ||
+    msg.includes("unexpected end of stream") ||
+    msg.includes("socket hang up")
+  )
+}
+
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached image(s) from tool result:"
 export { isMedia }
 
@@ -1159,6 +1170,18 @@ export function fromError(
           responseHeaders: parsed.responseHeaders,
           responseBody: parsed.responseBody,
           metadata: parsed.metadata,
+        },
+        { cause: e },
+      ).toObject()
+    case e instanceof Error && isStreamConnectionError(e):
+      return new APIError(
+        {
+          message: "Connection closed during streaming",
+          isRetryable: true,
+          metadata: {
+            code: "STREAM_CONNECTION_ERROR",
+            message: e.message,
+          },
         },
         { cause: e },
       ).toObject()

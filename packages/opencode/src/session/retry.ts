@@ -74,6 +74,16 @@ export function retryable(error: Err) {
     ) {
       return msg
     }
+    // Stream connection errors (Bun fetch incomplete chunked read, peer closed)
+    if (
+      lower.includes("peer closed connection") ||
+      lower.includes("incomplete chunked read") ||
+      lower.includes("connection closed during streaming") ||
+      lower.includes("unexpected end of stream") ||
+      lower.includes("socket hang up")
+    ) {
+      return "Connection closed during streaming — retrying"
+    }
   }
 
   const json = iife(() => {
