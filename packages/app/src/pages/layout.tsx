@@ -2471,7 +2471,8 @@ export default function Layout(props: ParentProps) {
               <main
                 data-component="main-surface"
                 classList={{
-                  "size-full overflow-hidden flex flex-col items-start contain-strict border-t xl:border-l xl:rounded-tl-xl xl:rounded-bl-xl": true,
+                  "size-full overflow-hidden flex flex-col items-start contain-strict border-t xl:border-l": true,
+                  "xl:rounded-tl-xl xl:rounded-bl-xl": !layout.sidebar.opened(),
                 }}
                 style={{
                   "border-top-width": "var(--layout-divider-width, 1px)",
