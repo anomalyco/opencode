@@ -73,16 +73,14 @@ export class Approval extends Schema.Class<Approval>("PermissionApproval")({
 }
 
 export const Event = {
-  Asked: BusEvent.define("permission.asked", Request.zod),
+  Asked: BusEvent.define("permission.asked", Request),
   Replied: BusEvent.define(
     "permission.replied",
-    zod(
-      Schema.Struct({
-        sessionID: SessionID,
-        requestID: PermissionID,
-        reply: Reply,
-      }),
-    ),
+    Schema.Struct({
+      sessionID: SessionID,
+      requestID: PermissionID,
+      reply: Reply,
+    }),
   ),
 }
 

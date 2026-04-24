@@ -19,7 +19,7 @@ import { zod, ZodOverride } from "@/util/effect-zod"
 const log = Log.create({ service: "lsp" })
 
 export const Event = {
-  Updated: BusEvent.define("lsp.updated", z.object({})),
+  Updated: BusEvent.define("lsp.updated", Schema.Struct({})),
 }
 
 const Position = Schema.Struct({

@@ -366,7 +366,7 @@ export default function Layout(props: ParentProps) {
 
   const useUpdatePolling = () =>
     onMount(() => {
-      if (!platform.checkUpdate || !platform.update || !platform.restart) return
+      if (!platform.checkUpdate || !platform.updateAndRestart) return
 
       let toastId: number | undefined
       let interval: ReturnType<typeof setInterval> | undefined
@@ -384,8 +384,7 @@ export default function Layout(props: ParentProps) {
               {
                 label: language.t("toast.update.action.installRestart"),
                 onClick: async () => {
-                  await platform.update!()
-                  await platform.restart!()
+                  await platform.updateAndRestart!()
                 },
               },
               {

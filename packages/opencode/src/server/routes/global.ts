@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { SyncEvent } from "@/sync"
@@ -18,7 +18,7 @@ import { errors } from "../error"
 
 const log = Log.create({ service: "server" })
 
-export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
+export const GlobalDisposedEvent = BusEvent.define("global.disposed", Schema.Struct({}))
 
 async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
   return streamSSE(c, async (stream) => {
