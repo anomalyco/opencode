@@ -534,7 +534,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
-      return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+      const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+      if (model.api.id.includes("deepseek-v4")) {
+        efforts.push("max")
+      }
+      return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
 
     case "@ai-sdk/azure":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
