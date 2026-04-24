@@ -617,7 +617,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
     })
 
     const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
-      yield* patch(input.sessionID, { time: { archived: input.time } })
+      yield* patch(input.sessionID, { time: { archived: input.time ?? null } })
     })
 
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {

@@ -527,6 +527,15 @@ export function MessageTimeline(props: {
       })
   }
 
+  const unarchiveSession = async (sessionID: string) => {
+    await sdk.client.session.update({ sessionID, time: { archived: null } }).catch((err) => {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: errorMessage(err),
+      })
+    })
+  }
+
   const deleteSession = async (sessionID: string) => {
     const session = sync.session.get(sessionID)
     if (!session) return false
@@ -878,9 +887,18 @@ export function MessageTimeline(props: {
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
+                                <Show
+                                  when={info()?.time?.archived}
+                                  fallback={
+                                    <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
+                                      <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                                    </DropdownMenu.Item>
+                                  }
+                                >
+                                  <DropdownMenu.Item onSelect={() => void unarchiveSession(id)}>
+                                    <DropdownMenu.ItemLabel>{language.t("common.unarchive")}</DropdownMenu.ItemLabel>
+                                  </DropdownMenu.Item>
+                                </Show>
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item
                                   onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}

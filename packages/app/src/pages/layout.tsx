@@ -1011,6 +1011,15 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  async function unarchiveSession(sessionID: string, directory: string) {
+    await globalSDK.client.session.update({
+      directory,
+      sessionID,
+      time: { archived: null },
+    })
+    navigate(`/${params.dir}/session/${sessionID}`)
+  }
+
   command.register("layout", () => {
     const commands: CommandOption[] = [
       {
@@ -1097,6 +1106,15 @@ export default function Layout(props: ParentProps) {
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
           if (session) void archiveSession(session)
+        },
+      },
+      {
+        id: "session.unarchive",
+        title: language.t("command.session.unarchive"),
+        category: language.t("command.category.session"),
+        disabled: !params.dir || !params.id,
+        onSelect: () => {
+          if (params.id && params.dir) void unarchiveSession(params.id, params.dir)
         },
       },
       {

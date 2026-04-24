@@ -2652,7 +2652,14 @@
                     "type": "object",
                     "properties": {
                       "archived": {
-                        "type": "number"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     }
                   }

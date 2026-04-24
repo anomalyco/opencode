@@ -441,6 +441,9 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                     >
                       {item.title}
                     </span>
+                    <Show when={item.archived}>
+                      <span class="text-12-regular text-text-weak">(archived)</span>
+                    </Show>
                     <Show when={item.description}>
                       <span
                         class="text-14-regular text-text-weak truncate"

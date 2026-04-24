@@ -3420,7 +3420,7 @@ export type SessionUpdateData = {
     title?: string
     permission?: PermissionRuleset
     time?: {
-      archived?: number
+      archived?: number | null
     }
   }
   path: {

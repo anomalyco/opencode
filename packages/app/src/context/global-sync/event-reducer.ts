@@ -147,6 +147,7 @@ export function applyDirectoryEvent(input: {
       const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
+      if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
       break
     }
     case "session.deleted": {

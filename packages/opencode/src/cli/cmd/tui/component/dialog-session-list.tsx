@@ -157,10 +157,15 @@ export function DialogSessionList() {
           category = "Today"
         }
         const isDeleting = toDelete() === x.id
+        const isArchived = !!x.time?.archived
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
         return {
-          title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
+          title: isDeleting
+            ? `Press ${keybind.print("session_delete")} again to confirm`
+            : isArchived
+              ? `[archived] ${x.title}`
+              : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
@@ -245,6 +250,29 @@ export function DialogSessionList() {
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
+          },
+        },
+        {
+          keybind: Keybind.parse("ctrl+a")[0],
+          title: "archive",
+          onTrigger: async (option) => {
+            const session = sessions().find((item) => item.id === option.value)
+            if (!session) return
+            const archived = session.time?.archived
+            await sdk.client.session
+              .update({
+                sessionID: option.value,
+                time: { archived: archived ? null : Date.now() },
+              })
+              .catch((err) => {
+                toast.show({
+                  variant: "error",
+                  title: archived ? "Failed to unarchive session" : "Failed to archive session",
+                  message: errorMessage(err),
+                })
+              })
+            await sync.session.refresh()
+            if (search()) await refetch()
           },
         },
         {
