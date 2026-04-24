@@ -1,8 +1,7 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
-import { Effect, Exit, Layer, Stream } from "effect"
+import { Effect, Exit, Stream } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
@@ -170,7 +169,9 @@ describe("cross-spawn spawner", () => {
             'process.stderr.write("stderr\\n", done)',
           ].join("\n"),
         )
-        const [stdout, stderr] = yield* Effect.all([decodeByteStream(handle.stdout), decodeByteStream(handle.stderr)])
+        const [stdout, stderr] = yield* Effect.all([decodeByteStream(handle.stdout), decodeByteStream(handle.stderr)], {
+          concurrency: 2,
+        })
         expect(stdout).toBe("stdout")
         expect(stderr).toBe("stderr")
       }),

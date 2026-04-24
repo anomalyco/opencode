@@ -1,4 +1,4 @@
-import { Wildcard } from "@/util/wildcard"
+import { Wildcard } from "@/util"
 
 type Rule = {
   permission: string

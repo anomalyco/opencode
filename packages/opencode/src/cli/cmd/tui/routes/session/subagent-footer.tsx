@@ -6,7 +6,7 @@ import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
-import { Locale } from "@/util/locale"
+import { Locale } from "@/util"
 import { useTerminalDimensions } from "@opentui/solid"
 
 export function SubagentFooter() {
@@ -59,7 +59,7 @@ export function SubagentFooter() {
   const keybind = useKeybind()
   const command = useCommandDialog()
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
-  const dimensions = useTerminalDimensions()
+  useTerminalDimensions()
 
   return (
     <box flexShrink={0}>

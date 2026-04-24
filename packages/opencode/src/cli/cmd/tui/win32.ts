@@ -1,4 +1,5 @@
 import { dlopen, ptr } from "bun:ffi"
+import type { ReadStream } from "node:tty"
 
 const STD_INPUT_HANDLE = -10
 const ENABLE_PROCESSED_INPUT = 0x0001
@@ -71,7 +72,7 @@ export function win32InstallCtrlCGuard() {
   if (!load()) return
   if (unhook) return unhook
 
-  const stdin = process.stdin as any
+  const stdin = process.stdin as ReadStream
   const original = stdin.setRawMode
 
   const handle = k32!.symbols.GetStdHandle(STD_INPUT_HANDLE)
@@ -93,7 +94,7 @@ export function win32InstallCtrlCGuard() {
     setImmediate(enforce)
   }
 
-  let wrapped: ((mode: boolean) => unknown) | undefined
+  let wrapped: ReadStream["setRawMode"] | undefined
 
   if (typeof original === "function") {
     wrapped = (mode: boolean) => {

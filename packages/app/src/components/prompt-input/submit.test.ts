@@ -74,7 +74,7 @@ beforeAll(async () => {
     showToast: () => 0,
   }))
 
-  mock.module("@opencode-ai/util/encode", () => ({
+  mock.module("@opencode-ai/shared/util/encode", () => ({
     base64Encode: (value: string) => value,
   }))
 

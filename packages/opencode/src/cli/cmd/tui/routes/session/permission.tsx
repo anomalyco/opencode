@@ -9,10 +9,11 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
+import { useProject } from "../../context/project"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import { Keybind } from "@/util/keybind"
-import { Locale } from "@/util/locale"
+import { Keybind } from "@/util"
+import { Locale } from "@/util"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -131,6 +132,7 @@ function TextBody(props: { title: string; description?: string; icon?: string })
 
 export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sdk = useSDK()
+  const project = useProject()
   const sync = useSync()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
@@ -184,9 +186,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            sdk.client.permission.reply({
+            void sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,
+              workspace: project.workspace.current(),
             })
           }}
         />
@@ -194,10 +197,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
       <Match when={store.stage === "reject"}>
         <RejectPrompt
           onConfirm={(message) => {
-            sdk.client.permission.reply({
+            void sdk.client.permission.reply({
               reply: "reject",
               requestID: props.request.id,
               message: message || undefined,
+              workspace: project.workspace.current(),
             })
           }}
           onCancel={() => {
@@ -447,15 +451,17 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     setStore("stage", "reject")
                     return
                   }
-                  sdk.client.permission.reply({
+                  void sdk.client.permission.reply({
                     reply: "reject",
                     requestID: props.request.id,
+                    workspace: project.workspace.current(),
                   })
                   return
                 }
-                sdk.client.permission.reply({
+                void sdk.client.permission.reply({
                   reply: "once",
                   requestID: props.request.id,
+                  workspace: project.workspace.current(),
                 })
               }}
             />
@@ -599,7 +605,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   })
 
   const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
-  const renderer = useRenderer()
+  useRenderer()
 
   const content = () => (
     <box

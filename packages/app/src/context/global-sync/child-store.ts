@@ -14,6 +14,8 @@ import {
   type VcsCache,
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
+import { useQuery } from "@tanstack/solid-query"
+import { loadPathQuery } from "./bootstrap"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -154,16 +156,21 @@ export function createChildStoreManager(input: {
 
       const init = () =>
         createRoot((dispose) => {
-          const initialMeta = meta[0].value
           const initialIcon = icon[0].value
+
+          const pathQuery = useQuery(() => loadPathQuery(directory))
           const child = createStore<State>({
             project: "",
-            projectMeta: initialMeta,
+            projectMeta: undefined,
             icon: initialIcon,
             provider_ready: false,
             provider: { all: [], connected: [], default: {} },
             config: {},
-            path: { state: "", config: "", worktree: "", directory: "", home: "" },
+            get path() {
+              if (pathQuery.isLoading || !pathQuery.data)
+                return { state: "", config: "", worktree: "", directory: "", home: "" }
+              return pathQuery.data
+            },
             status: "loading" as const,
             agent: [],
             command: [],
@@ -198,11 +205,6 @@ export function createChildStoreManager(input: {
             const cached = vcsStore.value
             if (!cached?.branch) return
             child[1]("vcs", (value) => value ?? cached)
-          })
-
-          onPersistedInit(meta[2], () => {
-            if (child[0].projectMeta !== initialMeta) return
-            child[1]("projectMeta", meta[0].value)
           })
 
           onPersistedInit(icon[2], () => {
@@ -243,8 +245,8 @@ export function createChildStoreManager(input: {
     const cached = metaCache.get(directory)
     if (!cached) return
     const previous = store.projectMeta ?? {}
-    const icon = patch.icon ? { ...(previous.icon ?? {}), ...patch.icon } : previous.icon
-    const commands = patch.commands ? { ...(previous.commands ?? {}), ...patch.commands } : previous.commands
+    const icon = patch.icon ? { ...previous.icon, ...patch.icon } : previous.icon
+    const commands = patch.commands ? { ...previous.commands, ...patch.commands } : previous.commands
     const next = {
       ...previous,
       ...patch,

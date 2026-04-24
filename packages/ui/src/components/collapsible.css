@@ -9,7 +9,7 @@
   overflow: visible;
 
   &.tool-collapsible {
-    --tool-content-gap: 8px;
+    --tool-content-gap: 4px;
     gap: var(--tool-content-gap);
   }
 

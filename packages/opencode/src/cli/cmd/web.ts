@@ -34,7 +34,7 @@ export const WebCommand = cmd({
   describe: "start opencode server and open web interface",
   handler: async (args) => {
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
-      UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
+      UI.println(UI.Style.TEXT_WARNING_BOLD + "!  OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = await resolveNetworkOptions(args)
     const server = await Server.listen(opts)
