@@ -1,23 +1,6 @@
-const API_HOST_PROJECT_DIR_DISABLED =
-  "This server does not expose a host project directory. Work happens in the database and executor, not the API’s filesystem."
-
-/** Veritly: the API has no on-disk “project” for clients to list or read. */
+/** Veritly: the API has no on-disk “project” for tool registry (read/grep/… on host). */
 export function localFilesystemDisabled() {
   return true
-}
-
-export function hostedFilesystemDisabledResponse() {
-  return new Response(
-    JSON.stringify({
-      error: API_HOST_PROJECT_DIR_DISABLED,
-    }),
-    {
-      status: 501,
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-      },
-    },
-  )
 }
 
 /**

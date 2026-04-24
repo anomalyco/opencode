@@ -30,7 +30,9 @@ export namespace Plugin {
     const hooks: Hooks[] = []
     const input: PluginInput = {
       client,
-      project: Instance.project,
+      project: Instance.project as unknown as PluginInput["project"],
+      directory: Instance.directory,
+      worktree: Instance.directory,
       get serverUrl(): URL {
         return Server.url ?? new URL("http://localhost:4096")
       },

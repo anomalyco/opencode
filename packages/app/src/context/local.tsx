@@ -3,7 +3,6 @@ import { batch, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
@@ -34,7 +33,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     let setModel: (model: ModelKey | undefined, options?: { recent?: boolean }) => void = () => undefined
 
     const agent = (() => {
-      const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const list = createMemo(function () {
+        return sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden)
+      })
       const models = useModels()
 
       const [store, setStore] = createStore<{
@@ -243,7 +244,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })()
 
     const result = {
-      slug: createMemo(() => base64Encode(sdk.directory)),
+      slug: createMemo(() => sdk.directory),
       model,
       agent,
     }

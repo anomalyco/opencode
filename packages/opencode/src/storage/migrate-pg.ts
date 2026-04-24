@@ -31,7 +31,7 @@ export async function runPostgresMigrations() {
   const { rows: applied } = await pool.query(
     'SELECT hash FROM "__drizzle_migrations"'
   )
-  const appliedHashes = new Set(applied.map((r) => r.hash))
+  const appliedHashes = new Set(applied.map((r: { hash: string }) => r.hash))
 
   for (const entry of entries) {
     if (appliedHashes.has(entry)) {

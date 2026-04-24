@@ -21,9 +21,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
-import { WorkspaceContext } from "../control-plane/workspace-context"
 import { ProjectID } from "../project/schema"
-import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
@@ -50,6 +48,10 @@ export namespace Session {
 
   type SessionRow = typeof SessionTable.$inferSelect
 
+  const jsonArray = <T>(value: unknown): T[] | undefined => (Array.isArray(value) ? (value as T[]) : undefined)
+  const jsonObject = <T extends object>(value: unknown): T | undefined =>
+    value && typeof value === "object" && !Array.isArray(value) ? (value as T) : undefined
+
   export function fromRow(row: SessionRow): Info {
     const summary =
       row.summary_additions !== null || row.summary_deletions !== null || row.summary_files !== null
@@ -57,23 +59,22 @@ export namespace Session {
             additions: row.summary_additions ?? 0,
             deletions: row.summary_deletions ?? 0,
             files: row.summary_files ?? 0,
-            diffs: row.summary_diffs ?? undefined,
+            diffs: jsonArray<Snapshot.FileDiff>(row.summary_diffs),
           }
         : undefined
     const share = row.share_url ? { url: row.share_url } : undefined
-    const revert = row.revert ?? undefined
+    const revert = jsonObject<Info["revert"] & object>(row.revert)
     return {
-      id: row.id,
+      id: row.id as SessionID,
       slug: row.slug,
-      projectID: row.project_id,
-      workspaceID: row.workspace_id ?? undefined,
-      parentID: row.parent_id ?? undefined,
+      projectID: row.project_id as ProjectID,
+      parentID: (row.parent_id as SessionID | null) ?? undefined,
       title: row.title,
       version: row.version,
       summary,
       share,
       revert,
-      permission: row.permission ?? undefined,
+      permission: jsonArray<PermissionNext.Rule>(row.permission),
       time: {
         created: row.time_created,
         updated: row.time_updated,
@@ -87,7 +88,7 @@ export namespace Session {
     return {
       id: info.id,
       project_id: info.projectID,
-      workspace_id: info.workspaceID,
+      workspace_id: null,
       parent_id: info.parentID,
       slug: info.slug,
       title: info.title,
@@ -121,7 +122,6 @@ export namespace Session {
       id: SessionID.zod,
       slug: z.string(),
       projectID: ProjectID.zod,
-      workspaceID: WorkspaceID.zod.optional(),
       parentID: SessionID.zod.optional(),
       summary: z
         .object({
@@ -217,7 +217,6 @@ export namespace Session {
         parentID: SessionID.zod.optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
-        workspaceID: WorkspaceID.zod.optional(),
       })
       .optional(),
     async (input) => {
@@ -225,7 +224,6 @@ export namespace Session {
         parentID: input?.parentID,
         title: input?.title,
         permission: input?.permission,
-        workspaceID: input?.workspaceID,
       })
     },
   )
@@ -240,7 +238,6 @@ export namespace Session {
       if (!original) throw new Error("session not found")
       const title = getForkedTitle(original.title)
       const session = await createNext({
-        workspaceID: original.workspaceID,
         title,
       })
       const msgs = await messages({ sessionID: input.sessionID })
@@ -291,7 +288,6 @@ export namespace Session {
     id?: SessionID
     title?: string
     parentID?: SessionID
-    workspaceID?: WorkspaceID
     permission?: PermissionNext.Ruleset
   }) {
     const result: Info = {
@@ -299,7 +295,6 @@ export namespace Session {
       slug: Slug.create(),
       version: process.env.OPENCODE_VERSION ?? "dev",
       projectID: Instance.project.id,
-      workspaceID: input.workspaceID,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
@@ -531,7 +526,6 @@ export namespace Session {
   )
 
   export async function* list(input?: {
-    workspaceID?: WorkspaceID
     roots?: boolean
     start?: number
     search?: string
@@ -539,10 +533,6 @@ export namespace Session {
   }) {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
-
-    if (WorkspaceContext.workspaceID) {
-      conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
-    }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
     }
@@ -619,7 +609,7 @@ export namespace Session {
       )
       for (const item of items) {
         projects.set(item.id, {
-          id: item.id,
+          id: item.id as ProjectID,
           name: item.name ?? undefined,
         })
       }

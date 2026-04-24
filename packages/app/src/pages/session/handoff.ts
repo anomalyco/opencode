@@ -9,7 +9,6 @@ const MAX = 40
 
 const store = {
   session: new Map<string, HandoffSession>(),
-  terminal: new Map<string, string[]>(),
 }
 
 const touch = <K, V>(map: Map<K, V>, key: K, value: V) => {
@@ -28,9 +27,3 @@ export const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) =
 }
 
 export const getSessionHandoff = (key: string) => store.session.get(key)
-
-export const setTerminalHandoff = (key: string, value: string[]) => {
-  touch(store.terminal, key, value)
-}
-
-export const getTerminalHandoff = (key: string) => store.terminal.get(key)

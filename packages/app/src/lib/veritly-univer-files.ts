@@ -1,4 +1,5 @@
 import { univerBackendOrigin } from "@/lib/univer-backend-origin"
+import type { FileContent, FileNode } from "@opencode-ai/sdk/v2"
 
 const OFFICE_PATH = /\.(xlsx|xlsm|xls|csv|docx|doc|odt|pptx|ppt|odp)$/i
 
@@ -79,10 +80,9 @@ export async function readOfficeFile(workspaceRelativePath: string, options?: { 
     const text = await res.text().catch(() => "")
     throw new Error(`office read failed ${res.status}: ${text.slice(0, 300)}`)
   }
-  return res.json() as Promise<{
+  return res.json() as Promise<FileContent & {
     type: "binary"
     encoding: "base64"
-    content: string
     mimeType?: string
     unitId?: string
     unitKind?: "sheet" | "doc" | "slide"
@@ -124,5 +124,11 @@ export async function listOfficeFiles(dirPath: string, options?: { projectId?: s
     throw new Error(`office list failed ${res.status}: ${text.slice(0, 300)}`)
   }
   const body = (await res.json()) as { data?: Array<{ path: string; name: string; type: "file" | "directory" }> }
-  return body.data ?? []
+  return (body.data ?? []).map(
+    (item): FileNode => ({
+      ...item,
+      absolute: item.path,
+      ignored: false,
+    }),
+  )
 }

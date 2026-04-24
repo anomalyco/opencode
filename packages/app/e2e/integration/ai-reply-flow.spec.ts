@@ -26,7 +26,6 @@ test.describe("AI Reply Flow - Stateless Architecture", () => {
       console.error("[Page Error]", err.message)
     })
 
-    // Create a session via SDK
     const sessionResult = await sdk.session.create({ title: "E2E Test Session" })
     if (!sessionResult.data) throw new Error("Failed to create session")
     const session = sessionResult.data

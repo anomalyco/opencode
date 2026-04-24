@@ -10,7 +10,6 @@ import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
@@ -44,7 +43,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const prompt = usePrompt()
   const sdk = useSDK()
   const sync = useSync()
-  const terminal = useTerminal()
   const layout = useLayout()
   const params = useParams()
   const navigate = useNavigate()
@@ -92,11 +90,24 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const fileCommand = withCategory(language.t("command.category.file"))
   const contextCommand = withCategory(language.t("command.category.context"))
   const viewCommand = withCategory(language.t("command.category.view"))
-  const terminalCommand = withCategory(language.t("command.category.terminal"))
   const modelCommand = withCategory(language.t("command.category.model"))
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const agentCommand = withCategory(language.t("command.category.agent"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
+  const startNewSession = () => {
+    if (!params.dir) return
+
+    if (params.id) {
+      const source = tabs().tabs()
+      if (source.all.length > 0 || source.active) {
+        const target = layout.tabs(params.dir)
+        target.setAll(source.all)
+        target.setActive(source.active && source.all.includes(source.active) ? source.active : source.all[0])
+      }
+    }
+
+    navigate(`/${params.dir}/session`)
+  }
 
   const sessionCommands = createMemo(() => [
     sessionCommand({
@@ -104,7 +115,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.new"),
       keybind: "mod+shift+s",
       slash: "new",
-      onSelect: () => navigate(`/${params.dir}/session`),
+      onSelect: startNewSession,
     }),
   ])
 
@@ -163,13 +174,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const viewCommands = createMemo(() => [
     viewCommand({
-      id: "terminal.toggle",
-      title: language.t("command.terminal.toggle"),
-      keybind: "ctrl+`",
-      slash: "terminal",
-      onSelect: () => view().terminal.toggle(),
-    }),
-    viewCommand({
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
@@ -186,16 +190,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.input.focus"),
       keybind: "ctrl+l",
       onSelect: () => focusInput(),
-    }),
-    terminalCommand({
-      id: "terminal.new",
-      title: language.t("command.terminal.new"),
-      description: language.t("command.terminal.new.description"),
-      keybind: "ctrl+alt+t",
-      onSelect: () => {
-        if (terminal.all().length > 0) terminal.new()
-        view().terminal.open()
-      },
     }),
   ])
 

@@ -3,7 +3,6 @@ import type { Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
-const createdClients: string[] = []
 const createdSessions: string[] = []
 const enabledAutoAccept: Array<{ sessionID: string; directory: string }> = []
 const optimistic: Array<{
@@ -14,16 +13,13 @@ const optimistic: Array<{
   }
 }> = []
 const sentShell: string[] = []
-const syncedDirectories: string[] = []
 
 let params: { id?: string } = {}
-let selected = "/repo/worktree-a"
 let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
 const clientFor = (directory: string) => {
-  createdClients.push(directory)
   return {
     session: {
       create: async () => {
@@ -39,9 +35,6 @@ const clientFor = (directory: string) => {
       command: async () => ({ data: undefined }),
       abort: async () => ({ data: undefined }),
     },
-    worktree: {
-      create: async () => ({ data: { directory: `${directory}/new` } }),
-    },
   }
 }
 
@@ -51,13 +44,6 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => params,
-  }))
-
-  mock.module("@opencode-ai/sdk/v2/client", () => ({
-    createOpencodeClient: (input: { directory: string }) => {
-      createdClients.push(input.directory)
-      return clientFor(input.directory)
-    },
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
@@ -115,9 +101,6 @@ beforeAll(async () => {
         directory: "/repo/main",
         client: rootClient,
         url: "http://localhost:4096",
-        createClient(opts: any) {
-          return clientFor(opts.directory)
-        },
       }
       return sdk
     },
@@ -142,10 +125,7 @@ beforeAll(async () => {
 
   mock.module("@/context/global-sync", () => ({
     useGlobalSync: () => ({
-      child: (directory: string) => {
-        syncedDirectories.push(directory)
-        return [{}, () => undefined]
-      },
+      child: () => [{}, () => undefined],
     }),
   }))
 
@@ -166,19 +146,16 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
-  createdClients.length = 0
   createdSessions.length = 0
   enabledAutoAccept.length = 0
   optimistic.length = 0
   params = {}
   sentShell.length = 0
-  syncedDirectories.length = 0
-  selected = "/repo/worktree-a"
   variant = undefined
 })
 
-describe("prompt submit worktree selection", () => {
-  test("reads the latest worktree accessor value per submit", async () => {
+describe("prompt submit session creation", () => {
+  test("creates and sends shell messages in the current project", async () => {
     const submit = createPromptSubmit({
       info: () => undefined,
       imageAttachments: () => [],
@@ -193,21 +170,16 @@ describe("prompt submit worktree selection", () => {
       resetHistoryNavigation: () => undefined,
       setMode: () => undefined,
       setPopover: () => undefined,
-      newSessionWorktree: () => selected,
-      onNewSessionWorktreeReset: () => undefined,
       onSubmit: () => undefined,
     })
 
     const event = { preventDefault: () => undefined } as unknown as Event
 
     await submit.handleSubmit(event)
-    selected = "/repo/worktree-b"
     await submit.handleSubmit(event)
 
-    expect(createdClients).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
-    expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
-    expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
-    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
+    expect(createdSessions).toEqual(["/repo/main", "/repo/main"])
+    expect(sentShell).toEqual(["/repo/main", "/repo/main"])
   })
 
   test("applies auto-accept to newly created sessions", async () => {
@@ -225,8 +197,6 @@ describe("prompt submit worktree selection", () => {
       resetHistoryNavigation: () => undefined,
       setMode: () => undefined,
       setPopover: () => undefined,
-      newSessionWorktree: () => selected,
-      onNewSessionWorktreeReset: () => undefined,
       onSubmit: () => undefined,
     })
 
@@ -234,7 +204,7 @@ describe("prompt submit worktree selection", () => {
 
     await submit.handleSubmit(event)
 
-    expect(enabledAutoAccept).toEqual([{ sessionID: "session-1", directory: "/repo/worktree-a" }])
+    expect(enabledAutoAccept).toEqual([{ sessionID: "session-1", directory: "/repo/main" }])
   })
 
   test("includes the selected variant on optimistic prompts", async () => {

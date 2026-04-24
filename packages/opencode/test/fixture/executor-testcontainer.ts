@@ -12,7 +12,7 @@ import { Executor } from "../../src/executor/sdk"
 
 const log = Log.create({ service: "executor-fixture" })
 
-const EXECUTOR_URL = process.env.VERITLY_EXECUTOR_URL ?? "http://localhost:8080"
+const EXECUTOR_URL = process.env.VERITLY_EXECUTOR_URL ?? "http://localhost:18080"
 
 export interface ExecutorTestContext {
   sdk: ReturnType<typeof Executor.create>
@@ -36,7 +36,7 @@ export async function checkExecutor(): Promise<void> {
     log.error("✗ Executor is not available", { url: EXECUTOR_URL, error })
     throw new Error(
       `Executor not available at ${EXECUTOR_URL}. ` +
-      "Run: docker compose -f docker-compose.e2e.yml up -d executor"
+      "Run: ./script/setup-e2e.sh"
     )
   }
 }

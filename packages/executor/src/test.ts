@@ -102,7 +102,7 @@ async function main() {
   // Health check
   if (!(await healthCheck())) {
     console.error("\nExecutor is not available. Make sure it's running:")
-    console.error("  docker-compose up executor")
+    console.error("  docker compose -f docker-compose.e2e.yml up executor")
     process.exit(1)
   }
 

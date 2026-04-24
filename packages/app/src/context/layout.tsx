@@ -1,35 +1,14 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useGlobalSync } from "./global-sync"
-import { useGlobalSDK } from "./global-sdk"
-import { useServer } from "./server"
 import { usePlatform } from "./platform"
-import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
-import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 
-const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
-const DEFAULT_TERMINAL_HEIGHT = 280
-export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
-
-export function getAvatarColors(key?: string) {
-  if (key && AVATAR_COLOR_KEYS.includes(key as AvatarColorKey)) {
-    return {
-      background: `var(--avatar-background-${key})`,
-      foreground: `var(--avatar-text-${key})`,
-    }
-  }
-  return {
-    background: "var(--surface-info-base)",
-    foreground: "var(--text-base)",
-  }
-}
 
 type SessionTabs = {
   active?: string
@@ -48,8 +27,6 @@ type TabHandoff = {
   id: string
   at: number
 }
-
-export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
 
@@ -101,9 +78,7 @@ function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): 
 const sessionPath = (key: string) => {
   const dir = key.split("/")[0]
   if (!dir) return
-  const root = decode64(dir)
-  if (!root) return
-  return createPathHelpers(() => root)
+  return createPathHelpers(() => dir)
 }
 
 const normalizeSessionTab = (path: ReturnType<typeof createPathHelpers> | undefined, tab: string) => {
@@ -133,9 +108,6 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
-    const globalSdk = useGlobalSDK()
-    const globalSync = useGlobalSync()
-    const server = useServer()
     const platform = usePlatform()
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -145,15 +117,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       if (!isRecord(value)) return value
 
       const sidebar = value.sidebar
-      const migratedSidebar = (() => {
-        if (!isRecord(sidebar)) return sidebar
-        if (typeof sidebar.workspaces !== "boolean") return sidebar
-        return {
-          ...sidebar,
-          workspaces: {},
-          workspacesDefault: sidebar.workspaces,
-        }
-      })()
 
       const review = value.review
       const fileTree = value.fileTree
@@ -207,7 +170,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })()
 
       if (
-        migratedSidebar === sidebar &&
         migratedReview === review &&
         migratedFileTree === fileTree &&
         migratedSessionTabs === sessionTabs
@@ -217,7 +179,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       return {
         ...value,
-        sidebar: migratedSidebar,
         review: migratedReview,
         fileTree: migratedFileTree,
         sessionTabs: migratedSessionTabs,
@@ -229,14 +190,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       { ...target, migrate },
       createStore({
         sidebar: {
-          opened: false,
+          opened: true,
           width: DEFAULT_PANEL_WIDTH,
-          workspaces: {} as Record<string, boolean>,
-          workspacesDefault: false,
-        },
-        terminal: {
-          height: DEFAULT_TERMINAL_HEIGHT,
-          opened: false,
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
@@ -271,7 +226,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const SESSION_STATE_KEYS = [
       { key: "prompt", legacy: "prompt", version: "v2" },
-      { key: "terminal", legacy: "terminal", version: "v1" },
       { key: "file-view", legacy: "file", version: "v1" },
     ] as const
 
@@ -375,182 +329,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })
     })
 
-    const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
-    const colorRequested = new Map<string, AvatarColorKey>()
-
-    function pickAvailableColor(used: Set<string>): AvatarColorKey {
-      const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
-      if (available.length === 0) return AVATAR_COLOR_KEYS[Math.floor(Math.random() * AVATAR_COLOR_KEYS.length)]
-      return available[Math.floor(Math.random() * available.length)]
-    }
-
-    function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
-      const projectID = childStore.project
-      const metadata = projectID
-        ? globalSync.data.project.find((x) => x.id === projectID)
-        : globalSync.data.project.find((x) => x.worktree === project.worktree)
-
-      const local = childStore.projectMeta
-      const localOverride =
-        local?.name !== undefined ||
-        local?.commands?.start !== undefined ||
-        local?.icon?.override !== undefined ||
-        local?.icon?.color !== undefined
-
-      const base = {
-        ...(metadata ?? {}),
-        ...project,
-        icon: {
-          url: metadata?.icon?.url,
-          override: metadata?.icon?.override ?? childStore.icon,
-          color: metadata?.icon?.color,
-        },
-      }
-
-      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
-      if (!isGlobal) return base
-
-      return {
-        ...base,
-        id: base.id ?? "global",
-        name: local?.name,
-        commands: local?.commands,
-        icon: {
-          url: base.icon?.url,
-          override: local?.icon?.override,
-          color: local?.icon?.color,
-        },
-      }
-    }
-
-    const roots = createMemo(() => {
-      const map = new Map<string, string>()
-      for (const project of globalSync.data.project) {
-        const sandboxes = project.sandboxes ?? []
-        for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
-        }
-      }
-      return map
-    })
-
-    const rootFor = (directory: string) => {
-      const map = roots()
-      if (map.size === 0) return directory
-
-      const visited = new Set<string>()
-      const chain = [directory]
-
-      while (chain.length) {
-        const current = chain[chain.length - 1]
-        if (!current) return directory
-
-        const next = map.get(current)
-        if (!next) return current
-
-        if (visited.has(next)) return directory
-        visited.add(next)
-        chain.push(next)
-      }
-
-      return directory
-    }
-
-    createEffect(() => {
-      const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
-
-      batch(() => {
-        for (const project of projects) {
-          const root = rootFor(project.worktree)
-          if (root === project.worktree) continue
-
-          server.projects.close(project.worktree)
-
-          if (!seen.has(root)) {
-            server.projects.open(root)
-            seen.add(root)
-          }
-
-          if (project.expanded) server.projects.expand(root)
-        }
-      })
-    })
-
-    const enriched = createMemo(() => server.projects.list().map(enrich))
-    const list = createMemo(() => {
-      const projects = enriched()
-      return projects.map((project) => {
-        const color = project.icon?.color ?? colors[project.worktree]
-        if (!color) return project
-        const icon = project.icon ? { ...project.icon, color } : { color }
-        return { ...project, icon }
-      })
-    })
-
-    createEffect(() => {
-      const projects = enriched()
-      if (projects.length === 0) return
-      if (!globalSync.ready) return
-
-      for (const project of projects) {
-        if (!project.id) continue
-        if (project.id === "global") continue
-        globalSync.project.icon(project.worktree, project.icon?.override)
-      }
-    })
-
-    createEffect(() => {
-      const projects = enriched()
-      if (projects.length === 0) return
-
-      for (const project of projects) {
-        if (project.icon?.color) colorRequested.delete(project.worktree)
-      }
-
-      const used = new Set<string>()
-      for (const project of projects) {
-        const color = project.icon?.color ?? colors[project.worktree]
-        if (color) used.add(color)
-      }
-
-      for (const project of projects) {
-        if (project.icon?.color) continue
-        const worktree = project.worktree
-        const existing = colors[worktree]
-        const color = existing ?? pickAvailableColor(used)
-        if (!existing) {
-          used.add(color)
-          setColors(worktree, color)
-        }
-        if (!project.id) continue
-
-        const requested = colorRequested.get(worktree)
-        if (requested === color) continue
-        colorRequested.set(worktree, color)
-
-        if (project.id === "global") {
-          globalSync.project.meta(worktree, { icon: { color } })
-          continue
-        }
-
-        void globalSdk.client.project
-          .update({ projectID: project.id, directory: worktree, icon: { color } })
-          .catch(() => {
-            if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
-          })
-      }
-    })
-
-    onMount(() => {
-      Promise.all(
-        server.projects.list().map((project) => {
-          return globalSync.project.loadSessions(project.worktree)
-        }),
-      )
-    })
-
     return {
       ready,
       handoff: {
@@ -561,27 +339,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         clearTabs() {
           if (!store.handoff?.tabs) return
           setStore("handoff", "tabs", undefined)
-        },
-      },
-      projects: {
-        list,
-        open(directory: string) {
-          const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
-          globalSync.project.loadSessions(root)
-          server.projects.open(root)
-        },
-        close(directory: string) {
-          server.projects.close(directory)
-        },
-        expand(directory: string) {
-          server.projects.expand(directory)
-        },
-        collapse(directory: string) {
-          server.projects.collapse(directory)
-        },
-        move(directory: string, toIndex: number) {
-          server.projects.move(directory, toIndex)
         },
       },
       sidebar: {
@@ -598,22 +355,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         width: createMemo(() => store.sidebar.width),
         resize(width: number) {
           setStore("sidebar", "width", width)
-        },
-        workspaces(directory: string) {
-          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
-        },
-        setWorkspaces(directory: string, value: boolean) {
-          setStore("sidebar", "workspaces", directory, value)
-        },
-        toggleWorkspaces(directory: string) {
-          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
-          setStore("sidebar", "workspaces", directory, !current)
-        },
-      },
-      terminal: {
-        height: createMemo(() => store.terminal.height),
-        resize(height: number) {
-          setStore("terminal", "height", height)
         },
       },
       review: {
@@ -734,20 +475,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       view(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
-        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
-
-        function setTerminalOpened(next: boolean) {
-          const current = store.terminal
-          if (!current) {
-            setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
-            return
-          }
-
-          const value = current.opened ?? false
-          if (value === next) return
-          setStore("terminal", "opened", next)
-        }
 
         function setReviewPanelOpened(next: boolean) {
           const current = store.review
@@ -767,18 +495,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(key(), tab, pos)
-          },
-          terminal: {
-            opened: terminalOpened,
-            open() {
-              setTerminalOpened(true)
-            },
-            close() {
-              setTerminalOpened(false)
-            },
-            toggle() {
-              setTerminalOpened(!terminalOpened())
-            },
           },
           reviewPanel: {
             opened: reviewPanelOpened,

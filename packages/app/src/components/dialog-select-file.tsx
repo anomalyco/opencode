@@ -4,7 +4,6 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
@@ -14,7 +13,6 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
-import { decode64 } from "@/utils/base64"
 import { getRelativeTime } from "@/utils/time"
 
 type EntryType = "command" | "file" | "session"
@@ -39,10 +37,8 @@ type DialogSelectFileMode = "all" | "files"
 const ENTRY_LIMIT = 5
 const COMMON_COMMAND_IDS = [
   "session.new",
-  "workspace.new",
   "session.previous",
   "session.next",
-  "terminal.toggle",
   "review.toggle",
 ] as const
 
@@ -165,7 +161,7 @@ function createFileEntries(props: {
 }
 
 function createSessionEntries(props: {
-  workspaces: () => string[]
+  directories: () => string[]
   label: (directory: string) => string
   globalSDK: ReturnType<typeof useGlobalSDK>
   language: ReturnType<typeof useLanguage>
@@ -193,7 +189,7 @@ function createSessionEntries(props: {
     if (state.inflight) return state.inflight
 
     const current = state.token
-    const dirs = props.workspaces()
+    const dirs = props.directories()
     if (dirs.length === 0) return [] as Entry[]
 
     state.inflight = Promise.all(
@@ -272,36 +268,22 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const commandEntries = createCommandEntries({ filesOnly, command, language })
   const fileEntries = createFileEntries({ file, tabs, language })
 
-  const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
-  const project = createMemo(() => {
+  const projectDirectory = createMemo(() => params.dir ?? "")
+  const directories = createMemo(() => {
     const directory = projectDirectory()
-    if (!directory) return
-    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
-  })
-  const workspaces = createMemo(() => {
-    const directory = projectDirectory()
-    const current = project()
-    if (!current) return directory ? [directory] : []
-
-    const dirs = [current.worktree, ...(current.sandboxes ?? [])]
-    if (directory && !dirs.includes(directory)) return [...dirs, directory]
-    return dirs
+    if (!directory) return []
+    return [directory]
   })
   const homedir = createMemo(() => globalSync.data.path.home)
   const label = (directory: string) => {
-    const current = project()
-    const kind =
-      current && directory === current.worktree
-        ? language.t("workspace.type.local")
-        : language.t("workspace.type.sandbox")
     const [store] = globalSync.child(directory, { bootstrap: false })
     const home = homedir()
     const path = home ? directory.replace(home, "~") : directory
     const name = store.vcs?.branch ?? getFilename(directory)
-    return `${kind} : ${name || path}`
+    return name || path
   }
 
-  const { sessions } = createSessionEntries({ workspaces, label, globalSDK, language })
+  const { sessions } = createSessionEntries({ directories, label, globalSDK, language })
 
   const items = async (text: string) => {
     const query = text.trim()
@@ -365,7 +347,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
 
     if (item.type === "session") {
       if (!item.directory || !item.sessionID) return
-      navigate(`/${base64Encode(item.directory)}/session/${item.sessionID}`)
+      navigate(`/${item.directory}/session/${item.sessionID}`)
       return
     }
 

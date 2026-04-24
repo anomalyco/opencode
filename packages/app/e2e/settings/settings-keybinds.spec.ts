@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
-import { openSettings, closeDialog, waitTerminalReady, withSession } from "../actions"
-import { keybindButtonSelector, terminalSelector } from "../selectors"
+import { openSettings, closeDialog, withSession } from "../actions"
+import { keybindButtonSelector } from "../selectors"
 import { modKey } from "../utils"
 
 test("changing sidebar toggle keybind works", async ({ page, gotoSession }) => {
@@ -270,80 +270,6 @@ test("changing file open keybind works", async ({ page, gotoSession }) => {
 
   await page.keyboard.press("Escape")
   await expect(filePickerDialog).toHaveCount(0)
-})
-
-test("changing terminal toggle keybind works", async ({ page, gotoSession }) => {
-  await gotoSession()
-
-  const dialog = await openSettings(page)
-  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
-
-  const keybindButton = dialog.locator(keybindButtonSelector("terminal.toggle"))
-  await expect(keybindButton).toBeVisible()
-
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+KeyY`)
-  await page.waitForTimeout(100)
-
-  const newKeybind = await keybindButton.textContent()
-  expect(newKeybind).toContain("Y")
-
-  const stored = await page.evaluate(() => {
-    const raw = localStorage.getItem("settings.v3")
-    return raw ? JSON.parse(raw) : null
-  })
-  expect(stored?.keybinds?.["terminal.toggle"]).toBe("mod+y")
-
-  await closeDialog(page, dialog)
-
-  const terminal = page.locator(terminalSelector)
-  await expect(terminal).not.toBeVisible()
-
-  await page.keyboard.press(`${modKey}+Y`)
-  await waitTerminalReady(page, { term: terminal })
-
-  await page.keyboard.press(`${modKey}+Y`)
-  await expect(terminal).not.toBeVisible()
-})
-
-test("terminal toggle keybind persists after reload", async ({ page, gotoSession }) => {
-  await gotoSession()
-
-  const dialog = await openSettings(page)
-  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
-
-  const keybindButton = dialog.locator(keybindButtonSelector("terminal.toggle"))
-  await expect(keybindButton).toBeVisible()
-
-  await keybindButton.click()
-  await expect(keybindButton).toHaveText(/press/i)
-
-  await page.keyboard.press(`${modKey}+Shift+KeyY`)
-  await page.waitForTimeout(100)
-
-  await expect(keybindButton).toContainText("Y")
-  await closeDialog(page, dialog)
-
-  await page.reload()
-
-  await expect
-    .poll(async () => {
-      return await page.evaluate(() => {
-        const raw = localStorage.getItem("settings.v3")
-        if (!raw) return
-        const parsed = JSON.parse(raw)
-        return parsed?.keybinds?.["terminal.toggle"]
-      })
-    })
-    .toBe("mod+shift+y")
-
-  const reloaded = await openSettings(page)
-  await reloaded.getByRole("tab", { name: "Shortcuts" }).click()
-  const reloadedKeybind = reloaded.locator(keybindButtonSelector("terminal.toggle")).first()
-  await expect(reloadedKeybind).toContainText("Y")
-  await closeDialog(page, reloaded)
 })
 
 test("changing command palette keybind works", async ({ page, gotoSession }) => {

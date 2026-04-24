@@ -9,7 +9,6 @@ import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@opencode-ai/ui/toast"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { useLanguage } from "@/context/language"
 
 interface ForkableMessage {
@@ -75,7 +74,7 @@ export const DialogFork: Component = () => {
           return
         }
         dialog.close()
-        navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
+        navigate(`/${sdk.directory}/session/${forked.data.id}`)
         requestAnimationFrame(() => {
           prompt.set(restored)
         })

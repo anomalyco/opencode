@@ -6,7 +6,6 @@ import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
-import { decode64 } from "@/utils/base64"
 import {
   acceptKey,
   directoryAcceptKey,
@@ -52,7 +51,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     const globalSync = useGlobalSync()
 
     const permissionsEnabled = createMemo(() => {
-      const directory = decode64(params.dir)
+      const directory = params.dir
       if (!directory) return false
       const [store] = globalSync.child(directory)
       return hasPermissionPromptRules(store.config.permission)
@@ -84,7 +83,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     // When config has permission: "allow", auto-enable directory-level auto-accept
     createEffect(() => {
       if (!ready()) return
-      const directory = decode64(params.dir)
+      const directory = params.dir
       if (!directory) return
       const [childStore] = globalSync.child(directory)
       const perm = childStore.config.permission

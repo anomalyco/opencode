@@ -135,7 +135,7 @@ test("review keeps scroll position after a live diff update", async ({ page, wit
   await page.setViewportSize({ width: 1600, height: 1000 })
 
   await withProject(async (project) => {
-    const sdk = createSdk()
+    const sdk = createSdk({ id: project.id })
 
     await withSession(sdk, `e2e review ${tag}`, async (session) => {
       await patch(sdk, session.id, seed(list))

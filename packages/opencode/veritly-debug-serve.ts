@@ -70,12 +70,11 @@ if (!(await relayHealthy())) {
 
 process.argv = [
   process.argv[0] ?? "bun",
-  path.join(packageRoot, "src", "index.ts"),
-  "serve",
+  path.join(packageRoot, "src", "server", "main.ts"),
   "--port",
   port,
   "--hostname",
   host,
 ]
 
-await import("./src/index.ts")
+await import("./src/server/main.ts")

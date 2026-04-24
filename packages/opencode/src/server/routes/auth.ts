@@ -181,7 +181,7 @@ export async function getSessionUser(): Promise<User | null> {
 }
 
 export async function getRequestUser(c: Pick<Context, "req">): Promise<User | null> {
-  const sessionData = getCookie(c, COOKIE_NAME)
+  const sessionData = getCookie(c as Context, COOKIE_NAME)
   if (!sessionData) return null
 
   try {

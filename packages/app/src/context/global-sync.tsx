@@ -168,7 +168,7 @@ function createGlobalSync() {
 		const cached = sdkCache.get(directory);
 		if (cached) return cached;
 		const sdk = globalSDK.createClient({
-			directory,
+			projectId: directory,
 			throwOnError: true,
 		});
 		sdkCache.set(directory, sdk);
@@ -250,15 +250,12 @@ function createGlobalSync() {
 		children.pin(directory);
 		const promise = (async () => {
 			const child = children.ensureChild(directory);
-			const cache = children.vcsCache.get(directory);
-			if (!cache) return;
 			const sdk = sdkFor(directory);
 			await bootstrapDirectory({
 				directory,
 				sdk,
 				store: child[0],
 				setStore: child[1],
-				vcsCache: cache,
 				loadSessions,
 				translate: language.t,
 			});
@@ -303,11 +300,6 @@ function createGlobalSync() {
 			push: queue.push,
 			setSessionTodo,
 			vcsCache: children.vcsCache.get(directory),
-			loadLsp: () => {
-				sdkFor(directory)
-					.lsp.status()
-					.then((x) => setStore("lsp", x.data ?? []));
-			},
 		});
 	});
 

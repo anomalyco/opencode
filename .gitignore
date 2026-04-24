@@ -36,3 +36,5 @@ logs/
 .local-dev/
 tsconfig.tsbuildinfo
 packages/univer-sdk/python/veritly_univer_sdk.egg-info/**
+packages/executor/build/**
+packages/executor/output/**

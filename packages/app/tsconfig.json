@@ -21,6 +21,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "package.json"],
+  "include": ["src", "e2e/workos-auth.ts", "package.json"],
   "exclude": ["dist", "ts-dist"]
 }

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, Session } from "@opencode-ai/sdk/v2/client"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { autoRespondsPermission, isDirectoryAutoAccepting } from "./permission-auto-respond"
 
 const session = (input: { id: string; parentID?: string }) =>
@@ -19,7 +18,7 @@ describe("autoRespondsPermission", () => {
     const directory = "/tmp/project"
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
     const autoAccept = {
-      [`${base64Encode(directory)}/root`]: true,
+      [`${directory}/root`]: true,
     }
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(true)
@@ -44,7 +43,7 @@ describe("autoRespondsPermission", () => {
     const directory = "/tmp/project"
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
     const autoAccept = {
-      [`${base64Encode(directory)}/root`]: false,
+      [`${directory}/root`]: false,
     }
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(false)
@@ -54,8 +53,8 @@ describe("autoRespondsPermission", () => {
     const directory = "/tmp/project"
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
     const autoAccept = {
-      [`${base64Encode(directory)}/root`]: false,
-      [`${base64Encode(directory)}/child`]: true,
+      [`${directory}/root`]: false,
+      [`${directory}/child`]: true,
     }
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(true)
@@ -65,7 +64,7 @@ describe("autoRespondsPermission", () => {
     const directory = "/tmp/project"
     const sessions = [session({ id: "root" })]
     const autoAccept = {
-      [`${base64Encode(directory)}/*`]: true,
+      [`${directory}/*`]: true,
     }
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(true)
@@ -75,8 +74,8 @@ describe("autoRespondsPermission", () => {
     const directory = "/tmp/project"
     const sessions = [session({ id: "root" })]
     const autoAccept = {
-      [`${base64Encode(directory)}/*`]: true,
-      [`${base64Encode(directory)}/root`]: false,
+      [`${directory}/*`]: true,
+      [`${directory}/root`]: false,
     }
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(false)
@@ -86,7 +85,7 @@ describe("autoRespondsPermission", () => {
 describe("isDirectoryAutoAccepting", () => {
   test("returns true when directory key is set", () => {
     const directory = "/tmp/project"
-    const autoAccept = { [`${base64Encode(directory)}/*`]: true }
+    const autoAccept = { [`${directory}/*`]: true }
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(true)
   })
 
@@ -96,7 +95,7 @@ describe("isDirectoryAutoAccepting", () => {
 
   test("returns false when directory key is explicitly false", () => {
     const directory = "/tmp/project"
-    const autoAccept = { [`${base64Encode(directory)}/*`]: false }
+    const autoAccept = { [`${directory}/*`]: false }
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
   })
 })

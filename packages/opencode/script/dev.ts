@@ -10,7 +10,7 @@ const frontPort = process.env.DEV_FRONTEND_PORT?.trim() || "4444"
 const base = process.env.PUBLIC_BASE_URL?.trim() || `http://${frontHost}:${frontPort}`
 const redirect = process.env.WORKOS_REDIRECT_URI?.trim() || `http://${host}:${port}/auth/callback`
 
-const cmd = ["bun", "run", "--conditions=browser", "./src/index.ts", "serve"]
+const cmd = ["bun", "run", "./src/server/main.ts"]
 if (!has("--hostname")) cmd.push("--hostname", host)
 if (!has("--port")) cmd.push("--port", port)
 cmd.push(...args)

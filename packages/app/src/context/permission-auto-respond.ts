@@ -1,12 +1,10 @@
-import { base64Encode } from "@opencode-ai/util/encode"
-
 export function acceptKey(sessionID: string, directory?: string) {
   if (!directory) return sessionID
-  return `${base64Encode(directory)}/${sessionID}`
+  return `${directory}/${sessionID}`
 }
 
 export function directoryAcceptKey(directory: string) {
-  return `${base64Encode(directory)}/*`
+  return `${directory}/*`
 }
 
 function accepted(autoAccept: Record<string, boolean>, sessionID: string, directory?: string) {

@@ -89,7 +89,7 @@ export function applyDirectoryEvent(input: {
   setStore: SetStoreFunction<State>
   push: (directory: string) => void
   directory: string
-  loadLsp: () => void
+  loadLsp?: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
 }) {
@@ -346,10 +346,6 @@ export function applyDirectoryEvent(input: {
           draft.splice(result.index, 1)
         }),
       )
-      break
-    }
-    case "lsp.updated": {
-      input.loadLsp()
       break
     }
   }

@@ -59,8 +59,6 @@ import { ImagePreview } from "@opencode-ai/ui/image-preview"
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
-  newSessionWorktree?: string
-  onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
 }
 
@@ -988,8 +986,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     setMode: (mode) => setStore("mode", mode),
     setPopover: (popover) => setStore("popover", popover),
-    newSessionWorktree: () => props.newSessionWorktree,
-    onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     onSubmit: props.onSubmit,
   })
 

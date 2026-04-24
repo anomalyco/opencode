@@ -20,6 +20,7 @@
     "@veritly/telemetry-veritly": "workspace:*"
   },
   "devDependencies": {
+    "@types/bun": "1.3.9",
     "@typescript/native-preview": "catalog:",
     "@univerjs/core": "0.18.0",
     "@univerjs/sheets": "0.18.0",

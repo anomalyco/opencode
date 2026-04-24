@@ -31,8 +31,6 @@ export interface Session {
   id: string
   slug: string
   projectID: string
-  workspaceID?: string
-  directory: string | null
   parentID?: string
   title: string
   version: string
@@ -130,7 +128,6 @@ export class OpenCodeClient {
 
   async createProject(input: {
     name: string
-    directory?: string
   }): Promise<Project> {
     // Project creation goes through the project init API
     const result = await this.request<Project>(

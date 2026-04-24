@@ -14,8 +14,8 @@ const isBash = (part: unknown): part is ToolPart => {
 test("shell mode runs a command in the project directory", async ({ page, withProject }) => {
   test.setTimeout(120_000)
 
-  await withProject(async ({ directory, gotoSession, trackSession }) => {
-    const sdk = createSdk()
+  await withProject(async ({ id, directory, gotoSession, trackSession }) => {
+    const sdk = createSdk({ id })
     const prompt = page.locator(promptSelector)
     const cmd = process.platform === "win32" ? "dir" : "ls"
 

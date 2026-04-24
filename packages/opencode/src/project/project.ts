@@ -101,7 +101,7 @@ export namespace Project {
 		await Database.use(async (db) => db.insert(ProjectTable).values(insert));
 		const project = await get(id);
 		if (!project) throw new Error("Failed to create project");
-		return { project, directory: `/projects/${id}` };
+		return { project };
 	}
 	export async function get(id: ProjectID): Promise<Info | undefined> {
 		const row = await Database.use(async (db) => {
@@ -138,6 +138,7 @@ export namespace Project {
 			if (!result) throw new Error(`Project not found: ${input.projectID}`);
 			const data = fromRow(result);
 			GlobalBus.emit("event", {
+				projectID: data.id,
 				payload: {
 					type: Event.Updated.type,
 					properties: data,

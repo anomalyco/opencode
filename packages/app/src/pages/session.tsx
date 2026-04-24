@@ -22,7 +22,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode, checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@opencode-ai/util/encode"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
@@ -33,15 +33,13 @@ import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { useTerminal } from "@/context/terminal"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
-import { createOpenReviewFile, createSizing, focusTerminalById } from "@/pages/session/helpers"
+import { createOpenReviewFile, createSizing } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { resetSessionModel, syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
-import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { extractPromptFromParts } from "@/utils/prompt"
@@ -270,7 +268,6 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
-  const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
 
   createEffect(() => {
@@ -300,8 +297,8 @@ export default function Page() {
   const composer = createSessionComposerState()
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const workspaceKey = createMemo(() => params.dir ?? "")
-  const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
+  const projectKey = createMemo(() => params.dir ?? "")
+  const projectTabs = createMemo(() => layout.tabs(projectKey))
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
 
@@ -323,7 +320,7 @@ export default function Page() {
         layout.handoff.clearTabs()
         if (pending.dir !== (params.dir ?? "")) return
 
-        const from = workspaceTabs().tabs()
+        const from = projectTabs().tabs()
         if (from.all.length === 0 && !from.active) return
 
         const current = tabs().tabs()
@@ -334,8 +331,8 @@ export default function Page() {
         tabs().setAll(all)
         tabs().setActive(active && all.includes(active) ? active : all[0])
 
-        workspaceTabs().setAll([])
-        workspaceTabs().setActive(undefined)
+        projectTabs().setAll([])
+        projectTabs().setActive(undefined)
       },
       { defer: true },
     ),
@@ -450,7 +447,6 @@ export default function Page() {
     messageId: undefined as string | undefined,
     mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
-    newSessionWorktree: "main",
     deferRender: false,
   })
 
@@ -482,13 +478,6 @@ export default function Page() {
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
-
-  const newSessionWorktree = createMemo(() => {
-    if (store.newSessionWorktree === "create") return "create"
-    const project = sync.project
-    if (project && sdk.directory !== project.worktree) return sdk.directory
-    return "main"
-  })
 
   const setActiveMessage = (message: UserMessage | undefined) => {
     messageMark = scrollMark
@@ -662,7 +651,6 @@ export default function Page() {
       () => params.dir,
       (dir) => {
         if (!dir) return
-        setStore("newSessionWorktree", "main")
       },
       { defer: true },
     ),
@@ -762,12 +750,6 @@ export default function Page() {
     if (activeElement === inputRef) {
       if (event.key === "Escape") inputRef?.blur()
       return
-    }
-
-    // Prefer the open terminal over the composer when it can take focus
-    if (view().terminal.opened()) {
-      const id = terminal.active()
-      if (id && focusTerminalById(id)) return
     }
 
     // Only treat explicit scroll keys as potential "user scroll" gestures.
@@ -1229,7 +1211,7 @@ export default function Page() {
           })
           return
         }
-        navigate(`/${base64Encode(sdk.directory)}/session/${next.id}`)
+        navigate(`/${sdk.directory}/session/${next.id}`)
         captureVeritly("session_forked", {
           from_session_id: input.sessionID,
           message_id: input.messageID,
@@ -1411,23 +1393,7 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView
-                  worktree={newSessionWorktree()}
-                  onWorktreeChange={(value) => {
-                    if (value === "create") {
-                      setStore("newSessionWorktree", value)
-                      return
-                    }
-
-                    setStore("newSessionWorktree", "main")
-
-                    const target = value === "main" ? sync.project?.worktree : value
-                    if (!target) return
-                    if (target === sdk.directory) return
-                    layout.projects.open(target)
-                    navigate(`/${base64Encode(target)}/session`)
-                  }}
-                />
+                <NewSessionView />
               </Match>
             </Switch>
           </div>
@@ -1439,8 +1405,6 @@ export default function Page() {
             inputRef={(el) => {
               inputRef = el
             }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
             onSubmit={() => {
               comments.clear()
               resumeScroll()
@@ -1484,8 +1448,6 @@ export default function Page() {
           size={size}
         />
       </div>
-
-      <TerminalPanel />
     </div>
   )
 }

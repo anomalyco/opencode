@@ -3,14 +3,12 @@
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
     "jsx": "preserve",
-    "jsxImportSource": "@opentui/solid",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": [],
     "noUncheckedIndexedAccess": false,
     "customConditions": ["browser"],
     "paths": {
-      "@/*": ["./src/*"],
-      "@tui/*": ["./src/cli/cmd/tui/*"]
+      "@/*": ["./src/*"]
     },
     "plugins": [
       {
@@ -19,5 +17,7 @@
         "namespaceImportPackages": ["effect", "@effect/*"]
       }
     ]
-  }
+  },
+  "include": ["src/**/*.ts", "script/**/*.ts", "veritly-debug-serve.ts", "bunfig.toml", "package.json"],
+  "exclude": ["test", "node_modules", "dist", "ts-dist"]
 }

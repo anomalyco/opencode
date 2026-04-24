@@ -115,7 +115,7 @@ export namespace PermissionNext {
       const rows = await db.select().from(PermissionTable).where(eq(PermissionTable.project_id, projectID));
       return rows[0];
     });
-    const stored = row?.data ?? ([] as Ruleset)
+      const stored = Array.isArray(row?.data) ? (row.data as Ruleset) : ([] as Ruleset)
 
     const pending: Record<
       string,

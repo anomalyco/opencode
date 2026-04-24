@@ -35,7 +35,7 @@ export async function createProjectSimple(input: { name: string; tenantUserId: s
     commands: row.commands ?? undefined,
   };
 
-  return { project, directory: `/projects/${id}` };
+  return { project };
 }
 
 export async function listProjectsSimple(tenantUserId?: string) {

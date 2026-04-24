@@ -149,6 +149,7 @@ const serverEnv = {
   XDG_CONFIG_HOME: xdgConfigDir,
   XDG_STATE_HOME: path.join(sandbox, "state"),
   OPENCODE_E2E_PROJECT_DIR: repoDir,
+  OPENCODE_E2E_USER_ID: "e2e_test_user",
   OPENCODE_E2E_SESSION_TITLE: "E2E Session",
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
   OPENCODE_E2E_MODEL: "openai/llama3.2:1b",
@@ -213,10 +214,9 @@ try {
     process.env.OPENCODE_PID = String(process.pid)
 
     const log = await import("../../opencode/src/util/log")
-    const install = await import("../../opencode/src/installation")
     await log.Log.init({
       print: true,
-      dev: install.Installation.isLocal(),
+      dev: true,
       level: "WARN",
     })
 

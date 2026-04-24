@@ -1,5 +1,3 @@
-preload = ["@opentui/solid/preload"]
-
 [test]
 preload = ["./test/preload.ts"]
 # timeout is not actually parsed from bunfig.toml (see src/bunfig.zig in oven-sh/bun)

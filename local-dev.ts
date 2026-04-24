@@ -46,6 +46,23 @@ function num(name: string) {
   return value
 }
 
+function ensureUniverSdkInstalled(python: string) {
+  const found = spawnSync("python3", ["-m", "pip", "show", "veritly_univer_sdk"], {
+    cwd: root,
+    stdio: "ignore",
+  })
+  if (found.status === 0) return
+
+  const installed = spawnSync("python3", ["-m", "pip", "install", "-e", python], {
+    cwd: root,
+    stdio: "inherit",
+  })
+  if (installed.status === 0) return
+
+  console.error("Failed to install packages/univer-sdk/python for the local executor.")
+  process.exit(installed.status ?? 1)
+}
+
 function kill(pid: number) {
   try {
     process.kill(pid, "SIGKILL")
@@ -104,9 +121,6 @@ function argv(entry: string, args: string[]) {
 async function boot(entry: string, args: string[], extra?: Record<string, string>) {
   if (extra) Object.assign(process.env, extra)
   argv(entry, args)
-  if (entry.endsWith("/packages/opencode/src/index.ts")) {
-    await import(resolve(root, "node_modules/.bun/node_modules/@opentui/solid/scripts/preload.ts"))
-  }
   await import(entry)
 }
 
@@ -148,7 +162,7 @@ const svc = {
     const host = env("DEV_BACKEND_HOST")
     const port = env("DEV_BACKEND_PORT")
     clear(Number(port))
-    await boot(resolve(root, "packages/opencode/src/index.ts"), ["serve", "--hostname", host, "--port", port, ...rest], {
+    await boot(resolve(root, "packages/opencode/src/server/main.ts"), ["--hostname", host, "--port", port, ...rest], {
       DATABASE_URL: env("DATABASE_URL"),
       PUBLIC_BASE_URL: `http://${env("DEV_FRONTEND_HOST")}:${env("DEV_FRONTEND_PORT")}`,
       WORKOS_REDIRECT_URI: `http://${host}:${port}/auth/callback`,
@@ -170,6 +184,7 @@ const svc = {
   executor: async () => {
     const port = new URL(env("VERITLY_EXECUTOR_URL")).port || "80"
     const python = resolve(root, "packages/univer-sdk/python")
+    ensureUniverSdkInstalled(python)
     const user = execSync("python3 -c 'import site; print(site.getusersitepackages())'", {
       cwd: root,
       stdio: "pipe",
@@ -180,6 +195,7 @@ const svc = {
     clear(Number(port))
     await boot(resolve(root, "packages/executor/src/server.ts"), [], {
       PORT: port,
+      EXECUTOR_RUNTIME: process.env.EXECUTOR_RUNTIME?.trim() || "dangerous-local",
       PYTHONPATH: path,
     })
   },

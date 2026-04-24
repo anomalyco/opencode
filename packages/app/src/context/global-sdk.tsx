@@ -41,7 +41,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       [key: string]: Event
     }>()
 
-    type Queued = { directory: string; payload: Event }
+    type Queued = { projectID: string; payload: Event }
     const FLUSH_FRAME_MS = 16
     const STREAM_YIELD_MS = 8
     const RECONNECT_DELAY_MS = 250
@@ -53,14 +53,14 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
 
-    const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
+    const deltaKey = (projectID: string, messageID: string, partID: string) => `${projectID}:${messageID}:${partID}`
 
-    const key = (directory: string, payload: Event) => {
-      if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
-      if (payload.type === "lsp.updated") return `lsp.updated:${directory}`
+    const key = (projectID: string, payload: Event) => {
+      if (payload.type === "session.status") return `session.status:${projectID}:${payload.properties.sessionID}`
+      if (payload.type === "lsp.updated") return `lsp.updated:${projectID}`
       if (payload.type === "message.part.updated") {
         const part = payload.properties.part
-        return `message.part.updated:${directory}:${part.messageID}:${part.id}`
+        return `message.part.updated:${projectID}:${part.messageID}:${part.id}`
       }
     }
 
@@ -83,9 +83,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         for (const event of events) {
           if (skip && event.payload.type === "message.part.delta") {
             const props = event.payload.properties
-            if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) continue
+            if (skip.has(deltaKey(event.projectID, props.messageID, props.partID))) continue
           }
-          emitter.emit(event.directory, event.payload)
+          emitter.emit(event.projectID, event.payload)
         }
       })
 
@@ -146,22 +146,22 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           for await (const event of events.stream) {
             resetHeartbeat()
             streamErrorLogged = false
-            const directory = event.directory ?? "global"
+            const projectID = (event as any).projectID ?? "global"
             const payload = event.payload
-            const k = key(directory, payload)
+            const k = key(projectID, payload)
             if (k) {
               const i = coalesced.get(k)
               if (i !== undefined) {
-                queue[i] = { directory, payload }
+                queue[i] = { projectID, payload }
                 if (payload.type === "message.part.updated") {
                   const part = payload.properties.part
-                  staleDeltas.add(deltaKey(directory, part.messageID, part.id))
+                  staleDeltas.add(deltaKey(projectID, part.messageID, part.id))
                 }
                 continue
               }
               coalesced.set(k, queue.length)
             }
-            queue.push({ directory, payload })
+            queue.push({ projectID, payload })
             schedule()
 
             if (Date.now() - yielded < STREAM_YIELD_MS) continue

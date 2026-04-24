@@ -4,6 +4,18 @@
 
 set -e
 
+if [ ! -s packages/executor/output/vmlinux ] || [ ! -s packages/executor/output/rootfs.ext4 ]; then
+  echo "[E2E Setup] Missing Firecracker VM artifacts."
+  echo ""
+  echo "Build them first on a Linux/KVM-capable host:"
+  echo "  (cd packages/executor && bun run build-vm)"
+  echo ""
+  echo "Expected files:"
+  echo "  packages/executor/output/vmlinux"
+  echo "  packages/executor/output/rootfs.ext4"
+  exit 1
+fi
+
 echo "[E2E Setup] Starting Docker Compose environment..."
 docker compose -f docker-compose.e2e.yml up -d postgres executor
 

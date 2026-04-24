@@ -99,7 +99,7 @@ export const GlobalRoutes = lazy(() =>
                 schema: resolver(
                   z
                     .object({
-                      directory: z.string(),
+                      projectID: z.string(),
                       payload: BusEvent.payloads(),
                     })
                     .meta({
@@ -159,6 +159,7 @@ export const GlobalRoutes = lazy(() =>
             c.req.raw.signal.addEventListener("abort", abort, { once: true })
 
             void send({
+              projectID: "global",
               payload: {
                 type: "server.connected",
                 properties: {},
@@ -167,6 +168,7 @@ export const GlobalRoutes = lazy(() =>
 
             timer = setInterval(() => {
               void send({
+                projectID: "global",
                 payload: {
                   type: "server.heartbeat",
                   properties: {},
@@ -243,7 +245,7 @@ export const GlobalRoutes = lazy(() =>
       async (c) => {
         await Instance.disposeAll()
         GlobalBus.emit("event", {
-          directory: "global",
+          projectID: "global",
           payload: {
             type: GlobalDisposedEvent.type,
             properties: {},

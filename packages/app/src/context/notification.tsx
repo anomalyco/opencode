@@ -8,8 +8,6 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { Binary } from "@opencode-ai/util/binary"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSound, soundSrc } from "@/utils/sound"
@@ -118,7 +116,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const empty: Notification[] = []
 
     const currentDirectory = createMemo(() => {
-      return decode64(params.dir)
+      return params.dir
     })
 
     const currentSession = createMemo(() => params.id)
@@ -245,7 +243,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           session: sessionID,
         })
 
-        const href = `/${base64Encode(directory)}/session/${sessionID}`
+        const href = `/${directory}/session/${sessionID}`
         if (settings.notifications.agent()) {
           void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, href)
         }
@@ -278,7 +276,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         const description =
           session?.title ??
           (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-        const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
+        const href = sessionID ? `/${directory}/session/${sessionID}` : `/${directory}`
         if (settings.notifications.errors()) {
           void platform.notify(language.t("notification.session.error.title"), description, href)
         }

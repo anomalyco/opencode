@@ -1,3 +1,4 @@
+import type { Project } from "@opencode-ai/sdk/v2/client"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -7,9 +8,17 @@ import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
-import { errorMessage } from "@/pages/layout/helpers"
 
-export function DialogCreateProject(props: { onCreate: (directory: string) => void }) {
+const errorMessage = (err: unknown, fallback: string) => {
+  if (err && typeof err === "object" && "data" in err) {
+    const data = (err as { data?: { message?: string } }).data
+    if (data?.message) return data.message
+  }
+  if (err instanceof Error) return err.message
+  return fallback
+}
+
+export function DialogCreateProject(props: { onCreate: (project: Project) => void }) {
   const dialog = useDialog()
   const server = useServer()
   const platform = usePlatform()
@@ -45,12 +54,18 @@ export function DialogCreateProject(props: { onCreate: (directory: string) => vo
       )
     }
 
-    const directory =
-      payload && typeof payload === "object" && "directory" in payload && typeof payload.directory === "string"
-        ? payload.directory
+    const project =
+      payload &&
+      typeof payload === "object" &&
+      "project" in payload &&
+      payload.project &&
+      typeof payload.project === "object" &&
+      "id" in payload.project &&
+      typeof payload.project.id === "string"
+        ? (payload.project as Project)
         : undefined
-    if (!directory) throw new Error("Project creation returned no directory")
-    return directory
+    if (!project) throw new Error("Project creation returned no project")
+    return project
   }
 
   async function submit() {
@@ -59,9 +74,9 @@ export function DialogCreateProject(props: { onCreate: (directory: string) => vo
 
     setStore("saving", true)
     try {
-      const directory = await request(name)
+      const project = await request(name)
       dialog.close()
-      props.onCreate(directory)
+      props.onCreate(project)
     } catch (err) {
       showToast({
         variant: "error",

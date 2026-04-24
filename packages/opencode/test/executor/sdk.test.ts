@@ -1,26 +1,22 @@
-import { describe, expect, test, afterAll } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Log } from "../../src/util/log"
-import { withExecutor, cleanupAllContainers } from "../fixture/executor-testcontainer"
+import { withExecutor } from "../fixture/executor-testcontainer"
 import { ExecutorSDK, ExecutorError } from "../../src/executor/sdk"
 
 Log.init({ print: false })
 
-// Increase timeout for testcontainer tests (Docker build + startup takes time)
+// Increase timeout for executor tests (Firecracker VM boot can take time)
 const TEST_TIMEOUT = 180000 // 3 minutes
+const expectedMode = "dangerous-local"
 
-// Cleanup all containers after tests
-afterAll(async () => {
-  await cleanupAllContainers()
-})
-
-describe("Executor SDK + Testcontainer", () => {
+describe("Executor SDK", () => {
   test("health check returns ok", { timeout: TEST_TIMEOUT }, async () => {
     await withExecutor(async ({ sdk }) => {
       const health = await sdk.health()
       
       expect(health.ok).toBe(true)
       expect(health.service).toBe("executor")
-      expect(health.mode).toBeOneOf(["firecracker", "container"])
+      expect(health.mode).toBe(expectedMode)
       expect(typeof health.activeSessions).toBe("number")
     })
   })
@@ -121,7 +117,7 @@ describe("Executor SDK + Testcontainer", () => {
       expect(status.sessionId).toBe(sessionId)
       expect(status.createdAt).toBeGreaterThan(0)
       expect(status.lastActivity).toBeGreaterThan(0)
-      expect(status.mode).toBeOneOf(["firecracker", "container"])
+      expect(status.mode).toBe(expectedMode)
     })
   })
 
@@ -185,7 +181,7 @@ describe("Executor SDK + Testcontainer", () => {
     })
   })
 
-  test("Python commands work in container", { timeout: TEST_TIMEOUT }, async () => {
+  test("Python commands work in VM", { timeout: TEST_TIMEOUT }, async () => {
     await withExecutor(async ({ sdk }) => {
       const sessionId = `test-python-${Date.now()}`
       
@@ -210,7 +206,7 @@ print(json.dumps(data))
       
       const result = await sdk.exec(
         sessionId,
-        `python3 -c "
+        `python3 -m pip show veritly_univer_sdk && python3 -c "
 from veritly_univer_sdk import RangeRect, UniverSDK
 import json
 

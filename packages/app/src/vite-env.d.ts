@@ -10,7 +10,7 @@ interface ImportMetaEnv {
   readonly VITE_UNIVER_BACKEND_URL?: string
   /** Univer Pro `license.txt` body (same string as backend `configs/license.txt`). */
   readonly VITE_UNIVER_LICENSE?: string
-  /** Optional workspace/project namespace header for control-plane lookups. */
+  /** Optional project namespace header for hosted API lookups. */
   readonly VITE_VERITLY_PROJECT_ID?: string
   /** Optional local WebSocket relay used by the Univer SDK bridge. */
   readonly VITE_UNIVER_SDK_WS?: string

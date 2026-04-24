@@ -10,27 +10,15 @@ import { getCookie, setCookie } from "hono/cookie"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { NamedError } from "@opencode-ai/util/error"
-import { LSP } from "../lsp"
-import { Format } from "../format"
-import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
-import { ProjectID } from "../project/schema"
-import { Vcs } from "../project/vcs"
 
-import { localProject } from "../project/local-project"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
-import { Global } from "../global"
-import { WorkspaceContext } from "../control-plane/workspace-context"
-import { WorkspaceID } from "../control-plane/schema"
-import { WorkspaceRouterMiddleware } from "../control-plane/workspace-router-middleware"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
-import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
-import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
@@ -44,13 +32,13 @@ import { Filesystem } from "@/util/filesystem"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
-import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry-veritly"
 import path from "path"
 import { apiHealthReport, apiHealthReportSimple, isPublicHealthPath } from "./health"
 import { AuthRoutes, getCookieOptions, type SessionUser } from "./routes/auth"
 import { isOpencodeWorkosEnabled } from "./workos-env"
+import { resolveInstanceProject } from "./resolve-instance-project"
 import {
   createWorkOSClient,
   requireCookiePassword,
@@ -164,6 +152,7 @@ export namespace Server {
             if (!password) return next()
             return next()
           }
+          if (process.env["OPENCODE_E2E_USER_ID"]) return next()
 
           const sessionData = getCookie(c, WORKOS_SESSION_COOKIE_NAME)
           if (!sessionData) {
@@ -279,27 +268,17 @@ export namespace Server {
         )
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
-          const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
-          const root = (() => {
-            const fromEnv = process.env.OPENCODE_INSTANCE_ROOT?.trim()
-            if (fromEnv) return Filesystem.resolve(fromEnv)
-            return Filesystem.resolve(process.cwd())
-          })()
-          const project = localProject(root)
-          return WorkspaceContext.provide({
-            workspaceID: rawWorkspaceID ? WorkspaceID.make(rawWorkspaceID) : undefined,
+          const resolved = await resolveInstanceProject(c)
+          if (resolved instanceof Response) return resolved
+          const project = resolved
+          return Instance.provide({
+            project,
+            init: InstanceBootstrap,
             async fn() {
-              return Instance.provide({
-                project,
-                init: InstanceBootstrap,
-                async fn() {
-                  return next()
-                },
-              })
+              return next()
             },
           })
         })
-        .use(WorkspaceRouterMiddleware)
         .get(
           "/doc",
           openAPIRouteHandler(app, {
@@ -317,21 +296,18 @@ export namespace Server {
           validator(
             "query",
             z.object({
-              workspace: z.string().optional(),
+              project: z.string().optional(),
             }),
           ),
         )
         .route("/project", ProjectRoutes())
-        .route("/pty", PtyRoutes())
         .route("/config", ConfigRoutes())
         .route("/experimental", ExperimentalRoutes())
         .route("/session", SessionRoutes())
         .route("/permission", PermissionRoutes())
         .route("/question", QuestionRoutes())
         .route("/provider", ProviderRoutes())
-        .route("/", FileRoutes())
         .route("/mcp", McpRoutes())
-        .route("/tui", TuiRoutes())
         .post(
           "/instance/dispose",
           describeRoute({
@@ -352,69 +328,6 @@ export namespace Server {
           async (c) => {
             await Instance.dispose()
             return c.json(true)
-          },
-        )
-        .get(
-          "/path",
-          describeRoute({
-            summary: "Get paths",
-            description:
-              "Retrieve the current working directory and related path information for the OpenCode instance.",
-            operationId: "path.get",
-            responses: {
-              200: {
-                description: "Path",
-                content: {
-                  "application/json": {
-                    schema: resolver(
-                      z
-                        .object({
-                          home: z.string(),
-                          state: z.string(),
-                          config: z.string(),
-                          projectID: ProjectID.zod,
-                        })
-                        .meta({
-                          ref: "Path",
-                        }),
-                    ),
-                  },
-                },
-              },
-            },
-          }),
-          async (c) => {
-            return c.json({
-              home: Global.Path.home,
-              state: Global.Path.state,
-              config: Global.Path.config,
-              projectID: Instance.projectID,
-            })
-          },
-        )
-        .get(
-          "/vcs",
-          describeRoute({
-            summary: "Get VCS info",
-            description:
-              "Retrieve version control system (VCS) information for the current project, such as git branch.",
-            operationId: "vcs.get",
-            responses: {
-              200: {
-                description: "VCS info",
-                content: {
-                  "application/json": {
-                    schema: resolver(Vcs.Info),
-                  },
-                },
-              },
-            },
-          }),
-          async (c) => {
-            const branch = await Vcs.branch()
-            return c.json({
-              branch,
-            })
           },
         )
         .get(
@@ -511,48 +424,6 @@ export namespace Server {
           async (c) => {
             const modes = await Agent.list()
             return c.json(modes)
-          },
-        )
-        .get(
-          "/lsp",
-          describeRoute({
-            summary: "Get LSP status",
-            description: "Get LSP server status",
-            operationId: "lsp.status",
-            responses: {
-              200: {
-                description: "LSP server status",
-                content: {
-                  "application/json": {
-                    schema: resolver(LSP.Status.array()),
-                  },
-                },
-              },
-            },
-          }),
-          async (c) => {
-            return c.json(await LSP.status())
-          },
-        )
-        .get(
-          "/formatter",
-          describeRoute({
-            summary: "Get formatter status",
-            description: "Get formatter status",
-            operationId: "formatter.status",
-            responses: {
-              200: {
-                description: "Formatter status",
-                content: {
-                  "application/json": {
-                    schema: resolver(Format.Status.array()),
-                  },
-                },
-              },
-            },
-          }),
-          async (c) => {
-            return c.json(await Format.status())
           },
         )
         .get(
@@ -661,8 +532,6 @@ export namespace Server {
   export function listen(opts: {
     port: number
     hostname: string
-    mdns?: boolean
-    mdnsDomain?: string
     cors?: string[]
   }) {
     url = new URL(`http://${opts.hostname}:${opts.port}`)
@@ -682,24 +551,6 @@ export namespace Server {
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
-
-    const shouldPublishMDNS =
-      opts.mdns &&
-      server.port &&
-      opts.hostname !== "127.0.0.1" &&
-      opts.hostname !== "localhost" &&
-      opts.hostname !== "::1"
-    if (shouldPublishMDNS) {
-      MDNS.publish(server.port!, opts.mdnsDomain)
-    } else if (opts.mdns) {
-      log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
-    }
-
-    const originalStop = server.stop.bind(server)
-    server.stop = async (closeActiveConnections?: boolean) => {
-      if (shouldPublishMDNS) MDNS.unpublish()
-      return originalStop(closeActiveConnections)
-    }
 
     return server
   }

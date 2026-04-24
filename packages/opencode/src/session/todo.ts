@@ -38,6 +38,8 @@ export namespace Todo {
             status: todo.status,
             priority: todo.priority,
             position,
+            time_created: Date.now(),
+            time_updated: Date.now(),
           })),
         )
     })

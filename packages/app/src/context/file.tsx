@@ -190,12 +190,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       }
 
       const promise = readOfficeFile(file, { projectId: univerProjectId() })
-        .then((x) => {
+        .then((content) => {
           if (scope() !== directory) return
-          const content = ("data" in x ? x.data : x)
           setLoaded(file, content)
 
-          if (!content) return
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
         })

@@ -97,7 +97,7 @@ class TokenRefreshRequest extends Schema.Class<TokenRefreshRequest>("TokenRefres
   client_id: Schema.String,
 }) {}
 
-const clientId = "opencode-cli"
+const clientId = "opencode-app"
 
 const mapAccountServiceError =
   (message = "Account service operation failed") =>
@@ -152,7 +152,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
       // persisting it when the cached token has expired.
       const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
         const now = yield* Clock.currentTimeMillis
-        if (row.token_expiry && row.token_expiry > now) return row.access_token
+        if (row.token_expiry && row.token_expiry > now) return row.access_token as AccessToken
 
         const response = yield* executeEffectOk(
           HttpClientRequest.post(`${row.url}/auth/device/token`).pipe(
@@ -160,7 +160,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
             HttpClientRequest.schemaBodyJson(TokenRefreshRequest)(
               new TokenRefreshRequest({
                 grant_type: "refresh_token",
-                refresh_token: row.refresh_token,
+                refresh_token: row.refresh_token as RefreshToken,
                 client_id: clientId,
               }),
             ),
@@ -174,13 +174,13 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         const expiry = Option.some(now + Duration.toMillis(parsed.expires_in))
 
         yield* repo.persistToken({
-          accountID: row.id,
+          accountID: row.id as AccountID,
           accessToken: parsed.access_token,
           refreshToken: parsed.refresh_token,
           expiry,
         })
 
-        return parsed.access_token
+        return parsed.access_token as AccessToken
       })
 
       const resolveAccess = Effect.fnUntraced(function* (accountID: AccountID) {

@@ -20,8 +20,9 @@ Isolated command execution using Firecracker microVMs. Each session gets its own
 ## Quick Start
 
 ```bash
-# Build and run with Docker
-docker-compose up --build executor
+# Build VM artifacts first, then build and run with Docker
+(cd packages/executor && bun run build-vm)
+docker compose -f docker-compose.e2e.yml up --build executor
 
 # Test it
 curl http://localhost:7777/health
@@ -39,10 +40,10 @@ Response:
 
 ```json
 {
-  "status": "ok",
+  "ok": true,
   "mode": "firecracker",
-  "activeVMs": 0,
-  "sessions": 0
+  "activeSessions": 0,
+  "ready": true
 }
 ```
 
@@ -122,8 +123,8 @@ POST /v1/sessions/:sessionId/close
 Firecracker requires Linux KVM, which isn't available on macOS. Use Docker Desktop:
 
 ```bash
-# Docker Desktop for Mac uses a Linux VM under the hood
-docker-compose up --build executor
+# Build the VM rootfs on a Linux/KVM-capable host, then build the executor image.
+docker compose -f docker-compose.e2e.yml up --build executor
 
 # The executor will have access to KVM inside Docker Desktop's VM
 ```
@@ -139,7 +140,7 @@ The Docker image builds a Ubuntu-based rootfs with:
 - **Univer SDK** pre-installed
 - `/workspace` directory for session files
 
-Univer SDK is installed both in the container (for potential future use) and in the VM rootfs (where commands actually run).
+Univer SDK is installed in the VM rootfs, where commands actually run.
 
 ## Docker Compose
 

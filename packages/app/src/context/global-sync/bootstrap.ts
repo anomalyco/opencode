@@ -14,7 +14,7 @@ import { getFilename } from "@opencode-ai/util/path";
 import { retry } from "@opencode-ai/util/retry";
 import { batch } from "solid-js";
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store";
-import type { State, VcsCache } from "./types";
+import type { State } from "./types";
 import { cmp, normalizeProviderList } from "./utils";
 import { formatServerError } from "@/utils/server-errors";
 import { healthOk } from "@/utils/server-health";
@@ -73,11 +73,6 @@ export async function bootstrapGlobal(input: {
 
 	const tasks = [
 		retry(() =>
-			input.globalSDK.path.get().then((x) => {
-				input.setGlobalStore("path", x.data!);
-			}),
-		),
-		retry(() =>
 			input.globalSDK.global.config.get().then((x) => {
 				input.setGlobalStore("config", x.data!);
 			}),
@@ -86,7 +81,6 @@ export async function bootstrapGlobal(input: {
 			input.globalSDK.project.list().then((x) => {
 				const projects = (x.data ?? [])
 					.filter((p) => !!p?.id)
-					.filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
 					.slice()
 					.sort((a, b) => cmp(a.id, b.id));
 				input.setGlobalStore("project", projects);
@@ -133,7 +127,6 @@ export async function bootstrapDirectory(input: {
 	sdk: OpencodeClient;
 	store: Store<State>;
 	setStore: SetStoreFunction<State>;
-	vcsCache: VcsCache;
 	loadSessions: (directory: string) => Promise<void> | void;
 	translate: (key: string, vars?: Record<string, string | number>) => string;
 }) {
@@ -166,17 +159,10 @@ export async function bootstrapDirectory(input: {
 	if (input.store.status !== "complete") input.setStore("status", "partial");
 
 	Promise.all([
-		input.sdk.path.get().then((x) => input.setStore("path", x.data!)),
 		input.sdk.command.list().then((x) => input.setStore("command", x.data ?? [])),
 		input.sdk.session.status().then((x) => input.setStore("session_status", x.data!)),
 		input.loadSessions(input.directory),
 		input.sdk.mcp.status().then((x) => input.setStore("mcp", x.data!)),
-		input.sdk.lsp.status().then((x) => input.setStore("lsp", x.data!)),
-		input.sdk.vcs.get().then((x) => {
-			const next = x.data ?? input.store.vcs;
-			input.setStore("vcs", next);
-			if (next?.branch) input.vcsCache.setStore("value", next);
-		}),
 		input.sdk.permission.list().then((x) => {
 			const grouped = groupBySession(
 				(x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),

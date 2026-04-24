@@ -1,9 +1,7 @@
 import { createMemo, For, Match, Switch } from "solid-js";
 import { Button } from "@opencode-ai/ui/button";
 import { Logo } from "@opencode-ai/ui/logo";
-import { useLayout } from "@/context/layout";
 import { useNavigate } from "@solidjs/router";
-import { base64Encode } from "@opencode-ai/util/encode";
 import { Icon } from "@opencode-ai/ui/icon";
 import { DateTime } from "luxon";
 import { useDialog } from "@opencode-ai/ui/context/dialog";
@@ -16,12 +14,10 @@ import { captureVeritly } from "@/lib/telemetry/posthog";
 
 export default function Home() {
 	const sync = useGlobalSync();
-	const layout = useLayout();
 	const dialog = useDialog();
 	const navigate = useNavigate();
 	const server = useServer();
 	const language = useLanguage();
-	const homedir = createMemo(() => sync.data.path.home);
 	const recent = createMemo(() => {
 		return sync.data.project
 			.slice()
@@ -36,16 +32,30 @@ export default function Home() {
 		return "bg-border-weak-base";
 	});
 
-	function openProject(directory: string, source: "recent" | "create_dialog" | "empty_state") {
+	function openProject(projectID: string, source: "recent" | "create_dialog" | "empty_state") {
 		captureVeritly("project_opened", { source });
-		layout.projects.open(directory);
-		server.projects.touch(directory);
-		navigate(`/${base64Encode(directory)}`);
+		server.projects.touch(projectID);
+		navigate(`/${projectID}`);
+	}
+
+	function rememberProject(project: (typeof sync.data.project)[number]) {
+		const next = sync.data.project.slice();
+		const index = next.findIndex((item) => item.id === project.id);
+		if (index >= 0) next[index] = project;
+		else next.unshift(project);
+		sync.set("project", next);
 	}
 
 	function chooseProject(from: "toolbar" | "empty_state") {
 		const source = from === "empty_state" ? "empty_state" : "create_dialog";
-		dialog.show(() => <DialogCreateProject onCreate={(dir) => openProject(dir, source)} />);
+		dialog.show(() => (
+			<DialogCreateProject
+				onCreate={(project) => {
+					rememberProject(project);
+					openProject(project.id, source);
+				}}
+			/>
+		));
 	}
 
 	return (
@@ -81,9 +91,9 @@ export default function Home() {
 										size="large"
 										variant="ghost"
 										class="text-14-mono text-left justify-between px-3"
-										onClick={() => openProject(project.worktree, "recent")}
+										onClick={() => openProject(project.id, "recent")}
 									>
-										{project.worktree.replace(homedir(), "~")}
+										{project.name ?? project.id}
 										<div class="text-14-regular text-text-weak">
 											{DateTime.fromMillis(Number(project.time.updated ?? project.time.created)).toRelative()}
 										</div>

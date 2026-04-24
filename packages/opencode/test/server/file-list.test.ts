@@ -32,13 +32,14 @@ describe("GET /file and File.list (no host project directory)", () => {
       }
     })
 
-    test("GET /file/content returns 501 (no host fs; frontend must not call)", async () => {
+    test("GET /file/content returns 200 with empty text stub (no host fs)", async () => {
       const app = Server.createApp({})
       const r = await app.request("http://x/file/content?path=README.md", {
         method: "GET",
         headers,
       })
-      expect(r.status).toBe(501)
+      expect(r.status).toBe(200)
+      expect(await r.json()).toEqual({ type: "text", content: "" })
     })
   }
 

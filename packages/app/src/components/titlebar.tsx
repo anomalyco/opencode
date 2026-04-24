@@ -98,6 +98,20 @@ export function Titlebar() {
 
 	const canBack = createMemo(() => history.index > 0);
 	const canForward = createMemo(() => history.index < history.stack.length - 1);
+	const startNewSession = () => {
+		if (!params.dir) return;
+
+		if (params.id) {
+			const source = layout.tabs(`${params.dir}/${params.id}`).tabs();
+			if (source.all.length > 0 || source.active) {
+				const target = layout.tabs(params.dir);
+				target.setAll(source.all);
+				target.setActive(source.active && source.all.includes(source.active) ? source.active : source.all[0]);
+			}
+		}
+
+		navigate(`/${params.dir}/session`);
+	};
 
 	const back = () => {
 		const next = backPath(history);
@@ -260,10 +274,7 @@ export function Titlebar() {
 									variant="ghost"
 									icon="new-session"
 									class="titlebar-icon w-8 h-6 p-0 box-border"
-									onClick={() => {
-										if (!params.dir) return;
-										navigate(`/${params.dir}/session`);
-									}}
+									onClick={startNewSession}
 									aria-label={language.t("command.session.new")}
 								/>
 							</TooltipKeybind>

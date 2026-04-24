@@ -18,21 +18,25 @@ export interface ExecResult {
   output: string
   exitCode: number
   sessionId: string
-  mode: string
+  mode: "firecracker" | "dangerous-local"
+  vmId: string
 }
 
 export interface SessionStatus {
   sessionId: string
   createdAt: number
   lastActivity: number
-  mode: string
+  mode: "firecracker" | "dangerous-local"
+  vmId: string
+  guestIP?: string
 }
 
 export interface ExecutorHealth {
   ok: boolean
   service: string
-  mode: "firecracker" | "container"
+  mode: "firecracker" | "dangerous-local"
   activeSessions: number
+  ready: boolean
 }
 
 

@@ -6,7 +6,6 @@ import { Session } from "../../session"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
-import { WorkspaceRoutes } from "./workspace"
 import { MCP } from "../../mcp"
 
 export const ExperimentalRoutes = lazy(() =>
@@ -85,7 +84,6 @@ export const ExperimentalRoutes = lazy(() =>
         )
       },
     )
-    .route("/workspace", WorkspaceRoutes())
     .get(
       "/session",
       describeRoute({

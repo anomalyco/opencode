@@ -37,8 +37,12 @@ services:
       - "18080:7777"
     environment:
       - PORT=7777
-      - EXECUTOR_MODE=container
     privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/kvm:/dev/kvm
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7777/health"]
       interval: 2s

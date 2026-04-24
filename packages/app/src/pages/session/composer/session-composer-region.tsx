@@ -17,8 +17,6 @@ export function SessionComposerRegion(props: {
   ready: boolean
   centered: boolean
   inputRef: (el: HTMLDivElement) => void
-  newSessionWorktree: string
-  onNewSessionWorktreeReset: () => void
   onSubmit: () => void
   onResponseSubmit: () => void
   revert?: {
@@ -249,12 +247,7 @@ export function SessionComposerRegion(props: {
                 "margin-top": `${-lift()}px`,
               }}
             >
-              <PromptInput
-                ref={props.inputRef}
-                newSessionWorktree={props.newSessionWorktree}
-                onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
-                onSubmit={props.onSubmit}
-              />
+              <PromptInput ref={props.inputRef} onSubmit={props.onSubmit} />
             </div>
           </Show>
         </Show>

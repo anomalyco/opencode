@@ -18,7 +18,9 @@ const headerGetterSetter = {
   },
 }
 
-export function createOpencodeClient(config?: Config & { experimental_workspaceID?: string }) {
+export function createOpencodeClient(
+  config?: Config & { projectId?: string },
+) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
       if (req instanceof Request && trace.getActiveSpan()) {
@@ -37,10 +39,10 @@ export function createOpencodeClient(config?: Config & { experimental_workspaceI
     }
   }
 
-  if (config?.experimental_workspaceID) {
+  if (config?.projectId?.trim()) {
     config.headers = {
       ...config.headers,
-      "x-opencode-workspace": config.experimental_workspaceID,
+      "x-opencode-project": config.projectId.trim(),
     }
   }
 

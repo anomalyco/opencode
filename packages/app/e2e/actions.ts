@@ -1,24 +1,17 @@
 import { expect, type Locator, type Page } from "@playwright/test"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { execSync } from "node:child_process"
-import { terminalAttr, type E2EWindow } from "../src/testing/terminal"
-import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
+import { createSdk, modKey, serverUrl } from "./utils"
 import {
-  dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
-  projectMenuTriggerSelector,
-  projectCloseMenuSelector,
-  projectWorkspacesToggleSelector,
   titlebarRightSelector,
   popoverBodySelector,
   listItemSelector,
   listItemKeySelector,
   listItemKeyStartsWithSelector,
-  terminalSelector,
-  workspaceItemSelector,
-  workspaceMenuTriggerSelector,
 } from "./selectors"
 
 export async function defocus(page: Page) {
@@ -28,53 +21,6 @@ export async function defocus(page: Page) {
       if (el instanceof HTMLElement) el.blur()
     })
     .catch(() => undefined)
-}
-
-async function terminalID(term: Locator) {
-  const id = await term.getAttribute(terminalAttr)
-  if (id) return id
-  throw new Error(`Active terminal missing ${terminalAttr}`)
-}
-
-async function terminalReady(page: Page, term?: Locator) {
-  const next = term ?? page.locator(terminalSelector).first()
-  const id = await terminalID(next)
-  return page.evaluate((id) => {
-    const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]
-    return !!state?.connected && (state.settled ?? 0) > 0
-  }, id)
-}
-
-async function terminalHas(page: Page, input: { term?: Locator; token: string }) {
-  const next = input.term ?? page.locator(terminalSelector).first()
-  const id = await terminalID(next)
-  return page.evaluate(
-    (input) => {
-      const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[input.id]
-      return state?.rendered.includes(input.token) ?? false
-    },
-    { id, token: input.token },
-  )
-}
-
-export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
-  const term = input?.term ?? page.locator(terminalSelector).first()
-  const timeout = input?.timeout ?? 10_000
-  await expect(term).toBeVisible()
-  await expect(term.locator("textarea")).toHaveCount(1)
-  await expect.poll(() => terminalReady(page, term), { timeout }).toBe(true)
-}
-
-export async function runTerminal(page: Page, input: { cmd: string; token: string; term?: Locator; timeout?: number }) {
-  const term = input.term ?? page.locator(terminalSelector).first()
-  const timeout = input.timeout ?? 10_000
-  await waitTerminalReady(page, { term, timeout })
-  const textarea = term.locator("textarea")
-  await term.click()
-  await expect(textarea).toBeFocused()
-  await page.keyboard.type(input.cmd)
-  await page.keyboard.press("Enter")
-  await expect.poll(() => terminalHas(page, { term, token: input.token }), { timeout }).toBe(true)
 }
 
 export async function openPalette(page: Page) {
@@ -172,10 +118,10 @@ export async function openSettings(page: Page) {
 }
 
 // Stateless architecture: Seed project using database project ID
-// The directory is now a virtual path like /projects/<id>
+// The directory is now the raw project ID.
 export async function seedProjects(page: Page, input: { projectId: string }) {
-  const directory = `/projects/${input.projectId}`
-  
+  const directory = input.projectId
+
   await page.addInitScript(
     (args: { directory: string; serverUrl: string }) => {
       const key = "opencode.global.dat:server"
@@ -192,34 +138,15 @@ export async function seedProjects(page: Page, input: { projectId: string }) {
       const store = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {}
       const list = Array.isArray(store.list) ? store.list : []
       const lastProject = store.lastProject && typeof store.lastProject === "object" ? store.lastProject : {}
-      const projects = store.projects && typeof store.projects === "object" ? store.projects : {}
-      const nextProjects = { ...(projects as Record<string, unknown>) }
-
-      // In stateless architecture, worktree is the virtual directory path
-      const add = (origin: string, dir: string) => {
-        const current = nextProjects[origin]
-        const items = Array.isArray(current) ? current : []
-        const existing = items.filter(
-          (p): p is { worktree: string; expanded?: boolean } =>
-            !!p &&
-            typeof p === "object" &&
-            "worktree" in p &&
-            typeof (p as { worktree?: unknown }).worktree === "string",
-        )
-
-        if (existing.some((p) => p.worktree === dir)) return
-        nextProjects[origin] = [{ worktree: dir, expanded: true }, ...existing]
-      }
-
-      add("local", args.directory)
-      add(args.serverUrl, args.directory)
+      const nextLast = { ...(lastProject as Record<string, unknown>) }
+      nextLast.local = args.directory
+      nextLast[args.serverUrl] = args.directory
 
       localStorage.setItem(
         key,
         JSON.stringify({
           list,
-          projects: nextProjects,
-          lastProject: { worktree: args.directory },
+          lastProject: nextLast,
         }),
       )
     },
@@ -229,7 +156,7 @@ export async function seedProjects(page: Page, input: { projectId: string }) {
 
 // Stateless Architecture: createTestProject creates a database project, not a filesystem directory
 export async function createTestProject(name = "E2E Test Project") {
-  const sdk = createSdk()
+  const sdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
   const result = await sdk.project.create({ name })
   if (!result.data?.id) throw new Error("Failed to create test project")
   
@@ -670,87 +597,4 @@ export async function openStatusPopover(page: Page) {
   }
 
   return { rightSection, popoverBody }
-}
-
-export async function openProjectMenu(page: Page, projectSlug: string) {
-  const trigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
-  await expect(trigger).toHaveCount(1)
-
-  const menu = page
-    .locator(dropdownMenuContentSelector)
-    .filter({ has: page.locator(projectCloseMenuSelector(projectSlug)) })
-    .first()
-  const close = menu.locator(projectCloseMenuSelector(projectSlug)).first()
-
-  const clicked = await trigger
-    .click({ timeout: 1500 })
-    .then(() => true)
-    .catch(() => false)
-
-  if (clicked) {
-    const opened = await menu
-      .waitFor({ state: "visible", timeout: 1500 })
-      .then(() => true)
-      .catch(() => false)
-    if (opened) {
-      await expect(close).toBeVisible()
-      return menu
-    }
-  }
-
-  await trigger.focus()
-  await page.keyboard.press("Enter")
-
-  const opened = await menu
-    .waitFor({ state: "visible", timeout: 1500 })
-    .then(() => true)
-    .catch(() => false)
-
-  if (opened) {
-    await expect(close).toBeVisible()
-    return menu
-  }
-
-  throw new Error(`Failed to open project menu: ${projectSlug}`)
-}
-
-export async function setWorkspacesEnabled(page: Page, projectSlug: string, enabled: boolean) {
-  const current = await page
-    .getByRole("button", { name: "New workspace" })
-    .first()
-    .isVisible()
-    .then((x) => x)
-    .catch(() => false)
-
-  if (current === enabled) return
-
-  const flip = async (timeout?: number) => {
-    const menu = await openProjectMenu(page, projectSlug)
-    const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
-    await expect(toggle).toBeVisible()
-    return toggle.click({ force: true, timeout })
-  }
-
-  const flipped = await flip(1500)
-    .then(() => true)
-    .catch(() => false)
-
-  if (!flipped) await flip()
-
-  const expected = enabled ? "New workspace" : "New session"
-  await expect(page.getByRole("button", { name: expected }).first()).toBeVisible()
-}
-
-export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {
-  const item = page.locator(workspaceItemSelector(workspaceSlug)).first()
-  await expect(item).toBeVisible()
-  await item.hover()
-
-  const trigger = page.locator(workspaceMenuTriggerSelector(workspaceSlug)).first()
-  await expect(trigger).toBeVisible()
-  await trigger.click({ force: true })
-
-  const menu = page.locator(dropdownMenuContentSelector).first()
-  await expect(menu).toBeVisible()
-  return menu
 }

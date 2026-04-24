@@ -1,5 +1,4 @@
 import { useGlobalSync } from "@/context/global-sync"
-import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 
@@ -18,7 +17,7 @@ const popularProviderSet = new Set(popularProviders)
 export function useProviders() {
   const globalSync = useGlobalSync()
   const params = useParams()
-  const currentDirectory = createMemo(() => decode64(params.dir) ?? "")
+  const currentDirectory = createMemo(() => params.dir ?? "")
   const providers = createMemo(() => {
     if (currentDirectory()) {
       const [projectStore] = globalSync.child(currentDirectory())

@@ -63,13 +63,17 @@ export namespace ShareNext {
 
   const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
+  function sessionData(session: Session.Info): SDK.Session {
+    return { ...session, directory: "" } as SDK.Session
+  }
+
   export async function init() {
     if (disabled) return
     Bus.subscribe(Session.Event.Updated, async (evt) => {
       await sync(evt.properties.info.id, [
         {
           type: "session",
-          data: evt.properties.info,
+          data: sessionData(evt.properties.info),
         },
       ])
     })
@@ -131,7 +135,14 @@ export namespace ShareNext {
     await Database.use(async (db) =>
       db
         .insert(SessionShareTable)
-        .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
+        .values({
+          session_id: sessionID,
+          id: result.id,
+          secret: result.secret,
+          url: result.url,
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
         .onConflictDoUpdate({
           target: SessionShareTable.session_id,
           set: { id: result.id, secret: result.secret, url: result.url },
@@ -207,7 +218,7 @@ export namespace ShareNext {
       const queued = queue.get(sessionID)
       if (!queued) return
       queue.delete(sessionID)
-      const share = get(sessionID)
+      const share = await get(sessionID)
       if (!share) return
 
       const req = await request()
@@ -230,7 +241,7 @@ export namespace ShareNext {
   export async function remove(sessionID: SessionID) {
     if (disabled) return
     log.info("removing share", { sessionID })
-    const share = get(sessionID)
+    const share = await get(sessionID)
     if (!share) return
 
     const req = await request()
@@ -268,7 +279,7 @@ export namespace ShareNext {
     await sync(sessionID, [
       {
         type: "session",
-        data: session,
+        data: sessionData(session),
       },
       ...messages.map((x) => ({
         type: "message" as const,

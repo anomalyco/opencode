@@ -85,8 +85,11 @@ if [ -d "${UNIVER_SDK_SRC}" ]; then
     
     # Install in the chroot
     sudo chroot "${MOUNT_DIR}" /bin/bash -c "
+        python3 -m pip install -U pip setuptools wheel --break-system-packages || python3 -m pip install -U pip setuptools wheel
         cd /opt/univer-sdk &&
-        pip3 install -e . --break-system-packages || pip3 install -e .
+        python3 -m pip install -e . --break-system-packages || python3 -m pip install -e .
+        python3 -m pip show veritly-univer-sdk || python3 -m pip show veritly_univer_sdk
+        python3 -c 'from veritly_univer_sdk import UniverSDK; print(\"Univer SDK ready\")'
     "
 fi
 

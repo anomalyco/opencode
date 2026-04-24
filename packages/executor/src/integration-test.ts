@@ -60,10 +60,10 @@ class TestRunner {
         throw new Error(`Health check failed: ${response.status}`)
       }
       const data = await response.json()
-      if (data.status !== "ok") {
+      if (data.ok !== true || data.mode !== "firecracker") {
         throw new Error(`Executor not healthy: ${JSON.stringify(data)}`)
       }
-      console.log(`  Mode: ${data.mode}, VMs: ${data.activeVMs}, Sessions: ${data.sessions}`)
+      console.log(`  Mode: ${data.mode}, Sessions: ${data.activeSessions}`)
     })
   }
 

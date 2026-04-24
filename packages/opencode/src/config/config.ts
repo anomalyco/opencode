@@ -1261,14 +1261,7 @@ export namespace Config {
 
     const normalized = (() => {
       if (!data || typeof data !== "object" || Array.isArray(data)) return data
-      const copy = { ...(data as Record<string, unknown>) }
-      const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
-      if (!hadLegacy) return copy
-      delete copy.theme
-      delete copy.keybinds
-      delete copy.tui
-      log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
-      return copy
+      return { ...(data as Record<string, unknown>) }
     })()
 
     const parsed = Info.safeParse(normalized)
@@ -1422,7 +1415,7 @@ export namespace Config {
       .catch(() => undefined)
       .finally(() => {
         GlobalBus.emit("event", {
-          directory: "global",
+          projectID: "global",
           payload: {
             type: Event.Disposed.type,
             properties: {},

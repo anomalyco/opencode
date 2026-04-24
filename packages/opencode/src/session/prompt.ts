@@ -324,6 +324,8 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+      const agent = await Agent.get(lastUser.agent)
+      if (!agent) throw new Error(`Agent not found: ${lastUser.agent}`)
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
@@ -385,7 +387,6 @@ export namespace SessionPrompt {
           time: {
             created: Date.now(),
           },
-          sessionID,
         })) as MessageV2.Assistant
 
         const taskProcessor = SessionProcessor.create({
@@ -436,7 +437,7 @@ export namespace SessionPrompt {
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
       const tools = await resolveTools({
-        agent: lastUser.agent,
+        agent,
         session,
         model,
         tools: lastUser.tools,
@@ -494,7 +495,7 @@ export namespace SessionPrompt {
 
       const result = await processor.process({
         user: lastUser,
-        agent: lastUser.agent,
+        agent,
         abort,
         sessionID,
         system,
