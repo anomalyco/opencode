@@ -4,7 +4,7 @@ export interface Runner<A, E = never> {
   readonly state: State<A, E>
   readonly busy: boolean
   readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
-  readonly startShell: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
+  readonly startShell: (work: (signal: AbortSignal) => Effect.Effect<A, E>) => Effect.Effect<A, E>
   readonly cancel: Effect.Effect<void>
 }
 
@@ -19,6 +19,7 @@ interface RunHandle<A, E> {
 interface ShellHandle<A, E> {
   id: number
   fiber: Fiber.Fiber<A, E>
+  abort: AbortController
 }
 
 interface PendingHandle<A, E> {
@@ -98,7 +99,12 @@ export const make = <A, E = never>(
       }),
     ).pipe(Effect.flatten)
 
-  const stopShell = (shell: ShellHandle<A, E>) => Fiber.interrupt(shell.fiber)
+  const stopShell = (shell: ShellHandle<A, E>) =>
+    Effect.gen(function* () {
+      shell.abort.abort()
+      yield* Effect.sleep("100 millis")
+      yield* Fiber.interrupt(shell.fiber)
+    })
 
   const ensureRunning = (work: Effect.Effect<A, E>) =>
     SynchronizedRef.modifyEffect(
@@ -130,7 +136,7 @@ export const make = <A, E = never>(
       ),
     )
 
-  const startShell = (work: Effect.Effect<A, E>) =>
+  const startShell = (work: (signal: AbortSignal) => Effect.Effect<A, E>) =>
     SynchronizedRef.modifyEffect(
       ref,
       Effect.fnUntraced(function* (st) {
@@ -145,8 +151,9 @@ export const make = <A, E = never>(
         }
         yield* busy
         const id = next()
-        const fiber = yield* work.pipe(Effect.ensuring(finishShell(id)), Effect.forkChild)
-        const shell = { id, fiber } satisfies ShellHandle<A, E>
+        const abort = new AbortController()
+        const fiber = yield* work(abort.signal).pipe(Effect.ensuring(finishShell(id)), Effect.forkChild)
+        const shell = { id, fiber, abort } satisfies ShellHandle<A, E>
         return [
           Effect.gen(function* () {
             const exit = yield* Fiber.await(fiber)

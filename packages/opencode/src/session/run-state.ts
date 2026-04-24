@@ -17,7 +17,7 @@ export interface Interface {
   readonly startShell: (
     sessionID: SessionID,
     onInterrupt: Effect.Effect<MessageV2.WithParts>,
-    work: Effect.Effect<MessageV2.WithParts>,
+    work: (signal: AbortSignal) => Effect.Effect<MessageV2.WithParts>,
   ) => Effect.Effect<MessageV2.WithParts>
 }
 
@@ -94,7 +94,7 @@ export const layer = Layer.effect(
     const startShell = Effect.fn("SessionRunState.startShell")(function* (
       sessionID: SessionID,
       onInterrupt: Effect.Effect<MessageV2.WithParts>,
-      work: Effect.Effect<MessageV2.WithParts>,
+      work: (signal: AbortSignal) => Effect.Effect<MessageV2.WithParts>,
     ) {
       return yield* (yield* runner(sessionID, onInterrupt)).startShell(work)
     })

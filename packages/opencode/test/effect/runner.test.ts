@@ -279,7 +279,7 @@ describe("Runner", () => {
       const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
-      const sh = yield* runner.startShell(Deferred.await(gate).pipe(Effect.as("first"))).pipe(Effect.forkChild)
+      const sh = yield* runner.startShell((_signal) => Deferred.await(gate).pipe(Effect.as("first"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
       const exit = yield* runner.startShell(Effect.succeed("second")).pipe(Effect.exit)

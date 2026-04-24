@@ -718,7 +718,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       } satisfies MessageV2.TextPart)
     })
 
-    const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput) {
+    const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput, signal: AbortSignal) {
       const ctx = yield* InstanceState.context
       const run = yield* runner()
       const session = yield* sessions.get(input.sessionID)
@@ -840,6 +840,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       let output = ""
       let aborted = false
+
+      if (signal.aborted) {
+        aborted = true
+      } else {
+        signal.addEventListener("abort", () => {
+          aborted = true
+        }, { once: true })
+      }
 
       const finish = Effect.uninterruptible(
         Effect.gen(function* () {
@@ -1543,7 +1551,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
       function* (input: ShellInput) {
-        return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input))
+        return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), (signal) => shellImpl(input, signal))
       },
     )
 
