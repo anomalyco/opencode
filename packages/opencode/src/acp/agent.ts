@@ -46,7 +46,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config"
 import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
-import { z } from "zod"
+import { Result, Schema } from "effect"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
@@ -54,6 +54,7 @@ import { InstallationVersion } from "@/installation/version"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
+const decodeTodos = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Array(Todo.Info)))
 
 const DEFAULT_VARIANT_VALUE = "default"
 
@@ -372,14 +373,14 @@ export class Agent implements ACPAgent {
               }
 
               if (part.tool === "todowrite") {
-                const parsedTodos = z.array(Todo.Info.zod).safeParse(JSON.parse(part.state.output))
-                if (parsedTodos.success) {
+                const parsedTodos = decodeTodos(part.state.output)
+                if (Result.isSuccess(parsedTodos)) {
                   await this.connection
                     .sessionUpdate({
                       sessionId,
                       update: {
                         sessionUpdate: "plan",
-                        entries: parsedTodos.data.map((todo) => {
+                        entries: parsedTodos.success.map((todo) => {
                           const status: PlanEntry["status"] =
                             todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                           return {
@@ -394,7 +395,7 @@ export class Agent implements ACPAgent {
                       log.error("failed to send session update for todo", { error })
                     })
                 } else {
-                  log.error("failed to parse todo output", { error: parsedTodos.error })
+                  log.error("failed to parse todo output", { error: parsedTodos.failure })
                 }
               }
 
@@ -901,14 +902,14 @@ export class Agent implements ACPAgent {
             }
 
             if (part.tool === "todowrite") {
-              const parsedTodos = z.array(Todo.Info.zod).safeParse(JSON.parse(part.state.output))
-              if (parsedTodos.success) {
+              const parsedTodos = decodeTodos(part.state.output)
+              if (Result.isSuccess(parsedTodos)) {
                 await this.connection
                   .sessionUpdate({
                     sessionId,
                     update: {
                       sessionUpdate: "plan",
-                      entries: parsedTodos.data.map((todo) => {
+                      entries: parsedTodos.success.map((todo) => {
                         const status: PlanEntry["status"] =
                           todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                         return {
@@ -923,7 +924,7 @@ export class Agent implements ACPAgent {
                     log.error("failed to send session update for todo", { error: err })
                   })
               } else {
-                log.error("failed to parse todo output", { error: parsedTodos.error })
+                log.error("failed to parse todo output", { error: parsedTodos.failure })
               }
             }
 
