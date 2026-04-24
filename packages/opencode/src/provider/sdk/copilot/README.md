@@ -1,5 +1,5 @@
 This is a temporary package used primarily for GitHub Copilot compatibility.
 
-Avoid making changes to these files unless you only want to affect the Copilot provider.
+These DO NOT apply for openai-compatible providers or majority of providers supporting completions/responses apis. THIS IS ONLY FOR GITHUB COPILOT!!!
 
-Also, this should ONLY be used for the Copilot provider.
+Avoid making edits to these files
