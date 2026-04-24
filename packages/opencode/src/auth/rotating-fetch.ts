@@ -5,6 +5,12 @@ import { Log } from "../util/log"
 
 const log = Log.create({ service: "rotating-fetch" })
 
+function withBearerToken(init: RequestInit | undefined, token: string): RequestInit {
+  const headers = new Headers((init as RequestInit & { headers?: HeadersInit })?.headers)
+  headers.set("Authorization", `Bearer ${token}`)
+  return { ...(init ?? {}), headers }
+}
+
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 30_000
 const DEFAULT_AUTH_FAILURE_COOLDOWN_MS = 5 * 60_000
 const DEFAULT_NETWORK_RETRY_ATTEMPTS = 1
@@ -12,7 +18,6 @@ const DEFAULT_NETWORK_RETRY_ATTEMPTS = 1
 // OAuth token refresh endpoints for supported providers
 const OAUTH_TOKEN_ENDPOINTS: Record<string, string> = {
   openai: "https://auth.openai.com/oauth/token",
-  anthropic: "https://auth.anthropic.com/oauth/token",
   google: "https://oauth2.googleapis.com/token",
 }
 
@@ -241,10 +246,11 @@ export async function rotatingFetch(
     let response: Response
     let bodyReplayable = true
 
-    // For OAuth, SDK adds Authorization header via apiKey, so we don't add another one
-    // But we still track which record was used via withOAuthRecord for health updates
+    // Inject the current record's access token as Authorization: Bearer.
+    // This ensures the correct token is used on each attempt, including after
+    // token refresh or failover to a different record.
     try {
-      response = await withOAuthRecord(providerID, recordID, () => fetch(input, init))
+      response = await withOAuthRecord(providerID, recordID, () => fetch(input, withBearerToken(init, record.access)))
       bodyReplayable = isReplayableBody(response.body)
     } catch (error) {
       if (isNetworkError(error)) {
@@ -286,8 +292,8 @@ export async function rotatingFetch(
       if (refreshed) {
         log.info("token refresh succeeded, updating record and retrying", { providerID, recordID })
         await Auth.refreshOAuthRecord(providerID, recordID, refreshed)
-        // Retry with new token
-        response = await withOAuthRecord(providerID, recordID, () => fetch(input, init))
+        // Retry with new token - inject refreshed access token into headers
+        response = await withOAuthRecord(providerID, recordID, () => fetch(input, withBearerToken(init, refreshed.access)))
         if (response.ok) {
           await Auth.updateOAuthRecordHealth(providerID, recordID, {
             lastStatusCode: response.status,
@@ -358,7 +364,7 @@ export async function rotatingFetch(
   }
 
   log.warn("rotating-fetch all records exhausted", { providerID })
-  return withOAuthRecord(providerID, recordQueue[0].id, () => fetch(input, init))
+  return withOAuthRecord(providerID, recordQueue[0].id, () => fetch(input, withBearerToken(init, recordQueue[0].access)))
 }
 
 function rotateOrder(records: OAuthProviderRecord[], activeID: string | undefined): OAuthProviderRecord[] {

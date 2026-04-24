@@ -202,6 +202,34 @@ export namespace LLM {
 
     const tools = await resolveTools(input)
 
+    // For Anthropic providers, cap the number of tools sent to avoid 429 rate limits
+    // from oversized request bodies (system prompt + many tool schemas fill context).
+    // Use model runtime config's maxActiveTools (defaults to 25 if not set).
+    if (
+      input.model.api.npm === "@ai-sdk/anthropic" ||
+      input.model.api.npm === "@ai-sdk/google-vertex/anthropic"
+    ) {
+      const max = input.model.runtime?.maxActiveTools ?? 25
+      const keys = Object.keys(tools)
+      if (max < keys.length) {
+        const priority = input.model.runtime?.toolPriority
+        if (priority && priority.length > 0) {
+          const keep = new Set(priority)
+          const remaining = keys.filter((k) => !keep.has(k))
+          const extra = max - Math.min(max, keep.size)
+          const extraKeys = remaining.slice(0, Math.max(0, extra))
+          const allowed = new Set([...priority.slice(0, max), ...extraKeys])
+          for (const k of keys) {
+            if (!allowed.has(k)) delete tools[k]
+          }
+        } else {
+          for (const k of keys.slice(max)) {
+            delete tools[k]
+          }
+        }
+      }
+    }
+
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
     // Add a dummy tool that is never called to satisfy this validation.

@@ -10,6 +10,7 @@ type Line = {
 }
 
 type Account = {
+  id: string
   label?: string
   email?: string
   isActive?: boolean
@@ -58,6 +59,7 @@ type Usage = Partial<{
 }>
 
 type Item = {
+  providerID: string
   title: string
   subtitle?: string
   info?: string
@@ -83,6 +85,7 @@ function codex(input?: Usage["codex"]): Item | undefined {
   ].filter((item): item is Line => !!item)
   if (!lines.length) return
   return {
+    providerID: "openai",
     title: "OpenAI Codex",
     subtitle: usage?.planType,
     lines,
@@ -99,6 +102,7 @@ function anthropic(input?: Usage["anthropic"]): Item | undefined {
   ].filter((item): item is Line => !!item)
   if (!lines.length) return
   return {
+    providerID: "anthropic",
     title: "Anthropic / Claude",
     subtitle: "Claude Pro/Max",
     lines,
@@ -114,6 +118,7 @@ function minimax(input?: Usage["minimax"]): Item | undefined {
       ? ` (${usage.remainingCredits}/${usage.totalCredits} credits)`
       : ""
   return {
+    providerID: "minimax",
     title: "MiniMax",
     lines: [{ label: `5-Hour Window${credits}`, utilization: usage.utilization, resetsAt: usage.resetsAt }],
     accounts: input?.accounts,
@@ -124,6 +129,7 @@ function copilot(input?: Usage["github-copilot"]): Item | undefined {
   if (!input) return
   const usage = input.githubCopilotUsage
   return {
+    providerID: "github-copilot",
     title: "GitHub Copilot",
     subtitle: usage?.orgBillingBreakdown?.planType ?? (usage?.hasAccess ? "Access granted" : undefined),
     info:
@@ -136,6 +142,34 @@ function copilot(input?: Usage["github-copilot"]): Item | undefined {
   }
 }
 
+function AccountRow(props: {
+  account: Account
+  providerID: string
+  api: TuiPluginApi
+  onSwitch: () => void
+}) {
+  const theme = () => props.api.theme.current
+  const label = () => props.account.label ?? props.account.email ?? "default"
+
+  const switchAccount = async () => {
+    if (props.account.isActive) return
+    await props.api.client.auth.setActive({
+      providerID: props.providerID,
+      recordID: props.account.id,
+    })
+    props.onSwitch()
+  }
+
+  return (
+    <box flexDirection="row" gap={1} onMouseDown={() => void switchAccount()}>
+      <text fg={props.account.isActive ? theme().success : theme().textMuted}>
+        {props.account.isActive ? "●" : "○"}
+      </text>
+      <text fg={props.account.isActive ? theme().text : theme().textMuted}>{label()}</text>
+    </box>
+  )
+}
+
 function View(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   const [usage, act] = createResource(async () => ((await props.api.client.auth.usage()).data ?? {}) as Usage)
@@ -146,12 +180,6 @@ function View(props: { api: TuiPluginApi }) {
     return [anthropic(data.anthropic), codex(data.codex), minimax(data.minimax), copilot(data["github-copilot"])]
       .filter((item): item is Item => !!item)
   })
-
-  const accounts = (item: Item) =>
-    (item.accounts ?? [])
-      .filter((item) => item.isActive)
-      .map((item) => item.label ?? item.email ?? "default")
-      .join(", ")
 
   return (
     <Show when={usage.loading || list().length > 0}>
@@ -180,8 +208,17 @@ function View(props: { api: TuiPluginApi }) {
               <Show when={item.subtitle}>
                 <text fg={theme().textMuted}>{item.subtitle}</text>
               </Show>
-              <Show when={accounts(item)}>
-                <text fg={theme().textMuted}>{accounts(item)}</text>
+              <Show when={(item.accounts?.length ?? 0) > 0}>
+                <For each={item.accounts}>
+                  {(account) => (
+                    <AccountRow
+                      account={account}
+                      providerID={item.providerID}
+                      api={props.api}
+                      onSwitch={() => void act.refetch()}
+                    />
+                  )}
+                </For>
               </Show>
               <Show when={item.info && item.lines.length === 0}>
                 <text fg={theme().textMuted}>{item.info}</text>

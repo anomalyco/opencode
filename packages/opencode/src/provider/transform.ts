@@ -749,6 +749,12 @@ export namespace ProviderTransform {
   }): Record<string, any> {
     const result: Record<string, any> = {}
 
+    // Reduce maxOutputTokens for Anthropic to avoid rate limits from large request bodies
+    // (system prompt + tools consume most of the context; smaller output = smaller total tokens)
+    if (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+      result["maxOutputTokens"] = Math.min(16_000, Math.floor(OUTPUT_TOKEN_MAX * 0.5))
+    }
+
     // openai and providers using openai package should set store to false by default.
     if (
       input.model.providerID === "openai" ||

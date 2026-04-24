@@ -4,6 +4,7 @@ import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
+import { AnthropicAuthPlugin } from "./anthropic"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
@@ -48,6 +49,7 @@ export namespace Plugin {
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [
+    AnthropicAuthPlugin,
     CodexAuthPlugin,
     CopilotAuthPlugin,
     GitlabAuthPlugin,

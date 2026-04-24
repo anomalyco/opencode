@@ -176,6 +176,21 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
+
+              // If tool-input-start was not received (can happen with OpenRouter flush behavior),
+              // create the tool part on-the-fly
+              if (!ctx.toolcalls[value.toolCallId]) {
+                ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
+                  id: PartID.ascending(),
+                  messageID: ctx.assistantMessage.id,
+                  sessionID: ctx.assistantMessage.sessionID,
+                  type: "tool",
+                  tool: value.toolName,
+                  callID: value.toolCallId,
+                  state: { status: "pending", input: {}, raw: "" },
+                } satisfies MessageV2.ToolPart)
+              }
+
               const pointer = ctx.toolcalls[value.toolCallId]
               const match = yield* session.getPart({
                 partID: pointer.id,

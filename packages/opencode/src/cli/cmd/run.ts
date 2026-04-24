@@ -383,6 +383,15 @@ export const RunCommand = cmd({
       return message.slice(0, 50) + (message.length > 50 ? "..." : "")
     }
 
+    function headers() {
+      const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
+      if (!password) return undefined
+      const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
+      return {
+        Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`,
+      }
+    }
+
     async function session(sdk: OpencodeClient) {
       const baseID = args.continue ? (await sdk.session.list()).data?.find((s) => !s.parentID)?.id : args.session
 
@@ -666,14 +675,7 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const headers = (() => {
-        const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
-        if (!password) return undefined
-        const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
-        const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
-        return { Authorization: auth }
-      })()
-      const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
+      const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers: headers() })
       return await execute(sdk)
     }
 
@@ -682,7 +684,12 @@ export const RunCommand = cmd({
         const request = new Request(input, init)
         return Server.Default().app.fetch(request)
       }) as typeof globalThis.fetch
-      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
+      const sdk = createOpencodeClient({
+        baseUrl: "http://opencode.internal",
+        fetch: fetchFn,
+        directory,
+        headers: headers(),
+      })
       await execute(sdk)
     })
   },

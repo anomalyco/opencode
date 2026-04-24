@@ -1100,6 +1100,10 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          show_deprecated_models: z
+            .boolean()
+            .optional()
+            .describe("Show deprecated models in the model list with a (deprecated) label"),
         })
         .optional(),
     })

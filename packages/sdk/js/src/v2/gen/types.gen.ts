@@ -1627,6 +1627,10 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * Show deprecated models in the model list with a (deprecated) label
+     */
+    show_deprecated_models?: boolean
   }
 }
 

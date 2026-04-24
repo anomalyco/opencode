@@ -1416,7 +1416,9 @@ export namespace Provider {
               )
                 delete provider.models[modelID]
               if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
-              if (model.status === "deprecated") delete provider.models[modelID]
+              const showDeprecated = Flag.OPENCODE_SHOW_DEPRECATED_MODELS || cfg.experimental?.show_deprecated_models
+              if (model.status === "deprecated" && !showDeprecated) delete provider.models[modelID]
+              if (model.status === "deprecated" && showDeprecated) model.name = `${model.name} (deprecated)`
               if (
                 (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
                 (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))

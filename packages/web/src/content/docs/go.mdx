@@ -73,6 +73,21 @@ The current list of models includes:
 
 The list of models may change as we test and add new ones.
 
+### Deprecated Models
+
+The following models are deprecated but still functional. They are hidden by default but can be shown by setting the `OPENCODE_SHOW_DEPRECATED_MODELS` environment variable to `true`:
+
+- **Qwen3.5 Plus** (deprecated)
+- **Qwen3.6 Plus** (deprecated)
+
+To use deprecated models, run OpenCode with the flag:
+
+```bash
+OPENCODE_SHOW_DEPRECATED_MODELS=true opencode
+```
+
+When enabled, deprecated models will appear in the model list with a "(deprecated)" label.
+
 ---
 
 ## Usage limits
@@ -132,6 +147,10 @@ You can also access Go models through the following API endpoints.
 | MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.5 Plus¹| qwen3.5-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Qwen3.6 Plus¹| qwen3.6-plus | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+
+¹ Deprecated - requires `OPENCODE_SHOW_DEPRECATED_MODELS=true`
 
 The [model id](/docs/config/#models) in your OpenCode config
 uses the format `opencode-go/<model-id>`. For example, for Kimi K2.5, you would
