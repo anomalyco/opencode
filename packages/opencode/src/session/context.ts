@@ -18,6 +18,7 @@ import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { SessionAssemble } from "./assemble"
 import { SessionOverflow } from "./overflow"
+import * as MessageV2 from "./message-v2"
 
 // --- API schema -------------------------------------------------------------
 
@@ -170,7 +171,10 @@ export const layer = Layer.effect(
 
     const compute = Effect.fn("SessionContext.compute")(function* (input: GetInput) {
       const model = yield* provider.getModel(input.providerID, input.modelID)
-      const msgs = yield* sessions.messages({ sessionID: input.sessionID })
+      // Raw history from the store. Walked via filterCompacted to select only
+      // messages the LLM actually sees this turn (post any compaction rollups).
+      const allMsgs = yield* sessions.messages({ sessionID: input.sessionID })
+      const msgs = MessageV2.filterCompacted(allMsgs)
 
       // Agent resolution mirrors session/prompt.ts behavior.
       const defaultAgentName = yield* agents.defaultAgent()
@@ -312,13 +316,15 @@ export const layer = Layer.effect(
           JSON.stringify(list.map((m) => ({ info: m.info, parts: m.parts })))
         const userText = sizeOf(userMsgs)
         const asstText = sizeOf(asstMsgs)
+        const compactedOut = allMsgs.length - msgs.length
         const totalDetail = usage.authoritative ? "superseded by usage above" : "estimated"
+        const compactedNote = compactedOut > 0 ? ` · ${compactedOut} older compacted out` : ""
         const items: ContextItem[] = [
           {
-            label: `Total ${msgs.length} message(s)`,
+            label: `Total ${msgs.length} message(s) in context`,
             tokens: Token.estimate(messagesSerialized),
             chars: messagesSerialized.length,
-            detail: totalDetail,
+            detail: totalDetail + compactedNote,
           },
         ]
         if (userMsgs.length > 0) {
@@ -326,7 +332,7 @@ export const layer = Layer.effect(
             label: `User (${userMsgs.length})`,
             tokens: Token.estimate(userText),
             chars: userText.length,
-            detail: "prompts + attached parts",
+            detail: "prompts + attached parts (current session, post-compaction)",
           })
         }
         if (asstMsgs.length > 0) {
@@ -334,7 +340,7 @@ export const layer = Layer.effect(
             label: `Assistant (${asstMsgs.length}) — ${agent.name}`,
             tokens: Token.estimate(asstText),
             chars: asstText.length,
-            detail: "responses + tool calls + tool results",
+            detail: "responses + tool calls + tool results (current session, post-compaction)",
           })
         }
         return items

@@ -15,6 +15,8 @@ export type DialogSessionContextProps = {
 
 // Format a token count as `12.3k` for >=1000, plain otherwise.
 function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 10_000) return `${Math.round(n / 1000)}k`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
   return n.toString()
 }
@@ -169,7 +171,8 @@ export function DialogSessionContext(props: DialogSessionContextProps) {
                               {section.label}
                             </text>
                             <text fg={theme.textMuted}>
-                              ~{formatTokens(section.tokens)} · {section.items.length}
+                              ~{formatTokens(section.tokens)}
+                              {section.key === "messages" ? "" : ` · ${section.items.length}`}
                             </text>
                           </box>
                           <Show
