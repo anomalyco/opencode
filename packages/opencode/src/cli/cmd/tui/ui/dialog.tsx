@@ -9,7 +9,7 @@ import * as Selection from "@tui/util/selection"
 
 export function Dialog(
   props: ParentProps<{
-    size?: "medium" | "large" | "xlarge" | "full" | "full"
+    size?: "medium" | "large" | "xlarge" | "full"
     onClose: () => void
   }>,
 ) {
