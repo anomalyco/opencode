@@ -596,7 +596,7 @@ export default function Page() {
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
-    const enabled = wantsReview() && sync.project?.vcs === "git"
+    const enabled = !sync.data.config.experimental?.disable_vcs_diff && wantsReview() && sync.project?.vcs === "git"
 
     return {
       queryKey: [...vcsKey(), mode] as const,
