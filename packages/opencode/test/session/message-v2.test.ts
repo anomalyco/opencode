@@ -360,6 +360,106 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("preserves assistant tool-call ids for multiple completed tools", async () => {
+    const userID = "m-user-multi"
+    const assistantID = "m-assistant-multi"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1-multi"),
+            type: "text",
+            text: "check files",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-multi"),
+            type: "text",
+            text: "I checked your files.",
+          },
+          {
+            ...basePart(assistantID, "a2-multi"),
+            type: "tool",
+            callID: "call-read",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/root" },
+              output: "contents",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+          {
+            ...basePart(assistantID, "a3-multi"),
+            type: "tool",
+            callID: "call-glob",
+            tool: "glob",
+            state: {
+              status: "completed",
+              input: { pattern: "**/*.pdf", path: "/root" },
+              output: "No files found",
+              title: "Glob",
+              metadata: {},
+              time: { start: 2, end: 3 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "check files" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "I checked your files." },
+          {
+            type: "tool-call",
+            toolCallId: "call-read",
+            toolName: "read",
+            input: { filePath: "/root" },
+            providerExecuted: undefined,
+          },
+          {
+            type: "tool-call",
+            toolCallId: "call-glob",
+            toolName: "glob",
+            input: { pattern: "**/*.pdf", path: "/root" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-read",
+            toolName: "read",
+            output: { type: "text", value: "contents" },
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call-glob",
+            toolName: "glob",
+            output: { type: "text", value: "No files found" },
+          },
+        ],
+      },
+    ])
+  })
+
   test("preserves jpeg tool-result media for anthropic models", async () => {
     const anthropicModel: Provider.Model = {
       ...model,

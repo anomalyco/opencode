@@ -395,6 +395,207 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("replays assistant tool_calls alongside matching tool_call_id results for openai-compatible models", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "vivgrid"
+    const modelID = "gemini-3.1-pro-preview"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Done"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-replay-tool-calls")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("user-replay-tool-calls"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const history = [
+          {
+            info: {
+              id: "msg-user-replay",
+              sessionID,
+              role: "user",
+              time: { created: 1 },
+              agent: "test",
+              model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+            },
+            parts: [
+              {
+                id: "part-user-replay",
+                sessionID,
+                messageID: "msg-user-replay",
+                type: "text",
+                text: "Check for pdf files in /root",
+              },
+            ],
+          },
+          {
+            info: {
+              id: "msg-assistant-replay",
+              sessionID,
+              parentID: "msg-user-replay",
+              role: "assistant",
+              mode: "test",
+              agent: "test",
+              path: { cwd: "/root", root: "/" },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: resolved.id,
+              providerID: ProviderID.make(providerID),
+              time: { created: 2, completed: 3 },
+              finish: "tool-calls",
+            },
+            parts: [
+              {
+                id: "part-assistant-text-replay",
+                sessionID,
+                messageID: "msg-assistant-replay",
+                type: "text",
+                text: "I checked your home directory and looked for PDF files.",
+                time: { start: 0, end: 1 },
+              },
+              {
+                id: "part-tool-read-replay",
+                sessionID,
+                messageID: "msg-assistant-replay",
+                type: "tool",
+                tool: "read",
+                callID: "call-read-replay",
+                state: {
+                  status: "completed",
+                  input: { filePath: "/root" },
+                  output: "<path>/root</path>",
+                  metadata: {},
+                  title: "Read",
+                  time: { start: 2, end: 3 },
+                },
+              },
+              {
+                id: "part-tool-glob-replay",
+                sessionID,
+                messageID: "msg-assistant-replay",
+                type: "tool",
+                tool: "glob",
+                callID: "call-glob-replay",
+                state: {
+                  status: "completed",
+                  input: { pattern: "**/*.pdf", path: "/root" },
+                  output: "No files found",
+                  metadata: {},
+                  title: "Glob",
+                  time: { start: 4, end: 5 },
+                },
+              },
+            ],
+          },
+        ] as MessageV2.WithParts[]
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: [],
+          messages: await MessageV2.toModelMessages(history, resolved),
+          tools: {
+            read: tool({
+              description: "Stub read tool",
+              inputSchema: z.object({
+                filePath: z.string(),
+              }),
+              execute: async () => ({ output: "stub" }),
+            }),
+            glob: tool({
+              description: "Stub glob tool",
+              inputSchema: z.object({
+                pattern: z.string(),
+                path: z.string().optional(),
+              }),
+              execute: async () => ({ output: "stub" }),
+            }),
+          },
+        })
+
+        const capture = await request
+        const body = capture.body
+        expect(capture.url.pathname.endsWith("/chat/completions")).toBe(true)
+
+        type OutboundToolCall = {
+          id: string
+        }
+        type OutboundMessage = {
+          role: string
+          content?: unknown
+          tool_calls?: OutboundToolCall[]
+          tool_call_id?: string
+        }
+
+        const outboundMessages = (body.messages as OutboundMessage[]) ?? []
+        const replayAssistant = outboundMessages.find((msg) => msg.role === "assistant" && msg.tool_calls?.length)
+        expect(replayAssistant).toBeDefined()
+        expect(typeof replayAssistant?.content).toBe("string")
+
+        const assistantToolCallIds = new Set((replayAssistant?.tool_calls ?? []).map((call) => call.id))
+        expect(assistantToolCallIds.has("call-read-replay")).toBe(true)
+        expect(assistantToolCallIds.has("call-glob-replay")).toBe(true)
+
+        const outboundToolMessages = outboundMessages.filter((msg) => msg.role === "tool")
+        expect(outboundToolMessages.map((msg) => msg.tool_call_id)).toEqual(
+          expect.arrayContaining(["call-read-replay", "call-glob-replay"]),
+        )
+
+        for (const msg of outboundToolMessages) {
+          if (!msg.tool_call_id) continue
+          expect(assistantToolCallIds.has(msg.tool_call_id)).toBe(true)
+        }
+      },
+    })
+  })
+
   test("service stream cancellation cancels provider response body promptly", async () => {
     const server = state.server
     if (!server) throw new Error("Server not initialized")

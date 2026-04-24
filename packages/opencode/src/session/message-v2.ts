@@ -709,6 +709,65 @@ function providerMeta(metadata: Record<string, any> | undefined) {
   return Object.keys(rest).length > 0 ? rest : undefined
 }
 
+type ReplayToolCall = {
+  toolName: string
+  input: Record<string, unknown>
+  providerExecuted?: true
+  providerOptions?: Record<string, unknown>
+}
+
+function repairAssistantToolCallReplay(messages: ModelMessage[], replayToolCalls: Map<string, ReplayToolCall>) {
+  const result = [...messages]
+  for (let index = 0; index < result.length; index++) {
+    const message = result[index]
+    if (message.role !== "tool" || !Array.isArray(message.content)) continue
+
+    const toolResultIDs = message.content.flatMap((part) => (part.type === "tool-result" ? [part.toolCallId] : []))
+    if (toolResultIDs.length === 0) continue
+
+    let assistantIndex = -1
+    for (let scan = index - 1; scan >= 0; scan--) {
+      if (result[scan].role !== "assistant") continue
+      assistantIndex = scan
+      break
+    }
+    if (assistantIndex < 0) continue
+
+    const assistant = result[assistantIndex]
+    const assistantContent = Array.isArray(assistant.content)
+      ? [...assistant.content]
+      : [{ type: "text" as const, text: assistant.content }]
+    const existingToolCallIDs = new Set(
+      assistantContent.flatMap((part) => (part.type === "tool-call" ? [part.toolCallId] : [])),
+    )
+
+    const missingToolCalls = toolResultIDs
+      .filter((toolCallID) => !existingToolCallIDs.has(toolCallID))
+      .flatMap((toolCallID) => {
+        const repaired = replayToolCalls.get(toolCallID)
+        if (!repaired) return []
+        return [
+          {
+            type: "tool-call" as const,
+            toolCallId: toolCallID,
+            toolName: repaired.toolName,
+            input: repaired.input,
+            ...(repaired.providerExecuted ? { providerExecuted: true as const } : {}),
+            ...(repaired.providerOptions ? { providerOptions: repaired.providerOptions } : {}),
+          },
+        ]
+      })
+    if (missingToolCalls.length === 0) continue
+
+    result[assistantIndex] = {
+      ...assistant,
+      content: [...assistantContent, ...missingToolCalls],
+    }
+  }
+
+  return result
+}
+
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
@@ -716,6 +775,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  const replayToolCalls = new Map<string, ReplayToolCall>()
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support media in tool results.
   //
@@ -850,6 +910,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         if (part.type === "tool") {
           toolNames.add(part.tool)
+          const callProviderMetadata = differentModel ? undefined : providerMeta(part.metadata)
+          replayToolCalls.set(part.callID, {
+            toolName: part.tool,
+            input: part.state.input,
+            ...(part.metadata?.providerExecuted ? { providerExecuted: true as const } : {}),
+            ...(callProviderMetadata ? { providerOptions: callProviderMetadata } : {}),
+          })
           if (part.state.status === "completed") {
             const outputText = part.state.time.compacted
               ? "[Old tool result content cleared]"
@@ -880,7 +947,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               output,
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentModel ? {} : { callProviderMetadata }),
             })
           }
           if (part.state.status === "error") {
@@ -893,7 +960,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 output,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentModel ? {} : { callProviderMetadata }),
               })
             } else {
               assistantMessage.parts.push({
@@ -903,7 +970,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
                 input: part.state.input,
                 errorText: part.state.error,
                 ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+                ...(differentModel ? {} : { callProviderMetadata }),
               })
             }
           }
@@ -917,7 +984,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               input: part.state.input,
               errorText: "[Tool execution was interrupted]",
               ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              ...(differentModel ? {} : { callProviderMetadata }),
             })
         }
         if (part.type === "reasoning") {
@@ -955,7 +1022,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 
   const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
-  return yield* Effect.promise(() =>
+  const converted = yield* Effect.promise(() =>
     convertToModelMessages(
       result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
       {
@@ -964,6 +1031,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       },
     ),
   )
+  return repairAssistantToolCallReplay(converted, replayToolCalls)
 })
 
 export function toModelMessages(

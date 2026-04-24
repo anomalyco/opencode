@@ -56,6 +56,85 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
+type SourceToolCall = {
+  toolName: string
+  input: unknown
+  providerExecuted?: true
+  providerOptions?: Record<string, unknown>
+}
+
+function sourceToolCalls(messages: ModelMessage[]) {
+  const result = new Map<string, SourceToolCall>()
+  for (const message of messages) {
+    if (message.role !== "assistant" || !Array.isArray(message.content)) continue
+    for (const part of message.content) {
+      if (part.type !== "tool-call") continue
+      result.set(part.toolCallId, {
+        toolName: part.toolName,
+        input: part.input,
+        ...(part.providerExecuted ? { providerExecuted: true as const } : {}),
+        ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
+      })
+    }
+  }
+  return result
+}
+
+function repairAssistantToolCallPrompt(prompt: ModelMessage[], messages: ModelMessage[]) {
+  const knownToolCalls = sourceToolCalls(messages)
+  if (knownToolCalls.size === 0) return prompt
+
+  const result = [...prompt]
+  for (let index = 0; index < result.length; index++) {
+    const message = result[index]
+    if (message.role !== "tool" || !Array.isArray(message.content)) continue
+
+    const toolResultIDs = message.content.flatMap((part) => (part.type === "tool-result" ? [part.toolCallId] : []))
+    if (toolResultIDs.length === 0) continue
+
+    let assistantIndex = -1
+    for (let scan = index - 1; scan >= 0; scan--) {
+      if (result[scan].role !== "assistant") continue
+      assistantIndex = scan
+      break
+    }
+    if (assistantIndex < 0) continue
+
+    const assistant = result[assistantIndex]
+    const assistantContent = Array.isArray(assistant.content)
+      ? [...assistant.content]
+      : [{ type: "text" as const, text: assistant.content }]
+    const existingToolCallIDs = new Set(
+      assistantContent.flatMap((part) => (part.type === "tool-call" ? [part.toolCallId] : [])),
+    )
+
+    const repairedToolCalls = toolResultIDs
+      .filter((toolCallID) => !existingToolCallIDs.has(toolCallID))
+      .flatMap((toolCallID) => {
+        const known = knownToolCalls.get(toolCallID)
+        if (!known) return []
+        return [
+          {
+            type: "tool-call" as const,
+            toolCallId: toolCallID,
+            toolName: known.toolName,
+            input: known.input,
+            ...(known.providerExecuted ? { providerExecuted: true as const } : {}),
+            ...(known.providerOptions ? { providerOptions: known.providerOptions } : {}),
+          },
+        ]
+      })
+    if (repairedToolCalls.length === 0) continue
+
+    result[assistantIndex] = {
+      ...assistant,
+      content: [...assistantContent, ...repairedToolCalls],
+    }
+  }
+
+  return result
+}
+
 const live: Layer.Layer<
   Service,
   never,
@@ -158,6 +237,7 @@ const live: Layer.Layer<
               ),
               ...input.messages,
             ]
+      const shouldRepairToolCallReplay = input.model.api.npm === "@ai-sdk/openai-compatible" && hasToolCalls(messages)
 
       const params = yield* plugin.trigger(
         "chat.params",
@@ -391,8 +471,14 @@ const live: Layer.Layer<
               specificationVersion: "v3" as const,
               async transformParams(args) {
                 if (args.type === "stream") {
+                  const repaired = shouldRepairToolCallReplay
+                    ? repairAssistantToolCallPrompt(args.params.prompt as ModelMessage[], messages)
+                    : args.params.prompt
                   // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
+                  args.params.prompt = ProviderTransform.message(repaired, input.model, options)
+                  if (shouldRepairToolCallReplay) {
+                    args.params.prompt = repairAssistantToolCallPrompt(args.params.prompt as ModelMessage[], messages)
+                  }
                 }
                 return args.params
               },
