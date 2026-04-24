@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
-import { sentinelCommand, filterEcho, extractExit, cleanOutput, TerminalTool } from "../../src/tool/terminal"
+import { sentinelCommand, filterEcho, extractExit, cleanOutput, TerminalTool, Parameters } from "../../src/tool/terminal"
 import * as Tool from "../../src/tool/tool"
 import { Pty } from "../../src/pty"
 import { PtyID } from "../../src/pty/schema"
@@ -237,6 +237,15 @@ describe("terminal tool integration", () => {
   // process exit. In the test context (testEffect + provideTmpdirInstance), the bus event
   // doesn't propagate to the subscriber because Instance.provide creates a separate
   // async context. In production (full opencode runtime), this works correctly.
+  it("parses command-only params (backward compat: action omitted defaults to run)", () => {
+    const parsed = Parameters.parse({ command: "ls", description: "List files" })
+    expect(parsed).toEqual(expect.objectContaining({
+      action: "run",
+      command: "ls",
+      description: "List files",
+    }))
+  })
+
   // The "run" action is backward-compatible with the existing bash tool, which has
   // its own comprehensive test suite (bash.test.ts).
   it.live.skip("backward compat: explicit run action", () =>

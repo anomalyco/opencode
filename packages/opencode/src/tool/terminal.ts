@@ -33,7 +33,20 @@ type SessionState = {
   shell: string
   createdAt: number
   exitCode: number | null
-}
+  buffer: string
+}  
+
+/* ... */
+
+        sessions.set(info.id, {
+          ptyId: info.id,
+          lastCursor: 0,
+          description: desc,
+          shell,
+          createdAt: Date.now(),
+          exitCode: null,
+          buffer: "",
+        })
 
 // ---------------------------------------------------------------------------
 // Sentinel command helper (shell-aware)
@@ -54,7 +67,7 @@ export function sentinelCommand(shellName: string): string {
 // ---------------------------------------------------------------------------
 
 const RunAction = z.object({
-  action: z.literal("run").default("run"),
+  action: z.literal("run"),
   command: z.string().describe("The command to execute in a TTY-aware terminal session"),
   timeout: z.number().describe("Optional timeout in milliseconds").optional(),
   workdir: z
@@ -92,7 +105,15 @@ const CloseAction = z.object({
   sessionId: PtyID.zod.describe("ID of the terminal session to close"),
 })
 
-const Parameters = z.discriminatedUnion("action", [RunAction, CreateAction, SendAction, ReadAction, CloseAction])
+export const Parameters = z.preprocess(
+  (data: unknown) => {
+    if (typeof data === "object" && data !== null && "command" in data && !("action" in data)) {
+      return { ...data, action: "run" }
+    }
+    return data
+  },
+  z.discriminatedUnion("action", [RunAction, CreateAction, SendAction, ReadAction, CloseAction]),
+)
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-testable)
@@ -104,7 +125,6 @@ const Parameters = z.discriminatedUnion("action", [RunAction, CreateAction, Send
  * matches the command (trimmed), we remove it.
  */
 export function filterEcho(text: string, command: string): string {
-  const lines = text.split("\n")
   if (lines.length === 0) return text
   const firstLine = lines[0].replace(/\r$/, "").trim()
   if (firstLine === command.trim()) {
@@ -151,7 +171,10 @@ type MockSocket = {
   close: (code?: number, reason?: string) => void
 }
 
-function createMockSocket(onData: (chunk: string) => void): MockSocket {
+function createMockSocket(
+  onData: (chunk: string) => void,
+  onMeta?: (cursor: number) => void,
+): MockSocket {
   return {
     readyState: 1, // OPEN
     data: {},
@@ -159,7 +182,19 @@ function createMockSocket(onData: (chunk: string) => void): MockSocket {
       if (typeof data === "string") {
         onData(data)
       } else {
-        onData(new TextDecoder().decode(data))
+        const buf = data instanceof Uint8Array ? data : new Uint8Array(data)
+        if (buf.length > 0 && buf[0] === 0x00) {
+          // Meta frame: 0x00 + JSON
+          const json = new TextDecoder().decode(buf.slice(1))
+          try {
+            const meta = JSON.parse(json)
+            onMeta?.(meta.cursor)
+          } catch (e) {
+            // Invalid meta - ignore
+          }
+        } else {
+          onData(new TextDecoder().decode(buf))
+        }
       }
     },
     close() {
@@ -259,10 +294,10 @@ export const TerminalTool = Tool.define(
 
               const info = yield* pty.create({
                 command: Shell.preferred(),
-                args: Shell.login(Shell.preferred()) ? ["-l"] : [],
                 cwd,
                 title: `Agent: ${params.description.slice(0, 30)}`,
                 env,
+                source: "agent",
               })
 
               yield* Effect.addFinalizer(() => pty.remove(info.id).pipe(Effect.orDie))
@@ -429,10 +464,10 @@ export const TerminalTool = Tool.define(
 
             const info = yield* pty.create({
               command: Shell.preferred(),
-              args: Shell.login(Shell.preferred()) ? ["-l"] : [],
               cwd,
-              title: `Agent: ${desc.slice(0, 30)}`,
+              title: desc.slice(0, 30),
               env,
+              source: "agent",
             })
 
             sessions.set(info.id, {
@@ -554,29 +589,30 @@ export const TerminalTool = Tool.define(
 
             // Use a temporary mock socket to capture output from lastCursor
             let newOutput = ""
-            const readWs = createMockSocket((chunk) => {
-              newOutput += chunk
-            })
+            let currentCursor = session.lastCursor
+
+            const readWs = createMockSocket(
+              (chunk) => {
+                newOutput += chunk
+              },
+              (cursor) => {
+                currentCursor = cursor
+              },
+            )
 
             const conn = yield* pty.connect(session.ptyId, readWs, session.lastCursor)
-
-            // Parse cursor from the meta frame (0x00-prefixed JSON at end)
-            // The PTY service sends meta with cursor at the end of replay
-            // We can read the current cursor from the session info
-            const ptyInfo = yield* pty.get(session.ptyId)
 
             if (conn) {
               conn.onClose()
             }
 
-            // Strip ANSI, clean up output
             const stripped = stripAnsi(newOutput)
             const cleaned = stripped.trim()
 
-            // Update cursor — advance by output length
-            session.lastCursor += newOutput.length
+            session.lastCursor = currentCursor
+            session.buffer += newOutput
 
-            const exitCode = ptyInfo?.status === "exited" ? session.exitCode ?? 0 : null
+            const exitCode = session.exitCode !== null ? session.exitCode : null
 
             let finalOutput = cleaned
             if (!finalOutput) finalOutput = "(no new output)"

@@ -16,6 +16,7 @@ export type LocalPTY = {
   buffer?: string
   scrollY?: number
   cursor?: number
+  source?: "user" | "agent"
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -192,6 +193,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       id: info.id,
       title: info.title,
       titleNumber: info.titleNumber ?? numberFromTitle(info.title) ?? 0,
+      source: info.source,
     }
     setStore("all", store.all.length, newTerminal)
   })
