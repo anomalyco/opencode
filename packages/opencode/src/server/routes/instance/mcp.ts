@@ -21,7 +21,7 @@ export const McpRoutes = lazy(() =>
             description: "MCP server status",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), MCP.Status)),
+                schema: resolver(z.record(z.string(), MCP.Status.zod)),
               },
             },
           },
@@ -44,7 +44,7 @@ export const McpRoutes = lazy(() =>
             description: "MCP server added successfully",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), MCP.Status)),
+                schema: resolver(z.record(z.string(), MCP.Status.zod)),
               },
             },
           },
@@ -121,7 +121,7 @@ export const McpRoutes = lazy(() =>
             description: "OAuth authentication completed",
             content: {
               "application/json": {
-                schema: resolver(MCP.Status),
+                    schema: resolver(MCP.Status.zod),
               },
             },
           },
@@ -153,7 +153,7 @@ export const McpRoutes = lazy(() =>
             description: "OAuth authentication completed",
             content: {
               "application/json": {
-                schema: resolver(MCP.Status),
+                    schema: resolver(MCP.Status.zod),
               },
             },
           },
