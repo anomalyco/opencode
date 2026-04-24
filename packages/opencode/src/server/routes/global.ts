@@ -11,6 +11,7 @@ import { AsyncQueue } from "@/util/queue"
 import { Instance } from "../../project/instance"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@/installation/version"
+import { processStartTime } from "@/util/opencode-process"
 import { Log } from "../../util"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config"
@@ -83,14 +84,16 @@ export const GlobalRoutes = lazy(() =>
             description: "Health information",
             content: {
               "application/json": {
-                schema: resolver(z.object({ healthy: z.literal(true), version: z.string() })),
+                schema: resolver(
+                  z.object({ healthy: z.literal(true), version: z.string(), startTime: z.number() }),
+                ),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json({ healthy: true, version: InstallationVersion })
+        return c.json({ healthy: true, version: InstallationVersion, startTime: processStartTime() })
       },
     )
     .get(

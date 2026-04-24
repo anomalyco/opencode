@@ -1,6 +1,12 @@
 export const OPENCODE_RUN_ID = "OPENCODE_RUN_ID"
 export const OPENCODE_PROCESS_ROLE = "OPENCODE_PROCESS_ROLE"
 
+const PROCESS_START_TIME = Date.now()
+
+export function processStartTime() {
+  return PROCESS_START_TIME
+}
+
 export function ensureRunID() {
   return (process.env[OPENCODE_RUN_ID] ??= crypto.randomUUID())
 }
@@ -13,6 +19,7 @@ export function ensureProcessMetadata(fallback: "main" | "worker") {
   return {
     runID: ensureRunID(),
     processRole: ensureProcessRole(fallback),
+    startTime: PROCESS_START_TIME,
   }
 }
 
