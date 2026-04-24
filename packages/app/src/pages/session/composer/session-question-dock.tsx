@@ -373,7 +373,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const resizeInput = (el: HTMLTextAreaElement) => {
     el.style.height = "0px"
-    el.style.height = `${el.scrollHeight}px`
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
   }
 
   const focusCustom = (el: HTMLTextAreaElement) => {
