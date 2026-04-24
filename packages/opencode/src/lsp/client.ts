@@ -8,6 +8,7 @@ import { Log } from "../util"
 import { Process } from "../util"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import z from "zod"
+import { Schema } from "effect"
 import type * as LSPServer from "./server"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { withTimeout } from "../util/timeout"
@@ -41,9 +42,9 @@ export const InitializeError = NamedError.create(
 export const Event = {
   Diagnostics: BusEvent.define(
     "lsp.client.diagnostics",
-    z.object({
-      serverID: z.string(),
-      path: z.string(),
+    Schema.Struct({
+      serverID: Schema.String,
+      path: Schema.String,
     }),
   ),
 }

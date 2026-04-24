@@ -3,6 +3,8 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { listAdaptors } from "@/control-plane/adaptors"
 import { Workspace } from "@/control-plane/workspace"
+import { WorkspaceAdaptorEntry } from "@/control-plane/types"
+import { zodObject } from "@/util/effect-zod"
 import { Instance } from "@/project/instance"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
@@ -24,15 +26,7 @@ export const WorkspaceRoutes = lazy(() =>
             description: "Workspace adaptors",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.array(
-                    z.object({
-                      type: z.string(),
-                      name: z.string(),
-                      description: z.string(),
-                    }),
-                  ),
-                ),
+                schema: resolver(z.array(zodObject(WorkspaceAdaptorEntry))),
               },
             },
           },
@@ -53,7 +47,7 @@ export const WorkspaceRoutes = lazy(() =>
             description: "Workspace created",
             content: {
               "application/json": {
-                schema: resolver(Workspace.Info),
+                schema: resolver(Workspace.Info.zod),
               },
             },
           },
@@ -62,12 +56,12 @@ export const WorkspaceRoutes = lazy(() =>
       }),
       validator(
         "json",
-        Workspace.create.schema.omit({
+        Workspace.CreateInput.zodObject.omit({
           projectID: true,
         }),
       ),
       async (c) => {
-        const body = c.req.valid("json")
+        const body = c.req.valid("json") as Omit<Workspace.CreateInput, "projectID">
         const workspace = await Workspace.create({
           projectID: Instance.project.id,
           ...body,
@@ -86,7 +80,7 @@ export const WorkspaceRoutes = lazy(() =>
             description: "Workspaces",
             content: {
               "application/json": {
-                schema: resolver(z.array(Workspace.Info)),
+                schema: resolver(z.array(Workspace.Info.zod)),
               },
             },
           },
@@ -107,7 +101,7 @@ export const WorkspaceRoutes = lazy(() =>
             description: "Workspace status",
             content: {
               "application/json": {
-                schema: resolver(z.array(Workspace.ConnectionStatus)),
+                schema: resolver(z.array(zodObject(Workspace.ConnectionStatus))),
               },
             },
           },
@@ -129,7 +123,7 @@ export const WorkspaceRoutes = lazy(() =>
             description: "Workspace removed",
             content: {
               "application/json": {
-                schema: resolver(Workspace.Info.optional()),
+                schema: resolver(Workspace.Info.zod.optional()),
               },
             },
           },
@@ -139,7 +133,7 @@ export const WorkspaceRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          id: Workspace.Info.shape.id,
+          id: zodObject(Workspace.Info).shape.id,
         }),
       ),
       async (c) => {
@@ -169,11 +163,11 @@ export const WorkspaceRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ id: Workspace.Info.shape.id })),
-      validator("json", Workspace.sessionRestore.schema.omit({ workspaceID: true })),
+      validator("param", z.object({ id: zodObject(Workspace.Info).shape.id })),
+      validator("json", Workspace.SessionRestoreInput.zodObject.omit({ workspaceID: true })),
       async (c) => {
         const { id } = c.req.valid("param")
-        const body = c.req.valid("json")
+        const body = c.req.valid("json") as Omit<Workspace.SessionRestoreInput, "workspaceID">
         log.info("session restore route requested", {
           workspaceID: id,
           sessionID: body.sessionID,

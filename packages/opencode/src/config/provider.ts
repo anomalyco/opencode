@@ -1,8 +1,6 @@
 import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
-
-const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
+import { PositiveInt, withStatics } from "@/util/schema"
 
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),

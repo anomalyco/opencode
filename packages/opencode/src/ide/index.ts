@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
+import { Schema } from "effect"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { Log } from "../util"
 import { Process } from "@/util"
@@ -17,8 +18,8 @@ const log = Log.create({ service: "ide" })
 export const Event = {
   Installed: BusEvent.define(
     "ide.installed",
-    z.object({
-      ide: z.string(),
+    Schema.Struct({
+      ide: Schema.String,
     }),
   ),
 }

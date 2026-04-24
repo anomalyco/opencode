@@ -81,8 +81,8 @@ OpenCode Zen은 OpenCode의 다른 provider와 똑같이 작동합니다.
 | Claude Haiku 3.5      | claude-3-5-haiku      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Gemini 3.1 Pro        | gemini-3.1-pro        | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
 | Gemini 3 Flash        | gemini-3-flash        | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/alibaba`           |
+| Qwen3.6 Plus          | qwen3.6-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3.5 Plus          | qwen3.5-plus          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5          | minimax-m2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5 Free     | minimax-m2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7          | minimax-m2.7          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
@@ -92,6 +92,7 @@ OpenCode Zen은 OpenCode의 다른 provider와 똑같이 작동합니다.
 | Kimi K2.6             | kimi-k2.6             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle            | big-pickle            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Ling 2.6 Flash        | ling-2.6-flash        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Hy3 Preview Free      | hy3-preview-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 OpenCode config에서 사용하는 [모델 ID](/docs/config/#models)는 `opencode/<model-id>` 형식입니다. 예를 들어 GPT 5.4를 사용하려면 config에서 `opencode/gpt-5.4`를 사용하면 됩니다.
@@ -117,6 +118,7 @@ https://opencode.ai/zen/v1/models
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | MiniMax M2.5 Free                 | Free   | Free    | Free        | -            |
 | Ling 2.6 Flash Free               | Free   | Free    | Free        | -            |
+| Hy3 Preview Free                  | Free   | Free    | Free        | -            |
 | Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
@@ -166,6 +168,7 @@ https://opencode.ai/zen/v1/models
 
 - MiniMax M2.5 Free는 한정된 기간 동안 OpenCode에서 제공됩니다. 팀은 이 기간에 피드백을 수집하고 모델을 개선합니다.
 - Ling 2.6 Flash Free는 한정된 기간 동안 OpenCode에서 제공됩니다. 팀은 이 기간에 피드백을 수집하고 모델을 개선합니다.
+- Hy3 Preview Flash Free는 한정된 기간 동안 OpenCode에서 제공됩니다. 팀은 이 기간에 피드백을 수집하고 모델을 개선합니다.
 - Nemotron 3 Super Free는 한정된 기간 동안 OpenCode에서 제공됩니다. 팀은 이 기간에 피드백을 수집하고 모델을 개선합니다.
 - Big Pickle은 한정된 기간 동안 OpenCode에서 무료로 제공되는 stealth model입니다. 팀은 이 기간에 피드백을 수집하고 모델을 개선합니다.
 
@@ -210,6 +213,7 @@ https://opencode.ai/zen/v1/models
 - Big Pickle: 무료 제공 기간에는 수집된 데이터가 모델 개선에 사용될 수 있습니다.
 - MiniMax M2.5 Free: 무료 제공 기간에는 수집된 데이터가 모델 개선에 사용될 수 있습니다.
 - Ling 2.6 Flash Free: 무료 제공 기간에는 수집된 데이터가 모델 개선에 사용될 수 있습니다.
+- Hy3 Preview Free: 무료 제공 기간에는 수집된 데이터가 모델 개선에 사용될 수 있습니다.
 - Nemotron 3 Super Free(NVIDIA 무료 엔드포인트): [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)에 따라 제공됩니다. 평가판 전용이며 프로덕션 환경이나 민감한 데이터에는 사용할 수 없습니다. NVIDIA는 자사 모델과 서비스를 개선하기 위해 프롬프트와 출력을 기록합니다. 개인 정보나 기밀 데이터는 제출하지 마세요.
 - OpenAI APIs: 요청은 [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data)에 따라 30일 동안 보관됩니다.
 - Anthropic APIs: 요청은 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage)에 따라 30일 동안 보관됩니다.

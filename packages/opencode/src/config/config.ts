@@ -25,7 +25,7 @@ import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "e
 import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
 import { InstanceRef } from "@/effect/instance-ref"
 import { zod, ZodOverride } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@/util/schema"
 import { ConfigAgent } from "./agent"
 import { ConfigCommand } from "./command"
 import { ConfigFormatter } from "./formatter"
@@ -87,9 +87,6 @@ export type Layout = ConfigLayout.Layout
 // exact zod directly, preserving component $refs.
 const AgentRef = Schema.Any.annotate({ [ZodOverride]: ConfigAgent.Info })
 const LogLevelRef = Schema.Any.annotate({ [ZodOverride]: Log.Level })
-
-const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
-const NonNegativeInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))
 
 // The Effect Schema is the canonical source of truth. The `.zod` compatibility
 // surface is derived so existing Hono validators keep working without a parallel
@@ -204,6 +201,19 @@ export const Info = Schema.Struct({
       url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }),
     }),
   ),
+  tool_output: Schema.optional(
+    Schema.Struct({
+      max_lines: Schema.optional(PositiveInt).annotate({
+        description: "Maximum lines of tool output before it is truncated and saved to disk (default: 2000)",
+      }),
+      max_bytes: Schema.optional(PositiveInt).annotate({
+        description: "Maximum bytes of tool output before it is truncated and saved to disk (default: 51200)",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Thresholds for truncating tool output. When output exceeds either limit, the full text is written to the truncation directory and a preview is returned.",
+  }),
   compaction: Schema.optional(
     Schema.Struct({
       auto: Schema.optional(Schema.Boolean).annotate({
@@ -252,26 +262,9 @@ export const Info = Schema.Struct({
     })),
   )
 
-// Schema.Struct produces readonly types by default, but the service code
-// below mutates Info objects directly (e.g. `config.mode = ...`). Strip the
-// readonly recursively so callers get the same mutable shape zod inferred.
-//
-// `Types.DeepMutable` from effect-smol would be a drop-in, but its fallback
-// branch `{ -readonly [K in keyof T]: ... }` collapses `unknown` to `{}`
-// (since `keyof unknown = never`), which widens `Record<string, unknown>`
-// fields like `ConfigPlugin.Options`. The local version gates on
-// `extends object` so `unknown` passes through.
-//
-// Tuple branch preserves `ConfigPlugin.Spec`'s `readonly [string, Options]`
-// shape (otherwise the general array branch widens it to an array).
-type DeepMutable<T> = T extends readonly [unknown, ...unknown[]]
-  ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
-  : T extends readonly (infer U)[]
-    ? DeepMutable<U>[]
-    : T extends object
-      ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
-      : T
-
+// Uses the shared `DeepMutable` from `@/util/schema`. See the definition
+// there for why the local variant is needed over `Types.DeepMutable` from
+// effect-smol (the upstream version collapses `unknown` to `{}`).
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
