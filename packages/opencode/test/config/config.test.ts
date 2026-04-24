@@ -2337,3 +2337,10 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+test("parseManagedPlist returns empty object for non-object JSON values", async () => {
+  expect(await ConfigManaged.parseManagedPlist("null")).toBe("{}")
+  expect(await ConfigManaged.parseManagedPlist("[]")).toBe("{}")
+  expect(await ConfigManaged.parseManagedPlist("1")).toBe("{}")
+  expect(await ConfigManaged.parseManagedPlist('"test"')).toBe("{}")
+})
