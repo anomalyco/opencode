@@ -3,7 +3,8 @@ export * as ConfigAgent from "./agent"
 import { Schema } from "effect"
 import z from "zod"
 import { Bus } from "@/bus"
-import { zod, ZodOverride } from "@/util/effect-zod"
+import { zod } from "@/util/effect-zod"
+import { PositiveInt } from "@/util/schema"
 import { Log } from "../util"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { Glob } from "@opencode-ai/shared/util/glob"
@@ -15,18 +16,10 @@ import { ConfigPermission } from "./permission"
 
 const log = Log.create({ service: "config" })
 
-const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
-
 const Color = Schema.Union([
   Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
   Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
 ])
-
-// ConfigPermission.Info is a zod schema (its `.preprocess(...).transform(...)`
-// shape lives outside the Effect Schema type system), so the walker reaches it
-// via ZodOverride rather than a pure Schema reference.  This preserves the
-// `$ref: PermissionConfig` emitted in openapi.json.
-const PermissionRef = Schema.Any.annotate({ [ZodOverride]: ConfigPermission.Info })
 
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
@@ -54,7 +47,7 @@ const AgentSchema = Schema.StructWithRest(
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
-    permission: Schema.optional(PermissionRef),
+    permission: Schema.optional(ConfigPermission.Info),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 )
