@@ -24,12 +24,19 @@ spec:
         - name: executor
           image: opencode-veritly-executor:latest
           imagePullPolicy: Always
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: dev-kvm
+              mountPath: /dev/kvm
           ports:
             - containerPort: 7777
               name: http
           env:
             - name: PORT
               value: "7777"
+            - name: EXECUTOR_RUNTIME
+              value: "firecracker"
             - name: VM_INACTIVITY_TIMEOUT_MS
               value: "300000"
             - name: KERNEL_PATH
@@ -61,6 +68,11 @@ spec:
             limits:
               memory: "1Gi"
               cpu: "500m"
+      volumes:
+        - name: dev-kvm
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice
 ---
 apiVersion: v1
 kind: Service

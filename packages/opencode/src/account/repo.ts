@@ -42,16 +42,25 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
     Effect.gen(function* () {
       const decode = Schema.decodeUnknownSync(Account)
 
+      const err = (cause: unknown) =>
+        new AccountRepoError({
+          message:
+            cause instanceof Error
+              ? `Database operation failed: ${cause.message}`
+              : "Database operation failed",
+          cause,
+        })
+
       const query = <A>(f: (db: DbClient) => Promise<A>) =>
         Effect.tryPromise({
           try: () => Database.use(f),
-          catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
+          catch: (cause) => err(cause),
         })
 
       const tx = <A>(f: (db: DbClient) => Promise<A>) =>
         Effect.tryPromise({
           try: () => Database.use(f),
-          catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
+          catch: (cause) => err(cause),
         })
 
       const current = async (db: DbClient) => {

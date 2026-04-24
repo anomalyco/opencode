@@ -1,0 +1,48 @@
+# One-shot database migration (Drizzle via packages/opencode migrate-pg.ts).
+#
+# The migration SQL in git is the same for every environment; only DATABASE_URL
+# changes. drizzle-kit *generate* uses a local/dev DATABASE_URL to diff schema —
+# the resulting migration.sql is what you apply everywhere.
+#
+# Do not add this to kustomization.yaml.
+# Create a new Job each time (uses generateName — must use `kubectl create`, not apply):
+#   kubectl create -f deploy/k8s/opencode-migrate-job.yaml
+#
+# Logs: kubectl logs -n veritly job/<tab-complete-name>
+# List: kubectl get jobs -n veritly -l app.kubernetes.io/component=opencode-migrate
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: opencode-migrate-
+  namespace: veritly
+  labels:
+    app.kubernetes.io/component: opencode-migrate
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: opencode-migrate
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: []
+      containers:
+        - name: migrate
+          # Same image as opencode-api so migration files + bun match what you deployed.
+          image: registry.digitalocean.com/veritly-registry/opencode-api:latest
+          imagePullPolicy: Always
+          workingDir: /app/packages/opencode
+          command: ["bun", "run", "db:migrate"]
+          envFrom:
+            - secretRef:
+                name: veritly-secrets
+          # Optional: if DATABASE_URL in secret points at a host service name, no change needed.
+          # If you ever use "localhost" in a secret, override here for the cluster.
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

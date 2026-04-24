@@ -59,6 +59,24 @@ This will:
 5. Deploy all services
 6. Wait for rollout
 
+## Database migrations (Drizzle)
+
+Migrations live in `packages/opencode/migration/` and are **baked into the `opencode-api` image** at build time. The cluster does not read the repo from disk; it only runs what is inside the image you pushed.
+
+**After the API (and any migration changes) are deployed and workloads are up**, run a one-shot Job that uses the **same** `opencode-api` image and your `DATABASE_URL` from `veritly-secrets`:
+
+```bash
+kubectl create -f deploy/k8s/opencode-migrate-job.yaml
+```
+
+- Use `kubectl create` (not `apply`) because the Job uses `generateName`.
+- Logs: `kubectl logs -n veritly -l app=opencode-migrate --tail=100`
+- The script records applied migration folder names in Postgres table `__drizzle_migrations`.
+
+**Order of operations that avoids surprises:** build and push `opencode-api` with the new migration SQL → apply Kubernetes manifests / rollout → **then** run the migration Job. If you run the Job before pushing an image that contains the new `migration/` folders, those migrations will not run.
+
+**Future automation:** wire this into CI (e.g. after `opencode-api` image push) or a post-deploy script; same Job manifest is the building block.
+
 ## Manual Steps
 
 ### 1. Configure kubectl
