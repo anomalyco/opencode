@@ -1,7 +1,6 @@
 import path from "path"
 import os from "os"
 import z from "zod"
-import * as EffectZod from "@/util/effect-zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util"
@@ -10,14 +9,14 @@ import * as Session from "./session"
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
-import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
+import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { Bus } from "../bus"
-import { ProviderTransform } from "../provider"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
+import { SessionAssemble } from "./assemble"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
@@ -63,8 +62,6 @@ IMPORTANT:
 - The input must be valid JSON matching the required schema
 - Complete all necessary research and tool calls BEFORE calling this tool
 - This tool provides your final answer - no further actions are taken after calling it`
-
-const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
@@ -406,10 +403,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         providerID: input.model.providerID,
         agent: input.agent,
       })) {
-        const schema = ProviderTransform.schema(input.model, EffectZod.toJsonSchema(item.parameters))
+        const rendered = SessionAssemble.renderBuiltinTool(input.model, item)
         tools[item.id] = tool({
-          description: item.description,
-          inputSchema: jsonSchema(schema),
+          description: rendered.description,
+          inputSchema: jsonSchema(rendered.schema),
           execute(args, options) {
             return run.promise(
               Effect.gen(function* () {
@@ -448,9 +445,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const execute = item.execute
         if (!execute) continue
 
-        const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
-        const transformed = ProviderTransform.schema(input.model, schema)
-        item.inputSchema = jsonSchema(transformed)
+        const rendered = yield* SessionAssemble.renderMcpTool(input.model, key, item)
+        item.inputSchema = jsonSchema(rendered.schema)
         item.execute = (args, opts) =>
           run.promise(
             Effect.gen(function* () {
@@ -1479,9 +1475,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...(skills ? [skills] : []), ...instructions]
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            const system = SessionAssemble.middleSegments({ env, skills, instructions, format })
             const result = yield* handle.process({
               user: lastUser,
               agent,

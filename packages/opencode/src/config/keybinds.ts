@@ -37,6 +37,7 @@ const KeybindsSchema = Schema.Struct({
   session_unshare: keybind("none", "Unshare current session"),
   session_interrupt: keybind("escape", "Interrupt current session"),
   session_compact: keybind("<leader>c", "Compact the session"),
+  session_context: keybind("none", "View session context breakdown"),
   messages_page_up: keybind("pageup,ctrl+alt+b", "Scroll messages up by one page"),
   messages_page_down: keybind("pagedown,ctrl+alt+f", "Scroll messages down by one page"),
   messages_line_up: keybind("ctrl+alt+y", "Scroll messages up by one line"),

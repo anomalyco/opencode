@@ -5,6 +5,14 @@ import type { MessageV2 } from "./message-v2"
 
 const COMPACTION_BUFFER = 20_000
 
+// Single source of truth for "how many tokens does this assistant turn
+// represent in the context window?" — matches how providers bill/account for
+// prompt+completion usage. `total` is honored first when the provider reports
+// it; the explicit sum is the AI-SDK-compatible fallback.
+export function currentTokens(tokens: MessageV2.Assistant["tokens"]): number {
+  return tokens.total || tokens.input + tokens.output + tokens.cache.read + tokens.cache.write
+}
+
 export function usable(input: { cfg: Config.Info; model: Provider.Model }) {
   const context = input.model.limit.context
   if (context === 0) return 0
@@ -20,7 +28,7 @@ export function isOverflow(input: { cfg: Config.Info; tokens: MessageV2.Assistan
   if (input.cfg.compaction?.auto === false) return false
   if (input.model.limit.context === 0) return false
 
-  const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-  return count >= usable(input)
+  return currentTokens(input.tokens) >= usable(input)
 }
+
+export * as SessionOverflow from "./overflow"

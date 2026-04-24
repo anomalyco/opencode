@@ -119,6 +119,8 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionContextErrors,
+  SessionContextResponses,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -2143,6 +2145,42 @@ export class Session2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get session context breakdown
+   *
+   * Compute a breakdown of what will be sent to the model on the next turn: system prompt, rules, skills, tool definitions, MCP tool definitions, and message history. Token counts for messages are taken from the last assistant turn's provider usage when available, and estimated otherwise.
+   */
+  public context<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      providerID: string
+      modelID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "providerID" },
+            { in: "query", key: "modelID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionContextResponses, SessionContextErrors, ThrowOnError>({
+      url: "/session/{sessionID}/context",
+      ...options,
+      ...params,
     })
   }
 

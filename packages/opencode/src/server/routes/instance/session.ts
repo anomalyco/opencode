@@ -8,6 +8,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRunState } from "@/session/run-state"
 import { SessionCompaction } from "@/session/compaction"
+import { SessionContext } from "@/session/context"
 import { SessionRevert } from "@/session/revert"
 import { SessionShare } from "@/share"
 import { SessionStatus } from "@/session/status"
@@ -594,6 +595,48 @@ export const SessionRoutes = lazy(() =>
           })
           yield* prompt.loop({ sessionID })
           return true
+        }),
+    )
+    .get(
+      "/:sessionID/context",
+      describeRoute({
+        summary: "Get session context breakdown",
+        description:
+          "Compute a breakdown of what will be sent to the model on the next turn: system prompt, rules, " +
+          "skills, tool definitions, MCP tool definitions, and message history. Token counts for messages " +
+          "are taken from the last assistant turn's provider usage when available, and estimated otherwise.",
+        operationId: "session.context",
+        responses: {
+          200: {
+            description: "Session context breakdown",
+            content: {
+              "application/json": {
+                schema: resolver(SessionContext.ContextInfo.zod),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "query",
+        z.object({
+          providerID: ProviderID.zod,
+          modelID: ModelID.zod,
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.context", c, function* () {
+          const { sessionID } = c.req.valid("param")
+          const { providerID, modelID } = c.req.valid("query")
+          const ctx = yield* SessionContext.Service
+          return yield* ctx.compute({ sessionID, providerID, modelID })
         }),
     )
     .get(

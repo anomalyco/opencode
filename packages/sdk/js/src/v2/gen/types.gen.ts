@@ -1914,6 +1914,46 @@ export type McpResource = {
   client: string
 }
 
+export type SessionContextUsage = {
+  authoritative: boolean
+  input: number
+  output: number
+  reasoning: number
+  cacheRead: number
+  cacheWrite: number
+  current: number
+  contextLimit: number
+  outputReserve: number
+  usable: number
+  overBudget: boolean
+  overflow: boolean
+}
+
+export type SessionContextItem = {
+  label: string
+  tokens: number
+  chars: number
+  detail?: string
+}
+
+export type SessionContextSection = {
+  key: "system" | "rules" | "skills" | "tools" | "mcp_tools" | "agent" | "messages"
+  label: string
+  tokens: number
+  chars: number
+  items: Array<SessionContextItem>
+}
+
+export type SessionContextInfo = {
+  model: {
+    providerID: string
+    modelID: string
+  }
+  agent: string
+  usage: SessionContextUsage
+  sections: Array<SessionContextSection>
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -3745,6 +3785,42 @@ export type SessionSummarizeResponses = {
 }
 
 export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSummarizeResponses]
+
+export type SessionContextData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    providerID: string
+    modelID: string
+  }
+  url: "/session/{sessionID}/context"
+}
+
+export type SessionContextErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionContextError = SessionContextErrors[keyof SessionContextErrors]
+
+export type SessionContextResponses = {
+  /**
+   * Session context breakdown
+   */
+  200: SessionContextInfo
+}
+
+export type SessionContextResponse = SessionContextResponses[keyof SessionContextResponses]
 
 export type SessionMessagesData = {
   body?: never

@@ -62,6 +62,7 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogSessionContext } from "../../component/dialog-session-context"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { Flag } from "@/flag/flag"
@@ -511,6 +512,33 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "View context breakdown",
+      value: "session.context",
+      keybind: "session_context",
+      category: "Session",
+      slash: {
+        name: "context",
+      },
+      onSelect: (dialog) => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to inspect session context",
+            duration: 3000,
+          })
+          return
+        }
+        dialog.replace(() => (
+          <DialogSessionContext
+            sessionID={route.sessionID}
+            providerID={selectedModel.providerID}
+            modelID={selectedModel.modelID}
+          />
+        ))
       },
     },
     {
