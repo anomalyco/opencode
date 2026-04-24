@@ -1,13 +1,13 @@
 import { describe, test, expect } from "bun:test"
-import { Effect, Layer, ManagedRuntime } from "effect"
-import z from "zod"
+import { Effect, Layer, ManagedRuntime, Schema } from "effect"
 import { Agent } from "../../src/agent/agent"
+import { MessageID, SessionID } from "../../src/session/schema"
 import { Tool } from "../../src/tool"
 import { Truncate } from "../../src/tool"
 
 const runtime = ManagedRuntime.make(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
 
-const params = z.object({ input: z.string() })
+const params = Schema.Struct({ input: Schema.String })
 
 function makeTool(id: string, executeFn?: () => void) {
   return {
@@ -55,5 +55,45 @@ describe("Tool.define", () => {
     const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
+  })
+
+  test("execute receives decoded parameters", async () => {
+    const parameters = Schema.Struct({
+      count: Schema.NumberFromString.pipe(Schema.optional, Schema.withDecodingDefaultType(Effect.succeed(5))),
+    })
+    const calls: Array<Schema.Schema.Type<typeof parameters>> = []
+    const info = await runtime.runPromise(
+      Tool.define(
+        "test-decoded",
+        Effect.succeed({
+          description: "test tool",
+          parameters,
+          execute(args: Schema.Schema.Type<typeof parameters>) {
+            calls.push(args)
+            return Effect.succeed({ title: "test", output: "ok", metadata: { truncated: false } })
+          },
+        }),
+      ),
+    )
+    const ctx: Tool.Context = {
+      sessionID: SessionID.descending(),
+      messageID: MessageID.ascending(),
+      agent: "build",
+      abort: new AbortController().signal,
+      messages: [],
+      metadata() {
+        return Effect.void
+      },
+      ask() {
+        return Effect.void
+      },
+    }
+    const tool = await Effect.runPromise(info.init())
+    const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
+
+    await Effect.runPromise(execute({}, ctx))
+    await Effect.runPromise(execute({ count: "7" }, ctx))
+
+    expect(calls).toEqual([{ count: 5 }, { count: 7 }])
   })
 })

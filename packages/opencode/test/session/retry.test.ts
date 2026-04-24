@@ -294,4 +294,26 @@ describe("session.message-v2.fromError", () => {
     const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError
     expect(result.data.isRetryable).toBe(true)
   })
+
+  test("converts OpenAI server_error stream chunks to retryable APIError", () => {
+    const result = MessageV2.fromError(
+      {
+        message: JSON.stringify({
+          type: "error",
+          sequence_number: 2,
+          error: {
+            type: "server_error",
+            code: "server_error",
+            message: "An error occurred while processing your request.",
+            param: null,
+          },
+        }),
+      },
+      { providerID: ProviderID.make("openai") },
+    )
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result)).toBe("An error occurred while processing your request.")
+  })
 })

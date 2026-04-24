@@ -3,9 +3,8 @@
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
-import z from "zod"
 import * as path from "path"
-import { Effect, Semaphore } from "effect"
+import { Effect, Schema, Semaphore } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -45,11 +44,15 @@ function lock(filePath: string) {
   return next
 }
 
-const Parameters = z.object({
-  filePath: z.string().describe("The absolute path to the file to modify"),
-  oldString: z.string().describe("The text to replace"),
-  newString: z.string().describe("The text to replace it with (must be different from oldString)"),
-  replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+export const Parameters = Schema.Struct({
+  filePath: Schema.String.annotate({ description: "The absolute path to the file to modify" }),
+  oldString: Schema.String.annotate({ description: "The text to replace" }),
+  newString: Schema.String.annotate({
+    description: "The text to replace it with (must be different from oldString)",
+  }),
+  replaceAll: Schema.optional(Schema.Boolean).annotate({
+    description: "Replace all occurrences of oldString (default false)",
+  }),
 })
 
 export const EditTool = Tool.define(
@@ -63,7 +66,7 @@ export const EditTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
-      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           if (!params.filePath) {
             throw new Error("filePath is required")
