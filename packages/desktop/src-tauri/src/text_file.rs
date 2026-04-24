@@ -1,5 +1,6 @@
 #[tauri::command]
 #[specta::specta]
-pub fn write_text_file(path: String, content: String) -> Result<(), String> {
-    std::fs::write(&path, content).map_err(|e| format!("write failed: {}: {}", path, e))
+pub fn write_text_file(root: String, path: String, content: String) -> Result<(), String> {
+    let full = std::path::PathBuf::from(&root).join(&path);
+    std::fs::write(&full, content).map_err(|e| format!("write failed: {}: {}", full.display(), e))
 }

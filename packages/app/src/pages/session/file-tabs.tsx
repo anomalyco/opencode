@@ -14,6 +14,7 @@ import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
 import { invoke } from "@tauri-apps/api/core"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
+import { useSDK } from "@/context/sdk"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
@@ -176,6 +177,7 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 
 export function FileTabContent(props: { tab: string }) {
   const file = useFile()
+  const sdk = useSDK()
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
@@ -222,11 +224,13 @@ export function FileTabContent(props: { tab: string }) {
   }
   const saveEdit = async () => {
     const p = path()
-    if (!p || draft() === null) return
+    const root = sdk.directory
+    if (!p || !root || draft() === null) return
     try {
-      await invoke("write_text_file", { path: p, content: draft() ?? "" })
+      await invoke("write_text_file", { root, path: p, content: draft() ?? "" })
       setEditing(false)
       setDraft(null)
+      await file.load(p, { force: true })
       showToast({ variant: "success", title: "Saved" })
     } catch (e) {
       showToast({ variant: "error", title: `Save failed: ${e}` })
