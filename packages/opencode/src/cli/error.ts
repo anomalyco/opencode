@@ -28,10 +28,10 @@ export function FormatError(input: unknown) {
   // ProviderModelNotFoundError: { providerID: string, modelID: string, suggestions?: string[] }
   if (NamedError.hasName(input, "ProviderModelNotFoundError")) {
     const data = (input as ErrorLike).data
-    const suggestions = data?.suggestions as string[] | undefined
+    const suggestions: string[] = Array.isArray(data?.suggestions) ? data.suggestions : []
     return [
       `Model not found: ${data?.providerID}/${data?.modelID}`,
-      ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
+      ...(suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
       `Try: \`opencode models\` to list available models`,
       `Or check your config (opencode.json) provider/model names`,
     ].join("\n")
@@ -64,10 +64,10 @@ export function FormatError(input: unknown) {
     const data = (input as ErrorLike).data
     const path = data?.path
     const message = data?.message
-    const issues = data?.issues as Array<{ message: string; path: string[] }> | undefined
+    const issues: Array<{ message: string; path: string[] }> = Array.isArray(data?.issues) ? data.issues : []
     return [
       `Configuration is invalid${path && path !== "config" ? ` at ${path}` : ""}` + (message ? `: ${message}` : ""),
-      ...(issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
+      ...issues.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")),
     ].join("\n")
   }
 

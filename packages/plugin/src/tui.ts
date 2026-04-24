@@ -29,7 +29,7 @@ export type TuiRouteCurrent =
       name: "session"
       params: {
         sessionID: string
-        initialPrompt?: unknown
+        prompt?: unknown
       }
     }
   | {

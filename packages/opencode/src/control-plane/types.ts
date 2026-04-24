@@ -28,7 +28,7 @@ export type WorkspaceAdaptor = {
   name: string
   description: string
   configure(info: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
-  create(info: WorkspaceInfo, env: Record<string, string>, from?: WorkspaceInfo): Promise<void>
+  create(info: WorkspaceInfo, env: Record<string, string | undefined>, from?: WorkspaceInfo): Promise<void>
   remove(info: WorkspaceInfo): Promise<void>
   target(info: WorkspaceInfo): Target | Promise<Target>
 }
