@@ -66,6 +66,31 @@ When using `--hostname 0.0.0.0`, set `OPENCODE_SERVER_PASSWORD` to secure the se
 OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 ```
 
+### Using MDNS (Alternative)
+
+If you encounter path resolution issues when connecting the Desktop App to WSL (such as UNC paths being sent incorrectly), you can use mDNS for automatic service discovery instead of IP-based connections:
+
+1. **Enable mirrored networking** in WSL (recommended for mDNS):
+
+   Create or edit `%USERPROFILE%\.wslconfig`:
+
+   ```ini
+   [wsl2]
+   networkingMode=mirrored
+   ```
+
+   See [Microsoft's WSL networking docs](https://learn.microsoft.com/en-us/windows/wsl/networking#mirrored-mode-networking) for more details.
+
+2. **Start the server with MDNS**:
+
+   ```bash
+   opencode serve --mdns --mdns-domain opencode.local --hostname 0.0.0.0 --port 4096
+   ```
+
+3. **Connect the Desktop App** to `http://opencode.local:4096`
+
+This approach avoids UNC path issues (e.g., `\\wsl.localhost\Debian`) because the server uses a hostname instead of Windows UNC paths.
+
 ---
 
 ## Web Client + WSL
