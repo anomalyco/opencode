@@ -6,6 +6,7 @@ import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, json
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider"
+import { registerExternalProviderPermissionBridge } from "@/provider/external-permission-bridge"
 import { Config } from "@/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
@@ -193,6 +194,32 @@ const live: Layer.Layer<
         },
       )
 
+      const ruleset = Permission.merge(input.agent.permission, input.permission ?? [])
+      const bridge = yield* EffectBridge.make()
+      const unregisterExternalPermissionBridge = registerExternalProviderPermissionBridge(input.sessionID, {
+        ask: async (request) => {
+          try {
+            await bridge.promise(
+              perm.ask({
+                sessionID: SessionID.make(request.sessionID),
+                permission: request.permission,
+                patterns: request.patterns,
+                metadata: request.metadata,
+                always: request.always,
+                tool: request.tool,
+                ruleset,
+              }),
+            )
+            return { behavior: "allow" as const }
+          } catch (error) {
+            return {
+              behavior: "deny" as const,
+              message: error instanceof Error ? error.message : String(error),
+            }
+          }
+        },
+      })
+
       const tools = resolveTools(input)
 
       // LiteLLM and some Anthropic proxies require the tools parameter to be present
@@ -266,7 +293,6 @@ const live: Layer.Layer<
           return !match || match.action !== "ask"
         })
 
-        const bridge = yield* EffectBridge.make()
         const approvedToolsForSession = new Set<string>()
         workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
@@ -330,7 +356,7 @@ const live: Layer.Layer<
           })
         : undefined
 
-      return streamText({
+      const result = streamText({
         onError(error) {
           l.error("stream error", {
             error,
@@ -409,6 +435,11 @@ const live: Layer.Layer<
           },
         },
       })
+
+      return {
+        result,
+        cleanup: unregisterExternalPermissionBridge,
+      }
     })
 
     const stream: Interface["stream"] = (input) =>
@@ -420,9 +451,14 @@ const live: Layer.Layer<
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
 
-            const result = yield* run({ ...input, abort: ctrl.signal })
+            const running = yield* Effect.acquireRelease(
+              run({ ...input, abort: ctrl.signal }),
+              ({ cleanup }) => Effect.sync(cleanup),
+            )
 
-            return Stream.fromAsyncIterable(result.fullStream, (e) => (e instanceof Error ? e : new Error(String(e))))
+            return Stream.fromAsyncIterable(running.result.fullStream, (e) =>
+              e instanceof Error ? e : new Error(String(e)),
+            )
           }),
         ),
       )
