@@ -9,6 +9,7 @@ import { Config } from "@/config"
 import { MCP } from "@/mcp"
 import { Provider, ProviderTransform } from "@/provider"
 import { ProviderID, ModelID } from "@/provider/schema"
+import { Skill } from "@/skill"
 import { ToolRegistry } from "@/tool"
 
 import * as Session from "./session"
@@ -29,6 +30,9 @@ export const ContextItem = Schema.Struct({
   tokens: Schema.Number,
   chars: Schema.Number,
   detail: Schema.optional(Schema.String),
+  // Optional logical grouping key. Currently used for MCP tools so the UI
+  // can render per-server subtotals under the single "MCP tools" section.
+  group: Schema.optional(Schema.String),
 })
   .annotate({ identifier: "SessionContextItem" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -120,6 +124,27 @@ function stringItem(label: string, text: string, detail?: string): ContextItem {
   }
 }
 
+// Human-readable detail for each system-prompt segment so the /context UI
+// explains *what* the cryptic labels like `base/0` or `env/0` actually are.
+function describeSegment(s: SessionAssemble.LabeledSegment): string | undefined {
+  switch (s.kind) {
+    case "base":
+      return "Provider base prompt (model-family specific coding-agent system prompt)"
+    case "agent_prompt":
+      return "Agent-specific prompt override (from agent config)"
+    case "env":
+      return "Runtime environment: model id, cwd, workspace, git, platform, date"
+    case "user_system":
+      return "Per-turn user-supplied system text"
+    case "structured_output":
+      return "Structured-output tool enforcement"
+    case "instructions":
+      return "Project rules / AGENTS.md content"
+    case "skills":
+      return "Available skills (name + description injected into prompt)"
+  }
+}
+
 function buildSection(key: ContextSection["key"], label: string, items: ContextItem[]): ContextSection {
   return {
     key,
@@ -141,6 +166,7 @@ export const layer = Layer.effect(
     const registry = yield* ToolRegistry.Service
     const mcp = yield* MCP.Service
     const config = yield* Config.Service
+    const skill = yield* Skill.Service
 
     const compute = Effect.fn("SessionContext.compute")(function* (input: GetInput) {
       const model = yield* provider.getModel(input.providerID, input.modelID)
@@ -153,7 +179,11 @@ export const layer = Layer.effect(
       // --- Static breakdown (diagnostic) ------------------------------------
       const lastUser = msgs.findLast((m) => m.info.role === "user")
       const userSystem = lastUser?.info.role === "user" ? lastUser.info.system : undefined
-      const [skills, instructions] = yield* Effect.all([sys.skills(agent), instruction.system().pipe(Effect.orDie)])
+      const [skills, instructions, availableSkills] = yield* Effect.all([
+        sys.skills(agent),
+        instruction.system().pipe(Effect.orDie),
+        skill.available(agent),
+      ])
       const segments = SessionAssemble.systemSegments({
         model,
         agent,
@@ -164,10 +194,16 @@ export const layer = Layer.effect(
         format: { type: "text" },
       })
       const pickItems = (kinds: SessionAssemble.LabeledSegment["kind"][]): ContextItem[] =>
-        segments.filter((s) => kinds.includes(s.kind)).map((s) => stringItem(s.label, s.text))
+        segments.filter((s) => kinds.includes(s.kind)).map((s) => stringItem(s.label, s.text, describeSegment(s)))
 
       const systemItems = pickItems(["base", "agent_prompt", "env", "user_system", "structured_output"])
-      const skillsItems = pickItems(["skills"])
+      // Skills: show one row per available skill. The text used for size
+      // estimation is the skill's description — that is what's injected into
+      // the system prompt via `Skill.fmt`. Full skill content is only loaded
+      // on demand via the skill tool, so it's not counted here.
+      const skillsItems: ContextItem[] = availableSkills
+        .toSorted((a, b) => a.name.localeCompare(b.name))
+        .map((s) => stringItem(s.name, s.description, s.description))
       const rulesItems = pickItems(["instructions"])
 
       const agentMetaText = JSON.stringify(
@@ -208,11 +244,13 @@ export const layer = Layer.effect(
         if (!item.execute) continue
         const rendered = yield* SessionAssemble.renderMcpTool(model, key, item)
         const body = (rendered.description ?? "") + "\n" + JSON.stringify(rendered.schema)
+        const server = SessionAssemble.mcpServerFromKey(key)
         mcpItems.push({
           label: rendered.id,
           chars: body.length,
           tokens: Token.estimate(body),
-          detail: SessionAssemble.mcpServerFromKey(key),
+          detail: server,
+          group: server,
         })
       }
 
@@ -266,14 +304,41 @@ export const layer = Layer.effect(
             overflow: false,
           }
 
-      const messagesItems: ContextItem[] = [
-        {
-          label: `${msgs.length} message(s)`,
-          tokens: Token.estimate(messagesSerialized),
-          chars: messagesSerialized.length,
-          detail: usage.authoritative ? "superseded by usage above" : "estimated",
-        },
-      ]
+      const messagesItems: ContextItem[] = (() => {
+        if (msgs.length === 0) return []
+        const userMsgs = msgs.filter((m) => m.info.role === "user")
+        const asstMsgs = msgs.filter((m) => m.info.role === "assistant")
+        const sizeOf = (list: typeof msgs) =>
+          JSON.stringify(list.map((m) => ({ info: m.info, parts: m.parts })))
+        const userText = sizeOf(userMsgs)
+        const asstText = sizeOf(asstMsgs)
+        const totalDetail = usage.authoritative ? "superseded by usage above" : "estimated"
+        const items: ContextItem[] = [
+          {
+            label: `Total ${msgs.length} message(s)`,
+            tokens: Token.estimate(messagesSerialized),
+            chars: messagesSerialized.length,
+            detail: totalDetail,
+          },
+        ]
+        if (userMsgs.length > 0) {
+          items.push({
+            label: `User (${userMsgs.length})`,
+            tokens: Token.estimate(userText),
+            chars: userText.length,
+            detail: "prompts + attached parts",
+          })
+        }
+        if (asstMsgs.length > 0) {
+          items.push({
+            label: `Assistant (${asstMsgs.length}) — ${agent.name}`,
+            tokens: Token.estimate(asstText),
+            chars: asstText.length,
+            detail: "responses + tool calls + tool results",
+          })
+        }
+        return items
+      })()
 
       const sections: ContextSection[] = [
         buildSection("system", "System prompt", systemItems),
@@ -307,6 +372,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(ToolRegistry.defaultLayer),
     Layer.provide(MCP.defaultLayer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(Skill.defaultLayer),
   ),
 )
 

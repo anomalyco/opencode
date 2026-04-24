@@ -1934,6 +1934,7 @@ export type SessionContextItem = {
   tokens: number
   chars: number
   detail?: string
+  group?: string
 }
 
 export type SessionContextSection = {

@@ -136,42 +136,99 @@ export function DialogSessionContext(props: DialogSessionContextProps) {
 
               <box flexDirection="row" justifyContent="space-between">
                 <text fg={theme.textMuted}>Breakdown (estimated · chars/4)</text>
-                <text fg={theme.textMuted}>↑↓ pgup pgdn scroll</text>
+                <text fg={theme.textMuted}>↑↓ pgup pgdn scroll · hold ⌥/shift to select text</text>
               </box>
 
               {/* Scrollable diagnostic breakdown. */}
               <scrollbox height={scrollHeight()} scrollAcceleration={getScrollAcceleration()}>
                 <box gap={1} paddingRight={2}>
                   <For each={data().sections}>
-                    {(section) => (
-                      <box>
-                        <box flexDirection="row" justifyContent="space-between">
-                          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-                            {section.label}
-                          </text>
-                          <text fg={theme.textMuted}>
-                            ~{formatTokens(section.tokens)} · {section.items.length}
-                          </text>
+                    {(section) => {
+                      // Group items by `group` field when present; renders a
+                      // subheader per group with subtotal (e.g. MCP servers).
+                      const grouped = () => {
+                        const map = new Map<string, typeof section.items>()
+                        for (const it of section.items) {
+                          const k = it.group ?? ""
+                          if (!map.has(k)) map.set(k, [])
+                          map.get(k)!.push(it)
+                        }
+                        return Array.from(map.entries())
+                          .sort(([a], [b]) => a.localeCompare(b))
+                          .map(([g, items]) => ({
+                            group: g,
+                            items,
+                            tokens: items.reduce((acc, it) => acc + it.tokens, 0),
+                          }))
+                      }
+                      const hasGroups = () => section.items.some((i) => i.group)
+                      return (
+                        <box>
+                          <box flexDirection="row" justifyContent="space-between">
+                            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+                              {section.label}
+                            </text>
+                            <text fg={theme.textMuted}>
+                              ~{formatTokens(section.tokens)} · {section.items.length}
+                            </text>
+                          </box>
+                          <Show
+                            when={hasGroups()}
+                            fallback={
+                              <For each={section.items}>
+                                {(item) => (
+                                  <box flexDirection="row" gap={1}>
+                                    <text flexShrink={0} fg={theme.textMuted}>
+                                      ·
+                                    </text>
+                                    <text fg={theme.text} wrapMode="word">
+                                      {shortenPath(item.label, itemLabelMax())}
+                                      <span style={{ fg: theme.textMuted }}>
+                                        {"  ~"}
+                                        {formatTokens(item.tokens)}
+                                        {item.detail ? ` — ${item.detail}` : ""}
+                                      </span>
+                                    </text>
+                                  </box>
+                                )}
+                              </For>
+                            }
+                          >
+                            <For each={grouped()}>
+                              {(g) => (
+                                <box>
+                                  <box flexDirection="row" justifyContent="space-between">
+                                    <text fg={theme.text}>
+                                      <span style={{ fg: theme.textMuted }}>▸ </span>
+                                      {g.group || "ungrouped"}
+                                    </text>
+                                    <text fg={theme.textMuted}>
+                                      ~{formatTokens(g.tokens)} · {g.items.length}
+                                    </text>
+                                  </box>
+                                  <For each={g.items}>
+                                    {(item) => (
+                                      <box flexDirection="row" gap={1} paddingLeft={2}>
+                                        <text flexShrink={0} fg={theme.textMuted}>
+                                          ·
+                                        </text>
+                                        <text fg={theme.text} wrapMode="word">
+                                          {shortenPath(item.label, itemLabelMax())}
+                                          <span style={{ fg: theme.textMuted }}>
+                                            {"  ~"}
+                                            {formatTokens(item.tokens)}
+                                          </span>
+                                        </text>
+                                      </box>
+                                    )}
+                                  </For>
+                                </box>
+                              )}
+                            </For>
+                          </Show>
                         </box>
-                        <For each={section.items}>
-                          {(item) => (
-                            <box flexDirection="row" gap={1}>
-                              <text flexShrink={0} fg={theme.textMuted}>
-                                ·
-                              </text>
-                              <text fg={theme.text} wrapMode="word">
-                                {shortenPath(item.label, itemLabelMax())}
-                                <span style={{ fg: theme.textMuted }}>
-                                  {"  ~"}
-                                  {formatTokens(item.tokens)}
-                                  {item.detail ? ` — ${item.detail}` : ""}
-                                </span>
-                              </text>
-                            </box>
-                          )}
-                        </For>
-                      </box>
-                    )}
+                      )
+                    }}
                   </For>
                 </box>
               </scrollbox>
