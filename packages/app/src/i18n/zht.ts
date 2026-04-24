@@ -227,7 +227,7 @@ export const dict = {
   "common.default": "預設",
   "common.attachment": "附件",
 
-  "prompt.placeholder.shell": "輸入 shell 命令...",
+  "prompt.placeholder.shell": "輸入 shell 命令... {{example}}",
   "prompt.placeholder.normal": '隨便問點什麼... "{{example}}"',
   "prompt.placeholder.simple": "隨便問點什麼...",
   "prompt.placeholder.summarizeComments": "摘要評論…",

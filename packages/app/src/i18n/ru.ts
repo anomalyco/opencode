@@ -227,7 +227,7 @@ export const dict = {
   "common.default": "По умолчанию",
   "common.attachment": "вложение",
 
-  "prompt.placeholder.shell": "Введите команду оболочки...",
+  "prompt.placeholder.shell": "Введите команду оболочки... {{example}}",
   "prompt.placeholder.normal": 'Спросите что угодно... "{{example}}"',
   "prompt.placeholder.simple": "Спросите что угодно...",
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",

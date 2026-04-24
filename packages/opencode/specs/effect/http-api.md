@@ -409,13 +409,15 @@ Current instance route inventory:
 - `project` - `bridged` (partial)
   bridged endpoints: `GET /project`, `GET /project/current`
   defer git-init mutation first
-- `workspace` - `next`
+- `workspace` - `bridged`
   best small reads: `GET /experimental/workspace/adaptor`, `GET /experimental/workspace`, `GET /experimental/workspace/status`
   defer create/remove mutations first
-- `file` - `later`
-  good JSON-only candidate set, but larger than the current first-wave slices
-- `mcp` - `later`
-  has JSON-only endpoints, but interactive OAuth/auth flows make it a worse early fit
+- `file` - `bridged` (partial)
+  bridged endpoints: `GET /file`, `GET /file/content`, `GET /file/status`
+  defer search endpoints first
+- `mcp` - `bridged` (partial)
+  bridged endpoints: `GET /mcp`
+  defer interactive OAuth/auth flows first
 - `session` - `defer`
   large, stateful, mixes CRUD with prompt/shell/command/share/revert flows and a streaming route
 - `event` - `defer`
@@ -448,8 +450,9 @@ Recommended near-term sequence:
 - [x] port `config` providers read endpoint
 - [x] port `project` read endpoints (`GET /project`, `GET /project/current`)
 - [x] port `GET /config` full read endpoint
-- [ ] port `workspace` read endpoints
-- [ ] port `file` JSON read endpoints
+- [x] port `workspace` read endpoints
+- [x] port `file` JSON read endpoints
+- [x] port `mcp` status read endpoint
 - [ ] decide when to remove the flag and make Effect routes the default
 
 ## Rule of thumb
