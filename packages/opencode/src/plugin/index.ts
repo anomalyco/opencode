@@ -149,6 +149,7 @@ type TriggerName = {
                 .then(async (mod) => {
                   const seen = new Set<PluginInstance>()
                   for (const [name, fn] of Object.entries<PluginInstance>(mod)) {
+                    if (typeof fn !== "function") continue
                     if (seen.has(fn)) continue
                     seen.add(fn)
                     const init = await fn(input)
