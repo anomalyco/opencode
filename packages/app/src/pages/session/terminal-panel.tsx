@@ -80,7 +80,7 @@ export function TerminalPanel() {
         if (prevCount === undefined || count <= prevCount) return
         const all = terminal.all()
         const last = all[all.length - 1]
-        if (!last?.title.startsWith("Agent:")) return
+        if (last?.source !== "agent") return
         if (!opened()) view().terminal.open()
         terminal.open(last.id)
       },
@@ -120,17 +120,6 @@ export function TerminalPanel() {
       for (const timer of timers) clearTimeout(timer)
     }
   }
-
-  createEffect(
-    on(
-      () => [opened(), terminal.active()] as const,
-      ([next, id]) => {
-        if (!next || !id) return
-        const stop = focus(id)
-        onCleanup(stop)
-      },
-    ),
-  )
 
   createEffect(() => {
     if (opened()) return
