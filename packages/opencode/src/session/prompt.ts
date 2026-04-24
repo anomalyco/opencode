@@ -798,9 +798,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             `
               [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
               [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-              cd "$OPENCODE_CWD"
+              cd -- "$1"
               eval ${JSON.stringify(input.command)}
             `,
+            "opencode",
+            cwd,
           ],
         },
         bash: {
@@ -810,9 +812,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             `
               shopt -s expand_aliases
               [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-              cd "$OPENCODE_CWD"
+              cd -- "$1"
               eval ${JSON.stringify(input.command)}
             `,
+            "opencode",
+            cwd,
           ],
         },
         cmd: { args: ["/c", input.command] },
@@ -831,7 +835,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const cmd = ChildProcess.make(sh, args, {
         cwd,
         extendEnv: true,
-        env: { ...shellEnv.env, OPENCODE_CWD: cwd, TERM: "dumb" },
+        env: { ...shellEnv.env, TERM: "dumb" },
         stdin: "ignore",
         forceKillAfter: "3 seconds",
       })
