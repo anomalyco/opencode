@@ -1262,6 +1262,13 @@ export type Config = {
   }
   experimental?: {
     disable_paste_summary?: boolean
+    /**
+     * Disable live VCS diff queries in the app session review UI
+     */
+    disable_vcs_diff?: boolean
+    /**
+     * Enable the batch tool
+     */
     batch_tool?: boolean
     openTelemetry?: boolean
     primary_tools?: Array<string>
