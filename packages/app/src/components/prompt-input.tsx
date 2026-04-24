@@ -1574,33 +1574,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </TooltipKeybind>
                       </Show>
                     </div>
-                    <div
-                      data-component="prompt-variant-control"
-                      style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
-                    >
-                      <TooltipKeybind
-                        placement="top"
-                        gutter={4}
-                        title={language.t("command.model.variant.cycle")}
-                        keybind={command.keybind("model.variant.cycle")}
+                    <Show when={variants().length > 2}>
+                      <div
+                        data-component="prompt-variant-control"
+                        style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
                       >
-                        <Select
-                          size="normal"
-                          options={variants()}
-                          current={local.model.variant.current() ?? "default"}
-                          label={(x) => (x === "default" ? language.t("common.default") : x)}
-                          onSelect={(value) => {
-                            local.model.variant.set(value === "default" ? undefined : value)
-                            restoreFocus()
-                          }}
-                          class="capitalize max-w-[160px] text-text-base"
-                          valueClass="truncate text-13-regular text-text-base"
-                          triggerStyle={control()}
-                          triggerProps={{ "data-action": "prompt-model-variant" }}
-                          variant="ghost"
-                        />
-                      </TooltipKeybind>
-                    </div>
+                        <TooltipKeybind
+                          placement="top"
+                          gutter={4}
+                          title={language.t("command.model.variant.cycle")}
+                          keybind={command.keybind("model.variant.cycle")}
+                        >
+                          <Select
+                            size="normal"
+                            options={variants()}
+                            current={local.model.variant.current() ?? "default"}
+                            label={(x) => (x === "default" ? language.t("common.default") : x)}
+                            onSelect={(value) => {
+                              local.model.variant.set(value === "default" ? undefined : value)
+                              restoreFocus()
+                            }}
+                            class="capitalize max-w-[160px] text-text-base"
+                            valueClass="truncate text-13-regular text-text-base"
+                            triggerStyle={control()}
+                            triggerProps={{ "data-action": "prompt-model-variant" }}
+                            variant="ghost"
+                          />
+                        </TooltipKeybind>
+                      </div>
+                    </Show>
                   </Show>
                 </Show>
               </div>
