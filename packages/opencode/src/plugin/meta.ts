@@ -4,7 +4,7 @@ import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Filesystem } from "@/util"
-import { Flock } from "@opencode-ai/shared/util/flock"
+import { Flock } from "@opencode-ai/core/util/flock"
 
 import { parsePluginSpecifier, pluginSource } from "./shared"
 

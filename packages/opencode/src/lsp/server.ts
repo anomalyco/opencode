@@ -11,7 +11,7 @@ import { Flag } from "../flag/flag"
 import { Archive } from "../util"
 import { Process } from "../util"
 import { which } from "../util/which"
-import { Module } from "@opencode-ai/shared/util/module"
+import { Module } from "@opencode-ai/core/util/module"
 import { spawn } from "./launch"
 import { Npm } from "../npm"
 

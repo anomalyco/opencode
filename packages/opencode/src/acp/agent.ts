@@ -34,7 +34,7 @@ import {
 import { Log } from "../util"
 import { pathToFileURL } from "url"
 import { Filesystem } from "../util"
-import { Hash } from "@opencode-ai/shared/util/hash"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider"

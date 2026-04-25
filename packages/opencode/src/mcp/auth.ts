@@ -2,7 +2,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "../global"
 import { Effect, Layer, Context } from "effect"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 export const Tokens = z.object({
   accessToken: z.string(),
