@@ -35,6 +35,7 @@ export const TuiEvent = {
     Schema.Struct({
       title: Schema.optional(Schema.String),
       message: Schema.String,
+      projectName: Schema.optional(Schema.String).annotate({ description: "Project name for multi-project context" }),
       variant: Schema.Literals(["info", "success", "warning", "error"]),
       duration: Schema.optional(Schema.Number).annotate({ description: "Duration in milliseconds" }),
     }),

@@ -3,9 +3,10 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "../component/border"
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, RGBA } from "@opentui/core"
 import { Schema } from "effect"
 import { type TuiEvent } from "../event"
+import { STATUS_COLORS, statusToToastVariant, type StatusType } from "../context/status-colors"
 
 export type ToastOptions = Schema.Schema.Type<typeof TuiEvent.ToastShow.properties>
 
@@ -16,33 +17,50 @@ export function Toast() {
 
   return (
     <Show when={toast.currentToast}>
-      {(current) => (
-        <box
-          position="absolute"
-          justifyContent="center"
-          alignItems="flex-start"
-          top={2}
-          right={2}
-          maxWidth={Math.min(60, dimensions().width - 6)}
-          paddingLeft={2}
-          paddingRight={2}
-          paddingTop={1}
-          paddingBottom={1}
-          backgroundColor={theme.backgroundPanel}
-          borderColor={theme[current().variant]}
-          border={["left", "right"]}
-          customBorderChars={SplitBorder.customBorderChars}
-        >
-          <Show when={current().title}>
-            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
-              {current().title}
+      {(current) => {
+        const variant = () => current().variant
+        const statusColor = () => {
+          const status: StatusType = statusToToastVariant(variant())
+          return STATUS_COLORS[status].color
+        }
+
+        return (
+          <box
+            position="absolute"
+            justifyContent="center"
+            alignItems="flex-start"
+            top={2}
+            right={2}
+            maxWidth={Math.min(60, dimensions().width - 6)}
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+            backgroundColor={theme.backgroundPanel}
+            borderColor={RGBA.fromHex(statusColor())}
+            border={["left", "right"]}
+            customBorderChars={SplitBorder.customBorderChars}
+          >
+            <Show when={current().projectName}>
+              <text
+                attributes={TextAttributes.BOLD}
+                fg={RGBA.fromHex(statusColor())}
+                marginBottom={1}
+              >
+                [{current().projectName}]
+              </text>
+            </Show>
+            <Show when={current().title}>
+              <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
+                {current().title}
+              </text>
+            </Show>
+            <text fg={theme.text} wrapMode="word" width="100%">
+              {current().message}
             </text>
-          </Show>
-          <text fg={theme.text} wrapMode="word" width="100%">
-            {current().message}
-          </text>
-        </box>
-      )}
+          </box>
+        )
+      }}
     </Show>
   )
 }
