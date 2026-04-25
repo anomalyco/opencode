@@ -13,7 +13,7 @@ import { Global } from "@opencode-ai/core/global"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
-import { CrossSpawnSpawner } from "../effect/cross-spawn-spawner"
+import * as CrossSpawnSpawner from "../effect/cross-spawn-spawner"
 import { makeRuntime } from "../effect/runtime"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
