@@ -165,6 +165,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [infinity, setInfinity] = createSignal<{ active: boolean }>({ active: false })
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -1197,6 +1198,10 @@ export function Session() {
                     onSubmit={() => {
                       toBottom()
                     }}
+                    onInfinity={(active) => {
+                      setInfinity(active ? { active: true } : { active: false })
+                    }}
+                    infinity={infinity()}
                     sessionID={route.sessionID}
                     right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                   />

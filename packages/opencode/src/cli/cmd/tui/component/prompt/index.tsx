@@ -39,6 +39,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { DialogSessionInfinity } from "../dialog-session-infinity"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
@@ -50,6 +51,8 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onInfinity?: (active: boolean) => void
+  infinity?: { active: boolean }
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
@@ -597,6 +600,38 @@ export function Prompt(props: PromptProps) {
   }
 
   command.register(() => [
+    {
+      title: props.infinity?.active ? "Disable Infinity mode" : "Enable Infinity mode",
+      value: "session.infinity",
+      category: "Session",
+      slash: {
+        name: "infinity",
+      },
+      onSelect: async (dialog) => {
+        if (props.infinity?.active) {
+          if (props.sessionID) {
+            await sdk.client.session.infinityClear({ sessionID: props.sessionID }).catch(() => {})
+          }
+          props.onInfinity?.(false)
+          dialog.clear()
+          return
+        }
+        if (props.sessionID) {
+          dialog.replace(() => (
+            <DialogSessionInfinity
+              sessionID={props.sessionID}
+              onConfirm={() => {
+                props.onInfinity?.(true)
+              }}
+            />
+          ))
+          return
+        }
+        await sdk.client.session.infinitySet({ sessionID: "" }).catch(() => {})
+        props.onInfinity?.(true)
+        dialog.clear()
+      },
+    },
     {
       title: "Stash prompt",
       value: "prompt.stash",

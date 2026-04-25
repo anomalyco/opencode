@@ -4208,6 +4208,114 @@ export type SessionUnrevertResponses = {
 
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
 
+export type SessionInfinityClearData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/infinity"
+}
+
+export type SessionInfinityClearErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionInfinityClearError = SessionInfinityClearErrors[keyof SessionInfinityClearErrors]
+
+export type SessionInfinityClearResponses = {
+  /**
+   * Disabled Infinity mode
+   */
+  200: {
+    active: boolean
+  }
+}
+
+export type SessionInfinityClearResponse = SessionInfinityClearResponses[keyof SessionInfinityClearResponses]
+
+export type SessionInfinityStatusData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/infinity"
+}
+
+export type SessionInfinityStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionInfinityStatusError = SessionInfinityStatusErrors[keyof SessionInfinityStatusErrors]
+
+export type SessionInfinityStatusResponses = {
+  /**
+   * Infinity mode status
+   */
+  200: {
+    active: boolean
+  }
+}
+
+export type SessionInfinityStatusResponse = SessionInfinityStatusResponses[keyof SessionInfinityStatusResponses]
+
+export type SessionInfinitySetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/infinity"
+}
+
+export type SessionInfinitySetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionInfinitySetError = SessionInfinitySetErrors[keyof SessionInfinitySetErrors]
+
+export type SessionInfinitySetResponses = {
+  /**
+   * Enabled Infinity mode
+   */
+  200: {
+    active: boolean
+  }
+}
+
+export type SessionInfinitySetResponse = SessionInfinitySetResponses[keyof SessionInfinitySetResponses]
+
 export type PermissionRespondData = {
   body?: {
     response: "once" | "always" | "reject"

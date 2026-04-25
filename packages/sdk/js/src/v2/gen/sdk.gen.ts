@@ -129,6 +129,12 @@ import type {
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
+  SessionInfinityClearErrors,
+  SessionInfinityClearResponses,
+  SessionInfinitySetErrors,
+  SessionInfinitySetResponses,
+  SessionInfinityStatusErrors,
+  SessionInfinityStatusResponses,
   SessionInitErrors,
   SessionInitResponses,
   SessionListResponses,
@@ -2548,6 +2554,110 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionUnrevertResponses, SessionUnrevertErrors, ThrowOnError>({
       url: "/session/{sessionID}/unrevert",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Disable Infinity mode
+   *
+   * Disable Infinity mode for a session, returning to normal single-turn behavior.
+   */
+  public infinityClear<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      SessionInfinityClearResponses,
+      SessionInfinityClearErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/infinity",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get Infinity mode status
+   *
+   * Check whether Infinity mode is active for a session.
+   */
+  public infinityStatus<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionInfinityStatusResponses,
+      SessionInfinityStatusErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/infinity",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Enable Infinity mode
+   *
+   * Enable autonomous Infinity mode for a session. After each finished assistant turn, an evaluator judges whether the original goal is complete and re-prompts if not.
+   */
+  public infinitySet<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionInfinitySetResponses, SessionInfinitySetErrors, ThrowOnError>({
+      url: "/session/{sessionID}/infinity",
       ...options,
       ...params,
     })

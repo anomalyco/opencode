@@ -68,6 +68,56 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
+const infinityState = new Map<string, { summary?: string; last?: string }>()
+const InfinityJudgeOutput = z.object({
+  summary: z.string().trim().min(1),
+  should_continue: z.boolean(),
+  prompt: z.string().optional(),
+  reason: z.string().optional(),
+})
+
+function textFromMessage(message?: MessageV2.WithParts) {
+  if (!message) return ""
+  return message.parts
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n")
+    .trim()
+}
+
+function parseInfinityJudgeOutput(raw: string) {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]
+  const source = (fenced ?? raw).trim()
+  const first = source.indexOf("{")
+  const last = source.lastIndexOf("}")
+  if (first === -1 || last === -1 || last < first) return
+  try {
+    const parsed = JSON.parse(source.slice(first, last + 1))
+    const result = InfinityJudgeOutput.safeParse(parsed)
+    if (!result.success) return
+    return result.data
+  } catch {
+    return
+  }
+}
+
+export const InfinityInfo = z.object({
+  active: z.boolean(),
+})
+
+export function infinity(sessionID: string) {
+  const item = infinityState.get(sessionID)
+  return { active: !!item }
+}
+
+export function setInfinity(input: { sessionID: string }) {
+  infinityState.set(input.sessionID, {})
+  return { active: true }
+}
+
+export function clearInfinity(sessionID: string) {
+  infinityState.delete(sessionID)
+  return { active: false }
+}
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -217,6 +267,73 @@ export const layer = Layer.effect(
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
         .pipe(Effect.catchCause((cause) => elog.error("failed to generate title", { error: Cause.squash(cause) })))
+    })
+
+    const judgeInfinity = Effect.fn("SessionPrompt.judgeInfinity")(function* (input: {
+      sessionID: SessionID
+      user: MessageV2.User
+      assistant: MessageV2.WithParts
+      messages: MessageV2.WithParts[]
+      previousSummary?: string
+      model: Provider.Model
+    }) {
+      const judgeAgent = yield* agents.get("infinity")
+      const judgeModel = (yield* provider.getSmallModel(input.user.model.providerID)) ?? input.model
+      const latestReply = textFromMessage(input.assistant)
+      const latestReplyInput = latestReply.length > 30_000 ? latestReply.slice(0, 30_000) : latestReply
+      const firstUserRequest = textFromMessage(
+        input.messages.find((msg) => msg.info.role === "user" && textFromMessage(msg).length > 0),
+      )
+      const prompt = [
+        "Decide whether the session should continue autonomously.",
+        "",
+        "<first-user-request>",
+        firstUserRequest || "(missing)",
+        "</first-user-request>",
+        "",
+        "<previous-summary>",
+        input.previousSummary?.trim() || "(none)",
+        "</previous-summary>",
+        "",
+        "<latest-assistant-response>",
+        latestReplyInput || "(no text response)",
+        "</latest-assistant-response>",
+        "",
+        "Return only JSON matching the required schema.",
+      ].join("\n")
+
+      const raw = yield* llm
+        .stream({
+          agent: judgeAgent,
+          user: input.user,
+          system: [],
+          small: true,
+          tools: {},
+          model: judgeModel,
+          sessionID: input.sessionID,
+          retries: 1,
+          messages: [{ role: "user", content: prompt }],
+        })
+        .pipe(
+          Stream.filter((e): e is Extract<LLM.Event, { type: "text-delta" }> => e.type === "text-delta"),
+          Stream.map((e) => e.text),
+          Stream.mkString,
+          Effect.orDie,
+        )
+
+      const judged = parseInfinityJudgeOutput(raw)
+      if (judged?.should_continue) {
+        const nextPrompt = judged.prompt?.trim() || latestReplyInput
+        return { summary: judged.summary, shouldContinue: true as const, prompt: nextPrompt }
+      }
+      if (judged) return { summary: judged.summary, shouldContinue: false as const }
+
+      const fallbackSummary = [input.previousSummary?.trim(), latestReplyInput.trim()].filter(Boolean).join("\n\n")
+      return {
+        summary: fallbackSummary || "No summary available.",
+        shouldContinue: true as const,
+        prompt: latestReplyInput,
+      }
     })
 
     const insertReminders = Effect.fn("SessionPrompt.insertReminders")(function* (input: {
@@ -401,11 +518,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             .pipe(Effect.orDie),
       })
 
+      const isInfinity = !!infinityState.get(input.session.id)
       for (const item of yield* registry.tools({
         modelID: ModelID.make(input.model.api.id),
         providerID: input.model.providerID,
         agent: input.agent,
       })) {
+        if (isInfinity && item.id === "question") continue
         const schema = ProviderTransform.schema(input.model, EffectZod.toJsonSchema(item.parameters))
         tools[item.id] = tool({
           description: item.description,
@@ -1351,6 +1470,34 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             !hasToolCalls &&
             lastUser.id < lastAssistant.id
           ) {
+            const inf = infinityState.get(sessionID)
+            if (inf && inf.last !== lastAssistant.id && lastAssistant.summary !== true && lastAssistantMsg) {
+              inf.last = lastAssistant.id
+              const mdl = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+              const judged = yield* judgeInfinity({
+                sessionID,
+                user: lastUser,
+                assistant: lastAssistantMsg,
+                messages: msgs,
+                previousSummary: inf.summary,
+                model: mdl,
+              })
+              inf.summary = judged.summary
+              if (!judged.shouldContinue) {
+                yield* slog.info("infinity complete")
+                break
+              }
+              yield* createUserMessage({
+                sessionID,
+                agent: lastUser.agent,
+                model: lastUser.model,
+                noReply: true,
+                parts: [{ type: "text", text: judged.prompt }],
+              })
+              yield* sessions.touch(sessionID)
+              yield* slog.info("infinity continuing", { prompt: judged.prompt?.slice(0, 100) })
+              continue
+            }
             yield* slog.info("exiting loop")
             break
           }

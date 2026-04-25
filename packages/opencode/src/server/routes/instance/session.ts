@@ -1064,6 +1064,105 @@ export const SessionRoutes = lazy(() =>
           return yield* svc.unrevert({ sessionID })
         }),
     )
+    .get(
+      "/:sessionID/infinity",
+      describeRoute({
+        summary: "Get Infinity mode status",
+        description: "Check whether Infinity mode is active for a session.",
+        operationId: "session.infinity_status",
+        responses: {
+          200: {
+            description: "Infinity mode status",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPrompt.InfinityInfo),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await runRequest("SessionRoutes.infinity_status", c, Effect.gen(function* () {
+          const session = yield* Session.Service
+          yield* session.get(sessionID)
+        }))
+        return c.json(SessionPrompt.infinity(sessionID))
+      },
+    )
+    .post(
+      "/:sessionID/infinity",
+      describeRoute({
+        summary: "Enable Infinity mode",
+        description: "Enable autonomous Infinity mode for a session. After each finished assistant turn, an evaluator judges whether the original goal is complete and re-prompts if not.",
+        operationId: "session.infinity_set",
+        responses: {
+          200: {
+            description: "Enabled Infinity mode",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPrompt.InfinityInfo),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await runRequest("SessionRoutes.infinity_set", c, Effect.gen(function* () {
+          const session = yield* Session.Service
+          yield* session.get(sessionID)
+        }))
+        return c.json(SessionPrompt.setInfinity({ sessionID }))
+      },
+    )
+    .delete(
+      "/:sessionID/infinity",
+      describeRoute({
+        summary: "Disable Infinity mode",
+        description: "Disable Infinity mode for a session, returning to normal single-turn behavior.",
+        operationId: "session.infinity_clear",
+        responses: {
+          200: {
+            description: "Disabled Infinity mode",
+            content: {
+              "application/json": {
+                schema: resolver(SessionPrompt.InfinityInfo),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await runRequest("SessionRoutes.infinity_clear", c, Effect.gen(function* () {
+          const session = yield* Session.Service
+          yield* session.get(sessionID)
+        }))
+        return c.json(SessionPrompt.clearInfinity(sessionID))
+      },
+    )
     .post(
       "/:sessionID/permissions/:permissionID",
       describeRoute({

@@ -190,6 +190,8 @@ type PromptSubmitInput = {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  infinityPending?: Accessor<boolean>
+  onInfinityActivated?: () => void
 }
 
 type CommentItem = {
@@ -376,6 +378,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         seed(sessionDirectory, created)
         session = created
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
+        if (input.infinityPending?.()) {
+          await client.session.infinitySet({ sessionID: session.id }).catch(() => {})
+          input.onInfinityActivated?.()
+        }
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
         navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)

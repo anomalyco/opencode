@@ -54,7 +54,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import { useQueries } from "@tanstack/solid-query"
+import { useMutation, useQuery, skipToken, useQueries, useQueryClient } from "@tanstack/solid-query"
 import { loadAgentsQuery, loadProvidersQuery } from "@/context/global-sync/bootstrap"
 
 interface PromptInputProps {
@@ -1066,6 +1066,42 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return permission.isAutoAccepting(id, sdk.directory)
   })
 
+  const queryClient = useQueryClient()
+  const infinityQuery = useQuery(() => ({
+    queryKey: ["infinity", params.id] as const,
+    queryFn: params.id
+      ? () =>
+          sdk.client.session
+            .infinityStatus({ sessionID: params.id! })
+            .then((r) => r.data ?? { active: false })
+            .catch(() => ({ active: false } as const))
+      : skipToken,
+    enabled: !!params.id,
+    refetchInterval: 10000,
+    retry: false,
+  }))
+  const infinityActive = createMemo(() => infinityQuery.data?.active ?? false)
+  const [infinityPending, setInfinityPending] = createSignal(false)
+  const infinityOn = createMemo(() => infinityActive() || infinityPending())
+  const infinityMutation = useMutation(() => ({
+    mutationFn: async (active: boolean) => {
+      if (!params.id) {
+        setInfinityPending(!active)
+        return
+      }
+      if (active) {
+        await sdk.client.session.infinityClear({ sessionID: params.id! })
+      } else {
+        await sdk.client.session.infinitySet({ sessionID: params.id! })
+      }
+    },
+    onSuccess: () => {
+      if (params.id) {
+        void queryClient.invalidateQueries({ queryKey: ["infinity", params.id] })
+      }
+    },
+  }))
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
@@ -1088,6 +1124,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
+    infinityPending: () => infinityPending(),
+    onInfinityActivated: () => {
+      setInfinityPending(false)
+      void queryClient.invalidateQueries({ queryKey: ["infinity"] })
+    },
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1603,6 +1644,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </TooltipKeybind>
                       </div>
                     </Show>
+                    <div data-component="prompt-infinity-control">
+                      <Tooltip placement="top" gutter={4} value={infinityOn() ? "Disable Infinity mode" : "Enable Infinity mode"}>
+                        <Button
+                          variant="ghost"
+                          size="normal"
+                          style={control()}
+                          class="min-w-0 text-13-regular text-text-base"
+                          data-action="prompt-infinity"
+                          onClick={() => infinityMutation.mutate(infinityOn())}
+                          disabled={infinityMutation.isPending}
+                        >
+                          <span classList={{
+                            "text-icon-strong-base": infinityOn(),
+                            "text-icon-weak-base": !infinityOn(),
+                          }}>
+                            {infinityOn() ? "∞" : "∞"}
+                          </span>
+                        </Button>
+                      </Tooltip>
+                    </div>
                   </Show>
                 </Show>
               </div>
