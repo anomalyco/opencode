@@ -1324,12 +1324,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           let lastUser: MessageV2.User | undefined
           let lastAssistant: MessageV2.Assistant | undefined
           let lastFinished: MessageV2.Assistant | undefined
+          // Track transcript positions instead of relying on lexical ID ordering.
+          // Callers may supply custom messageIDs via the API, so MessageID order
+          // is not guaranteed to match transcript order — use array indices.
+          let lastUserIndex = -1
+          let lastAssistantIndex = -1
+          let lastFinishedIndex = -1
           let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
           for (let i = msgs.length - 1; i >= 0; i--) {
             const msg = msgs[i]
-            if (!lastUser && msg.info.role === "user") lastUser = msg.info
-            if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
-            if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
+            if (!lastUser && msg.info.role === "user") {
+              lastUser = msg.info
+              lastUserIndex = i
+            }
+            if (!lastAssistant && msg.info.role === "assistant") {
+              lastAssistant = msg.info
+              lastAssistantIndex = i
+            }
+            if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) {
+              lastFinished = msg.info
+              lastFinishedIndex = i
+            }
             if (lastUser && lastFinished) break
             const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
             if (task && !lastFinished) tasks.push(...task)
@@ -1351,7 +1366,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            lastUserIndex < lastAssistantIndex
           ) {
             yield* slog.info("exiting loop")
             break
@@ -1456,8 +1471,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
 
             if (step > 1 && lastFinished) {
-              for (const m of msgs) {
-                if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
+              for (let i = lastFinishedIndex + 1; i < msgs.length; i++) {
+                const m = msgs[i]
+                if (m.info.role !== "user") continue
                 for (const p of m.parts) {
                   if (p.type !== "text" || p.ignored || p.synthetic) continue
                   if (!p.text.trim()) continue

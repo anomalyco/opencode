@@ -342,6 +342,66 @@ it.live("loop exits immediately when last assistant has stop finish", () =>
   ),
 )
 
+// Regression: #23490. The HTTP API accepts caller-supplied messageIDs, but the
+// loop-exit decision used to compare lexical IDs (`lastUser.id < lastAssistant.id`).
+// A custom user ID that lex-sorts AFTER the assistant's auto-generated ID would
+// cause the loop to keep running after assistant `finish: "stop"`, sending a
+// transcript ending in an assistant turn — which providers reject with
+// "last message must be a user message". Ordering must use transcript position,
+// not opaque ID compare.
+it.live("loop exits when caller-supplied user messageID lex-sorts after assistant id", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Custom IDs" })
+      const session = yield* Session.Service
+
+      // Custom user ID that lex-sorts greater than any MessageID.ascending()
+      // output (which uses hex 0-9a-f for the timestamp prefix).
+      const userTime = Date.now()
+      const userMsg = yield* session.updateMessage({
+        id: MessageID.make("msg_zzzzzzzzzzzzzzzzzzzzzzzz"),
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        time: { created: userTime },
+      })
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: userMsg.id,
+        sessionID: chat.id,
+        type: "text",
+        text: "hello",
+      })
+      yield* session.updateMessage({
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: userMsg.id,
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        // Strictly greater than userTime so transcript ordering by time_created
+        // is unambiguous regardless of ID lex order.
+        time: { created: userTime + 1 },
+        finish: "stop",
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
+      expect(yield* llm.calls).toBe(0)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
 it.live("loop calls LLM and returns assistant message", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ llm }) {
