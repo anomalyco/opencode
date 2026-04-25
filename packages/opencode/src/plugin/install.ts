@@ -10,7 +10,7 @@ import {
 import * as ConfigPaths from "@/config/paths"
 import { Global } from "@/global"
 import { Filesystem } from "@/util"
-import { Flock } from "@opencode-ai/shared/util/flock"
+import { Flock } from "@opencode-ai/core/util/flock"
 import { isRecord } from "@/util/record"
 
 import { parsePluginSpecifier, readPackageThemes, readPluginPackage, resolvePluginTarget } from "./shared"

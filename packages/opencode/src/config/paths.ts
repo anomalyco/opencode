@@ -7,7 +7,7 @@ import { Global } from "@/global"
 import { unique } from "remeda"
 import { JsonError } from "./error"
 import * as Effect from "effect/Effect"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   name: string,
