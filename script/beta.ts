@@ -57,6 +57,19 @@ function lines(prs: PR[]) {
   return prs.map((x) => `- #${x.number}: ${x.title}`).join("\n") || "(none)"
 }
 
+function group(title: string) {
+  if (process.env.GITHUB_ACTIONS !== "true") {
+    console.log(title)
+    return { [Symbol.dispose]() {} }
+  }
+  console.log(`::group::${title}`)
+  return {
+    [Symbol.dispose]() {
+      console.log("::endgroup::")
+    },
+  }
+}
+
 async function typecheck() {
   console.log("  Running typecheck...")
 
@@ -227,8 +240,8 @@ async function main() {
   const failed: FailedPR[] = []
 
   for (const [idx, pr] of prs.entries()) {
-    console.log(`\nProcessing PR ${idx + 1}/${prs.length} #${pr.number}: ${pr.title}`)
-
+    console.log()
+    using _ = group(`Processing PR ${idx + 1}/${prs.length} #${pr.number}: ${pr.title}`)
     console.log("  Fetching PR head...")
     try {
       await $`git fetch origin pull/${pr.number}/head:pr/${pr.number}`
