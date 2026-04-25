@@ -58,6 +58,61 @@ describe("file watcher invalidation", () => {
     expect(loads).toEqual(["src/open.ts"])
   })
 
+  test("normalizes watcher paths before matching open files", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.watcher.updated",
+        properties: {
+          file: "src\\open.ts",
+          event: "change",
+        },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        isOpen: (path) => path === "src/open.ts",
+        loadFile: (path) => loads.push(path),
+        node: () => ({
+          path: "src/open.ts",
+          type: "file",
+          name: "open.ts",
+          absolute: "/repo/src/open.ts",
+          ignored: false,
+        }),
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      },
+    )
+
+    expect(loads).toEqual(["src/open.ts"])
+  })
+
+  test("refreshes nearest loaded ancestor on add", () => {
+    const refresh: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.watcher.updated",
+        properties: {
+          file: "src/nested/deep/new.ts",
+          event: "add",
+        },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        loadFile: () => {},
+        node: () => undefined,
+        isDirLoaded: (path) => path === "src",
+        refreshDir: (path) => refresh.push(path),
+      },
+    )
+
+    expect(refresh).toEqual(["src"])
+  })
+
   test("refreshes only changed loaded directory nodes", () => {
     const refresh: string[] = []
 

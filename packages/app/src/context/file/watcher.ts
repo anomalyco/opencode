@@ -15,6 +15,20 @@ type WatcherOps = {
   refreshDir: (path: string) => void
 }
 
+function toWatcherKey(path: string) {
+  return path.replace(/\\/g, "/")
+}
+
+function nearestLoadedParent(path: string, ops: WatcherOps) {
+  const parts = path.split("/").slice(0, -1)
+  while (true) {
+    const dir = parts.join("/")
+    if (ops.isDirLoaded(dir)) return dir
+    if (parts.length === 0) return
+    parts.pop()
+  }
+}
+
 export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   if (event.type !== "file.watcher.updated") return
   const props =
@@ -24,7 +38,7 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   if (!rawPath) return
   if (!kind) return
 
-  const path = ops.normalize(rawPath)
+  const path = toWatcherKey(ops.normalize(rawPath))
   if (!path) return
   if (path.startsWith(".git/")) return
 
@@ -46,8 +60,8 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   }
   if (kind !== "add" && kind !== "unlink") return
 
-  const parent = path.split("/").slice(0, -1).join("/")
-  if (!ops.isDirLoaded(parent)) return
+  const parent = nearestLoadedParent(path, ops)
+  if (parent === undefined) return
 
   ops.refreshDir(parent)
 }
