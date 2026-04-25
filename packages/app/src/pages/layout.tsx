@@ -1824,10 +1824,12 @@ export default function Layout(props: ParentProps) {
           return
         }
 
-        const next = new Set(dirs)
-        for (const directory of next) {
-          if (loadedSessionDirs.has(directory)) continue
-          void globalSync.project.loadSessions(directory)
+        const filterDirectory = workspaceSetting()
+        const next = new Set(dirs.map((directory) => `${directory}\n${filterDirectory}`))
+        for (const directory of dirs) {
+          const key = `${directory}\n${filterDirectory}`
+          if (loadedSessionDirs.has(key)) continue
+          void globalSync.project.loadSessions(directory, { filterDirectory })
         }
 
         loadedSessionDirs.clear()

@@ -1,15 +1,21 @@
 import type { RootLoadArgs } from "./types"
 
 export async function loadRootSessionsWithFallback(input: RootLoadArgs) {
+  const query = (limit?: number) => ({
+    ...(input.filterDirectory === false ? {} : { directory: input.directory }),
+    roots: true as const,
+    ...(limit ? { limit } : {}),
+  })
+
   try {
-    const result = await input.list({ directory: input.directory, roots: true, limit: input.limit })
+    const result = await input.list(query(input.limit))
     return {
       data: result.data,
       limit: input.limit,
       limited: true,
     } as const
   } catch {
-    const result = await input.list({ directory: input.directory, roots: true })
+    const result = await input.list(query())
     return {
       data: result.data,
       limit: input.limit,

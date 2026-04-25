@@ -41,7 +41,10 @@ type GlobalStore = {
 }
 
 export const loadSessionsQuery = (directory: string) =>
-  queryOptions<null>({ queryKey: [directory, "loadSessions"], queryFn: skipToken })
+  queryOptions<null>({ queryKey: [directory, "loadSessions", true], queryFn: skipToken })
+
+const sessionLoadQuery = (directory: string, filterDirectory: boolean) =>
+  queryOptions<null>({ queryKey: [directory, "loadSessions", filterDirectory], queryFn: skipToken })
 
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
@@ -52,7 +55,7 @@ function createGlobalSync() {
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
-  const sessionMeta = new Map<string, { limit: number }>()
+  const sessionMeta = new Map<string, { filterDirectory: boolean; limit: number }>()
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     ready: false,
@@ -146,14 +149,15 @@ function createGlobalSync() {
     return sdk
   }
 
-  async function loadSessions(directory: string) {
+  async function loadSessions(directory: string, options?: { filterDirectory?: boolean }) {
+    const filterDirectory = options?.filterDirectory ?? true
     const pending = sessionLoads.get(directory)
     if (pending) return pending
 
     children.pin(directory)
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(directory)
-    if (meta && meta.limit >= store.limit) {
+    if (meta && meta.filterDirectory === filterDirectory && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
         limit: store.limit,
         permission: store.permission,
@@ -169,10 +173,11 @@ function createGlobalSync() {
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
     const promise = queryClient
       .fetchQuery({
-        ...loadSessionsQuery(directory),
+        ...sessionLoadQuery(directory, filterDirectory),
         queryFn: () =>
           loadRootSessionsWithFallback({
             directory,
+            filterDirectory,
             limit,
             list: (query) => globalSDK.client.session.list(query),
           })
@@ -199,7 +204,7 @@ function createGlobalSync() {
                 setStore("session", reconcile(sessions, { key: "id" }))
                 cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
               })
-              sessionMeta.set(directory, { limit })
+              sessionMeta.set(directory, { filterDirectory, limit })
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
