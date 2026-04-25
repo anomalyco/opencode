@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
-import z from "zod"
+import { Schema } from "effect"
 
 export const Event = {
-  Connected: BusEvent.define("server.connected", z.object({})),
-  Disposed: BusEvent.define("global.disposed", z.object({})),
+  Connected: BusEvent.define("server.connected", Schema.Struct({})),
+  Disposed: BusEvent.define("global.disposed", Schema.Struct({})),
 }

@@ -1,9 +1,10 @@
 import { NodePath } from "@effect/platform-node"
-import { Cause, Duration, Effect, Layer, Schedule, Context } from "effect"
+import { Cause, Duration, Effect, Layer, Option, Schedule, Context } from "effect"
 import path from "path"
 import type { Agent } from "../agent/agent"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { evaluate } from "@/permission/evaluate"
+import { Config } from "../config"
 import { Identifier } from "../id/id"
 import { Log } from "../util"
 import { ToolID } from "./schema"
@@ -38,6 +39,10 @@ export interface Interface {
    * to the truncation directory and returns a preview plus a hint to inspect the saved file.
    */
   readonly output: (text: string, options?: Options, agent?: Agent.Info) => Effect.Effect<Result>
+  /**
+   * Resolved truncation limits: values from `tool_output` in opencode config, or MAX_LINES / MAX_BYTES if unset.
+   */
+  readonly limits: () => Effect.Effect<{ maxLines: number; maxBytes: number }>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Truncate") {}
@@ -68,9 +73,20 @@ export const layer = Layer.effect(
       return file
     })
 
+    const limits = Effect.fn("Truncate.limits")(function* () {
+      const configSvc = yield* Effect.serviceOption(Config.Service)
+      if (Option.isNone(configSvc)) return { maxLines: MAX_LINES, maxBytes: MAX_BYTES }
+      const cfg = yield* configSvc.value.get().pipe(Effect.catch(() => Effect.succeed(undefined)))
+      return {
+        maxLines: cfg?.tool_output?.max_lines ?? MAX_LINES,
+        maxBytes: cfg?.tool_output?.max_bytes ?? MAX_BYTES,
+      }
+    })
+
     const output = Effect.fn("Truncate.output")(function* (text: string, options: Options = {}, agent?: Agent.Info) {
-      const maxLines = options.maxLines ?? MAX_LINES
-      const maxBytes = options.maxBytes ?? MAX_BYTES
+      const resolved = yield* limits()
+      const maxLines = options.maxLines ?? resolved.maxLines
+      const maxBytes = options.maxBytes ?? resolved.maxBytes
       const direction = options.direction ?? "head"
       const lines = text.split("\n")
       const totalBytes = Buffer.byteLength(text, "utf-8")
@@ -135,7 +151,7 @@ export const layer = Layer.effect(
       Effect.forkScoped,
     )
 
-    return Service.of({ cleanup, write, output })
+    return Service.of({ cleanup, write, output, limits })
   }),
 )
 

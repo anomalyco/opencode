@@ -156,13 +156,12 @@ export function createChildStoreManager(input: {
 
       const init = () =>
         createRoot((dispose) => {
-          const initialMeta = meta[0].value
           const initialIcon = icon[0].value
 
           const pathQuery = useQuery(() => loadPathQuery(directory))
           const child = createStore<State>({
             project: "",
-            projectMeta: initialMeta,
+            projectMeta: undefined,
             icon: initialIcon,
             provider_ready: false,
             provider: { all: [], connected: [], default: {} },
@@ -206,11 +205,6 @@ export function createChildStoreManager(input: {
             const cached = vcsStore.value
             if (!cached?.branch) return
             child[1]("vcs", (value) => value ?? cached)
-          })
-
-          onPersistedInit(meta[2], () => {
-            if (child[0].projectMeta !== initialMeta) return
-            child[1]("projectMeta", meta[0].value)
           })
 
           onPersistedInit(icon[2], () => {

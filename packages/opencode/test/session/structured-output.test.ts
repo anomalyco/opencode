@@ -95,7 +95,7 @@ describe("structured-output.StructuredOutputError", () => {
 
 describe("structured-output.UserMessage", () => {
   test("user message accepts outputFormat", () => {
-    const result = MessageV2.User.safeParse({
+    const result = MessageV2.User.zod.safeParse({
       id: MessageID.ascending(),
       sessionID: SessionID.descending(),
       role: "user",
@@ -111,7 +111,7 @@ describe("structured-output.UserMessage", () => {
   })
 
   test("user message works without outputFormat (optional)", () => {
-    const result = MessageV2.User.safeParse({
+    const result = MessageV2.User.zod.safeParse({
       id: MessageID.ascending(),
       sessionID: SessionID.descending(),
       role: "user",
@@ -140,7 +140,7 @@ describe("structured-output.AssistantMessage", () => {
   }
 
   test("assistant message accepts structured", () => {
-    const result = MessageV2.Assistant.safeParse({
+    const result = MessageV2.Assistant.zod.safeParse({
       ...baseAssistantMessage,
       structured: { company: "Anthropic", founded: 2021 },
     })
@@ -151,7 +151,7 @@ describe("structured-output.AssistantMessage", () => {
   })
 
   test("assistant message works without structured_output (optional)", () => {
-    const result = MessageV2.Assistant.safeParse(baseAssistantMessage)
+    const result = MessageV2.Assistant.zod.safeParse(baseAssistantMessage)
     expect(result.success).toBe(true)
   })
 })

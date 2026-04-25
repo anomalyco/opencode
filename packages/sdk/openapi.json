@@ -4174,34 +4174,30 @@
                   "parts": {
                     "type": "array",
                     "items": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "pattern": "^prt.*"
-                            },
-                            "type": {
-                              "type": "string",
-                              "const": "file"
-                            },
-                            "mime": {
-                              "type": "string"
-                            },
-                            "filename": {
-                              "type": "string"
-                            },
-                            "url": {
-                              "type": "string"
-                            },
-                            "source": {
-                              "$ref": "#/components/schemas/FilePartSource"
-                            }
-                          },
-                          "required": ["type", "mime", "url"]
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^prt.*"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "file"
+                        },
+                        "mime": {
+                          "type": "string"
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "$ref": "#/components/schemas/FilePartSource"
                         }
-                      ]
+                      },
+                      "required": ["type", "mime", "url"]
                     }
                   }
                 },
@@ -6808,7 +6804,6 @@
                   },
                   "duration": {
                     "description": "Duration in milliseconds",
-                    "default": 5000,
                     "type": "number"
                   }
                 },
@@ -7642,20 +7637,8 @@
                 "type": "string"
               },
               "event": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "add"
-                  },
-                  {
-                    "type": "string",
-                    "const": "change"
-                  },
-                  {
-                    "type": "string",
-                    "const": "unlink"
-                  }
-                ]
+                "type": "string",
+                "enum": ["add", "change", "unlink"]
               }
             },
             "required": ["file", "event"]
@@ -8511,7 +8494,6 @@
               },
               "duration": {
                 "description": "Duration in milliseconds",
-                "default": 5000,
                 "type": "number"
               }
             },
@@ -10574,8 +10556,7 @@
                           }
                         ]
                       }
-                    },
-                    "required": ["url"]
+                    }
                   },
                   "title": {
                     "anyOf": [
@@ -10640,8 +10621,7 @@
                           }
                         ]
                       }
-                    },
-                    "required": ["created", "updated", "compacting", "archived"]
+                    }
                   },
                   "permission": {
                     "anyOf": [
@@ -10680,20 +10660,7 @@
                       }
                     ]
                   }
-                },
-                "required": [
-                  "id",
-                  "slug",
-                  "projectID",
-                  "workspaceID",
-                  "directory",
-                  "parentID",
-                  "summary",
-                  "title",
-                  "version",
-                  "permission",
-                  "revert"
-                ]
+                }
               }
             },
             "required": ["sessionID", "info"]
@@ -11852,6 +11819,24 @@
               "url": {
                 "description": "Enterprise URL",
                 "type": "string"
+              }
+            }
+          },
+          "tool_output": {
+            "description": "Thresholds for truncating tool output. When output exceeds either limit, the full text is written to the truncation directory and a preview is returned.",
+            "type": "object",
+            "properties": {
+              "max_lines": {
+                "description": "Maximum lines of tool output before it is truncated and saved to disk (default: 2000)",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "max_bytes": {
+                "description": "Maximum bytes of tool output before it is truncated and saved to disk (default: 51200)",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               }
             }
           },
