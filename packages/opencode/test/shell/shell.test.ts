@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Shell } from "../../src/shell/shell"
 import { Filesystem } from "../../src/util"
+import { tmpdir } from "../fixture/fixture"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
   const prev = process.env.SHELL
@@ -17,6 +19,32 @@ const withShell = async (shell: string | undefined, fn: () => void | Promise<voi
     Shell.acceptable.reset()
     Shell.preferred.reset()
   }
+}
+
+const WINDOWS_ENV_KEYS = ["Path", "PATHEXT", "WINDIR", "SystemRoot"] as const
+
+const withWindowsEnv = async (
+  env: Partial<Record<(typeof WINDOWS_ENV_KEYS)[number], string | undefined>>,
+  fn: () => void | Promise<void>,
+) => {
+  const prev = Object.fromEntries(WINDOWS_ENV_KEYS.map((key) => [key, process.env[key]]))
+  for (const key of WINDOWS_ENV_KEYS) {
+    if (env[key] === undefined) delete process.env[key]
+    else process.env[key] = env[key]
+  }
+  try {
+    await fn()
+  } finally {
+    for (const key of WINDOWS_ENV_KEYS) {
+      if (prev[key] === undefined) delete process.env[key]
+      else process.env[key] = prev[key]
+    }
+  }
+}
+
+const writeExe = async (file: string) => {
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  await Bun.write(file, "x")
 }
 
 describe("shell", () => {
@@ -60,6 +88,68 @@ describe("shell", () => {
         expect(Shell.acceptable()).toBe(bash)
         expect(Shell.preferred()).toBe(bash)
       })
+    })
+
+    test("prefers bash from PATH over git-derived paths", async () => {
+      await using tmp = await tmpdir()
+      const bash = path.join(tmp.path, "msys64", "usr", "bin", "bash.exe")
+      const git = path.join(tmp.path, "Git", "cmd", "git.exe")
+
+      await writeExe(bash)
+      await writeExe(git)
+      await writeExe(path.join(tmp.path, "Git", "bin", "bash.exe"))
+
+      await withWindowsEnv(
+        {
+          Path: [path.dirname(bash), path.dirname(git)].join(path.delimiter),
+          PATHEXT: ".EXE",
+        },
+        async () => {
+          expect(Shell.gitbash()?.toLowerCase()).toBe(bash.toLowerCase())
+        },
+      )
+    })
+
+    test("resolves MSYS2 UCRT64 git layout", async () => {
+      await using tmp = await tmpdir()
+      const git = path.join(tmp.path, "msys64", "ucrt64", "bin", "git.exe")
+      const bash = path.join(tmp.path, "msys64", "usr", "bin", "bash.exe")
+
+      await writeExe(git)
+      await writeExe(bash)
+
+      await withWindowsEnv(
+        {
+          Path: path.dirname(git),
+          PATHEXT: ".EXE",
+        },
+        async () => {
+          expect(Shell.gitbash()).toBe(bash)
+        },
+      )
+    })
+
+    test("ignores WSL bash from Windows system directories", async () => {
+      await using tmp = await tmpdir()
+      const windows = path.join(tmp.path, "Windows")
+      const git = path.join(tmp.path, "Git", "cmd", "git.exe")
+      const bash = path.join(tmp.path, "Git", "bin", "bash.exe")
+
+      await writeExe(path.join(windows, "System32", "bash.exe"))
+      await writeExe(git)
+      await writeExe(bash)
+
+      await withWindowsEnv(
+        {
+          Path: [path.join(windows, "System32"), path.dirname(git)].join(path.delimiter),
+          PATHEXT: ".EXE",
+          WINDIR: windows,
+          SystemRoot: windows,
+        },
+        async () => {
+          expect(Shell.gitbash()).toBe(bash)
+        },
+      )
     })
 
     test("resolves bare PowerShell shells", async () => {

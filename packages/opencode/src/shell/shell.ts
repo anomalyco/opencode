@@ -72,10 +72,38 @@ function select(file: string | undefined, opts?: { acceptable?: boolean }) {
 export function gitbash() {
   if (process.platform !== "win32") return
   if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
+  const bash = pathbash()
+  if (bash) return bash
   const git = which("git")
   if (!git) return
-  const file = path.join(git, "..", "..", "bin", "bash.exe")
-  if (Filesystem.stat(file)?.size) return file
+  return [
+    path.join(git, "..", "..", "bin", "bash.exe"),
+    path.join(git, "..", "bash.exe"),
+    path.join(git, "..", "..", "..", "usr", "bin", "bash.exe"),
+  ].find(executable)
+}
+
+function pathbash() {
+  return (process.env.PATH ?? process.env.Path ?? "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map((dir) => path.join(dir.replace(/^"(.*)"$/, "$1"), "bash.exe"))
+    .find((file) => !wslbash(file) && executable(file))
+}
+
+function executable(file: string) {
+  try {
+    return !!Filesystem.stat(file)?.size
+  } catch {
+    return false
+  }
+}
+
+function wslbash(file: string) {
+  return [process.env.WINDIR, process.env.SystemRoot]
+    .filter((dir): dir is string => !!dir)
+    .flatMap((dir) => [path.join(dir, "System32", "bash.exe"), path.join(dir, "Sysnative", "bash.exe")])
+    .some((candidate) => Filesystem.windowsPath(candidate).toLowerCase() === Filesystem.windowsPath(file).toLowerCase())
 }
 
 function fallback() {
