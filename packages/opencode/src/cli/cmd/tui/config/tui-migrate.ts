@@ -3,7 +3,7 @@ import { type ParseError as JsoncParseError, applyEdits, modify, parse as parseJ
 import { unique } from "remeda"
 import z from "zod"
 import { TuiInfo, TuiOptions } from "./tui-schema"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@/global"
 import { Filesystem, Log } from "@/util"
 import * as ConfigPaths from "@/config/paths"

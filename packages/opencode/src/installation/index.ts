@@ -6,11 +6,11 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
 import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
-import { Flag } from "../flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Log } from "../util"
 
 import semver from "semver"
-import { InstallationChannel, InstallationVersion } from "./version"
+import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 
 const log = Log.create({ service: "installation" })
 

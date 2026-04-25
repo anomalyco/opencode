@@ -7,7 +7,7 @@ import { useProject } from "@tui/context/project"
 import { createMemo, createSignal, onMount } from "solid-js"
 import { setTimeout as sleep } from "node:timers/promises"
 import { errorData, errorMessage } from "@/util/error"
-import * as Log from "@/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 

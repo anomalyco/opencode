@@ -18,7 +18,7 @@ import { ProjectApi, projectHandlers } from "./project"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
-import { memoMap } from "@/effect/memo-map"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),

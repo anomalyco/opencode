@@ -3,7 +3,7 @@ import type { InstanceContext } from "../project/instance"
 import { Filesystem } from "../util"
 import { Process } from "../util"
 import { which } from "../util/which"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 export interface Context extends Pick<InstanceContext, "directory" | "worktree"> {}
 
