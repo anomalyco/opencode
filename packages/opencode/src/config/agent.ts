@@ -1,6 +1,6 @@
 export * as ConfigAgent from "./agent"
 
-import { Schema, SchemaGetter } from "effect"
+import { Exit, Schema, SchemaGetter } from "effect"
 import { Bus } from "@/bus"
 import { zod } from "@/util/effect-zod"
 import { PositiveInt, withStatics } from "@/util/schema"
@@ -8,9 +8,9 @@ import { Log } from "../util"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { Glob } from "@opencode-ai/shared/util/glob"
 import { configEntryNameFromPath } from "./entry-name"
-import { InvalidError } from "./error"
 import * as ConfigMarkdown from "./markdown"
 import { ConfigModelID } from "./model-id"
+import { ConfigParse } from "./parse"
 import { ConfigPermission } from "./permission"
 
 const log = Log.create({ service: "config" })
@@ -134,12 +134,7 @@ export async function load(dir: string) {
       ...md.data,
       prompt: md.content.trim(),
     }
-    const parsed = Info.zod.safeParse(config)
-    if (parsed.success) {
-      result[config.name] = parsed.data
-      continue
-    }
-    throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+    result[config.name] = ConfigParse.effectSchema(Info, config, item)
   }
   return result
 }
@@ -168,10 +163,10 @@ export async function loadMode(dir: string) {
       ...md.data,
       prompt: md.content.trim(),
     }
-    const parsed = Info.zod.safeParse(config)
-    if (parsed.success) {
+    const parsed = Schema.decodeUnknownExit(Info)(config, { errors: "all", propertyOrder: "original" })
+    if (Exit.isSuccess(parsed)) {
       result[config.name] = {
-        ...parsed.data,
+        ...parsed.value,
         mode: "primary" as const,
       }
     }
