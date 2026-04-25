@@ -246,9 +246,17 @@ function normalizeMessages(
         }
       }
       if (typeof msg.content === "string") {
+        const sdk = sdkKey(model.api.npm) ?? "openaiCompatible"
         return {
           ...msg,
           content: [{ type: "text" as const, text: msg.content }, { type: "reasoning" as const, text: "" }],
+          providerOptions: {
+            ...msg.providerOptions,
+            [sdk]: {
+              ...msg.providerOptions?.[sdk],
+              reasoning_content: "",
+            },
+          },
         }
       }
       return msg
