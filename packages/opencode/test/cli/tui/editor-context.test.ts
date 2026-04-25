@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { offsetToPosition } from "../../../src/cli/cmd/tui/context/editor"
+import { offsetToPosition } from "../../../src/cli/cmd/tui/context/editor-zed"
 
 test("offsetToPosition converts Zed offsets to 1-based editor positions", () => {
   expect(offsetToPosition("one\ntwo\nthree", 0)).toEqual({ line: 1, character: 1 })
