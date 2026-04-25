@@ -420,5 +420,3 @@ export type LLMError =
   | ProviderRequestError
   | ProviderChunkError
   | TransportError
-
-export * as LLMCoreSchema from "./schema"

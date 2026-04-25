@@ -121,17 +121,6 @@ export function registry(patches: ReadonlyArray<AnyPatch>): PatchRegistry {
   }
 }
 
-export const Patch = {
-  make,
-  request,
-  prompt,
-  toolSchema,
-  target,
-  transport,
-  stream,
-  registry,
-}
-
 export function context(input: {
   readonly request: LLMRequest
   readonly small?: boolean
@@ -184,4 +173,4 @@ export function mergeRegistries(registries: ReadonlyArray<PatchRegistry>): Patch
   )
 }
 
-export * as LLMCorePatch from "./patch"
+export * as Patch from "./patch"

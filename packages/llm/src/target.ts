@@ -7,4 +7,4 @@ export interface TargetBuilder<Draft, Target> {
   readonly validate: (draft: Draft) => Effect.Effect<Target, LLMError>
 }
 
-export * as LLMCoreTarget from "./target"
+export * as Target from "./target"

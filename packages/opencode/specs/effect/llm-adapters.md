@@ -84,8 +84,8 @@ Initial in-repo import shape:
 import { LLMRequest, LLMEvent, LLMClient } from "@opencode-ai/llm"
 ```
 
-Until it becomes a package, this can live under `packages/opencode/src/llm-core`
-with the same module boundaries.
+The first implementation lives in `packages/llm` so the package boundary stays
+honest from the start.
 
 ### Module responsibilities
 
@@ -110,17 +110,16 @@ Keep module boundaries strict so the package stays portable.
   chunk-to-event raising, and default protocol patches.
 - `patch/*` owns reusable named patches that are not tied to one adapter file.
 
-If the first version lands under `packages/opencode/src/llm-core`, each module
-should follow the repo's self-export pattern, for example:
+Each module should follow the repo's self-export pattern, for example:
 
 ```ts
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLMCore") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/LLM/Transport") {}
 
-export * as LLMCore from "./client"
+export * as Transport from "./transport"
 ```
 
-The standalone package can expose a package-level `index.ts` later, but internal
-multi-sibling directories should avoid broad barrels.
+The package exposes a small package-level `index.ts`; internal multi-sibling
+directories should still avoid broad barrels.
 
 ## Public API
 
@@ -165,14 +164,13 @@ export const client: (options: ClientOptions) => Effect.Effect<LLMClient, LLMErr
 Consumer-side opencode code should be this small:
 
 ```ts
-const llm = yield* LLMCore.client({
+const llm = client({
   adapters: AdapterRegistry.make([
     OpenAIChat.adapter,
     OpenAIResponses.adapter,
     Anthropic.adapter,
     Gemini.adapter,
   ]),
-  transport: Transport.fetch,
   patches: OpenCodePatches.default,
 })
 
@@ -197,7 +195,7 @@ wiring can use layers without forcing standalone consumers to do the same:
 ```ts
 export interface Interface extends LLMClient {}
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLMCore") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 ```
 
 `client` should be the implementation primitive. The service layer should be thin
@@ -807,20 +805,21 @@ export interface PatchRegistry {
 }
 ```
 
-Recommended opencode layout:
+Recommended package/opencode layout:
 
 ```text
-src/llm-core/
+packages/llm/src/
   patch.ts
-  patches/
-    prompt.ts           # shared history/request compatibility patches
-    schema.ts           # shared tool/JSON schema transforms
-    transport.ts        # shared header/routing patches
-    index.ts            # OpenCodePatches.default
   provider/
     openai-chat.ts      # adapter + typed OpenAI target patches
     anthropic.ts        # adapter + typed Anthropic target patches
     gemini.ts           # adapter + typed Gemini target patches
+
+packages/opencode/src/provider/patch/
+  prompt.ts             # shared history/request compatibility patches
+  schema.ts             # shared tool/JSON schema transforms
+  transport.ts          # shared header/routing patches
+  index.ts              # OpenCodePatches.default
 ```
 
 Normal opencode code should import only the final registry:
@@ -1604,8 +1603,7 @@ confidence.
 
 Goal: define the standalone API without touching opencode runtime behavior.
 
-1. Add `packages/llm` or `packages/opencode/src/llm-core` with no imports from
-   opencode session modules.
+1. Add `packages/llm` with no imports from opencode session modules.
 2. Add `schema.ts` with `ModelRef`, `LLMRequest`, `Message`, `ContentPart`,
    `ToolDefinition`, `LLMEvent`, `Usage`, and errors.
 3. Add `target.ts` with `TargetBuilder`, `TargetFragment`, and `TargetSlot`.
@@ -1714,8 +1712,8 @@ Acceptance criteria:
 
 Use these defaults unless implementation proves they are wrong.
 
-- Land the first version under `packages/opencode/src/llm-core` only if creating a
-  workspace package slows the prototype. Keep imports package-clean either way.
+- Keep the first version in `packages/llm`; do not move package-generic code back
+  into `packages/opencode` during integration.
 - Treat patch IDs as internal until config, plugin, or public docs reference them.
   Once referenced externally, require stable IDs and deprecation notes.
 - Keep `ModelRef.native` and `LLMRequest.native` as
@@ -1771,11 +1769,11 @@ Mitigation:
 
 The smallest useful implementation should be docs-to-code mechanical.
 
-1. Create `llm-core/schema.ts` with only schemas and errors.
-2. Create `llm-core/patch.ts` with pure patch planning and trace tests.
-3. Create `llm-core/target.ts` with the minimal `TargetBuilder` interface. Add
+1. Create `packages/llm/src/schema.ts` with only schemas and errors.
+2. Create `packages/llm/src/patch.ts` with pure patch planning and trace tests.
+3. Create `packages/llm/src/target.ts` with the minimal `TargetBuilder` interface. Add
    fragments only when a real adapter needs them.
-4. Create `llm-core/adapter.ts` with the shared runner but no real provider.
+4. Create `packages/llm/src/adapter.ts` with the shared runner but no real provider.
 5. Add a fake adapter and in-memory transport contract test.
 6. Add `provider/openai-chat.ts` only after the fake adapter proves the runner
    boundaries.

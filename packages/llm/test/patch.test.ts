@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { LLMRequest, ModelCapabilities, ModelLimits, ModelRef } from "../../src/llm-core/schema"
-import { Model, Patch, Request, context, plan } from "../../src/llm-core/patch"
+import { Model, Patch, Request, context, plan } from "../src/patch"
+import { LLMRequest, ModelCapabilities, ModelLimits, ModelRef } from "../src/schema"
 
 const capabilities = new ModelCapabilities({
   input: { text: true, image: false, audio: false, video: false, pdf: false },
@@ -25,7 +25,7 @@ const request = new LLMRequest({
   generation: {},
 })
 
-describe("llm-core patch", () => {
+describe("llm patch", () => {
   test("constructors prefix ids and registry groups by phase", () => {
     const prompt = Patch.prompt("mistral.test", {
       reason: "test prompt",

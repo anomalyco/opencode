@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { ContentPart, LLMEvent, LLMRequest, ModelCapabilities, ModelLimits, ModelRef } from "../../src/llm-core/schema"
+import { ContentPart, LLMEvent, LLMRequest, ModelCapabilities, ModelLimits, ModelRef } from "../src/schema"
 
 const capabilities = new ModelCapabilities({
   input: { text: true, image: false, audio: false, video: false, pdf: false },
@@ -18,7 +18,7 @@ const model = new ModelRef({
   limits: new ModelLimits({}),
 })
 
-describe("llm-core schema", () => {
+describe("llm schema", () => {
   test("decodes a minimal request", () => {
     const input: unknown = {
       id: "req_1",

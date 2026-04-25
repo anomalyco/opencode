@@ -2,7 +2,7 @@ import { Effect, Stream } from "effect"
 import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry, target as targetPatch } from "./patch"
 import type { TargetBuilder } from "./target"
-import type { Transport } from "./transport"
+import { Transport } from "./transport"
 import type {
   LLMError,
   LLMEvent,
@@ -63,13 +63,12 @@ export interface AdapterDefinition<Draft, Target, Chunk> extends Adapter<Draft, 
 
 export interface LLMClient {
   readonly prepare: (request: LLMRequest) => Effect.Effect<PreparedRequest, LLMError>
-  readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
-  readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError>
+  readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError, Transport.Service>
+  readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError, Transport.Service>
 }
 
 export interface ClientOptions<Draft, Target, Chunk> {
   readonly adapter: Adapter<Draft, Target, Chunk>
-  readonly transport: Transport
   readonly patches?: PatchRegistry | ReadonlyArray<AnyPatch>
   readonly small?: boolean
   readonly flags?: Record<string, string | number | boolean | undefined>
@@ -104,10 +103,10 @@ export function define<Draft, Target, Chunk>(input: AdapterInput<Draft, Target, 
   return build(input.patches ?? [])
 }
 
-export function makeClient<Draft, Target, Chunk>(options: ClientOptions<Draft, Target, Chunk>): LLMClient {
+export function client<Draft, Target, Chunk>(options: ClientOptions<Draft, Target, Chunk>): LLMClient {
   const registry = normalizeRegistry(options.patches)
 
-  const compile = Effect.fn("LLMCore.compile")(function* (request: LLMRequest) {
+  const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
     yield* assertProtocol(request.model, options.adapter)
 
     const requestPlan = plan({
@@ -157,7 +156,7 @@ export function makeClient<Draft, Target, Chunk>(options: ClientOptions<Draft, T
     return { request: patchedRequest, target, transport, patchTrace }
   })
 
-  const prepare = Effect.fn("LLMCore.prepare")(function* (request: LLMRequest) {
+  const prepare = Effect.fn("LLM.prepare")(function* (request: LLMRequest) {
     const compiled = yield* compile(request)
 
     return new PreparedRequestSchema({
@@ -175,7 +174,8 @@ export function makeClient<Draft, Target, Chunk>(options: ClientOptions<Draft, T
     Stream.unwrap(
       Effect.gen(function* () {
         const compiled = yield* compile(request)
-        const response = yield* options.transport.fetch(compiled.transport)
+        const transport = yield* Transport.Service
+        const response = yield* transport.fetch(compiled.transport)
         const streamPlan = plan({
           phase: "stream",
           context: context({ request: compiled.request, small: options.small, flags: options.flags }),
@@ -194,7 +194,7 @@ export function makeClient<Draft, Target, Chunk>(options: ClientOptions<Draft, T
       }),
     )
 
-  const generate = Effect.fn("LLMCore.generate")(function* (request: LLMRequest) {
+  const generate = Effect.fn("LLM.generate")(function* (request: LLMRequest) {
     const events = Array.from(yield* stream(request).pipe(Stream.runCollect))
     const usage = events.reduce<LLMResponse["usage"]>(
       (last, event) => ("usage" in event && event.usage !== undefined ? event.usage : last),
@@ -206,10 +206,4 @@ export function makeClient<Draft, Target, Chunk>(options: ClientOptions<Draft, T
   return { prepare, stream, generate }
 }
 
-export const client = makeClient
-
-export const Adapter = {
-  define,
-}
-
-export * as LLMCore from "./adapter"
+export * as Adapter from "./adapter"
