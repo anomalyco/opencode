@@ -1652,7 +1652,7 @@ export type Config = {
      */
     auto?: boolean
     /**
-     * Enable pruning of old tool outputs (default: true)
+     * Enable pruning of old tool outputs (default: false)
      */
     prune?: boolean
     /**

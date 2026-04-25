@@ -11847,7 +11847,7 @@
                 "type": "boolean"
               },
               "prune": {
-                "description": "Enable pruning of old tool outputs (default: true)",
+                "description": "Enable pruning of old tool outputs (default: false)",
                 "type": "boolean"
               },
               "tail_turns": {
