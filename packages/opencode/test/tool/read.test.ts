@@ -78,7 +78,6 @@ const fail = Effect.fn("ReadToolTest.fail")(function* (
   throw new Error("expected read to fail")
 })
 
-const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
 const put = Effect.fn("ReadToolTest.put")(function* (p: string, content: string | Buffer | Uint8Array) {
@@ -124,6 +123,48 @@ describe("tool.read external_directory permission", () => {
     }),
   )
 
+  it.live("applies exact project-relative read permission rules", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const target = path.join(
+        dir,
+        "src",
+        "main",
+        "java",
+        "com",
+        "example",
+        "app",
+        "controller",
+        "ExampleController.java",
+      )
+      const ruleset = Permission.fromConfig({
+        read: {
+          "*": "allow",
+          "src/main/java/com/example/app/controller/ExampleController.java": "deny",
+        },
+      })
+
+      yield* put(target, "secret")
+
+      const err = yield* fail(
+        dir,
+        { filePath: target },
+        {
+          ...ctx,
+          ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+            Effect.sync(() => {
+              for (const pattern of req.patterns) {
+                const rule = Permission.evaluate(req.permission, pattern, ruleset)
+                if (rule.action === "deny") throw new Permission.DeniedError({ ruleset })
+              }
+            }),
+        },
+      )
+
+      expect(err).toBeInstanceOf(Permission.DeniedError)
+    }),
+  )
+
   it.live("asks for external_directory permission when reading absolute path outside project", () =>
     Effect.gen(function* () {
       const outer = yield* tmpdirScoped()
@@ -148,14 +189,14 @@ describe("tool.read external_directory permission", () => {
         const { items, next } = asks()
         const target = path.join(dir, "test.txt")
         const alt = target
-          .replace(/^[A-Za-z]:/, "")
+          .replace(/^([A-Za-z]):/, "/$1")
           .replaceAll("\\", "/")
           .toLowerCase()
 
         yield* exec(dir, { filePath: alt }, next)
         const read = items.find((item) => item.permission === "read")
         expect(read).toBeDefined()
-        expect(read!.patterns).toEqual([full(target)])
+        expect(read!.patterns).toEqual(["test.txt"])
       }),
     )
   }

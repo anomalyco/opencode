@@ -164,6 +164,7 @@ export const ReadTool = Tool.define(
         filepath = AppFileSystem.normalizePath(filepath)
       }
       const title = path.relative(Instance.worktree, filepath)
+      const permissionPath = title.startsWith("..") || path.isAbsolute(title) ? filepath : title
 
       const stat = yield* fs.stat(filepath).pipe(
         Effect.catchIf(
@@ -179,7 +180,7 @@ export const ReadTool = Tool.define(
 
       yield* ctx.ask({
         permission: "read",
-        patterns: [filepath],
+        patterns: [permissionPath],
         always: ["*"],
         metadata: {},
       })
