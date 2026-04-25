@@ -1915,6 +1915,38 @@ describe("SessionNs.getUsage", () => {
     expect(result.tokens.cache.read).toBe(200)
   })
 
+  test("clamps adjusted token counts to zero", () => {
+    const model = createModel({ context: 100_000, output: 32_000 })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 425,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: 75,
+        },
+      },
+      metadata: {
+        anthropic: {
+          cacheCreationInputTokens: 150,
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(0)
+    expect(result.tokens.output).toBe(0)
+    expect(result.tokens.reasoning).toBe(75)
+    expect(result.tokens.cache.read).toBe(200)
+    expect(result.tokens.cache.write).toBe(150)
+  })
+
   test("handles anthropic cache write metadata", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
     const result = SessionNs.getUsage({

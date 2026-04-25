@@ -301,14 +301,15 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
     if (!Number.isFinite(value)) return 0
     return value
   }
-  const inputTokens = safe(input.usage.inputTokens ?? 0)
-  const outputTokens = safe(input.usage.outputTokens ?? 0)
-  const reasoningTokens = safe(input.usage.outputTokenDetails?.reasoningTokens ?? input.usage.reasoningTokens ?? 0)
+  const nonNegative = (value: number) => Math.max(0, safe(value))
+  const inputTokens = nonNegative(input.usage.inputTokens ?? 0)
+  const outputTokens = nonNegative(input.usage.outputTokens ?? 0)
+  const reasoningTokens = nonNegative(input.usage.outputTokenDetails?.reasoningTokens ?? input.usage.reasoningTokens ?? 0)
 
-  const cacheReadInputTokens = safe(
+  const cacheReadInputTokens = nonNegative(
     input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
   )
-  const cacheWriteInputTokens = safe(
+  const cacheWriteInputTokens = nonNegative(
     Number(
       input.usage.inputTokenDetails?.cacheWriteTokens ??
         input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
@@ -326,14 +327,14 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
   // AI SDK v6 normalized inputTokens to include cached tokens across all providers
   // (including Anthropic/Bedrock which previously excluded them). Always subtract cache
   // tokens to get the non-cached input count for separate cost calculation.
-  const adjustedInputTokens = safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
+  const adjustedInputTokens = nonNegative(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
 
   const total = input.usage.totalTokens
 
   const tokens = {
     total,
     input: adjustedInputTokens,
-    output: safe(outputTokens - reasoningTokens),
+    output: nonNegative(outputTokens - reasoningTokens),
     reasoning: reasoningTokens,
     cache: {
       write: cacheWriteInputTokens,
