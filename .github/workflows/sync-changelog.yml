@@ -1,0 +1,130 @@
+name: sync-changelog
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [changelog_update]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Fetch changelog
+        run: |
+          cat > fetch-changelog.mjs << 'EOF'
+          const res = await fetch("https://opencode.ai/changelog");
+          const html = await res.text();
+
+          const versionRegex = /v(\d+\.\d+\.\d+)[^]+?(\w+ \d+, \d+)/g;
+
+          const versions = [];
+          let match;
+          while ((match = versionRegex.exec(html)) !== null) {
+            versions.push({ version: match[1], date: match[2].trim(), index: match.index });
+          }
+
+          versions.sort((a, b) => b.index - a.index);
+
+          const changes = [];
+
+          for (let i = 0; i < Math.min(versions.length, 5); i++) {
+            const v = versions[i];
+            const nextIndex = i < versions.length - 1 ? versions[i + 1].index : html.length;
+            const section = html.slice(v.index, nextIndex);
+
+            const sections = {};
+            const sectionTitleRegex = /### (\w+)[^]+?- /g;
+            let sMatch;
+            while ((sMatch = sectionTitleRegex.exec(section)) !== null) {
+              const title = sMatch[1].trim();
+              const entryMatch = section.matchAll(/- ([^\n]+)/g);
+              const items = [...entryMatch].map(m => m[1].trim()).filter(Boolean);
+              sections[title] = items;
+            }
+
+            changes.push({ version: v.version, date: v.date, ...sections });
+          }
+
+          await Bun.write("changes.json", JSON.stringify(changes, null, 2));
+          EOF
+          bun run fetch-changelog.mjs
+
+      - name: Sync changelog
+        run: |
+          cat > sync-changelog.mjs << 'EOF'
+          import { readFileSync, writeFileSync, existsSync } from "fs";
+
+          const changes = JSON.parse(readFileSync("changes.json", "utf-8"));
+
+          let content = existsSync("changelog.md") 
+            ? readFileSync("changelog.md", "utf-8").trim() 
+            : "# Changelog\n\nNew updates and improvements to OpenCode";
+
+          const existingVersions = content.match(/## \[v(\d+\.\d+\.\d+)\]/g) || [];
+          const existingSet = new Set(existingVersions.map(v => v.match(/v(\d+\.\d+\.\d+)/)?.[1]).filter(Boolean));
+
+          const newEntries = [];
+
+          for (const change of changes) {
+            if (existingSet.has(change.version)) continue;
+
+            const validSections = ["Core", "TUI", "Desktop", "SDK"];
+            const sections = [];
+
+            for (const sec of validSections) {
+              if (change[sec]?.length) {
+                sections.push(`### ${sec}\n\n${change[sec].map(c => `- ${c}`).join("\n")}`);
+              }
+            }
+
+            if (!sections.length) continue;
+
+            const entry = `## [v${change.version}](https://github.com/anomalyco/opencode/releases/tag/v${change.version})\n\n${change.date}\n\n${sections.join("\n\n")}`;
+            newEntries.push(entry);
+          }
+
+          if (newEntries.length === 0) {
+            console.log("No new entries found");
+            process.exit(0);
+          }
+
+          const header = "# Changelog\n\nNew updates and improvements to OpenCode";
+          const body = content.replace(header, "").trim();
+          const newContent = `${header}\n\n${newEntries.join("\n\n")}${body ? "\n\n" + body : ""}`;
+
+          writeFileSync("changelog.md", newContent.trim() + "\n");
+          console.log(`Updated changelog with ${newEntries.length} new entries`);
+          EOF
+          bun run sync-changelog.mjs
+
+      - name: Commit and push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add changelog.md
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: sync changelog from opencode.ai/changelog"
+            git push origin dev
+          else
+            echo "No changes to commit"
+          fi
