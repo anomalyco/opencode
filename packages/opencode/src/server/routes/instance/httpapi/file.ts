@@ -1,6 +1,7 @@
 import { File } from "@/file"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "./auth"
 
 const FileQuery = Schema.Struct({
   path: Schema.String,
@@ -51,7 +52,8 @@ export const FileApi = HttpApi.make("file")
           title: "file",
           description: "Experimental HttpApi file routes.",
         }),
-      ),
+      )
+      .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({

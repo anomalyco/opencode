@@ -1,6 +1,7 @@
 import { MCP } from "@/mcp"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "./auth"
 
 export const McpPaths = {
   status: "/mcp",
@@ -25,7 +26,8 @@ export const McpApi = HttpApi.make("mcp")
           title: "mcp",
           description: "Experimental HttpApi MCP routes.",
         }),
-      ),
+      )
+      .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({
