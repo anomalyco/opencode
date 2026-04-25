@@ -855,11 +855,13 @@ const ProviderCacheCost = Schema.Struct({
 const ProviderCost = Schema.Struct({
   input: Schema.Number,
   output: Schema.Number,
+  reasoning: Schema.optional(Schema.Number),
   cache: ProviderCacheCost,
   experimentalOver200K: Schema.optional(
     Schema.Struct({
       input: Schema.Number,
       output: Schema.Number,
+      reasoning: Schema.optional(Schema.Number),
       cache: ProviderCacheCost,
     }),
   ),
@@ -949,6 +951,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {
     input: c?.input ?? 0,
     output: c?.output ?? 0,
+    reasoning: c?.reasoning,
     cache: {
       read: c?.cache_read ?? 0,
       write: c?.cache_write ?? 0,
@@ -962,6 +965,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
       },
       input: c.context_over_200k.input,
       output: c.context_over_200k.output,
+      reasoning: c.context_over_200k.reasoning,
     }
   }
   return result
@@ -1182,6 +1186,7 @@ const layer: Layer.Layer<
               cost: {
                 input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
                 output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
+                reasoning: model?.cost?.reasoning ?? existingModel?.cost?.reasoning,
                 cache: {
                   read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
                   write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,

@@ -24,12 +24,14 @@ const ttl = 5 * 60 * 1000
 const Cost = Schema.Struct({
   input: Schema.Number,
   output: Schema.Number,
+  reasoning: Schema.optional(Schema.Number),
   cache_read: Schema.optional(Schema.Number),
   cache_write: Schema.optional(Schema.Number),
   context_over_200k: Schema.optional(
     Schema.Struct({
       input: Schema.Number,
       output: Schema.Number,
+      reasoning: Schema.optional(Schema.Number),
       cache_read: Schema.optional(Schema.Number),
       cache_write: Schema.optional(Schema.Number),
     }),

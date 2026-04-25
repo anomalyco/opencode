@@ -2089,6 +2089,62 @@ describe("SessionNs.getUsage", () => {
     expect(result.cost).toBe(3 + 1.5)
   })
 
+  test("uses explicit reasoning price when the model exposes one", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: {
+        input: 0.6,
+        output: 4,
+        reasoning: 1,
+        cache: { read: 0.15, write: 0 },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 120,
+        totalTokens: 1120,
+        inputTokenDetails: {
+          noCacheTokens: 800,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: 20,
+          reasoningTokens: 100,
+        },
+      },
+    })
+
+    expect(result.cost).toBeCloseTo((800 * 0.6 + 20 * 4 + 100 * 1 + 200 * 0.15) / 1_000_000, 10)
+  })
+
+  test("falls back to output price for reasoning tokens when no reasoning cost is set", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: {
+        input: 0.6,
+        output: 4,
+        cache: { read: 0, write: 0 },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: 20, reasoningTokens: 30 },
+      },
+    })
+
+    expect(result.cost).toBeCloseTo((100 * 0.6 + 20 * 4 + 30 * 4) / 1_000_000, 10)
+  })
+
   test.each(["@ai-sdk/anthropic", "@ai-sdk/amazon-bedrock", "@ai-sdk/google-vertex/anthropic"])(
     "computes total from components for %s models",
     (npm) => {
