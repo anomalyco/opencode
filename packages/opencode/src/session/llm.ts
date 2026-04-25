@@ -2,7 +2,7 @@ import { Provider } from "@/provider"
 import { Log } from "@/util"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
-import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
+import { generateText, streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider"
@@ -55,6 +55,56 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyPart = { type: string; [k: string]: any }
+
+function isImageContentPart(part: AnyPart): boolean {
+  return (
+    part.type === "image" ||
+    (part.type === "file" && typeof part.mediaType === "string" && part.mediaType.startsWith("image/"))
+  )
+}
+
+function hasImageParts(msgs: ModelMessage[]): boolean {
+  return msgs.some(
+    (msg) =>
+      msg.role === "user" &&
+      Array.isArray(msg.content) &&
+      (msg.content as unknown as AnyPart[]).some(isImageContentPart),
+  )
+}
+
+function extractImageParts(msgs: ModelMessage[]): AnyPart[] {
+  const parts: AnyPart[] = []
+  for (const msg of msgs) {
+    if (msg.role !== "user" || !Array.isArray(msg.content)) continue
+    for (const part of msg.content as unknown as AnyPart[]) {
+      if (isImageContentPart(part)) parts.push(part)
+    }
+  }
+  return parts
+}
+
+function replaceImagePartsWithText(msgs: ModelMessage[], description: string): ModelMessage[] {
+  let replaced = false
+  return msgs.map((msg) => {
+    if (msg.role !== "user" || !Array.isArray(msg.content)) return msg
+    const newContent: AnyPart[] = []
+    for (const part of msg.content as unknown as AnyPart[]) {
+      if (isImageContentPart(part)) {
+        if (!replaced) {
+          replaced = true
+          newContent.push({ type: "text", text: description })
+        }
+        // drop subsequent image parts — already covered by the single description
+      } else {
+        newContent.push(part)
+      }
+    }
+    return { ...msg, content: newContent } as unknown as ModelMessage
+  })
+}
 
 const live: Layer.Layer<
   Service,
@@ -144,11 +194,49 @@ const live: Layer.Layer<
         options.instructions = system.join("\n")
       }
 
+      // Vision fallback: describe images via a vision-capable model when the selected model
+      // doesn't support image input, so the main model still gets useful context.
+      let processedMessages = input.messages
+      if (!input.model.capabilities.input.image && hasImageParts(input.messages)) {
+        const visionModel = yield* provider.getVisionModel(input.model)
+        if (visionModel) {
+          const visionLanguage = yield* provider.getLanguage(visionModel).pipe(
+            Effect.catchDefect(() => Effect.succeed(null)),
+          )
+          if (visionLanguage) {
+            const imageParts = extractImageParts(input.messages)
+            const visionPrompt = {
+              role: "user" as const,
+              content: [
+                ...imageParts,
+                {
+                  type: "text" as const,
+                  text: "Describe the content of the image(s) above in detail so that a text-only AI assistant can understand them and help the user. Be thorough and precise.",
+                },
+              ],
+            } as unknown as ModelMessage
+            const description = yield* Effect.tryPromise(() =>
+              generateText({ model: visionLanguage, messages: [visionPrompt] }).then((r) => r.text),
+            ).pipe(Effect.catch((err) => {
+              l.error("vision-fallback failed", { visionModelID: visionModel.id, error: String(err) })
+              return Effect.succeed(null as string | null)
+            }))
+            if (description !== null) {
+              processedMessages = replaceImagePartsWithText(
+                input.messages,
+                `[Image description by ${visionModel.id}]:\n${description}`,
+              )
+              l.info("vision-fallback applied", { visionModelID: visionModel.id })
+            }
+          }
+        }
+      }
+
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
       const messages = isOpenaiOauth
-        ? input.messages
+        ? processedMessages
         : isWorkflow
-          ? input.messages
+          ? processedMessages
           : [
               ...system.map(
                 (x): ModelMessage => ({
@@ -156,7 +244,7 @@ const live: Layer.Layer<
                   content: x,
                 }),
               ),
-              ...input.messages,
+              ...processedMessages,
             ]
 
       const params = yield* plugin.trigger(
