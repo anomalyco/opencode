@@ -2,6 +2,14 @@ import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
 import { PositiveInt, withStatics } from "@/util/schema"
 
+const ModelCapabilities = Schema.Struct({
+  attachment: Schema.optional(Schema.Boolean),
+  reasoning: Schema.optional(Schema.Boolean),
+  temperature: Schema.optional(Schema.Boolean),
+  tool_call: Schema.optional(Schema.Boolean),
+  toolcall: Schema.optional(Schema.Boolean),
+})
+
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
@@ -11,6 +19,7 @@ export const Model = Schema.Struct({
   reasoning: Schema.optional(Schema.Boolean),
   temperature: Schema.optional(Schema.Boolean),
   tool_call: Schema.optional(Schema.Boolean),
+  capabilities: Schema.optional(ModelCapabilities),
   interleaved: Schema.optional(
     Schema.Union([
       Schema.Literal(true),

@@ -1335,6 +1335,13 @@ export type ProviderConfig = {
       reasoning?: boolean
       temperature?: boolean
       tool_call?: boolean
+      capabilities?: {
+        attachment?: boolean
+        reasoning?: boolean
+        temperature?: boolean
+        tool_call?: boolean
+        toolcall?: boolean
+      }
       interleaved?:
         | true
         | {

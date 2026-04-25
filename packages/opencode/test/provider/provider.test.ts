@@ -926,6 +926,51 @@ test("model modalities default correctly", async () => {
   })
 })
 
+test("model capabilities object is preserved", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            omniroute: {
+              name: "Omniroute",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "minimax/minimax-m2.7": {
+                  name: "minimax-m2.7",
+                  family: "minimax",
+                  release_date: "2026-03-18",
+                  capabilities: {
+                    reasoning: true,
+                    temperature: true,
+                    attachment: true,
+                    tool_call: false,
+                  },
+                },
+              },
+              options: { apiKey: "test", baseURL: "http://localhost:20128/v1" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const model = providers[ProviderID.make("omniroute")].models["minimax/minimax-m2.7"]
+      expect(model.capabilities.reasoning).toBe(true)
+      expect(model.capabilities.temperature).toBe(true)
+      expect(model.capabilities.attachment).toBe(true)
+      expect(model.capabilities.toolcall).toBe(false)
+    },
+  })
+})
+
 test("model with custom cost values", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
