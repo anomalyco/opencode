@@ -18,10 +18,13 @@ import { LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema }
 
 interface Compiled<Target> {
   readonly request: LLMRequest
+  readonly adapter: RuntimeAdapter
   readonly target: Target
   readonly transport: TransportRequest
   readonly patchTrace: ReadonlyArray<PatchTrace>
 }
+
+type RuntimeAdapter = Adapter<unknown, unknown, unknown>
 
 export interface TransportContext {
   readonly request: LLMRequest
@@ -68,17 +71,19 @@ export interface LLMClient {
   readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError, Transport.Service>
 }
 
-export interface ClientOptions<Draft, Target, Chunk> {
-  readonly adapter: Adapter<Draft, Target, Chunk>
+export interface ClientOptions<Draft = unknown, Target = unknown, Chunk = unknown> {
+  readonly adapter?: Adapter<Draft, Target, Chunk>
+  readonly adapters?: ReadonlyArray<Adapter<Draft, Target, Chunk>>
   readonly patches?: PatchRegistry | ReadonlyArray<AnyPatch>
   readonly small?: boolean
   readonly flags?: Record<string, string | number | boolean | undefined>
 }
 
-const assertProtocol = (model: ModelRef, adapter: { readonly protocol: Protocol }) => {
-  if (model.protocol === adapter.protocol) return Effect.void
-  return Effect.fail(new NoAdapterError({ protocol: model.protocol, provider: model.provider, model: model.id }))
-}
+const noAdapter = (model: ModelRef) =>
+  new NoAdapterError({ protocol: model.protocol, provider: model.provider, model: model.id })
+
+const runtimeAdapter = <Draft, Target, Chunk>(adapter: Adapter<Draft, Target, Chunk>): RuntimeAdapter =>
+  adapter as unknown as RuntimeAdapter
 
 const normalizeRegistry = (patches: PatchRegistry | ReadonlyArray<AnyPatch> | undefined): PatchRegistry => {
   if (!patches) return emptyRegistry
@@ -106,9 +111,20 @@ export function define<Draft, Target, Chunk>(input: AdapterInput<Draft, Target, 
 
 export function client<Draft, Target, Chunk>(options: ClientOptions<Draft, Target, Chunk>): LLMClient {
   const registry = normalizeRegistry(options.patches)
+  const adapters = [
+    ...(options.adapter ? [runtimeAdapter(options.adapter)] : []),
+    ...(options.adapters?.map(runtimeAdapter) ?? []),
+  ]
+
+  const resolveAdapter = (request: LLMRequest) =>
+    Effect.gen(function* () {
+      const adapter = adapters.find((adapter) => adapter.protocol === request.model.protocol)
+      if (!adapter) return yield* noAdapter(request.model)
+      return adapter
+    })
 
   const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-    yield* assertProtocol(request.model, options.adapter)
+    const adapter = yield* resolveAdapter(request)
 
     const requestPlan = plan({
       phase: "request",
@@ -132,20 +148,20 @@ export function client<Draft, Target, Chunk>(options: ClientOptions<Draft, Targe
         ? requestBeforeToolPatches
         : { ...requestBeforeToolPatches, tools: requestBeforeToolPatches.tools.map(toolSchemaPlan.apply) }
     const patchContext = context({ request: patchedRequest, small: options.small, flags: options.flags })
-    const draft = yield* options.adapter.prepare(patchedRequest)
+    const draft = yield* adapter.prepare(patchedRequest)
     const targetPlan = plan({
       phase: "target",
       context: patchContext,
-      patches: [...options.adapter.patches, ...(registry.target as ReadonlyArray<Patch<Draft>>)],
+      patches: [...adapter.patches, ...(registry.target as ReadonlyArray<Patch<unknown>>)],
     })
-    const target = yield* options.adapter.builder.validate(targetPlan.apply(draft))
+    const target = yield* adapter.builder.validate(targetPlan.apply(draft))
     const targetPatchTrace = [
       ...requestPlan.trace,
       ...promptPlan.trace,
       ...(requestBeforeToolPatches.tools.length === 0 ? [] : toolSchemaPlan.trace),
       ...targetPlan.trace,
     ]
-    const rawTransport = yield* options.adapter.toTransport(target, { request: patchedRequest, patchTrace: targetPatchTrace })
+    const rawTransport = yield* adapter.toTransport(target, { request: patchedRequest, patchTrace: targetPatchTrace })
     const transportPlan = plan({
       phase: "transport",
       context: patchContext,
@@ -154,7 +170,7 @@ export function client<Draft, Target, Chunk>(options: ClientOptions<Draft, Targe
     const patchTrace = [...targetPatchTrace, ...transportPlan.trace]
     const transport = transportPlan.apply(rawTransport)
 
-    return { request: patchedRequest, target, transport, patchTrace }
+    return { request: patchedRequest, adapter, target, transport, patchTrace }
   })
 
   const prepare = Effect.fn("LLM.prepare")(function* (request: LLMRequest) {
@@ -162,10 +178,10 @@ export function client<Draft, Target, Chunk>(options: ClientOptions<Draft, Targe
 
     return new PreparedRequestSchema({
       id: compiled.request.id ?? "request",
-      adapter: options.adapter.id,
+      adapter: compiled.adapter.id,
       model: compiled.request.model,
       target: compiled.target,
-      redactedTarget: options.adapter.redact(compiled.target),
+      redactedTarget: compiled.adapter.redact(compiled.target),
       transport: compiled.transport,
       patchTrace: compiled.patchTrace,
     })
@@ -182,9 +198,9 @@ export function client<Draft, Target, Chunk>(options: ClientOptions<Draft, Targe
           context: context({ request: compiled.request, small: options.small, flags: options.flags }),
           patches: registry.stream,
         })
-        const events = options.adapter.parse(response).pipe(
+        const events = compiled.adapter.parse(response).pipe(
           Stream.flatMap((chunk) =>
-            options.adapter.raise(chunk, {
+            compiled.adapter.raise(chunk, {
               request: compiled.request,
               patchTrace: compiled.patchTrace,
             }),

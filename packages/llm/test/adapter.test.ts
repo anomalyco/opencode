@@ -69,6 +69,12 @@ const fake = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
   },
 })
 
+const gemini = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
+  ...fake,
+  id: "gemini-fake",
+  protocol: "gemini",
+})
+
 const transportLayer = Layer.succeed(
   Transport.Service,
   Transport.Service.of({
@@ -118,6 +124,19 @@ describe("llm adapter", () => {
       expect(response.events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
     }),
   )
+
+  test("selects adapters by request protocol", async () => {
+    const prepared = await Effect.runPromise(
+      client({ adapters: [fake, gemini] }).prepare(
+        LLM.request({
+          ...request,
+          model: LLM.model({ ...request.model, protocol: "gemini" }),
+        }),
+      ),
+    )
+
+    expect(prepared.adapter).toBe("gemini-fake")
+  })
 
   test("request, prompt, and tool-schema patches run before adapter prepare", async () => {
     const llm = client({

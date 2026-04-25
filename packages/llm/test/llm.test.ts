@@ -27,4 +27,18 @@ describe("llm constructors", () => {
     expect(LLM.toolChoice("lookup")).toEqual(new ToolChoice({ type: "tool", name: "lookup" }))
     expect(LLM.toolChoice(tool)).toEqual(new ToolChoice({ type: "tool", name: "lookup" }))
   })
+
+  test("builds assistant tool calls and tool result messages", () => {
+    const call = LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })
+    const result = LLM.toolResult({ id: "call_1", name: "lookup", result: { temperature: 72 } })
+
+    expect(LLM.assistant([call]).content).toEqual([call])
+    expect(LLM.toolMessage(result).content).toEqual([
+      { type: "tool-result", id: "call_1", name: "lookup", result: { type: "json", value: { temperature: 72 } } },
+    ])
+  })
+
+  test("extracts output text from responses", () => {
+    expect(LLM.outputText({ events: [{ type: "text-delta", text: "hi" }, { type: "request-finish", reason: "stop" }] })).toBe("hi")
+  })
 })

@@ -13,11 +13,85 @@
 - Use `testEffect(...)` from `test/lib/effect.ts` for tests requiring Effect layers.
 - Keep provider tests fixture-first. Live provider calls must stay behind `RECORD=true` and required API-key checks.
 
+## Architecture
+
+This package is an Effect Schema-first LLM core. The Schema classes in `src/schema.ts` are the canonical runtime data model. Convenience functions in `src/llm.ts` are thin constructors that return those same Schema class instances; they should improve callsites without creating a second model.
+
+### Request Flow
+
+The intended callsite is:
+
+```ts
+const request = LLM.request({
+  model: OpenAIChat.model({ id: "gpt-4o-mini", apiKey }),
+  system: "You are concise.",
+  prompt: "Say hello.",
+})
+
+const response = yield* client({ adapters: [OpenAIChat.adapter] }).generate(request)
+```
+
+`LLM.request(...)` builds an `LLMRequest`. `client(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, converts that target into a `TransportRequest`, sends it through `Transport.Service`, parses the provider stream, raises common `LLMEvent`s, and finally returns an `LLMResponse`.
+
+### Adapters
+
+Adapters are provider/protocol boundaries. They own provider-native schemas and conversion logic. For example, `OpenAIChat.adapter` owns the OpenAI Chat target schema, OpenAI SSE chunk schema, message lowering, tool-call parsing, usage mapping, and finish-reason mapping.
+
+Adapters should stay boring and typed:
+
+- `prepare` lowers common `LLMRequest` into a provider draft.
+- target patches mutate that draft before validation.
+- `builder.validate` validates the final provider target with Schema.
+- `toTransport` creates the HTTP request.
+- `parse` decodes provider chunks from `HttpClientResponse`.
+- `raise` converts provider chunks into common `LLMEvent`s.
+
+### Patches
+
+Patches are the forcing function for provider/model quirks. If a behavior is not universal enough for common IR, keep it as a named patch with a trace entry. Good examples:
+
+- OpenAI Chat streaming usage: `target.openai-chat.include-usage` adds `stream_options.include_usage`.
+- Anthropic prompt caching: map common cache hints onto selected content/message blocks.
+- Mistral/OpenAI-compatible prompt cleanup: normalize empty text content or tool-call IDs only for affected models.
+- Reasoning models: map common reasoning intent to provider-specific effort, summary, or encrypted-content fields.
+
+Do not grow common request schemas just to fit one provider. Prefer adapter-local target schemas plus patches selected by provider/model predicates.
+
+### Tools
+
+Tool loops are represented in common messages and events:
+
+```ts
+const call = LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })
+const result = LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } })
+
+const followUp = LLM.request({
+  model,
+  messages: [LLM.user("Weather?"), LLM.assistant([call]), result],
+})
+```
+
+Adapters lower this into provider-native assistant tool-call messages and tool-result messages. Streaming providers should emit `tool-input-delta` events while arguments arrive, then a final `tool-call` event with parsed input.
+
+### Recording Tests
+
+Recorded tests use one cassette per scenario. Use `recordedTests({ prefix, requires })` and let the helper derive cassette names from test names:
+
+```ts
+const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
+
+recorded.effect("streams text", () => Effect.gen(function* () {
+  // test body
+}))
+```
+
+Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars.
+
 ## TODO
 
-- [ ] Add an adapter registry so `client(...)` can choose an adapter by `request.model.protocol` instead of requiring a single adapter.
-- [ ] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
-- [ ] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
+- [x] Add an adapter registry so `client(...)` can choose an adapter by `request.model.protocol` instead of requiring a single adapter.
+- [x] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
+- [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
 - [ ] Add OpenAI Chat recorded tests for tool-result follow-up, usage chunks, malformed chunks, and tool arguments that arrive in the first chunk.
 - [ ] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
 - [ ] Add provider patch examples from real opencode quirks, starting with prompt normalization and target-level provider options.

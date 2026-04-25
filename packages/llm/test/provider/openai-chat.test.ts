@@ -68,6 +68,46 @@ describe("OpenAI Chat adapter", () => {
     expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.openai-chat.include-usage"])
   })
 
+  test("prepares assistant tool-call and tool-result messages", async () => {
+    const llm = client({ adapter: OpenAIChat.adapter })
+
+    const prepared = await Effect.runPromise(
+      llm.prepare(
+        LLM.request({
+          id: "req_tool_result",
+          model,
+          messages: [
+            LLM.user("What is the weather?"),
+            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+          ],
+        }),
+      ),
+    )
+
+    expect(prepared.transport.body).toBe(
+      encodeJson({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "user", content: "What is the weather?" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function",
+                function: { name: "lookup", arguments: encodeJson({ query: "weather" }) },
+              },
+            ],
+          },
+          { role: "tool", tool_call_id: "call_1", content: encodeJson({ forecast: "sunny" }) },
+        ],
+        stream: true,
+      }),
+    )
+  })
+
   testEffect(layer("text")).effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {
       const response = yield* client({ adapter: OpenAIChat.adapter }).generate(request)

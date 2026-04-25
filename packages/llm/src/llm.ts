@@ -1,6 +1,7 @@
 import {
   GenerationOptions,
   LLMRequest,
+  LLMResponse,
   Message,
   ModelCapabilities,
   ModelLimits,
@@ -8,9 +9,13 @@ import {
   ToolChoice,
   ToolDefinition,
   type ContentPart,
+  type LLMEvent,
   type Protocol,
   type ReasoningEffort,
   type SystemPart,
+  type ToolCallPart,
+  type ToolResultPart,
+  type ToolResultValue,
 } from "./schema"
 
 export type CapabilitiesInput = {
@@ -37,6 +42,11 @@ export type ToolChoiceInput =
   | ConstructorParameters<typeof ToolChoice>[0]
   | ToolDefinition
   | string
+
+export type ToolResultInput = Omit<ToolResultPart, "type" | "result"> & {
+  readonly result: ToolResultValue | unknown
+  readonly resultType?: ToolResultValue["type"]
+}
 
 export type RequestInput = Omit<
   ConstructorParameters<typeof LLMRequest>[0],
@@ -81,6 +91,9 @@ export const message = (input: Message | MessageInput) => {
 export const user = (content: string | ContentPart | ReadonlyArray<ContentPart>) =>
   message({ role: "user", content })
 
+export const assistant = (content: string | ContentPart | ReadonlyArray<ContentPart>) =>
+  message({ role: "assistant", content })
+
 export const model = (input: ModelInput) => {
   const { capabilities: modelCapabilities, limits: modelLimits, ...rest } = input
   return new ModelRef({
@@ -95,6 +108,24 @@ export const tool = (input: ToolDefinition | ConstructorParameters<typeof ToolDe
   if (input instanceof ToolDefinition) return input
   return new ToolDefinition(input)
 }
+
+export const toolCall = (input: Omit<ToolCallPart, "type">): ToolCallPart => ({ type: "tool-call", ...input })
+
+const toolResultValue = (value: ToolResultValue | unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
+  if (typeof value === "object" && value !== null && "type" in value && "value" in value) return value as ToolResultValue
+  return { type, value }
+}
+
+export const toolResult = (input: ToolResultInput): ToolResultPart => ({
+  type: "tool-result",
+  id: input.id,
+  name: input.name,
+  result: toolResultValue(input.result, input.resultType),
+  metadata: input.metadata,
+})
+
+export const toolMessage = (input: ToolResultPart | ToolResultInput) =>
+  message({ role: "tool", content: ["type" in input ? input : toolResult(input)] })
 
 export const toolChoice = (input: ToolChoiceInput) => {
   if (input instanceof ToolChoice) return input
@@ -119,3 +150,9 @@ export const request = (input: RequestInput) => {
     generation: generation(requestGeneration),
   })
 }
+
+export const outputText = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) =>
+  response.events
+    .filter((event) => event.type === "text-delta")
+    .map((event) => event.text)
+    .join("")
