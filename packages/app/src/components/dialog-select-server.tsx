@@ -354,11 +354,11 @@ export function DialogSelectServer() {
     dialog.close()
     if (persist && conn.type === "http") {
       server.add(conn)
-      navigate("/")
+      navigate("/", { replace: true })
       return
     }
-    navigate("/")
-    queueMicrotask(() => server.setActive(ServerConnection.key(conn)))
+    server.setActive(ServerConnection.key(conn))
+    navigate("/", { replace: true })
   }
 
   const handleAddChange = (value: string) => {

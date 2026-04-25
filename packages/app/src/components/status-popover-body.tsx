@@ -292,8 +292,8 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                       aria-disabled={blocked()}
                       onClick={() => {
                         if (blocked()) return
-                        navigate("/")
-                        queueMicrotask(() => server.setActive(key))
+                        server.setActive(key)
+                        navigate("/", { replace: true })
                       }}
                     >
                       <ServerHealthIndicator health={health[key]} />
