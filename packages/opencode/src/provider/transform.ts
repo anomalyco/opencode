@@ -176,7 +176,8 @@ function normalizeMessages(
   }
 
   // Deepseek requires all assistant messages to have reasoning on them
-  if (model.api.id.includes("deepseek")) {
+  // Check both API ID and model ID to cover OpenRouter-routed DeepSeek models
+  if (model.api.id.includes("deepseek") || model.id.includes("deepseek")) {
     msgs = msgs.map((msg) => {
       if (msg.role !== "assistant") return msg
       if (Array.isArray(msg.content)) {
@@ -195,6 +196,7 @@ function normalizeMessages(
 
   if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
     const field = model.capabilities.interleaved.field
+    const sdk = sdkKey(model.api.npm) ?? "openaiCompatible"
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
@@ -211,14 +213,44 @@ function normalizeMessages(
           content: filteredContent,
           providerOptions: {
             ...msg.providerOptions,
-            openaiCompatible: {
-              ...msg.providerOptions?.openaiCompatible,
+            [sdk]: {
+              ...msg.providerOptions?.[sdk],
               [field]: reasoningText,
             },
           },
         }
       }
 
+      return msg
+    })
+  }
+
+  // When reasoning is active but interleaved is not configured, still inject empty reasoning_content
+  // for ALL assistant messages. This covers historical messages from DB that were stored before
+  // reasoning mode was enabled — they have no reasoning part to extract but DeepSeek's API still
+  // requires reasoning_content on every assistant turn in thinking mode.
+  if (model.capabilities.reasoning) {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant") return msg
+      if (Array.isArray(msg.content)) {
+        const sdk = sdkKey(model.api.npm) ?? "openaiCompatible"
+        return {
+          ...msg,
+          providerOptions: {
+            ...msg.providerOptions,
+            [sdk]: {
+              ...msg.providerOptions?.[sdk],
+              reasoning_content: "",
+            },
+          },
+        }
+      }
+      if (typeof msg.content === "string") {
+        return {
+          ...msg,
+          content: [{ type: "text" as const, text: msg.content }, { type: "reasoning" as const, text: "" }],
+        }
+      }
       return msg
     })
   }
