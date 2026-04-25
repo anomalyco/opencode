@@ -1,6 +1,6 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Dynamic } from "solid-js/web"
+import { Dynamic, Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
@@ -9,6 +9,7 @@ import { createLineCommentController } from "@opencode-ai/ui/line-comment-annota
 import { sampledChecksum } from "@opencode-ai/shared/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -24,6 +25,70 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import CodeMirrorView from "@/components/code-mirror-view"
 import { langFromExt } from "@/utils/lang-from-ext"
 import { isBinary, tooLarge } from "@/utils/file-limits"
+
+function isMarkdownPath(p: string | undefined): boolean {
+  if (!p) return false
+  const lower = p.toLowerCase()
+  return lower.endsWith(".md") || lower.endsWith(".markdown")
+}
+
+function rangeAt(source: string, offset: number, len: number) {
+  const before = source.slice(0, offset)
+  const inner = source.slice(offset, offset + len)
+  const start = (before.match(/\n/g)?.length ?? 0) + 1
+  const end = start + (inner.match(/\n/g)?.length ?? 0)
+  return { start, end }
+}
+
+// 构建归一化空白后的字符串 + 原 offset 映射,用于宽松匹配。
+function normalizeWithMap(s: string): { text: string; back: number[] } {
+  const back: number[] = []
+  let out = ""
+  let prevSpace = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+      if (!prevSpace && out.length > 0) {
+        out += " "
+        back.push(i)
+      }
+      prevSpace = true
+    } else {
+      out += c
+      back.push(i)
+      prevSpace = false
+    }
+  }
+  return { text: out, back }
+}
+
+// 把选中文字映射回源码行号区间(1-based)。
+// 1. 精确 indexOf;2. 归一化空白后再 indexOf(应对跨行选中的表格/列表,DOM text 中空白被压缩)。
+// 都失败 → null,调用方走无 selection 分支(commentID 兜底去重)。
+function findLineRange(source: string, needle: string): { start: number; end: number } | null {
+  if (!source || !needle) return null
+  const trimmed = needle.trim()
+  if (!trimmed) return null
+
+  const idx = source.indexOf(trimmed)
+  if (idx >= 0) return rangeAt(source, idx, trimmed.length)
+
+  const { text: nSource, back } = normalizeWithMap(source)
+  const nNeedle = trimmed.replace(/[\s]+/g, " ")
+  const nIdx = nSource.indexOf(nNeedle)
+  if (nIdx < 0 || nIdx >= back.length) return null
+
+  const srcStart = back[nIdx]
+  const endNIdx = Math.min(nIdx + nNeedle.length, back.length - 1)
+  const srcEnd = back[endNIdx] ?? source.length
+  return rangeAt(source, srcStart, Math.max(1, srcEnd - srcStart))
+}
+
+function truncatePreview(text: string, max = 500): string {
+  const collapsed = text.replace(/\s+/g, " ").trim()
+  if (collapsed.length <= max) return collapsed
+  return collapsed.slice(0, max) + "…"
+}
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -503,82 +568,192 @@ export function FileTabContent(props: { tab: string }) {
     scrollSync.queueRestore()
   })
 
-  const renderFile = (source: string) => (
-    <div class="relative overflow-hidden pb-40">
-      <Dynamic
-        component={fileComponent}
-        mode="text"
-        file={{
-          name: path() ?? "",
-          contents: source,
-          cacheKey: cacheKey(),
-        }}
-        enableLineSelection
-        enableHoverUtility
-        selectedLines={activeSelection()}
-        commentedLines={commentedLines()}
-        onRendered={() => {
-          scrollSync.queueRestore()
-        }}
-        annotations={commentsUi.annotations()}
-        renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
-        onLineSelected={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelected(range)
-        }}
-        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
-        onLineSelectionEnd={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelectionEnd(range)
-        }}
-        search={search}
-        class="select-text"
-        media={{
-          mode: "auto",
-          path: path(),
-          current: state()?.content,
-          onLoad: scrollSync.queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
-            showToast({
-              variant: "error",
-              title: language.t("toast.file.loadFailed.title"),
-            })
-          },
-        }}
-      />
+  // 右键选中文字弹自定义菜单(2 项:复制 / + 添加到聊天窗口)
+  // 点 "+ 添加到聊天窗口" 切到输入面板,用户写问题/修改意见,提交后选中文字 + 评论一起加进聊天上下文
+  type MdMenuMode = "menu" | "input"
+  type MdMenuState = { open: boolean; x: number; y: number; text: string; mode: MdMenuMode }
+  const [mdMenu, setMdMenu] = createSignal<MdMenuState>({ open: false, x: 0, y: 0, text: "", mode: "menu" })
+  const [mdComment, setMdComment] = createSignal("")
+
+  // 持久化选区高亮:textarea 获取焦点后 window.getSelection 会 collapse,
+  // 用 CSS Custom Highlight API 单独画一层背景色保持视觉指示。
+  const setSelectionHighlight = (range: Range | null) => {
+    const css = (typeof window !== "undefined" ? (window as any).CSS : undefined) as
+      | { highlights?: { set: (k: string, v: unknown) => void; delete: (k: string) => void } }
+      | undefined
+    const HighlightCtor = (typeof window !== "undefined" ? (window as any).Highlight : undefined) as
+      | (new (range: Range) => unknown)
+      | undefined
+    if (!css?.highlights || !HighlightCtor) return
+    if (!range) {
+      css.highlights.delete("md-quote-active")
+      return
+    }
+    try {
+      css.highlights.set("md-quote-active", new HighlightCtor(range))
+    } catch {
+      // ignore
+    }
+  }
+
+  // 一次性注入 ::highlight 样式
+  onMount(() => {
+    if (typeof document === "undefined") return
+    if (document.getElementById("md-quote-highlight-style")) return
+    const style = document.createElement("style")
+    style.id = "md-quote-highlight-style"
+    style.textContent = `::highlight(md-quote-active){background-color:rgba(255,196,0,0.35);color:inherit;}`
+    document.head.appendChild(style)
+  })
+
+  const closeMdMenu = () => {
+    setMdMenu((m) => (m.open ? { ...m, open: false } : m))
+    setMdComment("")
+    setSelectionHighlight(null)
+  }
+
+  const handleSelectionContextMenu = (event: MouseEvent) => {
+    if (editing()) return // 编辑态让 CodeMirror 拿到原生右键菜单
+    const selObj = typeof window !== "undefined" ? window.getSelection() : null
+    const text = selObj?.toString() ?? ""
+    event.preventDefault()
+    if (text.trim() && selObj && selObj.rangeCount > 0) {
+      setSelectionHighlight(selObj.getRangeAt(0).cloneRange())
+    }
+    setMdComment("")
+    setMdMenu({ open: true, x: event.clientX, y: event.clientY, text, mode: "menu" })
+  }
+
+  const startEditFromMenu = () => {
+    closeMdMenu()
+    if (canEdit() && state()?.loaded) void startEdit()
+  }
+
+  const copyMdSelection = () => {
+    const text = mdMenu().text
+    if (text && typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {})
+    }
+    closeMdMenu()
+  }
+
+  const openMdInputPanel = () => {
+    setMdMenu((m) => ({ ...m, mode: "input" }))
+  }
+
+  const submitMdSelection = () => {
+    const m = mdMenu()
+    const p = path()
+    const comment = mdComment().trim()
+    closeMdMenu()
+    if (!p || !m.text.trim()) return
+    const range = findLineRange(contents(), m.text)
+    const uid = `md-sel-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    prompt.context.add({
+      type: "file",
+      path: p,
+      selection: range ? selectionFromLines(range) : undefined,
+      preview: truncatePreview(m.text),
+      comment: comment || undefined,
+      commentID: uid,
+      commentOrigin: "file",
+    })
+    showToast({ variant: "success", title: comment ? "已加入聊天上下文(含问题)" : "已加入聊天上下文" })
+    if (typeof window !== "undefined") window.getSelection()?.removeAllRanges()
+  }
+
+  createEffect(() => {
+    if (!mdMenu().open) return
+    const onDocDown = (e: MouseEvent) => {
+      const t = e.target as Element | null
+      if (t?.closest('[data-slot="md-selection-menu"]')) return
+      closeMdMenu()
+    }
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMdMenu()
+    }
+    document.addEventListener("mousedown", onDocDown, true)
+    document.addEventListener("keydown", onEsc, true)
+    onCleanup(() => {
+      document.removeEventListener("mousedown", onDocDown, true)
+      document.removeEventListener("keydown", onEsc, true)
+    })
+  })
+
+  const renderMarkdown = (source: string) => (
+    <div class="relative pb-40 px-6 py-4 select-text" onContextMenu={handleSelectionContextMenu}>
+      <Markdown text={source} cacheKey={cacheKey()} />
     </div>
   )
 
+  const renderFile = (source: string) => {
+    if (isMarkdownPath(path())) return renderMarkdown(source)
+    return (
+      <div class="relative overflow-hidden pb-40" onContextMenu={handleSelectionContextMenu}>
+        <Dynamic
+          component={fileComponent}
+          mode="text"
+          file={{
+            name: path() ?? "",
+            contents: source,
+            cacheKey: cacheKey(),
+          }}
+          enableLineSelection
+          enableHoverUtility
+          selectedLines={activeSelection()}
+          commentedLines={commentedLines()}
+          onRendered={() => {
+            scrollSync.queueRestore()
+          }}
+          annotations={commentsUi.annotations()}
+          renderAnnotation={commentsUi.renderAnnotation}
+          renderHoverUtility={commentsUi.renderHoverUtility}
+          onLineSelected={(range: SelectedLineRange | null) => {
+            commentsUi.onLineSelected(range)
+          }}
+          onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+          onLineSelectionEnd={(range: SelectedLineRange | null) => {
+            commentsUi.onLineSelectionEnd(range)
+          }}
+          search={search}
+          class="select-text"
+          media={{
+            mode: "auto",
+            path: path(),
+            current: state()?.content,
+            onLoad: scrollSync.queueRestore,
+            onError: (args: { kind: "image" | "audio" | "svg" }) => {
+              if (args.kind !== "svg") return
+              showToast({
+                variant: "error",
+                title: language.t("toast.file.loadFailed.title"),
+              })
+            },
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <Tabs.Content value={props.tab} class="mt-3 relative h-full flex flex-col">
-      <div class="flex items-center gap-2 px-4 py-1 border-b border-border">
-        <Show
-          when={!editing()}
-          fallback={
-            <>
-              <button
-                onClick={saveEdit}
-                disabled={!dirty()}
-                class="text-xs px-2 py-1 rounded border disabled:opacity-50"
-              >
-                Save{dirty() ? " *" : ""}
-              </button>
-              <button onClick={cancelEdit} class="text-xs px-2 py-1 rounded border">
-                Cancel
-              </button>
-            </>
-          }
-        >
+      <Show when={editing()}>
+        <div class="flex items-center justify-between px-4 py-1.5 border-b border-border-base bg-surface-raised-stronger-non-alpha shadow-sm">
           <button
-            onClick={startEdit}
-            disabled={!canEdit() || !state()?.loaded}
-            class="text-xs px-2 py-1 rounded border disabled:opacity-50"
-            title={editDisabledReason()}
+            onClick={saveEdit}
+            disabled={!dirty()}
+            class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover disabled:opacity-50"
           >
-            Edit
+            保存{dirty() ? " *" : ""}
           </button>
-        </Show>
-      </div>
+          <button
+            onClick={cancelEdit}
+            class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
+          >
+            关闭
+          </button>
+        </div>
+      </Show>
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
           <Match when={editing() && state()?.loaded}>
@@ -597,6 +772,82 @@ export function FileTabContent(props: { tab: string }) {
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
+      <Show when={mdMenu().open}>
+        <Portal mount={document.body}>
+          <Switch>
+            <Match when={mdMenu().mode === "menu"}>
+              <div
+                data-slot="md-selection-menu"
+                class="fixed z-50 min-w-[220px] rounded-md border border-border-base bg-surface-raised-stronger-non-alpha text-text-strong shadow-[var(--shadow-lg-border-base)] py-1 text-sm"
+                style={{ left: `${mdMenu().x}px`, top: `${mdMenu().y}px` }}
+              >
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!mdMenu().text.trim()}
+                  onClick={openMdInputPanel}
+                >
+                  添加到聊天窗口
+                </button>
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!canEdit() || !state()?.loaded}
+                  title={editDisabledReason()}
+                  onClick={startEditFromMenu}
+                >
+                  编辑
+                </button>
+                <div class="my-1 border-t border-border-base" />
+                <button
+                  class="w-full px-3 py-1.5 hover:bg-surface-base-hover flex justify-between items-center gap-6 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!mdMenu().text.trim()}
+                  onClick={copyMdSelection}
+                >
+                  <span>复制</span>
+                  <span class="text-xs text-text-weak">Ctrl+C</span>
+                </button>
+              </div>
+            </Match>
+            <Match when={mdMenu().mode === "input"}>
+              <div
+                data-slot="md-selection-menu"
+                class="fixed z-50 w-[360px] rounded-md border border-border-base bg-surface-raised-stronger-non-alpha text-text-strong shadow-[var(--shadow-lg-border-base)] p-3 text-sm flex flex-col gap-2"
+                style={{ left: `${mdMenu().x}px`, top: `${mdMenu().y}px` }}
+              >
+                <textarea
+                  ref={(el) => queueMicrotask(() => el.focus())}
+                  class="w-full min-h-[80px] rounded border border-border-base bg-background-base px-2 py-1.5 text-sm text-text-strong placeholder:text-text-weak focus:outline-none focus:ring-1 focus:ring-text-interactive-base resize-y"
+                  placeholder="想怎么改 / 想问什么..."
+                  value={mdComment()}
+                  onInput={(e) => setMdComment(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault()
+                      submitMdSelection()
+                    }
+                  }}
+                />
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] text-text-weak">Ctrl+Enter 提交 · Esc 取消</span>
+                  <div class="flex items-center gap-2">
+                    <button
+                      class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
+                      onClick={closeMdMenu}
+                    >
+                      取消
+                    </button>
+                    <button
+                      class="text-xs px-2 py-1 rounded border border-border-base bg-surface-base hover:bg-surface-base-hover"
+                      onClick={submitMdSelection}
+                    >
+                      加入聊天
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Match>
+          </Switch>
+        </Portal>
+      </Show>
     </Tabs.Content>
   )
 }
