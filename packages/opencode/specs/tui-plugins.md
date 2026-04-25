@@ -202,7 +202,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `api.kv.get`, `set`, `ready`
 - `api.state`
 - `api.theme.current`, `selected`, `has`, `set`, `install`, `mode`, `ready`
-- `api.client`, `api.scopedClient(workspaceID?)`, `api.workspace.current()`, `api.workspace.set(workspaceID?)`
+- `api.client`
 - `api.event.on(type, handler)`
 - `api.renderer`
 - `api.slots.register(plugin)`
@@ -270,7 +270,6 @@ Command behavior:
   - `provider`
   - `path.{state,config,worktree,directory}`
   - `vcs?.branch`
-  - `workspace.list()` / `workspace.get(workspaceID)`
   - `session.count()`
   - `session.diff(sessionID)`
   - `session.todo(sessionID)`
@@ -282,8 +281,6 @@ Command behavior:
   - `lsp()`
   - `mcp()`
 - `api.client` always reflects the current runtime client.
-- `api.scopedClient(workspaceID?)` creates or reuses a client bound to a workspace.
-- `api.workspace.set(...)` rebinds the active workspace; `api.client` follows that rebind.
 - `api.event.on(type, handler)` subscribes to the TUI event stream and returns an unsubscribe function.
 - `api.renderer` exposes the raw `CliRenderer`.
 

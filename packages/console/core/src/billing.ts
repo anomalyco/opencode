@@ -1,6 +1,14 @@
 import { Stripe } from "stripe"
-import { Database, eq, sql } from "./drizzle"
-import { BillingTable, LiteTable, PaymentTable, SubscriptionTable, UsageTable } from "./schema/billing.sql"
+import { and, Database, eq, isNull, sql } from "./drizzle"
+import {
+  BillingTable,
+  CouponTable,
+  CouponType,
+  LiteTable,
+  PaymentTable,
+  SubscriptionTable,
+  UsageTable,
+} from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
@@ -147,6 +155,37 @@ export namespace Billing {
     return amountInMicroCents
   }
 
+  export const redeemCoupon = async (email: string, type: (typeof CouponType)[number]) => {
+    const coupon = await Database.use((tx) =>
+      tx
+        .select()
+        .from(CouponTable)
+        .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type)))
+        .then((rows) => rows[0]),
+    )
+    if (!coupon) throw new Error("Invalid coupon code")
+    if (coupon.timeRedeemed) throw new Error("Coupon already redeemed")
+
+    if (type === "BUILDATHON") await grantCredit(Actor.workspace(), 500)
+
+    await Database.use((tx) =>
+      tx
+        .update(CouponTable)
+        .set({ timeRedeemed: sql`now()` })
+        .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type))),
+    )
+  }
+
+  export const hasCoupon = async (email: string, type: (typeof CouponType)[number]) => {
+    return await Database.use((tx) =>
+      tx
+        .select()
+        .from(CouponTable)
+        .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type), isNull(CouponTable.timeRedeemed)))
+        .then((rows) => rows.length > 0),
+    )
+  }
+
   export const setMonthlyLimit = fn(z.number(), async (input) => {
     return await Database.use((tx) =>
       tx
@@ -245,16 +284,19 @@ export namespace Billing {
       const user = Actor.assert("user")
       const { successUrl, cancelUrl, method } = input
 
-      const email = await User.getAuthEmail(user.properties.userID)
+      const email = (await User.getAuthEmail(user.properties.userID))!
       const billing = await Billing.get()
 
       if (billing.subscriptionID) throw new Error("Already subscribed to Black")
       if (billing.liteSubscriptionID) throw new Error("Already subscribed to Lite")
 
+      const coupon = (await Billing.hasCoupon(email, "GOFREEMONTH"))
+        ? LiteData.firstMonth100Coupon
+        : LiteData.firstMonth50Coupon
       const createSession = () =>
         Billing.stripe().checkout.sessions.create({
           mode: "subscription",
-          discounts: [{ coupon: LiteData.firstMonth50Coupon() }],
+          discounts: [{ coupon }],
           ...(billing.customerID
             ? {
                 customer: billing.customerID,
@@ -264,7 +306,7 @@ export namespace Billing {
                 },
               }
             : {
-                customer_email: email!,
+                customer_email: email,
               }),
           ...(() => {
             if (method === "alipay") {
@@ -312,6 +354,8 @@ export namespace Billing {
             metadata: {
               workspaceID: Actor.workspace(),
               userID: user.properties.userID,
+              userEmail: email,
+              coupon,
               type: "lite",
             },
           },

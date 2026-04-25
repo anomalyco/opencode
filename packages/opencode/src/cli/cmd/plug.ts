@@ -1,14 +1,14 @@
 import { intro, log, outro, spinner } from "@clack/prompts"
 import type { Argv } from "yargs"
 
-import { ConfigPaths } from "../../config/paths"
+import { ConfigPaths } from "../../config"
 import { Global } from "../../global"
 import { installPlugin, patchPluginConfig, readPluginManifest } from "../../plugin/install"
 import { resolvePluginTarget } from "../../plugin/shared"
 import { Instance } from "../../project/instance"
 import { errorMessage } from "../../util/error"
-import { Filesystem } from "../../util/filesystem"
-import { Process } from "../../util/process"
+import { Filesystem } from "../../util"
+import { Process } from "../../util"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 

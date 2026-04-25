@@ -109,6 +109,12 @@ const zenLiteCouponFirstMonth50 = new stripe.Coupon("ZenLiteCouponFirstMonth50",
   appliesToProducts: [zenLiteProduct.id],
   duration: "once",
 })
+const zenLiteCouponFirstMonth100 = new stripe.Coupon("ZenLiteCouponFirstMonth100", {
+  name: "First month 100% off",
+  percentOff: 100,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "once",
+})
 const zenLitePrice = new stripe.Price("ZenLitePrice", {
   product: zenLiteProduct.id,
   currency: "usd",
@@ -124,6 +130,7 @@ const ZEN_LITE_PRICE = new sst.Linkable("ZEN_LITE_PRICE", {
     price: zenLitePrice.id,
     priceInr: 92900,
     firstMonth50Coupon: zenLiteCouponFirstMonth50.id,
+    firstMonth100Coupon: zenLiteCouponFirstMonth100.id,
   },
 })
 

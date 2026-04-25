@@ -8,6 +8,7 @@ import {
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
+  childSessionOnPath,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
@@ -196,6 +197,19 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("root")
+  })
+
+  test("finds the direct child on the active session path", () => {
+    const list = [
+      session({ id: "root", directory: "/workspace" }),
+      session({ id: "child", directory: "/workspace", parentID: "root" }),
+      session({ id: "leaf", directory: "/workspace", parentID: "child" }),
+    ]
+
+    expect(childSessionOnPath(list, "root", "leaf")?.id).toBe("child")
+    expect(childSessionOnPath(list, "child", "leaf")?.id).toBe("leaf")
+    expect(childSessionOnPath(list, "root", "root")).toBeUndefined()
+    expect(childSessionOnPath(list, "root", "other")).toBeUndefined()
   })
 
   test("formats fallback project display name", () => {

@@ -4,12 +4,17 @@ import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
-import { Database } from "../../storage/db"
+import { Database } from "../../storage"
 import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
 import { Instance } from "../../project/instance"
-import { ShareNext } from "../../share/share-next"
+import { ShareNext } from "../../share"
 import { EOL } from "os"
-import { Filesystem } from "../../util/filesystem"
+import { Filesystem } from "../../util"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Schema } from "effect"
+
+const decodeMessageInfo = Schema.decodeUnknownSync(MessageV2.Info)
+const decodePart = Schema.decodeUnknownSync(MessageV2.Part)
 
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
@@ -100,7 +105,7 @@ export const ImportCommand = cmd({
       if (isUrl) {
         const slug = parseShareUrl(args.file)
         if (!slug) {
-          const baseUrl = await ShareNext.url()
+          const baseUrl = await AppRuntime.runPromise(ShareNext.Service.use((svc) => svc.url()))
           process.stdout.write(`Invalid URL format. Expected: ${baseUrl}/share/<slug>`)
           process.stdout.write(EOL)
           return
@@ -108,7 +113,7 @@ export const ImportCommand = cmd({
 
         const parsed = new URL(args.file)
         const baseUrl = parsed.origin
-        const req = await ShareNext.request()
+        const req = await AppRuntime.runPromise(ShareNext.Service.use((svc) => svc.request()))
         const headers = shouldAttachShareAuthHeaders(args.file, req.baseUrl) ? req.headers : {}
 
         const dataPath = req.api.data(slug)
@@ -153,10 +158,10 @@ export const ImportCommand = cmd({
         return
       }
 
-      const info = Session.Info.parse({
+      const info = Schema.decodeUnknownSync(Session.Info)({
         ...exportData.info,
         projectID: Instance.project.id,
-      })
+      }) as Session.Info
       const row = Session.toRow(info)
       Database.use((db) =>
         db
@@ -167,7 +172,7 @@ export const ImportCommand = cmd({
       )
 
       for (const msg of exportData.messages) {
-        const msgInfo = MessageV2.Info.parse(msg.info)
+        const msgInfo = decodeMessageInfo(msg.info) as MessageV2.Info
         const { id, sessionID: _, ...msgData } = msgInfo
         Database.use((db) =>
           db
@@ -183,7 +188,7 @@ export const ImportCommand = cmd({
         )
 
         for (const part of msg.parts) {
-          const partInfo = MessageV2.Part.parse(part)
+          const partInfo = decodePart(part) as MessageV2.Part
           const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
           Database.use((db) =>
             db

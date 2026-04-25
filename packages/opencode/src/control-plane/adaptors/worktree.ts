@@ -1,18 +1,20 @@
-import z from "zod"
+import { Schema } from "effect"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Worktree } from "@/worktree"
-import { type Adaptor, WorkspaceInfo } from "../types"
+import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
 
-const Config = WorkspaceInfo.extend({
-  name: WorkspaceInfo.shape.name.unwrap(),
-  branch: WorkspaceInfo.shape.branch.unwrap(),
-  directory: WorkspaceInfo.shape.directory.unwrap(),
+const WorktreeConfig = Schema.Struct({
+  name: WorkspaceInfo.fields.name,
+  branch: Schema.String,
+  directory: Schema.String,
 })
+const decodeWorktreeConfig = Schema.decodeUnknownSync(WorktreeConfig)
 
-type Config = z.infer<typeof Config>
-
-export const WorktreeAdaptor: Adaptor = {
+export const WorktreeAdaptor: WorkspaceAdaptor = {
+  name: "Worktree",
+  description: "Create a git worktree",
   async configure(info) {
-    const worktree = await Worktree.makeWorktreeInfo(info.name ?? undefined)
+    const worktree = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
     return {
       ...info,
       name: worktree.name,
@@ -21,18 +23,26 @@ export const WorktreeAdaptor: Adaptor = {
     }
   },
   async create(info) {
-    const config = Config.parse(info)
-    await Worktree.createFromInfo({
-      name: config.name,
-      directory: config.directory,
-      branch: config.branch,
-    })
+    const config = decodeWorktreeConfig(info)
+    await AppRuntime.runPromise(
+      Worktree.Service.use((svc) =>
+        svc.createFromInfo({
+          name: config.name,
+          directory: config.directory,
+          branch: config.branch,
+        }),
+      ),
+    )
   },
   async remove(info) {
-    const config = Config.parse(info)
-    await Worktree.remove({ directory: config.directory })
+    const config = decodeWorktreeConfig(info)
+    await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove({ directory: config.directory })))
   },
-  async fetch(_info, _input: RequestInfo | URL, _init?: RequestInit) {
-    throw new Error("fetch not implemented")
+  target(info) {
+    const config = decodeWorktreeConfig(info)
+    return {
+      type: "local",
+      directory: config.directory,
+    }
   },
 }

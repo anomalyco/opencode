@@ -1,6 +1,7 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createEffect, createSignal } from "solid-js"
 import { Logo } from "../component/logo"
+import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
@@ -9,7 +10,6 @@ import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "../plugin"
 
-// TODO: what is the best way to do this?
 let once = false
 const placeholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
@@ -18,6 +18,7 @@ const placeholder = {
 
 export function Home() {
   const sync = useSync()
+  const project = useProject()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
@@ -29,8 +30,8 @@ export function Home() {
     setRef(r)
     promptRef.set(r)
     if (once || !r) return
-    if (route.initialPrompt) {
-      r.set(route.initialPrompt)
+    if (route.prompt) {
+      r.set(route.prompt)
       once = true
       return
     }
@@ -63,11 +64,16 @@ export function Home() {
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-          <TuiPluginRuntime.Slot name="home_prompt" mode="replace" workspace_id={route.workspaceID} ref={bind}>
+          <TuiPluginRuntime.Slot
+            name="home_prompt"
+            mode="replace"
+            workspace_id={project.workspace.current()}
+            ref={bind}
+          >
             <Prompt
               ref={bind}
-              workspaceID={route.workspaceID}
-              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={route.workspaceID} />}
+              workspaceID={project.workspace.current()}
+              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
               placeholders={placeholder}
             />
           </TuiPluginRuntime.Slot>

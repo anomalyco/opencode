@@ -1,17 +1,21 @@
 import { describe, test, expect } from "bun:test"
-import z from "zod"
-import { Tool } from "../../src/tool/tool"
+import { Effect, Layer, ManagedRuntime, Schema } from "effect"
+import { Agent } from "../../src/agent/agent"
+import { MessageID, SessionID } from "../../src/session/schema"
+import { Tool } from "../../src/tool"
+import { Truncate } from "../../src/tool"
 
-const params = z.object({ input: z.string() })
-const defaultArgs = { input: "test" }
+const runtime = ManagedRuntime.make(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
+
+const params = Schema.Struct({ input: Schema.String })
 
 function makeTool(id: string, executeFn?: () => void) {
   return {
     description: "test tool",
     parameters: params,
-    async execute() {
+    execute() {
       executeFn?.()
-      return { title: "test", output: "ok", metadata: {} }
+      return Effect.succeed({ title: "test", output: "ok", metadata: {} })
     },
   }
 }
@@ -21,81 +25,75 @@ describe("Tool.define", () => {
     const original = makeTool("test")
     const originalExecute = original.execute
 
-    const tool = Tool.define("test-tool", original)
+    const info = await runtime.runPromise(Tool.define("test-tool", Effect.succeed(original)))
 
-    await tool.init()
-    await tool.init()
-    await tool.init()
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
 
     expect(original.execute).toBe(originalExecute)
   })
 
-  test("object-defined tool does not accumulate wrapper layers across init() calls", async () => {
-    let calls = 0
-
-    const tool = Tool.define(
-      "test-tool",
-      makeTool("test", () => calls++),
+  test("effect-defined tool returns fresh objects and is unaffected", async () => {
+    const info = await runtime.runPromise(
+      Tool.define(
+        "test-fn-tool",
+        Effect.succeed(() => Effect.succeed(makeTool("test"))),
+      ),
     )
 
-    for (let i = 0; i < 100; i++) {
-      await tool.init()
-    }
-
-    const resolved = await tool.init()
-    calls = 0
-
-    let stack = ""
-    const exec = resolved.execute
-    resolved.execute = async (args: any, ctx: any) => {
-      const result = await exec.call(resolved, args, ctx)
-      stack = new Error().stack || ""
-      return result
-    }
-
-    await resolved.execute(defaultArgs, {} as any)
-    expect(calls).toBe(1)
-
-    const frames = stack.split("\n").filter((l) => l.includes("tool.ts")).length
-    expect(frames).toBeLessThan(5)
-  })
-
-  test("function-defined tool returns fresh objects and is unaffected", async () => {
-    const tool = Tool.define("test-fn-tool", () => Promise.resolve(makeTool("test")))
-
-    const first = await tool.init()
-    const second = await tool.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
   })
 
   test("object-defined tool returns distinct objects per init() call", async () => {
-    const tool = Tool.define("test-copy", makeTool("test"))
+    const info = await runtime.runPromise(Tool.define("test-copy", Effect.succeed(makeTool("test"))))
 
-    const first = await tool.init()
-    const second = await tool.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
   })
 
-  test("validation still works after many init() calls", async () => {
-    const tool = Tool.define("test-validation", {
-      description: "validation test",
-      parameters: z.object({ count: z.number().int().positive() }),
-      async execute(args) {
-        return { title: "test", output: String(args.count), metadata: {} }
-      },
+  test("execute receives decoded parameters", async () => {
+    const parameters = Schema.Struct({
+      count: Schema.NumberFromString.pipe(Schema.optional, Schema.withDecodingDefaultType(Effect.succeed(5))),
     })
-
-    for (let i = 0; i < 100; i++) {
-      await tool.init()
+    const calls: Array<Schema.Schema.Type<typeof parameters>> = []
+    const info = await runtime.runPromise(
+      Tool.define(
+        "test-decoded",
+        Effect.succeed({
+          description: "test tool",
+          parameters,
+          execute(args: Schema.Schema.Type<typeof parameters>) {
+            calls.push(args)
+            return Effect.succeed({ title: "test", output: "ok", metadata: { truncated: false } })
+          },
+        }),
+      ),
+    )
+    const ctx: Tool.Context = {
+      sessionID: SessionID.descending(),
+      messageID: MessageID.ascending(),
+      agent: "build",
+      abort: new AbortController().signal,
+      messages: [],
+      metadata() {
+        return Effect.void
+      },
+      ask() {
+        return Effect.void
+      },
     }
+    const tool = await Effect.runPromise(info.init())
+    const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
 
-    const resolved = await tool.init()
+    await Effect.runPromise(execute({}, ctx))
+    await Effect.runPromise(execute({ count: "7" }, ctx))
 
-    const result = await resolved.execute({ count: 42 }, {} as any)
-    expect(result.output).toBe("42")
-
-    await expect(resolved.execute({ count: -1 }, {} as any)).rejects.toThrow("invalid arguments")
+    expect(calls).toEqual([{ count: 5 }, { count: 7 }])
   })
 })

@@ -4,8 +4,8 @@ import path from "path"
 import { pathToFileURL } from "url"
 
 import { tmpdir } from "../fixture/fixture"
-import { Process } from "../../src/util/process"
-import { Filesystem } from "../../src/util/filesystem"
+import { Process } from "../../src/util"
+import { Filesystem } from "../../src/util"
 
 const { PluginMeta } = await import("../../src/plugin/meta")
 const root = path.join(import.meta.dir, "../..")

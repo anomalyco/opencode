@@ -25,7 +25,12 @@ kommander
 -opencodeengineer bot that spams issues
 r44vc0rp
 rekram1-node
+-ricardo-m-l
 -robinmordasiewicz
+rubdos
+shantur
+simonklee
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
 thdxr
 -toastythebot
+-davidbernat looks to be a clawdbot that spams team and sends super weird emails, doesnt appear to be a real person

@@ -7,10 +7,10 @@ import {
   printParseErrorCode,
 } from "jsonc-parser"
 
-import { ConfigPaths } from "@/config/paths"
+import * as ConfigPaths from "@/config/paths"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
-import { Flock } from "@/util/flock"
+import { Filesystem } from "@/util"
+import { Flock } from "@opencode-ai/shared/util/flock"
 import { isRecord } from "@/util/record"
 
 import { parsePluginSpecifier, readPackageThemes, readPluginPackage, resolvePluginTarget } from "./shared"
