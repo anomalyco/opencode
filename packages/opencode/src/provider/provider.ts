@@ -19,7 +19,7 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Effect, Exit, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
@@ -933,6 +933,9 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }>
+  readonly resolveFallbackChain: (
+    chain: Array<{ providerID: ProviderID; modelID: ModelID }>,
+  ) => Effect.Effect<{ model: Model; remaining: Array<{ providerID: ProviderID; modelID: ModelID }> } | undefined>
 }
 
 interface State {
@@ -1680,7 +1683,20 @@ const layer: Layer.Layer<
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    const resolveFallbackChain = Effect.fn("Provider.resolveFallbackChain")(function* (
+      chain: Array<{ providerID: ProviderID; modelID: ModelID }>,
+    ) {
+      for (let i = 0; i < chain.length; i++) {
+        const { providerID, modelID } = chain[i]
+        const exit = yield* getModel(providerID, modelID).pipe(Effect.exit)
+        if (Exit.isSuccess(exit)) {
+          return { model: exit.value, remaining: chain.slice(i + 1) }
+        }
+      }
+      return undefined
+    })
+
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, resolveFallbackChain })
   }),
 )
 
