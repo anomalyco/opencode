@@ -1471,7 +1471,20 @@ const layer: Layer.Layer<
             }
           }
 
-          const res = await fetchFn(input, {
+          const requestInput = (() => {
+            const apiVersion = options["apiVersion"]
+            if (model.api.npm !== "@ai-sdk/azure" || typeof apiVersion !== "string" || apiVersion === "") return input
+
+            const url = input instanceof URL ? new URL(input.href) : typeof input === "string" && URL.canParse(input) ? new URL(input) : undefined
+            if (!url) return input
+            if (url.searchParams.has("api-version")) return input
+
+            // Azure Cognitive Services requires api-version even when the SDK uses a custom baseURL.
+            url.searchParams.set("api-version", apiVersion)
+            return input instanceof URL ? url : url.href
+          })()
+
+          const res = await fetchFn(requestInput, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
