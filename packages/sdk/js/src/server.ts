@@ -1,6 +1,9 @@
-import launch from "cross-spawn"
+import { createRequire } from "node:module"
+import type launchType from "cross-spawn"
 import { type Config } from "./gen/types.gen.js"
 import { stop, bindAbort } from "./process.js"
+
+const launch = createRequire(import.meta.url)("cross-spawn") as typeof launchType
 
 export type ServerOptions = {
   hostname?: string
