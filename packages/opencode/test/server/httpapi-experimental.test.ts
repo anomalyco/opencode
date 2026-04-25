@@ -41,10 +41,11 @@ describe("experimental HttpApi", () => {
     })
 
     const headers = { "x-opencode-directory": tmp.path }
-    const [consoleState, consoleOrgs, toolIDs, resources] = await Promise.all([
+    const [consoleState, consoleOrgs, toolIDs, worktrees, resources] = await Promise.all([
       app().request(ExperimentalPaths.console, { headers }),
       app().request(ExperimentalPaths.consoleOrgs, { headers }),
       app().request(ExperimentalPaths.toolIDs, { headers }),
+      app().request(ExperimentalPaths.worktree, { headers }),
       app().request(ExperimentalPaths.resource, { headers }),
     ])
 
@@ -59,6 +60,9 @@ describe("experimental HttpApi", () => {
 
     expect(toolIDs.status).toBe(200)
     expect(await toolIDs.json()).toContain("bash")
+
+    expect(worktrees.status).toBe(200)
+    expect(await worktrees.json()).toEqual([])
 
     expect(resources.status).toBe(200)
     expect(await resources.json()).toEqual({})

@@ -164,7 +164,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `mcp`                    | `bridged` partial | status only                                                                           |
 | `workspace`              | `bridged`         | list, get, enter                                                                      |
 | top-level instance reads | `bridged`         | path, vcs, command, agent, skill, lsp, formatter                                      |
-| experimental JSON routes | `bridged` partial | console reads, tool ids, resource list; worktree and global session list remain later |
+| experimental JSON routes | `bridged` partial | console reads, tool ids, worktree list, resource list; global session list remains later |
 | `session`                | `later/special`   | large stateful surface plus streaming                                                 |
 | `sync`                   | `later`           | process/control side effects                                                          |
 | `event`                  | `special`         | SSE                                                                                   |

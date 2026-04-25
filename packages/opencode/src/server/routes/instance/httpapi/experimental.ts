@@ -1,6 +1,8 @@
 import { Account } from "@/account/account"
 import { Config } from "@/config"
+import { InstanceState } from "@/effect"
 import { MCP } from "@/mcp"
+import { Project } from "@/project"
 import { ToolRegistry } from "@/tool"
 import { Effect, Layer, Option, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -27,10 +29,13 @@ const ConsoleOrgList = Schema.Struct({
 
 const ToolIDs = Schema.Array(Schema.String).annotate({ identifier: "ToolIDs" })
 
+const WorktreeList = Schema.Array(Schema.String).annotate({ identifier: "WorktreeList" })
+
 export const ExperimentalPaths = {
   console: "/experimental/console",
   consoleOrgs: "/experimental/console/orgs",
   toolIDs: "/experimental/tool/ids",
+  worktree: "/experimental/worktree",
   resource: "/experimental/resource",
 } as const
 
@@ -66,6 +71,15 @@ export const ExperimentalApi = HttpApi.make("experimental")
               "Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.",
           }),
         ),
+        HttpApiEndpoint.get("worktree", ExperimentalPaths.worktree, {
+          success: WorktreeList,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "worktree.list",
+            summary: "List worktrees",
+            description: "List all sandbox worktrees for the current project.",
+          }),
+        ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {
           success: Schema.Record(Schema.String, MCP.Resource),
         }).annotateMerge(
@@ -97,6 +111,7 @@ export const experimentalHandlers = Layer.unwrap(
     const account = yield* Account.Service
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
+    const project = yield* Project.Service
     const registry = yield* ToolRegistry.Service
 
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
@@ -139,6 +154,11 @@ export const experimentalHandlers = Layer.unwrap(
       return yield* registry.ids()
     })
 
+    const worktree = Effect.fn("ExperimentalHttpApi.worktree")(function* () {
+      const ctx = yield* InstanceState.context
+      return yield* project.sandboxes(ctx.project.id)
+    })
+
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {
       return yield* mcp.resources()
     })
@@ -148,6 +168,7 @@ export const experimentalHandlers = Layer.unwrap(
         .handle("console", getConsole)
         .handle("consoleOrgs", listConsoleOrgs)
         .handle("toolIDs", toolIDs)
+        .handle("worktree", worktree)
         .handle("resource", resource),
     )
   }),
@@ -155,5 +176,6 @@ export const experimentalHandlers = Layer.unwrap(
   Layer.provide(Account.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(MCP.defaultLayer),
+  Layer.provide(Project.defaultLayer),
   Layer.provide(ToolRegistry.defaultLayer),
 )
