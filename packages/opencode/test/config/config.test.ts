@@ -3,6 +3,8 @@ import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config, ConfigManaged } from "../../src/config"
 import { ConfigParse } from "../../src/config/parse"
+import { Permission } from "../../src/permission"
+import os from "os"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { Instance } from "../../src/project/instance"
@@ -1563,6 +1565,69 @@ test("permission config preserves user key order", async () => {
         "tools_*",
         "pr_comments_*",
       ])
+    },
+  })
+})
+
+// Regression for #24335: nested rule key order (the keys *inside* `edit: { ... }`,
+// `bash: { ... }`, etc.) must also be preserved end-to-end. The reporter put a
+// `"*": "deny"` first and a specific `"~/Documents/Programming/AI/**": "allow"`
+// after it expecting the specific allow to win, but evaluation kept denying
+// because nested decode reordered the keys.
+test("permission config preserves nested rule key order (#24335)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission: {
+            external_directory: {
+              "~/Documents/Programming/AI/**": "allow",
+            },
+            edit: {
+              "*": "deny",
+              "~/Documents/Programming/AI/**": "allow",
+            },
+            bash: {
+              "*": "deny",
+              "cd ~/Documents/Programming/AI/*": "allow",
+              "ls ~/Documents/Programming/AI/*": "allow",
+              "touch ~/Documents/Programming/AI/*": "allow",
+              pwd: "allow",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+
+      const editRule = config.permission!.edit as Record<string, string>
+      expect(Object.keys(editRule)).toEqual(["*", "~/Documents/Programming/AI/**"])
+
+      const bashRule = config.permission!.bash as Record<string, string>
+      expect(Object.keys(bashRule)).toEqual([
+        "*",
+        "cd ~/Documents/Programming/AI/*",
+        "ls ~/Documents/Programming/AI/*",
+        "touch ~/Documents/Programming/AI/*",
+        "pwd",
+      ])
+
+      const ruleset = Permission.fromConfig(config.permission!)
+      // edit/external_directory match against expanded absolute paths
+      expect(Permission.evaluate("edit", `${os.homedir()}/Documents/Programming/AI/file.md`, ruleset).action).toBe(
+        "allow",
+      )
+      expect(Permission.evaluate("edit", "/some/other/dir/file.md", ruleset).action).toBe("deny")
+      // bash matches against the literal command source, where `~` is preserved
+      expect(Permission.evaluate("bash", "pwd", ruleset).action).toBe("allow")
+      expect(Permission.evaluate("bash", "cd ~/Documents/Programming/AI/x", ruleset).action).toBe("allow")
+      expect(Permission.evaluate("bash", "rm -rf /", ruleset).action).toBe("deny")
     },
   })
 })
