@@ -660,9 +660,17 @@ export class Agent implements ACPAgent {
           result.modes.currentModeId = lastUser.agent
           this.sessionManager.setMode(sessionId, lastUser.agent)
         }
+        const providers = sortProvidersByName(
+          await this.sdk.config.providers({ directory }, { throwOnError: true }).then((x) => x.data!.providers),
+        )
         result.configOptions = buildConfigOptions({
           currentModelId: result.models.currentModelId,
           availableModels: result.models.availableModels,
+          currentVariant: this.sessionManager.getVariant(sessionId),
+          availableVariants: modelVariantsFromProviders(
+            providers,
+            this.sessionManager.getModel(sessionId) ?? (await defaultModel(this.config, directory)),
+          ),
           modes: result.modes,
         })
       }
@@ -1273,6 +1281,8 @@ export class Agent implements ACPAgent {
       configOptions: buildConfigOptions({
         currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
         availableModels,
+        currentVariant,
+        availableVariants,
         modes,
       }),
       _meta: buildVariantMeta({
@@ -1333,6 +1343,14 @@ export class Agent implements ACPAgent {
         throw RequestError.invalidParams(JSON.stringify({ error: `Mode not found: ${params.value}` }))
       }
       this.sessionManager.setMode(session.id, params.value)
+    } else if (params.configId === "variant") {
+      if (typeof params.value !== "string") throw RequestError.invalidParams("variant value must be a string")
+      const model = this.sessionManager.getModel(session.id) ?? (await defaultModel(this.config, session.cwd))
+      const availableVariants = modelVariantsFromProviders(entries, model)
+      if (!availableVariants.includes(params.value)) {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Variant not found: ${params.value}` }))
+      }
+      this.sessionManager.setVariant(session.id, params.value === DEFAULT_VARIANT_VALUE ? undefined : params.value)
     } else {
       throw RequestError.invalidParams(JSON.stringify({ error: `Unknown config option: ${params.configId}` }))
     }
@@ -1348,7 +1366,13 @@ export class Agent implements ACPAgent {
       : undefined
 
     return {
-      configOptions: buildConfigOptions({ currentModelId, availableModels, modes }),
+      configOptions: buildConfigOptions({
+        currentModelId,
+        availableModels,
+        currentVariant: updatedSession.variant,
+        availableVariants,
+        modes,
+      }),
     }
   }
 
@@ -1806,6 +1830,8 @@ function parseModelSelection(
 function buildConfigOptions(input: {
   currentModelId: string
   availableModels: ModelOption[]
+  currentVariant: string | undefined
+  availableVariants: string[]
   modes?: { availableModes: ModeOption[]; currentModeId: string } | undefined
 }): SessionConfigOption[] {
   const options: SessionConfigOption[] = [
@@ -1818,6 +1844,26 @@ function buildConfigOptions(input: {
       options: input.availableModels.map((m) => ({ value: m.modelId, name: m.name })),
     },
   ]
+  const variantOptions = input.availableVariants.map((variant) => ({
+    value: variant,
+    name:
+      variant === DEFAULT_VARIANT_VALUE
+        ? "Default"
+        : variant
+            .split(/[_-]/)
+            .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+            .join(" "),
+  }))
+  if (variantOptions.length > 1) {
+    options.push({
+      id: "variant",
+      name: "Variant",
+      category: "effort",
+      type: "select",
+      currentValue: input.currentVariant ?? DEFAULT_VARIANT_VALUE,
+      options: variantOptions,
+    })
+  }
   if (input.modes) {
     options.push({
       id: "mode",
