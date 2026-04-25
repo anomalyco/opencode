@@ -1056,11 +1056,12 @@ export function get(input: { sessionID: SessionID; messageID: MessageID }): With
 }
 
 export function filterCompacted(msgs: Iterable<WithParts>) {
+  const all = [] as WithParts[]
   const result = [] as WithParts[]
   const completed = new Set<string>()
   let retain: MessageID | undefined
   for (const msg of msgs) {
-    result.push(msg)
+    all.push(msg)
     if (retain) {
       if (msg.info.id === retain) break
       continue
@@ -1078,6 +1079,11 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
     if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
       completed.add(msg.info.parentID)
   }
+  // If retain was set but not found in the stream, we cannot safely filter.
+  // The tail_start_id references a message beyond available history, so we
+  // should not include everything (which causes context inflation to 1.7M tokens).
+  // Instead, keep only the recent messages after retain was set to allow continuation.
+  if (retain) return all.slice(-result.length).reverse()
   result.reverse()
   return result
 }

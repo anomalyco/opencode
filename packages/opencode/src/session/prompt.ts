@@ -1062,7 +1062,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     metadata: () => Effect.void,
                     ask: () => Effect.void,
                   })
-                  .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
+                  .pipe(
+                    Effect.onInterrupt(() => Effect.sync(() => controller.abort())),
+                    Effect.ensuring(Effect.sync(() => controller.abort())),
+                  )
               }
 
               if (part.mime === "text/plain") {
