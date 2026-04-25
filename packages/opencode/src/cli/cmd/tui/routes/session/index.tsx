@@ -243,9 +243,16 @@ export function Session() {
   const bind = (r: PromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
-    if (seeded || !route.prompt || !r) return
-    seeded = true
-    r.set(route.prompt)
+    if (!r) return
+
+    // Seed explicit prompt state first.
+    if (!seeded && route.prompt) {
+      seeded = true
+      r.set(route.prompt)
+    }
+
+    // Fill with startup typing only if still empty.
+    promptRef.drainStartupInputBuffer(r)
   }
   const keybind = useKeybind()
   const dialog = useDialog()

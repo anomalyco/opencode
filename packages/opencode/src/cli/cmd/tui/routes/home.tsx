@@ -29,15 +29,21 @@ export function Home() {
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
-    if (once || !r) return
-    if (route.prompt) {
-      r.set(route.prompt)
-      once = true
-      return
+    if (!r) return
+
+    // Seed explicit prompt state first.
+    if (!once) {
+      if (route.prompt) {
+        r.set(route.prompt)
+        once = true
+      } else if (args.prompt) {
+        r.set({ input: args.prompt, parts: [] })
+        once = true
+      }
     }
-    if (!args.prompt) return
-    r.set({ input: args.prompt, parts: [] })
-    once = true
+
+    // Fill with startup typing only if still empty.
+    promptRef.drainStartupInputBuffer(r)
   }
 
   // Wait for sync and model store to be ready before auto-submitting --prompt

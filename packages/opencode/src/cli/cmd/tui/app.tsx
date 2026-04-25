@@ -63,6 +63,7 @@ import { FormatError, FormatUnknownError } from "@/cli/error"
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { createStartupInputBuffer } from "./startup-input-buffer"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
@@ -119,6 +120,7 @@ export function tui(input: {
   return new Promise<void>(async (resolve) => {
     const unguard = win32InstallCtrlCGuard()
     win32DisableProcessedInput()
+    const startupInputBuffer = createStartupInputBuffer()
 
     const onExit = async () => {
       unguard?.()
@@ -126,6 +128,7 @@ export function tui(input: {
     }
 
     const onBeforeExit = async () => {
+      startupInputBuffer.dispose()
       await TuiPluginRuntime.dispose()
     }
 
@@ -171,7 +174,7 @@ export function tui(input: {
                                       <CommandProvider>
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
-                                            <PromptRefProvider>
+                                            <PromptRefProvider startupInputBuffer={startupInputBuffer}>
                                               <EditorContextProvider>
                                                 <App onSnapshot={input.onSnapshot} />
                                               </EditorContextProvider>
