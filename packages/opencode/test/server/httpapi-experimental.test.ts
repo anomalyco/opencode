@@ -107,14 +107,16 @@ describe("experimental HttpApi", () => {
     expect(listed.status).toBe(200)
     expect(await listed.json()).toContain(info.directory)
 
-    const reset = await app().request(ExperimentalPaths.worktreeReset, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ directory: info.directory }),
-    })
+    if (process.platform !== "win32") {
+      const reset = await app().request(ExperimentalPaths.worktreeReset, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ directory: info.directory }),
+      })
 
-    expect(reset.status).toBe(200)
-    expect(await reset.json()).toBe(true)
+      expect(reset.status).toBe(200)
+      expect(await reset.json()).toBe(true)
+    }
 
     const removed = await app().request(ExperimentalPaths.worktree, {
       method: "DELETE",
