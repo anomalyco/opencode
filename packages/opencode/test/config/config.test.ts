@@ -3,13 +3,13 @@ import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config, ConfigManaged } from "../../src/config"
 import { ConfigParse } from "../../src/config/parse"
-import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
@@ -895,7 +895,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 })
 
 // Note: deduplication and serialization of npm installs is now handled by the
-// shared Npm.Service (via EffectFlock). Those behaviors are tested in the shared
+// core Npm.Service (via EffectFlock). Those behaviors are tested in the core
 // package's npm tests, not here.
 
 test("resolves scoped npm plugins in config", async () => {
@@ -1495,16 +1495,9 @@ test("merges legacy tools with existing permission config", async () => {
   })
 })
 
-test("permission config canonicalises known keys first, preserves rest-key insertion order", async () => {
-  // ConfigPermission.Info is a StructWithRest schema — the decoder reorders
-  // keys into declaration-order for known permission names (edit, read,
-  // todowrite, external_directory are declared in `config/permission.ts`),
-  // followed by rest keys in the user's insertion order.
-  //
-  // Rule precedence is NOT affected by this reordering: `Permission.fromConfig`
-  // sorts wildcards before specifics before iterating. See the
-  // "fromConfig - specific key beats wildcard regardless of JSON key order"
-  // test in test/permission/next.test.ts for the behavioural guarantee.
+test("permission config preserves user key order", async () => {
+  // Permission precedence follows the order users write in config, so parsing
+  // must not canonicalise known keys ahead of wildcard or custom keys.
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Filesystem.write(
@@ -1532,15 +1525,12 @@ test("permission config canonicalises known keys first, preserves rest-key inser
     fn: async () => {
       const config = await load()
       expect(Object.keys(config.permission!)).toEqual([
-        // known fields that the user provided, in declaration order from
-        // config/permission.ts (read, edit, ..., external_directory, todowrite)
-        "read",
-        "edit",
-        "external_directory",
-        "todowrite",
-        // rest keys (not in the known list), in user's insertion order
         "*",
+        "edit",
         "write",
+        "external_directory",
+        "read",
+        "todowrite",
         "thoughts_*",
         "reasoning_model_*",
         "tools_*",

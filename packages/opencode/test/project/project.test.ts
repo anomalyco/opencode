@@ -9,7 +9,7 @@ import { ProjectID } from "../../src/project/schema"
 import { Effect, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 
 void Log.init({ print: false })

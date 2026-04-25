@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { Schema } from "effect"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { Log } from "../util"
 import { Process } from "@/util"
 
