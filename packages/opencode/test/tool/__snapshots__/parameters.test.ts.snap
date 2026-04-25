@@ -1,0 +1,495 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`tool parameters JSON Schema (wire shape) apply_patch 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "patchText": {
+      "description": "The full patch text that describes all changes to be made",
+      "type": "string",
+    },
+  },
+  "required": [
+    "patchText",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "command": {
+      "description": "The command to execute",
+      "type": "string",
+    },
+    "description": {
+      "description": 
+"Clear, concise description of what this command does in 5-10 words. Examples:
+Input: ls
+Output: Lists files in current directory
+
+Input: git status
+Output: Shows working tree status
+
+Input: npm install
+Output: Installs package dependencies
+
+Input: mkdir foo
+Output: Creates directory 'foo'"
+,
+      "type": "string",
+    },
+    "timeout": {
+      "description": "Optional timeout in milliseconds",
+      "type": "number",
+    },
+    "workdir": {
+      "description": "The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.",
+      "type": "string",
+    },
+  },
+  "required": [
+    "command",
+    "description",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) codesearch 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "query": {
+      "description": "Search query to find relevant context for APIs, Libraries, and SDKs. For example, 'React useState hook examples', 'Python pandas dataframe filtering', 'Express.js middleware', 'Next js partial prerendering configuration'",
+      "type": "string",
+    },
+    "tokensNum": {
+      "default": 5000,
+      "description": "Number of tokens to return (1000-50000). Default is 5000 tokens. Adjust this value based on how much context you need - use lower values for focused queries and higher values for comprehensive documentation.",
+      "maximum": 50000,
+      "minimum": 1000,
+      "type": "number",
+    },
+  },
+  "required": [
+    "query",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) edit 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "filePath": {
+      "description": "The absolute path to the file to modify",
+      "type": "string",
+    },
+    "newString": {
+      "description": "The text to replace it with (must be different from oldString)",
+      "type": "string",
+    },
+    "oldString": {
+      "description": "The text to replace",
+      "type": "string",
+    },
+    "replaceAll": {
+      "description": "Replace all occurrences of oldString (default false)",
+      "type": "boolean",
+    },
+  },
+  "required": [
+    "filePath",
+    "oldString",
+    "newString",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) glob 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "path": {
+      "description": "The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.",
+      "type": "string",
+    },
+    "pattern": {
+      "description": "The glob pattern to match files against",
+      "type": "string",
+    },
+  },
+  "required": [
+    "pattern",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) grep 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "include": {
+      "description": "File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")",
+      "type": "string",
+    },
+    "path": {
+      "description": "The directory to search in. Defaults to the current working directory.",
+      "type": "string",
+    },
+    "pattern": {
+      "description": "The regex pattern to search for in file contents",
+      "type": "string",
+    },
+  },
+  "required": [
+    "pattern",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) invalid 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "error": {
+      "type": "string",
+    },
+    "tool": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "tool",
+    "error",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) lsp 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "character": {
+      "description": "The character offset (1-based, as shown in editors)",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "filePath": {
+      "description": "The absolute or relative path to the file",
+      "type": "string",
+    },
+    "line": {
+      "description": "The line number (1-based, as shown in editors)",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "operation": {
+      "description": "The LSP operation to perform",
+      "enum": [
+        "goToDefinition",
+        "findReferences",
+        "hover",
+        "documentSymbol",
+        "workspaceSymbol",
+        "goToImplementation",
+        "prepareCallHierarchy",
+        "incomingCalls",
+        "outgoingCalls",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "operation",
+    "filePath",
+    "line",
+    "character",
+  ],
+  "type": "object",
+}
+`;
+
+
+exports[`tool parameters JSON Schema (wire shape) plan 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {},
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) question 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "questions": {
+      "description": "Questions to ask",
+      "items": {
+        "properties": {
+          "header": {
+            "description": "Very short label (max 30 chars)",
+            "type": "string",
+          },
+          "multiple": {
+            "description": "Allow selecting multiple choices",
+            "type": "boolean",
+          },
+          "options": {
+            "description": "Available choices",
+            "items": {
+              "properties": {
+                "description": {
+                  "description": "Explanation of choice",
+                  "type": "string",
+                },
+                "label": {
+                  "description": "Display text (1-5 words, concise)",
+                  "type": "string",
+                },
+              },
+              "ref": "QuestionOption",
+              "required": [
+                "label",
+                "description",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "question": {
+            "description": "Complete question",
+            "type": "string",
+          },
+        },
+        "ref": "QuestionPrompt",
+        "required": [
+          "question",
+          "header",
+          "options",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "questions",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) read 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "filePath": {
+      "description": "The absolute path to the file or directory to read",
+      "type": "string",
+    },
+    "limit": {
+      "description": "The maximum number of lines to read (defaults to 2000)",
+      "type": "number",
+    },
+    "offset": {
+      "description": "The line number to start reading from (1-indexed)",
+      "type": "number",
+    },
+  },
+  "required": [
+    "filePath",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) skill 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "name": {
+      "description": "The name of the skill from available_skills",
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) task 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "command": {
+      "description": "The command that triggered this task",
+      "type": "string",
+    },
+    "description": {
+      "description": "A short (3-5 words) description of the task",
+      "type": "string",
+    },
+    "prompt": {
+      "description": "The task for the agent to perform",
+      "type": "string",
+    },
+    "subagent_type": {
+      "description": "The type of specialized agent to use for this task",
+      "type": "string",
+    },
+    "task_id": {
+      "description": "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+      "type": "string",
+    },
+  },
+  "required": [
+    "description",
+    "prompt",
+    "subagent_type",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) todo 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "todos": {
+      "description": "The updated todo list",
+      "items": {
+        "properties": {
+          "content": {
+            "description": "Brief description of the task",
+            "type": "string",
+          },
+          "priority": {
+            "description": "Priority level of the task: high, medium, low",
+            "type": "string",
+          },
+          "status": {
+            "description": "Current status of the task: pending, in_progress, completed, cancelled",
+            "type": "string",
+          },
+        },
+        "required": [
+          "content",
+          "status",
+          "priority",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "todos",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "format": {
+      "default": "markdown",
+      "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
+      "enum": [
+        "text",
+        "markdown",
+        "html",
+      ],
+      "type": "string",
+    },
+    "timeout": {
+      "description": "Optional timeout in seconds (max 120)",
+      "type": "number",
+    },
+    "url": {
+      "description": "The URL to fetch content from",
+      "type": "string",
+    },
+  },
+  "required": [
+    "url",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) websearch 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "contextMaxCharacters": {
+      "description": "Maximum characters for context string optimized for LLMs (default: 10000)",
+      "type": "number",
+    },
+    "livecrawl": {
+      "description": "Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback')",
+      "enum": [
+        "fallback",
+        "preferred",
+      ],
+      "type": "string",
+    },
+    "numResults": {
+      "description": "Number of search results to return (default: 8)",
+      "type": "number",
+    },
+    "query": {
+      "description": "Websearch query",
+      "type": "string",
+    },
+    "type": {
+      "description": "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search",
+      "enum": [
+        "auto",
+        "fast",
+        "deep",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "query",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) write 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "content": {
+      "description": "The content to write to the file",
+      "type": "string",
+    },
+    "filePath": {
+      "description": "The absolute path to the file to write (must be absolute, not relative)",
+      "type": "string",
+    },
+  },
+  "required": [
+    "content",
+    "filePath",
+  ],
+  "type": "object",
+}
+`;

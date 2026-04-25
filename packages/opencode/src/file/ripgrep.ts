@@ -1,7 +1,6 @@
 import path from "path"
-import z from "zod"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { Cause, Context, Effect, Fiber, Layer, Queue, Stream } from "effect"
+import { Cause, Context, Effect, Fiber, Layer, Queue, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ChildProcess } from "effect/unstable/process"
@@ -12,95 +11,97 @@ import { Global } from "@/global"
 import { Log } from "@/util"
 import { sanitizedProcessEnv } from "@/util/opencode-process"
 import { which } from "@/util/which"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "ripgrep" })
-const VERSION = "14.1.1"
+const VERSION = "15.1.0"
 const PLATFORM = {
   "arm64-darwin": { platform: "aarch64-apple-darwin", extension: "tar.gz" },
   "arm64-linux": { platform: "aarch64-unknown-linux-gnu", extension: "tar.gz" },
   "x64-darwin": { platform: "x86_64-apple-darwin", extension: "tar.gz" },
   "x64-linux": { platform: "x86_64-unknown-linux-musl", extension: "tar.gz" },
   "arm64-win32": { platform: "aarch64-pc-windows-msvc", extension: "zip" },
+  "ia32-win32": { platform: "i686-pc-windows-msvc", extension: "zip" },
   "x64-win32": { platform: "x86_64-pc-windows-msvc", extension: "zip" },
 } as const
 
-const Stats = z.object({
-  elapsed: z.object({
-    secs: z.number(),
-    nanos: z.number(),
-    human: z.string(),
-  }),
-  searches: z.number(),
-  searches_with_match: z.number(),
-  bytes_searched: z.number(),
-  bytes_printed: z.number(),
-  matched_lines: z.number(),
-  matches: z.number(),
+const TimeStats = Schema.Struct({
+  secs: Schema.Number,
+  nanos: Schema.Number,
+  human: Schema.String,
 })
 
-const Begin = z.object({
-  type: z.literal("begin"),
-  data: z.object({
-    path: z.object({
-      text: z.string(),
-    }),
+const Stats = Schema.Struct({
+  elapsed: TimeStats,
+  searches: Schema.Number,
+  searches_with_match: Schema.Number,
+  bytes_searched: Schema.Number,
+  bytes_printed: Schema.Number,
+  matched_lines: Schema.Number,
+  matches: Schema.Number,
+})
+
+const PathText = Schema.Struct({
+  text: Schema.String,
+})
+
+const Begin = Schema.Struct({
+  type: Schema.Literal("begin"),
+  data: Schema.Struct({
+    path: PathText,
   }),
 })
 
-export const Match = z.object({
-  type: z.literal("match"),
-  data: z.object({
-    path: z.object({
-      text: z.string(),
-    }),
-    lines: z.object({
-      text: z.string(),
-    }),
-    line_number: z.number(),
-    absolute_offset: z.number(),
-    submatches: z.array(
-      z.object({
-        match: z.object({
-          text: z.string(),
-        }),
-        start: z.number(),
-        end: z.number(),
+export const SearchMatch = Schema.Struct({
+  path: PathText,
+  lines: Schema.Struct({
+    text: Schema.String,
+  }),
+  line_number: Schema.Number,
+  absolute_offset: Schema.Number,
+  submatches: Schema.Array(
+    Schema.Struct({
+      match: Schema.Struct({
+        text: Schema.String,
       }),
-    ),
-  }),
+      start: Schema.Number,
+      end: Schema.Number,
+    }),
+  ),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+
+export const Match = Schema.Struct({
+  type: Schema.Literal("match"),
+  data: SearchMatch,
 })
 
-const End = z.object({
-  type: z.literal("end"),
-  data: z.object({
-    path: z.object({
-      text: z.string(),
-    }),
-    binary_offset: z.number().nullable(),
+const End = Schema.Struct({
+  type: Schema.Literal("end"),
+  data: Schema.Struct({
+    path: PathText,
+    binary_offset: Schema.NullOr(Schema.Number),
     stats: Stats,
   }),
 })
 
-const Summary = z.object({
-  type: z.literal("summary"),
-  data: z.object({
-    elapsed_total: z.object({
-      human: z.string(),
-      nanos: z.number(),
-      secs: z.number(),
-    }),
+const Summary = Schema.Struct({
+  type: Schema.Literal("summary"),
+  data: Schema.Struct({
+    elapsed_total: TimeStats,
     stats: Stats,
   }),
 })
 
-const Result = z.union([Begin, Match, End, Summary])
+const Result = Schema.Union([Begin, Match, End, Summary])
+const decodeResult = Schema.decodeUnknownEffect(Schema.fromJsonString(Result))
 
-export type Result = z.infer<typeof Result>
-export type Match = z.infer<typeof Match>
+export type Result = Schema.Schema.Type<typeof Result>
+export type Match = Schema.Schema.Type<typeof Match>
 export type Item = Match["data"]
-export type Begin = z.infer<typeof Begin>
-export type End = z.infer<typeof End>
-export type Summary = z.infer<typeof Summary>
+export type Begin = Schema.Schema.Type<typeof Begin>
+export type End = Schema.Schema.Type<typeof End>
+export type Summary = Schema.Schema.Type<typeof Summary>
 export type Row = Match["data"]
 
 export interface SearchResult {
@@ -186,10 +187,7 @@ function row(data: Row): Row {
 }
 
 function parse(line: string) {
-  return Effect.try({
-    try: () => Result.parse(JSON.parse(line)),
-    catch: (cause) => new Error("invalid ripgrep output", { cause }),
-  })
+  return decodeResult(line).pipe(Effect.mapError((cause) => new Error("invalid ripgrep output", { cause })))
 }
 
 function fail(queue: Queue.Queue<string, PlatformError | Error | Cause.Done>, err: PlatformError | Error) {
@@ -247,17 +245,20 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
         return { stdout, stderr, code }
       }, Effect.scoped)
 
-      const extract = Effect.fnUntraced(function* (archive: string, config: (typeof PLATFORM)[keyof typeof PLATFORM]) {
+      const extract = Effect.fnUntraced(function* (
+        archive: string,
+        config: (typeof PLATFORM)[keyof typeof PLATFORM],
+        target: string,
+      ) {
         const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: "ripgrep-" })
 
         if (config.extension === "zip") {
           const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
           const result = yield* run(shell, [
             "-NoProfile",
+            "-NonInteractive",
             "-Command",
-            "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
-            archive,
-            dir,
+            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
           ])
           if (result.code !== 0) {
             return yield* Effect.fail(error(result.stderr || result.stdout, result.code))
@@ -271,12 +272,23 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
           }
         }
 
-        return path.join(dir, `ripgrep-${VERSION}-${config.platform}`, process.platform === "win32" ? "rg.exe" : "rg")
+        const extracted = path.join(
+          dir,
+          `ripgrep-${VERSION}-${config.platform}`,
+          process.platform === "win32" ? "rg.exe" : "rg",
+        )
+        if (!(yield* fs.isFile(extracted))) {
+          return yield* Effect.fail(new Error(`ripgrep archive did not contain executable: ${extracted}`))
+        }
+
+        yield* fs.copyFile(extracted, target)
+        if (process.platform === "win32") return
+        yield* fs.chmod(target, 0o755)
       }, Effect.scoped)
 
       const filepath = yield* Effect.cached(
         Effect.gen(function* () {
-          const system = yield* Effect.sync(() => which("rg"))
+          const system = yield* Effect.sync(() => which(process.platform === "win32" ? "rg.exe" : "rg"))
           if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
 
           const target = path.join(Global.Path.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
@@ -304,17 +316,8 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
             return yield* Effect.fail(new Error(`failed to download ripgrep from ${url}`))
           }
 
-          yield* fs.writeWithDirs(archive, new Uint8Array(bytes)).pipe(Effect.orDie)
-          const extracted = yield* extract(archive, config)
-          const exists = yield* fs.exists(extracted).pipe(Effect.orDie)
-          if (!exists) {
-            return yield* Effect.fail(new Error(`ripgrep archive did not contain executable: ${extracted}`))
-          }
-
-          yield* fs.copyFile(extracted, target).pipe(Effect.orDie)
-          if (process.platform !== "win32") {
-            yield* fs.chmod(target, 0o755).pipe(Effect.orDie)
-          }
+          yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
+          yield* extract(archive, config, target)
           yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
           return target
         }),

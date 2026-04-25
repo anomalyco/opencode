@@ -16,6 +16,9 @@ import { GlobalRoutes } from "./routes/global"
 import { WorkspaceRouterMiddleware } from "./workspace"
 import { InstanceMiddleware } from "./routes/instance/middleware"
 import { WorkspaceRoutes } from "./routes/control/workspace"
+import { ExperimentalHttpApiServer } from "./routes/instance/httpapi/server"
+import { WorkspacePaths } from "./routes/instance/httpapi/workspace"
+import { Context } from "effect"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -54,16 +57,24 @@ function create(opts: { cors?: string[] }) {
     }
   }
 
+  const workspaceApp = new Hono()
+  const workspaceLegacyApp = new Hono()
+    .use(InstanceMiddleware())
+    .route("/experimental/workspace", WorkspaceRoutes())
+    .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket))
+  if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
+    const handler = ExperimentalHttpApiServer.webHandler().handler
+    const context = Context.empty() as Context.Context<unknown>
+    workspaceApp.get(WorkspacePaths.adaptors, (c) => handler(c.req.raw, context))
+    workspaceApp.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
+    workspaceApp.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
+  }
+  workspaceApp.route("/", workspaceLegacyApp)
+
   return {
     app: app
       .route("/", ControlPlaneRoutes())
-      .route(
-        "/",
-        new Hono()
-          .use(InstanceMiddleware())
-          .route("/experimental/workspace", WorkspaceRoutes())
-          .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket)),
-      )
+      .route("/", workspaceApp)
       .route("/", InstanceRoutes(runtime.upgradeWebSocket))
       .route("/", UIRoutes()),
     runtime,

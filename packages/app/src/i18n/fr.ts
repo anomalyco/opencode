@@ -210,7 +210,7 @@ export const dict = {
   "common.saving": "Enregistrement...",
   "common.default": "Défaut",
   "common.attachment": "pièce jointe",
-  "prompt.placeholder.shell": "Entrez une commande shell...",
+  "prompt.placeholder.shell": "Entrez une commande shell... {{example}}",
   "prompt.placeholder.normal": 'Demandez n\'importe quoi... "{{example}}"',
   "prompt.placeholder.simple": "Demandez n'importe quoi...",
   "prompt.placeholder.summarizeComments": "Résumer les commentaires…",
@@ -598,6 +598,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Développer les parties de l'outil edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Afficher les parties des outils edit, write et patch développées par défaut dans la chronologie",
+  "settings.general.row.showSessionProgressBar.title": "Afficher la barre de progression de la session",
+  "settings.general.row.showSessionProgressBar.description":
+    "Afficher la barre de progression animée en haut de la session lorsque l'agent travaille",
   "settings.general.row.wayland.title": "Utiliser Wayland natif",
   "settings.general.row.wayland.description": "Désactiver le repli X11 sur Wayland. Nécessite un redémarrage.",
   "settings.general.row.wayland.tooltip":

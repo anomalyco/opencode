@@ -210,7 +210,7 @@ export const dict = {
   "common.saving": "جارٍ الحفظ...",
   "common.default": "افتراضي",
   "common.attachment": "مرفق",
-  "prompt.placeholder.shell": "أدخل أمر shell...",
+  "prompt.placeholder.shell": "أدخل أمر shell... {{example}}",
   "prompt.placeholder.normal": 'اسأل أي شيء... "{{example}}"',
   "prompt.placeholder.simple": "اسأل أي شيء...",
   "prompt.placeholder.summarizeComments": "لخّص التعليقات…",
@@ -582,6 +582,8 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "توسيع أجزاء أداة edit",
   "settings.general.row.editToolPartsExpanded.description":
     "إظهار أجزاء أدوات edit و write و patch موسعة بشكل افتراضي في الشريط الزمني",
+  "settings.general.row.showSessionProgressBar.title": "إظهار شريط تقدم الجلسة",
+  "settings.general.row.showSessionProgressBar.description": "عرض شريط التقدم المتحرك أعلى الجلسة أثناء عمل الوكيل",
   "settings.general.row.wayland.title": "استخدام Wayland الأصلي",
   "settings.general.row.wayland.description": "تعطيل التراجع إلى X11 على Wayland. يتطلب إعادة التشغيل.",
   "settings.general.row.wayland.tooltip":

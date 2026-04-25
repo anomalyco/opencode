@@ -211,7 +211,7 @@ export const dict = {
   "common.saving": "Zapisywanie...",
   "common.default": "Domyślny",
   "common.attachment": "załącznik",
-  "prompt.placeholder.shell": "Wpisz polecenie terminala...",
+  "prompt.placeholder.shell": "Wpisz polecenie terminala... {{example}}",
   "prompt.placeholder.normal": 'Zapytaj o cokolwiek... "{{example}}"',
   "prompt.placeholder.simple": "Zapytaj o cokolwiek...",
   "prompt.placeholder.summarizeComments": "Podsumuj komentarze…",
@@ -588,6 +588,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Rozwijaj elementy narzędzia edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Domyślnie pokazuj rozwinięte elementy narzędzi edit, write i patch na osi czasu",
+  "settings.general.row.showSessionProgressBar.title": "Pokazuj pasek postępu sesji",
+  "settings.general.row.showSessionProgressBar.description":
+    "Wyświetlaj animowany pasek postępu u góry sesji, gdy agent pracuje",
   "settings.general.row.wayland.title": "Użyj natywnego Wayland",
   "settings.general.row.wayland.description": "Wyłącz fallback X11 na Wayland. Wymaga restartu.",
   "settings.general.row.wayland.tooltip":

@@ -230,7 +230,7 @@ export const dict = {
   "common.default": "Default",
   "common.attachment": "attachment",
 
-  "prompt.placeholder.shell": "Enter shell command...",
+  "prompt.placeholder.shell": "Enter shell command... {{example}}",
   "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
   "prompt.placeholder.simple": "Ask anything...",
   "prompt.placeholder.summarizeComments": "Summarize comments…",
@@ -762,6 +762,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
+  "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
+  "settings.general.row.showSessionProgressBar.description":
+    "Display the animated progress bar at the top of the session when the agent is working",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",

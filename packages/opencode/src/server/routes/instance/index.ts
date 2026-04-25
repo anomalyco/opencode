@@ -16,6 +16,8 @@ import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
 import { Flag } from "@/flag/flag"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { FilePaths } from "./httpapi/file"
+import { McpPaths } from "./httpapi/mcp"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -40,6 +42,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post("/question/:requestID/reject", (c) => handler(c.req.raw, context))
     app.get("/permission", (c) => handler(c.req.raw, context))
     app.post("/permission/:requestID/reply", (c) => handler(c.req.raw, context))
+    app.get("/config", (c) => handler(c.req.raw, context))
     app.get("/config/providers", (c) => handler(c.req.raw, context))
     app.get("/provider", (c) => handler(c.req.raw, context))
     app.get("/provider/auth", (c) => handler(c.req.raw, context))
@@ -47,6 +50,10 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post("/provider/:providerID/oauth/callback", (c) => handler(c.req.raw, context))
     app.get("/project", (c) => handler(c.req.raw, context))
     app.get("/project/current", (c) => handler(c.req.raw, context))
+    app.get(FilePaths.list, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.content, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.status, (c) => handler(c.req.raw, context))
+    app.get(McpPaths.status, (c) => handler(c.req.raw, context))
   }
 
   return app
@@ -259,7 +266,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "LSP server status",
             content: {
               "application/json": {
-                schema: resolver(LSP.Status.array()),
+                schema: resolver(LSP.Status.zod.array()),
               },
             },
           },

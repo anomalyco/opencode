@@ -1,14 +1,14 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
-import z from "zod"
+import { Schema } from "effect"
 
 export const TuiEvent = {
-  PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  PromptAppend: BusEvent.define("tui.prompt.append", Schema.Struct({ text: Schema.String })),
   CommandExecute: BusEvent.define(
     "tui.command.execute",
-    z.object({
-      command: z.union([
-        z.enum([
+    Schema.Struct({
+      command: Schema.Union([
+        Schema.Literals([
           "session.list",
           "session.new",
           "session.share",
@@ -26,23 +26,23 @@ export const TuiEvent = {
           "prompt.submit",
           "agent.cycle",
         ]),
-        z.string(),
+        Schema.String,
       ]),
     }),
   ),
   ToastShow: BusEvent.define(
     "tui.toast.show",
-    z.object({
-      title: z.string().optional(),
-      message: z.string(),
-      variant: z.enum(["info", "success", "warning", "error"]),
-      duration: z.number().default(5000).optional().describe("Duration in milliseconds"),
+    Schema.Struct({
+      title: Schema.optional(Schema.String),
+      message: Schema.String,
+      variant: Schema.Literals(["info", "success", "warning", "error"]),
+      duration: Schema.optional(Schema.Number).annotate({ description: "Duration in milliseconds" }),
     }),
   ),
   SessionSelect: BusEvent.define(
     "tui.session.select",
-    z.object({
-      sessionID: SessionID.zod.describe("Session ID to navigate to"),
+    Schema.Struct({
+      sessionID: SessionID.annotate({ description: "Session ID to navigate to" }),
     }),
   ),
 }
