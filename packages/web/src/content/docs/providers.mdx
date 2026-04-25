@@ -555,6 +555,8 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` is also accepted as an alias for `CLOUDFLARE_API_TOKEN`.
+
 ---
 
 ### Cloudflare Workers AI
@@ -958,8 +960,15 @@ To use Google Vertex AI with OpenCode:
    :::
 
 2. Set the required environment variables:
-   - `GOOGLE_CLOUD_PROJECT`: Your Google Cloud project ID
-   - `VERTEX_LOCATION` (optional): The region for Vertex AI (defaults to `global`)
+   - Project ID (one of):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Location (optional, checked in this order):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Defaults to `us-central1` if none are set
    - Authentication (choose one):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Path to your service account JSON key file
      - Authenticate using gcloud CLI: `gcloud auth application-default login`
@@ -975,11 +984,11 @@ To use Google Vertex AI with OpenCode:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-The `global` region improves availability and reduces errors at no extra cost. Use regional endpoints (e.g., `us-central1`) for data residency requirements. [Learn more](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+The `global` region improves availability and reduces errors at no extra cost. Use it by setting `VERTEX_LOCATION=global`. Use regional endpoints (e.g., `us-central1`) for data residency requirements. [Learn more](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Run the `/models` command to select the model you want.
