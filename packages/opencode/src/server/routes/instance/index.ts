@@ -17,6 +17,7 @@ import { PermissionRoutes } from "./permission"
 import { Flag } from "@/flag/flag"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
 import { FilePaths } from "./httpapi/file"
+import { InstancePaths } from "./httpapi/instance"
 import { McpPaths } from "./httpapi/mcp"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
@@ -53,6 +54,9 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(FilePaths.list, (c) => handler(c.req.raw, context))
     app.get(FilePaths.content, (c) => handler(c.req.raw, context))
     app.get(FilePaths.status, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.path, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.vcs, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.vcsDiff, (c) => handler(c.req.raw, context))
     app.get(McpPaths.status, (c) => handler(c.req.raw, context))
   }
 
@@ -142,7 +146,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "VCS info",
             content: {
               "application/json": {
-                schema: resolver(Vcs.Info),
+                schema: resolver(Vcs.Info.zod),
               },
             },
           },
@@ -168,7 +172,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "VCS diff",
             content: {
               "application/json": {
-                schema: resolver(Vcs.FileDiff.array()),
+                schema: resolver(Vcs.FileDiff.zod.array()),
               },
             },
           },
@@ -177,7 +181,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
       validator(
         "query",
         z.object({
-          mode: Vcs.Mode,
+          mode: Vcs.Mode.zod,
         }),
       ),
       async (c) =>
