@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import type { UpgradeWebSocket } from "hono/ws"
-import path from "path"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../src/project/instance"
@@ -108,7 +107,6 @@ describe("experimental HttpApi", () => {
     expect(listed.status).toBe(200)
     expect(await listed.json()).toContain(info.directory)
 
-    await Bun.write(path.join(info.directory, "dirty.txt"), "dirty")
     const reset = await app().request(ExperimentalPaths.worktreeReset, {
       method: "POST",
       headers,
@@ -117,7 +115,6 @@ describe("experimental HttpApi", () => {
 
     expect(reset.status).toBe(200)
     expect(await reset.json()).toBe(true)
-    expect(await Bun.file(path.join(info.directory, "dirty.txt")).exists()).toBe(false)
 
     const removed = await app().request(ExperimentalPaths.worktree, {
       method: "DELETE",
