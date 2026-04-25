@@ -1,4 +1,4 @@
-import { Npm } from "../npm"
+import { Npm } from "@opencode-ai/core/npm"
 import type { InstanceContext } from "../project/instance"
 import { Filesystem } from "../util"
 import { Process } from "../util"

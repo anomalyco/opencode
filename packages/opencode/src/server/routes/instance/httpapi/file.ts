@@ -19,11 +19,7 @@ const FindFileQuery = Schema.Struct({
   dirs: Schema.optional(Schema.Literals(["true", "false"])),
   type: Schema.optional(Schema.Literals(["file", "directory"])),
   limit: Schema.optional(
-    Schema.NumberFromString.check(
-      Schema.isInt(),
-      Schema.isGreaterThanOrEqualTo(1),
-      Schema.isLessThanOrEqualTo(200),
-    ),
+    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
   ),
 })
 

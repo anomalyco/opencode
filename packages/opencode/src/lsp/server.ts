@@ -13,7 +13,7 @@ import { Process } from "../util"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/core/util/module"
 import { spawn } from "./launch"
-import { Npm } from "../npm"
+import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "lsp.server" })
 const pathExists = async (p: string) =>

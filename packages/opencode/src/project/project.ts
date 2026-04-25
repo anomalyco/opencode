@@ -12,7 +12,7 @@ import { Effect, Layer, Path, Scope, Context, Stream, Types, Schema } from "effe
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 

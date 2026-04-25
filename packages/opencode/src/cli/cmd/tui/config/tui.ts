@@ -18,7 +18,7 @@ import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/instal
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Filesystem, Log } from "@/util"
 import { ConfigVariable } from "@/config/variable"
-import { Npm } from "@/npm"
+import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "tui.config" })
 

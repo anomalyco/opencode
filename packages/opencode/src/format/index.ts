@@ -1,6 +1,6 @@
 import { Effect, Layer, Context, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceState } from "@/effect"
 import path from "path"
 import { mergeDeep } from "remeda"

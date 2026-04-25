@@ -15,7 +15,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
@@ -29,7 +29,7 @@ import { Global } from "@opencode-ai/core/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util"
 import { ConfigPlugin } from "@/config/plugin"
-import { Npm } from "@/npm"
+import { Npm } from "@opencode-ai/core/npm"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),

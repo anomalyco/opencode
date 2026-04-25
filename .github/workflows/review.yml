@@ -51,7 +51,7 @@ jobs:
           PR_TITLE: ${{ steps.pr-details.outputs.title }}
         run: |
           PR_BODY=$(jq -r .body pr_data.json)
-          opencode run -m opencode/openai-gpt-5.5 --variant medium "A new pull request has been created: '${PR_TITLE}'
+          opencode run -m opencode/gpt-5.5 --variant medium "A new pull request has been created: '${PR_TITLE}'
 
           <pr-number>
           ${{ steps.pr-number.outputs.number }}

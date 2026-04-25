@@ -42,7 +42,7 @@ import { ConfigProvider } from "./provider"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
-import { Npm } from "@/npm"
+import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "config" })
 

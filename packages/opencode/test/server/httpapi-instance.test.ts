@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import type { UpgradeWebSocket } from "hono/ws"
 import path from "path"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../src/project/instance"
 import { InstanceRoutes } from "../../src/server/routes/instance"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/instance"
@@ -76,5 +77,27 @@ describe("instance HttpApi", () => {
 
     expect(formatter.status).toBe(200)
     expect(await formatter.json()).toEqual([])
+  })
+
+  test("serves instance dispose through Hono bridge", async () => {
+    await using tmp = await tmpdir()
+
+    const disposed = new Promise<string | undefined>((resolve) => {
+      const onEvent = (event: { directory?: string; payload: { type?: string } }) => {
+        if (event.payload.type !== "server.instance.disposed") return
+        GlobalBus.off("event", onEvent)
+        resolve(event.directory)
+      }
+      GlobalBus.on("event", onEvent)
+    })
+
+    const response = await app().request(InstancePaths.dispose, {
+      method: "POST",
+      headers: { "x-opencode-directory": tmp.path },
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toBe(true)
+    expect(await disposed).toBe(tmp.path)
   })
 })
