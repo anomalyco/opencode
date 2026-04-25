@@ -64,6 +64,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(FilePaths.content, (c) => handler(c.req.raw, context))
     app.get(FilePaths.status, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.path, (c) => handler(c.req.raw, context))
+    app.post(InstancePaths.dispose, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcs, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcsDiff, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.command, (c) => handler(c.req.raw, context))

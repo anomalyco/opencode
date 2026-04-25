@@ -77,4 +77,16 @@ describe("instance HttpApi", () => {
     expect(formatter.status).toBe(200)
     expect(await formatter.json()).toEqual([])
   })
+
+  test("serves instance dispose through Hono bridge", async () => {
+    await using tmp = await tmpdir()
+
+    const response = await app().request(InstancePaths.dispose, {
+      method: "POST",
+      headers: { "x-opencode-directory": tmp.path },
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toBe(true)
+  })
 })

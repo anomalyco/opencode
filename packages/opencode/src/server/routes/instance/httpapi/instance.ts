@@ -6,6 +6,7 @@ import { LSP } from "@/lsp"
 import { Vcs } from "@/project"
 import { Skill } from "@/skill"
 import * as InstanceState from "@/effect/instance-state"
+import { Instance } from "@/project/instance"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
@@ -23,6 +24,7 @@ const VcsDiffQuery = Schema.Struct({
 })
 
 export const InstancePaths = {
+  dispose: "/instance/dispose",
   path: "/path",
   vcs: "/vcs",
   vcsDiff: "/vcs/diff",
@@ -37,6 +39,15 @@ export const InstanceApi = HttpApi.make("instance")
   .add(
     HttpApiGroup.make("instance")
       .add(
+        HttpApiEndpoint.post("dispose", InstancePaths.dispose, {
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "instance.dispose",
+            summary: "Dispose instance",
+            description: "Clean up and dispose the current OpenCode instance, releasing all resources.",
+          }),
+        ),
         HttpApiEndpoint.get("path", InstancePaths.path, {
           success: PathInfo,
         }).annotateMerge(
@@ -138,6 +149,17 @@ export const instanceHandlers = Layer.unwrap(
     const skill = yield* Skill.Service
     const vcs = yield* Vcs.Service
 
+    const dispose = Effect.fn("InstanceHttpApi.dispose")(function* () {
+      const ctx = yield* InstanceState.context
+      yield* Effect.sync(() => {
+        // Disposing inline would invalidate the active request scope before HttpApi can send the response.
+        setTimeout(() => {
+          void Instance.restore(ctx, () => Instance.dispose())
+        }, 0)
+      })
+      return true
+    })
+
     const getPath = Effect.fn("InstanceHttpApi.path")(function* () {
       const ctx = yield* InstanceState.context
       return {
@@ -180,6 +202,7 @@ export const instanceHandlers = Layer.unwrap(
 
     return HttpApiBuilder.group(InstanceApi, "instance", (handlers) =>
       handlers
+        .handle("dispose", dispose)
         .handle("path", getPath)
         .handle("vcs", getVcs)
         .handle("vcsDiff", getVcsDiff)
