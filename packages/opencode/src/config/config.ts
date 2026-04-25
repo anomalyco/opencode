@@ -52,6 +52,10 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
   if (target.instructions && source.instructions) {
     merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
   }
+  // fallback_model uses replacement strategy (override), not concatenation
+  if (source.fallback_model !== undefined) {
+    merged.fallback_model = source.fallback_model
+  }
   return merged
 }
 
@@ -141,6 +145,9 @@ export const Info = Schema.Struct({
   }),
   small_model: Schema.optional(ConfigModelID).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
+  }),
+  fallback_model: Schema.optional(Schema.mutable(Schema.Array(ConfigModelID))).annotate({
+    description: "Fallback models to use when the primary model is unavailable, in the format of provider/model",
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
