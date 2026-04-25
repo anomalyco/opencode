@@ -555,39 +555,39 @@ OpenCode se puede configurar mediante variables de entorno.
 
 | Variable                              | Type     | Description                                                                     |
 | ------------------------------------- | -------- | ------------------------------------------------------------------------------- |
-| `OPENCODE_AUTH_CONTENT                ` | cadena  | Credenciales de autenticación JSON en línea |
-| `OPENCODE_AUTO_SHARE                  ` | booleano | Compartir sesiones automáticamente |
-| `OPENCODE_CLIENT                      ` | cadena  | Identificador de cliente (por defecto `cli`) |
-| `OPENCODE_CONFIG                      ` | cadena  | Ruta al archivo de configuración |
-| `OPENCODE_CONFIG_DIR                  ` | cadena  | Ruta al directorio de configuración |
-| `OPENCODE_CONFIG_CONTENT              ` | cadena  | Contenido de configuración json en línea |
-| `OPENCODE_DISABLE_AUTOCOMPACT         ` | booleano | Deshabilitar la compactación automática de contexto |
-| `OPENCODE_DISABLE_AUTOUPDATE          ` | booleano | Deshabilitar las comprobaciones automáticas de actualizaciones |
-| `OPENCODE_DISABLE_CLAUDE_CODE         ` | booleano | Deshabilitar la lectura desde `.claude` (mensaje + habilidades) |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT  ` | booleano | Desactivar lectura `~/.claude/CLAUDE.md` |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS  ` | booleano | Deshabilitar la carga `.claude/skills` |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS     ` | booleano | Deshabilitar complementos predeterminados |
-| `OPENCODE_DISABLE_EXTERNAL_SKILLS     ` | booleano | Deshabilitar la carga de habilidades desde paquetes npm |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD        ` | booleano | Deshabilitar las descargas automáticas del servidor LSP |
-| `OPENCODE_DISABLE_MODELS_FETCH        ` | booleano | Deshabilitar la recuperación de modelos desde fuentes remotas |
-| `OPENCODE_DISABLE_MOUSE               ` | booleano | Deshabilitar la captura del ratón en la TUI |
-| `OPENCODE_DISABLE_PRUNE               ` | booleano | Deshabilitar la poda de datos antiguos |
-| `OPENCODE_DISABLE_PROJECT_CONFIG      ` | booleano | Deshabilitar la carga de configuración a nivel de proyecto |
-| `OPENCODE_DISABLE_TERMINAL_TITLE      ` | booleano | Deshabilitar las actualizaciones automáticas de títulos de terminal |
-| `OPENCODE_ENABLE_EXA                  ` | booleano | Habilitar las herramientas de búsqueda web de Exa |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS  ` | booleano | Habilitar modelos experimentales |
-| `OPENCODE_FAKE_VCS                    ` | cadena  | Proveedor de VCS falso para fines de prueba |
-| `OPENCODE_GIT_BASH_PATH               ` | cadena  | Ruta al ejecutable de Git Bash en Windows |
-| `OPENCODE_MODELS_PATH                 ` | cadena  | Ruta personalizada para el archivo caché JSON de modelos |
-| `OPENCODE_MODELS_URL                  ` | cadena  | URL personalizada para buscar la configuración de modelos |
-| `OPENCODE_PERMISSION                  ` | cadena  | Configuración de permisos json incorporados |
-| `OPENCODE_SERVER_PASSWORD             ` | cadena  | Habilite la autenticación básica para `serve`/`web` |
-| `OPENCODE_SERVER_USERNAME             ` | cadena  | Anular el nombre de usuario de autenticación básica (predeterminado `opencode`) |
-| `OPENCODE_TUI_CONFIG                  ` | cadena  | Ruta al archivo de configuración TUI |
-| `EXA_API_KEY                          ` | cadena  | Clave API para búsqueda web de Exa (requiere `OPENCODE_ENABLE_EXA`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT          ` | cadena  | Endpoint del exportador OpenTelemetry OTLP |
-| `OTEL_EXPORTER_OTLP_HEADERS           ` | cadena  | Encabezados del exportador OpenTelemetry OTLP |
-| `OTEL_RESOURCE_ATTRIBUTES             ` | cadena  | Atributos de recursos de OpenTelemetry (pares clave=valor) |
+| `OPENCODE_AUTH_CONTENT`               | cadena   | Credenciales de autenticación JSON en línea                                     |
+| `OPENCODE_AUTO_SHARE`                 | booleano | Compartir sesiones automáticamente                                              |
+| `OPENCODE_CLIENT`                     | cadena   | Identificador de cliente (por defecto `cli`)                                    |
+| `OPENCODE_CONFIG`                     | cadena   | Ruta al archivo de configuración                                                |
+| `OPENCODE_CONFIG_DIR`                 | cadena   | Ruta al directorio de configuración                                             |
+| `OPENCODE_CONFIG_CONTENT`             | cadena   | Contenido de configuración json en línea                                        |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | booleano | Deshabilitar la compactación automática de contexto                             |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | booleano | Deshabilitar las comprobaciones automáticas de actualizaciones                  |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | booleano | Deshabilitar la lectura desde `.claude` (mensaje + habilidades)                 |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | booleano | Desactivar lectura `~/.claude/CLAUDE.md`                                        |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | booleano | Deshabilitar la carga `.claude/skills`                                          |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | booleano | Deshabilitar complementos predeterminados                                       |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS`    | booleano | Deshabilitar la carga de habilidades desde paquetes npm                         |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | booleano | Deshabilitar las descargas automáticas del servidor LSP                         |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | booleano | Deshabilitar la recuperación de modelos desde fuentes remotas                   |
+| `OPENCODE_DISABLE_MOUSE`              | booleano | Deshabilitar la captura del ratón en la TUI                                     |
+| `OPENCODE_DISABLE_PRUNE`              | booleano | Deshabilitar la poda de datos antiguos                                          |
+| `OPENCODE_DISABLE_PROJECT_CONFIG`     | booleano | Deshabilitar la carga de configuración a nivel de proyecto                      |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | booleano | Deshabilitar las actualizaciones automáticas de títulos de terminal             |
+| `OPENCODE_ENABLE_EXA`                 | booleano | Habilitar las herramientas de búsqueda web de Exa                               |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | booleano | Habilitar modelos experimentales                                                |
+| `OPENCODE_FAKE_VCS`                   | cadena   | Proveedor de VCS falso para fines de prueba                                     |
+| `OPENCODE_GIT_BASH_PATH`              | cadena   | Ruta al ejecutable de Git Bash en Windows                                       |
+| `OPENCODE_MODELS_PATH`                | cadena   | Ruta personalizada para el archivo caché JSON de modelos                        |
+| `OPENCODE_MODELS_URL`                 | cadena   | URL personalizada para buscar la configuración de modelos                       |
+| `OPENCODE_PERMISSION`                 | cadena   | Configuración de permisos json incorporados                                     |
+| `OPENCODE_SERVER_PASSWORD`            | cadena   | Habilite la autenticación básica para `serve`/`web`                             |
+| `OPENCODE_SERVER_USERNAME`            | cadena   | Anular el nombre de usuario de autenticación básica (predeterminado `opencode`) |
+| `OPENCODE_TUI_CONFIG`                 | cadena   | Ruta al archivo de configuración TUI                                            |
+| `EXA_API_KEY`                         | cadena   | Clave API para búsqueda web de Exa (requiere `OPENCODE_ENABLE_EXA`)             |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`         | cadena   | Endpoint del exportador OpenTelemetry OTLP                                      |
+| `OTEL_EXPORTER_OTLP_HEADERS`          | cadena   | Encabezados del exportador OpenTelemetry OTLP                                   |
+| `OTEL_RESOURCE_ATTRIBUTES`            | cadena   | Atributos de recursos de OpenTelemetry (pares clave=valor)                      |
 
 ---
 
@@ -597,18 +597,18 @@ Estas variables de entorno habilitan funciones experimentales que pueden cambiar
 
 | Variable                                        | Type     | Description                                                |
 | ----------------------------------------------- | -------- | ---------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL                          ` | booleano | Habilitar todas las funciones experimentales |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS  ` | número  | Tiempo de espera predeterminado para comandos bash en ms |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT   ` | booleano | Deshabilitar copia al seleccionar en TUI |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER      ` | booleano | Deshabilitar el observador de archivos |
-| `OPENCODE_EXPERIMENTAL_EXA                      ` | booleano | Habilitar funciones experimentales de Exa |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER              ` | booleano | Habilite el observador de archivos para todo el directorio |
-| `OPENCODE_EXPERIMENTAL_HTTPAPI                  ` | booleano | Habilitar puente Effect HttpApi |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY           ` | booleano | Habilitar descubrimiento de íconos |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL                 ` | booleano | Habilitar herramienta experimental LSP |
-| `OPENCODE_EXPERIMENTAL_LSP_TY                   ` | booleano | Habilitar Habilitar TY LSP para archivos python |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN                 ` | booleano | Habilitar funciones de Markdown experimentales |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX         ` | número  | Tokens de salida máximos para respuestas LLM |
-| `OPENCODE_EXPERIMENTAL_OXFMT                    ` | booleano | Habilitar el formateador oxfmt |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE                ` | booleano | Habilitar modo de plan |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES               ` | booleano | Habilitar espacios de trabajo experimentales |
+| `OPENCODE_EXPERIMENTAL`                         | booleano | Habilitar todas las funciones experimentales               |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | número   | Tiempo de espera predeterminado para comandos bash en ms   |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booleano | Deshabilitar copia al seleccionar en TUI                   |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booleano | Deshabilitar el observador de archivos                     |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | booleano | Habilitar funciones experimentales de Exa                  |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | booleano | Habilite el observador de archivos para todo el directorio |
+| `OPENCODE_EXPERIMENTAL_HTTPAPI`                 | booleano | Habilitar puente Effect HttpApi                            |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | booleano | Habilitar descubrimiento de íconos                         |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | booleano | Habilitar herramienta experimental LSP                     |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booleano | Habilitar Habilitar TY LSP para archivos python            |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | booleano | Habilitar funciones de Markdown experimentales             |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | número   | Tokens de salida máximos para respuestas LLM               |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | booleano | Habilitar el formateador oxfmt                             |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booleano | Habilitar modo de plan                                     |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | booleano | Habilitar espacios de trabajo experimentales               |

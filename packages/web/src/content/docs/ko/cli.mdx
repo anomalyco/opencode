@@ -29,16 +29,16 @@ opencode [project]
 
 #### 플래그
 
-| 플래그       | 축약 | 설명                                                                   |
-| ------------ | ---- | ---------------------------------------------------------------------- |
-| `--continue` | `-c` | 마지막 세션 이어서 실행                                                |
-| `--session`  | `-s` | 이어서 실행할 세션 ID                                                  |
+| 플래그          | 축약   | 설명                                                   |
+| ------------ | ---- | ---------------------------------------------------- |
+| `--continue` | `-c` | 마지막 세션 이어서 실행                                        |
+| `--session`  | `-s` | 이어서 실행할 세션 ID                                        |
 | `--fork`     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용) |
-| `--prompt`   |      | 사용할 프롬프트                                                        |
-| `--model`    | `-m` | 사용할 모델 (`provider/model` 형식)                                    |
-| `--agent`    |      | 사용할 에이전트                                                        |
-| `--port`     |      | 수신 포트                                                              |
-| `--hostname` |      | 수신 호스트명                                                          |
+| `--prompt`   |      | 사용할 프롬프트                                             |
+| `--model`    | `-m` | 사용할 모델 (`provider/model` 형식)                         |
+| `--agent`    |      | 사용할 에이전트                                             |
+| `--port`     |      | 수신 포트                                                |
+| `--hostname` |      | 수신 호스트명                                              |
 
 ---
 
@@ -78,10 +78,10 @@ opencode attach http://10.20.30.40:4096
 
 #### 플래그
 
-| 플래그      | 축약 | 설명                       |
-| ----------- | ---- | -------------------------- |
+| 플래그         | 축약   | 설명               |
+| ----------- | ---- | ---------------- |
 | `--dir`     |      | TUI를 시작할 작업 디렉터리 |
-| `--session` | `-s` | 이어서 실행할 세션 ID      |
+| `--session` | `-s` | 이어서 실행할 세션 ID    |
 
 ---
 
@@ -187,10 +187,10 @@ opencode github run
 
 ##### 플래그
 
-| 플래그    | 설명                      |
-| --------- | ------------------------- |
+| 플래그       | 설명                |
+| --------- | ----------------- |
 | `--event` | 실행할 GitHub 모의 이벤트 |
-| `--token` | GitHub 개인 액세스 토큰   |
+| `--token` | GitHub 개인 액세스 토큰  |
 
 ---
 
@@ -296,9 +296,9 @@ opencode models anthropic
 
 #### 플래그
 
-| 플래그      | 설명                                              |
-| ----------- | ------------------------------------------------- |
-| `--refresh` | models.dev에서 모델 캐시 새로고침                 |
+| 플래그         | 설명                            |
+| ----------- | ----------------------------- |
+| `--refresh` | models.dev에서 모델 캐시 새로고침       |
 | `--verbose` | 더 자세한 모델 출력 사용(비용 등 메타데이터 포함) |
 
 `--refresh` 플래그를 사용하면 캐시된 모델 목록을 갱신할 수 있습니다. provider에 새 모델이 추가된 뒤 OpenCode에서 바로 확인하고 싶을 때 유용합니다.
@@ -335,20 +335,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### 플래그
 
-| 플래그       | 축약 | 설명                                                                   |
-| ------------ | ---- | ---------------------------------------------------------------------- |
-| `--command`  |      | 실행할 명령(인수는 message로 전달)                                     |
-| `--continue` | `-c` | 마지막 세션 이어서 실행                                                |
-| `--session`  | `-s` | 이어서 실행할 세션 ID                                                  |
+| 플래그          | 축약   | 설명                                                   |
+| ------------ | ---- | ---------------------------------------------------- |
+| `--command`  |      | 실행할 명령(인수는 message로 전달)                              |
+| `--continue` | `-c` | 마지막 세션 이어서 실행                                        |
+| `--session`  | `-s` | 이어서 실행할 세션 ID                                        |
 | `--fork`     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용) |
-| `--share`    |      | 세션 공유                                                              |
-| `--model`    | `-m` | 사용할 모델 (`provider/model` 형식)                                    |
-| `--agent`    |      | 사용할 에이전트                                                        |
-| `--file`     | `-f` | 메시지에 첨부할 파일                                                   |
-| `--format`   |      | 출력 형식: default(포맷됨) 또는 json(원시 JSON 이벤트)                 |
-| `--title`    |      | 세션 제목(값이 없으면 프롬프트를 잘라 자동 생성)                       |
-| `--attach`   |      | 실행 중인 opencode 서버에 연결(예: http://localhost:4096)              |
-| `--port`     |      | 로컬 서버 포트(기본값: 랜덤 포트)                                      |
+| `--share`    |      | 세션 공유                                                |
+| `--model`    | `-m` | 사용할 모델 (`provider/model` 형식)                         |
+| `--agent`    |      | 사용할 에이전트                                             |
+| `--file`     | `-f` | 메시지에 첨부할 파일                                          |
+| `--format`   |      | 출력 형식: default(포맷됨) 또는 json(원시 JSON 이벤트)             |
+| `--title`    |      | 세션 제목(값이 없으면 프롬프트를 잘라 자동 생성)                         |
+| `--attach`   |      | 실행 중인 opencode 서버에 연결(예: http://localhost:4096)      |
+| `--port`     |      | 로컬 서버 포트(기본값: 랜덤 포트)                                 |
 
 ---
 
@@ -364,11 +364,11 @@ opencode serve
 
 #### 플래그
 
-| 플래그       | 설명                              |
-| ------------ | --------------------------------- |
-| `--port`     | 수신 포트                         |
-| `--hostname` | 수신 호스트명                     |
-| `--mdns`     | mDNS 검색 활성화                  |
+| 플래그          | 설명                       |
+| ------------ | ------------------------ |
+| `--port`     | 수신 포트                    |
+| `--hostname` | 수신 호스트명                  |
+| `--mdns`     | mDNS 검색 활성화              |
 | `--cors`     | 허용할 추가 브라우저 origin(CORS) |
 
 ---
@@ -393,8 +393,8 @@ opencode session list
 
 ##### 플래그
 
-| 플래그        | 축약 | 설명                                   |
-| ------------- | ---- | -------------------------------------- |
+| 플래그           | 축약   | 설명                             |
+| ------------- | ---- | ------------------------------ |
 | `--max-count` | `-n` | 최근 N개 세션만 표시                   |
 | `--format`    |      | 출력 형식: table 또는 json(기본 table) |
 
@@ -410,11 +410,11 @@ opencode stats
 
 #### 플래그
 
-| 플래그      | 설명                                                         |
-| ----------- | ------------------------------------------------------------ |
-| `--days`    | 최근 N일 통계 표시(기본값: 전체 기간)                        |
-| `--tools`   | 표시할 도구 개수(기본값: 전체)                               |
-| `--models`  | 모델 사용량 상세 표시(기본 숨김). 숫자를 주면 상위 N개 표시  |
+| 플래그         | 설명                                   |
+| ----------- | ------------------------------------ |
+| `--days`    | 최근 N일 통계 표시(기본값: 전체 기간)              |
+| `--tools`   | 표시할 도구 개수(기본값: 전체)                   |
+| `--models`  | 모델 사용량 상세 표시(기본 숨김). 숫자를 주면 상위 N개 표시 |
 | `--project` | 프로젝트 필터(기본: 전체 프로젝트, 빈 문자열: 현재 프로젝트) |
 
 ---
@@ -460,11 +460,11 @@ opencode web
 
 #### 플래그
 
-| 플래그       | 설명                              |
-| ------------ | --------------------------------- |
-| `--port`     | 수신 포트                         |
-| `--hostname` | 수신 호스트명                     |
-| `--mdns`     | mDNS 검색 활성화                  |
+| 플래그          | 설명                       |
+| ------------ | ------------------------ |
+| `--port`     | 수신 포트                    |
+| `--hostname` | 수신 호스트명                  |
+| `--mdns`     | mDNS 검색 활성화              |
 | `--cors`     | 허용할 추가 브라우저 origin(CORS) |
 
 ---
@@ -481,10 +481,10 @@ opencode acp
 
 #### 플래그
 
-| 플래그       | 설명          |
-| ------------ | ------------- |
+| 플래그          | 설명      |
+| ------------ | ------- |
 | `--cwd`      | 작업 디렉터리 |
-| `--port`     | 수신 포트     |
+| `--port`     | 수신 포트   |
 | `--hostname` | 수신 호스트명 |
 
 ---
@@ -499,12 +499,12 @@ opencode uninstall
 
 #### 플래그
 
-| 플래그          | 축약 | 설명                            |
-| --------------- | ---- | ------------------------------- |
-| `--keep-config` | `-c` | 설정 파일 유지                  |
-| `--keep-data`   | `-d` | 세션 데이터와 스냅샷 유지       |
+| 플래그             | 축약   | 설명                 |
+| --------------- | ---- | ------------------ |
+| `--keep-config` | `-c` | 설정 파일 유지           |
+| `--keep-data`   | `-d` | 세션 데이터와 스냅샷 유지     |
 | `--dry-run`     |      | 실제 삭제 없이 삭제 대상만 표시 |
-| `--force`       | `-f` | 확인 프롬프트 건너뛰기          |
+| `--force`       | `-f` | 확인 프롬프트 건너뛰기       |
 
 ---
 
@@ -530,8 +530,8 @@ opencode upgrade v0.1.48
 
 #### 플래그
 
-| 플래그     | 축약 | 설명                                       |
-| ---------- | ---- | ------------------------------------------ |
+| 플래그        | 축약   | 설명                                   |
+| ---------- | ---- | ------------------------------------ |
 | `--method` | `-m` | 설치 방식 지정: curl, npm, pnpm, bun, brew |
 
 ---
@@ -540,11 +540,11 @@ opencode upgrade v0.1.48
 
 opencode CLI는 아래 전역 플래그를 지원합니다.
 
-| 플래그         | 축약 | 설명                                |
-| -------------- | ---- | ----------------------------------- |
-| `--help`       | `-h` | 도움말 표시                         |
+| 플래그            | 축약   | 설명                              |
+| -------------- | ---- | ------------------------------- |
+| `--help`       | `-h` | 도움말 표시                          |
 | `--version`    | `-v` | 버전 출력                           |
-| `--print-logs` |      | 로그를 stderr로 출력                |
+| `--print-logs` |      | 로그를 stderr로 출력                  |
 | `--log-level`  |      | 로그 레벨(DEBUG, INFO, WARN, ERROR) |
 
 ---
@@ -553,41 +553,41 @@ opencode CLI는 아래 전역 플래그를 지원합니다.
 
 OpenCode는 환경 변수로도 구성할 수 있습니다.
 
-| 변수                                  | 타입    | 설명                                           |
-| ------------------------------------- | ------- | ---------------------------------------------- |
-| `OPENCODE_AUTH_CONTENT                ` | string  | 인라인 JSON 인증 자격 증명 |
-| `OPENCODE_AUTO_SHARE                  ` | boolean | 세션 자동 공유 |
-| `OPENCODE_CLIENT                      ` | string  | 클라이언트 식별자(기본값: `cli`) |
-| `OPENCODE_CONFIG                      ` | string  | 설정 파일 경로 |
-| `OPENCODE_CONFIG_DIR                  ` | string  | 설정 디렉터리 경로 |
-| `OPENCODE_CONFIG_CONTENT              ` | string  | 인라인 JSON 설정 내용 |
-| `OPENCODE_DISABLE_AUTOCOMPACT         ` | boolean | 자동 컨텍스트 컴팩션 비활성화 |
-| `OPENCODE_DISABLE_AUTOUPDATE          ` | boolean | 자동 업데이트 확인 비활성화 |
-| `OPENCODE_DISABLE_CLAUDE_CODE         ` | boolean | `.claude`(프롬프트 + 스킬) 읽기 비활성화 |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT  ` | boolean | `~/.claude/CLAUDE.md` 읽기 비활성화 |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS  ` | boolean | `.claude/skills` 로드 비활성화 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS     ` | boolean | 기본 플러그인 비활성화 |
-| `OPENCODE_DISABLE_EXTERNAL_SKILLS     ` | boolean | npm 패키지에서 스킬 로드 비활성화 |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD        ` | boolean | LSP 서버 자동 다운로드 비활성화 |
-| `OPENCODE_DISABLE_MODELS_FETCH        ` | boolean | 원격 소스에서 모델 목록 가져오기 비활성화 |
-| `OPENCODE_DISABLE_MOUSE               ` | boolean | TUI에서 마우스 캡처 비활성화 |
-| `OPENCODE_DISABLE_PRUNE               ` | boolean | 오래된 데이터 정리(prune) 비활성화 |
-| `OPENCODE_DISABLE_PROJECT_CONFIG      ` | boolean | 프로젝트 수준 설정 로드 비활성화 |
-| `OPENCODE_DISABLE_TERMINAL_TITLE      ` | boolean | 터미널 제목 자동 업데이트 비활성화 |
-| `OPENCODE_ENABLE_EXA                  ` | boolean | Exa 웹 검색 도구 활성화 |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS  ` | boolean | 실험적 모델 활성화 |
-| `OPENCODE_FAKE_VCS                    ` | string  | 테스트용 가짜 VCS provider |
-| `OPENCODE_GIT_BASH_PATH               ` | string  | Windows에서 Git Bash 실행 파일 경로 |
-| `OPENCODE_MODELS_PATH                 ` | string  | 모델 JSON 캐시 파일의 사용자 지정 경로 |
-| `OPENCODE_MODELS_URL                  ` | string  | 모델 설정을 가져올 사용자 지정 URL |
-| `OPENCODE_PERMISSION                  ` | string  | 인라인 JSON 권한 설정 |
-| `OPENCODE_SERVER_PASSWORD             ` | string  | `serve`/`web` 기본 인증 활성화 |
-| `OPENCODE_SERVER_USERNAME             ` | string  | 기본 인증 사용자명 오버라이드(기본 `opencode`) |
-| `OPENCODE_TUI_CONFIG                  ` | string  | TUI 설정 파일 경로 |
-| `EXA_API_KEY                          ` | string  | Exa 웹 검색 API 키 (`OPENCODE_ENABLE_EXA` 필요) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT          ` | string  | OpenTelemetry OTLP 내보내기 엔드포인트 |
-| `OTEL_EXPORTER_OTLP_HEADERS           ` | string  | OpenTelemetry OTLP 내보내기 헤더 |
-| `OTEL_RESOURCE_ATTRIBUTES             ` | string  | OpenTelemetry 리소스 속성 (key=value 쌍) |
+| 변수                                    | 타입      | 설명                                        |
+| ------------------------------------- | ------- | ----------------------------------------- |
+| `OPENCODE_AUTH_CONTENT`               | string  | 인라인 JSON 인증 자격 증명                         |
+| `OPENCODE_AUTO_SHARE`                 | boolean | 세션 자동 공유                                  |
+| `OPENCODE_CLIENT`                     | string  | 클라이언트 식별자(기본값: `cli`)                     |
+| `OPENCODE_CONFIG`                     | string  | 설정 파일 경로                                  |
+| `OPENCODE_CONFIG_DIR`                 | string  | 설정 디렉터리 경로                                |
+| `OPENCODE_CONFIG_CONTENT`             | string  | 인라인 JSON 설정 내용                            |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 자동 컨텍스트 컴팩션 비활성화                          |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 자동 업데이트 확인 비활성화                           |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | `.claude`(프롬프트 + 스킬) 읽기 비활성화              |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | `~/.claude/CLAUDE.md` 읽기 비활성화             |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` 로드 비활성화                  |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 기본 플러그인 비활성화                              |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS`    | boolean | npm 패키지에서 스킬 로드 비활성화                      |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | LSP 서버 자동 다운로드 비활성화                       |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 원격 소스에서 모델 목록 가져오기 비활성화                   |
+| `OPENCODE_DISABLE_MOUSE`              | boolean | TUI에서 마우스 캡처 비활성화                         |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | 오래된 데이터 정리(prune) 비활성화                    |
+| `OPENCODE_DISABLE_PROJECT_CONFIG`     | boolean | 프로젝트 수준 설정 로드 비활성화                        |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 터미널 제목 자동 업데이트 비활성화                       |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Exa 웹 검색 도구 활성화                           |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 실험적 모델 활성화                                |
+| `OPENCODE_FAKE_VCS`                   | string  | 테스트용 가짜 VCS provider                      |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Windows에서 Git Bash 실행 파일 경로               |
+| `OPENCODE_MODELS_PATH`                | string  | 모델 JSON 캐시 파일의 사용자 지정 경로                  |
+| `OPENCODE_MODELS_URL`                 | string  | 모델 설정을 가져올 사용자 지정 URL                     |
+| `OPENCODE_PERMISSION`                 | string  | 인라인 JSON 권한 설정                            |
+| `OPENCODE_SERVER_PASSWORD`            | string  | `serve`/`web` 기본 인증 활성화                   |
+| `OPENCODE_SERVER_USERNAME`            | string  | 기본 인증 사용자명 오버라이드(기본 `opencode`)           |
+| `OPENCODE_TUI_CONFIG`                 | string  | TUI 설정 파일 경로                              |
+| `EXA_API_KEY`                         | string  | Exa 웹 검색 API 키 (`OPENCODE_ENABLE_EXA` 필요) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`         | string  | OpenTelemetry OTLP 내보내기 엔드포인트             |
+| `OTEL_EXPORTER_OTLP_HEADERS`          | string  | OpenTelemetry OTLP 내보내기 헤더                |
+| `OTEL_RESOURCE_ATTRIBUTES`            | string  | OpenTelemetry 리소스 속성 (key=value 쌍)        |
 
 ---
 
@@ -595,20 +595,20 @@ OpenCode는 환경 변수로도 구성할 수 있습니다.
 
 아래 환경 변수는 변경되거나 제거될 수 있는 실험 기능을 활성화합니다.
 
-| 변수                                            | 타입    | 설명                             |
-| ----------------------------------------------- | ------- | -------------------------------- |
-| `OPENCODE_EXPERIMENTAL                          ` | boolean | 모든 실험 기능 활성화 |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS  ` | number  | bash 명령 기본 타임아웃(ms) |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT   ` | boolean | TUI에서 선택 시 복사 비활성화 |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER      ` | boolean | 파일 감시 비활성화 |
-| `OPENCODE_EXPERIMENTAL_EXA                      ` | boolean | 실험적 Exa 기능 활성화 |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER              ` | boolean | 전체 디렉터리 파일 감시 활성화 |
-| `OPENCODE_EXPERIMENTAL_HTTPAPI                  ` | boolean | Effect HttpApi 브릿지 활성화 |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY           ` | boolean | 아이콘 탐색 활성화 |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL                 ` | boolean | 실험적 LSP 도구 활성화 |
-| `OPENCODE_EXPERIMENTAL_LSP_TY                   ` | boolean | python 파일에 대해 TY LSP 활성화 |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN                 ` | boolean | 실험적 Markdown 기능 활성화 |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX         ` | number  | LLM 응답 최대 출력 토큰 수 |
-| `OPENCODE_EXPERIMENTAL_OXFMT                    ` | boolean | oxfmt 포매터 활성화 |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE                ` | boolean | Plan mode 활성화 |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES               ` | boolean | 실험적 워크스페이스 활성화 |
+| 변수                                              | 타입      | 설명                       |
+| ----------------------------------------------- | ------- | ------------------------ |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | 모든 실험 기능 활성화             |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 명령 기본 타임아웃(ms)      |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI에서 선택 시 복사 비활성화       |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 파일 감시 비활성화               |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 실험적 Exa 기능 활성화           |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 전체 디렉터리 파일 감시 활성화        |
+| `OPENCODE_EXPERIMENTAL_HTTPAPI`                 | boolean | Effect HttpApi 브릿지 활성화   |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 아이콘 탐색 활성화               |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 실험적 LSP 도구 활성화           |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | python 파일에 대해 TY LSP 활성화 |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | 실험적 Markdown 기능 활성화      |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 응답 최대 출력 토큰 수        |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | oxfmt 포매터 활성화            |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan mode 활성화            |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | 실험적 워크스페이스 활성화           |

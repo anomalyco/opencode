@@ -555,39 +555,39 @@ OpenCode kan konfigureres ved hjælp af miljøvariabler.
 
 | Variabel                              | Skriv   | Beskrivelse                                                           |
 | ------------------------------------- | ------- | --------------------------------------------------------------------- |
-| `OPENCODE_AUTH_CONTENT                ` | string  | Indbyggede JSON-godkendelsesoplysninger |
-| `OPENCODE_AUTO_SHARE                  ` | boolean | Del automatisk session |
-| `OPENCODE_CLIENT                      ` | string  | Klient-id (standard til `cli`) |
-| `OPENCODE_CONFIG                      ` | string  | Sti til konfigurationsfil |
-| `OPENCODE_CONFIG_DIR                  ` | string  | Sti til konfigurationsmappe |
-| `OPENCODE_CONFIG_CONTENT              ` | string  | Indbygget json-konfigurationsindhold |
-| `OPENCODE_DISABLE_AUTOCOMPACT         ` | boolean | Deaktiver automatisk kontekstkomprimering |
-| `OPENCODE_DISABLE_AUTOUPDATE          ` | boolean | Deaktiver automatisk opdateringskontrol |
-| `OPENCODE_DISABLE_CLAUDE_CODE         ` | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder) |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT  ` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md` |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS  ` | boolean | Deaktiver indlæsning af `.claude/skills` |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS     ` | boolean | Deaktiver standard plugins |
-| `OPENCODE_DISABLE_EXTERNAL_SKILLS     ` | boolean | Deaktiver indlæsning af færdigheder fra npm-pakker |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD        ` | boolean | Deaktiver automatisk LSP-serverdownloads |
-| `OPENCODE_DISABLE_MODELS_FETCH        ` | boolean | Deaktivering af modeller fra eksterne kilder |
-| `OPENCODE_DISABLE_MOUSE               ` | boolean | Deaktiver museopsnapning i TUI |
-| `OPENCODE_DISABLE_PRUNE               ` | boolean | Deaktiver beskæring af gamle data |
-| `OPENCODE_DISABLE_PROJECT_CONFIG      ` | boolean | Deaktiver indlæsning af projektniveaubaseret konfiguration |
-| `OPENCODE_DISABLE_TERMINAL_TITLE      ` | boolean | Deaktiver automatisk opdatering af terminaltitel |
-| `OPENCODE_ENABLE_EXA                  ` | boolean | Aktiver Exa-websøgeværktøjer |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS  ` | boolean | Aktive eksperimentelle modeller |
-| `OPENCODE_FAKE_VCS                    ` | string  | Falsk VCS-udbyder til testformål |
-| `OPENCODE_GIT_BASH_PATH               ` | string  | Sti til Git Bash eksekverbar på Windows |
-| `OPENCODE_MODELS_PATH                 ` | string  | Brugerdefineret sti til JSON-cache-fil til modeller |
-| `OPENCODE_MODELS_URL                  ` | string  | Brugerdefineret URL til hentning af modelkonfiguration |
-| `OPENCODE_PERMISSION                  ` | string  | Indbygget json-tilladelseskonfiguration |
-| `OPENCODE_SERVER_PASSWORD             ` | string  | Aktiver grundlæggende godkendelse for `serve`/`web` |
-| `OPENCODE_SERVER_USERNAME             ` | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
-| `OPENCODE_TUI_CONFIG                  ` | string  | Sti til TUI-konfigurationsfil |
-| `EXA_API_KEY                          ` | string  | API-nøgle til Exa-websøgning (kræver `OPENCODE_ENABLE_EXA`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT          ` | string  | OpenTelemetry OTLP-eksportør-endepunkt |
-| `OTEL_EXPORTER_OTLP_HEADERS           ` | string  | OpenTelemetry OTLP-eksportør-headere |
-| `OTEL_RESOURCE_ATTRIBUTES             ` | string  | OpenTelemetry-ressourceattributter (nøgle=værdi-par) |
+| `OPENCODE_AUTH_CONTENT`               | string  | Indbyggede JSON-godkendelsesoplysninger                               |
+| `OPENCODE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
+| `OPENCODE_CLIENT`                     | string  | Klient-id (standard til `cli`)                                        |
+| `OPENCODE_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
+| `OPENCODE_CONFIG_DIR`                 | string  | Sti til konfigurationsmappe                                           |
+| `OPENCODE_CONFIG_CONTENT`             | string  | Indbygget json-konfigurationsindhold                                  |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Deaktiver automatisk kontekstkomprimering                             |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS`    | boolean | Deaktiver indlæsning af færdigheder fra npm-pakker                    |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
+| `OPENCODE_DISABLE_MOUSE`              | boolean | Deaktiver museopsnapning i TUI                                        |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
+| `OPENCODE_DISABLE_PROJECT_CONFIG`     | boolean | Deaktiver indlæsning af projektniveaubaseret konfiguration            |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
+| `OPENCODE_FAKE_VCS`                   | string  | Falsk VCS-udbyder til testformål                                      |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
+| `OPENCODE_MODELS_PATH`                | string  | Brugerdefineret sti til JSON-cache-fil til modeller                   |
+| `OPENCODE_MODELS_URL`                 | string  | Brugerdefineret URL til hentning af modelkonfiguration                |
+| `OPENCODE_PERMISSION`                 | string  | Indbygget json-tilladelseskonfiguration                               |
+| `OPENCODE_SERVER_PASSWORD`            | string  | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
+| `OPENCODE_SERVER_USERNAME`            | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
+| `OPENCODE_TUI_CONFIG`                 | string  | Sti til TUI-konfigurationsfil                                         |
+| `EXA_API_KEY`                         | string  | API-nøgle til Exa-websøgning (kræver `OPENCODE_ENABLE_EXA`)           |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`         | string  | OpenTelemetry OTLP-eksportør-endepunkt                                |
+| `OTEL_EXPORTER_OTLP_HEADERS`          | string  | OpenTelemetry OTLP-eksportør-headere                                  |
+| `OTEL_RESOURCE_ATTRIBUTES`            | string  | OpenTelemetry-ressourceattributter (nøgle=værdi-par)                  |
 
 ---
 
@@ -597,18 +597,18 @@ Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres elle
 
 | Variabel                                        | Skriv   | Beskrivelse                                |
 | ----------------------------------------------- | ------- | ------------------------------------------ |
-| `OPENCODE_EXPERIMENTAL                          ` | boolean | Aktiver alle eksperimentelle funktioner |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS  ` | nummer  | Standard timeout for bash-kommandoer i ms |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT   ` | boolean | Deaktiver kopi ved valg i TUI |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER      ` | boolean | Deaktiver filovervågning |
-| `OPENCODE_EXPERIMENTAL_EXA                      ` | boolean | Aktive eksperimenter Exa-funktioner |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER              ` | boolean | Aktiver filovervågning for hele dir |
-| `OPENCODE_EXPERIMENTAL_HTTPAPI                  ` | boolean | Aktiver Effect HttpApi-bro |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY           ` | boolean | Aktiver ikonopdagelse |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL                 ` | boolean | Aktive eksperimenter LSP værktøj |
-| `OPENCODE_EXPERIMENTAL_LSP_TY                   ` | boolean | Aktiver TY LSP for python-filer |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN                 ` | boolean | Aktive eksperimentelle markdown-funktioner |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX         ` | nummer  | Maks. output-tokens for LLM-svar |
-| `OPENCODE_EXPERIMENTAL_OXFMT                    ` | boolean | Aktiver oxfmt formatter |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE                ` | boolean | Aktiver plantilstand |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES               ` | boolean | Aktiver eksperimentelle arbejdsområder |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | Aktiver alle eksperimentelle funktioner    |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer  | Standard timeout for bash-kommandoer i ms  |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI              |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Deaktiver filovervågning                   |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Aktive eksperimenter Exa-funktioner        |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir        |
+| `OPENCODE_EXPERIMENTAL_HTTPAPI`                 | boolean | Aktiver Effect HttpApi-bro                 |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                      |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj           |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Aktiver TY LSP for python-filer            |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Aktive eksperimentelle markdown-funktioner |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer  | Maks. output-tokens for LLM-svar           |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                    |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Aktiver plantilstand                       |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Aktiver eksperimentelle arbejdsområder     |
