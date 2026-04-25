@@ -10,12 +10,12 @@ Policy: one branch per fixable issue, no PR opened before review.
 
 ## Current Work
 
-| Issue  | Status                         | Branch                                     | Existing open PR                                        | Notes                                                                                  |
-| ------ | ------------------------------ | ------------------------------------------ | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| #22054 | Fixed locally, awaiting review | `fix/22054-windows-bash-detection`         | None found                                              | Bash detection did not support Bash from `PATH` or MSYS2 UCRT64 git layout.            |
-| #23048 | Fixed locally, awaiting review | `fix/23048-read-permission-relative-path`  | None directly found; related #18761 found later         | Exact project-relative `permission.read` deny rules did not match absolute read paths. |
-| #21444 | Fixed locally, awaiting review | `fix/21444-file-list-junction-directories` | None directly found; related #18291 covers search index | File tree classified junction/symlink directories as files.                            |
-| #15386 | Fixed locally, awaiting review | `fix/15386-permission-reply-not-found`     | None found                                              | Permission replies to stale IDs returned success instead of 404.                       |
+| Issue  | Status    | Branch                                     | Existing open PR                           | Notes                                                                                  |
+| ------ | --------- | ------------------------------------------ | ------------------------------------------ | -------------------------------------------------------------------------------------- |
+| #22054 | PR opened | `fix/22054-windows-bash-detection`         | #24321                                     | Bash detection did not support Bash from `PATH` or MSYS2 UCRT64 git layout.            |
+| #23048 | PR opened | `fix/23048-read-permission-relative-path`  | #24320; related #18761 found later         | Exact project-relative `permission.read` deny rules did not match absolute read paths. |
+| #21444 | PR opened | `fix/21444-file-list-junction-directories` | #24319; related #18291 covers search index | File tree classified junction/symlink directories as files.                            |
+| #15386 | PR opened | `fix/15386-permission-reply-not-found`     | #24322                                     | Permission replies to stale IDs returned success instead of 404.                       |
 
 ## Fixed Locally
 
@@ -23,9 +23,11 @@ Policy: one branch per fixable issue, no PR opened before review.
 
 URL: https://github.com/anomalyco/opencode/issues/15386
 
-Status: Fixed locally, awaiting review
+Status: PR opened
 
 Branch: `fix/15386-permission-reply-not-found`
+
+PR: https://github.com/anomalyco/opencode/pull/24322
 
 Open PR check:
 
@@ -59,9 +61,11 @@ Verification:
 
 URL: https://github.com/anomalyco/opencode/issues/21444
 
-Status: Fixed locally, awaiting review
+Status: PR opened
 
 Branch: `fix/21444-file-list-junction-directories`
+
+PR: https://github.com/anomalyco/opencode/pull/24319
 
 Open PR check: no direct #21444 PR; #18291 is related to file search/autocomplete indexing, not `File.list()` UI tree.
 
@@ -73,9 +77,11 @@ Verification: `bun test test/file/index.test.ts` pass, `bun typecheck` pass.
 
 URL: https://github.com/anomalyco/opencode/issues/23048
 
-Status: Fixed locally, awaiting review
+Status: PR opened
 
 Branch: `fix/23048-read-permission-relative-path`
+
+PR: https://github.com/anomalyco/opencode/pull/24320
 
 Open PR check: no direct #23048 PR; later review found related #18761 may overlap by standardizing tool path matching.
 
@@ -87,9 +93,11 @@ Verification: `bun test test/tool/read.test.ts` pass, `bun typecheck` pass.
 
 URL: https://github.com/anomalyco/opencode/issues/22054
 
-Status: Fixed locally, awaiting review
+Status: PR opened
 
 Branch: `fix/22054-windows-bash-detection`
+
+PR: https://github.com/anomalyco/opencode/pull/24321
 
 Open PR check: no open PR found for #22054, title, or `bash detection windows`.
 
