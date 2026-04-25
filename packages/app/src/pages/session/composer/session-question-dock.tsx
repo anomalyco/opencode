@@ -121,17 +121,17 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const measure = () => {
     if (!root) return
 
-    const scroller = document.querySelector(".scroll-view__viewport")
-    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
-    const top =
-      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
-    if (!top) {
-      root.style.removeProperty("--question-prompt-max-height")
-      return
-    }
-
     const dock = root.closest('[data-component="session-prompt-dock"]')
     if (!(dock instanceof HTMLElement)) return
+
+    const scroller = document.querySelector(".scroll-view__viewport")
+    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+    const sticky =
+      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
+    // Fall back to the scroller's top when no sticky header is present (e.g. on
+    // mobile with no session title) so the dock stays inside the visible content
+    // area instead of overflowing the viewport via the 100dvh CSS fallback.
+    const top = sticky || (scroller instanceof HTMLElement ? scroller.getBoundingClientRect().top : 0)
 
     const dockBottom = dock.getBoundingClientRect().bottom
     const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
