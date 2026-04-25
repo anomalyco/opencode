@@ -4,6 +4,7 @@ import { InstanceState } from "@/effect"
 import { MCP } from "@/mcp"
 import { Project } from "@/project"
 import { ToolRegistry } from "@/tool"
+import { Worktree } from "@/worktree"
 import { Effect, Layer, Option, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
@@ -36,6 +37,7 @@ export const ExperimentalPaths = {
   consoleOrgs: "/experimental/console/orgs",
   toolIDs: "/experimental/tool/ids",
   worktree: "/experimental/worktree",
+  worktreeReset: "/experimental/worktree/reset",
   resource: "/experimental/resource",
 } as const
 
@@ -80,6 +82,36 @@ export const ExperimentalApi = HttpApi.make("experimental")
             description: "List all sandbox worktrees for the current project.",
           }),
         ),
+        HttpApiEndpoint.post("worktreeCreate", ExperimentalPaths.worktree, {
+          payload: Schema.optional(Worktree.CreateInput),
+          success: Worktree.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "worktree.create",
+            summary: "Create worktree",
+            description: "Create a new git worktree for the current project and run any configured startup scripts.",
+          }),
+        ),
+        HttpApiEndpoint.delete("worktreeRemove", ExperimentalPaths.worktree, {
+          payload: Worktree.RemoveInput,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "worktree.remove",
+            summary: "Remove worktree",
+            description: "Remove a git worktree and delete its branch.",
+          }),
+        ),
+        HttpApiEndpoint.post("worktreeReset", ExperimentalPaths.worktreeReset, {
+          payload: Worktree.ResetInput,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "worktree.reset",
+            summary: "Reset worktree",
+            description: "Reset a worktree branch to the primary default branch.",
+          }),
+        ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {
           success: Schema.Record(Schema.String, MCP.Resource),
         }).annotateMerge(
@@ -113,6 +145,7 @@ export const experimentalHandlers = Layer.unwrap(
     const mcp = yield* MCP.Service
     const project = yield* Project.Service
     const registry = yield* ToolRegistry.Service
+    const worktreeSvc = yield* Worktree.Service
 
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
       const [state, groups] = yield* Effect.all(
@@ -159,6 +192,28 @@ export const experimentalHandlers = Layer.unwrap(
       return yield* project.sandboxes(ctx.project.id)
     })
 
+    const worktreeCreate = Effect.fn("ExperimentalHttpApi.worktreeCreate")(function* (ctx: {
+      payload: Worktree.CreateInput | undefined
+    }) {
+      return yield* worktreeSvc.create(ctx.payload)
+    })
+
+    const worktreeRemove = Effect.fn("ExperimentalHttpApi.worktreeRemove")(function* (input: {
+      payload: Worktree.RemoveInput
+    }) {
+      const ctx = yield* InstanceState.context
+      yield* worktreeSvc.remove(input.payload)
+      yield* project.removeSandbox(ctx.project.id, input.payload.directory)
+      return true
+    })
+
+    const worktreeReset = Effect.fn("ExperimentalHttpApi.worktreeReset")(function* (ctx: {
+      payload: Worktree.ResetInput
+    }) {
+      yield* worktreeSvc.reset(ctx.payload)
+      return true
+    })
+
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {
       return yield* mcp.resources()
     })
@@ -169,6 +224,9 @@ export const experimentalHandlers = Layer.unwrap(
         .handle("consoleOrgs", listConsoleOrgs)
         .handle("toolIDs", toolIDs)
         .handle("worktree", worktree)
+        .handle("worktreeCreate", worktreeCreate)
+        .handle("worktreeRemove", worktreeRemove)
+        .handle("worktreeReset", worktreeReset)
         .handle("resource", resource),
     )
   }),
@@ -178,4 +236,5 @@ export const experimentalHandlers = Layer.unwrap(
   Layer.provide(MCP.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(ToolRegistry.defaultLayer),
+  Layer.provide(Worktree.defaultLayer),
 )

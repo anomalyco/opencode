@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import type { UpgradeWebSocket } from "hono/ws"
+import path from "path"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../src/project/instance"
 import { InstanceRoutes } from "../../src/server/routes/instance"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/experimental"
 import { Log } from "../../src/util"
+import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
@@ -16,6 +19,24 @@ const websocket = (() => () => new Response(null, { status: 501 })) as unknown a
 function app() {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
   return InstanceRoutes(websocket)
+}
+
+async function waitReady(directory: string) {
+  return await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      GlobalBus.off("event", onEvent)
+      reject(new Error("timed out waiting for worktree.ready"))
+    }, 10_000)
+
+    function onEvent(event: { directory?: string; payload: { type?: string } }) {
+      if (event.payload.type !== Worktree.Event.Ready.type || event.directory !== directory) return
+      clearTimeout(timer)
+      GlobalBus.off("event", onEvent)
+      resolve()
+    }
+
+    GlobalBus.on("event", onEvent)
+  })
 }
 
 afterEach(async () => {
@@ -66,5 +87,49 @@ describe("experimental HttpApi", () => {
 
     expect(resources.status).toBe(200)
     expect(await resources.json()).toEqual({})
+  })
+
+  test("serves worktree mutations through Hono bridge", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+
+    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const created = await app().request(ExperimentalPaths.worktree, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "api-test" }),
+    })
+
+    expect(created.status).toBe(200)
+    const info = (await created.json()) as Worktree.Info
+    expect(info).toMatchObject({ name: "api-test", branch: "opencode/api-test" })
+    await waitReady(info.directory)
+
+    const listed = await app().request(ExperimentalPaths.worktree, { headers })
+    expect(listed.status).toBe(200)
+    expect(await listed.json()).toContain(info.directory)
+
+    await Bun.write(path.join(info.directory, "dirty.txt"), "dirty")
+    const reset = await app().request(ExperimentalPaths.worktreeReset, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ directory: info.directory }),
+    })
+
+    expect(reset.status).toBe(200)
+    expect(await reset.json()).toBe(true)
+    expect(await Bun.file(path.join(info.directory, "dirty.txt")).exists()).toBe(false)
+
+    const removed = await app().request(ExperimentalPaths.worktree, {
+      method: "DELETE",
+      headers,
+      body: JSON.stringify({ directory: info.directory }),
+    })
+
+    expect(removed.status).toBe(200)
+    expect(await removed.json()).toBe(true)
+
+    const afterRemove = await app().request(ExperimentalPaths.worktree, { headers })
+    expect(afterRemove.status).toBe(200)
+    expect(await afterRemove.json()).toEqual([])
   })
 })
