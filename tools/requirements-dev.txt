@@ -1,0 +1,11 @@
+# FastCI Agent Tools - Development & Testing Dependencies
+# Install via: pip install -r requirements-dev.txt
+
+# --- Testing ---
+# Pinned strictly to version 7.x to ensure reproducible CI test runs
+pytest>=7.0.0,<8.0.0
+
+# --- Linting & Type Checking (For Human Contributors) ---
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0

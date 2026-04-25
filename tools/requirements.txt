@@ -1,0 +1,7 @@
+# FastCI Agent Tools - Core Runtime Dependencies
+# Supported Python Versions: 3.8+ (3.9+ recommended)
+#
+# The core architecture is intentionally built strictly on Python's Standard Library
+# to ensure zero-friction execution in any CI environment and mitigate supply chain risks.
+#
+# For optional development and testing dependencies, see requirements-dev.txt
