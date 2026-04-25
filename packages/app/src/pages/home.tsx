@@ -3,7 +3,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/shared/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
@@ -111,6 +111,14 @@ export default function Home() {
                 )}
               </For>
             </ul>
+          </div>
+        </Match>
+        <Match when={!sync.ready}>
+          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
+            <div class="text-12-regular text-text-weak">{language.t("common.loading")}</div>
+            <Button class="px-3" onClick={chooseProject}>
+              {language.t("command.project.open")}
+            </Button>
           </div>
         </Match>
         <Match when={true}>

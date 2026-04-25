@@ -1,18 +1,20 @@
-import z from "zod"
+import { Schema } from "effect"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Worktree } from "@/worktree"
-import { type Adaptor, WorkspaceInfo } from "../types"
+import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
 
-const Config = WorkspaceInfo.extend({
-  name: WorkspaceInfo.shape.name.unwrap(),
-  branch: WorkspaceInfo.shape.branch.unwrap(),
-  directory: WorkspaceInfo.shape.directory.unwrap(),
+const WorktreeConfig = Schema.Struct({
+  name: WorkspaceInfo.fields.name,
+  branch: Schema.String,
+  directory: Schema.String,
 })
+const decodeWorktreeConfig = Schema.decodeUnknownSync(WorktreeConfig)
 
-type Config = z.infer<typeof Config>
-
-export const WorktreeAdaptor: Adaptor = {
+export const WorktreeAdaptor: WorkspaceAdaptor = {
+  name: "Worktree",
+  description: "Create a git worktree",
   async configure(info) {
-    const worktree = await Worktree.makeWorktreeInfo(info.name ?? undefined)
+    const worktree = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
     return {
       ...info,
       name: worktree.name,
@@ -21,26 +23,26 @@ export const WorktreeAdaptor: Adaptor = {
     }
   },
   async create(info) {
-    const config = Config.parse(info)
-    const bootstrap = await Worktree.createFromInfo({
-      name: config.name,
-      directory: config.directory,
-      branch: config.branch,
-    })
-    return bootstrap()
+    const config = decodeWorktreeConfig(info)
+    await AppRuntime.runPromise(
+      Worktree.Service.use((svc) =>
+        svc.createFromInfo({
+          name: config.name,
+          directory: config.directory,
+          branch: config.branch,
+        }),
+      ),
+    )
   },
   async remove(info) {
-    const config = Config.parse(info)
-    await Worktree.remove({ directory: config.directory })
+    const config = decodeWorktreeConfig(info)
+    await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove({ directory: config.directory })))
   },
-  async fetch(info, input: RequestInfo | URL, init?: RequestInit) {
-    const config = Config.parse(info)
-    const { WorkspaceServer } = await import("../workspace-server/server")
-    const url = input instanceof Request || input instanceof URL ? input : new URL(input, "http://opencode.internal")
-    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
-    headers.set("x-opencode-directory", config.directory)
-
-    const request = new Request(url, { ...init, headers })
-    return WorkspaceServer.App().fetch(request)
+  target(info) {
+    const config = decodeWorktreeConfig(info)
+    return {
+      type: "local",
+      directory: config.directory,
+    }
   },
 }

@@ -10,6 +10,10 @@
 adamdotdevin
 -agusbasari29 AI PR slop
 ariane-emory
+-atharvau AI review spamming literally every PR
+-borealbytes
+-danieljoshuanazareth
+-danieljoshuanazareth
 edemaine
 -florianleibert
 fwang
@@ -17,7 +21,16 @@ iamdavidhill
 jayair
 kitlangton
 kommander
+-opencode2026
+-opencodeengineer bot that spams issues
 r44vc0rp
 rekram1-node
+-ricardo-m-l
+-robinmordasiewicz
+rubdos
+shantur
+simonklee
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
 thdxr
+-toastythebot
+-davidbernat looks to be a clawdbot that spams team and sends super weird emails, doesnt appear to be a real person

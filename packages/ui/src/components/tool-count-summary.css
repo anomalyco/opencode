@@ -10,12 +10,12 @@
     opacity: 1;
     filter: blur(0);
     transform: translateY(0) scale(1);
-    overflow: clip;
+    overflow: hidden;
     transform-origin: left center;
     transition-property: grid-template-columns, opacity, filter, transform;
     transition-duration:
-      var(--tool-motion-spring-ms, 800ms), var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms),
-      var(--tool-motion-spring-ms, 800ms);
+      var(--tool-motion-spring-ms, 480ms), var(--tool-motion-fade-ms, 240ms), var(--tool-motion-fade-ms, 280ms),
+      var(--tool-motion-spring-ms, 480ms);
     transition-timing-function:
       var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), ease-out, ease-out,
       var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
@@ -35,12 +35,12 @@
     opacity: 0;
     filter: blur(var(--tool-motion-blur, 2px));
     transform: translateY(0.06em) scale(0.985);
-    overflow: clip;
+    overflow: hidden;
     transform-origin: left center;
     transition-property: grid-template-columns, opacity, filter, transform;
     transition-duration:
-      var(--tool-motion-spring-ms, 800ms), var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms),
-      var(--tool-motion-spring-ms, 800ms);
+      var(--tool-motion-spring-ms, 480ms), var(--tool-motion-fade-ms, 280ms), var(--tool-motion-fade-ms, 320ms),
+      var(--tool-motion-spring-ms, 480ms);
     transition-timing-function:
       var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), ease-out, ease-out,
       var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
@@ -55,7 +55,7 @@
 
   [data-slot="tool-count-summary-empty-inner"] {
     min-width: 0;
-    overflow: clip;
+    overflow: hidden;
     white-space: nowrap;
   }
 
@@ -63,7 +63,7 @@
     display: inline-flex;
     align-items: baseline;
     min-width: 0;
-    overflow: clip;
+    overflow: hidden;
     white-space: nowrap;
   }
 
@@ -75,11 +75,12 @@
     margin-right: 0;
     opacity: 0;
     filter: blur(calc(var(--tool-motion-blur, 2px) * 0.55));
-    overflow: clip;
+    overflow: hidden;
     transform: translateX(-0.08em);
     transition-property: opacity, filter, transform;
     transition-duration:
-      var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms), var(--tool-motion-fade-ms, 400ms);
+      calc(var(--tool-motion-fade-ms, 200ms) * 0.75), calc(var(--tool-motion-fade-ms, 220ms) * 0.75),
+      calc(var(--tool-motion-fade-ms, 220ms) * 0.6);
     transition-timing-function: ease-out, ease-out, ease-out;
   }
 

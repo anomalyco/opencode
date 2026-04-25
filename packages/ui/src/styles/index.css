@@ -13,6 +13,7 @@
 @import "../components/basic-tool.css" layer(components);
 @import "../components/button.css" layer(components);
 @import "../components/card.css" layer(components);
+@import "../components/tool-error-card.css" layer(components);
 @import "../components/checkbox.css" layer(components);
 @import "../components/file.css" layer(components);
 @import "../components/collapsible.css" layer(components);
@@ -40,7 +41,6 @@
 @import "../components/progress-circle.css" layer(components);
 @import "../components/radio-group.css" layer(components);
 @import "../components/resize-handle.css" layer(components);
-@import "../components/rolling-results.css" layer(components);
 @import "../components/select.css" layer(components);
 @import "../components/spinner.css" layer(components);
 @import "../components/switch.css" layer(components);

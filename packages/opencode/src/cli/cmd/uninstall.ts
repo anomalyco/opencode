@@ -1,13 +1,14 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "../../installation"
 import { Global } from "../../global"
-import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
-import { Filesystem } from "../../util/filesystem"
+import { Filesystem } from "../../util"
+import { Process } from "../../util"
 
 interface UninstallArgs {
   keepConfig: boolean
@@ -57,7 +58,7 @@ export const UninstallCommand = {
     UI.empty()
     prompts.intro("Uninstall OpenCode")
 
-    const method = await Installation.method()
+    const method = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.method()))
     prompts.log.info(`Installation method: ${method}`)
 
     const targets = await collectRemovalTargets(args, method)
@@ -192,16 +193,13 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
     const cmd = cmds[method]
     if (cmd) {
       spinner.start(`Running ${cmd.join(" ")}...`)
-      const result =
-        method === "choco"
-          ? await $`echo Y | choco uninstall opencode -y -r`.quiet().nothrow()
-          : await $`${cmd}`.quiet().nothrow()
-      if (result.exitCode !== 0) {
-        spinner.stop(`Package manager uninstall failed: exit code ${result.exitCode}`, 1)
-        if (
-          method === "choco" &&
-          result.stdout.toString("utf8").includes("not running from an elevated command shell")
-        ) {
+      const result = await Process.run(method === "choco" ? ["choco", "uninstall", "opencode", "-y", "-r"] : cmd, {
+        nothrow: true,
+      })
+      if (result.code !== 0) {
+        spinner.stop(`Package manager uninstall failed: exit code ${result.code}`, 1)
+        const text = `${result.stdout.toString("utf8")}\n${result.stderr.toString("utf8")}`
+        if (method === "choco" && text.includes("not running from an elevated command shell")) {
           prompts.log.warn(`You may need to run '${cmd.join(" ")}' from an elevated command shell`)
         } else {
           prompts.log.warn(`You may need to run manually: ${cmd.join(" ")}`)

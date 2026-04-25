@@ -10,7 +10,7 @@ import { afterAll } from "bun:test"
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(async () => {
-  const { Database } = await import("../src/storage/db")
+  const { Database } = await import("../src/storage")
   Database.close()
   const busy = (error: unknown) =>
     typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
@@ -44,6 +44,7 @@ process.env["OPENCODE_TEST_HOME"] = testHome
 // Set test managed config directory to isolate tests from system managed settings
 const testManagedConfigDir = path.join(dir, "managed")
 process.env["OPENCODE_TEST_MANAGED_CONFIG_DIR"] = testManagedConfigDir
+process.env["OPENCODE_DISABLE_DEFAULT_PLUGINS"] = "true"
 
 // Write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
@@ -61,6 +62,7 @@ delete process.env["AWS_PROFILE"]
 delete process.env["AWS_REGION"]
 delete process.env["AWS_BEARER_TOKEN_BEDROCK"]
 delete process.env["OPENROUTER_API_KEY"]
+delete process.env["LLM_GATEWAY_API_KEY"]
 delete process.env["GROQ_API_KEY"]
 delete process.env["MISTRAL_API_KEY"]
 delete process.env["PERPLEXITY_API_KEY"]
@@ -73,11 +75,17 @@ delete process.env["SAMBANOVA_API_KEY"]
 delete process.env["OPENCODE_SERVER_PASSWORD"]
 delete process.env["OPENCODE_SERVER_USERNAME"]
 
-// Now safe to import from src/
-const { Log } = await import("../src/util/log")
+// Use in-memory sqlite
+process.env["OPENCODE_DB"] = ":memory:"
 
-Log.init({
+// Now safe to import from src/
+const { Log } = await import("../src/util")
+const { initProjectors } = await import("../src/server/projectors")
+
+void Log.init({
   print: false,
   dev: true,
   level: "DEBUG",
 })
+
+initProjectors()

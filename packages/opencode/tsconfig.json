@@ -10,7 +10,15 @@
     "customConditions": ["browser"],
     "paths": {
       "@/*": ["./src/*"],
-      "@tui/*": ["./src/cli/cmd/tui/*"]
-    }
+      "@tui/*": ["./src/cli/cmd/tui/*"],
+      "@test/*": ["./test/*"]
+    },
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "transform": "@effect/language-service/transform",
+        "namespaceImportPackages": ["effect", "@effect/*"]
+      }
+    ]
   }
 }

@@ -1,26 +1,42 @@
-import { describe, expect, test } from "bun:test"
-import path from "path"
+import { afterEach, describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
-import { Session } from "../../src/session"
-import { Log } from "../../src/util/log"
+import { Session as SessionNs } from "../../src/session"
+import { Log } from "../../src/util"
+import { tmpdir } from "../fixture/fixture"
 
-const projectRoot = path.join(__dirname, "../..")
-Log.init({ print: false })
+void Log.init({ print: false })
 
-describe("Session.list", () => {
+function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
+  return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))
+}
+
+const svc = {
+  ...SessionNs,
+  create(input?: SessionNs.CreateInput) {
+    return run(SessionNs.Service.use((svc) => svc.create(input)))
+  },
+}
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
+
+describe("session.list", () => {
   test("filters by directory", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
-        const first = await Session.create({})
+        const first = await svc.create({})
 
-        const otherDir = path.join(projectRoot, "..", "__session_list_other")
+        await using other = await tmpdir({ git: true })
         const second = await Instance.provide({
-          directory: otherDir,
-          fn: async () => Session.create({}),
+          directory: other.path,
+          fn: async () => svc.create({}),
         })
 
-        const sessions = [...Session.list({ directory: projectRoot })]
+        const sessions = [...svc.list({ directory: tmp.path })]
         const ids = sessions.map((s) => s.id)
 
         expect(ids).toContain(first.id)
@@ -30,13 +46,14 @@ describe("Session.list", () => {
   })
 
   test("filters root sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
-        const root = await Session.create({ title: "root-session" })
-        const child = await Session.create({ title: "child-session", parentID: root.id })
+        const root = await svc.create({ title: "root-session" })
+        const child = await svc.create({ title: "child-session", parentID: root.id })
 
-        const sessions = [...Session.list({ roots: true })]
+        const sessions = [...svc.list({ roots: true })]
         const ids = sessions.map((s) => s.id)
 
         expect(ids).toContain(root.id)
@@ -46,26 +63,28 @@ describe("Session.list", () => {
   })
 
   test("filters by start time", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({ title: "new-session" })
+        await svc.create({ title: "new-session" })
         const futureStart = Date.now() + 86400000
 
-        const sessions = [...Session.list({ start: futureStart })]
+        const sessions = [...svc.list({ start: futureStart })]
         expect(sessions.length).toBe(0)
       },
     })
   })
 
   test("filters by search term", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
-        await Session.create({ title: "unique-search-term-abc" })
-        await Session.create({ title: "other-session-xyz" })
+        await svc.create({ title: "unique-search-term-abc" })
+        await svc.create({ title: "other-session-xyz" })
 
-        const sessions = [...Session.list({ search: "unique-search" })]
+        const sessions = [...svc.list({ search: "unique-search" })]
         const titles = sessions.map((s) => s.title)
 
         expect(titles).toContain("unique-search-term-abc")
@@ -75,14 +94,15 @@ describe("Session.list", () => {
   })
 
   test("respects limit parameter", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: projectRoot,
+      directory: tmp.path,
       fn: async () => {
-        await Session.create({ title: "session-1" })
-        await Session.create({ title: "session-2" })
-        await Session.create({ title: "session-3" })
+        await svc.create({ title: "session-1" })
+        await svc.create({ title: "session-2" })
+        await svc.create({ title: "session-3" })
 
-        const sessions = [...Session.list({ limit: 2 })]
+        const sessions = [...svc.list({ limit: 2 })]
         expect(sessions.length).toBe(2)
       },
     })

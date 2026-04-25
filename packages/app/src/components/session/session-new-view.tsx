@@ -5,7 +5,7 @@ import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Mark } from "@opencode-ai/ui/logo"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename } from "@opencode-ai/shared/util/path"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
@@ -13,7 +13,6 @@ const ROOT_CLASS = "size-full flex flex-col"
 
 interface NewSessionViewProps {
   worktree: string
-  onWorktreeChange: (value: string) => void
 }
 
 export function NewSessionView(props: NewSessionViewProps) {
