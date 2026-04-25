@@ -57,7 +57,7 @@ async function download(url: string, dest: string) {
 }
 
 async function main() {
-  console.log(`离线解析器缓存目录: ${CACHE_DIR}\n`)
+  console.log(`Offline parser cache directory: ${CACHE_DIR}\n`)
   await fs.promises.mkdir(CACHE_DIR, { recursive: true })
 
   // Write a manifest for traceability

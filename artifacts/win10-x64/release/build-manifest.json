@@ -1,0 +1,24 @@
+﻿{
+    "channel":  "latest",
+    "build_host":  "LAPTOP-1V5DR6PS",
+    "build_date":  "2026-04-25T16:02:22Z",
+    "parser_files":  64,
+    "files":  {
+                  "lingxicode-offline-v1.4.6-win10-x64.zip":  {
+                                                                  "sha256":  "17a781255bbd639448a3ff436dac08ff357f6ca435880dd0b02e3d65b6e339ff",
+                                                                  "size":  52159778
+                                                              },
+                  "opencode.exe":  {
+                                       "sha256":  "ba7fc2a67a4e71b5a34bb9c2be0d5b1c49b1873e9f5bb1b69f2f437f026c4cbf",
+                                       "size":  139009536
+                                   }
+              },
+    "bun_version":  "1.3.11",
+    "version":  "1.4.6",
+    "platform":  "windows-x64",
+    "parser_languages":  26,
+    "checksums":  {
+                      "lingxicode-offline-v1.4.6-win10-x64.zip":  "17a781255bbd639448a3ff436dac08ff357f6ca435880dd0b02e3d65b6e339ff",
+                      "opencode.exe":  "ba7fc2a67a4e71b5a34bb9c2be0d5b1c49b1873e9f5bb1b69f2f437f026c4cbf"
+                  }
+}
