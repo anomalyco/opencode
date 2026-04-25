@@ -12,6 +12,7 @@ import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
+import { AgentDisplay } from "@/agent/display"
 import { Locale } from "@/util"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
@@ -63,6 +64,35 @@ export type AutocompleteOption = {
   isDirectory?: boolean
   onSelect?: () => void
   path?: string
+}
+
+export function agentAutocompleteDisplay(agentName: string) {
+  return AgentDisplay.mention(agentName)
+}
+
+export function agentAutocompleteAliases(agentName: string) {
+  return [...new Set([`@${agentName}`, agentAutocompleteDisplay(agentName)])]
+}
+
+export function agentAutocompleteOption(
+  agent: { name: string },
+  insertPart: (text: string, part: PromptInfo["parts"][number]) => void,
+): AutocompleteOption {
+  return {
+    display: agentAutocompleteDisplay(agent.name),
+    aliases: agentAutocompleteAliases(agent.name),
+    onSelect: () => {
+      insertPart(agent.name, {
+        type: "agent",
+        name: agent.name,
+        source: {
+          start: 0,
+          end: 0,
+          value: "",
+        },
+      })
+    },
+  }
 }
 
 export function Autocomplete(props: {
@@ -338,22 +368,7 @@ export function Autocomplete(props: {
     const agents = sync.data.agent
     return agents
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
-      .map(
-        (agent): AutocompleteOption => ({
-          display: "@" + agent.name,
-          onSelect: () => {
-            insertPart(agent.name, {
-              type: "agent",
-              name: agent.name,
-              source: {
-                start: 0,
-                end: 0,
-                value: "",
-              },
-            })
-          },
-        }),
-      )
+      .map((agent): AutocompleteOption => agentAutocompleteOption(agent, insertPart))
   })
 
   const commands = createMemo((): AutocompleteOption[] => {
