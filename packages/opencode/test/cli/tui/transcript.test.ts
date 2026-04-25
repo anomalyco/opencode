@@ -109,6 +109,19 @@ describe("transcript", () => {
       const result = formatAssistantHeader(msg, true)
       expect(result).toContain("Plan")
     })
+
+    test("zero-width prefixed agent header renders without the hidden prefix", () => {
+      const msg = { ...baseMsg, agent: "\u200Bprometheus" }
+      const result = formatAssistantHeader(msg, true)
+      expect(result).toBe("## Assistant (Prometheus · claude-sonnet-4-20250514 · 5.4s)\n\n")
+      expect(result).not.toContain("\u200B")
+    })
+
+    test("zero-width joiner inside agent header text is preserved", () => {
+      const msg = { ...baseMsg, agent: "dev\u200Dops" }
+      const result = formatAssistantHeader(msg, true)
+      expect(result).toBe("## Assistant (Dev\u200DOps · claude-sonnet-4-20250514 · 5.4s)\n\n")
+    })
   })
 
   describe("formatPart", () => {
