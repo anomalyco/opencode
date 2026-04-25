@@ -2,7 +2,7 @@ export * as ConfigPaths from "./paths"
 
 import path from "path"
 import { Filesystem } from "@/util"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@/global"
 import { unique } from "remeda"
 import { JsonError } from "./error"

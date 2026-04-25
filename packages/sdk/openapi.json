@@ -10951,73 +10951,60 @@
             "$ref": "#/components/schemas/PermissionActionConfig"
           },
           {
-            "allOf": [
-              {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/PermissionRuleConfig"
-                }
+            "type": "object",
+            "properties": {
+              "read": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
               },
-              {
-                "type": "object",
-                "properties": {
-                  "read": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "edit": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "glob": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "grep": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "list": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "bash": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "task": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "external_directory": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "todowrite": {
-                    "$ref": "#/components/schemas/PermissionActionConfig"
-                  },
-                  "question": {
-                    "$ref": "#/components/schemas/PermissionActionConfig"
-                  },
-                  "webfetch": {
-                    "$ref": "#/components/schemas/PermissionActionConfig"
-                  },
-                  "websearch": {
-                    "$ref": "#/components/schemas/PermissionActionConfig"
-                  },
-                  "codesearch": {
-                    "$ref": "#/components/schemas/PermissionActionConfig"
-                  },
-                  "lsp": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  },
-                  "doom_loop": {
-                    "$ref": "#/components/schemas/PermissionActionConfig"
-                  },
-                  "skill": {
-                    "$ref": "#/components/schemas/PermissionRuleConfig"
-                  }
-                },
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/PermissionRuleConfig"
-                }
+              "edit": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "glob": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "grep": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "list": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "bash": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "task": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "external_directory": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "todowrite": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "question": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "webfetch": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "websearch": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "codesearch": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "lsp": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
+              },
+              "doom_loop": {
+                "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "skill": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
               }
-            ]
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PermissionRuleConfig"
+            }
           }
         ]
       },
@@ -11692,8 +11679,7 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["enabled"],
-                  "additionalProperties": false
+                  "required": ["enabled"]
                 }
               ]
             }
