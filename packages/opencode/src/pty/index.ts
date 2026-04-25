@@ -70,6 +70,7 @@ export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const CreateInput = Schema.Struct({
   command: Schema.optional(Schema.String),
+  shellCommand: Schema.optional(Schema.String),
   args: Schema.optional(Schema.Array(Schema.String)),
   cwd: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
@@ -175,11 +176,18 @@ export const layer = Layer.effect(
       const s = yield* InstanceState.get(state)
       const bridge = yield* EffectBridge.make()
       const id = PtyID.ascending()
-      const command = input.command || Shell.preferred()
-      const args = input.args || []
-      if (Shell.login(command)) {
-        args.push("-l")
-      }
+      const shellCommand = input.shellCommand?.trim()
+      const command = shellCommand
+        ? process.platform === "win32"
+          ? process.env.COMSPEC || "cmd.exe"
+          : Shell.acceptable()
+        : input.command || Shell.preferred()
+      const args = shellCommand
+        ? process.platform === "win32"
+          ? ["/d", "/s", "/c", shellCommand]
+          : ["-lc", shellCommand]
+        : input.args || []
+      if (!shellCommand && Shell.login(command)) args.push("-l")
 
       const cwd = input.cwd || s.dir
       const shell = yield* plugin.trigger("shell.env", { cwd }, { env: {} })

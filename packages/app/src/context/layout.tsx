@@ -390,8 +390,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
+      const commands =
+        childStore.projectMeta?.commands || metadata?.commands
+          ? { ...childStore.projectMeta?.commands, ...metadata?.commands }
+          : undefined
+      const next = { ...childStore.projectMeta, ...metadata, ...project }
 
-      return { ...metadata, ...project }
+      if (!commands) return next
+      return { ...next, commands }
     }
 
     const roots = createMemo(() => {

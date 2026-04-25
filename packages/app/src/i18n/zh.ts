@@ -28,6 +28,10 @@ export const dict = {
   "command.sidebar.toggle": "切换侧边栏",
 
   "command.project.open": "打开项目",
+  "command.project.run": "运行项目",
+  "command.project.run.description": "运行选中的项目命令",
+  "command.project.stop": "停止项目",
+  "command.project.stop.description": "停止正在运行的项目命令",
 
   "command.provider.connect": "连接提供商",
 
@@ -114,6 +118,12 @@ export const dict = {
   "command.session.share.description": "分享此会话并将链接复制到剪贴板",
   "command.session.unshare": "取消分享会话",
   "command.session.unshare.description": "停止分享此会话",
+
+  "run.project.start": "启动",
+  "run.selector.placeholder": "选择运行命令",
+  "run.empty": "未配置运行命令",
+  "run.run": "运行",
+  "run.stop": "停止",
 
   "palette.search.placeholder": "搜索文件、命令和会话",
   "palette.empty": "未找到结果",
@@ -365,6 +375,17 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "工作区启动脚本",
   "dialog.project.edit.worktree.startup.description": "在创建新的工作区 (worktree) 后运行。",
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
+  "dialog.project.edit.runConfigs": "运行配置",
+  "dialog.project.edit.runConfigs.description": "可在项目终端中运行的命名命令。",
+  "dialog.project.edit.runConfigs.detected": "从项目文件检测到",
+  "dialog.project.edit.runConfigs.scan": "扫描项目文件",
+  "dialog.project.edit.runConfigs.scan.scanning": "扫描中...",
+  "dialog.project.edit.runConfigs.add": "添加运行配置",
+  "dialog.project.edit.runConfigs.name": "名称",
+  "dialog.project.edit.runConfigs.name.placeholder": "例如开发服务器",
+  "dialog.project.edit.runConfigs.command": "命令",
+  "dialog.project.edit.runConfigs.command.placeholder": "例如 bun dev",
+  "dialog.project.edit.runConfigs.remove": "移除运行配置",
 
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "输入 token 的大致拆分。“其他”包含工具定义和开销。",

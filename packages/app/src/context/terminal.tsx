@@ -18,6 +18,15 @@ export type LocalPTY = {
   cursor?: number
 }
 
+export type ActiveRun = {
+  ptyID: string
+  title: string
+  command: string
+  cwd?: string
+}
+
+type RunTarget = string | { command: string; cwd?: string }
+
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20
 
@@ -110,6 +119,12 @@ const trimTerminal = (pty: LocalPTY) => {
   }
 }
 
+function runMatches(run: ActiveRun, target?: RunTarget) {
+  if (!target) return true
+  if (typeof target === "string") return run.command === target
+  return run.command === target.command && run.cwd === target.cwd
+}
+
 export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform) {
   const key = getWorkspaceTerminalCacheKey(dir)
   for (const cache of caches) {
@@ -132,6 +147,10 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], plat
 
 function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, legacySessionID?: string) {
   const legacy = getLegacyTerminalStorageKeys(dir, legacySessionID)
+
+  const [runStore, setRunStore] = createStore<{
+    active: ActiveRun[]
+  }>({ active: [] })
 
   const [store, setStore, _, ready] = persisted(
     {
@@ -180,7 +199,12 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     })
   }
 
+  const removeActiveRun = (ptyID: string) => {
+    setRunStore("active", (runs) => runs.filter((run) => run.ptyID !== ptyID))
+  }
+
   const unsub = sdk.event.on("pty.exited", (event: { properties: { id: string } }) => {
+    removeActiveRun(event.properties.id)
     removeExited(event.properties.id)
   })
   onCleanup(unsub)
@@ -243,10 +267,20 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     ready,
     all: createMemo(() => store.all),
     active: createMemo(() => store.active),
+    activeRuns: createMemo(() => runStore.active),
+    activeRun(target?: RunTarget) {
+      if (target) return runStore.active.find((run) => runMatches(run, target))
+      return runStore.active[0]
+    },
+    running(target?: RunTarget) {
+      if (target) return runStore.active.some((run) => runMatches(run, target))
+      return runStore.active.length > 0
+    },
     clear() {
       batch(() => {
         setStore("active", undefined)
         setStore("all", [])
+        setRunStore("active", [])
       })
     },
     new() {
@@ -268,6 +302,52 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         .catch((error: unknown) => {
           console.error("Failed to create terminal", error)
         })
+    },
+    async run(input: { title: string; command: string; cwd?: string }) {
+      const next = await sdk.client.pty
+        .create({
+          title: input.title,
+          shellCommand: input.command,
+          command: "sh",
+          args: ["-lc", input.command],
+          cwd: input.cwd,
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to run command", error)
+          return undefined
+        })
+      const id = next?.data?.id
+      if (!id) return
+
+      batch(() => {
+        setStore("all", store.all.length, {
+          id,
+          title: next.data?.title ?? input.title,
+          titleNumber: 0,
+        })
+        setStore("active", id)
+        setRunStore("active", runStore.active.length, {
+          ptyID: id,
+          title: next.data?.title ?? input.title,
+          command: input.command,
+          cwd: input.cwd,
+        })
+      })
+
+      return id
+    },
+    async stop(target?: RunTarget) {
+      const targets = target ? runStore.active.filter((run) => runMatches(run, target)) : [...runStore.active]
+      if (targets.length === 0) return
+      const ids = new Set(targets.map((run) => run.ptyID))
+      setRunStore("active", (runs) => runs.filter((run) => !ids.has(run.ptyID)))
+      await Promise.all(
+        targets.map((run) =>
+          sdk.client.pty.remove({ ptyID: run.ptyID }).catch((error: unknown) => {
+            console.error("Failed to stop run command", error)
+          }),
+        ),
+      )
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
       update(sdk.client, pty)
@@ -322,6 +402,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       const index = store.all.findIndex((f) => f.id === id)
       if (index !== -1) {
         batch(() => {
+          removeActiveRun(id)
           if (store.active === id) {
             const next = index > 0 ? store.all[index - 1]?.id : store.all[1]?.id
             setStore("active", next)
@@ -421,7 +502,12 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
+      activeRuns: () => workspace().activeRuns(),
+      activeRun: (target?: RunTarget) => workspace().activeRun(target),
+      running: (target?: RunTarget) => workspace().running(target),
       new: () => workspace().new(),
+      run: (input: { title: string; command: string; cwd?: string }) => workspace().run(input),
+      stop: (target?: RunTarget) => workspace().stop(target),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),

@@ -18,6 +18,7 @@ import { findLast } from "@opencode-ai/shared/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
+import { runConfigList, type RunConfig } from "@/pages/session/run-config"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export type SessionCommandContext = {
@@ -120,6 +121,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sessionCommand = withCategory(language.t("command.category.session"))
   const fileCommand = withCategory(language.t("command.category.file"))
   const contextCommand = withCategory(language.t("command.category.context"))
+  const projectCommand = withCategory(language.t("command.category.project"))
   const viewCommand = withCategory(language.t("command.category.view"))
   const terminalCommand = withCategory(language.t("command.category.terminal"))
   const modelCommand = withCategory(language.t("command.category.model"))
@@ -132,6 +134,19 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (sessionID) return permission.isAutoAccepting(sessionID, sdk.directory)
     return permission.isAutoAcceptingDirectory(sdk.directory)
   }
+  const projectCommands = () => {
+    const current = layout.projects
+      .list()
+      .find((project) => project.worktree === sdk.directory || project.sandboxes?.includes(sdk.directory))
+    if (!current?.commands && !sync.project?.commands) return
+    return { ...sync.project?.commands, ...current?.commands }
+  }
+  const runConfigs = () =>
+    runConfigList({
+      projectStart: projectCommands()?.start?.trim(),
+      projectStartTitle: language.t("run.project.start"),
+      customRuns: projectCommands()?.run,
+    })
   const write = async (value: string) => {
     const body = typeof document === "undefined" ? undefined : document.body
     if (body) {
@@ -253,6 +268,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const openTerminal = () => {
     if (terminal.all().length > 0) terminal.new()
+    view().terminal.open()
+  }
+
+  const runConfig = () => runConfigs()[0]
+
+  const runProject = async (config: RunConfig | undefined = runConfig()) => {
+    if (!config) return
+    if (terminal.running(config)) return
+    const id = await terminal.run(config)
+    if (!id) return
     view().terminal.open()
   }
 
@@ -493,6 +518,33 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
+  const projectCmds = () => [
+    projectCommand({
+      id: "project.run",
+      title: language.t("command.project.run"),
+      description: language.t("command.project.run.description"),
+      keybind: "mod+r",
+      disabled: !runConfig() || terminal.running(runConfig()),
+      onSelect: () => void runProject(),
+    }),
+    ...runConfigs().map((config) =>
+      projectCommand({
+        id: `project.run.${config.id}`,
+        title: `${language.t("run.run")}: ${config.title}`,
+        description: config.command,
+        disabled: terminal.running(config),
+        onSelect: () => void runProject(config),
+      }),
+    ),
+    projectCommand({
+      id: "project.stop",
+      title: language.t("command.project.stop"),
+      description: language.t("command.project.stop.description"),
+      disabled: !terminal.running(),
+      onSelect: () => void terminal.stop(),
+    }),
+  ]
+
   const messageCmds = () => [
     sessionCommand({
       id: "message.previous",
@@ -576,6 +628,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     ...shareCmds(),
     ...fileCmds(),
     ...contextCmds(),
+    ...projectCmds(),
     ...viewCmds(),
     ...terminalCmds(),
     ...messageCmds(),
