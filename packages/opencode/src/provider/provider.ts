@@ -1,4 +1,5 @@
 import os from "os"
+import fs from "fs/promises"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -443,16 +444,76 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         "us-central1",
       )
 
-      let authResult: { token: string; expiresAt: number } | null = null
-      const authPromise = Effect.tryPromise(async () => {
+const getAuthToken = yield* Effect.tryPromise(async () => {
         const { GoogleAuth } = await import("google-auth-library")
         const auth = new GoogleAuth()
+
+        let adcFilePath: string | null = null
+        try {
+          const envCreds = process.env.GOOGLE_APPLICATION_CREDENTIALS
+          if (envCreds) {
+            adcFilePath = envCreds
+          } else {
+            const home = os.homedir()
+            const defaultPath = path.join(home, ".config", "gcloud", "application_default_credentials.json")
+            try {
+              await fs.access(defaultPath)
+              adcFilePath = defaultPath
+            } catch {
+              // Not using default user ADC
+            }
+          }
+        } catch {
+          // Ignore
+        }
+
+        const getCacheFilePath = (): string | null => {
+          if (!adcFilePath) return null
+          if (adcFilePath.endsWith(".json")) {
+            return adcFilePath.replace(/\.json$/, "_access_token.json")
+          }
+          return `${adcFilePath}_access_token.json`
+        }
+
+        const cachePath = getCacheFilePath()
+        if (cachePath) {
+          try {
+            const content = await fs.readFile(cachePath, "utf8")
+            const parsed = JSON.parse(content)
+            if (parsed.access_token && typeof parsed.expires_at === "number" && parsed.expires_at > Date.now()) {
+              return { token: parsed.access_token, expiresAt: parsed.expires_at }
+            }
+          } catch {
+            // Cache miss or invalid
+          }
+        }
+
         const client = await auth.getApplicationDefault()
         const r = await client.credential.getAccessToken()
-        return { token: r.token ?? '', expiresAt: r.res?.data.expiry_date ?? 0 }
+        const result = { token: r.token ?? "", expiresAt: r.res?.data.expiry_date ?? 0 }
+
+        if (cachePath && result.expiresAt > 0) {
+          try {
+            const content = JSON.stringify(
+              {
+                access_token: result.token,
+                expires_at: result.expiresAt,
+                token_type: "Bearer",
+              },
+              null,
+              2,
+            )
+            await fs.writeFile(cachePath, content, { mode: 0o600 })
+          } catch {
+            // Ignore cache write errors
+          }
+        }
+
+        return result
       }).pipe(
         Effect.mapError(() => new Error("auth failed")),
         Effect.catch(() => Effect.succeed(null)),
+        Effect.cached,
       )
 
       const autoload = Boolean(project)
@@ -471,10 +532,19 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: {
           project,
           location,
-          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            if (!authResult) {
-              authResult = await Effect.runPromise(authPromise)
+          googleAuthOptions: {
+            authClient: {
+              getAccessToken: async () => {
+                const authResult = await Effect.runPromise(getAuthToken)
+                if (!authResult?.token) {
+                  throw new Error("Google Vertex AI auth failed: no valid access token")
+                }
+                return { token: authResult.token }
+              }
             }
+          },
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const authResult = await Effect.runPromise(getAuthToken)
             if (!authResult?.token) {
               throw new Error("Google Vertex AI auth failed: no valid access token")
             }
