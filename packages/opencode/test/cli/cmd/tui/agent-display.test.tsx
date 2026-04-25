@@ -7,6 +7,7 @@ import {
 } from "../../../../src/cli/cmd/tui/component/prompt/autocomplete"
 import { AgentDisplay } from "../../../../src/agent/display"
 import { PromptFooterLabel } from "../../../../src/cli/cmd/tui/component/prompt/footer-label"
+import { AssistantFooter } from "../../../../src/cli/cmd/tui/routes/session/assistant-footer"
 import { subagentLabelFromTitle } from "../../../../src/cli/cmd/tui/routes/session/subagent-footer"
 import { subagentSessionTitle } from "../../../../src/tool/task"
 
@@ -92,6 +93,12 @@ test("task block labels clean zero-width-prefixed subagent type", () => {
 
 test("main prompt footer keeps cleaned agent label intact before model separator", () => {
   expect(`${PromptFooterLabel.agent("normal", "\u200Bhephaestus - deep agent")} · GPT 5.5`).toBe(
+    "Hephaestus - Deep Agent · GPT 5.5",
+  )
+})
+
+test("assistant output footer cleans zero-width-prefixed mode label", () => {
+  expect(`${AssistantFooter.modeLabel("\u200B\u200BHephaestus - Deep Agent")} · GPT 5.5`).toBe(
     "Hephaestus - Deep Agent · GPT 5.5",
   )
 })
