@@ -83,7 +83,7 @@ function choose(
 
   const item = pickAgent(store)
   const agent = item?.name
-  if (!agent || !validModel(store, item?.model)) return
+  if (!agent) return
 
   if (preferredModel && validModel(store, preferredModel)) {
     return {
