@@ -181,7 +181,7 @@ export const layer = Layer.effect(
 
         yield* watch(Session.Event.Updated, (evt) =>
           Effect.gen(function* () {
-            const info = yield* session.get(evt.properties.sessionID)
+            const info = evt.properties.info
             yield* sync(info.id, [{ type: "session", data: info }])
           }),
         )

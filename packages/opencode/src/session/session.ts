@@ -15,7 +15,6 @@ import { PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage"
 import { Log } from "../util"
-import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { InstanceState } from "@/effect"
@@ -27,7 +26,9 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
-import { Effect, Layer, Option, Context } from "effect"
+import { Effect, Layer, Option, Context, Schema, Types } from "effect"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "session" })
 
@@ -114,140 +115,176 @@ function getForkedTitle(title: string): string {
   return `${title} (fork #1)`
 }
 
-export const Info = z
-  .object({
-    id: SessionID.zod,
-    slug: z.string(),
-    projectID: ProjectID.zod,
-    workspaceID: WorkspaceID.zod.optional(),
-    directory: z.string(),
-    parentID: SessionID.zod.optional(),
-    summary: z
-      .object({
-        additions: z.number(),
-        deletions: z.number(),
-        files: z.number(),
-        diffs: Snapshot.FileDiff.zod.array().optional(),
-      })
-      .optional(),
-    share: z
-      .object({
-        url: z.string(),
-      })
-      .optional(),
-    title: z.string(),
-    version: z.string(),
-    time: z.object({
-      created: z.number(),
-      updated: z.number(),
-      compacting: z.number().optional(),
-      archived: z.number().optional(),
-    }),
-    permission: Permission.Ruleset.zod.optional(),
-    revert: z
-      .object({
-        messageID: MessageID.zod,
-        partID: PartID.zod.optional(),
-        snapshot: z.string().optional(),
-        diff: z.string().optional(),
-      })
-      .optional(),
-  })
-  .meta({
-    ref: "Session",
-  })
-export type Info = z.output<typeof Info>
-
-export const ProjectInfo = z
-  .object({
-    id: ProjectID.zod,
-    name: z.string().optional(),
-    worktree: z.string(),
-  })
-  .meta({
-    ref: "ProjectSummary",
-  })
-export type ProjectInfo = z.output<typeof ProjectInfo>
-
-export const GlobalInfo = Info.extend({
-  project: ProjectInfo.nullable(),
-}).meta({
-  ref: "GlobalSession",
+const Summary = Schema.Struct({
+  additions: Schema.Number,
+  deletions: Schema.Number,
+  files: Schema.Number,
+  diffs: Schema.optional(Schema.Array(Snapshot.FileDiff)),
 })
-export type GlobalInfo = z.output<typeof GlobalInfo>
 
-export const CreateInput = z
-  .object({
-    parentID: SessionID.zod.optional(),
-    title: z.string().optional(),
-    permission: Info.shape.permission,
-    workspaceID: WorkspaceID.zod.optional(),
-  })
-  .optional()
-export type CreateInput = z.output<typeof CreateInput>
-
-export const ForkInput = z.object({ sessionID: SessionID.zod, messageID: MessageID.zod.optional() })
-export const GetInput = SessionID.zod
-export const ChildrenInput = SessionID.zod
-export const RemoveInput = SessionID.zod
-export const SetTitleInput = z.object({ sessionID: SessionID.zod, title: z.string() })
-export const SetArchivedInput = z.object({ sessionID: SessionID.zod, time: z.number().optional() })
-export const SetPermissionInput = z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset.zod })
-export const SetRevertInput = z.object({
-  sessionID: SessionID.zod,
-  revert: Info.shape.revert,
-  summary: Info.shape.summary,
+const Share = Schema.Struct({
+  url: Schema.String,
 })
-export const MessagesInput = z.object({ sessionID: SessionID.zod, limit: z.number().optional() })
+
+const Time = Schema.Struct({
+  created: Schema.Number,
+  updated: Schema.Number,
+  compacting: Schema.optional(Schema.Number),
+  archived: Schema.optional(Schema.Number),
+})
+
+const Revert = Schema.Struct({
+  messageID: MessageID,
+  partID: Schema.optional(PartID),
+  snapshot: Schema.optional(Schema.String),
+  diff: Schema.optional(Schema.String),
+})
+
+export const Info = Schema.Struct({
+  id: SessionID,
+  slug: Schema.String,
+  projectID: ProjectID,
+  workspaceID: Schema.optional(WorkspaceID),
+  directory: Schema.String,
+  parentID: Schema.optional(SessionID),
+  summary: Schema.optional(Summary),
+  share: Schema.optional(Share),
+  title: Schema.String,
+  version: Schema.String,
+  time: Time,
+  permission: Schema.optional(Permission.Ruleset),
+  revert: Schema.optional(Revert),
+})
+  .annotate({ identifier: "Session" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
+
+export const ProjectInfo = Schema.Struct({
+  id: ProjectID,
+  name: Schema.optional(Schema.String),
+  worktree: Schema.String,
+})
+  .annotate({ identifier: "ProjectSummary" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ProjectInfo = Types.DeepMutable<Schema.Schema.Type<typeof ProjectInfo>>
+
+export const GlobalInfo = Schema.Struct({
+  ...Info.fields,
+  project: Schema.NullOr(ProjectInfo),
+})
+  .annotate({ identifier: "GlobalSession" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type GlobalInfo = Types.DeepMutable<Schema.Schema.Type<typeof GlobalInfo>>
+
+export const CreateInput = Schema.optional(
+  Schema.Struct({
+    parentID: Schema.optional(SessionID),
+    title: Schema.optional(Schema.String),
+    permission: Schema.optional(Permission.Ruleset),
+    workspaceID: Schema.optional(WorkspaceID),
+  }),
+).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
+
+export const ForkInput = Schema.Struct({
+  sessionID: SessionID,
+  messageID: Schema.optional(MessageID),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const GetInput = SessionID
+export const ChildrenInput = SessionID
+export const RemoveInput = SessionID
+export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema.String }).pipe(
+  withStatics((s) => ({ zod: zod(s) })),
+)
+export const SetArchivedInput = Schema.Struct({
+  sessionID: SessionID,
+  time: Schema.optional(Schema.Number),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const SetPermissionInput = Schema.Struct({
+  sessionID: SessionID,
+  permission: Permission.Ruleset,
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const SetRevertInput = Schema.Struct({
+  sessionID: SessionID,
+  revert: Schema.optional(Revert),
+  summary: Schema.optional(Summary),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const MessagesInput = Schema.Struct({
+  sessionID: SessionID,
+  limit: Schema.optional(Schema.Number),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+
+const CreatedEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  info: Info,
+})
+
+const UpdatedShare = Schema.Struct({
+  url: Schema.optional(Schema.NullOr(Schema.String)),
+})
+
+const UpdatedTime = Schema.Struct({
+  created: Schema.optional(Schema.NullOr(Schema.Number)),
+  updated: Schema.optional(Schema.NullOr(Schema.Number)),
+  compacting: Schema.optional(Schema.NullOr(Schema.Number)),
+  archived: Schema.optional(Schema.NullOr(Schema.Number)),
+})
+
+const UpdatedInfo = Schema.Struct({
+  id: Schema.optional(Schema.NullOr(SessionID)),
+  slug: Schema.optional(Schema.NullOr(Schema.String)),
+  projectID: Schema.optional(Schema.NullOr(ProjectID)),
+  workspaceID: Schema.optional(Schema.NullOr(WorkspaceID)),
+  directory: Schema.optional(Schema.NullOr(Schema.String)),
+  parentID: Schema.optional(Schema.NullOr(SessionID)),
+  summary: Schema.optional(Schema.NullOr(Summary)),
+  share: Schema.optional(UpdatedShare),
+  title: Schema.optional(Schema.NullOr(Schema.String)),
+  version: Schema.optional(Schema.NullOr(Schema.String)),
+  time: Schema.optional(UpdatedTime),
+  permission: Schema.optional(Schema.NullOr(Permission.Ruleset)),
+  revert: Schema.optional(Schema.NullOr(Revert)),
+})
+
+const UpdatedEventSchema = Schema.Struct({
+  sessionID: SessionID,
+  info: UpdatedInfo,
+})
 
 export const Event = {
   Created: SyncEvent.define({
     type: "session.created",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      info: Info,
-    }),
+    schema: CreatedEventSchema,
   }),
   Updated: SyncEvent.define({
     type: "session.updated",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      info: updateSchema(Info).extend({
-        share: updateSchema(Info.shape.share.unwrap()).optional(),
-        time: updateSchema(Info.shape.time).optional(),
-      }),
-    }),
-    busSchema: z.object({
-      sessionID: SessionID.zod,
-      info: Info,
-    }),
+    schema: UpdatedEventSchema,
+    busSchema: CreatedEventSchema,
   }),
   Deleted: SyncEvent.define({
     type: "session.deleted",
     version: 1,
     aggregate: "sessionID",
-    schema: z.object({
-      sessionID: SessionID.zod,
-      info: Info,
-    }),
+    schema: CreatedEventSchema,
   }),
   Diff: BusEvent.define(
     "session.diff",
-    z.object({
-      sessionID: SessionID.zod,
-      diff: Snapshot.FileDiff.zod.array(),
+    Schema.Struct({
+      sessionID: SessionID,
+      diff: Schema.Array(Snapshot.FileDiff),
     }),
   ),
   Error: BusEvent.define(
     "session.error",
-    z.object({
-      sessionID: SessionID.zod.optional(),
-      // z.lazy defers access to break circular dep: session → message-v2 → provider → plugin → session
-      error: z.lazy(() => (MessageV2.Assistant.zod as unknown as z.ZodObject<any>).shape.error),
+    Schema.Struct({
+      sessionID: Schema.optional(SessionID),
+      // Reuses MessageV2.Assistant.fields.error (already Schema.optional) so
+      // the derived zod keeps the same discriminated-union shape on the bus.
+      error: MessageV2.Assistant.fields.error,
     }),
   ),
 }
@@ -379,7 +416,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
 
-type Patch = z.infer<typeof Event.Updated.schema>["info"]
+export type Patch = Types.DeepMutable<SyncEvent.Event<typeof Event.Updated>["data"]["info"]>
 
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
   Effect.sync(() => Database.use(fn))

@@ -6,12 +6,14 @@ import npa from "npm-package-arg"
 import semver from "semver"
 import Config from "@npmcli/config"
 import { definitions, flatten, nerfDarts, shorthands } from "@npmcli/config/lib/definitions/index.js"
-import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
+import { Effect, Schema, Context, Layer, Option, FileSystem, Stream } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Global } from "@opencode-ai/shared/global"
 import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
+import * as CrossSpawnSpawner from "../effect/cross-spawn-spawner"
 import { makeRuntime } from "../effect/runtime"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
@@ -106,7 +108,33 @@ export const layer = Layer.effect(
     const global = yield* Global.Service
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
+    const runView = Effect.fnUntraced(function* (cmd: string[]) {
+      const handle = yield* spawner.spawn(
+        ChildProcess.make(cmd[0], cmd.slice(1), {
+          extendEnv: true,
+        }),
+      )
+      const [stdout, stderr] = yield* Effect.all(
+        [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
+        { concurrency: 2 },
+      )
+      const code = yield* handle.exitCode
+      if (code !== 0 || !stdout.trim()) {
+        return yield* Effect.fail(stderr || stdout || `Failed to run ${cmd.join(" ")}`)
+      }
+      return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.String))(stdout)
+    }, Effect.scoped)
+    const viewLatestVersion = Effect.fnUntraced(function* (pkg: string) {
+      return yield* runView(["npm", "view", pkg, "dist-tags.latest", "--json"]).pipe(
+        Effect.catch(() =>
+          runView(["pnpm", "view", pkg, "dist-tags.latest", "--json"]).pipe(
+            Effect.catch(() => runView(["bun", "pm", "view", pkg, "dist-tags.latest", "--json"])),
+          ),
+        ),
+      )
+    })
     const reify = (input: { dir: string; add?: string[] }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
@@ -143,29 +171,15 @@ export const layer = Layer.effect(
       )
 
     const outdated = Effect.fn("Npm.outdated")(function* (pkg: string, cachedVersion: string) {
-      const response = yield* Effect.tryPromise({
-        try: () => fetch(`https://registry.npmjs.org/${pkg}`),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(() => undefined))
-
-      if (!response || !response.ok) {
-        return false
-      }
-
-      const data = yield* Effect.tryPromise({
-        try: () => response.json() as Promise<{ "dist-tags"?: { latest?: string } }>,
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(() => undefined))
-
-      const latestVersion = data?.["dist-tags"]?.latest
-      if (!latestVersion) {
+      const latestVersion = yield* viewLatestVersion(pkg).pipe(Effect.option)
+      if (Option.isNone(latestVersion)) {
         return false
       }
 
       const range = /[\s^~*xX<>|=]/.test(cachedVersion)
-      if (range) return !semver.satisfies(latestVersion, cachedVersion)
+      if (range) return !semver.satisfies(latestVersion.value, cachedVersion)
 
-      return semver.lt(cachedVersion, latestVersion)
+      return semver.lt(cachedVersion, latestVersion.value)
     })
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
@@ -304,6 +318,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(AppFileSystem.layer),
   Layer.provide(Global.layer),
   Layer.provide(NodeFileSystem.layer),
+  Layer.provide(CrossSpawnSpawner.defaultLayer),
 )
 
 const { runPromise } = makeRuntime(Service, defaultLayer)

@@ -1,6 +1,5 @@
-import z from "zod"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Question } from "../question"
 import { Session } from "../session"
@@ -17,6 +16,8 @@ function getLastModel(sessionID: SessionID) {
   return undefined
 }
 
+export const Parameters = Schema.Struct({})
+
 export const PlanExitTool = Tool.define(
   "plan_exit",
   Effect.gen(function* () {
@@ -26,7 +27,7 @@ export const PlanExitTool = Tool.define(
 
     return {
       description: EXIT_DESCRIPTION,
-      parameters: z.object({}),
+      parameters: Parameters,
       execute: (_params: {}, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const info = yield* session.get(ctx.sessionID)

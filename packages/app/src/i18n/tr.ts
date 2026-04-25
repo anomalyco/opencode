@@ -232,7 +232,7 @@ export const dict = {
   "common.default": "Varsayılan",
   "common.attachment": "ek",
 
-  "prompt.placeholder.shell": "Kabuk komutu girin...",
+  "prompt.placeholder.shell": "Kabuk komutu girin... {{example}}",
   "prompt.placeholder.normal": 'Bir şeyler sorun... "{{example}}"',
   "prompt.placeholder.simple": "Bir şeyler sorun...",
   "prompt.placeholder.summarizeComments": "Yorumları özetle…",
