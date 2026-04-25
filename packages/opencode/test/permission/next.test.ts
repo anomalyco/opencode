@@ -6,6 +6,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
+import { NotFoundError } from "../../src/storage"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
@@ -1045,10 +1046,11 @@ it.live("pending permission rejects on instance reload", () =>
   }),
 )
 
-it.live("reply - does nothing for unknown requestID", () =>
+it.live("reply - fails for unknown requestID", () =>
   withDir({ git: true }, () =>
     Effect.gen(function* () {
-      yield* reply({ requestID: PermissionID.make("per_unknown"), reply: "once" })
+      const err = yield* fail(reply({ requestID: PermissionID.make("per_unknown"), reply: "once" }))
+      expect(err).toBeInstanceOf(NotFoundError)
       expect(yield* list()).toHaveLength(0)
     }),
   ),

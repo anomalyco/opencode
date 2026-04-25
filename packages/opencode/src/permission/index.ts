@@ -5,7 +5,7 @@ import { InstanceState } from "@/effect"
 import { ProjectID } from "@/project/schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
-import { Database, eq } from "@/storage"
+import { Database, NotFoundError, eq } from "@/storage"
 import { zod } from "@/util/effect-zod"
 import { Log } from "@/util"
 import { withStatics } from "@/util/schema"
@@ -127,7 +127,7 @@ export type ReplyInput = Schema.Schema.Type<typeof ReplyInput>
 
 export interface Interface {
   readonly ask: (input: AskInput) => Effect.Effect<void, Error>
-  readonly reply: (input: ReplyInput) => Effect.Effect<void>
+  readonly reply: (input: ReplyInput) => Effect.Effect<void, InstanceType<typeof NotFoundError>>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
@@ -215,7 +215,7 @@ export const layer = Layer.effect(
     const reply = Effect.fn("Permission.reply")(function* (input: ReplyInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const existing = pending.get(input.requestID)
-      if (!existing) return
+      if (!existing) throw new NotFoundError({ message: `Permission request not found: ${input.requestID}` })
 
       pending.delete(input.requestID)
       yield* bus.publish(Event.Replied, {
