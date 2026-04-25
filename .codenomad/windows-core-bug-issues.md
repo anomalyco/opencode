@@ -104,6 +104,8 @@ Verification: `bun test test/shell/shell.test.ts` pass, `bun typecheck` pass.
 | #23636 | Skipped, existing PR open             | #23635 closes #23636 and changes `packages/opencode/src/tool/bash.ts`.                             |
 | #23519 | Skipped, existing related PR open     | Maintainer comment points to #18761.                                                               |
 | #24003 | Skipped, existing related PR open     | #18392 makes bash `description` optional for the same invalid_type root cause.                     |
+| #18792 | Skipped, existing PR open             | #18789 fixes Windows SDK `spawn opencode ENOENT` for `createOpencode`.                             |
+| #15882 | Skipped, existing PR open             | #15883 adds the missing `Show reasoning summaries` translations.                                   |
 | #21607 | Skipped, already covered / related PR | Current `dev` sorts log filenames before cleanup and #16628 also touches log cleanup.              |
 | #15023 | Skipped, multiple related PRs open    | Session path normalization/query PRs include #20215, #23862, #20216, #20361, #23276.               |
 | #23457 | Already fixed in current `dev`        | `ripgrep.ts` already inlines escaped `Expand-Archive` paths instead of using `$args`.              |
@@ -124,8 +126,7 @@ Verification: `bun test test/shell/shell.test.ts` pass, `bun typecheck` pass.
 | #22072 | Needs streaming/export design              | Large-session export likely needs memory-safe serialization, not a small local fix.                                                                            |
 | #22579 | Needs Desktop workspace-state reproduction | `/undo` corruption report is plausible but not enough to patch server-side safely.                                                                             |
 | #14491 | Needs tool availability check              | Discard/extract tools are not obvious in current tool registry; needs reproduction against current dev.                                                        |
-| #15882 | App translation issue                      | Not selected yet; likely outside core server package.                                                                                                          |
 
 ## Pending
 
-Not yet reviewed in detail: 150 issues from the source query.
+Not yet reviewed in detail: 149 issues from the source query.
