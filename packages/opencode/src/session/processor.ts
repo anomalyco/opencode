@@ -258,7 +258,8 @@ export const layer: Layer.Layer<
 
           case "tool-input-start":
             if (ctx.assistantMessage.summary) {
-              throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              slog.warn("tool call skipped during summary generation", { tool: value.toolName })
+              return
             }
             const part = yield* session.updatePart({
               id: ctx.toolcalls[value.id]?.partID ?? PartID.ascending(),
@@ -286,7 +287,8 @@ export const layer: Layer.Layer<
 
           case "tool-call": {
             if (ctx.assistantMessage.summary) {
-              throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              slog.warn("tool call skipped during summary generation", { tool: value.toolName })
+              return
             }
             yield* updateToolCall(value.toolCallId, (match) => ({
               ...match,
