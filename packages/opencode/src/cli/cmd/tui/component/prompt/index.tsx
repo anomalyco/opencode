@@ -1302,7 +1302,9 @@ export function Prompt(props: PromptProps) {
               flexDirection="row"
               gap={1}
               flexGrow={1}
-              justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
+              justifyContent={
+                status().type === "retry" || status().type === "reconnecting" ? "space-between" : "flex-start"
+              }
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
                 <box marginLeft={1}>
@@ -1367,6 +1369,41 @@ export function Prompt(props: PromptProps) {
                       </Show>
                     )
                   })()}
+                  {(() => {
+                    const reconnecting = createMemo(() => {
+                      const s = status()
+                      if (s.type !== "reconnecting") return
+                      return s
+                    })
+                    const [visible, setVisible] = createSignal(false)
+                    let timer: ReturnType<typeof setTimeout> | undefined
+                    createEffect(() => {
+                      const r = reconnecting()
+                      if (r) {
+                        timer = setTimeout(() => setVisible(true), 1000)
+                      } else {
+                        clearTimeout(timer)
+                        setVisible(false)
+                      }
+                    })
+                    onCleanup(() => clearTimeout(timer))
+                    const msg = createMemo(() => {
+                      const r = reconnecting()
+                      if (!r) return
+                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
+                      return r.message
+                    })
+
+                    return (
+                      <Show when={visible() && reconnecting()}>
+                        <box>
+                          <text fg={theme.warning}>
+                            {msg()} [reconnecting attempt #{reconnecting()?.attempt}]
+                          </text>
+                        </box>
+                      </Show>
+                    )
+                  })()}
                 </box>
               </box>
               <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
@@ -1377,7 +1414,7 @@ export function Prompt(props: PromptProps) {
               </text>
             </box>
           </Show>
-          <Show when={status().type !== "retry"}>
+          <Show when={status().type !== "retry" && status().type !== "reconnecting"}>
             <box gap={2} flexDirection="row">
               <Show when={editorFileLabelDisplay()}>{(file) => <text fg={theme.secondary}>{file()}</text>}</Show>
               <Switch>
