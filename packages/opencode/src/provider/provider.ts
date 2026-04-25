@@ -932,6 +932,7 @@ export interface Interface {
     query: string[],
   ) => Effect.Effect<{ providerID: ProviderID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderID) => Effect.Effect<Model | undefined>
+  readonly getVisionModel: (model: Model) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }>
 }
 
@@ -1646,6 +1647,28 @@ const layer: Layer.Layer<
       return undefined
     })
 
+    const getVisionModel = Effect.fn("Provider.getVisionModel")(function* (current: Model) {
+      const cfg = yield* config.get()
+      if (cfg.vision_model) {
+        const parsed = parseModel(cfg.vision_model)
+        return yield* getModel(parsed.providerID, parsed.modelID)
+      }
+
+      const s = yield* InstanceState.get(state)
+
+      // Scan all providers for a vision-capable model, skipping the current model itself.
+      // Do NOT prefer the same provider — if the user has run out of credits on that
+      // provider, picking another model from it would fail for the same reason.
+      for (const [pid, prov] of Object.entries(s.providers)) {
+        for (const [modelID, model] of Object.entries(prov.models)) {
+          if (pid === current.providerID && modelID === current.id) continue
+          if (model.capabilities.input.image) return yield* getModel(ProviderID.make(pid), ModelID.make(modelID))
+        }
+      }
+
+      return undefined
+    })
+
     const defaultModel = Effect.fn("Provider.defaultModel")(function* () {
       const cfg = yield* config.get()
       if (cfg.model) return parseModel(cfg.model)
@@ -1680,7 +1703,7 @@ const layer: Layer.Layer<
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, getVisionModel, defaultModel })
   }),
 )
 
