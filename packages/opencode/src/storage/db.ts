@@ -86,7 +86,13 @@ export const Client = lazy(() => {
 
   const db = init(Path)
 
-  db.run("PRAGMA journal_mode = WAL")
+  // Set WAL mode with fallback to DELETE if WAL fails (e.g., corrupted WAL from crash)
+  try {
+    db.run("PRAGMA journal_mode = WAL")
+  } catch (err) {
+    log.warn("WAL mode failed, falling back to DELETE mode", { err })
+    db.run("PRAGMA journal_mode = DELETE")
+  }
   db.run("PRAGMA synchronous = NORMAL")
   db.run("PRAGMA busy_timeout = 5000")
   db.run("PRAGMA cache_size = -64000")
@@ -115,6 +121,12 @@ export const Client = lazy(() => {
 })
 
 export function close() {
+  // Checkpoint WAL before closing to prevent corruption if app crashes
+  try {
+    Client().run("PRAGMA wal_checkpoint(TRUNCATE)")
+  } catch {
+    // Ignore checkpoint errors on close
+  }
   Client().$client.close()
   Client.reset()
 }
