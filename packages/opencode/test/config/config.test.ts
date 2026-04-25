@@ -645,6 +645,33 @@ Test agent prompt`,
   })
 })
 
+test("agent markdown permission config preserves user key order", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".opencode", "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(agentDir, "ordered.md"),
+        `---
+permission:
+  bash: allow
+  "*": deny
+  edit: ask
+---
+Ordered permissions`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
+    },
+  })
+})
+
 test("loads agents from .opencode/agents (plural)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -1540,6 +1567,29 @@ test("permission config preserves user key order", async () => {
   })
 })
 
+test("Effect config parser preserves permission order while rejecting unknown top-level keys", () => {
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    {
+      permission: {
+        bash: "allow",
+        "*": "deny",
+        edit: "ask",
+      },
+    },
+    "test",
+  )
+
+  expect(Object.keys(config.permission!)).toEqual(["bash", "*", "edit"])
+  try {
+    ConfigParse.effectSchema(Config.Info, { invalid_field: true }, "test")
+    throw new Error("expected config parse to fail")
+  } catch (err) {
+    const error = err as { data?: { issues?: Array<{ code?: string; keys?: string[]; path?: string[] }> } }
+    expect(error.data?.issues?.[0]).toMatchObject({ code: "unrecognized_keys", keys: ["invalid_field"], path: [] })
+  }
+})
+
 // MCP config merging tests
 
 test("project config can override MCP server enabled status", async () => {
@@ -2222,8 +2272,8 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 // parseManagedPlist unit tests — pure function, no OS interaction
 
 test("parseManagedPlist strips MDM metadata keys", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2250,8 +2300,8 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
 })
 
 test("parseManagedPlist parses server settings", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2270,8 +2320,8 @@ test("parseManagedPlist parses server settings", async () => {
 })
 
 test("parseManagedPlist parses permission rules", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2300,8 +2350,8 @@ test("parseManagedPlist parses permission rules", async () => {
 })
 
 test("parseManagedPlist parses enabled_providers", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2317,8 +2367,8 @@ test("parseManagedPlist parses enabled_providers", async () => {
 })
 
 test("parseManagedPlist handles empty config", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(JSON.stringify({ $schema: "https://opencode.ai/config.json" })),
       "test:mobileconfig",

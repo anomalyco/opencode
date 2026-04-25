@@ -11,7 +11,7 @@ import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
-import { InstallationVersion } from "./installation/version"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
@@ -38,7 +38,7 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
-import { ensureProcessMetadata } from "./util/opencode-process"
+import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 
 const processMetadata = ensureProcessMetadata("main")
 

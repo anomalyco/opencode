@@ -11,10 +11,10 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Global } from "@opencode-ai/core/global"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
 import * as CrossSpawnSpawner from "../effect/cross-spawn-spawner"
-import { makeRuntime } from "../effect/runtime"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),

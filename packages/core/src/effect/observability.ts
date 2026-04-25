@@ -2,9 +2,9 @@ import { Effect, Layer, Logger } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
 import * as EffectLogger from "./logger"
-import { Flag } from "@/flag/flag"
-import { InstallationChannel, InstallationVersion } from "@/installation/version"
-import { ensureProcessMetadata } from "@/util/opencode-process"
+import { Flag } from "../flag/flag"
+import { InstallationChannel, InstallationVersion } from "../installation/version"
+import { ensureProcessMetadata } from "../util/opencode-process"
 
 const base = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
 export const enabled = !!base
@@ -76,7 +76,7 @@ const traces = async () => {
   // register(), so the global @opentelemetry/api context manager stays
   // as the no-op default. Non-Effect code (like the AI SDK) that calls
   // tracer.startActiveSpan() relies on context.active() to find the
-  // parent span — without a real context manager every span starts a
+  // parent span - without a real context manager every span starts a
   // new trace. Registering AsyncLocalStorageContextManager fixes this.
   const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks")
   const { context } = await import("@opentelemetry/api")

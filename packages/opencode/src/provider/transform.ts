@@ -5,7 +5,7 @@ import type { JSONSchema } from "zod/v4/core"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "./models"
 import { iife } from "@/util/iife"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
