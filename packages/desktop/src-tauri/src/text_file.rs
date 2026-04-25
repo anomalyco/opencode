@@ -57,3 +57,20 @@ pub fn write_text_file(
     // 返回写盘后的新 mtime(让前端更新 baseline)
     mtime_ms(&full)
 }
+
+const MAX_BINARY_READ_BYTES: u64 = 500 * 1024 * 1024;
+
+#[tauri::command]
+#[specta::specta]
+pub fn read_binary_file_base64(root: String, path: String) -> Result<String, String> {
+    use base64::Engine;
+    let full = resolve(&root, &path);
+    let metadata = std::fs::metadata(&full)
+        .map_err(|e| format!("stat failed: {}: {}", full.display(), e))?;
+    if metadata.len() > MAX_BINARY_READ_BYTES {
+        return Err(format!("file too large: {} > {} bytes", metadata.len(), MAX_BINARY_READ_BYTES));
+    }
+    let bytes = std::fs::read(&full)
+        .map_err(|e| format!("read failed: {}: {}", full.display(), e))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}

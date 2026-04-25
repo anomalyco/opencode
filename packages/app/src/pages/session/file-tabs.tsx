@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic, Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -30,6 +30,53 @@ function isMarkdownPath(p: string | undefined): boolean {
   if (!p) return false
   const lower = p.toLowerCase()
   return lower.endsWith(".md") || lower.endsWith(".markdown")
+}
+
+// audio 元素分支:纯音频容器
+const AUDIO_MIME_FALLBACKS: Record<string, string[]> = {
+  ".mp3": ["audio/mpeg"],
+  ".m4a": ["audio/mp4", "audio/x-m4a", "audio/aac"],
+  ".wav": ["audio/wav", "audio/wave", "audio/x-wav"],
+  ".ogg": ["audio/ogg"],
+  ".aac": ["audio/aac", "audio/mp4"],
+  ".flac": ["audio/flac", "audio/x-flac"],
+  ".opus": ["audio/opus", "audio/ogg"],
+}
+
+// video 元素分支
+const VIDEO_MIME_FALLBACKS: Record<string, string[]> = {
+  ".mp4": ["video/mp4"],
+  ".m4v": ["video/mp4"],
+  ".mov": ["video/quicktime", "video/mp4"],
+  ".webm": ["video/webm"],
+  ".mkv": ["video/x-matroska", "video/mp4"],
+  ".avi": ["video/x-msvideo", "video/avi"],
+}
+
+// WebView2 内置播放器解不出的扩展(实测:audio 元素和 video 元素都失败)。直接走"用系统播放器打开"兜底,跳过 base64 加载。
+const UNSUPPORTED_MEDIA_EXTS = new Set([".m4a"])
+
+function isUnsupportedMedia(p: string | undefined): boolean {
+  if (!p) return false
+  const lower = p.toLowerCase()
+  for (const ext of UNSUPPORTED_MEDIA_EXTS) {
+    if (lower.endsWith(ext)) return true
+  }
+  return false
+}
+
+type MediaKind = "audio" | "video"
+
+function mediaKindFromPath(p: string | undefined): { kind: MediaKind; mimes: string[] } | null {
+  if (!p) return null
+  const lower = p.toLowerCase()
+  for (const ext in VIDEO_MIME_FALLBACKS) {
+    if (lower.endsWith(ext)) return { kind: "video", mimes: VIDEO_MIME_FALLBACKS[ext] }
+  }
+  for (const ext in AUDIO_MIME_FALLBACKS) {
+    if (lower.endsWith(ext)) return { kind: "audio", mimes: AUDIO_MIME_FALLBACKS[ext] }
+  }
+  return null
 }
 
 function rangeAt(source: string, offset: number, len: number) {
@@ -686,8 +733,178 @@ export function FileTabContent(props: { tab: string }) {
     </div>
   )
 
+  // 媒体文件(audio + video):server 对 binary 扩展返 content="",走 Tauri command 直读本地成 base64
+  // 用 createSignal + createEffect 手动管理(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
+  // 转 Blob URL 而非 dataURL:元素 seek/decode 更稳定,大文件不卡 string 拼接
+  const mediaInput = createMemo<{ root: string; path: string; mimes: string[]; kind: MediaKind } | null>(() => {
+    const p = path()
+    if (!p) return null
+    const m = mediaKindFromPath(p)
+    if (!m) return null
+    const root = sdk.directory
+    if (!root) return null
+    return { root, path: p, mimes: m.mimes, kind: m.kind }
+  })
+
+  type MediaState = {
+    url: string | null
+    mimes: string[]
+    kind: MediaKind | null
+    error: string | null
+    loading: boolean
+  }
+  const [mediaState, setMediaState] = createSignal<MediaState>({
+    url: null,
+    mimes: [],
+    kind: null,
+    error: null,
+    loading: false,
+  })
+  let currentBlobUrl: string | null = null
+  const releaseMediaBlob = () => {
+    if (currentBlobUrl) {
+      URL.revokeObjectURL(currentBlobUrl)
+      currentBlobUrl = null
+    }
+  }
+
+  const base64ToBlob = (b64: string, mime: string): Blob => {
+    const bin = atob(b64)
+    const len = bin.length
+    const buf = new Uint8Array(len)
+    for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i)
+    return new Blob([buf], { type: mime })
+  }
+
+  createEffect(() => {
+    const input = mediaInput()
+    releaseMediaBlob()
+    if (!input) {
+      setMediaState({ url: null, mimes: [], kind: null, error: null, loading: false })
+      return
+    }
+    if (isUnsupportedMedia(input.path)) {
+      setMediaState({
+        url: null,
+        mimes: input.mimes,
+        kind: input.kind,
+        error: "此格式 WebView2 内置播放器无法解码,请用下方按钮调系统播放器",
+        loading: false,
+      })
+      return
+    }
+    setMediaState({ url: null, mimes: input.mimes, kind: input.kind, error: null, loading: true })
+    const requestedPath = input.path
+    invoke<string>("read_binary_file_base64", { root: input.root, path: input.path })
+      .then((b64) => {
+        // race 防护:切 tab 太快时,旧请求迟到则丢弃
+        if (mediaInput()?.path !== requestedPath) return
+        try {
+          // Blob.type 用第一个 mime,实际识别交给 <source type=> 列表
+          const blob = base64ToBlob(b64, input.mimes[0])
+          const url = URL.createObjectURL(blob)
+          currentBlobUrl = url
+          setMediaState({ url, mimes: input.mimes, kind: input.kind, error: null, loading: false })
+        } catch (e) {
+          setMediaState({
+            url: null,
+            mimes: input.mimes,
+            kind: input.kind,
+            error: `decode failed: ${String(e)}`,
+            loading: false,
+          })
+        }
+      })
+      .catch((e) => {
+        if (mediaInput()?.path !== requestedPath) return
+        setMediaState({
+          url: null,
+          mimes: input.mimes,
+          kind: input.kind,
+          error: String(e),
+          loading: false,
+        })
+      })
+  })
+
+  onCleanup(() => releaseMediaBlob())
+
+  const openMediaInSystemPlayer = async () => {
+    const root = sdk.directory
+    const p = path()
+    if (!root || !p) return
+    const absPath = `${root}/${p}`.replace(/\\/g, "/")
+    try {
+      await invoke("open_path", { path: absPath, appName: null })
+    } catch (e) {
+      showToast({ variant: "error", title: `打开失败: ${e}` })
+    }
+  }
+
+  const onMediaError = (e: { currentTarget: HTMLMediaElement }) => {
+    const err = e.currentTarget.error
+    const codeMap: Record<number, string> = {
+      1: "ABORTED",
+      2: "NETWORK",
+      3: "DECODE",
+      4: "SRC_NOT_SUPPORTED",
+    }
+    const detail = err
+      ? `code=${err.code} (${codeMap[err.code] ?? "UNKNOWN"}) msg="${err.message ?? ""}"`
+      : "unknown"
+    setMediaState((s) => ({ ...s, url: null, error: `解码失败: ${detail}` }))
+  }
+
+  const renderMedia = () => (
+    <div class="flex flex-col items-center justify-center px-6 py-8 gap-3">
+      <Show
+        when={mediaState().url}
+        fallback={
+          <div class="text-text-weak text-sm max-w-xl text-center break-words">
+            {mediaState().error
+              ? `加载失败:${mediaState().error}`
+              : mediaState().loading
+                ? `${mediaState().kind === "video" ? "视频" : "音频"}加载中…`
+                : "无内容"}
+          </div>
+        }
+      >
+        <Switch>
+          <Match when={mediaState().kind === "video"}>
+            <video
+              class="w-full max-w-3xl max-h-[60vh] bg-black"
+              controls
+              preload="metadata"
+              onError={onMediaError}
+            >
+              <For each={mediaState().mimes}>{(t) => <source src={mediaState().url!} type={t} />}</For>
+            </video>
+          </Match>
+          <Match when={mediaState().kind === "audio"}>
+            <audio class="w-full max-w-xl" controls preload="metadata" onError={onMediaError}>
+              <For each={mediaState().mimes}>{(t) => <source src={mediaState().url!} type={t} />}</For>
+            </audio>
+          </Match>
+        </Switch>
+      </Show>
+      <div class="text-xs text-text-weak truncate max-w-full" title={mediaState().mimes.join(", ")}>
+        {path()}
+      </div>
+      <button
+        type="button"
+        onClick={openMediaInSystemPlayer}
+        class="text-xs px-3 py-1.5 rounded border border-border-base hover:bg-surface-base-hover"
+        title="若内置播放器解不出(WebView2 codec 受限或文件用了不支持的编码),点这里用系统默认应用打开"
+      >
+        🔊 用系统播放器打开
+      </button>
+    </div>
+  )
+
   const renderFile = (source: string) => {
-    if (isMarkdownPath(path())) return renderMarkdown(source)
+    const p = path()
+    if (isMarkdownPath(p)) return renderMarkdown(source)
+    if (mediaKindFromPath(p)) return renderMedia()
     return (
       <div class="relative overflow-hidden pb-40" onContextMenu={handleSelectionContextMenu}>
         <Dynamic
