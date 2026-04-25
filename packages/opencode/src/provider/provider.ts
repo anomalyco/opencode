@@ -430,21 +430,34 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
-    "google-vertex": Effect.fnUntraced(function* (provider: Info) {
+    "google-vertex": Effect.fn("Provider.google-vertex")(function* (provider: Info) {
       const env = yield* dep.env()
       const project =
         provider.options?.project ?? env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
 
       const location = String(
         provider.options?.location ??
-          env["GOOGLE_VERTEX_LOCATION"] ??
-          env["GOOGLE_CLOUD_LOCATION"] ??
-          env["VERTEX_LOCATION"] ??
-          "us-central1",
+        env["GOOGLE_VERTEX_LOCATION"] ??
+        env["GOOGLE_CLOUD_LOCATION"] ??
+        env["VERTEX_LOCATION"] ??
+        "us-central1",
+      )
+
+      let authResult: { token: string; expiresAt: number } | null = null
+      const authPromise = Effect.tryPromise(async () => {
+        const { GoogleAuth } = await import("google-auth-library")
+        const auth = new GoogleAuth()
+        const client = await auth.getApplicationDefault()
+        const r = await client.credential.getAccessToken()
+        return { token: r.token ?? '', expiresAt: r.res?.data.expiry_date ?? 0 }
+      }).pipe(
+        Effect.mapError(() => new Error("auth failed")),
+        Effect.catch(() => Effect.succeed(null)),
       )
 
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
+
       return {
         autoload: true,
         vars(_options: Record<string, any>) {
@@ -459,14 +472,15 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           project,
           location,
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const { GoogleAuth } = await import("google-auth-library")
-            const auth = new GoogleAuth()
-            const client = await auth.getApplicationDefault()
-            const token = await client.credential.getAccessToken()
+            if (!authResult) {
+              authResult = await Effect.runPromise(authPromise)
+            }
+            if (!authResult?.token) {
+              throw new Error("Google Vertex AI auth failed: no valid access token")
+            }
 
             const headers = new Headers(init?.headers)
-            headers.set("Authorization", `Bearer ${token.token}`)
-
+            headers.set("Authorization", `Bearer ${authResult.token}`)
             return fetch(input, { ...init, headers })
           },
         },
@@ -607,9 +621,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               log.info("gitlab model discovery skipped: no models found", {
                 project: result.project
                   ? {
-                      id: result.project.id,
-                      path: result.project.pathWithNamespace,
-                    }
+                    id: result.project.id,
+                    path: result.project.pathWithNamespace,
+                  }
                   : null,
               })
               return {}
@@ -750,7 +764,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!apiToken) {
         throw new Error(
           "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+          "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
         )
       }
 
@@ -943,7 +957,7 @@ interface State {
   varsLoaders: Record<string, CustomVarsLoader>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") { }
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {
@@ -1032,11 +1046,11 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
         cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
         options: opts.provider?.body
           ? Object.fromEntries(
-              Object.entries(opts.provider.body).map(([k, v]) => [
-                k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
-                v,
-              ]),
-            )
+            Object.entries(opts.provider.body).map(([k, v]) => [
+              k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+              v,
+            ]),
+          )
           : base.options,
         headers: opts.provider?.headers ?? base.headers,
       }
@@ -1558,9 +1572,9 @@ const layer: Layer.Layer<
         try {
           const language = s.modelLoaders[model.providerID]
             ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
-                ...provider.options,
-                ...model.options,
-              })
+              ...provider.options,
+              ...model.options,
+            })
             : sdk.languageModel(model.api.id)
           s.models.set(key, language)
           return language
