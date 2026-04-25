@@ -72,10 +72,20 @@ export async function parse(filePath: string) {
 
   try {
     const md = matter(template)
+    // gray-matter may return md.data as a string instead of an object when YAML
+    // is malformed (e.g. "skill:true" without space after colon). Treat this as
+    // a parse failure so the fallback sanitizer gets a chance to fix it.
+    if (typeof md.data !== "object" || md.data === null || Array.isArray(md.data)) {
+      throw new Error("frontmatter parsed as non-object")
+    }
     return md
   } catch {
     try {
-      return matter(fallbackSanitization(template))
+      const fallback = matter(fallbackSanitization(template))
+      if (typeof fallback.data !== "object" || fallback.data === null || Array.isArray(fallback.data)) {
+        throw new Error("frontmatter parsed as non-object after sanitization")
+      }
+      return fallback
     } catch (err) {
       throw new FrontmatterError(
         {

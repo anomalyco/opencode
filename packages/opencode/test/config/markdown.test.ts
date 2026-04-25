@@ -211,6 +211,42 @@ Always structure your responses using clear markdown formatting:
   })
 })
 
+describe("ConfigMarkdown: frontmatter with invalid YAML throws FrontmatterError", () => {
+  test("should throw FrontmatterError for unfixable invalid YAML", async () => {
+    try {
+      await ConfigMarkdown.parse(import.meta.dir + "/fixtures/invalid-yaml-frontmatter.md")
+      // should not reach here
+      expect(true).toBe(false)
+    } catch (err) {
+      expect(ConfigMarkdown.FrontmatterError.isInstance(err)).toBe(true)
+    }
+  })
+
+  test("should throw for frontmatter that parses as a non-object type", async () => {
+    // gray-matter can return numbers, booleans, arrays, or strings for
+    // certain malformed YAML.  All of these should be caught.
+    const cases = [
+      "---\n42\n---\ncontent",          // number
+      "---\ntrue\n---\ncontent",        // boolean
+      "---\n- item\n---\ncontent",      // array
+      "---\njust text\n---\ncontent",   // string
+    ]
+    for (const input of cases) {
+      const tmp = import.meta.dir + "/fixtures/_temp_nonobject.md"
+      const { writeFileSync, unlinkSync } = await import("fs")
+      writeFileSync(tmp, input)
+      try {
+        await ConfigMarkdown.parse(tmp)
+        expect(`should have thrown for: ${input}`).toBe("")
+      } catch (err) {
+        expect(ConfigMarkdown.FrontmatterError.isInstance(err)).toBe(true)
+      } finally {
+        try { unlinkSync(tmp) } catch {}
+      }
+    }
+  })
+})
+
 describe("ConfigMarkdown: frontmatter has weird model id", async () => {
   const result = await ConfigMarkdown.parse(import.meta.dir + "/fixtures/weird-model-id.md")
 
