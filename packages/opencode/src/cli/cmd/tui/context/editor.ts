@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
+import { Database } from "bun:sqlite"
 import os from "node:os"
 import path from "node:path"
 import { onCleanup, onMount } from "solid-js"
@@ -70,6 +71,15 @@ type EditorLockFile = {
   mtimeMs: number
 }
 
+type ZedEditorRow = {
+  workspace_paths: string | null
+  timestamp: string
+  buffer_path: string | null
+  contents: string | null
+  selection_start: number | null
+  selection_end: number | null
+}
+
 export const { use: useEditorContext, provider: EditorContextProvider } = createSimpleContext({
   name: "EditorContext",
   init: () => {
@@ -114,7 +124,21 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
         const connection = resolveEditorConnection()
         if (!connection) {
-          setStore("status", "disabled")
+          if (!resolveZedDbPath()) {
+            setStore("status", "disabled")
+            scheduleReconnect(1000)
+            return
+          }
+          void resolveZedSelection()
+            .then((selection) => {
+              if (closed || socket) return
+              setStore("selection", selection)
+              setStore("status", selection ? "connected" : "disabled")
+            })
+            .catch(() => {
+              if (closed || socket) return
+              setStore("status", "disabled")
+            })
           scheduleReconnect(1000)
           return
         }
@@ -196,7 +220,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection())
+        return Boolean(resolveEditorConnection() || resolveZedDbPath())
       },
       connected() {
         return store.status === "connected"
@@ -238,6 +262,100 @@ function resolveEditorConnection(): EditorConnection | undefined {
   return {
     url: `ws://127.0.0.1:${port}`,
     source: `env:${port}`,
+  }
+}
+
+async function resolveZedSelection() {
+  const dbPath = resolveZedDbPath()
+  if (!dbPath) return
+
+  const row = queryZedActiveEditor(dbPath, process.cwd())
+  if (!row?.buffer_path || row.selection_start == null || row.selection_end == null) return
+
+  const text =
+    row.contents ??
+    (await Bun.file(row.buffer_path)
+      .text()
+      .catch(() => undefined))
+  if (text == null) return
+
+  const start = offsetToPosition(text, Math.min(row.selection_start, row.selection_end))
+  const end = offsetToPosition(text, Math.max(row.selection_start, row.selection_end))
+
+  return {
+    text: text.slice(
+      Math.min(row.selection_start, row.selection_end),
+      Math.max(row.selection_start, row.selection_end),
+    ),
+    filePath: row.buffer_path,
+    selection: { start, end },
+  }
+}
+
+function queryZedActiveEditor(dbPath: string, cwd: string) {
+  let db: Database | undefined
+  try {
+    db = new Database(dbPath, { readonly: true })
+    return db
+      .query(
+        `select
+          w.paths as workspace_paths,
+          w.timestamp as timestamp,
+          e.buffer_path as buffer_path,
+          e.contents as contents,
+          s.start as selection_start,
+          s.end as selection_end
+        from items i
+        join panes p on p.pane_id = i.pane_id and p.workspace_id = i.workspace_id
+        join workspaces w on w.workspace_id = i.workspace_id
+        join editors e on e.item_id = i.item_id and e.workspace_id = i.workspace_id
+        left join editor_selections s on s.editor_id = e.item_id and s.workspace_id = e.workspace_id
+        where i.active = 1 and p.active = 1 and i.kind = 'Editor' and e.buffer_path is not null
+        order by w.timestamp desc`,
+      )
+      .all()
+      .filter(isZedEditorRow)
+      .map((row) => ({ row, score: scoreZedWorkspace(row.workspace_paths, cwd) }))
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score || right.row.timestamp.localeCompare(left.row.timestamp))[0]?.row
+  } catch {
+    return
+  } finally {
+    db?.close()
+  }
+}
+
+function resolveZedDbPath() {
+  const candidates = [
+    process.env.OPENCODE_ZED_DB,
+    path.join(os.homedir(), "Library", "Application Support", "Zed", "db", "0-stable", "db.sqlite"),
+    path.join(os.homedir(), ".local", "share", "zed", "db", "0-stable", "db.sqlite"),
+  ].filter((item): item is string => Boolean(item))
+
+  return candidates.find((item) => statSafe(item)?.isFile())
+}
+
+function scoreZedWorkspace(workspacePaths: string | null, cwd: string) {
+  return zedWorkspacePaths(workspacePaths).reduce((score, item) => {
+    if (pathContains(item, cwd)) return Math.max(score, 2)
+    if (pathContains(cwd, item)) return Math.max(score, 1)
+    return score
+  }, 0)
+}
+
+function zedWorkspacePaths(value: string | null) {
+  if (!value) return []
+  const parsed = parseJson(value)
+  if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === "string")
+  return value.split(/\r?\n/).filter(Boolean)
+}
+
+export function offsetToPosition(text: string, offset: number) {
+  const before = text.slice(0, Math.max(0, Math.min(offset, text.length)))
+  const lineStart = before.lastIndexOf("\n")
+  return {
+    line: before.split("\n").length,
+    character: lineStart === -1 ? before.length + 1 : before.length - lineStart,
   }
 }
 
@@ -284,6 +402,14 @@ function readEditorLockFile(filePath: string): EditorLockFile | undefined {
   }
 }
 
+function statSafe(filePath: string) {
+  try {
+    return statSync(filePath)
+  } catch {
+    return
+  }
+}
+
 function scoreEditorLock(lock: EditorLockFile, cwd: string) {
   const workspaceMatch = lock.workspaceFolders.some((folder) => pathContains(folder, cwd)) ? 1 : 0
   return workspaceMatch * 1_000_000_000_000 + lock.mtimeMs
@@ -312,6 +438,26 @@ function parseMessage(value: unknown) {
   } catch {
     return
   }
+}
+
+function parseJson(value: string) {
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return
+  }
+}
+
+function isZedEditorRow(value: unknown): value is ZedEditorRow {
+  if (!isRecord(value)) return false
+  return (
+    (typeof value.workspace_paths === "string" || value.workspace_paths === null) &&
+    typeof value.timestamp === "string" &&
+    (typeof value.buffer_path === "string" || value.buffer_path === null) &&
+    (typeof value.contents === "string" || value.contents === null) &&
+    (typeof value.selection_start === "number" || value.selection_start === null) &&
+    (typeof value.selection_end === "number" || value.selection_end === null)
+  )
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
