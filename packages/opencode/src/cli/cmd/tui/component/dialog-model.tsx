@@ -16,7 +16,7 @@ export function useConnected() {
   )
 }
 
-export function DialogModel(props: { providerID?: string }) {
+export function DialogModel(props: { providerID?: string; assignToAgent?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
@@ -133,12 +133,18 @@ export function DialogModel(props: { providerID?: string }) {
   )
 
   const title = createMemo(() => {
+    if (props.assignToAgent) return `Select model for ${props.assignToAgent}`
     const value = provider()
     if (!value) return "Select model"
     return value.name
   })
 
   function onSelect(providerID: string, modelID: string) {
+    if (props.assignToAgent) {
+      local.model.setForAgent(props.assignToAgent, { providerID, modelID })
+      dialog.clear()
+      return
+    }
     local.model.set({ providerID, modelID }, { recent: true })
     const list = local.model.variant.list()
     const cur = local.model.variant.selected()

@@ -12,6 +12,7 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util"
+import { modify, applyEdits } from "jsonc-parser"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -58,6 +59,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.info,
       ])
       return {
+        allVisible() {
+          return visibleAgents().filter((x) => !["explore", "general", "translator"].includes(x.name))
+        },
         list() {
           return agents()
         },
@@ -142,6 +146,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          model: modelStore.model,
         })
       }
 
@@ -150,6 +155,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+          if (typeof x.model === "object" && x.model !== null) setModelStore("model", x.model)
         })
         .catch(() => {})
         .finally(() => {
@@ -236,6 +242,50 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
+        async setForAgent(agentName: string, model: { providerID: string; modelID: string }) {
+          if (!isModelValid(model)) {
+            toast.show({
+              message: `Model ${model.providerID}/${model.modelID} is not valid`,
+              variant: "warning",
+              duration: 3000,
+            })
+            return
+          }
+          const configPath = path.join(Global.Path.config, "opencode.json")
+          const configPathC = path.join(Global.Path.config, "opencode.jsonc")
+          let file: string
+          try {
+            file = await Bun.file(configPath).text()
+          } catch {
+            try {
+              file = await Bun.file(configPathC).text()
+            } catch {
+              file = "{}"
+            }
+          }
+          const isJsonc = file !== "{}" ? file.includes("//") || file.includes("/*") : false
+          const edits = modify(
+            file,
+            ["agent", agentName, "model"],
+            `${model.providerID}/${model.modelID}`,
+            {
+              formattingOptions: {
+                insertSpaces: true,
+                tabSize: 2,
+              },
+            },
+          )
+          const updated = applyEdits(file, edits)
+          const targetPath = isJsonc ? configPathC : configPath
+          await Bun.write(targetPath, updated)
+          setModelStore("model", agentName, model)
+          save()
+          toast.show({
+            message: `Model for ${agentName} set to ${model.providerID}/${model.modelID}`,
+            variant: "success",
+            duration: 2000,
+          })
+        },
         cycle(direction: 1 | -1) {
           const current = currentModel()
           if (!current) return
