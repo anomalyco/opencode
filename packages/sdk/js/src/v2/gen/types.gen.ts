@@ -1255,9 +1255,29 @@ export type AgentConfig = {
     [key: string]: unknown
   }
   /**
-   * Hex color code (e.g., #FF5733) or theme color (e.g., primary)
+   * Hex color code (e.g., #FF5733), theme color (e.g., primary), or common named color (e.g., blue)
    */
-  color?: string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
+  color?:
+    | string
+    | "primary"
+    | "secondary"
+    | "accent"
+    | "success"
+    | "warning"
+    | "error"
+    | "info"
+    | "black"
+    | "white"
+    | "red"
+    | "orange"
+    | "yellow"
+    | "green"
+    | "blue"
+    | "purple"
+    | "pink"
+    | "cyan"
+    | "gray"
+    | "grey"
   /**
    * Maximum number of agentic iterations before forcing text-only response
    */
@@ -1289,6 +1309,18 @@ export type AgentConfig = {
     | "warning"
     | "error"
     | "info"
+    | "black"
+    | "white"
+    | "red"
+    | "orange"
+    | "yellow"
+    | "green"
+    | "blue"
+    | "purple"
+    | "pink"
+    | "cyan"
+    | "gray"
+    | "grey"
     | number
     | PermissionConfig
     | undefined

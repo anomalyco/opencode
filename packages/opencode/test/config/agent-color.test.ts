@@ -22,6 +22,7 @@ test("agent color parsed from project config", async () => {
           agent: {
             build: { color: "#FFA500" },
             plan: { color: "primary" },
+            general: { color: "blue" },
           },
         }),
       )
@@ -33,6 +34,7 @@ test("agent color parsed from project config", async () => {
       const cfg = await load()
       expect(cfg.agent?.["build"]?.color).toBe("#FFA500")
       expect(cfg.agent?.["plan"]?.color).toBe("primary")
+      expect(cfg.agent?.["general"]?.color).toBe("blue")
     },
   })
 })
