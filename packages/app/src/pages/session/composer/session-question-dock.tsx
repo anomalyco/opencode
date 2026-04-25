@@ -124,8 +124,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const dock = root.closest('[data-component="session-prompt-dock"]')
     if (!(dock instanceof HTMLElement)) return
 
-    const header = document.querySelector("[data-session-title]")
-    const scroller = document.querySelector(".scroll-view__viewport")
+    const panel = dock.parentElement
+    if (!(panel instanceof HTMLElement)) return
+
+    const header = panel.querySelector("[data-session-title]")
+    const scroller = panel.querySelector(".scroll-view__viewport")
     const top =
       header instanceof HTMLElement
         ? header.getBoundingClientRect().bottom
@@ -178,8 +181,16 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     makeEventListener(window, "resize", update)
 
     const dock = root?.closest('[data-component="session-prompt-dock"]')
-    const scroller = document.querySelector(".scroll-view__viewport")
-    createResizeObserver([dock, scroller], update)
+    const panel = dock?.parentElement
+    createResizeObserver(
+      [
+        dock,
+        panel,
+        panel instanceof HTMLElement ? panel.querySelector(".scroll-view__viewport") : undefined,
+        panel instanceof HTMLElement ? panel.querySelector("[data-session-title]") : undefined,
+      ],
+      update,
+    )
 
     onCleanup(() => {
       if (raf !== undefined) cancelAnimationFrame(raf)
