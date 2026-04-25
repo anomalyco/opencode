@@ -712,7 +712,7 @@ function providerMeta(metadata: Record<string, any> | undefined) {
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: { stripMedia?: boolean; stripPlanModeReminders?: boolean; toolOutputMaxChars?: number },
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
@@ -771,6 +771,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     return { type: "json", value: output as never }
   }
 
+  const skipText = (part: TextPart) => {
+    if (part.ignored) return true
+    if (!options?.stripPlanModeReminders) return false
+    if (!part.synthetic) return false
+    return part.text.includes("Plan mode is active") || part.text.includes("Plan mode ACTIVE")
+  }
+
   for (const msg of input) {
     if (msg.parts.length === 0) continue
 
@@ -782,7 +789,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       }
       result.push(userMessage)
       for (const part of msg.parts) {
-        if (part.type === "text" && !part.ignored)
+        if (part.type === "text" && !skipText(part))
           userMessage.parts.push({
             type: "text",
             text: part.text,
@@ -969,7 +976,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 export function toModelMessages(
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: { stripMedia?: boolean; stripPlanModeReminders?: boolean; toolOutputMaxChars?: number },
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
 }

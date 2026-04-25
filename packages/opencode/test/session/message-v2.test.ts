@@ -195,6 +195,47 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("can strip stale synthetic plan mode reminders", async () => {
+    const messageID = "m-user"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "text",
+            text: "<system-reminder>\nPlan mode is active. Do not edit files.\n</system-reminder>",
+            synthetic: true,
+          },
+          {
+            ...basePart(messageID, "p2"),
+            type: "text",
+            text: "<system-reminder>\nYour operational mode has changed from plan to build.\n</system-reminder>",
+            synthetic: true,
+          },
+          {
+            ...basePart(messageID, "p3"),
+            type: "text",
+            text: "Please implement the plan.",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model, { stripPlanModeReminders: true })).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "<system-reminder>\nYour operational mode has changed from plan to build.\n</system-reminder>",
+          },
+          { type: "text", text: "Please implement the plan." },
+        ],
+      },
+    ])
+  })
+
   test("converts user text/file parts and injects compaction/subtask prompts", async () => {
     const messageID = "m-user"
 
