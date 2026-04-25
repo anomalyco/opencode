@@ -35,6 +35,20 @@ export const commands = {
 } | null>("get_openclaw_server"),
 	testOpenclawServer: (config: OpenclawConfig) => __TAURI_INVOKE<OpenclawTestResult>("test_openclaw_server", { config }),
 	abortOpenclawTest: () => __TAURI_INVOKE<boolean>("abort_openclaw_test"),
+	syncGenericagentServer: () => __TAURI_INVOKE<{
+	url: string,
+	username: string | null,
+	password: string | null,
+} | null>("sync_genericagent_server"),
+	getGenericagentConfig: () => __TAURI_INVOKE<GenericagentConfig>("get_genericagent_config"),
+	setGenericagentConfig: (config: GenericagentConfig) => __TAURI_INVOKE<null>("set_genericagent_config", { config }),
+	getGenericagentServer: () => __TAURI_INVOKE<{
+	url: string,
+	username: string | null,
+	password: string | null,
+} | null>("get_genericagent_server"),
+	testGenericagentServer: (config: GenericagentConfig) => __TAURI_INVOKE<GenericagentTestResult>("test_genericagent_server", { config }),
+	abortGenericagentTest: () => __TAURI_INVOKE<boolean>("abort_genericagent_test"),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	filterDirectories: (paths: string[]) => __TAURI_INVOKE<string[]>("filter_directories", { paths }),
@@ -90,6 +104,17 @@ export type ConfigWorkspaceFile = {
 		name: string,
 		path: string,
 		kind: string,
+	};
+
+export type GenericagentConfig = {
+		enabled: boolean,
+		pythonExecutable: string | null,
+		genericAgentDir: string | null,
+	};
+
+export type GenericagentTestResult = {
+		ok: boolean,
+		logs: string[],
 	};
 
 export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" } | { phase: "failed"; detail: string };

@@ -88,6 +88,13 @@ struct OpenclawTestResult {
 }
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct GenericagentTestResult {
+    ok: bool,
+    logs: Vec<String>,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
 #[serde(tag = "phase", rename_all = "snake_case")]
 enum InitStep {
     ServerWaiting,
@@ -146,6 +153,13 @@ struct OpenclawState {
     child: Arc<Mutex<Option<CommandChild>>>,
     data: Arc<Mutex<Option<ServerReadyData>>>,
     config: Arc<Mutex<Option<server::OpenclawConfig>>>,
+    test: Arc<Mutex<Option<CommandChild>>>,
+}
+
+struct GenericagentState {
+    child: Arc<Mutex<Option<CommandChild>>>,
+    data: Arc<Mutex<Option<ServerReadyData>>>,
+    config: Arc<Mutex<Option<server::GenericagentConfig>>>,
     test: Arc<Mutex<Option<CommandChild>>>,
 }
 
@@ -591,10 +605,50 @@ fn kill_openclaw_test(app: &AppHandle) -> bool {
     false
 }
 
+fn kill_genericagent(app: &AppHandle) {
+    let Some(state) = app.try_state::<GenericagentState>() else {
+        tracing::info!("GenericAgent adapter not running");
+        return;
+    };
+
+    if let Ok(mut child) = state.child.lock()
+        && let Some(child) = child.take()
+    {
+        let _ = child.kill();
+        tracing::info!("Killed GenericAgent adapter");
+    }
+
+    if let Ok(mut data) = state.data.lock() {
+        *data = None;
+    }
+
+    if let Ok(mut cfg) = state.config.lock() {
+        *cfg = None;
+    }
+}
+
+fn kill_genericagent_test(app: &AppHandle) -> bool {
+    let Some(state) = app.try_state::<GenericagentState>() else {
+        tracing::info!("GenericAgent test adapter not running");
+        return false;
+    };
+
+    if let Ok(mut child) = state.test.lock()
+        && let Some(child) = child.take()
+    {
+        let _ = child.kill();
+        tracing::info!("Killed GenericAgent test adapter");
+        return true;
+    }
+
+    false
+}
+
 #[tauri::command]
 #[specta::specta]
 fn kill_sidecar(app: AppHandle) {
     kill_openclaw(&app);
+    kill_genericagent(&app);
 
     let Some(server_state) = app.try_state::<ServerState>() else {
         tracing::info!("Server not running");
@@ -898,6 +952,274 @@ async fn test_openclaw_server(
 #[specta::specta]
 fn abort_openclaw_test(app: AppHandle) -> bool {
     kill_openclaw_test(&app)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn sync_genericagent_server(app: AppHandle) -> Result<Option<ServerReadyData>, String> {
+    let cfg = server::get_genericagent_config(app.clone())?;
+    let Some(state) = app.try_state::<GenericagentState>() else {
+        return Ok(None);
+    };
+
+    let dir_present = cfg
+        .generic_agent_dir
+        .as_deref()
+        .is_some_and(|x| !x.trim().is_empty());
+
+    if !cfg.enabled || !dir_present {
+        tracing::info!(
+            enabled = cfg.enabled,
+            has_dir = dir_present,
+            "stopping GenericAgent adapter"
+        );
+        kill_genericagent(&app);
+        return Ok(None);
+    }
+
+    let current_cfg = state
+        .config
+        .lock()
+        .map_err(|_| "Failed to acquire genericagent config state".to_string())?
+        .clone();
+    let current = state
+        .data
+        .lock()
+        .map_err(|_| "Failed to acquire genericagent state".to_string())?
+        .clone();
+    let running = state
+        .child
+        .lock()
+        .map_err(|_| "Failed to acquire genericagent child state".to_string())?
+        .is_some();
+
+    if current_cfg.as_ref() == Some(&cfg) && running {
+        tracing::info!(
+            url = ?current.as_ref().map(|x| x.url.clone()),
+            "reusing GenericAgent adapter"
+        );
+        return Ok(current);
+    }
+
+    tracing::info!(cfg = ?cfg, "syncing GenericAgent adapter");
+    kill_genericagent(&app);
+
+    let generic_agent_dir = cfg
+        .generic_agent_dir
+        .clone()
+        .filter(|x| !x.trim().is_empty())
+        .ok_or_else(|| "GenericAgent directory is required".to_string())?;
+    let python = cfg
+        .python_executable
+        .clone()
+        .filter(|x| !x.trim().is_empty());
+    let port = get_genericagent_port();
+    let hostname = "127.0.0.1".to_string();
+    let password = uuid::Uuid::new_v4().to_string();
+    let http = format!("http://{hostname}:{port}");
+
+    let (child, health_check) = crate::cli::serve_genericagent(
+        &app,
+        &hostname,
+        port,
+        &password,
+        python.as_deref(),
+        &generic_agent_dir,
+    );
+
+    let data = ServerReadyData {
+        url: http,
+        username: Some("opencode".to_string()),
+        password: Some(password),
+    };
+
+    {
+        let mut handle = state
+            .child
+            .lock()
+            .map_err(|_| "Failed to acquire genericagent child state".to_string())?;
+        *handle = Some(child);
+    }
+
+    {
+        let mut current = state
+            .data
+            .lock()
+            .map_err(|_| "Failed to acquire genericagent state".to_string())?;
+        *current = Some(data.clone());
+    }
+
+    {
+        let mut current = state
+            .config
+            .lock()
+            .map_err(|_| "Failed to acquire genericagent config state".to_string())?;
+        *current = Some(cfg);
+    }
+
+    let handle = app.clone();
+    let url = data.url.clone();
+    tauri::async_runtime::spawn(async move {
+        match health_check.await {
+            Ok(payload) => {
+                tracing::warn!(payload = ?payload, url, "GenericAgent adapter exited");
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, url, "GenericAgent adapter exit watch failed");
+            }
+        }
+
+        let Some(state) = handle.try_state::<GenericagentState>() else {
+            return;
+        };
+        let same = state
+            .data
+            .lock()
+            .ok()
+            .and_then(|current| current.clone())
+            .is_some_and(|current| current.url == url);
+        if !same {
+            return;
+        }
+
+        if let Ok(mut child) = state.child.lock() {
+            *child = None;
+        }
+        if let Ok(mut data) = state.data.lock() {
+            *data = None;
+        }
+        if let Ok(mut cfg) = state.config.lock() {
+            *cfg = None;
+        }
+    });
+
+    Ok(Some(data))
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn get_genericagent_server(app: AppHandle) -> Result<Option<ServerReadyData>, String> {
+    sync_genericagent_server(app).await
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn test_genericagent_server(
+    app: AppHandle,
+    config: server::GenericagentConfig,
+) -> Result<GenericagentTestResult, String> {
+    let _ = kill_genericagent_test(&app);
+    let mut logs = vec!["Starting GenericAgent connection test".to_string()];
+    if !config.enabled {
+        return Ok(GenericagentTestResult {
+            ok: false,
+            logs: vec![
+                "Starting GenericAgent connection test".to_string(),
+                "Config check failed: GenericAgent is disabled".to_string(),
+            ],
+        });
+    }
+
+    let Some(dir) = config
+        .generic_agent_dir
+        .clone()
+        .filter(|x| !x.trim().is_empty())
+    else {
+        return Ok(GenericagentTestResult {
+            ok: false,
+            logs: vec![
+                "Starting GenericAgent connection test".to_string(),
+                "Config check failed: GenericAgent directory is required".to_string(),
+            ],
+        });
+    };
+    logs.push(format!("GenericAgent directory: {dir}"));
+    let python = config
+        .python_executable
+        .clone()
+        .filter(|x| !x.trim().is_empty());
+    logs.push(format!(
+        "Python executable: {}",
+        python.clone().unwrap_or_else(|| "python3 (default)".to_string())
+    ));
+    let port = get_genericagent_port();
+    let hostname = "127.0.0.1".to_string();
+    let password = uuid::Uuid::new_v4().to_string();
+    let http = format!("http://{hostname}:{port}");
+    logs.push(format!("Allocating temporary adapter on {http}"));
+    let (child, health_check) = crate::cli::serve_genericagent(
+        &app,
+        &hostname,
+        port,
+        &password,
+        python.as_deref(),
+        &dir,
+    );
+    logs.push("Temporary adapter spawned".to_string());
+
+    if let Some(state) = app.try_state::<GenericagentState>()
+        && let Ok(mut test) = state.test.lock()
+    {
+        *test = Some(child.clone());
+    }
+
+    let ready = async {
+        let started = Instant::now();
+        loop {
+            sleep(Duration::from_millis(100)).await;
+            if server::check_health(&http, Some(&password)).await {
+                tracing::info!(
+                    elapsed = ?started.elapsed(),
+                    url = %http,
+                    "GenericAgent test adapter ready"
+                );
+                return Ok(started.elapsed());
+            }
+        }
+    };
+
+    let terminated = async {
+        match health_check.await {
+            Ok(payload) => Err(format!(
+                "GenericAgent adapter terminated before becoming healthy (code={:?} signal={:?})",
+                payload.code, payload.signal
+            )),
+            Err(err) => Err(format!("GenericAgent adapter exit watch failed: {err}")),
+        }
+    };
+
+    let result = timeout(Duration::from_secs(20), async {
+        tokio::select! {
+            res = ready => res,
+            res = terminated => res,
+        }
+    })
+    .await;
+
+    let _ = child.kill();
+    let _ = kill_genericagent_test(&app);
+    logs.push("Temporary adapter stopped".to_string());
+
+    match result {
+        Ok(Ok(elapsed)) => {
+            logs.push(format!("Health check passed in {} ms", elapsed.as_millis()));
+            Ok(GenericagentTestResult { ok: true, logs })
+        }
+        Ok(Err(err)) => {
+            logs.push(format!("Health check failed: {err}"));
+            Ok(GenericagentTestResult { ok: false, logs })
+        }
+        Err(_) => {
+            logs.push("Health check timed out after 20000 ms".to_string());
+            Ok(GenericagentTestResult { ok: false, logs })
+        }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+fn abort_genericagent_test(app: AppHandle) -> bool {
+    kill_genericagent_test(&app)
 }
 
 #[tauri::command]
@@ -1494,6 +1816,12 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_openclaw_server,
             test_openclaw_server,
             abort_openclaw_test,
+            sync_genericagent_server,
+            server::get_genericagent_config,
+            server::set_genericagent_config,
+            get_genericagent_server,
+            test_genericagent_server,
+            abort_genericagent_test,
             markdown::parse_markdown_command,
             check_app_exists,
             filter_directories,
@@ -1746,6 +2074,12 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
         config: Arc::new(Mutex::new(None)),
         test: Arc::new(Mutex::new(None)),
     });
+    app.manage(GenericagentState {
+        child: Arc::new(Mutex::new(None)),
+        data: Arc::new(Mutex::new(None)),
+        config: Arc::new(Mutex::new(None)),
+        test: Arc::new(Mutex::new(None)),
+    });
 }
 
 fn spawn_cli_sync_task(app: AppHandle) {
@@ -1789,6 +2123,20 @@ fn get_openclaw_port() -> u32 {
                 .expect("Failed to bind to find free OpenClaw port")
                 .local_addr()
                 .expect("Failed to get local OpenClaw address")
+                .port()
+        }) as u32
+}
+
+fn get_genericagent_port() -> u32 {
+    option_env!("OPENCODE_GENERICAGENT_PORT")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("OPENCODE_GENERICAGENT_PORT").ok())
+        .and_then(|port_str| port_str.parse().ok())
+        .unwrap_or_else(|| {
+            TcpListener::bind("127.0.0.1:0")
+                .expect("Failed to bind to find free GenericAgent port")
+                .local_addr()
+                .expect("Failed to get local GenericAgent address")
                 .port()
         }) as u32
 }

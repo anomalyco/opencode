@@ -17,6 +17,8 @@ export type ExtraAgentCapabilities = {
     agent: string
     model: { providerID: string; modelID: string }
   }
+  hideAgent?: boolean
+  hideVariant?: boolean
   errorMatchers?: ReadonlyArray<ExtraAgentErrorMatcher>
 }
 
@@ -174,8 +176,12 @@ export const extraAgents: readonly ExtraAgentDescriptor[] = [
     sessionListFailedTitleKey: "toast.session.listFailed.genericagent.title",
     fileListEmptyKey: "toast.file.listFailed.genericagent",
     directory: "/genericagent",
-    configSection: "agents",
-    configPick: "agent:genericagent",
+    configSection: "claws",
+    configPick: "claw:genericagent",
+    capabilities: {
+      hideAgent: true,
+      hideVariant: true,
+    },
   },
 ]
 

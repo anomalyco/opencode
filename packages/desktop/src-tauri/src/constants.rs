@@ -8,6 +8,9 @@ pub const WSL_ENABLED_KEY: &str = "wslEnabled";
 pub const OPENCLAW_URL_KEY: &str = "openclawUrl";
 pub const OPENCLAW_TOKEN_KEY: &str = "openclawToken";
 pub const OPENCLAW_ENABLED_KEY: &str = "openclawEnabled";
+pub const GENERICAGENT_ENABLED_KEY: &str = "genericagentEnabled";
+pub const GENERICAGENT_PYTHON_KEY: &str = "genericagentPython";
+pub const GENERICAGENT_DIR_KEY: &str = "genericagentDir";
 pub const UPDATER_ENABLED: bool = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
 pub fn window_state_flags() -> StateFlags {

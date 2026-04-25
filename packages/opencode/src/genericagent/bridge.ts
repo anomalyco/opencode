@@ -2,16 +2,21 @@ import { Hono } from "hono"
 import { streamSSE } from "hono/streaming"
 import { cors } from "hono/cors"
 import { basicAuth } from "hono/basic-auth"
+import fs from "node:fs/promises"
+import path from "node:path"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
 import { NamedError } from "@opencode-ai/util/error"
+import shimSource from "./python/bridge_shim.py" with { type: "text" }
 
 type Opts = {
   hostname: string
   port: number
   cors?: string[]
+  pythonExecutable?: string
+  genericAgentDir?: string
 }
 
 const log = Log.create({ service: "genericagent" })
@@ -24,10 +29,461 @@ const version = Installation.VERSION
 const fileUnsupported =
   "GenericAgent does not expose a project filesystem yet. Use a normal project to browse files, or keep chatting in GenericAgent without the file tree."
 
-const pendingMessage =
-  "GenericAgent Python runtime is not wired yet (Phase 6). Your message was received but will not be processed."
+const DEFAULT_GA_DIR = "/Users/lelouch/apps/GenericAgent"
+const DEFAULT_PYTHON = "python3"
 
-function welcomeSession() {
+let shimScriptCache: Promise<string> | undefined
+async function materializeShimScript(): Promise<string> {
+  if (!shimScriptCache) {
+    shimScriptCache = (async () => {
+      const hasher = new Bun.CryptoHasher("sha1")
+      hasher.update(shimSource)
+      const hash = hasher.digest("hex").slice(0, 16)
+      const dir = path.join(Global.Path.cache, "genericagent")
+      const file = path.join(dir, `bridge_shim.${hash}.py`)
+      await fs.mkdir(dir, { recursive: true })
+      try {
+        await fs.access(file)
+      } catch {
+        await fs.writeFile(file, shimSource, { encoding: "utf8", mode: 0o644 })
+      }
+      log.info("shim materialized", { file })
+      return file
+    })().catch((err) => {
+      shimScriptCache = undefined
+      throw err
+    })
+  }
+  return shimScriptCache
+}
+
+type SessionInfo = {
+  id: string
+  slug: string
+  projectID: string
+  directory: string
+  title: string
+  version: string
+  time: { created: number; updated: number }
+}
+
+type TextPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "text"
+  text: string
+}
+
+type MessageInfo = {
+  id: string
+  sessionID: string
+  role: "user" | "assistant"
+  time: { created: number; completed?: number }
+  agent: string
+  parentID?: string
+  providerID: string
+  modelID: string
+  mode: string
+  path: { cwd: string; root: string }
+  cost: number
+  tokens: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
+}
+
+type Message = {
+  info: MessageInfo
+  parts: TextPart[]
+}
+
+type Event = { directory: string; payload: { type: string; properties: Record<string, unknown> } }
+
+function llmModelID(index: number): string {
+  return `llm_${index}`
+}
+
+function parseLlmIndex(id: string | undefined): number | undefined {
+  if (!id) return undefined
+  const m = /^llm_(\d+)$/.exec(id)
+  return m ? Number.parseInt(m[1], 10) : undefined
+}
+
+function modelDescriptor(id: string, name: string) {
+  return {
+    id,
+    name,
+    release_date: "",
+    attachment: false,
+    reasoning: false,
+    temperature: false,
+    tool_call: false,
+    knowledge: "",
+    last_updated: "",
+    cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+    limit: { context: 0, output: 0 },
+    experimental: true,
+  }
+}
+
+const placeholderModelID = modelID
+
+function buildProvider(llms: Array<{ index: number; name: string; current: boolean }>) {
+  if (llms.length === 0) {
+    return {
+      id: providerID,
+      name: "GenericAgent",
+      env: [] as string[],
+      models: { [placeholderModelID]: modelDescriptor(placeholderModelID, "GenericAgent (Python)") },
+    }
+  }
+  const models: Record<string, ReturnType<typeof modelDescriptor>> = {}
+  for (const item of llms) {
+    const id = llmModelID(item.index)
+    models[id] = modelDescriptor(id, item.name || id)
+  }
+  return {
+    id: providerID,
+    name: "GenericAgent",
+    env: [] as string[],
+    models,
+  }
+}
+
+function currentModelID(llms: Array<{ index: number; name: string; current: boolean }>): string {
+  if (llms.length === 0) return placeholderModelID
+  const current = llms.find((item) => item.current) ?? llms[0]
+  return llmModelID(current.index)
+}
+
+const agent = {
+  name: "genericagent",
+  builtIn: true,
+  description: "Python GenericAgent runtime",
+  mode: "primary" as const,
+  model: { providerID, modelID },
+  prompt: "",
+  tools: {},
+  permission: { edit: "allow", bash: {}, webfetch: "allow" },
+  options: {},
+  temperature: 0,
+  topP: 1,
+}
+
+class Events {
+  private listeners = new Set<(event: Event) => void>()
+  on(listener: (event: Event) => void) {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+  emit(event: Event) {
+    for (const listener of this.listeners) listener(event)
+  }
+}
+
+type ShimState =
+  | { kind: "booting" }
+  | { kind: "ready"; port: number }
+  | { kind: "error"; message: string }
+  | { kind: "stopped" }
+
+class ShimClient {
+  private proc?: ReturnType<typeof Bun.spawn>
+  private state: ShimState = { kind: "booting" }
+  private readyPromise: Promise<void>
+  private stdoutTail = ""
+  private stderrTail = ""
+
+  constructor(
+    private readonly pythonExecutable: string,
+    private readonly genericAgentDir: string,
+  ) {
+    this.readyPromise = this.boot()
+  }
+
+  private async boot(): Promise<void> {
+    let shimScript: string
+    try {
+      shimScript = await materializeShimScript()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      this.state = { kind: "error", message: `Failed to materialize shim: ${message}` }
+      return
+    }
+
+    try {
+      this.proc = Bun.spawn(
+        [this.pythonExecutable, shimScript, "--ga-dir", this.genericAgentDir, "--port", "0"],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "ignore",
+          onExit: (_proc, exitCode, signalCode) => {
+            if (this.state.kind !== "stopped") {
+              const message = `GenericAgent shim exited (code=${exitCode ?? "?"} signal=${signalCode ?? "?"}) — ${
+                this.stderrTail.slice(-500) || this.stdoutTail.slice(-500) || "no output"
+              }`
+              log.error("shim exit", { exitCode, signalCode, stderr: this.stderrTail.slice(-500) })
+              this.state = { kind: "error", message }
+            }
+          },
+        },
+      )
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      this.state = { kind: "error", message: `Failed to spawn python: ${message}` }
+      return
+    }
+
+    void this.drain(this.proc.stderr as ReadableStream<Uint8Array>, (chunk) => {
+      this.stderrTail = (this.stderrTail + chunk).slice(-4096)
+    })
+
+    const stdoutReader = (this.proc.stdout as ReadableStream<Uint8Array>).getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    const timeoutMs = 15_000
+    const deadline = Date.now() + timeoutMs
+    let settled = false
+
+    const processBuffer = (): boolean => {
+      while (true) {
+        const newlineIdx = buffer.indexOf("\n")
+        if (newlineIdx < 0) return false
+        const line = buffer.slice(0, newlineIdx).trim()
+        buffer = buffer.slice(newlineIdx + 1)
+        if (!line) continue
+        if (line.startsWith("LISTEN_PORT:")) {
+          const port = Number.parseInt(line.slice("LISTEN_PORT:".length), 10)
+          if (Number.isFinite(port) && port > 0) {
+            this.state = { kind: "ready", port }
+            log.info("shim ready", { port })
+            return true
+          }
+          this.state = { kind: "error", message: `shim emitted invalid port: ${line}` }
+          return true
+        }
+        if (line.startsWith("BOOT_ERROR:")) {
+          this.state = { kind: "error", message: line.slice("BOOT_ERROR:".length) }
+          log.error("shim boot error", { message: (this.state as { message: string }).message })
+          return true
+        }
+        log.debug("shim stdout pre-ready", { line })
+      }
+    }
+
+    while (!settled) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) {
+        this.state = { kind: "error", message: "shim boot timed out after 15s" }
+        break
+      }
+      const timer = new Promise<{ value?: undefined; done: true; timedOut: true }>((resolve) =>
+        setTimeout(() => resolve({ done: true, timedOut: true }), remaining),
+      )
+      const result = (await Promise.race([stdoutReader.read(), timer])) as
+        | { value?: Uint8Array; done: boolean; timedOut?: boolean }
+      if (result.timedOut) {
+        this.state = { kind: "error", message: "shim boot timed out after 15s" }
+        break
+      }
+      if (result.done) {
+        if (this.state.kind === "booting") this.state = { kind: "error", message: "shim stdout closed before ready" }
+        break
+      }
+      if (result.value) {
+        const chunk = decoder.decode(result.value, { stream: true })
+        buffer += chunk
+        this.stdoutTail = (this.stdoutTail + chunk).slice(-4096)
+      }
+      settled = processBuffer()
+    }
+
+    if (this.state.kind === "error") {
+      this.stop()
+      stdoutReader.releaseLock()
+      return
+    }
+
+    if (this.state.kind === "ready") {
+      stdoutReader.releaseLock()
+      void this.drain(this.proc.stdout as ReadableStream<Uint8Array>, (chunk) => {
+        this.stdoutTail = (this.stdoutTail + chunk).slice(-4096)
+      })
+    }
+  }
+
+  private async drain(stream: ReadableStream<Uint8Array>, onChunk: (chunk: string) => void): Promise<void> {
+    const reader = stream.getReader()
+    const decoder = new TextDecoder()
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        onChunk(decoder.decode(value, { stream: true }))
+      }
+    } catch {
+      // stream errors surface via onExit
+    } finally {
+      try {
+        reader.releaseLock()
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  async ready(): Promise<void> {
+    await this.readyPromise
+  }
+
+  getState(): ShimState {
+    return this.state
+  }
+
+  private requireReady(): number {
+    if (this.state.kind !== "ready") {
+      throw new Error(
+        this.state.kind === "error" ? this.state.message : `GenericAgent shim not ready (state=${this.state.kind})`,
+      )
+    }
+    return this.state.port
+  }
+
+  async health(): Promise<{ ok: boolean; model?: string; error?: string }> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") return { ok: false, error: (this.state as { message?: string }).message ?? this.state.kind }
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.state.port}/health`)
+      return (await res.json()) as { ok: boolean; model?: string; error?: string }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async reset(): Promise<void> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") return
+    try {
+      await fetch(`http://127.0.0.1:${this.state.port}/reset`, { method: "POST" })
+    } catch (e) {
+      log.warn("shim reset failed", { error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  async abort(): Promise<void> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") return
+    try {
+      await fetch(`http://127.0.0.1:${this.state.port}/abort`, { method: "POST" })
+    } catch (e) {
+      log.warn("shim abort failed", { error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  async listLlms(): Promise<Array<{ index: number; name: string; current: boolean }>> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") return []
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.state.port}/llms`)
+      if (!res.ok) return []
+      const data = (await res.json()) as Array<{ index: number; name: string; current: boolean }>
+      return Array.isArray(data) ? data : []
+    } catch (e) {
+      log.warn("shim listLlms failed", { error: e instanceof Error ? e.message : String(e) })
+      return []
+    }
+  }
+
+  async selectLlm(index: number): Promise<{ ok: boolean; model?: string; error?: string }> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") return { ok: false, error: (this.state as { message?: string }).message ?? this.state.kind }
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.state.port}/llm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; model?: string; error?: string }
+      if (!res.ok || data.ok !== true) {
+        return { ok: false, error: data.error ?? `HTTP ${res.status}` }
+      }
+      return { ok: true, model: data.model }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      log.warn("shim selectLlm failed", { index, error: message })
+      return { ok: false, error: message }
+    }
+  }
+
+  async prompt(
+    query: string,
+    onEvent: (event:
+      | { type: "delta"; text: string }
+      | { type: "done"; text: string }
+      | { type: "error"; message: string }
+      | { type: "tool_use"; data: { type: string; tool: string; id: string; input?: any; output?: any; status?: string; metadata?: any } }
+    ) => void,
+  ): Promise<void> {
+    await this.readyPromise
+    const port = this.requireReady()
+    const res = await fetch(`http://127.0.0.1:${port}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    })
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => "")
+      throw new Error(`shim /prompt failed (${res.status}): ${text.slice(0, 200)}`)
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      while (true) {
+        const separator = buffer.indexOf("\n\n")
+        if (separator < 0) break
+        const rawEvent = buffer.slice(0, separator)
+        buffer = buffer.slice(separator + 2)
+        const dataLine = rawEvent.split("\n").find((line) => line.startsWith("data:"))
+        if (!dataLine) continue
+        const payload = dataLine.slice("data:".length).trim()
+        if (!payload) continue
+        try {
+          const parsed = JSON.parse(payload) as
+            | { type: "delta"; text: string }
+            | { type: "done"; text: string }
+            | { type: "error"; message: string }
+            | { type: "tool_use"; data: any }
+          onEvent(parsed as any)
+          if (parsed.type === "done" || parsed.type === "error") {
+            try {
+              reader.releaseLock()
+            } catch {
+              // ignore
+            }
+            return
+          }
+        } catch (e) {
+          log.warn("shim event parse failed", { error: e instanceof Error ? e.message : String(e), payload })
+        }
+      }
+    }
+  }
+
+  stop(): void {
+    if (this.state.kind === "stopped") return
+    this.state = { kind: "stopped" }
+    try {
+      this.proc?.kill("SIGTERM")
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function welcomeSession(): SessionInfo {
   const created = Date.now()
   return {
     id: "welcome",
@@ -40,87 +496,132 @@ function welcomeSession() {
   }
 }
 
-function welcomeInfo() {
-  const id = Identifier.ascending("message")
-  return {
-    id,
+function welcomeMessages(): Message[] {
+  const info: MessageInfo = {
+    id: Identifier.ascending("message"),
     sessionID: "welcome",
-    role: "assistant" as const,
-    time: { created: Date.now() },
+    role: "assistant",
+    time: { created: Date.now(), completed: Date.now() },
+    agent: "genericagent",
     providerID,
-    modelID,
+    modelID: placeholderModelID,
+    mode: "default",
+    path: { cwd: directory, root: directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    path: { cwd: directory, root: directory },
-    version,
+  }
+  const part: TextPart = {
+    id: Identifier.ascending("part"),
+    messageID: info.id,
+    sessionID: "welcome",
+    type: "text",
+    text:
+      "👋 GenericAgent is wired to your local Python runtime. Create a new conversation and start chatting — the agent will execute against its full tool loop.",
+  }
+  return [{ info, parts: [part] }]
+}
+
+function extractPrompt(body: unknown): string {
+  if (!body || typeof body !== "object") return ""
+  const parts = (body as { parts?: Array<{ type?: string; text?: string }> }).parts
+  if (!Array.isArray(parts)) return ""
+  return parts
+    .filter((p) => p && p.type === "text" && typeof p.text === "string")
+    .map((p) => p.text as string)
+    .join("\n")
+    .trim()
+}
+
+function extractPromptIds(body: unknown): { messageID?: string; partID?: string } {
+  if (!body || typeof body !== "object") return {}
+  const messageID = (body as { messageID?: unknown }).messageID
+  const parts = (body as { parts?: Array<{ id?: unknown; messageID?: unknown }> }).parts
+  const firstPart = Array.isArray(parts) ? parts[0] : undefined
+  return {
+    messageID: typeof messageID === "string" ? messageID : typeof firstPart?.messageID === "string" ? firstPart.messageID : undefined,
+    partID: typeof firstPart?.id === "string" ? firstPart.id : undefined,
   }
 }
 
-function welcomeMessage() {
-  const info = welcomeInfo()
-  const part = {
-    id: Identifier.ascending("part"),
-    messageID: info.id,
-    sessionID: info.sessionID,
-    type: "text" as const,
-    text:
-      "👋 GenericAgent backend is registered but its Python runtime is not wired yet. This is a placeholder welcome session — chat will echo a notice until Phase 6 lands.",
-    time: { start: Date.now(), end: Date.now() },
+function userMessage(sessionID: string, text: string, currentModelID: string, ids?: { messageID?: string; partID?: string }): Message {
+  const messageID = ids?.messageID ?? Identifier.ascending("message")
+  const partID = ids?.partID ?? Identifier.ascending("part")
+  const info: MessageInfo = {
+    id: messageID,
+    sessionID,
+    role: "user",
+    time: { created: Date.now() },
+    agent: "genericagent",
+    providerID,
+    modelID: currentModelID,
+    mode: "default",
+    path: { cwd: directory, root: directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  }
+  const part: TextPart = {
+    id: partID,
+    messageID,
+    sessionID,
+    type: "text",
+    text,
   }
   return { info, parts: [part] }
 }
 
-const provider = {
-  id: providerID,
-  name: "GenericAgent",
-  env: [] as string[],
-  models: {
-    [modelID]: {
-      id: modelID,
-      name: "GenericAgent (Python)",
-      release_date: "",
-      attachment: false,
-      reasoning: false,
-      temperature: false,
-      tool_call: false,
-      knowledge: "",
-      last_updated: "",
-      cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
-      limit: { context: 0, output: 0 },
-      experimental: true,
-    },
-  },
-}
-
-const agent = {
-  name: "genericagent",
-  builtIn: true,
-  description: "Python GenericAgent (placeholder)",
-  mode: "primary" as const,
-  model: { providerID, modelID },
-  prompt: "",
-  tools: {},
-  permission: { edit: "allow", bash: {}, webfetch: "allow" },
-  options: {},
-  temperature: 0,
-  topP: 1,
-}
-
-class Events {
-  private listeners = new Set<(event: { directory: string; payload: unknown }) => void>()
-  on(listener: (event: { directory: string; payload: unknown }) => void) {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
+function assistantMessage(sessionID: string, parentID: string, currentModelID: string): Message {
+  const info: MessageInfo = {
+    id: Identifier.ascending("message"),
+    sessionID,
+    role: "assistant",
+    time: { created: Date.now() },
+    agent: "genericagent",
+    parentID,
+    providerID,
+    modelID: currentModelID,
+    mode: "default",
+    path: { cwd: directory, root: directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   }
-  emit(event: { directory: string; payload: unknown }) {
-    for (const listener of this.listeners) listener(event)
+  const part: TextPart = {
+    id: Identifier.ascending("part"),
+    messageID: info.id,
+    sessionID,
+    type: "text",
+    text: "",
   }
+  return { info, parts: [part] }
 }
 
 export namespace GenericAgentBridge {
   export function createApp(opts: Opts) {
-    const app = new Hono()
+    const pythonExecutable = opts.pythonExecutable || DEFAULT_PYTHON
+    const genericAgentDir = opts.genericAgentDir || DEFAULT_GA_DIR
+    const shim = new ShimClient(pythonExecutable, genericAgentDir)
     const events = new Events()
+    const sessions = new Map<string, SessionInfo>()
+    const messages = new Map<string, Message[]>()
+    const sessionLock = new Map<string, Promise<unknown>>()
+
+    sessions.set("welcome", welcomeSession())
+    messages.set("welcome", welcomeMessages())
+
+    const emit = (payload: Event["payload"]) => events.emit({ directory, payload })
+    const emitStatus = (sessionID: string, type: "busy" | "idle") =>
+      emit({ type: "session.status", properties: { sessionID, status: { type } } })
+
+    const serialize = async <T>(sessionID: string, fn: () => Promise<T>): Promise<T> => {
+      const prev = sessionLock.get(sessionID) ?? Promise.resolve()
+      const next = prev.catch(() => undefined).then(fn)
+      sessionLock.set(
+        sessionID,
+        next.catch(() => undefined),
+      )
+      return next
+    }
+
+    const app = new Hono()
     return app
       .onError((err, c) => {
         const message = err instanceof Error ? err.message : String(err)
@@ -149,12 +650,34 @@ export namespace GenericAgentBridge {
           },
         }),
       )
-      .get("/global/health", (c) => c.json({ healthy: true, version }))
-      .get("/global/config", (c) => c.json({ model: `${providerID}/${modelID}` }))
-      .patch("/global/config", async (c) =>
-        c.json(await c.req.json().catch(() => ({ model: `${providerID}/${modelID}` }))),
-      )
-      .post("/global/dispose", (c) => c.json(true))
+      .get("/global/health", async (c) => {
+        const health = await shim.health()
+        if (health.ok) return c.json({ healthy: true, version, model: health.model })
+        return c.json(new NamedError.Unknown({ message: health.error ?? "shim unavailable" }).toObject(), { status: 503 })
+      })
+      .get("/global/config", async (c) => {
+        const llms = await shim.listLlms()
+        return c.json({ model: `${providerID}/${currentModelID(llms)}` })
+      })
+      .patch("/global/config", async (c) => {
+        const body = (await c.req.json().catch(() => ({}))) as { model?: string }
+        const requested = typeof body.model === "string" ? body.model : undefined
+        if (requested) {
+          const slash = requested.indexOf("/")
+          const m = slash >= 0 ? requested.slice(slash + 1) : requested
+          const idx = parseLlmIndex(m)
+          if (idx !== undefined) {
+            const result = await shim.selectLlm(idx)
+            if (!result.ok) log.warn("selectLlm failed via /global/config", { index: idx, error: result.error })
+          }
+        }
+        const llms = await shim.listLlms()
+        return c.json({ model: `${providerID}/${currentModelID(llms)}` })
+      })
+      .post("/global/dispose", (c) => {
+        shim.stop()
+        return c.json(true)
+      })
       .get("/global/event", async (c) => {
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
@@ -204,17 +727,24 @@ export namespace GenericAgentBridge {
           sandboxes: [],
         }),
       )
-      .get("/provider", (c) =>
-        c.json({
-          all: [provider],
-          default: { [providerID]: `${providerID}/${modelID}` },
+      .get("/provider", async (c) => {
+        const llms = await shim.listLlms()
+        const prov = buildProvider(llms)
+        const current = currentModelID(llms)
+        return c.json({
+          all: [prov],
+          default: { [providerID]: `${providerID}/${current}` },
           connected: [providerID],
-        }),
-      )
+        })
+      })
       .get("/provider/auth", (c) => c.json({}))
       .get("/config", (c) => c.json({}))
       .get("/command", (c) => c.json([]))
-      .get("/agent", (c) => c.json([agent]))
+      .get("/agent", async (c) => {
+        const llms = await shim.listLlms()
+        const current = currentModelID(llms)
+        return c.json([{ ...agent, model: { providerID, modelID: current } }])
+      })
       .get("/skill", (c) => c.json([]))
       .get("/mcp", (c) => c.json({}))
       .get("/lsp", (c) => c.json([]))
@@ -229,24 +759,40 @@ export namespace GenericAgentBridge {
       .get("/permission", (c) => c.json([]))
       .get("/question", (c) => c.json([]))
       .get("/session/status", (c) => c.json({}))
-      .get("/session", (c) => c.json([welcomeSession()]))
+      .get("/session", (c) => c.json(Array.from(sessions.values())))
       .post("/session", async (c) => {
-        const body = (await c.req.json().catch(() => ({}))) as { id?: string; title?: string }
-        const sid = body.id || crypto.randomUUID()
-        return c.json({
-          id: sid,
-          slug: sid,
+        const body = (await c.req.json().catch(() => ({}))) as { id?: string; title?: string; parentID?: string }
+        const id = body.id || Identifier.ascending("session")
+        const info: SessionInfo = {
+          id,
+          slug: id,
           projectID,
           directory,
-          title: body.title || sid,
+          title: body.title || "New Conversation",
           version,
           time: { created: Date.now(), updated: Date.now() },
-        })
+        }
+        sessions.set(id, info)
+        messages.set(id, [])
+        if (!body.parentID) await shim.reset()
+        emit({ type: "session.created", properties: { info } })
+        return c.json(info)
+      })
+      .delete("/session/:sessionID", (c) => {
+        const sessionID = c.req.param("sessionID")
+        const info = sessions.get(sessionID)
+        if (info) {
+          sessions.delete(sessionID)
+          messages.delete(sessionID)
+          emit({ type: "session.deleted", properties: { info } })
+        }
+        return c.json(true)
       })
       .get("/session/:sessionID", (c) => {
         const sessionID = c.req.param("sessionID")
-        if (sessionID === "welcome") return c.json(welcomeSession())
-        return c.json({
+        const info = sessions.get(sessionID)
+        if (info) return c.json(info)
+        const fallback: SessionInfo = {
           id: sessionID,
           slug: sessionID,
           projectID,
@@ -254,31 +800,175 @@ export namespace GenericAgentBridge {
           title: sessionID,
           version,
           time: { created: Date.now(), updated: Date.now() },
-        })
+        }
+        return c.json(fallback)
       })
       .get("/session/:sessionID/todo", (c) => c.json([]))
       .get("/session/:sessionID/children", (c) => c.json([]))
       .get("/session/:sessionID/message", (c) => {
         const sessionID = c.req.param("sessionID")
-        if (sessionID === "welcome") return c.json([welcomeMessage()])
-        return c.json([])
+        return c.json(messages.get(sessionID) ?? [])
       })
-      .post("/session/:sessionID/prompt_async", (c) => {
+      .post("/session/:sessionID/abort", async (c) => {
+        await shim.abort()
+        emitStatus(c.req.param("sessionID"), "idle")
+        return c.json(true)
+      })
+      .post("/session/:sessionID/prompt_async", async (c) => {
         const sessionID = c.req.param("sessionID")
-        log.info("genericagent prompt received (placeholder)", { sessionID })
-        const info = {
-          ...welcomeInfo(),
-          sessionID,
+        const body = await c.req.json().catch(() => ({}))
+        const query = extractPrompt(body)
+        if (!query) {
+          return c.json(new NamedError.Unknown({ message: "empty prompt" }).toObject(), { status: 400 })
         }
-        const part = {
-          id: Identifier.ascending("part"),
-          messageID: info.id,
-          sessionID,
-          type: "text" as const,
-          text: pendingMessage,
-          time: { start: Date.now(), end: Date.now() },
+
+        const requestedModelID = typeof (body as { modelID?: string }).modelID === "string" ? (body as { modelID: string }).modelID : undefined
+        const requestedIndex = parseLlmIndex(requestedModelID)
+        if (requestedIndex !== undefined) {
+          const llms = await shim.listLlms()
+          const current = llms.find((item) => item.current)
+          if (current?.index !== requestedIndex) {
+            const result = await shim.selectLlm(requestedIndex)
+            if (!result.ok) log.warn("selectLlm failed during prompt", { index: requestedIndex, error: result.error })
+          }
         }
-        return c.json({ info, parts: [part] })
+        const llmsAfter = await shim.listLlms()
+        const currentModelID_ = currentModelID(llmsAfter)
+
+        if (!sessions.has(sessionID)) {
+          const info: SessionInfo = {
+            id: sessionID,
+            slug: sessionID,
+            projectID,
+            directory,
+            title: query.slice(0, 60) || sessionID,
+            version,
+            time: { created: Date.now(), updated: Date.now() },
+          }
+          sessions.set(sessionID, info)
+          messages.set(sessionID, [])
+          emit({ type: "session.created", properties: { info } })
+        }
+
+        const user = userMessage(sessionID, query, currentModelID_, extractPromptIds(body))
+        const assistant = assistantMessage(sessionID, user.info.id, currentModelID_)
+        const bucket = messages.get(sessionID) ?? []
+        bucket.push(user, assistant)
+        messages.set(sessionID, bucket)
+
+        emitStatus(sessionID, "busy")
+        emit({ type: "message.updated", properties: { info: assistant.info } })
+        emit({ type: "message.part.updated", properties: { part: assistant.parts[0] } })
+
+        void serialize(sessionID, async () => {
+          let accumulated = ""
+          const toolParts = new Map<string, any>()
+          try {
+            await shim.prompt(query, (event) => {
+              if (event.type === "tool_use") {
+                log.info("Received tool_use event", { data: event.data })
+                const toolData = event.data
+                if (toolData.type === "tool_start") {
+                  const toolPart = {
+                    id: Identifier.ascending("part"),
+                    messageID: assistant.info.id,
+                    sessionID,
+                    type: "tool" as const,
+                    tool: toolData.tool,
+                    state: {
+                      status: "running" as const,
+                      input: toolData.input || {},
+                    },
+                  }
+                  toolParts.set(toolData.id, toolPart)
+                  bucket.push(toolPart)
+                  log.info("Created tool part", { toolPart })
+                  emit({
+                    type: "message.part.updated",
+                    properties: { part: toolPart },
+                  })
+                } else if (toolData.type === "tool_done") {
+                  const toolPart = toolParts.get(toolData.id)
+                  log.info("Updating tool part", { toolId: toolData.id, found: !!toolPart })
+                  if (toolPart) {
+                    const outputStr = typeof toolData.output === "string"
+                      ? toolData.output
+                      : toolData.output != null
+                        ? JSON.stringify(toolData.output, null, 2)
+                        : ""
+                    toolPart.state = {
+                      status: toolData.status === "error" ? ("error" as const) : ("completed" as const),
+                      input: toolPart.state.input,
+                      output: outputStr,
+                      metadata: toolData.metadata || {},
+                    }
+                    if (toolData.status === "error") {
+                      toolPart.state.error = "Tool execution failed"
+                    }
+                    emit({
+                      type: "message.part.updated",
+                      properties: { part: toolPart },
+                    })
+                  }
+                }
+              } else if (event.type === "delta") {
+                accumulated += event.text
+                emit({
+                  type: "message.part.delta",
+                  properties: {
+                    sessionID,
+                    messageID: assistant.info.id,
+                    partID: assistant.parts[0].id,
+                    field: "text",
+                    delta: event.text,
+                  },
+                })
+              } else if (event.type === "done") {
+                const finalText = event.text || accumulated
+                assistant.parts[0].text = finalText
+                assistant.info.time.completed = Date.now()
+                emit({
+                  type: "message.part.updated",
+                  properties: { part: { ...assistant.parts[0], text: finalText } },
+                })
+                emit({ type: "message.updated", properties: { info: assistant.info } })
+                const existing = sessions.get(sessionID)
+                if (existing && existing.title === "New Conversation") {
+                  const updated = { ...existing, title: query.slice(0, 60) || existing.title, time: { ...existing.time, updated: Date.now() } }
+                  sessions.set(sessionID, updated)
+                  emit({ type: "session.updated", properties: { info: updated } })
+                }
+              } else if (event.type === "error") {
+                emit({
+                  type: "session.error",
+                  properties: {
+                    sessionID,
+                    error: { name: "UnknownError", data: { message: event.message } },
+                  },
+                })
+              }
+            })
+          } catch (e) {
+            const message = e instanceof Error ? e.message : String(e)
+            log.error("genericagent prompt failed", { sessionID, error: message })
+            emit({
+              type: "session.error",
+              properties: {
+                sessionID,
+                error: { name: "UnknownError", data: { message } },
+              },
+            })
+          } finally {
+            emitStatus(sessionID, "idle")
+          }
+        })
+
+        return c.body(null, 204)
+      })
+      .post("/session/:sessionID/message", async (c) => {
+        return c.json(new NamedError.Unknown({ message: "Use prompt_async for GenericAgent messaging" }).toObject(), {
+          status: 400,
+        })
       })
   }
 

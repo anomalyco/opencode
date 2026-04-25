@@ -80,6 +80,7 @@ if (os) document.documentElement.dataset.os = os
 let update: Update | null = null
 const [busy, setBusy] = createSignal(false)
 const [openclawTick, setOpenclawTick] = createSignal(0)
+const [genericagentTick, setGenericagentTick] = createSignal(0)
 
 type StartupPhase = "launch" | "backend" | "project" | "session" | "ready"
 const startupReadyEvent = "opencode:startup-interactive"
@@ -220,6 +221,10 @@ const reload = async () => {
 
 const syncOpenclaw = async () => {
   return commands.syncOpenclawServer().catch(() => null)
+}
+
+const syncGenericagent = async () => {
+  return commands.syncGenericagentServer().catch(() => null)
 }
 
 const deepLinkEvent = "opencode:deep-link"
@@ -699,6 +704,41 @@ const createPlatform = (): Platform => {
       return commands.abortOpenclawTest()
     },
 
+    getGenericagentConfig: async () => {
+      const next = await commands.getGenericagentConfig().catch(() => null)
+      return {
+        enabled: next?.enabled ?? false,
+        pythonExecutable: next?.pythonExecutable ?? undefined,
+        genericAgentDir: next?.genericAgentDir ?? undefined,
+      }
+    },
+
+    setGenericagentConfig: async (config) => {
+      await commands.setGenericagentConfig({
+        enabled: config.enabled,
+        pythonExecutable: config.pythonExecutable ?? null,
+        genericAgentDir: config.genericAgentDir ?? null,
+      })
+      await syncGenericagent()
+      setGenericagentTick((x) => x + 1)
+    },
+
+    testGenericagentConfig: async (config) => {
+      const next = await commands.testGenericagentServer({
+        enabled: config.enabled,
+        pythonExecutable: config.pythonExecutable ?? null,
+        genericAgentDir: config.genericAgentDir ?? null,
+      })
+      return {
+        ok: next.ok,
+        logs: next.logs,
+      }
+    },
+
+    abortGenericagentTest: async () => {
+      return commands.abortGenericagentTest()
+    },
+
     getDefaultServer: async () => {
       const url = await commands.getDefaultServerUrl().catch(() => null)
       if (!url) return null
@@ -788,6 +828,7 @@ render(() => {
     return commands.awaitInitialization(channel as any)
   })
   const [openclaw] = createResource(openclawTick, syncOpenclaw)
+  const [genericagent] = createResource(genericagentTick, syncGenericagent)
 
   const [defaultServer] = createResource(async () => {
     shell?.show("project")
@@ -827,6 +868,20 @@ render(() => {
           url: claw.url,
           username: claw.username ?? undefined,
           password: claw.password ?? undefined,
+        },
+      })
+    }
+
+    const ga = genericagent()
+    if (ga) {
+      list.push({
+        displayName: t("desktop.server.genericagent"),
+        integration: "genericagent",
+        type: "http",
+        http: {
+          url: ga.url,
+          username: ga.username ?? undefined,
+          password: ga.password ?? undefined,
         },
       })
     }
