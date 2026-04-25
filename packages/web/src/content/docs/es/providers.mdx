@@ -508,6 +508,8 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` también se acepta como alias para `CLOUDFLARE_API_TOKEN`.
+
 5. Ejecute el comando `/models` para seleccionar un modelo.
 
    ```txt
@@ -861,8 +863,15 @@ Para utilizar Google Vertex AI con OpenCode:
    :::
 
 2. Establezca las variables de entorno requeridas:
-   - `GOOGLE_CLOUD_PROJECT`: tu ID de proyecto de Google Cloud
-   - `VERTEX_LOCATION` (opcional): la región para Vertex AI (por defecto es `global`)
+   - ID del proyecto (elija uno):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Ubicación (opcional, se verifica en este orden):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Por defecto es `us-central1` si no se configura ninguno
    - Autenticación (elija una):
      - `GOOGLE_APPLICATION_CREDENTIALS`: ruta al archivo clave JSON de su cuenta de servicio
      - Autenticar usando gcloud CLI: `gcloud auth application-default login`
@@ -878,11 +887,11 @@ Para utilizar Google Vertex AI con OpenCode:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-La región `global` mejora la disponibilidad y reduce los errores sin costo adicional. Utilice puntos finales regionales (por ejemplo, `us-central1`) para los requisitos de residencia de datos. [Más información](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+La región `global` mejora la disponibilidad y reduce los errores sin costo adicional. Úsela configurando `VERTEX_LOCATION=global`. Utilice puntos finales regionales (por ejemplo, `us-central1`) para los requisitos de residencia de datos. [Más información](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Ejecute el comando `/models` para seleccionar el modelo que desee.

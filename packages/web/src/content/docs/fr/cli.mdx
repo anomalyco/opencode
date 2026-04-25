@@ -555,30 +555,39 @@ OpenCode peut être configuré à l'aide de variables d'environnement.
 
 | Variables                             | Type    | Description                                                                       |
 | ------------------------------------- | ------- | --------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | booléen | Partager automatiquement des sessions                                             |
-| `OPENCODE_GIT_BASH_PATH`              | chaîne  | Chemin vers l'exécutable Git Bash sur Windows                                     |
-| `OPENCODE_CONFIG`                     | chaîne  | Chemin d'accès au fichier de configuration                                        |
-| `OPENCODE_TUI_CONFIG`                 | chaîne  | Chemin d'accès au fichier de configuration TUI                                    |
-| `OPENCODE_CONFIG_DIR`                 | chaîne  | Chemin d'accès au répertoire de configuration                                     |
-| `OPENCODE_CONFIG_CONTENT`             | chaîne  | Contenu de configuration JSON en ligne                                            |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | booléen | Désactiver les vérifications automatiques des mises à jour                        |
-| `OPENCODE_DISABLE_PRUNE`              | booléen | Désactiver le nettoyage des anciennes données                                     |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | booléen | Désactiver les mises à jour automatiques des titres du terminal                   |
-| `OPENCODE_PERMISSION`                 | chaîne  | Configuration des autorisations JSON intégrées                                    |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | booléen | Désactiver les plugins par défaut                                                 |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | booléen | Désactiver les téléchargements automatiques du serveur LSP                        |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | booléen | Activer les modèles expérimentaux                                                 |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | booléen | Désactiver le compactage automatique du contexte                                  |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | booléen | Désactiver la lecture de `.claude` (prompt + compétences)                         |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | booléen | Désactiver la lecture `~/.claude/CLAUDE.md`                                       |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | booléen | Désactiver le chargement de `.claude/skills`                                      |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | booléen | Désactiver la récupération de modèles à partir de sources distantes               |
-| `OPENCODE_FAKE_VCS`                   | chaîne  | Faux fournisseur VCS à des fins de test                                           |
-| `OPENCODE_CLIENT`                     | chaîne  | Identifiant du client (par défaut `cli`)                                          |
-| `OPENCODE_ENABLE_EXA`                 | booléen | Activer les outils de recherche Web Exa                                           |
-| `OPENCODE_SERVER_PASSWORD`            | chaîne  | Activer l'authentification de base pour `serve`/`web`                             |
-| `OPENCODE_SERVER_USERNAME`            | chaîne  | Remplacer le nom d'utilisateur d'authentification de base (par défaut `opencode`) |
-| `OPENCODE_MODELS_URL`                 | chaîne  | URL personnalisé pour récupérer la configuration des modèles                      |
+| `OPENCODE_AUTH_CONTENT                ` | chaîne  | Identifiants d'authentification JSON en ligne |
+| `OPENCODE_AUTO_SHARE                  ` | booléen | Partager automatiquement des sessions |
+| `OPENCODE_CLIENT                      ` | chaîne  | Identifiant du client (par défaut `cli`) |
+| `OPENCODE_CONFIG                      ` | chaîne  | Chemin d'accès au fichier de configuration |
+| `OPENCODE_CONFIG_DIR                  ` | chaîne  | Chemin d'accès au répertoire de configuration |
+| `OPENCODE_CONFIG_CONTENT              ` | chaîne  | Contenu de configuration JSON en ligne |
+| `OPENCODE_DISABLE_AUTOCOMPACT         ` | booléen | Désactiver le compactage automatique du contexte |
+| `OPENCODE_DISABLE_AUTOUPDATE          ` | booléen | Désactiver les vérifications automatiques des mises à jour |
+| `OPENCODE_DISABLE_CLAUDE_CODE         ` | booléen | Désactiver la lecture de `.claude` (prompt + compétences) |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT  ` | booléen | Désactiver la lecture `~/.claude/CLAUDE.md` |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS  ` | booléen | Désactiver le chargement de `.claude/skills` |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS     ` | booléen | Désactiver les plugins par défaut |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS     ` | booléen | Désactiver le chargement des compétences depuis les paquets npm |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD        ` | booléen | Désactiver les téléchargements automatiques du serveur LSP |
+| `OPENCODE_DISABLE_MODELS_FETCH        ` | booléen | Désactiver la récupération de modèles à partir de sources distantes |
+| `OPENCODE_DISABLE_MOUSE               ` | booléen | Désactiver la capture de la souris dans le TUI |
+| `OPENCODE_DISABLE_PRUNE               ` | booléen | Désactiver le nettoyage des anciennes données |
+| `OPENCODE_DISABLE_PROJECT_CONFIG      ` | booléen | Désactiver le chargement de la config au niveau du projet |
+| `OPENCODE_DISABLE_TERMINAL_TITLE      ` | booléen | Désactiver les mises à jour automatiques des titres du terminal |
+| `OPENCODE_ENABLE_EXA                  ` | booléen | Activer les outils de recherche Web Exa |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS  ` | booléen | Activer les modèles expérimentaux |
+| `OPENCODE_FAKE_VCS                    ` | chaîne  | Faux fournisseur VCS à des fins de test |
+| `OPENCODE_GIT_BASH_PATH               ` | chaîne  | Chemin vers l'exécutable Git Bash sur Windows |
+| `OPENCODE_MODELS_PATH                 ` | chaîne  | Chemin personnalisé pour le fichier cache JSON des modèles |
+| `OPENCODE_MODELS_URL                  ` | chaîne  | URL personnalisé pour récupérer la configuration des modèles |
+| `OPENCODE_PERMISSION                  ` | chaîne  | Configuration des autorisations JSON intégrées |
+| `OPENCODE_SERVER_PASSWORD             ` | chaîne  | Activer l'authentification de base pour `serve`/`web` |
+| `OPENCODE_SERVER_USERNAME             ` | chaîne  | Remplacer le nom d'utilisateur d'authentification de base (par défaut `opencode`) |
+| `OPENCODE_TUI_CONFIG                  ` | chaîne  | Chemin d'accès au fichier de configuration TUI |
+| `EXA_API_KEY                          ` | chaîne  | Clé API pour la recherche web Exa (requiert `OPENCODE_ENABLE_EXA`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT          ` | chaîne  | Point de terminaison de l'exportateur OpenTelemetry OTLP |
+| `OTEL_EXPORTER_OTLP_HEADERS           ` | chaîne  | En-têtes de l'exportateur OpenTelemetry OTLP |
+| `OTEL_RESOURCE_ATTRIBUTES             ` | chaîne  | Attributs de ressource OpenTelemetry (paires clé=valeur) |
 
 ---
 
@@ -588,16 +597,18 @@ Ces variables d'environnement activent des fonctionnalités expérimentales qui 
 
 | Variables                                       | Type    | Description                                                     |
 | ----------------------------------------------- | ------- | --------------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | booléen | Activer toutes les fonctionnalités expérimentales               |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | booléen | Activer la découverte d'icônes                                  |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booléen | Désactiver la copie lors de la sélection dans TUI               |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | numéro  | Délai d'expiration par défaut pour les commandes bash en ms     |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | numéro  | Nombre maximum de jetons de sortie pour les réponses LLM        |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | booléen | Activer l'observateur de fichiers pour l'ensemble du répertoire |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | booléen | Activer le formateur oxfmt                                      |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | booléen | Activer l'outil expérimental LSP                                |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booléen | Désactiver l'observateur de fichiers                            |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | booléen | Activer les fonctionnalités Exa expérimentales                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booléen | Activer TY LSP pour les fichiers python                         |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | booléen | Activer les fonctionnalités Markdown expérimentales             |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booléen | Activer le mode plan                                            |
+| `OPENCODE_EXPERIMENTAL                          ` | booléen | Activer toutes les fonctionnalités expérimentales |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS  ` | numéro  | Délai d'expiration par défaut pour les commandes bash en ms |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT   ` | booléen | Désactiver la copie lors de la sélection dans TUI |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER      ` | booléen | Désactiver l'observateur de fichiers |
+| `OPENCODE_EXPERIMENTAL_EXA                      ` | booléen | Activer les fonctionnalités Exa expérimentales |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER              ` | booléen | Activer l'observateur de fichiers pour l'ensemble du répertoire |
+| `OPENCODE_EXPERIMENTAL_HTTPAPI                  ` | booléen | Activer le pont Effect HttpApi |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY           ` | booléen | Activer la découverte d'icônes |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL                 ` | booléen | Activer l'outil expérimental LSP |
+| `OPENCODE_EXPERIMENTAL_LSP_TY                   ` | booléen | Activer TY LSP pour les fichiers python |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN                 ` | booléen | Activer les fonctionnalités Markdown expérimentales |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX         ` | numéro  | Nombre maximum de jetons de sortie pour les réponses LLM |
+| `OPENCODE_EXPERIMENTAL_OXFMT                    ` | booléen | Activer le formateur oxfmt |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE                ` | booléen | Activer le mode plan |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES               ` | booléen | Activer les espaces de travail expérimentaux |

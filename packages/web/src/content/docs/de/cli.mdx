@@ -555,29 +555,39 @@ OpenCode kann mithilfe von Umgebungsvariablen konfiguriert werden.
 
 | Variable                              | Typ             | Beschreibung                                                                     |
 | ------------------------------------- | --------------- | -------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolescher Wert | Sitzungen automatisch teilen                                                     |
-| `OPENCODE_GIT_BASH_PATH`              | Zeichenfolge    | Pfad zur ausführbaren Git Bash-Datei unter Windows                               |
-| `OPENCODE_CONFIG`                     | Zeichenfolge    | Pfad zur Konfigurationsdatei                                                     |
-| `OPENCODE_CONFIG_DIR`                 | Zeichenfolge    | Pfad zum Konfigurationsverzeichnis                                               |
-| `OPENCODE_CONFIG_CONTENT`             | Zeichenfolge    | Inline-JSON-Konfigurationsinhalt                                                 |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolescher Wert | Automatische Update-Prüfungen deaktivieren                                       |
-| `OPENCODE_DISABLE_PRUNE`              | boolescher Wert | Bereinigung alter Daten deaktivieren                                             |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolescher Wert | Deaktivieren Sie die automatische Aktualisierung von Terminaltiteln              |
-| `OPENCODE_PERMISSION`                 | Zeichenfolge    | Inline-JSON-Berechtigungskonfiguration                                           |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolescher Wert | Standard-Plugins deaktivieren                                                    |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolescher Wert | Automatische LSP-Server-Downloads deaktivieren                                   |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolescher Wert | Experimentelle Modelle aktivieren                                                |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolescher Wert | Automatische Kontextkomprimierung deaktivieren                                   |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolescher Wert | Deaktivieren Sie das Lesen von `.claude` (Prompt + Skills)                       |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolescher Wert | Deaktivieren Sie das Lesen von `~/.claude/CLAUDE.md`                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolescher Wert | Deaktivieren Sie das Laden von `.claude/skills`                                  |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolescher Wert | Deaktivieren Sie das Abrufen von Modellen aus Remote-Quellen                     |
-| `OPENCODE_FAKE_VCS`                   | Zeichenfolge    | Gefälschter VCS-Anbieter zu Testzwecken                                          |
-| `OPENCODE_CLIENT`                     | Zeichenfolge    | Client-ID (standardmäßig `cli`)                                                  |
-| `OPENCODE_ENABLE_EXA`                 | boolescher Wert | Exa-Websuchtools aktivieren                                                      |
-| `OPENCODE_SERVER_PASSWORD`            | Zeichenfolge    | Aktivieren Sie die Basisauthentifizierung für `serve`/`web`                      |
-| `OPENCODE_SERVER_USERNAME`            | Zeichenfolge    | Benutzernamen für die Basisauthentifizierung überschreiben (Standard `opencode`) |
-| `OPENCODE_MODELS_URL`                 | Zeichenfolge    | Benutzerdefinierte URL zum Abrufen der Modellkonfiguration                       |
+| `OPENCODE_AUTH_CONTENT                ` | Zeichenfolge | Inline-JSON-Authentifizierungsdaten |
+| `OPENCODE_AUTO_SHARE                  ` | boolescher Wert | Sitzungen automatisch teilen |
+| `OPENCODE_CLIENT                      ` | Zeichenfolge | Client-ID (standardmäßig `cli`) |
+| `OPENCODE_CONFIG                      ` | Zeichenfolge | Pfad zur Konfigurationsdatei |
+| `OPENCODE_CONFIG_DIR                  ` | Zeichenfolge | Pfad zum Konfigurationsverzeichnis |
+| `OPENCODE_CONFIG_CONTENT              ` | Zeichenfolge | Inline-JSON-Konfigurationsinhalt |
+| `OPENCODE_DISABLE_AUTOCOMPACT         ` | boolescher Wert | Automatische Kontextkomprimierung deaktivieren |
+| `OPENCODE_DISABLE_AUTOUPDATE          ` | boolescher Wert | Automatische Update-Prüfungen deaktivieren |
+| `OPENCODE_DISABLE_CLAUDE_CODE         ` | boolescher Wert | Deaktivieren Sie das Lesen von `.claude` (Prompt + Skills) |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT  ` | boolescher Wert | Deaktivieren Sie das Lesen von `~/.claude/CLAUDE.md` |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS  ` | boolescher Wert | Deaktivieren Sie das Laden von `.claude/skills` |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS     ` | boolescher Wert | Standard-Plugins deaktivieren |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS     ` | boolescher Wert | Laden von Skills aus npm-Paketen deaktivieren |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD        ` | boolescher Wert | Automatische LSP-Server-Downloads deaktivieren |
+| `OPENCODE_DISABLE_MODELS_FETCH        ` | boolescher Wert | Deaktivieren Sie das Abrufen von Modellen aus Remote-Quellen |
+| `OPENCODE_DISABLE_MOUSE               ` | boolescher Wert | Mausaufzeichnung in der TUI deaktivieren |
+| `OPENCODE_DISABLE_PRUNE               ` | boolescher Wert | Bereinigung alter Daten deaktivieren |
+| `OPENCODE_DISABLE_PROJECT_CONFIG      ` | boolescher Wert | Laden der Konfiguration auf Projektebene deaktivieren |
+| `OPENCODE_DISABLE_TERMINAL_TITLE      ` | boolescher Wert | Deaktivieren Sie die automatische Aktualisierung von Terminaltiteln |
+| `OPENCODE_ENABLE_EXA                  ` | boolescher Wert | Exa-Websuchtools aktivieren |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS  ` | boolescher Wert | Experimentelle Modelle aktivieren |
+| `OPENCODE_FAKE_VCS                    ` | Zeichenfolge | Gefälschter VCS-Anbieter zu Testzwecken |
+| `OPENCODE_GIT_BASH_PATH               ` | Zeichenfolge | Pfad zur ausführbaren Git Bash-Datei unter Windows |
+| `OPENCODE_MODELS_PATH                 ` | Zeichenfolge | Benutzerdefinierter Pfad für JSON-Cachedatei der Modelle |
+| `OPENCODE_MODELS_URL                  ` | Zeichenfolge | Benutzerdefinierte URL zum Abrufen der Modellkonfiguration |
+| `OPENCODE_PERMISSION                  ` | Zeichenfolge | Inline-JSON-Berechtigungskonfiguration |
+| `OPENCODE_SERVER_PASSWORD             ` | Zeichenfolge | Aktivieren Sie die Basisauthentifizierung für `serve`/`web` |
+| `OPENCODE_SERVER_USERNAME             ` | Zeichenfolge | Benutzernamen für die Basisauthentifizierung überschreiben (Standard `opencode`) |
+| `OPENCODE_TUI_CONFIG                  ` | Zeichenfolge | Pfad zur TUI-Konfigurationsdatei |
+| `EXA_API_KEY                          ` | Zeichenfolge | API-Schlüssel für Exa-Websuche (erfordert `OPENCODE_ENABLE_EXA`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT          ` | Zeichenfolge | OpenTelemetry OTLP-Exporter-Endpunkt |
+| `OTEL_EXPORTER_OTLP_HEADERS           ` | Zeichenfolge | OpenTelemetry OTLP-Exporter-Header |
+| `OTEL_RESOURCE_ATTRIBUTES             ` | Zeichenfolge | OpenTelemetry-Ressourcenattribute (Schlüssel=Wert-Paare) |
 
 ---
 
@@ -587,16 +597,18 @@ Diese Umgebungsvariablen ermöglichen experimentelle Funktionen, die sich änder
 
 | Variable                                        | Typ             | Beschreibung                                            |
 | ----------------------------------------------- | --------------- | ------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolescher Wert | Alle experimentellen Funktionen aktivieren              |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolescher Wert | Symbolerkennung aktivieren                              |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolescher Wert | Kopieren bei Auswahl in TUI deaktivieren                |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Zahl            | Standard-Timeout für Bash-Befehle in ms                 |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Zahl            | Maximale Ausgabetokens für LLM-Antworten                |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolescher Wert | Dateiüberwachung für das gesamte Verzeichnis aktivieren |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolescher Wert | Oxfmt-Formatierer aktivieren                            |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolescher Wert | Experimentelles LSP-Tool aktivieren                     |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolescher Wert | Dateiüberwachung deaktivieren                           |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolescher Wert | Experimentelle Exa-Funktionen aktivieren                |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolescher Wert | TY LSP für Python-Dateien aktivieren                    |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolescher Wert | Experimentelle Markdown-Funktionen aktivieren           |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolescher Wert | Planmodus aktivieren                                    |
+| `OPENCODE_EXPERIMENTAL                          ` | boolescher Wert | Alle experimentellen Funktionen aktivieren |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS  ` | Zahl    | Standard-Timeout für Bash-Befehle in ms |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT   ` | boolescher Wert | Kopieren bei Auswahl in TUI deaktivieren |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER      ` | boolescher Wert | Dateiüberwachung deaktivieren |
+| `OPENCODE_EXPERIMENTAL_EXA                      ` | boolescher Wert | Experimentelle Exa-Funktionen aktivieren |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER              ` | boolescher Wert | Dateiüberwachung für das gesamte Verzeichnis aktivieren |
+| `OPENCODE_EXPERIMENTAL_HTTPAPI                  ` | boolescher Wert | Effect HttpApi-Bridge aktivieren |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY           ` | boolescher Wert | Symbolerkennung aktivieren |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL                 ` | boolescher Wert | Experimentelles LSP-Tool aktivieren |
+| `OPENCODE_EXPERIMENTAL_LSP_TY                   ` | boolescher Wert | TY LSP für Python-Dateien aktivieren |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN                 ` | boolescher Wert | Experimentelle Markdown-Funktionen aktivieren |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX         ` | Zahl    | Maximale Ausgabetokens für LLM-Antworten |
+| `OPENCODE_EXPERIMENTAL_OXFMT                    ` | boolescher Wert | Oxfmt-Formatierer aktivieren |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE                ` | boolescher Wert | Planmodus aktivieren |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES               ` | boolescher Wert | Experimentelle Arbeitsbereiche aktivieren |

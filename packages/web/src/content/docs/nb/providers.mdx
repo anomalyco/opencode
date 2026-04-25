@@ -509,6 +509,8 @@ Cloudflare AI Gateway lar deg få tilgang til modeller fra OpenAI, Anthropic, Wo
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` godtas også som et alias for `CLOUDFLARE_API_TOKEN`.
+
 5. Kjør kommandoen `/models` for å velge en modell.
 
    ```txt
@@ -862,8 +864,15 @@ Slik bruker du Google Vertex AI med OpenCode:
    :::
 
 2. Angi de nødvendige miljøvariablene:
-   - `GOOGLE_CLOUD_PROJECT`: Google Cloud-prosjektet ditt ID
-   - `VERTEX_LOCATION` (valgfritt): Regionen for verteks AI (standard til `global`)
+   - Prosjekt-ID (velg en):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Plassering (valgfritt, sjekkes i denne rekkefølgen):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Standard er `us-central1` hvis ingen er satt
    - Autentisering (velg en):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Bane til tjenestekontoen JSON nøkkelfil
      - Autentiser med gcloud CLI: `gcloud auth application-default login`
@@ -879,11 +888,11 @@ Slik bruker du Google Vertex AI med OpenCode:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-`global`-regionen forbedrer tilgjengeligheten og reduserer feil uten ekstra kostnad. Bruk regionale endepunkter (f.eks. `us-central1`) for krav til dataopphold. [Finn ut mer](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+`global`-regionen forbedrer tilgjengeligheten og reduserer feil uten ekstra kostnad. Bruk den ved å sette `VERTEX_LOCATION=global`. Bruk regionale endepunkter (f.eks. `us-central1`) for krav til dataopphold. [Finn ut mer](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Kjør kommandoen `/models` for å velge modellen du ønsker.

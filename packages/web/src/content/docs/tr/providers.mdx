@@ -509,6 +509,8 @@ Cloudflare AI Gateway, OpenAI, Anthropic, Workers AI ve daha fazlasındaki model
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN`, `CLOUDFLARE_API_TOKEN` için bir takma ad olarak da kabul edilir.
+
 5. Bir model seçmek için `/models` komutunu çalıştırın.
 
    ```txt
@@ -861,8 +863,15 @@ Google Vertex AI'yi opencode ile kullanmak için:
    :::
 
 2. Gerekli ortam değişkenlerini ayarlayın:
-   - `GOOGLE_CLOUD_PROJECT`: Google Cloud proje kimliğiniz
-   - `VERTEX_LOCATION` (isteğe bağlı): Vertex AI bölgesi (varsayılanı `global`'dir)
+   - Proje kimliği (birini seçin):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Konum (isteğe bağlı, bu sırayla kontrol edilir):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Hiçbiri ayarlanmazsa varsayılan `us-central1`
    - Kimlik Doğrulama (birini seçin):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Hizmet hesabınızın yolu JSON anahtar dosyası
      - gcloud kullanarak kimlik doğrulaması yapın CLI: `gcloud auth application-default login`
@@ -878,11 +887,11 @@ Google Vertex AI'yi opencode ile kullanmak için:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-`global` bölgesi, hiçbir ekstra maliyet olmaksızın kullanılabilirliği artırır ve hataları azaltır. Veri yerleşimi gereksinimleri için bölgesel uç noktaları (ör. `us-central1`) kullanın. [Daha fazla bilgi](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+`global` bölgesi, hiçbir ekstra maliyet olmaksızın kullanılabilirliği artırır ve hataları azaltır. `VERTEX_LOCATION=global` ayarlayarak kullanın. Veri yerleşimi gereksinimleri için bölgesel uç noktaları (ör. `us-central1`) kullanın. [Daha fazla bilgi](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. İstediğiniz modeli seçmek için `/models` komutunu çalıştırın.

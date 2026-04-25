@@ -507,6 +507,8 @@ Mit dem Cloudflare AI Gateway können Sie über einen einheitlichen Endpunkt auf
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` wird auch als Alias für `CLOUDFLARE_API_TOKEN` akzeptiert.
+
 5. Führen Sie den Befehl `/models` aus, um ein Modell auszuwählen.
 
    ```txt
@@ -860,8 +862,15 @@ So verwenden Sie Google Vertex AI mit OpenCode:
    :::
 
 2. Legen Sie die erforderlichen Umgebungsvariablen fest:
-   - `GOOGLE_CLOUD_PROJECT`: Ihr Google Cloud-Projekt ID
-   - `VERTEX_LOCATION` (optional): Die Region für Vertex AI (standardmäßig `global`)
+   - Projekt-ID (eine davon):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Standort (optional, in dieser Reihenfolge geprüft):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Standardmäßig `us-central1`, falls keine gesetzt ist
    - Authentifizierung (wählen Sie eine aus):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Pfad zur Schlüsseldatei Ihres Dienstkontos JSON
      - Authentifizieren Sie sich mit gcloud CLI: `gcloud auth application-default login`
@@ -877,11 +886,11 @@ So verwenden Sie Google Vertex AI mit OpenCode:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-Die Region `global` verbessert die Verfügbarkeit und reduziert Fehler ohne zusätzliche Kosten. Verwenden Sie regionale Endpunkte (e.g., `us-central1`) für Datenresidenzanforderungen. [Learn more](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+Die Region `global` verbessert die Verfügbarkeit und reduziert Fehler ohne zusätzliche Kosten. Verwenden Sie sie durch Setzen von `VERTEX_LOCATION=global`. Verwenden Sie regionale Endpunkte (z. B. `us-central1`) für Datenresidenzanforderungen. [Learn more](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Führen Sie den Befehl `/models` aus, um das gewünschte Modell auszuwählen.

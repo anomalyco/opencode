@@ -505,6 +505,8 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` مقبول أيضاً كاسم بديل لـ `CLOUDFLARE_API_TOKEN`.
+
 5. شغّل الأمر `/models` لاختيار نموذج.
 
    ```txt
@@ -856,8 +858,15 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    :::
 
 2. عيّن متغيرات البيئة المطلوبة:
-   - `GOOGLE_CLOUD_PROJECT`: معرّف مشروع Google Cloud لديك
-   - `VERTEX_LOCATION` (اختياري): منطقة Vertex AI (الافتراضي `global`)
+   - معرّف المشروع (اختر واحداً):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - الموقع (اختياري، يتم التحقق بهذا الترتيب):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - الافتراضي هو `us-central1` إذا لم يتم تعيين أي منها
    - المصادقة (اختر واحدا):
      - `GOOGLE_APPLICATION_CREDENTIALS`: مسار ملف مفتاح حساب الخدمة بصيغة JSON
      - المصادقة عبر gcloud CLI: ‏`gcloud auth application-default login`
@@ -873,11 +882,11 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-تساعد منطقة `global` على تحسين التوفر وتقليل الأخطاء دون تكلفة إضافية. استخدم نقاط نهاية إقليمية (مثل `us-central1`) لمتطلبات موضع البيانات. [اعرف المزيد](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+تساعد منطقة `global` على تحسين التوفر وتقليل الأخطاء دون تكلفة إضافية. استخدمها عن طريق تعيين `VERTEX_LOCATION=global`. استخدم نقاط نهاية إقليمية (مثل `us-central1`) لمتطلبات موضع البيانات. [اعرف المزيد](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. شغّل الأمر `/models` لاختيار النموذج الذي تريده.

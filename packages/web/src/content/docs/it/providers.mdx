@@ -485,6 +485,8 @@ Cloudflare AI Gateway ti permette di accedere a modelli di OpenAI, Anthropic, Wo
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` è accettato anche come alias per `CLOUDFLARE_API_TOKEN`.
+
 5. Esegui il comando `/models` per selezionare un modello.
 
    ```txt
@@ -837,8 +839,15 @@ Per usare Google Vertex AI con OpenCode:
    :::
 
 2. Imposta le variabili d'ambiente richieste:
-   - `GOOGLE_CLOUD_PROJECT`: Il tuo ID progetto Google Cloud
-   - `VERTEX_LOCATION` (opzionale): La regione per Vertex AI (predefinito `global`)
+   - ID progetto (scegline uno):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Posizione (opzionale, controllata in questo ordine):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Predefinito `us-central1` se nessuno è impostato
    - Autenticazione (scegline una):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Percorso al file JSON della chiave del tuo service account
      - Autenticati usando la CLI gcloud: `gcloud auth application-default login`
@@ -854,11 +863,11 @@ Per usare Google Vertex AI con OpenCode:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-La regione `global` migliora la disponibilità e riduce gli errori senza costi extra. Usa endpoint regionali (ad es. `us-central1`) per requisiti di residenza dei dati. [Scopri di più](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+La regione `global` migliora la disponibilità e riduce gli errori senza costi extra. Usala impostando `VERTEX_LOCATION=global`. Usa endpoint regionali (ad es. `us-central1`) per requisiti di residenza dei dati. [Scopri di più](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Esegui il comando `/models` per selezionare il modello che vuoi.

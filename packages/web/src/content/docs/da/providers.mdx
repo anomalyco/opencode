@@ -501,6 +501,8 @@ Cloudflare AI Gateway lader dig få adgang til modeller fra OpenAI, Anthropic, W
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` accepteres også som et alias for `CLOUDFLARE_API_TOKEN`.
+
 5. Kør kommandoen `/models` for at vælge en model.
 
    ```txt
@@ -854,8 +856,15 @@ Sådan bruger du Google Vertex AI med OpenCode:
    :::
 
 2. Angiv de nødvendige miljøvariabler:
-   - `GOOGLE_CLOUD_PROJECT`: Dit Google Cloud-projekt ID
-   - `VERTEX_LOCATION` (valgfrit): Regionen for Vertex AI (standard til `global`)
+   - Projekt-ID (vælg en):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Lokation (valgfrit, kontrolleres i denne rækkefølge):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Standard er `us-central1`, hvis ingen er sat
    - Godkendelse (vælg en):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Sti til tjenestekontoens JSON-nøglefil
      - Godkend med gcloud CLI: `gcloud auth application-default login`
@@ -871,11 +880,11 @@ Sådan bruger du Google Vertex AI med OpenCode:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-`global`-regionen forbedrer tilgængeligheden og reducerer fejl uden ekstra omkostninger. Brug regionale endpoints (f.eks. `us-central1`) for krav til dataophold. [Læs mere](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+`global`-regionen forbedrer tilgængeligheden og reducerer fejl uden ekstra omkostninger. Brug den ved at sætte `VERTEX_LOCATION=global`. Brug regionale endpoints (f.eks. `us-central1`) for krav til dataophold. [Læs mere](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Kør kommandoen `/models` for at vælge modellen du ønsker.

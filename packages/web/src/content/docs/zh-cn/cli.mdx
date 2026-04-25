@@ -555,30 +555,39 @@ OpenCode 可以通过环境变量进行配置。
 
 | 变量                                  | 类型    | 描述                                    |
 | ------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | 自动分享会话                            |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径    |
-| `OPENCODE_CONFIG`                     | string  | 配置文件路径                            |
-| `OPENCODE_TUI_CONFIG`                 | string  | TUI 配置文件路径                        |
-| `OPENCODE_CONFIG_DIR`                 | string  | 配置目录路径                            |
-| `OPENCODE_CONFIG_CONTENT`             | string  | 内联 JSON 配置内容                      |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | 禁用自动更新检查                        |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | 禁用旧数据清理                          |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | 禁用自动终端标题更新                    |
-| `OPENCODE_PERMISSION`                 | string  | 内联 JSON 权限配置                      |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | 禁用默认插件                            |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | 禁用 LSP 服务器自动下载                 |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | 启用实验性模型                          |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | 禁用自动上下文压缩                      |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | 禁用读取 `.claude`（提示词 + 技能）     |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | 禁用读取 `~/.claude/CLAUDE.md`          |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | 禁用加载 `.claude/skills`               |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 禁用从远程源获取模型                    |
-| `OPENCODE_FAKE_VCS`                   | string  | 用于测试目的的模拟 VCS 提供商           |
-| `OPENCODE_CLIENT`                     | string  | 客户端标识符（默认为 `cli`）            |
-| `OPENCODE_ENABLE_EXA`                 | boolean | 启用 Exa 网络搜索工具                   |
-| `OPENCODE_SERVER_PASSWORD`            | string  | 为 `serve`/`web` 启用基本认证           |
-| `OPENCODE_SERVER_USERNAME`            | string  | 覆盖基本认证用户名（默认为 `opencode`） |
-| `OPENCODE_MODELS_URL`                 | string  | 自定义模型配置获取 URL                  |
+| `OPENCODE_AUTH_CONTENT                ` | string  | 内联 JSON 认证凭据 |
+| `OPENCODE_AUTO_SHARE                  ` | boolean | 自动分享会话 |
+| `OPENCODE_CLIENT                      ` | string  | 客户端标识符（默认为 `cli`） |
+| `OPENCODE_CONFIG                      ` | string  | 配置文件路径 |
+| `OPENCODE_CONFIG_DIR                  ` | string  | 配置目录路径 |
+| `OPENCODE_CONFIG_CONTENT              ` | string  | 内联 JSON 配置内容 |
+| `OPENCODE_DISABLE_AUTOCOMPACT         ` | boolean | 禁用自动上下文压缩 |
+| `OPENCODE_DISABLE_AUTOUPDATE          ` | boolean | 禁用自动更新检查 |
+| `OPENCODE_DISABLE_CLAUDE_CODE         ` | boolean | 禁用读取 `.claude`（提示词 + 技能） |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT  ` | boolean | 禁用读取 `~/.claude/CLAUDE.md` |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS  ` | boolean | 禁用加载 `.claude/skills` |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS     ` | boolean | 禁用默认插件 |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS     ` | boolean | 禁用从 npm 包加载技能 |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD        ` | boolean | 禁用 LSP 服务器自动下载 |
+| `OPENCODE_DISABLE_MODELS_FETCH        ` | boolean | 禁用从远程源获取模型 |
+| `OPENCODE_DISABLE_MOUSE               ` | boolean | 禁用 TUI 中的鼠标捕获 |
+| `OPENCODE_DISABLE_PRUNE               ` | boolean | 禁用旧数据清理 |
+| `OPENCODE_DISABLE_PROJECT_CONFIG      ` | boolean | 禁用加载项目级配置 |
+| `OPENCODE_DISABLE_TERMINAL_TITLE      ` | boolean | 禁用自动终端标题更新 |
+| `OPENCODE_ENABLE_EXA                  ` | boolean | 启用 Exa 网络搜索工具 |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS  ` | boolean | 启用实验性模型 |
+| `OPENCODE_FAKE_VCS                    ` | string  | 用于测试目的的模拟 VCS 提供商 |
+| `OPENCODE_GIT_BASH_PATH               ` | string  | Windows 上 Git Bash 可执行文件的路径 |
+| `OPENCODE_MODELS_PATH                 ` | string  | 模型 JSON 缓存文件的自定义路径 |
+| `OPENCODE_MODELS_URL                  ` | string  | 自定义模型配置获取 URL |
+| `OPENCODE_PERMISSION                  ` | string  | 内联 JSON 权限配置 |
+| `OPENCODE_SERVER_PASSWORD             ` | string  | 为 `serve`/`web` 启用基本认证 |
+| `OPENCODE_SERVER_USERNAME             ` | string  | 覆盖基本认证用户名（默认为 `opencode`） |
+| `OPENCODE_TUI_CONFIG                  ` | string  | TUI 配置文件路径 |
+| `EXA_API_KEY                          ` | string  | Exa 网络搜索的 API 密钥（需要 `OPENCODE_ENABLE_EXA`） |
+| `OTEL_EXPORTER_OTLP_ENDPOINT          ` | string  | OpenTelemetry OTLP 导出端点 |
+| `OTEL_EXPORTER_OTLP_HEADERS           ` | string  | OpenTelemetry OTLP 导出请求头 |
+| `OTEL_RESOURCE_ATTRIBUTES             ` | string  | OpenTelemetry 资源属性（键=值对） |
 
 ---
 
@@ -587,16 +596,19 @@ OpenCode 可以通过环境变量进行配置。
 这些环境变量用于启用可能会更改或移除的实验性功能。
 
 | 变量                                            | 类型    | 描述                            |
-| ----------------------------------------------- | ------- | ------------------------------- | --- | -------------------------------- | ------- | ------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | 启用所有实验性功能              |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                    |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 禁用 TUI 中的选中即复制         |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 命令的默认超时时间（毫秒） |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 响应的最大输出 Token 数     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 启用整个目录的文件监听器        |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | 启用 oxfmt 格式化器             |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 启用实验性 LSP 工具             |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 禁用文件监听器                  |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 启用实验性 Exa 功能             |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 为 python 文件启用 TY LSP       |     | `OPENCODE_EXPERIMENTAL_MARKDOWN` | boolean | 启用实验性 Markdown 功能 |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | 启用计划模式                    |
+| ----------------------------------------------- | ------- | ------------------------------- |
+| `OPENCODE_EXPERIMENTAL                          ` | boolean | 启用所有实验性功能 |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS  ` | number  | bash 命令的默认超时时间（毫秒） |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT   ` | boolean | 禁用 TUI 中的选中即复制 |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER      ` | boolean | 禁用文件监听器 |
+| `OPENCODE_EXPERIMENTAL_EXA                      ` | boolean | 启用实验性 Exa 功能 |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER              ` | boolean | 启用整个目录的文件监听器 |
+| `OPENCODE_EXPERIMENTAL_HTTPAPI                  ` | boolean | 启用 Effect HttpApi 桥接 |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY           ` | boolean | 启用图标发现 |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL                 ` | boolean | 启用实验性 LSP 工具 |
+| `OPENCODE_EXPERIMENTAL_LSP_TY                   ` | boolean | 为 python 文件启用 TY LSP |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN                 ` | boolean | 启用实验性 Markdown 功能 |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX         ` | number  | LLM 响应的最大输出 Token 数 |
+| `OPENCODE_EXPERIMENTAL_OXFMT                    ` | boolean | 启用 oxfmt 格式化器 |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE                ` | boolean | 启用计划模式 |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES               ` | boolean | 启用实验性工作区 |

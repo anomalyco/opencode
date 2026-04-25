@@ -556,30 +556,39 @@ OpenCode สามารถกำหนดค่าโดยใช้ตัว�
 
 | ตัวแปร                                | ชนิด    | คำอธิบาย                                                         |
 | ------------------------------------- | ------- | ---------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | Boolean | แชร์เซสชันอัตโนมัติเมื่อสร้าง                                    |
-| `OPENCODE_GIT_BASH_PATH`              | String  | เส้นทางไปยัง Git Bash บน Windows                                 |
-| `OPENCODE_CONFIG`                     | String  | เส้นทางไปยังไฟล์การกำหนดค่า                                      |
-| `OPENCODE_TUI_CONFIG`                 | String  | เส้นทางไปยังไฟล์การกำหนดค่า TUI                                  |
-| `OPENCODE_CONFIG_DIR`                 | String  | เส้นทางไปยังไดเร็กทอรีการกำหนดค่า                                |
-| `OPENCODE_CONFIG_CONTENT`             | String  | เนื้อหาการกำหนดค่าแบบ inline JSON                                |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | Boolean | ปิดใช้งานการอัปเดตอัตโนมัติ                                      |
-| `OPENCODE_DISABLE_PRUNE`              | Boolean | ปิดใช้งานการลบข้อมูลเซสชันเก่า                                   |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | Boolean | ปิดใช้งานการตั้งชื่อหน้าต่าง terminal                            |
-| `OPENCODE_PERMISSION`                 | String  | การกำหนดค่าสิทธิ์แบบ inline JSON                                 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | Boolean | ปิดใช้งานปลั๊กอินเริ่มต้น                                        |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | Boolean | ปิดใช้งานการดาวน์โหลด LSP อัตโนมัติ                              |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | Boolean | เปิดใช้งานโมเดลทดลอง                                             |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | Boolean | ปิดใช้งานการบีบอัดบริบทอัตโนมัติ                                 |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | Boolean | ปิดใช้งานการนำเข้าจาก `.claude` (prompt + skills)                |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | Boolean | ปิดใช้งานการนำเข้า `~/.claude/CLAUDE.md`                         |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | Boolean | ปิดใช้งานการนำเข้า `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | Boolean | ปิดใช้งานการดึงรายการโมเดลจากระยะไกล                             |
-| `OPENCODE_FAKE_VCS`                   | String  | เปิดใช้งาน VCS จำลองสำหรับการทดสอบ                               |
-| `OPENCODE_CLIENT`                     | String  | ตัวระบุไคลเอนต์ (ค่าเริ่มต้นคือ `cli`)                           |
-| `OPENCODE_ENABLE_EXA`                 | Boolean | เปิดใช้งานการใช้ Exa แทน ls หากมี                                |
-| `OPENCODE_SERVER_PASSWORD`            | String  | รหัสผ่านสำหรับการตรวจสอบสิทธิ์พื้นฐาน `serve`/`web`              |
-| `OPENCODE_SERVER_USERNAME`            | String  | ชื่อผู้ใช้สำหรับการตรวจสอบสิทธิ์พื้นฐาน (ค่าเริ่มต้น `opencode`) |
-| `OPENCODE_MODELS_URL`                 | String  | URL ที่กำหนดเองสำหรับการดึงรายการโมเดล                           |
+| `OPENCODE_AUTH_CONTENT                ` | String  | ข้อมูลรับรองการตรวจสอบสิทธิ์ JSON แบบ inline |
+| `OPENCODE_AUTO_SHARE                  ` | Boolean | แชร์เซสชันอัตโนมัติเมื่อสร้าง |
+| `OPENCODE_CLIENT                      ` | String  | ตัวระบุไคลเอนต์ (ค่าเริ่มต้นคือ `cli`) |
+| `OPENCODE_CONFIG                      ` | String  | เส้นทางไปยังไฟล์การกำหนดค่า |
+| `OPENCODE_CONFIG_DIR                  ` | String  | เส้นทางไปยังไดเร็กทอรีการกำหนดค่า |
+| `OPENCODE_CONFIG_CONTENT              ` | String  | เนื้อหาการกำหนดค่าแบบ inline JSON |
+| `OPENCODE_DISABLE_AUTOCOMPACT         ` | Boolean | ปิดใช้งานการบีบอัดบริบทอัตโนมัติ |
+| `OPENCODE_DISABLE_AUTOUPDATE          ` | Boolean | ปิดใช้งานการอัปเดตอัตโนมัติ |
+| `OPENCODE_DISABLE_CLAUDE_CODE         ` | Boolean | ปิดใช้งานการนำเข้าจาก `.claude` (prompt + skills) |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT  ` | Boolean | ปิดใช้งานการนำเข้า `~/.claude/CLAUDE.md` |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS  ` | Boolean | ปิดใช้งานการนำเข้า `.claude/skills` |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS     ` | Boolean | ปิดใช้งานปลั๊กอินเริ่มต้น |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS     ` | Boolean | ปิดใช้งานการโหลด skills จากแพ็คเกจ npm |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD        ` | Boolean | ปิดใช้งานการดาวน์โหลด LSP อัตโนมัติ |
+| `OPENCODE_DISABLE_MODELS_FETCH        ` | Boolean | ปิดใช้งานการดึงรายการโมเดลจากระยะไกล |
+| `OPENCODE_DISABLE_MOUSE               ` | Boolean | ปิดใช้งานการจับภาพเมาส์ใน TUI |
+| `OPENCODE_DISABLE_PRUNE               ` | Boolean | ปิดใช้งานการลบข้อมูลเซสชันเก่า |
+| `OPENCODE_DISABLE_PROJECT_CONFIG      ` | Boolean | ปิดใช้งานการโหลด config ระดับโปรเจกต์ |
+| `OPENCODE_DISABLE_TERMINAL_TITLE      ` | Boolean | ปิดใช้งานการตั้งชื่อหน้าต่าง terminal |
+| `OPENCODE_ENABLE_EXA                  ` | Boolean | เปิดใช้งานการใช้ Exa แทน ls หากมี |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS  ` | Boolean | เปิดใช้งานโมเดลทดลอง |
+| `OPENCODE_FAKE_VCS                    ` | String  | เปิดใช้งาน VCS จำลองสำหรับการทดสอบ |
+| `OPENCODE_GIT_BASH_PATH               ` | String  | เส้นทางไปยัง Git Bash บน Windows |
+| `OPENCODE_MODELS_PATH                 ` | String  | เส้นทางที่กำหนดเองสำหรับไฟล์แคช JSON ของโมเดล |
+| `OPENCODE_MODELS_URL                  ` | String  | URL ที่กำหนดเองสำหรับการดึงรายการโมเดล |
+| `OPENCODE_PERMISSION                  ` | String  | การกำหนดค่าสิทธิ์แบบ inline JSON |
+| `OPENCODE_SERVER_PASSWORD             ` | String  | รหัสผ่านสำหรับการตรวจสอบสิทธิ์พื้นฐาน `serve`/`web` |
+| `OPENCODE_SERVER_USERNAME             ` | String  | ชื่อผู้ใช้สำหรับการตรวจสอบสิทธิ์พื้นฐาน (ค่าเริ่มต้น `opencode`) |
+| `OPENCODE_TUI_CONFIG                  ` | String  | เส้นทางไปยังไฟล์การกำหนดค่า TUI |
+| `EXA_API_KEY                          ` | String  | คีย์ API สำหรับค้นหาเว็บ Exa (ต้องใช้ `OPENCODE_ENABLE_EXA`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT          ` | String  | จุดสิ้นสุดตัวส่งออก OpenTelemetry OTLP |
+| `OTEL_EXPORTER_OTLP_HEADERS           ` | String  | ส่วนหัวตัวส่งออก OpenTelemetry OTLP |
+| `OTEL_RESOURCE_ATTRIBUTES             ` | String  | แอตทริบิวต์ทรัพยากร OpenTelemetry (คู่ key=value) |
 
 ---
 
@@ -589,16 +598,18 @@ OpenCode สามารถกำหนดค่าโดยใช้ตัว�
 
 | ตัวแปร                                          | ชนิด    | คำอธิบาย                                       |
 | ----------------------------------------------- | ------- | ---------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | Boolean | เปิดใช้งานฟีเจอร์ทดลองทั้งหมด                  |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | Boolean | การค้นหาไอคอนทดลอง                             |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | Boolean | ปิดใช้งานการคัดลอกเมื่อเลือกใน TUI             |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Number  | การหมดเวลาเริ่มต้นสำหรับคำสั่ง bash ในหน่วย ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Number  | ขีดจำกัดสูงสุดสำหรับโทเค็นเอาต์พุต LLM         |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | Boolean | เปิดใช้งานตัวเฝ้าดูไฟล์สำหรับไดเร็กทอรีทั้งหมด |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | Boolean | ใช้ oxfmt เป็นตัวจัดรูปแบบ                     |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | Boolean | เปิดใช้งานเครื่องมือ LSP ทดลอง                 |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | Boolean | ปิดใช้งานตัวเฝ้าดูไฟล์                         |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | Boolean | ฟีเจอร์ Exa ทดลอง                              |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | Boolean | เปิดใช้งาน TY LSP สำหรับไฟล์ python            |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | Boolean | ใช้ Markdown renderer แบบทดลอง                 |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | Boolean | เปิดใช้งาน Plan mode                           |
+| `OPENCODE_EXPERIMENTAL                          ` | Boolean | เปิดใช้งานฟีเจอร์ทดลองทั้งหมด |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS  ` | Number  | การหมดเวลาเริ่มต้นสำหรับคำสั่ง bash ในหน่วย ms |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT   ` | Boolean | ปิดใช้งานการคัดลอกเมื่อเลือกใน TUI |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER      ` | Boolean | ปิดใช้งานตัวเฝ้าดูไฟล์ |
+| `OPENCODE_EXPERIMENTAL_EXA                      ` | Boolean | ฟีเจอร์ Exa ทดลอง |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER              ` | Boolean | เปิดใช้งานตัวเฝ้าดูไฟล์สำหรับไดเร็กทอรีทั้งหมด |
+| `OPENCODE_EXPERIMENTAL_HTTPAPI                  ` | Boolean | เปิดใช้งาน Effect HttpApi bridge |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY           ` | Boolean | การค้นหาไอคอนทดลอง |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL                 ` | Boolean | เปิดใช้งานเครื่องมือ LSP ทดลอง |
+| `OPENCODE_EXPERIMENTAL_LSP_TY                   ` | Boolean | เปิดใช้งาน TY LSP สำหรับไฟล์ python |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN                 ` | Boolean | ใช้ Markdown renderer แบบทดลอง |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX         ` | Number  | ขีดจำกัดสูงสุดสำหรับโทเค็นเอาต์พุต LLM |
+| `OPENCODE_EXPERIMENTAL_OXFMT                    ` | Boolean | ใช้ oxfmt เป็นตัวจัดรูปแบบ |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE                ` | Boolean | เปิดใช้งาน Plan mode |
+| `OPENCODE_EXPERIMENTAL_WORKSPACES               ` | Boolean | เปิดใช้งานเวิร์กสเปซทดลอง |
