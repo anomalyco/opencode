@@ -23,7 +23,7 @@ import { InstanceState } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { withStatics, type DeepMutable } from "@/util/schema"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -48,25 +48,7 @@ export const Info = Schema.Struct({
 })
   .annotate({ identifier: "Agent" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
-export interface Info {
-  name: string
-  description?: string
-  mode: "subagent" | "primary" | "all"
-  native?: boolean
-  hidden?: boolean
-  topP?: number
-  temperature?: number
-  color?: string
-  permission: Permission.Ruleset
-  model?: {
-    modelID: ModelID
-    providerID: ProviderID
-  }
-  variant?: string
-  prompt?: string
-  options: Record<string, unknown>
-  steps?: number
-}
+export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
@@ -96,7 +78,7 @@ export const layer = Layer.effect(
     const provider = yield* Provider.Service
 
     const state = yield* InstanceState.make<State>(
-      Effect.fn("Agent.state")(function* (_ctx) {
+      Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
         const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
@@ -153,7 +135,7 @@ export const layer = Layer.effect(
                 edit: {
                   "*": "deny",
                   [path.join(".opencode", "plans", "*.md")]: "allow",
-                  [path.relative(_ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+                  [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
                 },
               }),
               user,
