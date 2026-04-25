@@ -3,29 +3,33 @@
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
-    "typecheck": {},
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "build": {
-      "dependsOn": [],
+      "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
     "opencode#test": {
       "dependsOn": ["^build"],
       "outputs": [],
-      "passThroughEnv": ["*"]
+      "passThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"]
     },
     "opencode#test:ci": {
       "dependsOn": ["^build"],
       "outputs": [".artifacts/unit/junit.xml"],
-      "passThroughEnv": ["*"]
+      "passThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"]
     },
     "@opencode-ai/app#test": {
       "dependsOn": ["^build"],
-      "outputs": []
+      "outputs": [],
+      "passThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"]
     },
     "@opencode-ai/app#test:ci": {
       "dependsOn": ["^build"],
       "outputs": [".artifacts/unit/junit.xml"],
-      "passThroughEnv": ["*"]
+      "passThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"]
     }
   }
 }
