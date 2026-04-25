@@ -1206,7 +1206,9 @@ export type PermissionRuleConfig = PermissionActionConfig | PermissionObjectConf
 
 export type PermissionConfig =
   | PermissionActionConfig
-  | {
+  | ({
+      [key: string]: PermissionRuleConfig
+    } & {
       read?: PermissionRuleConfig
       edit?: PermissionRuleConfig
       glob?: PermissionRuleConfig
@@ -1224,7 +1226,7 @@ export type PermissionConfig =
       doom_loop?: PermissionActionConfig
       skill?: PermissionRuleConfig
       [key: string]: PermissionRuleConfig | PermissionActionConfig | undefined
-    }
+    })
 
 export type AgentConfig = {
   model?: string

@@ -4,7 +4,7 @@ import { realpathSync } from "fs"
 import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { Glob } from "@opencode-ai/core/util/glob"
 
 // Fast sync version for metadata checks
 export async function exists(p: string): Promise<boolean> {

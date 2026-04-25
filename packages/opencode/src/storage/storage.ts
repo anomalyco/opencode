@@ -1,9 +1,9 @@
 import { Log } from "../util"
 import path from "path"
 import { Global } from "../global"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import z from "zod"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { Git } from "@/git"
 

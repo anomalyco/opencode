@@ -6,8 +6,8 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util"
-import { Flock } from "@opencode-ai/shared/util/flock"
-import { Hash } from "@opencode-ai/shared/util/hash"
+import { Flock } from "@opencode-ai/core/util/flock"
+import { Hash } from "@opencode-ai/core/util/hash"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
