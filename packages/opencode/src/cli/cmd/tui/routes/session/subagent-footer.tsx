@@ -8,6 +8,13 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 import { Locale } from "@/util"
 import { useTerminalDimensions } from "@opentui/solid"
+import { AgentDisplay } from "@/agent/display"
+
+export function subagentLabelFromTitle(title: string) {
+  const match = title.match(/\(@([^()]+?) subagent\)$/)
+  if (!match) return "Subagent"
+  return AgentDisplay.title(match[1])
+}
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -18,8 +25,7 @@ export function SubagentFooter() {
   const subagentInfo = createMemo(() => {
     const s = session()
     if (!s) return { label: "Subagent", index: 0, total: 0 }
-    const agentMatch = s.title.match(/@(\w+) subagent/)
-    const label = agentMatch ? Locale.titlecase(agentMatch[1]) : "Subagent"
+    const label = subagentLabelFromTitle(s.title)
 
     if (!s.parentID) return { label, index: 0, total: 0 }
 

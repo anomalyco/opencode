@@ -8,6 +8,7 @@ import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "../config"
 import { Effect } from "effect"
+import { AgentDisplay } from "../agent/display"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): void
@@ -16,6 +17,10 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
+
+export function subagentSessionTitle(description: string, agentName: string) {
+  return description + ` (${AgentDisplay.mention(agentName)} subagent)`
+}
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -68,7 +73,7 @@ export const TaskTool = Tool.define(
         session ??
         (yield* sessions.create({
           parentID: ctx.sessionID,
-          title: params.description + ` (@${next.name} subagent)`,
+          title: subagentSessionTitle(params.description, next.name),
           permission: [
             ...(canTodo
               ? []
