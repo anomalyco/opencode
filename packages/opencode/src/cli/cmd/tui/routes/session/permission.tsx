@@ -15,6 +15,7 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Keybind } from "@/util"
 import { Locale } from "@/util"
 import { Global } from "@/global"
+import { AgentDisplay } from "@/agent/display"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
@@ -309,7 +310,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const desc = typeof data.description === "string" ? data.description : ""
               return {
                 icon: "#",
-                title: `${Locale.titlecase(type)} Task`,
+                title: `${AgentDisplay.title(type)} Task`,
                 body: (
                   <Show when={desc}>
                     <box paddingLeft={1}>

@@ -66,6 +66,7 @@ import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import { AgentDisplay } from "@/agent/display"
 import parsers from "../../../../../../parsers-config.ts"
 import * as Clipboard from "../../util/clipboard"
 import { errorMessage } from "@/util/error"
@@ -2000,7 +2001,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   const content = createMemo(() => {
     if (!props.input.description) return ""
-    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
+    const content = [`${AgentDisplay.title(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
 
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`

@@ -5,6 +5,7 @@ import {
   agentAutocompleteDisplay,
   agentAutocompleteOption,
 } from "../../../../src/cli/cmd/tui/component/prompt/autocomplete"
+import { AgentDisplay } from "../../../../src/agent/display"
 import { subagentLabelFromTitle } from "../../../../src/cli/cmd/tui/routes/session/subagent-footer"
 import { subagentSessionTitle } from "../../../../src/tool/task"
 
@@ -79,5 +80,11 @@ test("subagent footer label supports exact spaced-plus-hyphen plan case", () => 
 test("task title helper uses display-safe subagent mention", () => {
   expect(subagentSessionTitle("Search context", "\u200Bprometheus-agent")).toBe(
     "Search context (@prometheus-agent subagent)",
+  )
+})
+
+test("task block labels clean zero-width-prefixed subagent type", () => {
+  expect(`${AgentDisplay.title("\u200Bprometheus-agent")} Task — Search context`).toBe(
+    "Prometheus-Agent Task — Search context",
   )
 })
