@@ -647,6 +647,25 @@ describe("file/index Filesystem patterns", () => {
       })
     })
 
+    test("marks linked directories as directories", async () => {
+      await using tmp = await tmpdir({ git: true })
+      const target = path.join(tmp.path, "target")
+      const link = path.join(tmp.path, "linked")
+
+      await fs.mkdir(target)
+      await fs.writeFile(path.join(target, "file.txt"), "content", "utf-8")
+      await fs.symlink(target, link, process.platform === "win32" ? "junction" : "dir").catch(() => undefined)
+      if (!(await Filesystem.exists(link))) return
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const nodes = await list()
+          expect(nodes.find((node) => node.name === "linked")?.type).toBe("directory")
+        },
+      })
+    })
+
     test("throws for paths outside project directory", async () => {
       await using tmp = await tmpdir({ git: true })
 
