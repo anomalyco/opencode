@@ -6,6 +6,7 @@ import {
   agentAutocompleteOption,
 } from "../../../../src/cli/cmd/tui/component/prompt/autocomplete"
 import { AgentDisplay } from "../../../../src/agent/display"
+import { PromptFooterLabel } from "../../../../src/cli/cmd/tui/component/prompt/footer-label"
 import { subagentLabelFromTitle } from "../../../../src/cli/cmd/tui/routes/session/subagent-footer"
 import { subagentSessionTitle } from "../../../../src/tool/task"
 
@@ -86,5 +87,11 @@ test("task title helper uses display-safe subagent mention", () => {
 test("task block labels clean zero-width-prefixed subagent type", () => {
   expect(`${AgentDisplay.title("\u200Bprometheus-agent")} Task — Search context`).toBe(
     "Prometheus-Agent Task — Search context",
+  )
+})
+
+test("main prompt footer keeps cleaned agent label intact before model separator", () => {
+  expect(`${PromptFooterLabel.agent("normal", "\u200Bhephaestus - deep agent")} · GPT 5.5`).toBe(
+    "Hephaestus - Deep Agent · GPT 5.5",
   )
 })
