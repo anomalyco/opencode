@@ -22,16 +22,8 @@ import { Effect, Context, Layer, Schema } from "effect"
 import { InstanceState } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
-import { zod, ZodOverride } from "@/util/effect-zod"
+import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
-
-const PermissionRuleInfo = Schema.Struct({
-  permission: Schema.String,
-  pattern: Schema.String,
-  action: Permission.Action,
-})
-
-const PermissionRulesetInfo = Schema.Array(PermissionRuleInfo).annotate({ [ZodOverride]: Permission.Ruleset.zod })
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -42,7 +34,7 @@ export const Info = Schema.Struct({
   topP: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   color: Schema.optional(Schema.String),
-  permission: PermissionRulesetInfo,
+  permission: Permission.Ruleset,
   model: Schema.optional(
     Schema.Struct({
       modelID: ModelID,
