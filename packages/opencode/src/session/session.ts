@@ -322,11 +322,21 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
         0,
     ),
   )
+  const noCacheInputTokens = input.usage.inputTokenDetails?.noCacheTokens
 
   // AI SDK v6 normalized inputTokens to include cached tokens across all providers
   // (including Anthropic/Bedrock which previously excluded them). Always subtract cache
   // tokens to get the non-cached input count for separate cost calculation.
-  const adjustedInputTokens = safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
+  // When the SDK reports an explicit noCacheTokens field, trust it directly; some
+  // OpenAI-compatible providers only populate cachedInputTokens at the top level
+  // and leave inputTokens equal to prompt_tokens (which already includes cached),
+  // so a blind subtraction would double-count the cached portion.
+  const adjustedInputTokens = Math.max(
+    0,
+    noCacheInputTokens === undefined
+      ? safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
+      : safe(noCacheInputTokens - cacheWriteInputTokens),
+  )
 
   const total = input.usage.totalTokens
 

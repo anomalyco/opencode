@@ -1915,6 +1915,70 @@ describe("SessionNs.getUsage", () => {
     expect(result.tokens.cache.read).toBe(200)
   })
 
+  test("uses cachedInputTokens without double-counting when noCacheTokens is absent", () => {
+    // Repro for openai-compatible providers (e.g. DeepSeek, Moonshot) that report
+    // cachedInputTokens at the top level but leave inputTokenDetails empty. Upstream
+    // reports input=0, cache.read=0 because inputTokens already includes cached tokens
+    // and the fallback path subtracted them while cacheReadInputTokens also picked
+    // cachedInputTokens up, leading to a negative (clamped to 0) and missing cache.
+    const model = createModel({
+      context: 262_144,
+      output: 32_000,
+      cost: {
+        input: 0.95,
+        output: 4,
+        cache: { read: 0.16, write: 0 },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 14,
+        outputTokens: 43,
+        totalTokens: 57,
+        cachedInputTokens: 14,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: 43,
+          reasoningTokens: undefined,
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(0)
+    expect(result.tokens.cache.read).toBe(14)
+    expect(result.cost).toBeCloseTo((14 * 0.16 + 43 * 4) / 1_000_000, 10)
+  })
+
+  test("prefers explicit noCacheTokens when provider reports it alongside cachedInputTokens", () => {
+    const model = createModel({ context: 262_144, output: 32_000 })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 36_441,
+        outputTokens: 17,
+        totalTokens: 36_458,
+        cachedInputTokens: 36_352,
+        inputTokenDetails: {
+          noCacheTokens: 89,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: 17,
+          reasoningTokens: undefined,
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(89)
+    expect(result.tokens.cache.read).toBe(36_352)
+  })
+
   test("handles anthropic cache write metadata", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
     const result = SessionNs.getUsage({
