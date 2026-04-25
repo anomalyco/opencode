@@ -43,7 +43,7 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
-import { AgentDisplay } from "@/agent/display"
+import { PromptFooterLabel } from "./footer-label"
 
 export type PromptProps = {
   sessionID?: string
@@ -1232,34 +1232,33 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
-              <box flexDirection="row" gap={1}>
+              <box flexDirection="row" gap={1} flexGrow={1}>
                 <Show when={local.agent.current()} fallback={<box height={1} />}>
                   {(agent) => (
-                    <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : AgentDisplay.title(agent().name)}
-                      </text>
+                    <text wrapMode="none" overflow="hidden" flexGrow={1}>
+                      <span style={{ fg: fadeColor(highlight(), agentMetaAlpha()) }}>
+                        {PromptFooterLabel.agent(store.mode, agent().name)}
+                      </span>
                       <Show when={store.mode === "normal"}>
-                        <box flexDirection="row" gap={1}>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
-                          <text
-                            flexShrink={0}
-                            fg={fadeColor(keybind.leader ? theme.textMuted : theme.text, modelMetaAlpha())}
+                        <>
+                          <span style={{ fg: fadeColor(theme.textMuted, modelMetaAlpha()) }}> · </span>
+                          <span
+                            style={{ fg: fadeColor(keybind.leader ? theme.textMuted : theme.text, modelMetaAlpha()) }}
                           >
                             {local.model.parsed().model}
-                          </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                          </span>
+                          <span style={{ fg: fadeColor(theme.textMuted, modelMetaAlpha()) }}>{currentProviderLabel()}</span>
                           <Show when={showVariant()}>
-                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
-                            <text>
+                            <>
+                              <span style={{ fg: fadeColor(theme.textMuted, variantMetaAlpha()) }}> · </span>
                               <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
                                 {local.model.variant.current()}
                               </span>
-                            </text>
+                            </>
                           </Show>
-                        </box>
+                        </>
                       </Show>
-                    </>
+                    </text>
                   )}
                 </Show>
               </box>
