@@ -324,6 +324,10 @@ describe("AppFileSystem", () => {
       expect(AppFileSystem.mimeType("unknown.qzx")).toBe("application/octet-stream")
     })
 
+    test("resolve tolerates missing paths", () => {
+      expect(() => AppFileSystem.resolve(path.join("definitely-missing", crypto.randomUUID()))).not.toThrow()
+    })
+
     test("contains checks path containment", () => {
       expect(AppFileSystem.contains("/a/b", "/a/b/c")).toBe(true)
       expect(AppFileSystem.contains("/a/b", "/a/c")).toBe(false)
