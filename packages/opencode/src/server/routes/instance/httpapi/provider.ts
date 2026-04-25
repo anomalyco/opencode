@@ -1,5 +1,5 @@
 import { ProviderAuth } from "@/provider"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { ModelsDev } from "@/provider"
 import { Provider } from "@/provider"
 import { ProviderID } from "@/provider/schema"

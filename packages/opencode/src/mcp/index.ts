@@ -9,7 +9,7 @@ import {
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
-import { Config } from "../config"
+import { Config } from "../config/config"
 import { ConfigMCP } from "../config/mcp"
 import { Log } from "../util"
 import { NamedError } from "@opencode-ai/shared/util/error"
@@ -521,7 +521,9 @@ export const layer = Layer.effect(
                     for (const dpid of pids) {
                       try {
                         process.kill(dpid, "SIGTERM")
-                      } catch {}
+                      } catch (e) {
+                        log.debug("process.kill SIGTERM failed", { error: e, pid: dpid })
+                      }
                     }
                   }
                   yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)

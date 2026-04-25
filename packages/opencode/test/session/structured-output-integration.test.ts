@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { Session } from "../../src/session"
+import { Session } from "../../src/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util"
 import { Instance } from "../../src/project/instance"

@@ -6,7 +6,7 @@ import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, json
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
@@ -255,8 +255,8 @@ const live: Layer.Layer<
               metadata: typeof result === "object" ? result?.metadata : undefined,
               title: typeof result === "object" ? result?.title : undefined,
             }
-          } catch (e: any) {
-            return { result: "", error: e.message ?? String(e) }
+          } catch (e: unknown) {
+            return { result: "", error: e instanceof Error ? e.message : String(e) }
           }
         }
 

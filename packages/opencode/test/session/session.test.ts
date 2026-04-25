@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Session as SessionNs } from "../../src/session"
+import { Session as SessionNs } from "../../src/session/session"
 import { Bus } from "../../src/bus"
 import { Log } from "../../src/util"
 import { Instance } from "../../src/project/instance"

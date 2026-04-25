@@ -2,8 +2,10 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
-import { Filesystem } from "../util"
+import { Filesystem, Log } from "../util"
 import { Flock } from "@opencode-ai/shared/util/flock"
+
+const log = Log.create({ service: "global" })
 
 const app = "opencode"
 
@@ -51,7 +53,9 @@ if (version !== CACHE_VERSION) {
         }),
       ),
     )
-  } catch {}
+  } catch (e) {
+    log.warn("cache directory cleanup failed", { error: e })
+  }
   await Filesystem.write(path.join(Path.cache, "version"), CACHE_VERSION)
 }
 

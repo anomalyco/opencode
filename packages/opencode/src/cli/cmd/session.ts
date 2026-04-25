@@ -1,6 +1,6 @@
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
-import { Session } from "../../session"
+import { Session } from "../../session/session"
 import { SessionID } from "../../session/schema"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"

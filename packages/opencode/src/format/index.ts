@@ -5,7 +5,7 @@ import { InstanceState } from "@/effect"
 import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
-import { Config } from "../config"
+import { Config } from "../config/config"
 import { Log } from "../util"
 import * as Formatter from "./formatter"
 

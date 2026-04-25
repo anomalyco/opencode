@@ -12,7 +12,7 @@ import { Log } from "@/util"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share"
 import * as Effect from "effect/Effect"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })

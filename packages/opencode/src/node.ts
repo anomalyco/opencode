@@ -1,4 +1,4 @@
-export { Config } from "./config"
+export { Config } from "./config/config"
 export { Server } from "./server/server"
 export { bootstrap } from "./cli/bootstrap"
 export { Log } from "./util"

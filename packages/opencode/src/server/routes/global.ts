@@ -13,7 +13,7 @@ import { Installation } from "@/installation"
 import { InstallationVersion } from "@/installation/version"
 import { Log } from "../../util"
 import { lazy } from "../../util/lazy"
-import { Config } from "../../config"
+import { Config } from "../../config/config"
 import { errors } from "../error"
 
 const log = Log.create({ service: "server" })

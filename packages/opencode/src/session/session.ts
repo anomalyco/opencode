@@ -506,6 +506,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
           SyncEvent.remove(sessionID)
         })
       } catch (e) {
+        log.warn("session remove failed", { error: e })
         log.error(e)
       }
     })
@@ -849,3 +850,5 @@ export function* listGlobal(input?: {
     yield { ...fromRow(row), project }
   }
 }
+
+export * as Session from "./session"

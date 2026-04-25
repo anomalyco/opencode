@@ -1,4 +1,4 @@
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { Provider } from "@/provider"
 import { Effect, Layer } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"

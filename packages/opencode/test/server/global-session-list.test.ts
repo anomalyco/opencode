@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import z from "zod"
 import { Instance } from "../../src/project/instance"
 import { Project } from "../../src/project"
-import { Session as SessionNs } from "../../src/session"
+import { Session as SessionNs } from "../../src/session/session"
 import { Log } from "../../src/util"
 import { tmpdir } from "../fixture/fixture"
 

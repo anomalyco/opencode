@@ -54,7 +54,11 @@ export const layer = Layer.effect(
       if (existing) return existing
       const next = Runner.make<MessageV2.WithParts>(data.scope, {
         onIdle: Effect.gen(function* () {
-          data.runners.delete(sessionID)
+          yield* Effect.sync(() => {
+            const r = data.runners.get(sessionID)
+            data.runners.delete(sessionID)
+            return r
+          })
           yield* status.set(sessionID, { type: "idle" })
         }),
         onBusy: status.set(sessionID, { type: "busy" }),

@@ -9,7 +9,7 @@ import { File } from "@/file"
 import { Vcs } from "@/project"
 import { Snapshot } from "@/snapshot"
 import { Bus } from "@/bus"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import * as Observability from "./observability"
 import { memoMap } from "./memo-map"
 

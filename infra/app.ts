@@ -41,7 +41,7 @@ export const api = new sst.cloudflare.Worker("Api", {
       args.migrations = {
         // Note: when releasing the next tag, make sure all stages use tag v2
         oldTag: $app.stage === "production" || $app.stage === "thdxr" ? "" : "v1",
-        newTag: $app.stage === "production" || $app.stage === "thdxr" ? "" : "v1",
+        newTag: "v2",
         //newSqliteClasses: ["SyncServer"],
       }
     },

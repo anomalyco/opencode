@@ -1,4 +1,7 @@
 import { isRecord } from "./record"
+import { Log } from "@/util"
+
+const log = Log.create({ service: "util.error" })
 
 export function errorFormat(error: unknown): string {
   if (error instanceof Error) {
@@ -8,7 +11,8 @@ export function errorFormat(error: unknown): string {
   if (typeof error === "object" && error !== null) {
     try {
       return JSON.stringify(error, null, 2)
-    } catch {
+    } catch (e) {
+      log.debug("JSON.stringify failed", { error: e })
       return "Unexpected error (unserializable)"
     }
   }
