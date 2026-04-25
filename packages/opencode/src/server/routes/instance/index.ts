@@ -57,6 +57,11 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(InstancePaths.path, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcs, (c) => handler(c.req.raw, context))
     app.get(InstancePaths.vcsDiff, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.command, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.agent, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.skill, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.lsp, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.formatter, (c) => handler(c.req.raw, context))
     app.get(McpPaths.status, (c) => handler(c.req.raw, context))
   }
 
@@ -201,7 +206,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "List of commands",
             content: {
               "application/json": {
-                schema: resolver(Command.Info.array()),
+                schema: resolver(Command.Info.zod.array()),
               },
             },
           },
@@ -224,7 +229,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "List of agents",
             content: {
               "application/json": {
-                schema: resolver(Agent.Info.array()),
+                schema: resolver(Agent.Info.zod.array()),
               },
             },
           },
@@ -247,7 +252,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "List of skills",
             content: {
               "application/json": {
-                schema: resolver(Skill.Info.array()),
+                schema: resolver(Skill.Info.zod.array()),
               },
             },
           },
@@ -293,7 +298,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "Formatter status",
             content: {
               "application/json": {
-                schema: resolver(Format.Status.array()),
+                schema: resolver(Format.Status.zod.array()),
               },
             },
           },

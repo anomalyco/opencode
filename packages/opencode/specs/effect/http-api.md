@@ -140,7 +140,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `file`                   | `bridged` partial | list/content/status only                                       |
 | `mcp`                    | `bridged` partial | status only                                                    |
 | `workspace`              | `bridged`         | list, get, enter                                               |
-| top-level instance reads | `bridged` partial | path and vcs reads; command, agent, skill, lsp, formatter next |
+| top-level instance reads | `bridged`         | path, vcs, command, agent, skill, lsp, formatter              |
 | experimental JSON routes | `next/later`      | console, tool, worktree, resource, global session list         |
 | `session`                | `later/special`   | large stateful surface plus streaming                          |
 | `sync`                   | `later`           | process/control side effects                                   |
@@ -151,8 +151,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 ## Next PRs
 
 1. Produce a generated route inventory from Hono registrations and update `Current Route Status` with exact paths.
-2. Continue porting top-level JSON reads.
-3. Start the Effect OpenAPI/SDK generation path for already-bridged routes.
+2. Start the Effect OpenAPI/SDK generation path for already-bridged routes.
 
 ## Checklist
 
@@ -165,7 +164,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 - [x] Add bridge-level auth and instance tests.
 - [ ] Complete exact Hono route inventory.
 - [x] Resolve implemented-but-unmounted route groups.
-- [ ] Port remaining JSON routes.
+- [x] Port remaining top-level JSON reads.
 - [ ] Generate SDK/OpenAPI from Effect routes.
 - [ ] Flip ported JSON routes to default-on with fallback.
 - [ ] Delete replaced Hono route implementations.

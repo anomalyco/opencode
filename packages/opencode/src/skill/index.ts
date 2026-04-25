@@ -2,7 +2,9 @@ import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -23,13 +25,14 @@ const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
-export const Info = z.object({
-  name: z.string(),
-  description: z.string(),
-  location: z.string(),
-  content: z.string(),
+export const Info = Schema.Struct({
+  name: Schema.String,
+  description: Schema.String,
+  location: Schema.String,
+  content: Schema.String,
 })
-export type Info = z.infer<typeof Info>
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
 export const InvalidError = NamedError.create(
   "SkillInvalidError",
@@ -91,7 +94,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
 
   if (!md) return
 
-  const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+  const parsed = z.object({ name: z.string(), description: z.string() }).safeParse(md.data)
   if (!parsed.success) return
 
   if (state.skills[parsed.data.name]) {

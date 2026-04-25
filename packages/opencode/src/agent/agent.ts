@@ -3,7 +3,6 @@ import z from "zod"
 import { Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
-import { Instance } from "../project/instance"
 import { Truncate } from "../tool"
 import { Auth } from "../auth"
 import { ProviderTransform } from "../provider"
@@ -19,37 +18,63 @@ import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
-import { Effect, Context, Layer } from "effect"
+import { Effect, Context, Layer, Schema } from "effect"
 import { InstanceState } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { zod, ZodOverride } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
-export const Info = z
-  .object({
-    name: z.string(),
-    description: z.string().optional(),
-    mode: z.enum(["subagent", "primary", "all"]),
-    native: z.boolean().optional(),
-    hidden: z.boolean().optional(),
-    topP: z.number().optional(),
-    temperature: z.number().optional(),
-    color: z.string().optional(),
-    permission: Permission.Ruleset.zod,
-    model: z
-      .object({
-        modelID: ModelID.zod,
-        providerID: ProviderID.zod,
-      })
-      .optional(),
-    variant: z.string().optional(),
-    prompt: z.string().optional(),
-    options: z.record(z.string(), z.any()),
-    steps: z.number().int().positive().optional(),
-  })
-  .meta({
-    ref: "Agent",
-  })
-export type Info = z.infer<typeof Info>
+const PermissionRuleInfo = Schema.Struct({
+  permission: Schema.String,
+  pattern: Schema.String,
+  action: Permission.Action,
+})
+
+const PermissionRulesetInfo = Schema.Array(PermissionRuleInfo).annotate({ [ZodOverride]: Permission.Ruleset.zod })
+
+export const Info = Schema.Struct({
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  mode: Schema.Literals(["subagent", "primary", "all"]),
+  native: Schema.optional(Schema.Boolean),
+  hidden: Schema.optional(Schema.Boolean),
+  topP: Schema.optional(Schema.Number),
+  temperature: Schema.optional(Schema.Number),
+  color: Schema.optional(Schema.String),
+  permission: PermissionRulesetInfo,
+  model: Schema.optional(
+    Schema.Struct({
+      modelID: ModelID,
+      providerID: ProviderID,
+    }),
+  ),
+  variant: Schema.optional(Schema.String),
+  prompt: Schema.optional(Schema.String),
+  options: Schema.Record(Schema.String, Schema.Unknown),
+  steps: Schema.optional(Schema.Number),
+})
+  .annotate({ identifier: "Agent" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export interface Info {
+  name: string
+  description?: string
+  mode: "subagent" | "primary" | "all"
+  native?: boolean
+  hidden?: boolean
+  topP?: number
+  temperature?: number
+  color?: string
+  permission: Permission.Ruleset
+  model?: {
+    modelID: ModelID
+    providerID: ProviderID
+  }
+  variant?: string
+  prompt?: string
+  options: Record<string, unknown>
+  steps?: number
+}
 
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
@@ -136,7 +161,7 @@ export const layer = Layer.effect(
                 edit: {
                   "*": "deny",
                   [path.join(".opencode", "plans", "*.md")]: "allow",
-                  [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+                  [path.relative(_ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
                 },
               }),
               user,

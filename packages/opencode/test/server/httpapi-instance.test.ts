@@ -50,4 +50,31 @@ describe("instance HttpApi", () => {
       expect.objectContaining({ file: "changed.txt", additions: 1, status: "added" }),
     )
   })
+
+  test("serves catalog read endpoints through Hono bridge", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+
+    const [commands, agents, skills, lsp, formatter] = await Promise.all([
+      app().request(InstancePaths.command, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.agent, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.skill, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.lsp, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.formatter, { headers: { "x-opencode-directory": tmp.path } }),
+    ])
+
+    expect(commands.status).toBe(200)
+    expect(await commands.json()).toContainEqual(expect.objectContaining({ name: "init", source: "command" }))
+
+    expect(agents.status).toBe(200)
+    expect(await agents.json()).toContainEqual(expect.objectContaining({ name: "build", mode: "primary" }))
+
+    expect(skills.status).toBe(200)
+    expect(await skills.json()).toBeArray()
+
+    expect(lsp.status).toBe(200)
+    expect(await lsp.json()).toEqual([])
+
+    expect(formatter.status).toBe(200)
+    expect(await formatter.json()).toEqual([])
+  })
 })
