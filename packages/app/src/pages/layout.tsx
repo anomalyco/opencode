@@ -986,7 +986,7 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  async function archiveSession(session: Session) {
+  async function executeArchiveSession(session: Session) {
     const [store, setStore] = globalSync.child(session.directory)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
@@ -1009,6 +1009,13 @@ export default function Layout(props: ParentProps) {
       } else {
         navigate(`/${params.dir}/session`)
       }
+    }
+  }
+
+  async function archiveSession(sessionID: string) {
+    const session = globalSync.data.session.find((s) => s.id === sessionID)
+    if (session) {
+      await executeArchiveSession(session)
     }
   }
 
@@ -1759,7 +1766,7 @@ export default function Layout(props: ParentProps) {
       () => sessionTitle(props.session.title) ?? language.t("command.session.new"),
     )
     const handleArchive = async () => {
-      await archiveSession(props.session)
+      await executeArchiveSession(props.session)
       dialog.close()
     }
 

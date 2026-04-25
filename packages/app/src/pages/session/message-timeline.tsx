@@ -623,6 +623,33 @@ export function MessageTimeline(props: {
     )
   }
 
+  function DialogArchiveSession(props: { sessionID: string; title: string }) {
+    const handleArchive = async () => {
+      await archiveSession(props.sessionID)
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("session.archive.title")} fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              {language.t("session.archive.confirm", { name: props.title })}
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleArchive}>
+              {language.t("session.archive.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
   return (
     <Show
       when={!props.mobileChanges}
@@ -878,7 +905,16 @@ export function MessageTimeline(props: {
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
+                                <DropdownMenu.Item
+                                  onSelect={() =>
+                                    dialog.show(() => (
+                                      <DialogArchiveSession
+                                        sessionID={id}
+                                        title={sync.session.get(id)?.title ?? language.t("command.session.new")}
+                                      />
+                                    ))
+                                  }
+                                >
                                   <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                                 <DropdownMenu.Separator />
