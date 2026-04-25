@@ -3,6 +3,8 @@ import { Log } from "@/util"
 
 type Fields = Record<string, unknown>
 
+const normalizeKey = (key: string) => (key === "sessionID" ? "session.id" : key)
+
 export interface Handle {
   readonly debug: (msg?: unknown, extra?: Fields) => Effect.Effect<void>
   readonly info: (msg?: unknown, extra?: Fields) => Effect.Effect<void>
@@ -12,7 +14,11 @@ export interface Handle {
 }
 
 const clean = (input?: Fields): Fields =>
-  Object.fromEntries(Object.entries(input ?? {}).filter((entry) => entry[1] !== undefined && entry[1] !== null))
+  Object.fromEntries(
+    Object.entries(input ?? {})
+      .filter((entry) => entry[1] !== undefined && entry[1] !== null)
+      .map(([key, value]) => [normalizeKey(key), value]),
+  )
 
 const text = (input: unknown): string => {
   // oxlint-disable-next-line no-base-to-string

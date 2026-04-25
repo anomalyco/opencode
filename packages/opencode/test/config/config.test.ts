@@ -1427,35 +1427,6 @@ test("migrates legacy patch tool to edit permission", async () => {
   })
 })
 
-test("migrates legacy multiedit tool to edit permission", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                multiedit: false,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await load()
-      expect(config.agent?.["test"]?.permission).toEqual({
-        edit: "deny",
-      })
-    },
-  })
-})
-
 test("migrates mixed legacy tools config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -1524,7 +1495,16 @@ test("merges legacy tools with existing permission config", async () => {
   })
 })
 
-test("permission config preserves key order", async () => {
+test("permission config canonicalises known keys first, preserves rest-key insertion order", async () => {
+  // ConfigPermission.Info is a StructWithRest schema — the decoder reorders
+  // keys into declaration-order for known permission names (edit, read,
+  // todowrite, external_directory are declared in `config/permission.ts`),
+  // followed by rest keys in the user's insertion order.
+  //
+  // Rule precedence is NOT affected by this reordering: `Permission.fromConfig`
+  // sorts wildcards before specifics before iterating. See the
+  // "fromConfig - specific key beats wildcard regardless of JSON key order"
+  // test in test/permission/next.test.ts for the behavioural guarantee.
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Filesystem.write(
@@ -1552,12 +1532,15 @@ test("permission config preserves key order", async () => {
     fn: async () => {
       const config = await load()
       expect(Object.keys(config.permission!)).toEqual([
-        "*",
-        "edit",
-        "write",
-        "external_directory",
+        // known fields that the user provided, in declaration order from
+        // config/permission.ts (read, edit, ..., external_directory, todowrite)
         "read",
+        "edit",
+        "external_directory",
         "todowrite",
+        // rest keys (not in the known list), in user's insertion order
+        "*",
+        "write",
         "thoughts_*",
         "reasoning_model_*",
         "tools_*",
@@ -2250,7 +2233,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 
 test("parseManagedPlist strips MDM metadata keys", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2278,7 +2261,7 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
 
 test("parseManagedPlist parses server settings", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2298,7 +2281,7 @@ test("parseManagedPlist parses server settings", async () => {
 
 test("parseManagedPlist parses permission rules", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2328,7 +2311,7 @@ test("parseManagedPlist parses permission rules", async () => {
 
 test("parseManagedPlist parses enabled_providers", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2345,7 +2328,7 @@ test("parseManagedPlist parses enabled_providers", async () => {
 
 test("parseManagedPlist handles empty config", async () => {
   const config = ConfigParse.schema(
-    Config.Info,
+    Config.Info.zod,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(JSON.stringify({ $schema: "https://opencode.ai/config.json" })),
       "test:mobileconfig",

@@ -21,12 +21,29 @@ const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
     )
   : undefined
 
-function resource() {
+export function resource(): { serviceName: string; serviceVersion: string; attributes: Record<string, string> } {
   const processMetadata = ensureProcessMetadata("main")
+  const attributes: Record<string, string> = (() => {
+    const value = process.env.OTEL_RESOURCE_ATTRIBUTES
+    if (!value) return {}
+    try {
+      return Object.fromEntries(
+        value.split(",").map((entry) => {
+          const index = entry.indexOf("=")
+          if (index < 1) throw new Error("Invalid OTEL_RESOURCE_ATTRIBUTES entry")
+          return [decodeURIComponent(entry.slice(0, index)), decodeURIComponent(entry.slice(index + 1))]
+        }),
+      )
+    } catch {
+      return {}
+    }
+  })()
+
   return {
     serviceName: "opencode",
     serviceVersion: InstallationVersion,
     attributes: {
+      ...attributes,
       "deployment.environment.name": InstallationChannel,
       "opencode.client": Flag.OPENCODE_CLIENT,
       "opencode.process_role": processMetadata.processRole,

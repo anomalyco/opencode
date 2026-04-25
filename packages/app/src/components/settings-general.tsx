@@ -19,6 +19,9 @@ import {
   sansDefault,
   sansFontFamily,
   sansInput,
+  terminalDefault,
+  terminalFontFamily,
+  terminalInput,
   useSettings,
 } from "@/context/settings"
 import { decode64 } from "@/utils/base64"
@@ -125,27 +128,25 @@ export const SettingsGeneral: Component = () => {
           return
         }
 
-        const actions =
-          platform.update && platform.restart
-            ? [
-                {
-                  label: language.t("toast.update.action.installRestart"),
-                  onClick: async () => {
-                    await platform.update!()
-                    await platform.restart!()
-                  },
+        const actions = platform.updateAndRestart
+          ? [
+              {
+                label: language.t("toast.update.action.installRestart"),
+                onClick: async () => {
+                  await platform.updateAndRestart!()
                 },
-                {
-                  label: language.t("toast.update.action.notYet"),
-                  onClick: "dismiss" as const,
-                },
-              ]
-            : [
-                {
-                  label: language.t("toast.update.action.notYet"),
-                  onClick: "dismiss" as const,
-                },
-              ]
+              },
+              {
+                label: language.t("toast.update.action.notYet"),
+                onClick: "dismiss" as const,
+              },
+            ]
+          : [
+              {
+                label: language.t("toast.update.action.notYet"),
+                onClick: "dismiss" as const,
+              },
+            ]
 
         showToast({
           persistent: true,
@@ -181,6 +182,7 @@ export const SettingsGeneral: Component = () => {
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
   const mono = () => monoInput(settings.appearance.font())
   const sans = () => sansInput(settings.appearance.uiFont())
+  const terminal = () => terminalInput(settings.appearance.terminalFont())
 
   const soundSelectProps = (
     enabled: () => boolean,
@@ -273,6 +275,18 @@ export const SettingsGeneral: Component = () => {
             <Switch
               checked={settings.general.editToolPartsExpanded()}
               onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.showSessionProgressBar.title")}
+          description={language.t("settings.general.row.showSessionProgressBar.description")}
+        >
+          <div data-action="settings-show-session-progress-bar">
+            <Switch
+              checked={settings.general.showSessionProgressBar()}
+              onChange={(checked) => settings.general.setShowSessionProgressBar(checked)}
             />
           </div>
         </SettingsRow>
@@ -448,6 +462,29 @@ export const SettingsGeneral: Component = () => {
               autocapitalize="off"
               class="text-12-regular"
               style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.terminalFont.title")}
+          description={language.t("settings.general.row.terminalFont.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextField
+              data-action="settings-terminal-font"
+              label={language.t("settings.general.row.terminalFont.title")}
+              hideLabel
+              type="text"
+              value={terminal()}
+              onChange={(value) => settings.appearance.setTerminalFont(value)}
+              placeholder={terminalDefault}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="text-12-regular"
+              style={{ "font-family": terminalFontFamily(settings.appearance.terminalFont()) }}
             />
           </div>
         </SettingsRow>

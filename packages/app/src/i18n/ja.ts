@@ -209,7 +209,7 @@ export const dict = {
   "common.saving": "保存中...",
   "common.default": "デフォルト",
   "common.attachment": "添付ファイル",
-  "prompt.placeholder.shell": "シェルコマンドを入力...",
+  "prompt.placeholder.shell": "シェルコマンドを入力... {{example}}",
   "prompt.placeholder.normal": '何でも聞いてください... "{{example}}"',
   "prompt.placeholder.simple": "何でも聞いてください...",
   "prompt.placeholder.summarizeComments": "コメントを要約…",
@@ -569,7 +569,9 @@ export const dict = {
   "settings.general.row.theme.title": "テーマ",
   "settings.general.row.theme.description": "OpenCodeのテーマをカスタマイズします。",
   "settings.general.row.font.title": "コードフォント",
-  "settings.general.row.font.description": "コードブロックとターミナルで使用するフォントをカスタマイズします",
+  "settings.general.row.font.description": "コードブロックで使用するフォントをカスタマイズします",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UIフォント",
   "settings.general.row.uiFont.description": "インターフェース全体で使用するフォントをカスタマイズします",
   "settings.general.row.followup.title": "フォローアップの動作",
@@ -585,6 +587,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "edit ツールパーツを展開",
   "settings.general.row.editToolPartsExpanded.description":
     "タイムラインで edit、write、patch ツールパーツをデフォルトで展開して表示します",
+  "settings.general.row.showSessionProgressBar.title": "セッション進行状況バーを表示",
+  "settings.general.row.showSessionProgressBar.description":
+    "エージェントの作業中に、セッション上部にアニメーション付きの進行状況バーを表示します",
   "settings.general.row.wayland.title": "ネイティブWaylandを使用",
   "settings.general.row.wayland.description": "WaylandでのX11フォールバックを無効にします。再起動が必要です。",
   "settings.general.row.wayland.tooltip":

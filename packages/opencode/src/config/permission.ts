@@ -1,15 +1,7 @@
 export * as ConfigPermission from "./permission"
-import { Schema } from "effect"
-import z from "zod"
+import { Schema, SchemaGetter } from "effect"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
-
-const permissionPreprocess = (val: unknown) => {
-  if (typeof val === "object" && val !== null && !Array.isArray(val)) {
-    return { __originalKeys: globalThis.Object.keys(val), ...val }
-  }
-  return val
-}
 
 export const Action = Schema.Literals(["ask", "allow", "deny"])
   .annotate({ identifier: "PermissionActionConfig" })
@@ -26,46 +18,62 @@ export const Rule = Schema.Union([Action, Object])
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Rule = Schema.Schema.Type<typeof Rule>
 
-const transform = (x: unknown): Record<string, Rule> => {
-  if (typeof x === "string") return { "*": x as Action }
-  const obj = x as { __originalKeys?: string[] } & Record<string, unknown>
-  const { __originalKeys, ...rest } = obj
-  if (!__originalKeys) return rest as Record<string, Rule>
-  const result: Record<string, Rule> = {}
-  for (const key of __originalKeys) {
-    if (key in rest) result[key] = rest[key] as Rule
-  }
-  return result
-}
+// Known permission keys get explicit types — most are full Rule (either a
+// single Action or a per-pattern object), but a handful of tools take no
+// sub-target patterns and are Action-only. Unknown keys fall through the
+// Record rest signature as Rule.
+//
+// StructWithRest canonicalises key order on decode (known first, then rest),
+// which used to require the `__originalKeys` preprocess hack because
+// `Permission.fromConfig` depended on the user's insertion order. That
+// dependency is gone — `fromConfig` now sorts top-level keys so wildcard
+// permissions come before specifics, making the final precedence
+// order-independent.
+const InputObject = Schema.StructWithRest(
+  Schema.Struct({
+    read: Schema.optional(Rule),
+    edit: Schema.optional(Rule),
+    glob: Schema.optional(Rule),
+    grep: Schema.optional(Rule),
+    list: Schema.optional(Rule),
+    bash: Schema.optional(Rule),
+    task: Schema.optional(Rule),
+    external_directory: Schema.optional(Rule),
+    todowrite: Schema.optional(Action),
+    question: Schema.optional(Action),
+    webfetch: Schema.optional(Action),
+    websearch: Schema.optional(Action),
+    codesearch: Schema.optional(Action),
+    lsp: Schema.optional(Rule),
+    doom_loop: Schema.optional(Action),
+    skill: Schema.optional(Rule),
+  }),
+  [Schema.Record(Schema.String, Rule)],
+)
 
-export const Info = z
-  .preprocess(
-    permissionPreprocess,
-    z
-      .object({
-        __originalKeys: z.string().array().optional(),
-        read: Rule.zod.optional(),
-        edit: Rule.zod.optional(),
-        glob: Rule.zod.optional(),
-        grep: Rule.zod.optional(),
-        list: Rule.zod.optional(),
-        bash: Rule.zod.optional(),
-        task: Rule.zod.optional(),
-        external_directory: Rule.zod.optional(),
-        todowrite: Action.zod.optional(),
-        question: Action.zod.optional(),
-        webfetch: Action.zod.optional(),
-        websearch: Action.zod.optional(),
-        codesearch: Action.zod.optional(),
-        lsp: Rule.zod.optional(),
-        doom_loop: Action.zod.optional(),
-        skill: Rule.zod.optional(),
-      })
-      .catchall(Rule.zod)
-      .or(Action.zod),
+// Input the user writes in config: either a single Action (shorthand for "*")
+// or an object of per-target rules.
+const InputSchema = Schema.Union([Action, InputObject])
+
+// Normalise the Action shorthand into `{ "*": action }`. Object inputs pass
+// through untouched.
+const normalizeInput = (input: Schema.Schema.Type<typeof InputSchema>): Schema.Schema.Type<typeof InputObject> =>
+  typeof input === "string" ? { "*": input } : input
+
+export const Info = InputSchema.pipe(
+  Schema.decodeTo(InputObject, {
+    decode: SchemaGetter.transform(normalizeInput),
+    // Not perfectly invertible (we lose whether the user originally typed an
+    // Action shorthand), but the object form is always a valid representation
+    // of the same rules.
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+  .annotate({ identifier: "PermissionConfig" })
+  .pipe(
+    // Walker already emits the decodeTo transform into the derived zod (see
+    // `encoded()` in effect-zod.ts), so just expose that directly.
+    withStatics((s) => ({ zod: zod(s) })),
   )
-  .transform(transform)
-  .meta({
-    ref: "PermissionConfig",
-  })
-export type Info = z.infer<typeof Info>
+type _Info = Schema.Schema.Type<typeof InputObject>
+export type Info = { -readonly [K in keyof _Info]: _Info[K] }

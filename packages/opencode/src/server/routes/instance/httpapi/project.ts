@@ -1,7 +1,8 @@
-import { Instance } from "@/project/instance"
+import * as InstanceState from "@/effect/instance-state"
 import { Project } from "@/project"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "./auth"
 
 const root = "/project"
 
@@ -33,7 +34,8 @@ export const ProjectApi = HttpApi.make("project")
           title: "project",
           description: "Experimental HttpApi project routes.",
         }),
-      ),
+      )
+      .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({
@@ -52,7 +54,7 @@ export const projectHandlers = Layer.unwrap(
     })
 
     const current = Effect.fn("ProjectHttpApi.current")(function* () {
-      return Instance.project
+      return (yield* InstanceState.context).project
     })
 
     return HttpApiBuilder.group(ProjectApi, "project", (handlers) =>
