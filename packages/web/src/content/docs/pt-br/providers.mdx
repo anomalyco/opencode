@@ -511,6 +511,8 @@ O Cloudflare AI Gateway permite que você acesse modelos do OpenAI, Anthropic, W
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` também é aceito como alias para `CLOUDFLARE_API_TOKEN`.
+
 5. Execute o comando `/models` para selecionar um modelo.
 
    ```txt
@@ -862,8 +864,15 @@ Para usar o Google Vertex AI com o opencode:
    :::
 
 2. Defina as variáveis de ambiente necessárias:
-   - `GOOGLE_CLOUD_PROJECT`: Seu ID do projeto do Google Cloud
-   - `VERTEX_LOCATION` (opcional): A região para o Vertex AI (padrão é `global`)
+   - ID do projeto (escolha um):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Localização (opcional, verificado nesta ordem):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Padrão é `us-central1` se nenhum for definido
    - Autenticação (escolha uma):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Caminho para seu arquivo de chave JSON da conta de serviço
      - Autentique usando o CLI gcloud: `gcloud auth application-default login`
@@ -879,11 +888,11 @@ Para usar o Google Vertex AI com o opencode:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-A região `global` melhora a disponibilidade e reduz erros sem custo adicional. Use endpoints regionais (ex: `us-central1`) para requisitos de residência de dados. [Saiba mais](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+A região `global` melhora a disponibilidade e reduz erros sem custo adicional. Use-a definindo `VERTEX_LOCATION=global`. Use endpoints regionais (ex: `us-central1`) para requisitos de residência de dados. [Saiba mais](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Execute o comando `/models` para selecionar o modelo que você deseja.

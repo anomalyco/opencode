@@ -510,6 +510,8 @@ Ili ga postavite kao varijablu okruženja.
    export CLOUDFLARE_API_TOKEN=your-api-token
 ```
 
+`CF_AIG_TOKEN` je takođe prihvaćen kao alias za `CLOUDFLARE_API_TOKEN`.
+
 5. Pokrenite naredbu `/models` da odaberete model.
 
 ```txt
@@ -865,8 +867,15 @@ Za korištenje Google Vertex AI s OpenCode:
    :::
 
 2. Postavite potrebne varijable okruženja:
-   - `GOOGLE_CLOUD_PROJECT`: ID vašeg Google Cloud projekta
-   - `VERTEX_LOCATION` (opciono): Region za Vertex AI (podrazumevano na `global`)
+   - ID projekta (odaberite jedan):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Lokacija (opciono, provjerava se ovim redoslijedom):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - Podrazumevano `us-central1` ako nijedno nije postavljeno
    - Autentifikacija (odaberite jednu):
      - `GOOGLE_APPLICATION_CREDENTIALS`: Put do JSON ključnog fajla vašeg naloga usluge
      - Autentifikacija koristeći gcloud CLI: `gcloud auth application-default login`
@@ -882,11 +891,11 @@ Ili ih dodajte svom bash profilu.
 ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
 ```
 
 :::tip
-Regija `global` poboljšava dostupnost i smanjuje greške bez dodatnih troškova. Koristite regionalne krajnje tačke (npr. `us-central1`) za zahtjeve rezidentnosti podataka. [Saznajte više](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+Regija `global` poboljšava dostupnost i smanjuje greške bez dodatnih troškova. Koristite je postavljanjem `VERTEX_LOCATION=global`. Koristite regionalne krajnje tačke (npr. `us-central1`) za zahtjeve rezidentnosti podataka. [Saznajte više](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Pokrenite naredbu `/models` da odaberete model koji želite.

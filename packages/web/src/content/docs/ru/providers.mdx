@@ -507,6 +507,8 @@ Cloudflare AI Gateway позволяет вам получать доступ к
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` также принимается как псевдоним для `CLOUDFLARE_API_TOKEN`.
+
 5. Запустите команду `/models`, чтобы выбрать модель.
 
    ```txt
@@ -860,8 +862,15 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    :::
 
 2. Установите необходимые переменные среды:
-   - `GOOGLE_CLOUD_PROJECT`: идентификатор вашего проекта Google Cloud.
-   - `VERTEX_LOCATION` (необязательно): регион для Vertex AI (по умолчанию `global`).
+   - Идентификатор проекта (выберите один):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - Расположение (необязательно, проверяется в следующем порядке):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - По умолчанию `us-central1`, если ничего не установлено
    - Аутентификация (выберите одну):
      - `GOOGLE_APPLICATION_CREDENTIALS`: путь к ключевому файлу JSON вашего сервисного аккаунта.
      - Аутентификация через CLI gcloud: `gcloud auth application-default login`.
@@ -877,11 +886,11 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-Регион `global` повышает доступность и уменьшает количество ошибок без дополнительных затрат. Используйте региональные конечные точки (например, `us-central1`) для требований к местонахождению данных. [Подробнее](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+Регион `global` повышает доступность и уменьшает количество ошибок без дополнительных затрат. Используйте его, установив `VERTEX_LOCATION=global`. Используйте региональные конечные точки (например, `us-central1`) для требований к местонахождению данных. [Подробнее](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. Запустите команду `/models`, чтобы выбрать нужную модель.

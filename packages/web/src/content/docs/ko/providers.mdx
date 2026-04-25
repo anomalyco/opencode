@@ -511,6 +511,8 @@ Cloudflare AI Gateway는 OpenAI, Anthropic, Workers AI 등의 모델에 액세�
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN`은 `CLOUDFLARE_API_TOKEN`의 별칭으로도 사용할 수 있습니다.
+
 5. 모델을 선택하려면 `/models` 명령을 실행하십시오.
 
    ```txt
@@ -859,8 +861,15 @@ OpenCode로 Google Vertex AI를 사용하려면:
    :::
 
 2. 필요한 환경 변수를 설정:
-   - `GOOGLE_CLOUD_PROJECT`: 구글 클라우드 프로젝트 ID
-   - `VERTEX_LOCATION` (선택): Vertex AI 리전 (기본값: `global`)
+   - 프로젝트 ID (중 하나):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - 위치 (선택, 이 순서로 확인):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - 설정되지 않은 경우 기본값은 `us-central1`
    - 인증 (하나 선택):
      - `GOOGLE_APPLICATION_CREDENTIALS`: 서비스 계정 JSON 키 파일 경로
      - gcloud CLI 사용: `gcloud auth application-default login`
@@ -876,11 +885,11 @@ OpenCode로 Google Vertex AI를 사용하려면:
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-`global` 리전은 가용성을 높이고 오류를 줄이며 추가 비용이 없습니다. 데이터 거주 요건이 있는 경우 지역 엔드포인트(예: `us-central1`)를 사용하십시오. [더 알아보기](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+`global` 리전은 가용성을 높이고 오류를 줄이며 추가 비용이 없습니다. `VERTEX_LOCATION=global`을 설정하여 사용하세요. 데이터 거주 요건이 있는 경우 지역 엔드포인트(예: `us-central1`)를 사용하십시오. [더 알아보기](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. `/models` 명령을 실행하여 원하는 모델을 선택하십시오.

@@ -507,6 +507,8 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` ยังสามารถใช้เป็นชื่อแทนสำหรับ `CLOUDFLARE_API_TOKEN` ได้อีกด้วย
+
 5. รันคำสั่ง `/models` เพื่อเลือกรุ่น
 
    ```txt
@@ -861,8 +863,15 @@ subscription](https://github.com/features/copilot/plans) เพื่อใช�
    :::
 
 2. ตั้งค่าตัวแปรสภาพแวดล้อมที่ต้องการ:
-   - `GOOGLE_CLOUD_PROJECT`: รหัสโครงการ Google Cloud ของคุณ
-   - `VERTEX_LOCATION` (เป็นทางเลือก): ภูมิภาคสำหรับ Vertex AI (ค่าเริ่มต้นคือ `global`)
+   - รหัสโครงการ (เลือกหนึ่งรายการ):
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - ตำแหน่ง (เป็นทางเลือก ตรวจสอบตามลำดับนี้):
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - ค่าเริ่มต้นคือ `us-central1` หากไม่ได้ตั้งค่าใดๆ
    - การรับรองความถูกต้อง (เลือกหนึ่งรายการ):
      - `GOOGLE_APPLICATION_CREDENTIALS`: เส้นทางไปยังบัญชีบริการของคุณ JSON ไฟล์คีย์
      - ตรวจสอบสิทธิ์โดยใช้ gcloud CLI: `gcloud auth application-default login`
@@ -878,11 +887,11 @@ subscription](https://github.com/features/copilot/plans) เพื่อใช�
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-ภูมิภาค `global` ปรับปรุงความพร้อมใช้งานและลดข้อผิดพลาดโดยไม่มีค่าใช้จ่ายเพิ่มเติม ใช้ตำแหน่งข้อมูลระดับภูมิภาค (เช่น `us-central1`) สำหรับข้อกำหนดด้านถิ่นที่อยู่ของข้อมูล [เรียนรู้เพิ่มเติม](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+ภูมิภาค `global` ปรับปรุงความพร้อมใช้งานและลดข้อผิดพลาดโดยไม่มีค่าใช้จ่ายเพิ่มเติม ใช้โดยตั้งค่า `VERTEX_LOCATION=global` ใช้ตำแหน่งข้อมูลระดับภูมิภาค (เช่น `us-central1`) สำหรับข้อกำหนดด้านถิ่นที่อยู่ของข้อมูล [เรียนรู้เพิ่มเติม](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. รันคำสั่ง `/models` เพื่อเลือกรุ่นที่ต้องการ

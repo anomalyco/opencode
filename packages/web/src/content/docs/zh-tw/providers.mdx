@@ -502,6 +502,8 @@ Cloudflare AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic
    export CLOUDFLARE_API_TOKEN=your-api-token
    ```
 
+   `CF_AIG_TOKEN` 也可作為 `CLOUDFLARE_API_TOKEN` 的別名使用。
+
 5. 執行 `/models` 指令選擇模型。
 
    ```txt
@@ -845,8 +847,15 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    :::
 
 2. 設定所需的環境變數：
-   - `GOOGLE_CLOUD_PROJECT`：您的 Google Cloud 專案 ID
-   - `VERTEX_LOCATION`（可選）：Vertex AI 的區域（預設為 `global`）
+   - 專案 ID（選擇其一）：
+     - `GOOGLE_CLOUD_PROJECT`
+     - `GCP_PROJECT`
+     - `GCLOUD_PROJECT`
+   - 位置（可選，按此順序檢查）：
+     - `GOOGLE_VERTEX_LOCATION`
+     - `GOOGLE_CLOUD_LOCATION`
+     - `VERTEX_LOCATION`
+     - 若未設定任何值，預設為 `us-central1`
    - 身分驗證（選擇其一）：
      - `GOOGLE_APPLICATION_CREDENTIALS`：服務帳號 JSON 金鑰檔案的路徑
      - 使用 gcloud CLI 進行身分驗證：`gcloud auth application-default login`
@@ -862,11 +871,11 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
-   export VERTEX_LOCATION=global
+   export VERTEX_LOCATION=us-central1
    ```
 
 :::tip
-`global` 區域可以提高可用性並減少錯誤，且不會產生額外費用。如果有資料駐留需求，請使用區域端點（例如 `us-central1`）。[了解更多](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
+`global` 區域可以提高可用性並減少錯誤，且不會產生額外費用。透過設定 `VERTEX_LOCATION=global` 來使用它。如果有資料駐留需求，請使用區域端點（例如 `us-central1`）。[了解更多](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. 執行 `/models` 指令選擇您想要的模型。
