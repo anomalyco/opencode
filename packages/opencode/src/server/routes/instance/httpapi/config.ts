@@ -2,6 +2,7 @@ import { Config } from "@/config"
 import { Provider } from "@/provider"
 import { Effect, Layer } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "./auth"
 
 const root = "/config"
 
@@ -33,7 +34,8 @@ export const ConfigApi = HttpApi.make("config")
           title: "config",
           description: "Experimental HttpApi config routes.",
         }),
-      ),
+      )
+      .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({
