@@ -1,4 +1,3 @@
-import z from "zod"
 import stripAnsi from "strip-ansi"
 import * as Tool from "./tool"
 import DESCRIPTION from "./terminal.txt"
@@ -9,7 +8,7 @@ import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
-import { Effect, Deferred, Stream } from "effect"
+import { Effect, Deferred, Stream, Schema } from "effect"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect"
 
@@ -54,54 +53,43 @@ export function sentinelCommand(shellName: string): string {
 // Parameters — discriminated union on "action"
 // ---------------------------------------------------------------------------
 
-const RunAction = z.object({
-  action: z.literal("run"),
-  command: z.string().describe("The command to execute in a TTY-aware terminal session"),
-  timeout: z.number().describe("Optional timeout in milliseconds").optional(),
-  workdir: z
-    .string()
-    .describe(
-      `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
-    )
-    .optional(),
-  description: z.string().describe("Clear, concise description of what this command does in 5-10 words"),
+const RunAction = Schema.Struct({
+  action: Schema.Literal("run"),
+  command: Schema.String.annotate({ description: "The command to execute in a TTY-aware terminal session" }),
+  timeout: Schema.optional(Schema.Number).annotate({ description: "Optional timeout in milliseconds" }),
+  workdir: Schema.optional(Schema.String).annotate({
+    description: "The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.",
+  }),
+  description: Schema.String.annotate({ description: "Clear, concise description of what this command does in 5-10 words" }),
 })
 
-const CreateAction = z.object({
-  action: z.literal("create"),
-  workdir: z.string().describe("Working directory for the session").optional(),
-  description: z.string().describe("Description for the terminal session").optional(),
+const CreateAction = Schema.Struct({
+  action: Schema.Literal("create"),
+  workdir: Schema.optional(Schema.String).annotate({ description: "Working directory for the session" }),
+  description: Schema.optional(Schema.String).annotate({ description: "Description for the terminal session" }),
 })
 
-const SendAction = z.object({
-  action: z.literal("send"),
-  sessionId: PtyID.zod.describe("ID of the terminal session to send input to"),
-  input: z
-    .string()
-    .describe("Text to send to the terminal. Use \\x03 for Ctrl+C, \\x04 for Ctrl+D. Commands are appended with \\n"),
-  description: z.string().describe("Clear, concise description of what this input does in 5-10 words"),
+const SendAction = Schema.Struct({
+  action: Schema.Literal("send"),
+  sessionId: Schema.String,
+  input: Schema.String.annotate({
+    description: "Text to send to the terminal. Use \\x03 for Ctrl+C, \\x04 for Ctrl+D. Commands are appended with \\n",
+  }),
+  description: Schema.String.annotate({ description: "Clear, concise description of what this input does in 5-10 words" }),
 })
 
-const ReadAction = z.object({
-  action: z.literal("read"),
-  sessionId: PtyID.zod.describe("ID of the terminal session to read output from"),
-  description: z.string().describe("Clear, concise description of what you are reading"),
+const ReadAction = Schema.Struct({
+  action: Schema.Literal("read"),
+  sessionId: Schema.String,
+  description: Schema.String.annotate({ description: "Clear, concise description of what you are reading" }),
 })
 
-const CloseAction = z.object({
-  action: z.literal("close"),
-  sessionId: PtyID.zod.describe("ID of the terminal session to close"),
+const CloseAction = Schema.Struct({
+  action: Schema.Literal("close"),
+  sessionId: Schema.String,
 })
 
-export const Parameters = z.preprocess(
-  (data: unknown) => {
-    if (typeof data === "object" && data !== null && "command" in data && !("action" in data)) {
-      return { ...data, action: "run" }
-    }
-    return data
-  },
-  z.discriminatedUnion("action", [RunAction, CreateAction, SendAction, ReadAction, CloseAction]),
-)
+export const Parameters = Schema.Union([RunAction, CreateAction, SendAction, ReadAction, CloseAction])
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-testable)
@@ -245,7 +233,7 @@ export const TerminalTool = Tool.define(
     return {
       description,
       parameters: Parameters,
-      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           // --- action: "run" (default, backward-compatible) ---
           if (params.action === "run" || params.action === undefined) {
