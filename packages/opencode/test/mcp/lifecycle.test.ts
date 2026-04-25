@@ -235,6 +235,36 @@ test(
   ),
 )
 
+test(
+  "tools() returns servers and tools in deterministic order",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "z-server"
+      const zState = getOrCreateClientState("z-server")
+      zState.tools = [{ name: "zeta", description: "Z", inputSchema: { type: "object", properties: {} } }]
+
+      yield* mcp.add("z-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
+
+      lastCreatedClientName = "a-server"
+      const aState = getOrCreateClientState("a-server")
+      aState.tools = [
+        { name: "beta", description: "B", inputSchema: { type: "object", properties: {} } },
+        { name: "alpha", description: "A", inputSchema: { type: "object", properties: {} } },
+      ]
+
+      yield* mcp.add("a-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
+
+      expect(Object.keys(yield* mcp.tools())).toEqual(["a-server_alpha", "a-server_beta", "z-server_zeta"])
+    }),
+  ),
+)
+
 // ========================================================================
 // Test: tool change notifications refresh the cache
 // ========================================================================

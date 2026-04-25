@@ -114,6 +114,10 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
 
+function byName<T extends { name: string }>(a: T, b: T) {
+  return a.name.localeCompare(b.name)
+}
+
 // Convert MCP tool definition to AI SDK Tool type
 function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
   const inputSchema = mcpTool.inputSchema
@@ -150,7 +154,7 @@ function defs(key: string, client: MCPClient, timeout?: number) {
     try: () => withTimeout(client.listTools(), timeout ?? DEFAULT_TIMEOUT),
     catch: (err) => (err instanceof Error ? err : new Error(String(err))),
   }).pipe(
-    Effect.map((result) => result.tools),
+    Effect.map((result) => result.tools.toSorted(byName)),
     Effect.catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return Effect.succeed(undefined)
@@ -625,28 +629,23 @@ export const layer = Layer.effect(
 
       const connectedClients = Object.entries(s.clients).filter(
         ([clientName]) => s.status[clientName]?.status === "connected",
-      )
+      ).toSorted(([a], [b]) => a.localeCompare(b))
 
-      yield* Effect.forEach(
-        connectedClients,
-        ([clientName, client]) =>
-          Effect.gen(function* () {
-            const mcpConfig = config[clientName]
-            const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : undefined
+      for (const [clientName, client] of connectedClients) {
+        const mcpConfig = config[clientName]
+        const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : undefined
 
-            const listed = s.defs[clientName]
-            if (!listed) {
-              log.warn("missing cached tools for connected server", { clientName })
-              return
-            }
+        const listed = s.defs[clientName]
+        if (!listed) {
+          log.warn("missing cached tools for connected server", { clientName })
+          continue
+        }
 
-            const timeout = entry?.timeout ?? defaultTimeout
-            for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
-            }
-          }),
-        { concurrency: "unbounded" },
-      )
+        const timeout = entry?.timeout ?? defaultTimeout
+        for (const mcpTool of listed.toSorted(byName)) {
+          result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+        }
+      }
       return result
     })
 
