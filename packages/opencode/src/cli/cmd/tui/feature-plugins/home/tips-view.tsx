@@ -1,4 +1,4 @@
-import { For } from "solid-js"
+import { createMemo, For } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
@@ -34,8 +34,8 @@ const NO_MODELS_TIP = "Run {highlight}/connect{/highlight} to add an AI provider
 
 export function Tips(props: { connected?: boolean }) {
   const theme = useTheme().theme
-  const tip = props.connected === false ? NO_MODELS_TIP : TIPS[Math.floor(Math.random() * TIPS.length)]
-  const parts = parse(tip)
+  const randomTip = TIPS[Math.floor(Math.random() * TIPS.length)]
+  const parts = createMemo(() => parse(props.connected === false ? NO_MODELS_TIP : randomTip))
 
   return (
     <box flexDirection="row" maxWidth="100%">
@@ -43,7 +43,7 @@ export function Tips(props: { connected?: boolean }) {
         ● Tip{" "}
       </text>
       <text flexShrink={1}>
-        <For each={parts}>
+        <For each={parts()}>
           {(part) => <span style={{ fg: part.highlight ? theme.text : theme.textMuted }}>{part.text}</span>}
         </For>
       </text>
