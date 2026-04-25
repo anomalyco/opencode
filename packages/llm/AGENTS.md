@@ -87,12 +87,16 @@ recorded.effect("streams text", () => Effect.gen(function* () {
 
 Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars.
 
+Do not blanket re-record an entire test file when adding one cassette. `RECORD=true` rewrites every recorded case that runs, and provider streams contain volatile IDs, timestamps, fingerprints, and obfuscation fields. Prefer deleting the one cassette you intend to refresh, or run a focused test pattern that only registers the scenario you want to record. Keep stable existing cassettes unchanged unless their request shape or expected behavior changed.
+
 ## TODO
 
 - [x] Add an adapter registry so `client(...)` can choose an adapter by `request.model.protocol` instead of requiring a single adapter.
 - [x] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
 - [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
-- [ ] Add OpenAI Chat recorded tests for tool-result follow-up, usage chunks, malformed chunks, and tool arguments that arrive in the first chunk.
+- [x] Add OpenAI Chat recorded tests for tool-result follow-up and usage chunks.
+- [ ] Add OpenAI Chat provider-error/sad-path recordings when live API failures produce useful stable cassettes.
+- [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.
 - [x] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
 - [x] Add provider patch examples from real opencode quirks, starting with prompt normalization and target-level provider options.
 - [ ] Add an OpenAI Responses adapter once the Chat adapter shape feels stable.
