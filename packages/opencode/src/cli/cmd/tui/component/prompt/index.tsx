@@ -116,6 +116,7 @@ export function Prompt(props: PromptProps) {
   const editorSelectionLabel = createMemo(() => {
     const selection = editor.selection()?.selection
     if (!selection) return
+    if (selection.start.line === selection.end.line && selection.start.character === selection.end.character) return
     if (selection.start.line === selection.end.line) return `#${selection.start.line}`
     return `#${selection.start.line}-${selection.end.line}`
   })
@@ -755,7 +756,7 @@ export function Prompt(props: PromptProps) {
               const start = editorSelection.selection.start
               const end = editorSelection.selection.end
               if (start.line === end.line && start.character === end.character) {
-                return `Note: The user's cursor is on line ${start.line} in "${editorSelection.filePath}".`
+                return `Note: The user opened the file "${editorSelection.filePath}".`
               }
               if (start.line === end.line) {
                 return `Note: The user selected line ${start.line} from  "${editorSelection.filePath}": ${editorSelection.text}`
