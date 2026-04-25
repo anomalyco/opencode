@@ -34,9 +34,30 @@ const BINARY_EXTS = new Set([
   ".pyc",
 ])
 
+const OFFICE_EXTS = new Set([
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".rtf",
+  ".odt",
+  ".ods",
+  ".odp",
+])
+
 export function isBinary(path: string): boolean {
   const lower = path.toLowerCase()
   for (const ext of BINARY_EXTS) {
+    if (lower.endsWith(ext)) return true
+  }
+  return false
+}
+
+export function isOfficeDocument(path: string): boolean {
+  const lower = path.toLowerCase()
+  for (const ext of OFFICE_EXTS) {
     if (lower.endsWith(ext)) return true
   }
   return false

@@ -2023,7 +2023,7 @@ export type FileContent = {
     }>
     index?: string
   }
-  encoding?: "base64"
+  encoding?: "base64" | "office-pdf-ref"
   mimeType?: string
 }
 
@@ -4747,6 +4747,84 @@ export type FileStatusResponses = {
 }
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
+
+export type FileOfficePdfData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/file/office-pdf"
+}
+
+export type FileOfficePdfErrors = {
+  /**
+   * Conversion failed or LibreOffice unavailable
+   */
+  404: unknown
+}
+
+export type FileOfficePdfResponses = {
+  /**
+   * PDF bytes
+   */
+  200: Blob | File
+}
+
+export type FileOfficePdfResponse = FileOfficePdfResponses[keyof FileOfficePdfResponses]
+
+export type OfficeToolingStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/office-tooling/status"
+}
+
+export type OfficeToolingStatusResponses = {
+  /**
+   * Status
+   */
+  200: unknown
+}
+
+export type OfficeToolingInstallData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/office-tooling/install"
+}
+
+export type OfficeToolingInstallResponses = {
+  /**
+   * Install started
+   */
+  200: unknown
+}
+
+export type OfficeToolingProgressData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/office-tooling/progress"
+}
+
+export type OfficeToolingProgressResponses = {
+  /**
+   * Progress
+   */
+  200: unknown
+}
 
 export type EventSubscribeData = {
   body?: never

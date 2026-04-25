@@ -15,6 +15,7 @@ import { Instance } from "../project/instance"
 import { Log } from "../util"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
+import * as LibreOffice from "./libreoffice"
 
 export const Info = z
   .object({
@@ -65,7 +66,7 @@ export const Content = z
         index: z.string().optional(),
       })
       .optional(),
-    encoding: z.literal("base64").optional(),
+    encoding: z.enum(["base64", "office-pdf-ref"]).optional(),
     mimeType: z.string().optional(),
   })
   .meta({
@@ -125,13 +126,6 @@ const binary = new Set([
   "xz",
   "lz",
   "z",
-  "pdf",
-  "doc",
-  "docx",
-  "ppt",
-  "pptx",
-  "xls",
-  "xlsx",
   "dmg",
   "iso",
   "img",
@@ -179,6 +173,19 @@ const binary = new Set([
   "rom",
   "com",
 ])
+
+const officeDirect = new Set(["pdf"])
+const officeConvert = new Set(["docx", "doc", "xlsx", "xls", "pptx", "ppt", "rtf", "odt", "ods", "odp"])
+
+const officeMime: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
 
 const image = new Set([
   "png",
@@ -291,6 +298,9 @@ const isImageByExtension = (file: string) => image.has(ext(file))
 const isTextByExtension = (file: string) => text.has(ext(file))
 const isTextByName = (file: string) => textName.has(name(file))
 const isBinaryByExtension = (file: string) => binary.has(ext(file))
+const isOfficeDirect = (file: string) => officeDirect.has(ext(file))
+const isOfficeConvert = (file: string) => officeConvert.has(ext(file))
+const getOfficeMimeType = (file: string) => officeMime[ext(file)] || "application/octet-stream"
 const isImage = (mimeType: string) => mimeType.startsWith("image/")
 const getImageMimeType = (file: string) => mime[ext(file)] || "image/" + ext(file)
 
@@ -529,6 +539,37 @@ export const layer = Layer.effect(
           }
         }
         return { type: "text" as const, content: "" }
+      }
+
+      if (isOfficeDirect(file)) {
+        const exists = yield* appFs.existsSafe(full)
+        if (!exists) return { type: "text" as const, content: "" }
+        const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
+        return {
+          type: "text" as const,
+          content: Buffer.from(bytes).toString("base64"),
+          mimeType: getOfficeMimeType(file),
+          encoding: "base64" as const,
+        }
+      }
+
+      if (isOfficeConvert(file)) {
+        const exists = yield* appFs.existsSafe(full)
+        if (!exists) return { type: "text" as const, content: "" }
+        // Pre-warm the conversion so the dedicated binary endpoint hits cache.
+        const pdfBytes = yield* Effect.promise(() =>
+          LibreOffice.convertToPdf(full).catch(() => undefined),
+        )
+        if (!pdfBytes) return { type: "binary" as const, content: "" }
+        // Return a lightweight reference. The frontend fetches the actual
+        // PDF bytes via /file/office-pdf to avoid base64-blowing memory on
+        // large decks (a 300MB PPTX → 300MB PDF would 2x in base64 + JSON).
+        return {
+          type: "text" as const,
+          content: "",
+          mimeType: "application/pdf",
+          encoding: "office-pdf-ref" as const,
+        }
       }
 
       const knownText = isTextByExtension(file) || isTextByName(file)

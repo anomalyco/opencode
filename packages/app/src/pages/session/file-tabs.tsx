@@ -24,12 +24,34 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import CodeMirrorView from "@/components/code-mirror-view"
 import { langFromExt } from "@/utils/lang-from-ext"
-import { isBinary, tooLarge } from "@/utils/file-limits"
+import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
 
 function isMarkdownPath(p: string | undefined): boolean {
   if (!p) return false
   const lower = p.toLowerCase()
   return lower.endsWith(".md") || lower.endsWith(".markdown")
+}
+
+// In-memory LRU cache for fetched office PDF binaries. Saves having to re-fetch
+// 200+ MB across tab switches. Bounded so RAM doesn't grow unboundedly.
+const OFFICE_PDF_CACHE_MAX = 2
+const officePdfCache = new Map<string, Uint8Array>()
+function officePdfCacheGet(key: string): Uint8Array | undefined {
+  const value = officePdfCache.get(key)
+  if (value) {
+    officePdfCache.delete(key)
+    officePdfCache.set(key, value) // bump to most-recent
+  }
+  return value
+}
+function officePdfCacheSet(key: string, value: Uint8Array) {
+  if (officePdfCache.has(key)) officePdfCache.delete(key)
+  officePdfCache.set(key, value)
+  while (officePdfCache.size > OFFICE_PDF_CACHE_MAX) {
+    const oldest = officePdfCache.keys().next().value
+    if (oldest === undefined) break
+    officePdfCache.delete(oldest)
+  }
 }
 
 // audio 元素分支:纯音频容器
@@ -333,6 +355,7 @@ export function FileTabContent(props: { tab: string }) {
     const p = path()
     if (!p) return false
     if (isBinary(p)) return false
+    if (isOfficeDocument(p)) return false
     if (tooLarge(contents())) return false
     return true
   }
@@ -340,6 +363,7 @@ export function FileTabContent(props: { tab: string }) {
     if (!isTauri()) return "Edit only available in desktop app"
     const p = path()
     if (!p) return undefined
+    if (isOfficeDocument(p)) return "Office 文件暂不支持在 OpenCode 内编辑，请用本机软件打开"
     if (isBinary(p)) return "Binary file cannot be edited"
     if (tooLarge(contents())) return "File >10MB, editing disabled"
     return undefined
@@ -939,12 +963,70 @@ export function FileTabContent(props: { tab: string }) {
             path: path(),
             current: state()?.content,
             onLoad: scrollSync.queueRestore,
-            onError: (args: { kind: "image" | "audio" | "svg" }) => {
+            onError: (args: { kind: "image" | "audio" | "svg" | "pdf" }) => {
               if (args.kind !== "svg") return
               showToast({
                 variant: "error",
                 title: language.t("toast.file.loadFailed.title"),
               })
+            },
+            officeTooling: {
+              getStatus: async () =>
+                sdk.client.office.tooling
+                  .status()
+                  .then((x) => x.data as any)
+                  .catch(() => undefined),
+              startInstall: async () =>
+                sdk.client.office.tooling
+                  .install()
+                  .then((x) => x.data as any)
+                  .catch(() => undefined),
+              getProgress: async () =>
+                sdk.client.office.tooling
+                  .progress()
+                  .then((x) => x.data as any)
+                  .catch(() => undefined),
+            },
+            onRetryFile: () => {
+              const p = path()
+              if (p) void file.load(p, { force: true })
+            },
+            onOpenExternal: () => {
+              const root = sdk.directory
+              const p = path()
+              if (!root || !p) return
+              const absPath = `${root}/${p}`.replace(/\\/g, "/")
+              invoke("open_path", { path: absPath, appName: null }).catch((e) => {
+                showToast({
+                  variant: "error",
+                  title: "无法用本机软件打开",
+                  description: String(e),
+                })
+              })
+            },
+            loadOfficePdf: async (filePath: string) => {
+              const cacheKey = `${sdk.directory ?? ""}::${filePath}`
+              const cached = officePdfCacheGet(cacheKey)
+              if (cached) return cached
+              try {
+                const res = await sdk.client.file.officePdf(
+                  { path: filePath },
+                  { parseAs: "arrayBuffer" } as any,
+                )
+                const data = (res as any)?.data
+                let bytes: Uint8Array | undefined
+                if (data instanceof ArrayBuffer) bytes = new Uint8Array(data)
+                else if (data instanceof Uint8Array) bytes = data
+                else if (data && (data as any).byteLength != null)
+                  bytes = new Uint8Array(data as ArrayBufferLike)
+                if (bytes && bytes.length > 0) {
+                  officePdfCacheSet(cacheKey, bytes)
+                }
+                return bytes
+              } catch (e) {
+                console.warn("loadOfficePdf failed", e)
+                return undefined
+              }
             },
           }}
         />

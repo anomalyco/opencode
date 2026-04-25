@@ -1,9 +1,22 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
 
-export type MediaKind = "image" | "audio" | "svg"
+export type MediaKind = "image" | "audio" | "svg" | "pdf"
 
 const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff", "heic"])
 const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
+const pdfLikeExtensions = new Set([
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "rtf",
+  "odt",
+  "ods",
+  "odp",
+])
 
 type MediaValue = unknown
 
@@ -38,6 +51,7 @@ export function mediaKindFromPath(path: string | undefined): MediaKind | undefin
   if (ext === "svg") return "svg"
   if (imageExtensions.has(ext)) return "image"
   if (audioExtensions.has(ext)) return "audio"
+  if (pdfLikeExtensions.has(ext)) return "pdf"
 }
 
 export function isBinaryContent(value: MediaValue) {
@@ -89,6 +103,32 @@ function decodeBase64Utf8(value: string) {
     if (typeof TextDecoder === "function") return new TextDecoder().decode(bytes)
     return raw
   } catch {}
+}
+
+function decodeBase64Bytes(value: string): Uint8Array | undefined {
+  if (typeof atob !== "function") return
+  try {
+    const raw = atob(value)
+    return Uint8Array.from(raw, (x) => x.charCodeAt(0))
+  } catch {
+    return undefined
+  }
+}
+
+export function arrayBufferFromMediaValue(value: MediaValue): Uint8Array | undefined {
+  const record = mediaRecord(value)
+  if (!record) return
+  // Direct in-memory bytes (set by app layer after binary fetch)
+  const direct = (record as { bytes?: unknown }).bytes
+  if (direct instanceof Uint8Array) return direct
+  if (typeof record.content !== "string") return
+  if (record.encoding !== "base64") return
+  return decodeBase64Bytes(record.content)
+}
+
+export function isOfficePdfRef(value: MediaValue): boolean {
+  const record = mediaRecord(value)
+  return record?.encoding === "office-pdf-ref"
 }
 
 export function svgTextFromValue(value: MediaValue) {
