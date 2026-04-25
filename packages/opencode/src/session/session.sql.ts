@@ -5,7 +5,7 @@ import type { SessionEntry } from "../v2/session-entry"
 import type { Snapshot } from "../snapshot"
 import type { Permission } from "../permission"
 import type { ProjectID } from "../project/schema"
-import type { SessionID, MessageID, PartID } from "./schema"
+import type { SessionID, MessageID, PartID, AgentMemoryID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
 import { Timestamps } from "../storage/schema.sql"
 
@@ -121,3 +121,34 @@ export const PermissionTable = sqliteTable("permission", {
   ...Timestamps,
   data: text({ mode: "json" }).notNull().$type<Permission.Ruleset>(),
 })
+
+export const AgentMemoryTable = sqliteTable(
+  "agent_memory",
+  {
+    id: text().$type<AgentMemoryID>().primaryKey(),
+    project_id: text()
+      .$type<ProjectID>()
+      .notNull()
+      .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    session_id: text().$type<SessionID>(),
+    type: text().notNull(),
+    title: text().notNull(),
+    content: text().notNull(),
+    metadata: text({ mode: "json" }).$type<{
+      what?: string
+      why?: string
+      where?: string | string[]
+      learned?: string
+    }>(),
+    tags: text({ mode: "json" }).$type<string[]>(),
+    strength: integer().notNull().default(100),
+    status: text().notNull().default("active"),
+    ...Timestamps,
+  },
+  (table) => [
+    index("agent_memory_project_idx").on(table.project_id),
+    index("agent_memory_type_idx").on(table.type),
+    index("agent_memory_status_idx").on(table.status),
+    index("agent_memory_project_type_idx").on(table.project_id, table.type),
+  ],
+)
