@@ -379,6 +379,14 @@ export const layer: Layer.Layer<
         }
       }
 
+      // Safety check: if we're in overflow mode but cannot find the previous context
+      // (tail_start_id points to a message not in the available history), do not
+      // proceed with overflow as it would include too much context.
+      if (input.overflow && replay && selected.head.length === 0) {
+        replay = undefined
+        messages = input.messages
+      }
+
       const agent = yield* agents.get("compaction")
       const model = agent.model
         ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
