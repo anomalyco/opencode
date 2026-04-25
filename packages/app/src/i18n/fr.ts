@@ -258,6 +258,8 @@ export const dict = {
   "prompt.attachment.remove": "Supprimer la pièce jointe",
   "prompt.action.send": "Envoyer",
   "prompt.action.stop": "Arrêter",
+  "prompt.action.addCommentToPrompt": "Ajouter un commentaire au prompt",
+  "prompt.action.addCommentsToPrompt": "Ajouter des commentaires au prompt",
   "prompt.toast.pasteUnsupported.title": "Pièce jointe non prise en charge",
   "prompt.toast.pasteUnsupported.description":
     "Seules les images, les PDF ou les fichiers texte peuvent être joints ici.",

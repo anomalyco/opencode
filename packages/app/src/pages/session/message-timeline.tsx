@@ -11,6 +11,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import { PART_MAPPING } from "@opencode-ai/ui/message-part"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TextField } from "@opencode-ai/ui/text-field"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
@@ -22,16 +23,21 @@ import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { usePrompt } from "@/context/prompt"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { MessageAnnotationPopover } from "@/pages/session/message-annotation-popover"
+import { MessageAnnotationTrigger } from "@/pages/session/message-annotation-trigger"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { makeTimer } from "@solid-primitives/timer"
+import { createMessageSelectionController, type MessageSelection } from "@/pages/session/message-selection"
+import { messageAnnotationVariant } from "@/testing/message-annotation"
 
 type MessageComment = {
   path: string
@@ -43,7 +49,12 @@ type MessageComment = {
 }
 
 const emptyMessages: MessageType[] = []
+const emptyAssistants: AssistantMessage[] = []
+const hidden = new Set(["todowrite", "todoread"])
+const ctx = new Set(["read", "glob", "grep", "list"])
 const idle = { type: "idle" as const }
+const noteVariant = "icon" as const
+
 type UserActions = {
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -97,6 +108,71 @@ const markBoundaryGesture = (input: {
   ) {
     input.onMarkScrollGesture(input.root)
   }
+}
+
+const tag = (el: Element | null, input?: { id: string; role: "assistant" | "user" }) => {
+  if (!(el instanceof HTMLElement)) return
+
+  if (!input) {
+    el.removeAttribute("data-message-selection")
+    el.removeAttribute("data-message-selection-id")
+    el.removeAttribute("data-message-role")
+    return
+  }
+
+  el.dataset.messageSelection = "true"
+  el.dataset.messageSelectionId = input.id
+  el.dataset.messageRole = input.role
+}
+
+const turnAssistants = (messages: MessageType[], id: string) => {
+  const result = Binary.search(messages, id, (message) => message.id)
+  const index = result.found ? result.index : messages.findIndex((message) => message.id === id)
+  if (index < 0) return emptyAssistants
+
+  const rest = messages.slice(index + 1)
+  const stop = rest.findIndex((message) => message.role === "user")
+  const list = stop === -1 ? rest : rest.slice(0, stop)
+  return list.filter((message): message is AssistantMessage => message.role === "assistant" && message.parentID === id)
+}
+
+const visible = (part: Part, show: boolean) => {
+  if (part.type === "tool") {
+    if (hidden.has(part.tool)) return false
+    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    return true
+  }
+
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return show && !!part.text?.trim()
+  return !!PART_MAPPING[part.type]
+}
+
+const assistantScopes = (messages: AssistantMessage[], parts: Record<string, Part[] | undefined>, show: boolean) => {
+  const list = messages.flatMap((message) =>
+    (parts[message.id] ?? []).filter((part) => visible(part, show)).map((part) => ({ messageID: message.id, part })),
+  )
+  const result: (string | undefined)[] = []
+  let refs: string[] = []
+
+  const flush = () => {
+    if (!refs.length) return
+    result.push(refs.every((id) => id === refs[0]) ? refs[0] : undefined)
+    refs = []
+  }
+
+  list.forEach((item) => {
+    if (item.part.type === "tool" && ctx.has(item.part.tool)) {
+      refs.push(item.messageID)
+      return
+    }
+
+    flush()
+    result.push(item.messageID)
+  })
+
+  flush()
+  return result
 }
 
 type StageConfig = {
@@ -220,11 +296,13 @@ export function MessageTimeline(props: {
   anchor: (id: string) => string
 }) {
   let touchGesture: number | undefined
+  let content: HTMLDivElement | undefined
 
   const navigate = useNavigate()
   const globalSDK = useGlobalSDK()
   const sdk = useSDK()
   const sync = useSync()
+  const prompt = usePrompt()
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
@@ -303,6 +381,33 @@ export function MessageTimeline(props: {
     messages: () => props.renderedUserMessages,
     config: stageCfg,
   })
+  const selection = createMessageSelectionController({ root: () => content })
+  const variant = () => messageAnnotationVariant(noteVariant)
+  const [annotation, setAnnotation] = createStore({
+    trigger: undefined as MessageSelection | undefined,
+    popover: undefined as MessageSelection | undefined,
+  })
+  const closeTrigger = () => {
+    selection.clear()
+    setAnnotation("trigger", undefined)
+  }
+  const closePopover = () => {
+    selection.clear()
+    setAnnotation({ trigger: undefined, popover: undefined })
+  }
+  const openPopover = (item: MessageSelection) => {
+    selection.clear()
+    setAnnotation({ trigger: undefined, popover: item })
+  }
+  const syncAnnotation = () => {
+    const next = selection.sync()
+    if (!next) {
+      setAnnotation("trigger", undefined)
+      return
+    }
+
+    setAnnotation({ trigger: next, popover: undefined })
+  }
 
   const [title, setTitle] = createStore({
     draft: "",
@@ -577,6 +682,7 @@ export function MessageTimeline(props: {
           }}
         >
           <button
+            type="button"
             class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
             onClick={props.onResumeScroll}
           >
@@ -585,6 +691,12 @@ export function MessageTimeline(props: {
         </div>
         <ScrollView
           viewportRef={props.setScrollRef}
+          onMouseUp={() => {
+            syncAnnotation()
+          }}
+          onKeyUp={() => {
+            syncAnnotation()
+          }}
           onWheel={(e) => {
             const root = e.currentTarget
             const delta = normalizeWheelDelta({
@@ -612,6 +724,7 @@ export function MessageTimeline(props: {
           }}
           onTouchEnd={() => {
             touchGesture = undefined
+            syncAnnotation()
           }}
           onTouchCancel={() => {
             touchGesture = undefined
@@ -635,10 +748,17 @@ export function MessageTimeline(props: {
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
-          <div ref={props.setContentRef} class="min-w-0 w-full">
+          <div
+            ref={(el) => {
+              content = el
+              props.setContentRef(el)
+            }}
+            class="min-w-0 w-full"
+          >
             <Show when={showHeader()}>
               <div
                 data-session-title
+                data-message-selection-ignore="true"
                 classList={{
                   "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
                   "w-full": true,
@@ -744,6 +864,7 @@ export function MessageTimeline(props: {
                           />
                           <DropdownMenu.Portal>
                             <DropdownMenu.Content
+                              data-message-selection-ignore="true"
                               style={{ "min-width": "104px" }}
                               onCloseAutoFocus={(event) => {
                                 if (title.pendingRename) {
@@ -806,6 +927,7 @@ export function MessageTimeline(props: {
                         >
                           <KobaltePopover.Portal>
                             <KobaltePopover.Content
+                              data-message-selection-ignore="true"
                               data-component="popover-content"
                               style={{ "min-width": "320px" }}
                               onEscapeKeyDown={(event) => {
@@ -924,7 +1046,16 @@ export function MessageTimeline(props: {
               </Show>
               <For each={rendered()}>
                 {(messageID) => {
+                  let root: HTMLDivElement | undefined
                   const active = createMemo(() => activeMessageID() === messageID)
+                  const assistants = createMemo(() => turnAssistants(sessionMessages(), messageID), emptyAssistants, {
+                    equals: (a, b) => a.length === b.length && a.every((item, i) => item.id === b[i]?.id),
+                  })
+                  const scopes = createMemo(
+                    () => assistantScopes(assistants(), sync.data.part, settings.general.showReasoningSummaries()),
+                    [],
+                    { equals: (a, b) => a.length === b.length && a.every((item, i) => item === b[i]) },
+                  )
                   const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
                     equals: (a, b) =>
                       a.length === b.length &&
@@ -937,10 +1068,35 @@ export function MessageTimeline(props: {
                       ),
                   })
                   const commentCount = createMemo(() => comments().length)
+
+                  createEffect(() => {
+                    const el = root
+                    if (!el) return
+
+                    tag(el.querySelector('[data-slot="session-turn-message-content"]'), {
+                      id: messageID,
+                      role: "user",
+                    })
+
+                    const box = el.querySelector('[data-slot="session-turn-assistant-content"]')
+                    if (!(box instanceof HTMLElement)) return
+
+                    tag(box, undefined)
+                    const list = scopes()
+                    Array.from(box.children).forEach((child, i) => {
+                      const id = list[i]
+                      tag(child, id ? { id, role: "assistant" } : undefined)
+                    })
+                  })
+
                   return (
                     <div
+                      ref={(el) => {
+                        root = el
+                      }}
                       id={props.anchor(messageID)}
                       data-message-id={messageID}
+                      data-message-role="user"
                       classList={{
                         "min-w-0 w-full max-w-full": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,
@@ -1013,6 +1169,25 @@ export function MessageTimeline(props: {
             </div>
           </div>
         </ScrollView>
+        <MessageAnnotationTrigger
+          selection={annotation.trigger}
+          variant={variant()}
+          label={language.t("ui.lineComment.placeholder")}
+          onOpen={openPopover}
+          onClose={closeTrigger}
+        />
+        <Show when={annotation.popover}>
+          {(current) => (
+            <MessageAnnotationPopover
+              selection={current()}
+              add={prompt.context.add}
+              onClose={closePopover}
+              placeholderLabel={language.t("ui.lineComment.placeholder")}
+              saveLabel={language.t("ui.lineComment.submit")}
+              cancelLabel={language.t("common.cancel")}
+            />
+          )}
+        </Show>
       </div>
     </Show>
   )

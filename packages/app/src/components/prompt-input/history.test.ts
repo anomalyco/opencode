@@ -8,12 +8,14 @@ import {
   prependHistoryEntry,
   promptLength,
   type PromptHistoryComment,
+  type PromptHistoryStoredEntry,
 } from "./history"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
 const text = (value: string): Prompt => [{ type: "text", content: value, start: 0, end: value.length }]
 const comment = (id: string, value = "note"): PromptHistoryComment => ({
+  type: "file",
   id,
   path: "src/a.ts",
   selection: { start: 2, end: 4 },
@@ -21,6 +23,15 @@ const comment = (id: string, value = "note"): PromptHistoryComment => ({
   time: 1,
   origin: "review",
   preview: "const a = 1",
+})
+const message = (id: string, value = "note"): PromptHistoryComment => ({
+  type: "message",
+  annotationID: id,
+  messageID: `msg-${id}`,
+  role: "assistant",
+  quote: `quote ${id}`,
+  comment: value,
+  preview: `preview ${id}`,
 })
 
 describe("prompt-input history", () => {
@@ -95,10 +106,58 @@ describe("prompt-input history", () => {
     expect(up.entry.comments).toEqual([comment("c1")])
   })
 
+  test("navigatePromptHistory keeps mixed file and message annotations through history", () => {
+    const entries = [
+      {
+        prompt: text("mixed"),
+        comments: [comment("c1"), message("m1")],
+      },
+    ]
+
+    const up = navigatePromptHistory({
+      direction: "up",
+      entries,
+      historyIndex: -1,
+      currentPrompt: text("draft"),
+      currentComments: [],
+      savedPrompt: null,
+    })
+
+    expect(up.handled).toBe(true)
+    if (!up.handled) throw new Error("expected handled")
+    expect(up.entry.comments).toEqual([comment("c1"), message("m1")])
+  })
+
   test("normalizePromptHistoryEntry supports legacy prompt arrays", () => {
     const entry = normalizePromptHistoryEntry(text("legacy"))
     expect(entry.prompt[0]?.type === "text" ? entry.prompt[0].content : "").toBe("legacy")
     expect(entry.comments).toEqual([])
+  })
+
+  test("normalizePromptHistoryEntry supports legacy file comment payloads", () => {
+    const entry = normalizePromptHistoryEntry({
+      prompt: text("legacy"),
+      comments: [
+        {
+          id: "c1",
+          path: "src/a.ts",
+          selection: { start: 2, end: 4 },
+          comment: "note",
+          time: 1,
+          origin: "review",
+          preview: "const a = 1",
+        },
+      ],
+    } satisfies PromptHistoryStoredEntry)
+
+    expect(entry.comments).toEqual([comment("c1")])
+  })
+
+  test("prependHistoryEntry deduplicates mixed annotations deterministically", () => {
+    const first = prependHistoryEntry([], text("hello"), [message("m1"), comment("c1")])
+    const deduped = prependHistoryEntry(first, text("hello"), [comment("c1"), message("m1")])
+
+    expect(deduped).toBe(first)
   })
 
   test("helpers clone prompt and count text content length", () => {

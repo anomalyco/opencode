@@ -7,6 +7,8 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/f
 import {
   ContentPart,
   DEFAULT_PROMPT,
+  type FileContextItem,
+  type MessageContextItem,
   isPromptEqual,
   Prompt,
   usePrompt,
@@ -41,6 +43,8 @@ import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
   canNavigateHistoryAtCursor,
+  isPromptHistoryFileComment,
+  isPromptHistoryMessageComment,
   navigatePromptHistory,
   prependHistoryEntry,
   type PromptHistoryComment,
@@ -51,8 +55,10 @@ import {
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
+import { contextFiles, contextMessages, MessageAnnotations } from "./prompt-input/message-annotations"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
+import { promptAction } from "./prompt-input/action"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 
@@ -287,30 +293,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .join("")
     return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
   })
-  const stopping = createMemo(() => working() && blank())
+  const fileItems = createMemo(() => contextFiles(prompt.context.items(), store.mode))
+  const messageAnnotations = createMemo(() => contextMessages(prompt.context.items(), store.mode))
+  const action = createMemo(() =>
+    promptAction({
+      blank: blank(),
+      count: messageAnnotations().length,
+      working: working(),
+      t: (key) => language.t(key as Parameters<typeof language.t>[0]),
+    }),
+  )
   const tip = () => {
-    if (stopping()) {
-      return (
-        <div class="flex items-center gap-2">
-          <span>{language.t("prompt.action.stop")}</span>
-          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
-        </div>
-      )
-    }
+    const value = action()
 
     return (
       <div class="flex items-center gap-2">
-        <span>{language.t("prompt.action.send")}</span>
-        <Icon name="enter" size="small" class="text-icon-base" />
+        <span>{value.label}</span>
+        {value.hint.kind === "text" ? (
+          <span class="text-icon-base text-12-medium text-[10px]!">{value.hint.label}</span>
+        ) : (
+          <Icon name={value.hint.name} size="small" class="text-icon-base" />
+        )}
       </div>
     )
   }
-
-  const contextItems = createMemo(() => {
-    const items = prompt.context.items()
-    if (store.mode !== "shell") return items
-    return items.filter((item) => !item.comment?.trim())
-  })
 
   const hasUserPrompt = createMemo(() => {
     const sessionID = params.id
@@ -351,14 +357,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
-    return prompt.context.items().flatMap((item) => {
-      if (item.type !== "file") return []
+    return prompt.context.items().flatMap<PromptHistoryComment>((item) => {
       const comment = item.comment?.trim()
       if (!comment) return []
 
-      const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
+      if (item.type === "message") {
+        return [
+          {
+            type: "message",
+            annotationID: item.annotationID,
+            messageID: item.messageID,
+            role: item.role,
+            quote: item.quote,
+            comment,
+            preview: item.preview,
+          } satisfies PromptHistoryComment,
+        ]
+      }
+
+      const match = item.commentID ? byID.get(`${item.path}\n${item.commentID}`) : undefined
       const nextSelection =
-        selection ??
+        match?.selection ??
         (item.selection
           ? ({
               start: item.selection.startLine,
@@ -369,11 +388,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       return [
         {
+          type: "file",
           id: item.commentID ?? item.key,
           path: item.path,
           selection: { ...nextSelection },
           comment,
-          time: item.commentID ? (byID.get(`${item.path}\n${item.commentID}`)?.time ?? Date.now()) : Date.now(),
+          time: item.commentID ? (match?.time ?? Date.now()) : Date.now(),
           origin: item.commentOrigin,
           preview: item.preview,
         } satisfies PromptHistoryComment,
@@ -382,8 +402,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const applyHistoryComments = (items: PromptHistoryComment[]) => {
+    const files = items.filter(isPromptHistoryFileComment)
+    const messages = items.filter(isPromptHistoryMessageComment)
+
     comments.replace(
-      items.map((item) => ({
+      files.map((item) => ({
         id: item.id,
         file: item.path,
         selection: { ...item.selection },
@@ -392,13 +415,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })),
     )
     prompt.context.replaceComments(
-      items.map((item) => ({
+      files.map((item) => ({
         type: "file" as const,
         path: item.path,
         selection: selectionFromLines(item.selection),
         comment: item.comment,
         commentID: item.id,
         commentOrigin: item.origin,
+        preview: item.preview,
+      })),
+    )
+    prompt.context.replaceMessages(
+      messages.map((item) => ({
+        type: "message" as const,
+        annotationID: item.annotationID,
+        messageID: item.messageID,
+        role: item.role,
+        quote: item.quote,
+        comment: item.comment,
         preview: item.preview,
       })),
     )
@@ -1018,15 +1052,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
 
         for (const item of edit.context) {
-          prompt.context.add({
-            type: item.type,
+          if (item.type === "message") {
+            const next: MessageContextItem = {
+              type: "message",
+              annotationID: item.annotationID,
+              messageID: item.messageID,
+              role: item.role,
+              quote: item.quote,
+              comment: item.comment,
+              preview: item.preview,
+            }
+            prompt.context.add(next)
+            continue
+          }
+
+          const next: FileContextItem = {
+            type: "file",
             path: item.path,
             selection: item.selection,
             comment: item.comment,
             commentID: item.commentID,
             commentOrigin: item.commentOrigin,
             preview: item.preview,
-          })
+          }
+          prompt.context.add(next)
         }
 
         setStore("mode", "normal")
@@ -1307,8 +1356,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           type={store.draggingType}
           label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
         />
+        <MessageAnnotations
+          items={messageAnnotations()}
+          update={prompt.context.updateMessage}
+          remove={prompt.context.removeMessage}
+          placeholder={language.t("ui.lineComment.placeholder")}
+          deleteLabel={language.t("common.delete")}
+        />
         <PromptContextItems
-          items={contextItems()}
+          items={fileItems()}
           active={(item) => {
             const active = comments.active()
             return !!item.commentID && item.commentID === active?.id && item.path === active?.file
@@ -1415,17 +1471,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
-              <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
+              <Tooltip placement="top" inactive={action().inactive} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"
                   type="submit"
-                  disabled={store.mode !== "normal" || (!working() && blank())}
+                  disabled={store.mode !== "normal" || action().inactive}
                   tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={stopping() ? "stop" : "arrow-up"}
+                  icon={action().icon}
                   variant="primary"
                   class="size-8"
                   style={buttons()}
-                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  aria-label={action().label}
                 />
               </Tooltip>
             </div>

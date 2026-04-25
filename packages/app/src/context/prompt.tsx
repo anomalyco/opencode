@@ -2,7 +2,8 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { checksum } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
-import { createStore, type SetStoreFunction } from "solid-js/store"
+import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import type { Message } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
 
@@ -38,17 +39,52 @@ export interface ImageAttachmentPart {
 export type ContentPart = TextPart | FileAttachmentPart | AgentPart | ImageAttachmentPart
 export type Prompt = ContentPart[]
 
-export type FileContextItem = {
-  type: "file"
-  path: string
-  selection?: FileSelection
+type ContextBase = {
   comment?: string
-  commentID?: string
-  commentOrigin?: "review" | "file"
   preview?: string
 }
 
-export type ContextItem = FileContextItem
+export type FileContextItem = ContextBase & {
+  type: "file"
+  path: string
+  selection?: FileSelection
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+export type MessageContextItem = ContextBase & {
+  type: "message"
+  annotationID: string
+  messageID: string
+  role: Message["role"]
+  quote: string
+}
+
+type MessageValue = MessageContextItem & {
+  path: never
+  selection?: never
+  commentID?: never
+  commentOrigin?: never
+}
+
+export type ContextItem =
+  | (FileContextItem & {
+      annotationID?: never
+      messageID?: never
+      role?: never
+      quote?: never
+    })
+  | MessageValue
+
+type ContextInput = FileContextItem | MessageContextItem
+type ContextEntry = ContextItem & { key: string }
+type PromptStore = {
+  prompt: Prompt
+  cursor?: number
+  context: {
+    items: ContextEntry[]
+  }
+}
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
@@ -100,8 +136,27 @@ function clonePrompt(prompt: Prompt): Prompt {
   return prompt.map(clonePart)
 }
 
-function contextItemKey(item: ContextItem) {
-  if (item.type !== "file") return item.type
+function asContext(item: ContextInput): ContextItem {
+  return item as ContextItem
+}
+
+function withKey(item: ContextInput): ContextEntry {
+  const value = asContext(item)
+  return { ...value, key: contextItemKey(value) }
+}
+
+function isFileItem(item: ContextInput | ContextEntry): item is FileContextItem | (FileContextItem & { key: string }) {
+  return item.type === "file"
+}
+
+function isMessageItem(
+  item: ContextInput | ContextEntry,
+): item is MessageContextItem | (MessageContextItem & { key: string }) {
+  return item.type === "message"
+}
+
+function contextItemKey(item: ContextInput | ContextEntry) {
+  if (isMessageItem(item)) return `message:${item.annotationID}`
   const start = item.selection?.startLine
   const end = item.selection?.endLine
   const key = `${item.type}:${item.path}:${start}:${end}`
@@ -117,18 +172,14 @@ function contextItemKey(item: ContextItem) {
 }
 
 function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
-  return item.type === "file" && !!item.comment?.trim()
+  return !!item.comment?.trim()
 }
 
-function createPromptActions(
-  setStore: SetStoreFunction<{
-    prompt: Prompt
-    cursor?: number
-    context: {
-      items: (ContextItem & { key: string })[]
-    }
-  }>,
-) {
+function isFileCommentItem(item: ContextInput | ContextEntry) {
+  return isFileItem(item) && isCommentItem(item)
+}
+
+function createPromptActions(setStore: SetStoreFunction<PromptStore>) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
       const next = clonePrompt(prompt)
@@ -144,6 +195,87 @@ function createPromptActions(
       })
     },
   }
+}
+
+function createPromptSessionState(store: Store<PromptStore>, setStore: SetStoreFunction<PromptStore>) {
+  const actions = createPromptActions(setStore)
+
+  return {
+    current: () => store.prompt,
+    cursor: () => store.cursor,
+    dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
+    context: {
+      items: () => store.context.items,
+      add(item: ContextInput) {
+        const key = contextItemKey(item)
+        if (store.context.items.find((x) => x.key === key)) return
+        setStore("context", "items", (items) => [...items, withKey(item)])
+      },
+      remove(key: string) {
+        setStore("context", "items", (items) => items.filter((x) => x.key !== key))
+      },
+      removeComment(path: string, commentID: string) {
+        setStore("context", "items", (items) =>
+          items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
+        )
+      },
+      updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
+        setStore("context", "items", (items) =>
+          items.map((item) => {
+            if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
+            const value = { ...item, ...next }
+            return { ...value, key: contextItemKey(value) }
+          }),
+        )
+      },
+      removeMessage(annotationID: string) {
+        setStore("context", "items", (items) =>
+          items.filter((item) => !(item.type === "message" && item.annotationID === annotationID)),
+        )
+      },
+      updateMessage(annotationID: string, next: Omit<Partial<MessageContextItem>, "annotationID" | "type">) {
+        setStore("context", "items", (items) =>
+          items.map((item) => {
+            if (item.type !== "message" || item.annotationID !== annotationID) return item
+            const value = { ...item, ...next }
+            return { ...value, key: contextItemKey(value) }
+          }),
+        )
+      },
+      replaceComments(items: FileContextItem[]) {
+        setStore("context", "items", (current) => [
+          ...current.filter((item) => !isFileCommentItem(item)),
+          ...items.map(withKey),
+        ])
+      },
+      replaceMessages(items: MessageContextItem[]) {
+        setStore("context", "items", (current) => [
+          ...current.filter((item) => !isMessageItem(item)),
+          ...items.map(withKey),
+        ])
+      },
+    },
+    set: actions.set,
+    reset: actions.reset,
+  }
+}
+
+export function createPromptSessionForTest(
+  input: {
+    prompt?: Prompt
+    cursor?: number
+    items?: (FileContextItem | MessageContextItem)[]
+  } = {},
+) {
+  const [store, setStore] = createStore<PromptStore>({
+    prompt: clonePrompt(input.prompt ?? DEFAULT_PROMPT),
+    cursor: input.cursor,
+    context: {
+      items: (input.items ?? []).map(withKey),
+    },
+  })
+
+  return createPromptSessionState(store, setStore)
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -166,13 +298,7 @@ function createPromptSession(dir: string, id: string | undefined) {
 
   const [store, setStore, _, ready] = persisted(
     Persist.scoped(dir, id, "prompt", [legacy]),
-    createStore<{
-      prompt: Prompt
-      cursor?: number
-      context: {
-        items: (ContextItem & { key: string })[]
-      }
-    }>({
+    createStore<PromptStore>({
       prompt: clonePrompt(DEFAULT_PROMPT),
       cursor: undefined,
       context: {
@@ -180,47 +306,16 @@ function createPromptSession(dir: string, id: string | undefined) {
       },
     }),
   )
-
-  const actions = createPromptActions(setStore)
+  const session = createPromptSessionState(store, setStore)
 
   return {
     ready,
-    current: createMemo(() => store.prompt),
-    cursor: createMemo(() => store.cursor),
-    dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
-    context: {
-      items: createMemo(() => store.context.items),
-      add(item: ContextItem) {
-        const key = contextItemKey(item)
-        if (store.context.items.find((x) => x.key === key)) return
-        setStore("context", "items", (items) => [...items, { key, ...item }])
-      },
-      remove(key: string) {
-        setStore("context", "items", (items) => items.filter((x) => x.key !== key))
-      },
-      removeComment(path: string, commentID: string) {
-        setStore("context", "items", (items) =>
-          items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
-        )
-      },
-      updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
-        setStore("context", "items", (items) =>
-          items.map((item) => {
-            if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
-            const value = { ...item, ...next }
-            return { ...value, key: contextItemKey(value) }
-          }),
-        )
-      },
-      replaceComments(items: FileContextItem[]) {
-        setStore("context", "items", (current) => [
-          ...current.filter((item) => !isCommentItem(item)),
-          ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
-        ])
-      },
-    },
-    set: actions.set,
-    reset: actions.reset,
+    current: session.current,
+    cursor: session.cursor,
+    dirty: session.dirty,
+    context: session.context,
+    set: session.set,
+    reset: session.reset,
   }
 }
 
@@ -283,12 +378,16 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       dirty: () => session().dirty(),
       context: {
         items: () => session().context.items(),
-        add: (item: ContextItem) => session().context.add(item),
+        add: (item: ContextInput) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
         removeComment: (path: string, commentID: string) => session().context.removeComment(path, commentID),
         updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
           session().context.updateComment(path, commentID, next),
+        removeMessage: (annotationID: string) => session().context.removeMessage(annotationID),
+        updateMessage: (annotationID: string, next: Omit<Partial<MessageContextItem>, "annotationID" | "type">) =>
+          session().context.updateMessage(annotationID, next),
         replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
+        replaceMessages: (items: MessageContextItem[]) => session().context.replaceMessages(items),
       },
       set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => pick(scope).set(prompt, cursorPosition),
       reset: (scope?: Scope) => pick(scope).reset(),

@@ -259,6 +259,8 @@ export const dict = {
   "prompt.attachment.remove": "Usuń załącznik",
   "prompt.action.send": "Wyślij",
   "prompt.action.stop": "Zatrzymaj",
+  "prompt.action.addCommentToPrompt": "Dodaj komentarz do promptu",
+  "prompt.action.addCommentsToPrompt": "Dodaj komentarze do promptu",
   "prompt.toast.pasteUnsupported.title": "Nieobsługiwany załącznik",
   "prompt.toast.pasteUnsupported.description": "Można tutaj załączać tylko obrazy, pliki PDF lub pliki tekstowe.",
   "prompt.toast.modelAgentRequired.title": "Wybierz agenta i model",

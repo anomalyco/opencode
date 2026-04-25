@@ -277,6 +277,8 @@ export const dict = {
   "prompt.attachment.remove": "Eliminar adjunto",
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Detener",
+  "prompt.action.addCommentToPrompt": "Añadir comentario al prompt",
+  "prompt.action.addCommentsToPrompt": "Añadir comentarios al prompt",
 
   "prompt.toast.pasteUnsupported.title": "Adjunto no compatible",
   "prompt.toast.pasteUnsupported.description": "Solo se pueden adjuntar imágenes, PDFs o archivos de texto aquí.",

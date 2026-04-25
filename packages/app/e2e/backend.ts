@@ -62,6 +62,13 @@ function tail(input: string[]) {
   return input.slice(-40).join("")
 }
 
+function cleanEnv() {
+  const env = { ...process.env }
+  delete env["OPENCODE_SERVER_PASSWORD"]
+  delete env["OPENCODE_SERVER_USERNAME"]
+  return env
+}
+
 export async function startBackend(label: string, input?: { llmUrl?: string }): Promise<Handle> {
   const port = await freePort()
   const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), `opencode-e2e-${label}-`))
@@ -69,7 +76,7 @@ export async function startBackend(label: string, input?: { llmUrl?: string }): 
   const repoDir = path.resolve(appDir, "../..")
   const opencodeDir = path.join(repoDir, "packages", "opencode")
   const env = {
-    ...process.env,
+    ...cleanEnv(),
     OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
     OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
     OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",

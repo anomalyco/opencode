@@ -258,6 +258,8 @@ export const dict = {
   "prompt.attachment.remove": "Remover anexo",
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Parar",
+  "prompt.action.addCommentToPrompt": "Adicionar comentário ao prompt",
+  "prompt.action.addCommentsToPrompt": "Adicionar comentários ao prompt",
   "prompt.toast.pasteUnsupported.title": "Anexo não suportado",
   "prompt.toast.pasteUnsupported.description": "Apenas imagens, PDFs ou arquivos de texto podem ser anexados aqui.",
   "prompt.toast.modelAgentRequired.title": "Selecione um agente e modelo",

@@ -19,11 +19,15 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { appendMessageFeedback, exportMessageFeedback } from "@/utils/message-feedback"
 
 type PendingPrompt = {
   abort: AbortController
   cleanup: VoidFunction
 }
+
+type FileEntry = ContextItem & { type: "file"; key: string }
+type MessageEntry = ContextItem & { type: "message"; key: string }
 
 const pending = new Map<string, PendingPrompt>()
 
@@ -105,9 +109,10 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   }
 
   const messageID = input.messageID ?? Identifier.ascending("message")
+  const ctx: FileEntry[] = input.draft.context.filter((item): item is FileEntry => item.type === "file")
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
-    context: input.draft.context,
+    context: ctx,
     images,
     text,
     sessionID: input.draft.sessionID,
@@ -289,9 +294,36 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
     const mode = input.mode()
+    const items = prompt.context.items().slice()
+    const ctx = items.filter((item): item is FileEntry => item.type === "file")
+    const msgs = items.filter((item): item is MessageEntry => item.type === "message")
 
     if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
       if (input.working()) abort()
+      return
+    }
+
+    if (mode === "normal" && msgs.length > 0) {
+      const md = exportMessageFeedback(
+        msgs.map((item) => ({
+          role: item.role,
+          quote: item.quote,
+          comment: item.comment ?? "",
+        })),
+      )
+      const next = appendMessageFeedback(currentPrompt, md)
+      const pos = input.promptLength(next)
+
+      prompt.set(next, pos)
+      prompt.context.replaceMessages([])
+
+      requestAnimationFrame(() => {
+        const editor = input.editor()
+        if (!editor) return
+        editor.focus()
+        setCursorPosition(editor, pos)
+        input.queueScroll()
+      })
       return
     }
 
@@ -391,12 +423,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       providerID: currentModel.provider.id,
     }
     const agent = currentAgent.name
-    const context = prompt.context.items().slice()
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
       prompt: currentPrompt,
-      context,
+      context: ctx,
       agent,
       model,
       variant,
@@ -483,7 +514,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
     }
 
-    const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
+    const commentItems = ctx.filter((item) => !!item.comment?.trim())
     const messageID = Identifier.ascending("message")
 
     const removeOptimisticMessage = () => {

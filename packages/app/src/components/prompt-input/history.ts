@@ -1,11 +1,12 @@
-import type { Prompt } from "@/context/prompt"
+import type { MessageContextItem, Prompt } from "@/context/prompt"
 import type { SelectedLineRange } from "@/context/file"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
 export const MAX_HISTORY = 100
 
-export type PromptHistoryComment = {
+export type PromptHistoryFileComment = {
+  type: "file"
   id: string
   path: string
   selection: SelectedLineRange
@@ -15,12 +16,31 @@ export type PromptHistoryComment = {
   preview?: string
 }
 
+export type PromptHistoryMessageComment = {
+  type: "message"
+  annotationID: string
+  messageID: string
+  role: MessageContextItem["role"]
+  quote: string
+  comment: string
+  preview?: string
+}
+
+export type PromptHistoryComment = PromptHistoryFileComment | PromptHistoryMessageComment
+
+type PromptHistoryStoredComment = PromptHistoryComment | Omit<PromptHistoryFileComment, "type">
+
 export type PromptHistoryEntry = {
   prompt: Prompt
   comments: PromptHistoryComment[]
 }
 
-export type PromptHistoryStoredEntry = Prompt | PromptHistoryEntry
+export type PromptHistoryStoredEntry =
+  | Prompt
+  | {
+      prompt: Prompt
+      comments: PromptHistoryStoredComment[]
+    }
 
 export function canNavigateHistoryAtCursor(direction: "up" | "down", text: string, cursor: number, inHistory = false) {
   const position = Math.max(0, Math.min(cursor, text.length))
@@ -52,11 +72,26 @@ function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
   }
 }
 
-export function clonePromptHistoryComments(comments: PromptHistoryComment[]) {
-  return comments.map((comment) => ({
-    ...comment,
-    selection: cloneSelection(comment.selection),
-  }))
+export function isPromptHistoryFileComment(comment: PromptHistoryComment): comment is PromptHistoryFileComment {
+  return comment.type === "file"
+}
+
+export function isPromptHistoryMessageComment(comment: PromptHistoryComment): comment is PromptHistoryMessageComment {
+  return comment.type === "message"
+}
+
+function clonePromptHistoryComment(comment: PromptHistoryStoredComment): PromptHistoryComment {
+  if ("type" in comment && comment.type === "message") return { ...comment }
+
+  const file = "type" in comment ? comment : { ...comment, type: "file" as const }
+  return {
+    ...file,
+    selection: cloneSelection(file.selection),
+  }
+}
+
+export function clonePromptHistoryComments(comments: PromptHistoryStoredComment[]) {
+  return comments.map(clonePromptHistoryComment)
 }
 
 export function normalizePromptHistoryEntry(entry: PromptHistoryStoredEntry): PromptHistoryEntry {
@@ -68,7 +103,7 @@ export function normalizePromptHistoryEntry(entry: PromptHistoryStoredEntry): Pr
   }
   return {
     prompt: clonePromptParts(entry.prompt),
-    comments: clonePromptHistoryComments(entry.comments),
+    comments: clonePromptHistoryComments(entry.comments ?? []),
   }
 }
 
@@ -100,6 +135,19 @@ export function prependHistoryEntry(
 }
 
 function isCommentEqual(commentA: PromptHistoryComment, commentB: PromptHistoryComment) {
+  if (commentA.type !== commentB.type) return false
+  if (isPromptHistoryMessageComment(commentA) && isPromptHistoryMessageComment(commentB)) {
+    return (
+      commentA.messageID === commentB.messageID &&
+      commentA.role === commentB.role &&
+      commentA.quote === commentB.quote &&
+      commentA.comment === commentB.comment &&
+      commentA.preview === commentB.preview
+    )
+  }
+
+  if (!isPromptHistoryFileComment(commentA) || !isPromptHistoryFileComment(commentB)) return false
+
   return (
     commentA.path === commentB.path &&
     commentA.comment === commentB.comment &&
@@ -110,6 +158,16 @@ function isCommentEqual(commentA: PromptHistoryComment, commentB: PromptHistoryC
     commentA.selection.side === commentB.selection.side &&
     commentA.selection.endSide === commentB.selection.endSide
   )
+}
+
+function isCommentGroupEqual(groupA: PromptHistoryComment[], groupB: PromptHistoryComment[]) {
+  if (groupA.length !== groupB.length) return false
+  for (let i = 0; i < groupA.length; i++) {
+    const commentA = groupA[i]
+    const commentB = groupB[i]
+    if (!commentA || !commentB || !isCommentEqual(commentA, commentB)) return false
+  }
+  return true
 }
 
 function isPromptEqual(promptA: PromptHistoryStoredEntry, promptB: PromptHistoryStoredEntry) {
@@ -138,13 +196,13 @@ function isPromptEqual(promptA: PromptHistoryStoredEntry, promptB: PromptHistory
     if (partA.type === "agent" && partA.name !== (partB.type === "agent" ? partB.name : "")) return false
     if (partA.type === "image" && partA.id !== (partB.type === "image" ? partB.id : "")) return false
   }
-  if (entryA.comments.length !== entryB.comments.length) return false
-  for (let i = 0; i < entryA.comments.length; i++) {
-    const commentA = entryA.comments[i]
-    const commentB = entryB.comments[i]
-    if (!commentA || !commentB || !isCommentEqual(commentA, commentB)) return false
-  }
-  return true
+  const filesA = entryA.comments.filter(isPromptHistoryFileComment)
+  const filesB = entryB.comments.filter(isPromptHistoryFileComment)
+  if (!isCommentGroupEqual(filesA, filesB)) return false
+
+  const messagesA = entryA.comments.filter(isPromptHistoryMessageComment)
+  const messagesB = entryB.comments.filter(isPromptHistoryMessageComment)
+  return isCommentGroupEqual(messagesA, messagesB)
 }
 
 type HistoryNavInput = {

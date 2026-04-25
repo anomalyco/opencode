@@ -257,6 +257,8 @@ export const dict = {
   "prompt.attachment.remove": "添付ファイルを削除",
   "prompt.action.send": "送信",
   "prompt.action.stop": "停止",
+  "prompt.action.addCommentToPrompt": "コメントをプロンプトに追加",
+  "prompt.action.addCommentsToPrompt": "コメントをプロンプトに追加",
   "prompt.toast.pasteUnsupported.title": "サポートされていない添付ファイル",
   "prompt.toast.pasteUnsupported.description": "画像、PDF、またはテキストファイルのみ添付できます。",
   "prompt.toast.modelAgentRequired.title": "エージェントとモデルを選択",

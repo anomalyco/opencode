@@ -277,6 +277,8 @@ export const dict = {
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "傳送",
   "prompt.action.stop": "停止",
+  "prompt.action.addCommentToPrompt": "將評論加入提示詞",
+  "prompt.action.addCommentsToPrompt": "將評論加入提示詞",
 
   "prompt.toast.pasteUnsupported.title": "不支援的附件",
   "prompt.toast.pasteUnsupported.description": "此處僅能附加圖片、PDF 或文字檔案。",

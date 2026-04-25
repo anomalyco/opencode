@@ -1,5 +1,6 @@
 export const promptSelector = '[data-component="prompt-input"]'
-const terminalPanelSelector = '#terminal-panel[aria-hidden="false"]'
+export const promptSubmitSelector = '[data-action="prompt-submit"]'
+export const terminalPanelSelector = '#terminal-panel[aria-hidden="false"]'
 export const terminalSelector = `${terminalPanelSelector} [data-component="terminal"]`
 export const sessionComposerDockSelector = '[data-component="session-prompt-dock"]'
 export const questionDockSelector = '[data-component="dock-prompt"][data-kind="question"]'
@@ -63,3 +64,20 @@ export const listItemKeyStartsWithSelector = (prefix: string) => `${listItemSele
 export const listItemKeySelector = (key: string) => `${listItemSelector}[data-key="${key}"]`
 
 export const keybindButtonSelector = (id: string) => `[data-keybind-id="${id}"]`
+
+export const messageAnnotationTriggerSelector = '[data-component="message-annotation-trigger"]'
+export const messageAnnotationTriggerOpenSelector = '[data-action="message-annotation-trigger-open"]'
+export const messageAnnotationPopoverSelector = '[data-component="message-annotation-popover"]'
+export const messageAnnotationHeadSelector = '[data-slot="message-annotation-head"]'
+export const messageAnnotationInputSelector = '[data-component="message-annotation-input"]'
+export const messageAnnotationSaveSelector = '[data-action="message-annotation-save"]'
+export const messageAnnotationCancelSelector = '[data-action="message-annotation-cancel"]'
+export const messageAnnotationBasketSelector = '[data-component="message-annotation-basket"]'
+export const messageAnnotationCardSelector = '[data-component="line-comment"][data-variant="editor"][data-inline]'
+export const messageAnnotationCommentSelector = '[data-slot="line-comment-textarea"]'
+export const messageAnnotationRemoveSelector = '[data-slot="line-comment-action"][data-variant="ghost"]'
+
+export const sessionMessageSelector = (id: string) => `[data-message-id="${id}"]`
+
+export const sessionMessageSelectionSelector = (input: { id: string; role: "assistant" | "user" }) =>
+  `[data-message-selection="true"][data-message-selection-id="${input.id}"][data-message-role="${input.role}"]`

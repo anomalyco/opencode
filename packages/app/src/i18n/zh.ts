@@ -297,6 +297,8 @@ export const dict = {
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "发送",
   "prompt.action.stop": "停止",
+  "prompt.action.addCommentToPrompt": "将评论添加到提示词",
+  "prompt.action.addCommentsToPrompt": "将评论添加到提示词",
   "prompt.toast.pasteUnsupported.title": "不支持的附件",
   "prompt.toast.pasteUnsupported.description": "此处仅能附加图片、PDF 或文本文件。",
   "prompt.toast.modelAgentRequired.title": "请选择智能体和模型",
