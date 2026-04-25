@@ -110,7 +110,7 @@ Good near-term candidates:
 - top-level reads: `GET /path`, `GET /vcs`, `GET /vcs/diff`, `GET /command`, `GET /agent`, `GET /skill`, `GET /lsp`, `GET /formatter`
 - simple mutations: `POST /instance/dispose`
 - experimental JSON reads: console, tool, worktree list, resource list
-- deferred JSON mutations: `PATCH /config`, project git init, workspace/worktree create/remove/reset, file search, MCP auth flows
+- deferred JSON mutations: workspace/worktree create/remove/reset, file search, MCP auth flows
 
 Keep large or stateful groups for later:
 
@@ -176,7 +176,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `permission`              | `bridged`         | list and reply                                                                                     |
 | `provider`                | `bridged`         | list, auth, OAuth authorize/callback                                                               |
 | `config`                  | `bridged`         | read, providers, update                                                                            |
-| `project`                 | `bridged` partial | reads only; git-init remains Hono                                                                  |
+| `project`                 | `bridged`         | list, current, git init                                                                            |
 | `file`                    | `bridged` partial | find text/file/symbol, list/content/status                                                         |
 | `mcp`                     | `bridged` partial | status only                                                                                        |
 | `workspace`               | `bridged`         | list, get, enter                                                                                   |

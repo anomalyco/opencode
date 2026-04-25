@@ -1,8 +1,11 @@
 import * as InstanceState from "@/effect/instance-state"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Project } from "@/project"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
+import { markInstanceForReload } from "./lifecycle"
 
 const root = "/project"
 
@@ -26,6 +29,15 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.current",
             summary: "Get current project",
             description: "Retrieve the currently active project that OpenCode is working with.",
+          }),
+        ),
+        HttpApiEndpoint.post("initGit", `${root}/git/init`, {
+          success: Project.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.initGit",
+            summary: "Initialize git repository",
+            description: "Create a git repository for the current project and return the refreshed project info.",
           }),
         ),
       )
@@ -57,8 +69,21 @@ export const projectHandlers = Layer.unwrap(
       return (yield* InstanceState.context).project
     })
 
+    const initGit = Effect.fn("ProjectHttpApi.initGit")(function* () {
+      const ctx = yield* InstanceState.context
+      const next = yield* svc.initGit({ directory: ctx.directory, project: ctx.project })
+      if (next.id === ctx.project.id && next.vcs === ctx.project.vcs && next.worktree === ctx.project.worktree) return next
+      yield* markInstanceForReload(ctx, {
+        directory: ctx.directory,
+        worktree: ctx.directory,
+        project: next,
+        init: () => AppRuntime.runPromise(InstanceBootstrap),
+      })
+      return next
+    })
+
     return HttpApiBuilder.group(ProjectApi, "project", (handlers) =>
-      handlers.handle("list", list).handle("current", current),
+      handlers.handle("list", list).handle("current", current).handle("initGit", initGit),
     )
   }),
 ).pipe(Layer.provide(Project.defaultLayer))
