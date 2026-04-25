@@ -1,10 +1,20 @@
 import { MCP } from "@/mcp"
+import { ConfigMCP } from "@/config/mcp"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
+const AddPayload = Schema.Struct({
+  name: Schema.String,
+  config: ConfigMCP.Info,
+}).annotate({ identifier: "McpAddInput" })
+
+const StatusMap = Schema.Record(Schema.String, MCP.Status)
+
 export const McpPaths = {
   status: "/mcp",
+  connect: "/mcp/:name/connect",
+  disconnect: "/mcp/:name/disconnect",
 } as const
 
 export const McpApi = HttpApi.make("mcp")
@@ -18,6 +28,34 @@ export const McpApi = HttpApi.make("mcp")
             identifier: "mcp.status",
             summary: "Get MCP status",
             description: "Get the status of all Model Context Protocol (MCP) servers.",
+          }),
+        ),
+        HttpApiEndpoint.post("add", McpPaths.status, {
+          payload: AddPayload,
+          success: StatusMap,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.add",
+            summary: "Add MCP server",
+            description: "Dynamically add a new Model Context Protocol (MCP) server to the system.",
+          }),
+        ),
+        HttpApiEndpoint.post("connect", McpPaths.connect, {
+          params: { name: Schema.String },
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.connect",
+            description: "Connect an MCP server.",
+          }),
+        ),
+        HttpApiEndpoint.post("disconnect", McpPaths.disconnect, {
+          params: { name: Schema.String },
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.disconnect",
+            description: "Disconnect an MCP server.",
           }),
         ),
       )
@@ -45,6 +83,24 @@ export const mcpHandlers = Layer.unwrap(
       return yield* mcp.status()
     })
 
-    return HttpApiBuilder.group(McpApi, "mcp", (handlers) => handlers.handle("status", status))
+    const add = Effect.fn("McpHttpApi.add")(function* (ctx: { payload: typeof AddPayload.Type }) {
+      const payload = Schema.decodeUnknownSync(AddPayload)(ctx.payload)
+      const result = (yield* mcp.add(payload.name, payload.config)).status
+      return Schema.decodeUnknownSync(StatusMap)("status" in result ? { [payload.name]: result } : result)
+    })
+
+    const connect = Effect.fn("McpHttpApi.connect")(function* (ctx: { params: { name: string } }) {
+      yield* mcp.connect(ctx.params.name)
+      return true
+    })
+
+    const disconnect = Effect.fn("McpHttpApi.disconnect")(function* (ctx: { params: { name: string } }) {
+      yield* mcp.disconnect(ctx.params.name)
+      return true
+    })
+
+    return HttpApiBuilder.group(McpApi, "mcp", (handlers) =>
+      handlers.handle("status", status).handle("add", add).handle("connect", connect).handle("disconnect", disconnect),
+    )
   }),
 ).pipe(Layer.provide(MCP.defaultLayer))
