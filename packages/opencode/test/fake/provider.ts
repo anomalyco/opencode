@@ -73,6 +73,9 @@ export namespace ProviderTest {
           defaultModel: Effect.fn("TestProvider.defaultModel")(() =>
             Effect.succeed({ providerID: row.id, modelID: mdl.id }),
           ),
+          resolveFallbackChain: Effect.fn("TestProvider.resolveFallbackChain")((chain) =>
+            Effect.succeed(chain[0] ? mdl : undefined),
+          ),
           ...override,
         }),
       ),

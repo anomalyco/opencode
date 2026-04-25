@@ -389,6 +389,14 @@ export const User = Schema.Struct({
     modelID: ModelID,
     variant: Schema.optional(Schema.String),
   }),
+  fallbackModels: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        providerID: ProviderID,
+        modelID: ModelID,
+      }),
+    ),
+  ),
   system: Schema.optional(Schema.String),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
 })

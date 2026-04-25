@@ -1,0 +1,662 @@
+- generic [ref=e2]:
+  - region
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]:
+                  - text: Platform
+                  - img [ref=e21]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]:
+                  - text: Solutions
+                  - img [ref=e26]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]:
+                  - text: Resources
+                  - img [ref=e31]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]:
+                  - text: Open Source
+                  - img [ref=e36]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]:
+                  - text: Enterprise
+                  - img [ref=e41]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+                  - generic [ref=e45]: Pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+            - link "Sign in" [ref=e54] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fanomalyco%2Fopencode%2Fpull%2F23794
+            - link "Sign up" [ref=e55] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Fvoltron%2Fpull_requests_fragments%2Fpull_request_layout&source=header-repo&source_repo=anomalyco%2Fopencode
+            - button "Appearance settings" [ref=e58] [cursor=pointer]:
+              - img
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e66]:
+          - img [ref=e67]
+          - link "anomalyco" [ref=e70] [cursor=pointer]:
+            - /url: /anomalyco
+          - generic [ref=e71]: /
+          - strong [ref=e72]:
+            - link "opencode" [ref=e73] [cursor=pointer]:
+              - /url: /anomalyco/opencode
+          - generic [ref=e74]: Public
+        - generic [ref=e75]:
+          - list:
+            - listitem [ref=e76]:
+              - link "You must be signed in to change notification settings" [ref=e77] [cursor=pointer]:
+                - /url: /login?return_to=%2Fanomalyco%2Fopencode
+                - img [ref=e78]
+                - text: Notifications
+            - listitem [ref=e80]:
+              - link "Fork 17k" [ref=e81] [cursor=pointer]:
+                - /url: /login?return_to=%2Fanomalyco%2Fopencode
+                - img [ref=e82]
+                - text: Fork
+                - generic "17,009" [ref=e84]: 17k
+            - listitem [ref=e85]:
+              - link "You must be signed in to star a repository" [ref=e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Fanomalyco%2Fopencode
+                - img [ref=e88]
+                - text: Star
+                - generic "148480 users starred this repository" [ref=e90]: 148k
+      - navigation "Repository" [ref=e91]:
+        - list [ref=e92]:
+          - listitem [ref=e93]:
+            - link "Code" [ref=e94] [cursor=pointer]:
+              - /url: /anomalyco/opencode
+              - img [ref=e95]
+              - generic [ref=e97]: Code
+          - listitem [ref=e98]:
+            - link "Issues 4.4k" [ref=e99] [cursor=pointer]:
+              - /url: /anomalyco/opencode/issues
+              - img [ref=e100]
+              - generic [ref=e103]: Issues
+              - generic "4,407" [ref=e104]: 4.4k
+          - listitem [ref=e105]:
+            - link "Pull requests 1.7k" [ref=e106] [cursor=pointer]:
+              - /url: /anomalyco/opencode/pulls
+              - img [ref=e107]
+              - generic [ref=e109]: Pull requests
+              - generic "1,707" [ref=e110]: 1.7k
+          - listitem [ref=e111]:
+            - link "Actions" [ref=e112] [cursor=pointer]:
+              - /url: /anomalyco/opencode/actions
+              - img [ref=e113]
+              - generic [ref=e115]: Actions
+          - listitem [ref=e116]:
+            - link "Projects" [ref=e117] [cursor=pointer]:
+              - /url: /anomalyco/opencode/projects
+              - img [ref=e118]
+              - generic [ref=e120]: Projects
+          - listitem [ref=e121]:
+            - link "Security and quality 2" [ref=e122] [cursor=pointer]:
+              - /url: /anomalyco/opencode/security
+              - img [ref=e123]
+              - generic [ref=e125]: Security and quality
+              - generic "2" [ref=e126]
+          - listitem [ref=e127]:
+            - link "Insights" [ref=e128] [cursor=pointer]:
+              - /url: /anomalyco/opencode/pulse
+              - img [ref=e129]
+              - generic [ref=e131]: Insights
+    - generic [ref=e138]:
+      - generic [ref=e141]:
+        - 'heading "feat(tool): add interactive terminal tool with persistent PTY sessions #23794" [level=1] [ref=e143]':
+          - text: "feat(tool): add interactive terminal tool with persistent PTY sessions"
+          - generic [ref=e145]: "#23794"
+        - generic [ref=e148]:
+          - generic [ref=e150]:
+            - img "Pull request" [ref=e151]
+            - text: Open
+          - generic [ref=e154]:
+            - link "herjarsa" [ref=e155] [cursor=pointer]:
+              - /url: /herjarsa
+            - text: wants to merge 2 commits into
+            - link "anomalyco:dev" [ref=e156] [cursor=pointer]:
+              - /url: /anomalyco/opencode/tree/dev
+            - generic [ref=e157]: from
+            - generic [ref=e158]:
+              - link "herjarsa:feat/interactive-terminal-tool" [ref=e159] [cursor=pointer]:
+                - /url: /herjarsa/opencode/tree/feat/interactive-terminal-tool
+              - button "Copy head branch name to clipboard" [ref=e160] [cursor=pointer]:
+                - img [ref=e161]
+        - navigation "Pull request navigation tabs" [ref=e167]:
+          - tablist [ref=e168]:
+            - tab "Conversation" [selected] [ref=e169] [cursor=pointer]:
+              - img [ref=e170]
+              - text: Conversation
+            - tab "Commits (2)" [ref=e172] [cursor=pointer]:
+              - img [ref=e173]
+              - text: Commits
+              - generic [ref=e175]: "2"
+              - generic [ref=e176]: (2)
+            - tab "Checks" [ref=e177] [cursor=pointer]:
+              - img [ref=e178]
+              - text: Checks
+            - tab "Files changed" [ref=e180] [cursor=pointer]:
+              - img [ref=e181]
+              - text: Files changed
+      - generic [ref=e187]:
+        - generic [ref=e189]:
+          - heading "Conversation" [level=2] [ref=e190]
+          - generic [ref=e191]:
+            - generic [ref=e192]:
+              - generic [ref=e194]:
+                - link "@herjarsa" [ref=e195] [cursor=pointer]:
+                  - /url: /herjarsa
+                  - img "@herjarsa" [ref=e196]
+                - generic [ref=e198]:
+                  - generic [ref=e199]:
+                    - group [ref=e202]:
+                      - button "Show options" [ref=e203] [cursor=pointer]:
+                        - img "Show options" [ref=e206]
+                    - heading "herjarsa commented Apr 22, 20262 days ago •" [level=3] [ref=e208]:
+                      - generic [ref=e209]:
+                        - strong [ref=e210]:
+                          - link "herjarsa" [ref=e211] [cursor=pointer]:
+                            - /url: /herjarsa
+                        - text: commented
+                        - link "Apr 22, 20262 days ago" [ref=e212] [cursor=pointer]:
+                          - /url: "#issue-4306990847"
+                        - generic [ref=e213]:
+                          - generic [ref=e214]: •
+                          - group [ref=e215]:
+                            - button "edited" [ref=e216] [cursor=pointer]:
+                              - generic [ref=e217]:
+                                - text: edited
+                                - img [ref=e218]
+                  - generic [ref=e223]:
+                    - heading "Issue for this PR" [level=3] [ref=e224]
+                    - paragraph [ref=e225]:
+                      - text: Related to
+                      - link "#23449" [ref=e226] [cursor=pointer]:
+                        - /url: https://github.com/anomalyco/opencode/issues/23449
+                    - heading "Type of change" [level=3] [ref=e227]
+                    - list [ref=e228]:
+                      - listitem [ref=e229]:
+                        - img [ref=e231]
+                        - checkbox "Incomplete task" [disabled] [ref=e233]
+                        - text: Bug fix
+                      - listitem [ref=e234]:
+                        - img [ref=e236]
+                        - checkbox "Completed task" [checked] [disabled] [ref=e238]
+                        - text: New feature
+                      - listitem [ref=e239]:
+                        - img [ref=e241]
+                        - checkbox "Incomplete task" [disabled] [ref=e243]
+                        - text: Refactor / code improvement
+                      - listitem [ref=e244]:
+                        - img [ref=e246]
+                        - checkbox "Incomplete task" [disabled] [ref=e248]
+                        - text: Documentation
+                    - heading "What does this PR do?" [level=3] [ref=e249]
+                    - paragraph [ref=e250]:
+                      - text: Implements Phase 1 + Phase 2 of
+                      - link "#23449" [ref=e251] [cursor=pointer]:
+                        - /url: https://github.com/anomalyco/opencode/issues/23449
+                      - text: — adds an explicit erminal tool backed by the existing PTY infrastructure, as suggested by
+                      - link "@egdev6" [ref=e252] [cursor=pointer]:
+                        - /url: https://github.com/egdev6
+                      - text: .
+                    - paragraph [ref=e253]:
+                      - strong [ref=e254]: "Phase 1 (Core):"
+                    - list [ref=e255]:
+                      - listitem [ref=e256]:
+                        - text: "New erminal tool with 5 actions: create, send,"
+                        - text: ead, close (plus
+                        - text: un for backward-compat one-shot)
+                      - listitem [ref=e257]: Backed by existing Pty.Service — no new backend infrastructure needed
+                      - listitem [ref=e258]: �ash tool untouched — simple commands stay on �ash
+                      - listitem [ref=e259]: SessionState with exitCode tracking (sentinel command on Windows PowerShell)
+                      - listitem [ref=e260]: FIFO eviction at max 20 sessions
+                      - listitem [ref=e261]: InstanceState for per-directory session isolation
+                      - listitem [ref=e262]: Incremental cursor-based reads
+                    - paragraph [ref=e263]:
+                      - strong [ref=e264]: "Phase 2 (Desktop UX):"
+                    - list [ref=e265]:
+                      - listitem [ref=e266]: Agent-created PTY sessions now appear in the Desktop terminal panel
+                      - listitem [ref=e267]: TerminalContext subscribes to pty.created events and adds sessions to the store
+                      - listitem [ref=e268]: Panel auto-opens when agent creates a session
+                      - listitem [ref=e269]: New agent session becomes the active tab automatically
+                    - heading "How did you verify your code works?" [level=3] [ref=e270]
+                    - paragraph [ref=e271]:
+                      - strong [ref=e272]: "Phase 1:"
+                    - list [ref=e273]:
+                      - listitem [ref=e274]: "20 unit tests: filterEcho, extractExit, cleanOutput, sentinelCommand, FIFO eviction"
+                      - listitem [ref=e275]: "3 integration tests: session lifecycle, close-not-found, read-not-found"
+                      - listitem [ref=e276]: �un typecheck passes for the opencode package
+                      - listitem [ref=e277]: Tested on Windows (PowerShell) with sentinel command for exit code detection
+                    - paragraph [ref=e278]:
+                      - strong [ref=e279]: "Phase 2:"
+                    - list [ref=e280]:
+                      - listitem [ref=e281]: Changes follow existing patterns in TerminalContext (pty.exited listener → pty.created listener)
+                      - listitem [ref=e282]: Auto-open follows existing panel open/close patterns
+                      - listitem [ref=e283]: Deduplication prevents duplicate sessions when both agent and user create PTYs
+                    - paragraph [ref=e284]:
+                      - text: 2 backward-compat
+                      - text: un action tests skipped — bus event propagation doesn't resolve in test context (works in production).
+                    - heading "Screenshots / recordings" [level=3] [ref=e285]
+                    - paragraph [ref=e286]: N/A — non-UI change (Phase 2 uses existing terminal panel UI)
+                    - heading "Checklist" [level=3] [ref=e287]
+                    - list [ref=e288]:
+                      - listitem [ref=e289]:
+                        - img [ref=e291]
+                        - checkbox "Completed task" [checked] [disabled] [ref=e293]
+                        - text: I have tested my changes locally
+                      - listitem [ref=e294]:
+                        - img [ref=e296]
+                        - checkbox "Completed task" [checked] [disabled] [ref=e298]
+                        - text: I have not included unrelated changes in this PR
+                  - generic [ref=e302]:
+                    - 'button "thumbs up (1): herjarsa, 05:55AM on April 22" [disabled] [ref=e303]':
+                      - generic [ref=e304]: 👍
+                      - generic [ref=e305]: "1"
+                    - 'button "heart (1): herjarsa, 05:55AM on April 22" [disabled] [ref=e306]':
+                      - generic [ref=e307]: ❤️
+                      - generic [ref=e308]: "1"
+              - generic [ref=e309]:
+                - generic [ref=e313]:
+                  - img [ref=e315]
+                  - generic [ref=e320]:
+                    - link "@herjarsa" [ref=e323] [cursor=pointer]:
+                      - /url: /herjarsa
+                      - img "@herjarsa" [ref=e324]
+                    - generic [ref=e325]:
+                      - code [ref=e326]:
+                        - 'link "feat(tool): add interactive terminal tool with persistent PTY sessions" [ref=e327] [cursor=pointer]':
+                          - /url: /anomalyco/opencode/pull/23794/commits/905637a94d5dcb750189a331a1feb05f507bcdc6
+                      - button "…" [ref=e329] [cursor=pointer]
+                    - group [ref=e333]:
+                      - generic "5 / 5 checks OK" [ref=e334] [cursor=pointer]:
+                        - img "5 / 5 checks OK" [ref=e335]
+                    - code [ref=e338]:
+                      - link "905637a" [ref=e339] [cursor=pointer]:
+                        - /url: /anomalyco/opencode/pull/23794/commits/905637a94d5dcb750189a331a1feb05f507bcdc6
+                - generic [ref=e340]:
+                  - generic [ref=e341]:
+                    - img [ref=e343]
+                    - generic [ref=e345]:
+                      - link "@rekram1-node" [ref=e346] [cursor=pointer]:
+                        - /url: /rekram1-node
+                        - img "@rekram1-node" [ref=e347]
+                      - link "rekram1-node" [ref=e348] [cursor=pointer]:
+                        - /url: /rekram1-node
+                      - link "force-pushed" [ref=e349] [cursor=pointer]:
+                        - /url: /anomalyco/opencode/compare/1026791076c6a4edf1d44422177e13d06c2930d6..ac26394fcb280592a8ecddf903a3a7116c841f39
+                      - text: the
+                      - generic [ref=e351]: dev
+                      - text: branch from
+                      - link "1026791" [ref=e352] [cursor=pointer]:
+                        - /url: /anomalyco/opencode/commit/1026791076c6a4edf1d44422177e13d06c2930d6
+                        - code [ref=e353]: "1026791"
+                      - text: to
+                      - link "ac26394" [ref=e354] [cursor=pointer]:
+                        - /url: /anomalyco/opencode/commit/ac26394fcb280592a8ecddf903a3a7116c841f39
+                        - code [ref=e355]: ac26394
+                      - link "Compare" [ref=e356] [cursor=pointer]:
+                        - /url: /anomalyco/opencode/compare/1026791076c6a4edf1d44422177e13d06c2930d6..ac26394fcb280592a8ecddf903a3a7116c841f39
+                        - generic [ref=e358]: Compare
+                      - link "April 23, 2026 04:27yesterday" [ref=e359] [cursor=pointer]:
+                        - /url: "#event-24781323968"
+                  - generic [ref=e360]:
+                    - img [ref=e362]
+                    - generic [ref=e364]:
+                      - generic [ref=e365]:
+                        - link "@herjarsa" [ref=e366] [cursor=pointer]:
+                          - /url: /herjarsa
+                          - img "@herjarsa" [ref=e367]
+                        - link "herjarsa" [ref=e368] [cursor=pointer]:
+                          - /url: /herjarsa
+                        - text: mentioned this pull request
+                        - link "Apr 23, 202611 hours ago" [ref=e369] [cursor=pointer]:
+                          - /url: "#ref-issue-4292145403"
+                      - generic [ref=e370]:
+                        - 'link "[FEATURE]: Agent should use integrated terminal (PTY) instead of spawning new shell processes #23449" [ref=e372] [cursor=pointer]':
+                          - /url: /anomalyco/opencode/issues/23449
+                        - 'generic "Status: Open" [ref=e374]':
+                          - img [ref=e375]
+                          - text: Open
+                      - generic [ref=e379]:
+                        - img [ref=e381]
+                        - generic [ref=e383]: 2 tasks
+                - generic [ref=e385]:
+                  - link "@herjarsa" [ref=e387] [cursor=pointer]:
+                    - /url: /herjarsa
+                    - img "@herjarsa" [ref=e388]
+                  - generic [ref=e390]:
+                    - generic [ref=e391]:
+                      - generic [ref=e392]:
+                        - group [ref=e394]:
+                          - button "Show options" [ref=e395] [cursor=pointer]:
+                            - img "Show options" [ref=e398]
+                        - generic "This user is the author of this pull request." [ref=e401]:
+                          - generic [ref=e402]: Author
+                      - heading "herjarsa commented Apr 23, 202611 hours ago" [level=3] [ref=e403]:
+                        - generic [ref=e404]:
+                          - strong [ref=e405]:
+                            - link "herjarsa" [ref=e406] [cursor=pointer]:
+                              - /url: /herjarsa
+                          - text: commented
+                          - link "Apr 23, 202611 hours ago" [ref=e407] [cursor=pointer]:
+                            - /url: "#issuecomment-4306568290"
+                    - generic [ref=e408]:
+                      - table [ref=e410]:
+                        - rowgroup [ref=e411]:
+                          - row "@egdev6 — when you have a moment, would appreciate your review on this. PR is passing all checks and is mergeable. Happy to address any feedback." [ref=e412]:
+                            - cell "@egdev6 — when you have a moment, would appreciate your review on this. PR is passing all checks and is mergeable. Happy to address any feedback." [ref=e413]:
+                              - paragraph [ref=e414]:
+                                - link "@egdev6" [ref=e415] [cursor=pointer]:
+                                  - /url: https://github.com/egdev6
+                                - text: — when you have a moment, would appreciate your review on this. PR is passing all checks and is mergeable. Happy to address any feedback.
+                      - button "react with thumbs up" [disabled] [ref=e421]:
+                        - generic [ref=e422]: 👍
+                        - generic [ref=e423]: "1"
+                - generic [ref=e425]:
+                  - link "@egdev6" [ref=e427] [cursor=pointer]:
+                    - /url: /egdev6
+                    - img "@egdev6" [ref=e428]
+                  - generic [ref=e430]:
+                    - generic [ref=e431]:
+                      - group [ref=e434]:
+                        - button "Show options" [ref=e435] [cursor=pointer]:
+                          - img "Show options" [ref=e438]
+                      - heading "egdev6 commented Apr 23, 202611 hours ago" [level=3] [ref=e440]:
+                        - generic [ref=e441]:
+                          - strong [ref=e442]:
+                            - link "egdev6" [ref=e443] [cursor=pointer]:
+                              - /url: /egdev6
+                          - text: commented
+                          - link "Apr 23, 202611 hours ago" [ref=e444] [cursor=pointer]:
+                            - /url: "#issuecomment-4306589335"
+                    - table [ref=e447]:
+                      - rowgroup [ref=e448]:
+                        - row "I'm away from my computer. I'll check it when I can. Cheers 🥰" [ref=e449]:
+                          - cell "I'm away from my computer. I'll check it when I can. Cheers 🥰" [ref=e450]:
+                            - paragraph [ref=e451]: I'm away from my computer. I'll check it when I can. Cheers 🥰
+                - generic [ref=e455]:
+                  - img [ref=e457]
+                  - generic [ref=e462]:
+                    - link "@herjarsa" [ref=e465] [cursor=pointer]:
+                      - /url: /herjarsa
+                      - img "@herjarsa" [ref=e466]
+                    - generic [ref=e467]:
+                      - code [ref=e468]:
+                        - 'link "feat(terminal): surface agent-created PTY sessions in Desktop UI" [ref=e469] [cursor=pointer]':
+                          - /url: /anomalyco/opencode/pull/23794/commits/7b999041198ea6aca674b12f709726dee21a02f2
+                      - button "…" [ref=e471] [cursor=pointer]
+                    - group [ref=e475]:
+                      - generic "2 / 2 checks OK" [ref=e476] [cursor=pointer]:
+                        - img "2 / 2 checks OK" [ref=e477]
+                    - code [ref=e480]:
+                      - link "7b99904" [ref=e481] [cursor=pointer]:
+                        - /url: /anomalyco/opencode/pull/23794/commits/7b999041198ea6aca674b12f709726dee21a02f2
+                - generic [ref=e483]:
+                  - img [ref=e485]
+                  - generic [ref=e487]:
+                    - link "@herjarsa" [ref=e488] [cursor=pointer]:
+                      - /url: /herjarsa
+                      - img "@herjarsa" [ref=e489]
+                    - link "herjarsa" [ref=e490] [cursor=pointer]:
+                      - /url: /herjarsa
+                    - text: requested a review from
+                    - link "adamdotdevin" [ref=e491] [cursor=pointer]:
+                      - /url: /adamdotdevin
+                    - text: as a
+                    - link "code owner" [ref=e492] [cursor=pointer]:
+                      - /url: /anomalyco/opencode/blob/0590452456a746457d5255e2ce3ecd9c5a4a621d/.github/CODEOWNERS#L2
+                    - link "April 23, 2026 18:2710 hours ago" [ref=e493] [cursor=pointer]:
+                      - /url: "#event-24808491395"
+                - generic [ref=e495]:
+                  - link "@egdev6" [ref=e497] [cursor=pointer]:
+                    - /url: /egdev6
+                    - img "@egdev6" [ref=e498]
+                  - generic [ref=e500]:
+                    - generic [ref=e501]:
+                      - group [ref=e504]:
+                        - button "Show options" [ref=e505] [cursor=pointer]:
+                          - img "Show options" [ref=e508]
+                      - heading "egdev6 commented Apr 23, 20266 hours ago" [level=3] [ref=e510]:
+                        - generic [ref=e511]:
+                          - strong [ref=e512]:
+                            - link "egdev6" [ref=e513] [cursor=pointer]:
+                              - /url: /egdev6
+                          - text: commented
+                          - link "Apr 23, 20266 hours ago" [ref=e514] [cursor=pointer]:
+                            - /url: "#issuecomment-4308674681"
+                    - table [ref=e517]:
+                      - rowgroup [ref=e518]:
+                        - row [ref=e519]:
+                          - cell [ref=e520]:
+                            - paragraph [ref=e521]:
+                              - text: Thanks for pushing this — the direction looks right overall, especially keeping
+                              - code [ref=e522]: bash
+                              - text: untouched for simple commands and routing PTY-heavy behavior through a separate tool.
+                            - paragraph [ref=e523]: "A few review points I think are worth addressing before merge:"
+                            - list [ref=e524]:
+                              - listitem [ref=e525]:
+                                - paragraph [ref=e526]:
+                                  - strong [ref=e527]: Login shell args appear to be duplicated
+                                  - text: in
+                                  - code [ref=e528]: packages/opencode/src/tool/terminal.ts
+                                  - text: .
+                                  - text: Both
+                                  - code [ref=e529]: run
+                                  - text: and
+                                  - code [ref=e530]: create
+                                  - text: call
+                                  - code [ref=e531]: "pty.create({ command: Shell.preferred(), args: Shell.login(Shell.preferred()) ? [-l] : [], ... })"
+                                  - text: ", but"
+                                  - code [ref=e532]: Pty.create()
+                                  - text: already appends
+                                  - code [ref=e533]: "-l"
+                                  - text: internally when
+                                  - code [ref=e534]: Shell.login(command)
+                                  - text: is true (
+                                  - code [ref=e535]: packages/opencode/src/pty/index.ts
+                                  - text: ). That means login shells will likely get
+                                  - code [ref=e536]: "-l -l"
+                                  - text: .
+                              - listitem [ref=e537]:
+                                - paragraph [ref=e538]:
+                                  - strong [ref=e539]:
+                                    - code [ref=e540]: read
+                                    - text: looks broken for cursor-based replay and final output capture
+                                  - text: .
+                                  - text: In
+                                  - code [ref=e541]: terminal.ts
+                                  - text: ","
+                                  - code [ref=e542]: read
+                                  - text: uses
+                                  - code [ref=e543]: pty.connect(session.ptyId, readWs, session.lastCursor)
+                                  - text: ", but"
+                                  - code [ref=e544]: Pty.connect()
+                                  - text: sends both replay data
+                                  - strong [ref=e545]: and
+                                  - text: the NUL-prefixed meta frame containing the real cursor.
+                                  - code [ref=e546]: createMockSocket()
+                                  - text: currently decodes all frames into
+                                  - code [ref=e547]: newOutput
+                                  - text: ", so the meta frame gets mixed into output, and then"
+                                  - code [ref=e548]: session.lastCursor += newOutput.length
+                                  - text: advances by payload length rather than the actual PTY cursor.
+                                - paragraph [ref=e549]:
+                                  - text: "Related: once the PTY exits,"
+                                  - code [ref=e550]: Pty
+                                  - text: auto-removes the session in the core service. That means a persistent session can disappear from the PTY layer before
+                                  - code [ref=e551]: read
+                                  - text: "has a chance to fetch final output / exit state. I think this needs either:"
+                                - list [ref=e552]:
+                                  - listitem [ref=e553]:
+                                    - text: explicit parsing of the meta cursor frame + storing cursor/output in
+                                    - code [ref=e554]: SessionState
+                                    - text: ", or"
+                                  - listitem [ref=e555]:
+                                    - text: a different persistence model so
+                                    - code [ref=e556]: read
+                                    - text: can still return the final buffered output after exit.
+                              - listitem [ref=e557]:
+                                - paragraph [ref=e558]:
+                                  - strong [ref=e559]:
+                                    - text: The claimed backward compatibility for omitted
+                                    - code [ref=e560]: action
+                                    - text: needs a real test
+                                  - text: .
+                                  - text: The tool uses
+                                  - code [ref=e561]: z.discriminatedUnion(action, ...)
+                                  - text: with
+                                  - code [ref=e562]: .default(run)
+                                  - text: on the
+                                  - code [ref=e563]: RunAction
+                                  - text: branch. I’m not confident that omission of the discriminator will actually parse as
+                                  - code [ref=e564]: run
+                                  - text: with
+                                  - code [ref=e565]: discriminatedUnion
+                                  - text: . The skipped tests make this especially important. I’d strongly suggest adding a test for calling the tool with no
+                                  - code [ref=e566]: action
+                                  - text: field at all, because right now this may not actually be backward-compatible.
+                              - listitem [ref=e567]:
+                                - paragraph [ref=e568]:
+                                  - strong [ref=e569]: There seems to be a duplicated focus effect
+                                  - text: in
+                                  - code [ref=e570]: packages/app/src/pages/session/terminal-panel.tsx
+                                  - text: .
+                                  - text: The
+                                  - code [ref=e571]: createEffect(on(() => [opened(), terminal.active()] ... focus(id)))
+                                  - text: block appears twice.
+                              - listitem [ref=e572]:
+                                - paragraph [ref=e573]:
+                                  - strong [ref=e574]: Agent-session detection by title prefix is probably too brittle
+                                  - text: .
+                                  - text: The Desktop auto-open logic currently relies on
+                                  - code [ref=e575]: last.title.startsWith(Agent:)
+                                  - text: . That works for now, but it feels easy to break if titles are customized/localized later. If there’s any way to tag agent-created PTYs structurally instead of inferring from the title, that would be more robust.
+                            - paragraph [ref=e576]:
+                              - text: The two biggest concerns from my side are
+                              - strong [ref=e577]:
+                                - text: (1) duplicated
+                                - code [ref=e578]: "-l"
+                              - text: and
+                              - strong [ref=e579]:
+                                - text: (2) the
+                                - code [ref=e580]: read
+                                - text: / cursor / exited-session behavior
+                              - text: ", since those seem like real correctness issues rather than polish."
+                            - paragraph [ref=e581]: Happy to take another look after an update.
+                - generic [ref=e583]:
+                  - img [ref=e585]
+                  - generic [ref=e587]:
+                    - generic [ref=e588]:
+                      - link "@github-actions" [ref=e589] [cursor=pointer]:
+                        - /url: /apps/github-actions
+                        - img "@github-actions" [ref=e590]
+                      - link "github-actions" [ref=e591] [cursor=pointer]:
+                        - /url: /apps/github-actions
+                      - generic [ref=e592]: Bot
+                      - text: mentioned this pull request
+                      - link "Apr 24, 20263 hours ago" [ref=e593] [cursor=pointer]:
+                        - /url: "#ref-issue-4319854064"
+                    - generic [ref=e594]:
+                      - link "📊 AI CLI 工具社区动态日报 2026-04-24 gsscsd/big_model_radar#235" [ref=e596] [cursor=pointer]:
+                        - /url: /gsscsd/big_model_radar/issues/235
+                      - 'generic "Status: Open" [ref=e598]':
+                        - img [ref=e599]
+                        - text: Open
+            - generic [ref=e605]:
+              - link "Sign up for free" [ref=e606] [cursor=pointer]:
+                - /url: /join?source=comment-repo
+              - strong [ref=e607]: to join this conversation on GitHub
+              - text: . Already have an account?
+              - link "Sign in to comment" [ref=e608] [cursor=pointer]:
+                - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fanomalyco%2Fopencode%2Fpull%2F23794
+        - generic [ref=e612]:
+          - form "Select reviewers" [ref=e614]:
+            - heading "Reviewers" [level=3] [ref=e615]
+            - paragraph [ref=e617]:
+              - generic [ref=e618]:
+                - link "@adamdotdevin" [ref=e619] [cursor=pointer]:
+                  - /url: /adamdotdevin
+                  - img "@adamdotdevin" [ref=e620]
+                - link "adamdotdevin" [ref=e621] [cursor=pointer]:
+                  - /url: /adamdotdevin
+              - button "Awaiting requested review from adamdotdevin" [ref=e622] [cursor=pointer]:
+                - img [ref=e624]
+              - button "adamdotdevin is a code owner" [ref=e626] [cursor=pointer]:
+                - img [ref=e628]
+          - form "Select assignees" [ref=e631]:
+            - heading "Assignees" [level=3] [ref=e632]
+            - text: No one assigned
+          - generic [ref=e633]:
+            - heading "Labels" [level=3] [ref=e634]
+            - generic [ref=e635]: None yet
+          - form "Select projects" [ref=e637]:
+            - heading "Projects" [level=3] [ref=e638]
+            - text: None yet
+          - form "Select milestones" [ref=e640]:
+            - heading "Milestone" [level=3] [ref=e641]
+            - text: No milestone
+          - form "Link issues" [ref=e647]:
+            - heading "Development" [level=3] [ref=e648]
+            - paragraph [ref=e649]: Successfully merging this pull request may close these issues.
+            - paragraph [ref=e651]: None yet
+          - generic [ref=e653]:
+            - heading "2 participants" [level=3] [ref=e654]
+            - generic [ref=e655]:
+              - link "@herjarsa" [ref=e656] [cursor=pointer]:
+                - /url: /herjarsa
+                - img "@herjarsa" [ref=e657]
+              - link "@egdev6" [ref=e658] [cursor=pointer]:
+                - /url: /egdev6
+                - img "@egdev6" [ref=e659]
+  - contentinfo [ref=e660]:
+    - heading "Footer" [level=2] [ref=e661]
+    - generic [ref=e662]:
+      - generic [ref=e663]:
+        - link "GitHub Homepage" [ref=e664] [cursor=pointer]:
+          - /url: https://github.com
+          - img [ref=e665]
+        - generic [ref=e667]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e668]:
+        - heading "Footer navigation" [level=3] [ref=e669]
+        - list "Footer navigation" [ref=e670]:
+          - listitem [ref=e671]:
+            - link "Terms" [ref=e672] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e673]:
+            - link "Privacy" [ref=e674] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e675]:
+            - link "Security" [ref=e676] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e677]:
+            - link "Status" [ref=e678] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e679]:
+            - link "Community" [ref=e680] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e681]:
+            - link "Docs" [ref=e682] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e683]:
+            - link "Contact" [ref=e684] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e685]:
+            - button "Manage cookies" [ref=e687] [cursor=pointer]
+          - listitem [ref=e688]:
+            - button "Do not share my personal information" [ref=e690] [cursor=pointer]

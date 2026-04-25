@@ -1,0 +1,1332 @@
+- generic [ref=e2]:
+  - region
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]:
+                  - text: Platform
+                  - img [ref=e21]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]:
+                  - text: Solutions
+                  - img [ref=e26]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]:
+                  - text: Resources
+                  - img [ref=e31]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]:
+                  - text: Open Source
+                  - img [ref=e36]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]:
+                  - text: Enterprise
+                  - img [ref=e41]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+                  - generic [ref=e45]: Pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+              - generic [ref=e53]: Search or jump to...
+              - img [ref=e55]
+            - link "Sign in" [ref=e59] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fanomalyco%2Fopencode%2Fpull%2F23794%2Ffiles
+            - link "Sign up" [ref=e60] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Fpull_requests%2Fshow%2Ffiles&source=header-repo&source_repo=anomalyco%2Fopencode
+            - button "Appearance settings" [ref=e63] [cursor=pointer]:
+              - img
+  - main [ref=e67]:
+    - generic [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e71]:
+          - img [ref=e72]
+          - link "anomalyco" [ref=e75] [cursor=pointer]:
+            - /url: /anomalyco
+          - generic [ref=e76]: /
+          - strong [ref=e77]:
+            - link "opencode" [ref=e78] [cursor=pointer]:
+              - /url: /anomalyco/opencode
+          - generic [ref=e79]: Public
+        - generic [ref=e80]:
+          - list:
+            - listitem [ref=e81]:
+              - link "You must be signed in to change notification settings" [ref=e82] [cursor=pointer]:
+                - /url: /login?return_to=%2Fanomalyco%2Fopencode
+                - img [ref=e83]
+                - text: Notifications
+            - listitem [ref=e85]:
+              - link "Fork 17k" [ref=e86] [cursor=pointer]:
+                - /url: /login?return_to=%2Fanomalyco%2Fopencode
+                - img [ref=e87]
+                - text: Fork
+                - generic "17,036" [ref=e89]: 17k
+            - listitem [ref=e90]:
+              - link "You must be signed in to star a repository" [ref=e92] [cursor=pointer]:
+                - /url: /login?return_to=%2Fanomalyco%2Fopencode
+                - img [ref=e93]
+                - text: Star
+                - generic "148656 users starred this repository" [ref=e95]: 149k
+      - navigation "Repository" [ref=e96]:
+        - list [ref=e97]:
+          - listitem [ref=e98]:
+            - link "Code" [ref=e99] [cursor=pointer]:
+              - /url: /anomalyco/opencode
+              - img [ref=e100]
+              - generic [ref=e102]: Code
+          - listitem [ref=e103]:
+            - link "Issues 4.4k" [ref=e104] [cursor=pointer]:
+              - /url: /anomalyco/opencode/issues
+              - img [ref=e105]
+              - generic [ref=e108]: Issues
+              - generic "4,426" [ref=e109]: 4.4k
+          - listitem [ref=e110]:
+            - link "Pull requests 1.7k" [ref=e111] [cursor=pointer]:
+              - /url: /anomalyco/opencode/pulls
+              - img [ref=e112]
+              - generic [ref=e114]: Pull requests
+              - generic "1,704" [ref=e115]: 1.7k
+          - listitem [ref=e116]:
+            - link "Actions" [ref=e117] [cursor=pointer]:
+              - /url: /anomalyco/opencode/actions
+              - img [ref=e118]
+              - generic [ref=e120]: Actions
+          - listitem [ref=e121]:
+            - link "Projects" [ref=e122] [cursor=pointer]:
+              - /url: /anomalyco/opencode/projects
+              - img [ref=e123]
+              - generic [ref=e125]: Projects
+          - listitem [ref=e126]:
+            - link "Security and quality 2" [ref=e127] [cursor=pointer]:
+              - /url: /anomalyco/opencode/security
+              - img [ref=e128]
+              - generic [ref=e130]: Security and quality
+              - generic "2" [ref=e131]
+          - listitem [ref=e132]:
+            - link "Insights" [ref=e133] [cursor=pointer]:
+              - /url: /anomalyco/opencode/pulse
+              - img [ref=e134]
+              - generic [ref=e136]: Insights
+    - generic [ref=e142]:
+      - generic [ref=e144]:
+        - generic [ref=e146]:
+          - 'heading "feat(tool): add interactive terminal tool with persistent PTY sessions #23794" [level=1] [ref=e147]'
+          - group [ref=e149]:
+            - button "New issue" [ref=e150] [cursor=pointer]
+        - generic [ref=e151]:
+          - 'generic "Status: Open" [ref=e153]':
+            - img [ref=e154]
+            - text: Open
+          - generic [ref=e156]:
+            - link "herjarsa" [ref=e157] [cursor=pointer]:
+              - /url: /herjarsa
+            - text: wants to merge 3 commits into
+            - generic "anomalyco/opencode:dev" [ref=e158]:
+              - 'link "anomalyco : dev" [ref=e159] [cursor=pointer]':
+                - /url: /anomalyco/opencode/tree/dev
+                - generic [ref=e160]: anomalyco
+                - text: ":"
+                - generic [ref=e161]: dev
+            - text: from
+            - generic "herjarsa/opencode:feat/interactive-terminal-tool" [ref=e162]:
+              - 'link "herjarsa : feat/interactive-terminal-tool" [ref=e163] [cursor=pointer]':
+                - /url: /herjarsa/opencode/tree/feat/interactive-terminal-tool
+                - generic [ref=e164]: herjarsa
+                - text: ":"
+                - generic [ref=e165]: feat/interactive-terminal-tool
+            - button "Copy" [ref=e168]:
+              - img [ref=e169]
+      - generic [ref=e173]:
+        - generic [ref=e175]: +1,104 −17
+        - navigation "Pull request tabs" [ref=e182]:
+          - link "Conversation 5" [ref=e183] [cursor=pointer]:
+            - /url: /anomalyco/opencode/pull/23794
+            - img [ref=e184]
+            - text: Conversation
+            - generic "5" [ref=e186]
+          - link "Commits 3" [ref=e187] [cursor=pointer]:
+            - /url: /anomalyco/opencode/pull/23794/commits
+            - img [ref=e188]
+            - text: Commits
+            - generic "3" [ref=e190]
+          - link "Checks 2" [ref=e191] [cursor=pointer]:
+            - /url: /anomalyco/opencode/pull/23794/checks
+            - img [ref=e192]
+            - text: Checks
+            - generic "2" [ref=e194]
+          - link "Files changed 10" [ref=e195] [cursor=pointer]:
+            - /url: /anomalyco/opencode/pull/23794/files
+            - img [ref=e196]
+            - text: Files changed
+            - generic "10" [ref=e198]
+      - generic [ref=e199]:
+        - generic [ref=e203]:
+          - button "Hide file tree" [ref=e206] [cursor=pointer]:
+            - img [ref=e207]
+          - group [ref=e210]:
+            - button "Changes from all commits" [ref=e211] [cursor=pointer]:
+              - text: Changes from
+              - strong [ref=e212]: all commits
+          - group [ref=e214]:
+            - button "File filter" [ref=e215] [cursor=pointer]:
+              - strong [ref=e216]: File filter
+          - group [ref=e218]:
+            - button "Conversations" [ref=e219] [cursor=pointer]:
+              - strong [ref=e220]: Conversations
+          - group [ref=e222]:
+            - button "Diff settings" [ref=e223] [cursor=pointer]:
+              - img "Diff settings" [ref=e224]
+        - generic [ref=e227]:
+          - generic [ref=e229]:
+            - generic [ref=e230]:
+              - textbox "Filter changed files" [ref=e231]
+              - img
+            - navigation "File Tree Navigation" [ref=e234]:
+              - tree "File Tree" [ref=e235]:
+                - treeitem "bun.lock" [level=1] [ref=e236]:
+                  - link "bun.lock" [ref=e237] [cursor=pointer]:
+                    - /url: "#diff-bfd0ef82a01108fa1e836c2500b98b7de8a92bb1ae352a8efcbd9d6ffcaabd60"
+                    - generic:
+                      - img
+                    - generic: bun.lock
+                    - generic:
+                      - img
+                - treeitem "packages" [level=1] [ref=e238]:
+                  - button "packages" [expanded] [ref=e239] [cursor=pointer]:
+                    - generic:
+                      - img
+                    - generic:
+                      - img
+                    - generic [ref=e240]: packages
+                  - group [ref=e241]:
+                    - treeitem "app/src" [level=2] [ref=e242]:
+                      - button "app/src" [expanded] [ref=e243] [cursor=pointer]:
+                        - generic:
+                          - img
+                        - generic:
+                          - img
+                        - generic [ref=e244]: app/src
+                      - group [ref=e245]:
+                        - treeitem "context" [level=3] [ref=e246]:
+                          - button "context" [expanded] [ref=e247] [cursor=pointer]:
+                            - generic:
+                              - img
+                            - generic:
+                              - img
+                            - generic [ref=e248]: context
+                          - group [ref=e249]:
+                            - treeitem "terminal.tsx" [level=4] [ref=e250]:
+                              - link "terminal.tsx" [ref=e251] [cursor=pointer]:
+                                - /url: "#diff-b2f9e3a67da148423e6c6904c793aa145170440a367e5a7493a8e6dd022bb4a2"
+                                - generic:
+                                  - img
+                                - generic: terminal.tsx
+                                - generic:
+                                  - img
+                        - treeitem "pages/session" [level=3] [ref=e252]:
+                          - button "pages/session" [expanded] [ref=e253] [cursor=pointer]:
+                            - generic:
+                              - img
+                            - generic:
+                              - img
+                            - generic [ref=e254]: pages/session
+                          - group [ref=e255]:
+                            - treeitem "terminal-panel.tsx" [level=4] [ref=e256]:
+                              - link "terminal-panel.tsx" [ref=e257] [cursor=pointer]:
+                                - /url: "#diff-faf6599552f39e1155c2adf3c0749024f35e56a66deed733a69e32d0a578fe2e"
+                                - generic:
+                                  - img
+                                - generic: terminal-panel.tsx
+                                - generic:
+                                  - img
+                    - treeitem "opencode" [level=2] [ref=e258]:
+                      - button "opencode" [expanded] [ref=e259] [cursor=pointer]:
+                        - generic:
+                          - img
+                        - generic:
+                          - img
+                        - generic [ref=e260]: opencode
+                      - group [ref=e261]:
+                        - treeitem "package.json" [level=3] [ref=e262]:
+                          - link "package.json" [ref=e263] [cursor=pointer]:
+                            - /url: "#diff-84ae3715691f5652df84f2da0c2f5af76504f81807f362e0c27262db5a0c67f2"
+                            - generic:
+                              - img
+                            - generic: package.json
+                            - generic:
+                              - img
+                        - treeitem "src" [level=3] [ref=e264]:
+                          - button "src" [expanded] [ref=e265] [cursor=pointer]:
+                            - generic:
+                              - img
+                            - generic:
+                              - img
+                            - generic [ref=e266]: src
+                          - group [ref=e267]:
+                            - treeitem "pty" [level=4] [ref=e268]:
+                              - button "pty" [expanded] [ref=e269] [cursor=pointer]:
+                                - generic:
+                                  - img
+                                - generic:
+                                  - img
+                                - generic [ref=e270]: pty
+                              - group [ref=e271]:
+                                - treeitem "index.ts" [level=5] [ref=e272]:
+                                  - link "index.ts" [ref=e273] [cursor=pointer]:
+                                    - /url: "#diff-27ebd645736bf60084a22b18a3c489330fc305c5b7c012b1892626a9dc1624d4"
+                                    - generic:
+                                      - img
+                                    - generic: index.ts
+                                    - generic:
+                                      - img
+                            - treeitem "tool" [level=4] [ref=e274]:
+                              - button "tool" [expanded] [ref=e275] [cursor=pointer]:
+                                - generic:
+                                  - img
+                                - generic:
+                                  - img
+                                - generic [ref=e276]: tool
+                              - group [ref=e277]:
+                                - treeitem "registry.ts" [level=5] [ref=e278]:
+                                  - link "registry.ts" [ref=e279] [cursor=pointer]:
+                                    - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                                    - generic:
+                                      - img
+                                    - generic: registry.ts
+                                    - generic:
+                                      - img
+                                - treeitem "terminal.ts" [level=5] [ref=e280]:
+                                  - link "terminal.ts" [ref=e281] [cursor=pointer]:
+                                    - /url: "#diff-b4af26bc93c81d94ab57e7b42f47d6a0e530a8290116b19c8e07136dd770ca42"
+                                    - generic:
+                                      - img
+                                    - generic: terminal.ts
+                                    - generic:
+                                      - img
+                                - treeitem "terminal.txt" [level=5] [ref=e282]:
+                                  - link "terminal.txt" [ref=e283] [cursor=pointer]:
+                                    - /url: "#diff-83adc9c58aca9d3015d6e067866097d853c8d7b4e8ad8997d79c035807c52eb2"
+                                    - generic:
+                                      - img
+                                    - generic: terminal.txt
+                                    - generic:
+                                      - img
+                                - treeitem "txt.d.ts" [level=5] [ref=e284]:
+                                  - link "txt.d.ts" [ref=e285] [cursor=pointer]:
+                                    - /url: "#diff-8fe76561621b24e8154556bdc447172fbea53aaafe3ee0448de5de0275da0d66"
+                                    - generic:
+                                      - img
+                                    - generic: txt.d.ts
+                                    - generic:
+                                      - img
+                        - treeitem "test/tool" [level=3] [ref=e286]:
+                          - button "test/tool" [expanded] [ref=e287] [cursor=pointer]:
+                            - generic:
+                              - img
+                            - generic:
+                              - img
+                            - generic [ref=e288]: test/tool
+                          - group [ref=e289]:
+                            - treeitem "terminal.test.ts" [level=4] [ref=e290]:
+                              - link "terminal.test.ts" [ref=e291] [cursor=pointer]:
+                                - /url: "#diff-29471a3e8f7203e37aa50172e3b43d4afb5cc4106ffb099feab840e5d9d5b12f"
+                                - generic:
+                                  - img
+                                - generic: terminal.test.ts
+                                - generic:
+                                  - img
+          - generic [ref=e292]:
+            - generic [ref=e293]:
+              - generic [ref=e294]:
+                - generic [ref=e296]:
+                  - generic [ref=e297]:
+                    - generic [ref=e298]:
+                      - button "Toggle diff contents" [expanded] [ref=e299] [cursor=pointer]:
+                        - img [ref=e300]
+                      - generic [ref=e302]: "1 change: 1 addition & 0 deletions"
+                      - generic [ref=e303]: "1"
+                      - generic [ref=e309]:
+                        - link "bun.lock" [ref=e310] [cursor=pointer]:
+                          - /url: "#diff-bfd0ef82a01108fa1e836c2500b98b7de8a92bb1ae352a8efcbd9d6ffcaabd60"
+                        - button "Copy" [ref=e312]:
+                          - img [ref=e313]
+                    - group [ref=e319]:
+                      - button "Show options" [ref=e320] [cursor=pointer]:
+                        - img "Show options" [ref=e322]
+                  - generic [ref=e327]:
+                    - img [ref=e328]
+                    - generic [ref=e330]:
+                      - button "Load diff" [ref=e331] [cursor=pointer]:
+                        - generic [ref=e334]: Load diff
+                      - paragraph [ref=e335]:
+                        - text: Some generated files are not rendered by default. Learn more about
+                        - link "how customized files appear on GitHub" [ref=e336] [cursor=pointer]:
+                          - /url: https://docs.github.com/github/administering-a-repository/customizing-how-changed-files-appear-on-github
+                        - text: .
+                - generic [ref=e338]:
+                  - generic [ref=e339]:
+                    - generic [ref=e340]:
+                      - button "Toggle diff contents" [expanded] [ref=e341] [cursor=pointer]:
+                        - img [ref=e342]
+                      - button "Expand all" [ref=e345] [cursor=pointer]:
+                        - img "Expand all" [ref=e346]
+                      - link "Owned by @adamdotdevin (from CODEOWNERS line 2)" [ref=e348] [cursor=pointer]:
+                        - /url: /anomalyco/opencode/blob/dev/.github/CODEOWNERS#L2
+                        - generic "Owned by @adamdotdevin (from CODEOWNERS line 2)" [ref=e349]:
+                          - img [ref=e350]
+                      - generic [ref=e352]: "13 changes: 13 additions & 0 deletions"
+                      - generic [ref=e353]: "13"
+                      - generic [ref=e359]:
+                        - link "packages/app/src/context/terminal.tsx" [ref=e360] [cursor=pointer]:
+                          - /url: "#diff-b2f9e3a67da148423e6c6904c793aa145170440a367e5a7493a8e6dd022bb4a2"
+                        - button "Copy" [ref=e362]:
+                          - img [ref=e363]
+                    - group [ref=e369]:
+                      - button "Show options" [ref=e370] [cursor=pointer]:
+                        - img "Show options" [ref=e372]
+                  - table [ref=e377]:
+                    - rowgroup [ref=e378]:
+                      - row "Original file line number Diff line number Diff line change" [ref=e379]:
+                        - columnheader "Original file line number" [ref=e380]
+                        - columnheader "Diff line number" [ref=e381]
+                        - columnheader "Diff line change" [ref=e382]
+                    - rowgroup [ref=e383]:
+                      - 'row "Expand Up @@ -16,6 +16,7 @@ export type LocalPTY = {" [ref=e384]':
+                        - cell "Expand Up" [ref=e385] [cursor=pointer]:
+                          - link "Expand Up" [ref=e386]:
+                            - /url: "#diff-b2f9e3a67da148423e6c6904c793aa145170440a367e5a7493a8e6dd022bb4a2"
+                            - img [ref=e387]
+                        - 'cell "@@ -16,6 +16,7 @@ export type LocalPTY = {" [ref=e389]'
+                      - 'row "16 16 buffer?: string" [ref=e390]':
+                        - cell "16" [ref=e391] [cursor=pointer]
+                        - cell "16" [ref=e392] [cursor=pointer]
+                        - 'cell "buffer?: string" [ref=e393]':
+                          - generic [ref=e394]: "buffer?: string"
+                      - 'row "17 17 scrollY?: number" [ref=e395]':
+                        - cell "17" [ref=e396] [cursor=pointer]
+                        - cell "17" [ref=e397] [cursor=pointer]
+                        - 'cell "scrollY?: number" [ref=e398]':
+                          - generic [ref=e399]: "scrollY?: number"
+                      - 'row "18 18 cursor?: number" [ref=e400]':
+                        - cell "18" [ref=e401] [cursor=pointer]
+                        - cell "18" [ref=e402] [cursor=pointer]
+                        - 'cell "cursor?: number" [ref=e403]':
+                          - generic [ref=e404]: "cursor?: number"
+                      - 'row "19 + source?: \"user\" | \"agent\"" [ref=e405]':
+                        - cell [ref=e406] [cursor=pointer]
+                        - cell "19" [ref=e407] [cursor=pointer]
+                        - 'cell "+ source?: \"user\" | \"agent\"" [ref=e408]':
+                          - generic [ref=e409]: "+ source?: \"user\" | \"agent\""
+                      - 'row "19 20 }" [ref=e410]':
+                        - cell "19" [ref=e411] [cursor=pointer]
+                        - cell "20" [ref=e412] [cursor=pointer]
+                        - 'cell "}" [ref=e413]':
+                          - generic [ref=e414]: "}"
+                      - row "20 21" [ref=e415]:
+                        - cell "20" [ref=e416] [cursor=pointer]
+                        - cell "21" [ref=e417] [cursor=pointer]
+                        - cell [ref=e418]
+                      - row "21 22 const WORKSPACE_KEY = \"__workspace__\"" [ref=e419]:
+                        - cell "21" [ref=e420] [cursor=pointer]
+                        - cell "22" [ref=e421] [cursor=pointer]
+                        - cell "const WORKSPACE_KEY = \"__workspace__\"" [ref=e422]:
+                          - generic [ref=e423]: const WORKSPACE_KEY = "__workspace__"
+                      - 'row "Expand Down Expand Up @@ -185,6 +186,18 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str" [ref=e424]':
+                        - cell "Expand Down Expand Up" [ref=e425] [cursor=pointer]:
+                          - link "Expand Down" [ref=e426]:
+                            - /url: "#diff-b2f9e3a67da148423e6c6904c793aa145170440a367e5a7493a8e6dd022bb4a2"
+                            - img [ref=e427]
+                          - link "Expand Up" [ref=e429]:
+                            - /url: "#diff-b2f9e3a67da148423e6c6904c793aa145170440a367e5a7493a8e6dd022bb4a2"
+                            - img [ref=e430]
+                        - 'cell "@@ -185,6 +186,18 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str" [ref=e432]'
+                      - 'row "185 186 })" [ref=e433]':
+                        - cell "185" [ref=e434] [cursor=pointer]
+                        - cell "186" [ref=e435] [cursor=pointer]
+                        - 'cell "})" [ref=e436]':
+                          - generic [ref=e437]: "})"
+                      - row "186 187 onCleanup(unsub)" [ref=e438]:
+                        - cell "186" [ref=e439] [cursor=pointer]
+                        - cell "187" [ref=e440] [cursor=pointer]
+                        - cell "onCleanup(unsub)" [ref=e441]:
+                          - generic [ref=e442]: onCleanup(unsub)
+                      - row "187 188" [ref=e443]:
+                        - cell "187" [ref=e444] [cursor=pointer]
+                        - cell "188" [ref=e445] [cursor=pointer]
+                        - cell [ref=e446]
+                      - 'row "189 + const unsubCreated = sdk.event.on(\"pty.created\", (event: { properties: { info: LocalPTY } }) => {" [ref=e447]':
+                        - cell [ref=e448] [cursor=pointer]
+                        - cell "189" [ref=e449] [cursor=pointer]
+                        - 'cell "+ const unsubCreated = sdk.event.on(\"pty.created\", (event: { properties: { info: LocalPTY } }) => {" [ref=e450]':
+                          - generic [ref=e451]: "+ const unsubCreated = sdk.event.on(\"pty.created\", (event: { properties: { info: LocalPTY } }) => {"
+                      - 'row "190 + const { info } = event.properties" [ref=e452]':
+                        - cell [ref=e453] [cursor=pointer]
+                        - cell "190" [ref=e454] [cursor=pointer]
+                        - 'cell "+ const { info } = event.properties" [ref=e455]':
+                          - generic [ref=e456]: "+ const { info } = event.properties"
+                      - row "191 + if (store.all.findIndex((x) => x.id === info.id) >= 0) return" [ref=e457]:
+                        - cell [ref=e458] [cursor=pointer]
+                        - cell "191" [ref=e459] [cursor=pointer]
+                        - cell "+ if (store.all.findIndex((x) => x.id === info.id) >= 0) return" [ref=e460]:
+                          - generic [ref=e461]: + if (store.all.findIndex((x) => x.id === info.id) >= 0) return
+                      - 'row "192 + const newTerminal = {" [ref=e462]':
+                        - cell [ref=e463] [cursor=pointer]
+                        - cell "192" [ref=e464] [cursor=pointer]
+                        - 'cell "+ const newTerminal = {" [ref=e465]':
+                          - generic [ref=e466]: "+ const newTerminal = {"
+                      - 'row "193 + id: info.id," [ref=e467]':
+                        - cell [ref=e468] [cursor=pointer]
+                        - cell "193" [ref=e469] [cursor=pointer]
+                        - 'cell "+ id: info.id," [ref=e470]':
+                          - generic [ref=e471]: "+ id: info.id,"
+                      - 'row "194 + title: info.title," [ref=e472]':
+                        - cell [ref=e473] [cursor=pointer]
+                        - cell "194" [ref=e474] [cursor=pointer]
+                        - 'cell "+ title: info.title," [ref=e475]':
+                          - generic [ref=e476]: "+ title: info.title,"
+                      - 'row "195 + titleNumber: info.titleNumber ?? numberFromTitle(info.title) ?? 0," [ref=e477]':
+                        - cell [ref=e478] [cursor=pointer]
+                        - cell "195" [ref=e479] [cursor=pointer]
+                        - 'cell "+ titleNumber: info.titleNumber ?? numberFromTitle(info.title) ?? 0," [ref=e480]':
+                          - generic [ref=e481]: "+ titleNumber: info.titleNumber ?? numberFromTitle(info.title) ?? 0,"
+                      - 'row "196 + source: (info.source as \"user\" | \"agent\") ?? \"agent\"," [ref=e482]':
+                        - cell [ref=e483] [cursor=pointer]
+                        - cell "196" [ref=e484] [cursor=pointer]
+                        - 'cell "+ source: (info.source as \"user\" | \"agent\") ?? \"agent\"," [ref=e485]':
+                          - generic [ref=e486]: "+ source: (info.source as \"user\" | \"agent\") ?? \"agent\","
+                      - 'row "197 + }" [ref=e487]':
+                        - cell [ref=e488] [cursor=pointer]
+                        - cell "197" [ref=e489] [cursor=pointer]
+                        - 'cell "+ }" [ref=e490]':
+                          - generic [ref=e491]: "+ }"
+                      - row "198 + setStore(\"all\", store.all.length, newTerminal)" [ref=e492]:
+                        - cell [ref=e493] [cursor=pointer]
+                        - cell "198" [ref=e494] [cursor=pointer]
+                        - cell "+ setStore(\"all\", store.all.length, newTerminal)" [ref=e495]:
+                          - generic [ref=e496]: + setStore("all", store.all.length, newTerminal)
+                      - 'row "199 + }) onCleanup(unsubCreated)" [ref=e497]':
+                        - cell [ref=e498] [cursor=pointer]
+                        - cell "199" [ref=e499] [cursor=pointer]
+                        - 'cell "+ }) onCleanup(unsubCreated)" [ref=e500]':
+                          - generic [ref=e501]: "+ }) onCleanup(unsubCreated)"
+                      - row "200 +" [ref=e502]:
+                        - cell [ref=e503] [cursor=pointer]
+                        - cell "200" [ref=e504] [cursor=pointer]
+                        - cell "+" [ref=e505]:
+                          - generic: +
+                      - 'row "188 201 const update = (client: ReturnType<typeof useSDK>[\"client\"], pty: Partial<LocalPTY> & { id: string }) => {" [ref=e506]':
+                        - cell "188" [ref=e507] [cursor=pointer]
+                        - cell "201" [ref=e508] [cursor=pointer]
+                        - 'cell "const update = (client: ReturnType<typeof useSDK>[\"client\"], pty: Partial<LocalPTY> & { id: string }) => {" [ref=e509]':
+                          - generic [ref=e510]: "const update = (client: ReturnType<typeof useSDK>[\"client\"], pty: Partial<LocalPTY> & { id: string }) => {"
+                      - row "189 202 const index = store.all.findIndex((x) => x.id === pty.id)" [ref=e511]:
+                        - cell "189" [ref=e512] [cursor=pointer]
+                        - cell "202" [ref=e513] [cursor=pointer]
+                        - cell "const index = store.all.findIndex((x) => x.id === pty.id)" [ref=e514]:
+                          - generic [ref=e515]: const index = store.all.findIndex((x) => x.id === pty.id)
+                      - 'row "190 203 const previous = index >= 0 ? store.all[index] : undefined" [ref=e516]':
+                        - cell "190" [ref=e517] [cursor=pointer]
+                        - cell "203" [ref=e518] [cursor=pointer]
+                        - 'cell "const previous = index >= 0 ? store.all[index] : undefined" [ref=e519]':
+                          - generic [ref=e520]: "const previous = index >= 0 ? store.all[index] : undefined"
+                      - row "Expand Down" [ref=e521]:
+                        - cell "Expand Down" [ref=e522] [cursor=pointer]:
+                          - link "Expand Down" [ref=e523]:
+                            - /url: "#diff-b2f9e3a67da148423e6c6904c793aa145170440a367e5a7493a8e6dd022bb4a2"
+                            - img [ref=e524]
+                        - cell [ref=e526]
+                - generic [ref=e528]:
+                  - generic [ref=e529]:
+                    - generic [ref=e530]:
+                      - button "Toggle diff contents" [expanded] [ref=e531] [cursor=pointer]:
+                        - img [ref=e532]
+                      - button "Expand all" [ref=e535] [cursor=pointer]:
+                        - img "Expand all" [ref=e536]
+                      - link "Owned by @adamdotdevin (from CODEOWNERS line 2)" [ref=e538] [cursor=pointer]:
+                        - /url: /anomalyco/opencode/blob/dev/.github/CODEOWNERS#L2
+                        - generic "Owned by @adamdotdevin (from CODEOWNERS line 2)" [ref=e539]:
+                          - img [ref=e540]
+                      - generic [ref=e542]: "21 changes: 5 additions & 16 deletions"
+                      - generic [ref=e543]: "21"
+                      - generic [ref=e549]:
+                        - link "packages/app/src/pages/session/terminal-panel.tsx" [ref=e550] [cursor=pointer]:
+                          - /url: "#diff-faf6599552f39e1155c2adf3c0749024f35e56a66deed733a69e32d0a578fe2e"
+                        - button "Copy" [ref=e552]:
+                          - img [ref=e553]
+                    - group [ref=e559]:
+                      - button "Show options" [ref=e560] [cursor=pointer]:
+                        - img "Show options" [ref=e562]
+                  - table [ref=e567]:
+                    - rowgroup [ref=e568]:
+                      - row "Original file line number Diff line number Diff line change" [ref=e569]:
+                        - columnheader "Original file line number" [ref=e570]
+                        - columnheader "Diff line number" [ref=e571]
+                        - columnheader "Diff line change" [ref=e572]
+                    - rowgroup [ref=e573]:
+                      - 'row "Expand Up @@ -67,11 +67,11 @@ export function TerminalPanel() {" [ref=e574]':
+                        - cell "Expand Up" [ref=e575] [cursor=pointer]:
+                          - link "Expand Up" [ref=e576]:
+                            - /url: "#diff-faf6599552f39e1155c2adf3c0749024f35e56a66deed733a69e32d0a578fe2e"
+                            - img [ref=e577]
+                        - 'cell "@@ -67,11 +67,11 @@ export function TerminalPanel() {" [ref=e579]'
+                      - row "67 67" [ref=e580]:
+                        - cell "67" [ref=e581] [cursor=pointer]
+                        - cell "67" [ref=e582] [cursor=pointer]
+                        - cell [ref=e583]
+                      - row "68 68 createEffect(" [ref=e584]:
+                        - cell "68" [ref=e585] [cursor=pointer]
+                        - cell "68" [ref=e586] [cursor=pointer]
+                        - cell "createEffect(" [ref=e587]:
+                          - generic [ref=e588]: createEffect(
+                      - row "69 69 on(" [ref=e589]:
+                        - cell "69" [ref=e590] [cursor=pointer]
+                        - cell "69" [ref=e591] [cursor=pointer]
+                        - cell "on(" [ref=e592]:
+                          - generic [ref=e593]: on(
+                      - row "70 - () => terminal.all().length," [ref=e594]:
+                        - cell "70" [ref=e595] [cursor=pointer]
+                        - cell [ref=e596] [cursor=pointer]
+                        - cell "- () => terminal.all().length," [ref=e597]:
+                          - generic [ref=e598]: "- () => terminal.all().length,"
+                      - 'row "71 - (count, prevCount) => {" [ref=e599]':
+                        - cell "71" [ref=e600] [cursor=pointer]
+                        - cell [ref=e601] [cursor=pointer]
+                        - 'cell "- (count, prevCount) => {" [ref=e602]':
+                          - generic [ref=e603]: "- (count, prevCount) => {"
+                      - row "72 - if (prevCount === undefined || prevCount <= 0 || count !== 0) return" [ref=e604]:
+                        - cell "72" [ref=e605] [cursor=pointer]
+                        - cell [ref=e606] [cursor=pointer]
+                        - cell "- if (prevCount === undefined || prevCount <= 0 || count !== 0) return" [ref=e607]:
+                          - generic [ref=e608]: "- if (prevCount === undefined || prevCount <= 0 || count !== 0) return"
+                      - row "73 - if (!opened()) return" [ref=e609]:
+                        - cell "73" [ref=e610] [cursor=pointer]
+                        - cell [ref=e611] [cursor=pointer]
+                        - cell "- if (!opened()) return" [ref=e612]:
+                          - generic [ref=e613]: "- if (!opened()) return"
+                      - row "74 - close()" [ref=e614]:
+                        - cell "74" [ref=e615] [cursor=pointer]
+                        - cell [ref=e616] [cursor=pointer]
+                        - cell "- close()" [ref=e617]:
+                          - generic [ref=e618]: "- close()"
+                      - row "70 + () => [opened(), terminal.active()] as const," [ref=e619]:
+                        - cell [ref=e620] [cursor=pointer]
+                        - cell "70" [ref=e621] [cursor=pointer]
+                        - cell "+ () => [opened(), terminal.active()] as const," [ref=e622]:
+                          - generic [ref=e623]: + () => [opened(), terminal.active()] as const,
+                      - 'row "71 + ([next, id]) => {" [ref=e624]':
+                        - cell [ref=e625] [cursor=pointer]
+                        - cell "71" [ref=e626] [cursor=pointer]
+                        - 'cell "+ ([next, id]) => {" [ref=e627]':
+                          - generic [ref=e628]: "+ ([next, id]) => {"
+                      - row "72 + if (!next || !id) return" [ref=e629]:
+                        - cell [ref=e630] [cursor=pointer]
+                        - cell "72" [ref=e631] [cursor=pointer]
+                        - cell "+ if (!next || !id) return" [ref=e632]:
+                          - generic [ref=e633]: + if (!next || !id) return
+                      - row "73 + const stop = focus(id)" [ref=e634]:
+                        - cell [ref=e635] [cursor=pointer]
+                        - cell "73" [ref=e636] [cursor=pointer]
+                        - cell "+ const stop = focus(id)" [ref=e637]:
+                          - generic [ref=e638]: + const stop = focus(id)
+                      - row "74 + onCleanup(stop)" [ref=e639]:
+                        - cell [ref=e640] [cursor=pointer]
+                        - cell "74" [ref=e641] [cursor=pointer]
+                        - cell "+ onCleanup(stop)" [ref=e642]:
+                          - generic [ref=e643]: + onCleanup(stop)
+                      - 'row "75 75 }," [ref=e644]':
+                        - cell "75" [ref=e645] [cursor=pointer]
+                        - cell "75" [ref=e646] [cursor=pointer]
+                        - 'cell "}," [ref=e647]':
+                          - generic [ref=e648]: "},"
+                      - row "76 76 )," [ref=e649]:
+                        - cell "76" [ref=e650] [cursor=pointer]
+                        - cell "76" [ref=e651] [cursor=pointer]
+                        - cell ")," [ref=e652]:
+                          - generic [ref=e653]: ),
+                      - row "77 77 )" [ref=e654]:
+                        - cell "77" [ref=e655] [cursor=pointer]
+                        - cell "77" [ref=e656] [cursor=pointer]
+                        - cell ")" [ref=e657]:
+                          - generic [ref=e658]: )
+                      - 'row "Expand Down Expand Up @@ -99,17 +99,6 @@ export function TerminalPanel() {" [ref=e659]':
+                        - cell "Expand Down Expand Up" [ref=e660] [cursor=pointer]:
+                          - link "Expand Down" [ref=e661]:
+                            - /url: "#diff-faf6599552f39e1155c2adf3c0749024f35e56a66deed733a69e32d0a578fe2e"
+                            - img [ref=e662]
+                          - link "Expand Up" [ref=e664]:
+                            - /url: "#diff-faf6599552f39e1155c2adf3c0749024f35e56a66deed733a69e32d0a578fe2e"
+                            - img [ref=e665]
+                        - 'cell "@@ -99,17 +99,6 @@ export function TerminalPanel() {" [ref=e667]'
+                      - 'row "99 99 }" [ref=e668]':
+                        - cell "99" [ref=e669] [cursor=pointer]
+                        - cell "99" [ref=e670] [cursor=pointer]
+                        - 'cell "}" [ref=e671]':
+                          - generic [ref=e672]: "}"
+                      - 'row "100 100 }" [ref=e673]':
+                        - cell "100" [ref=e674] [cursor=pointer]
+                        - cell "100" [ref=e675] [cursor=pointer]
+                        - 'cell "}" [ref=e676]':
+                          - generic [ref=e677]: "}"
+                      - row "101 101" [ref=e678]:
+                        - cell "101" [ref=e679] [cursor=pointer]
+                        - cell "101" [ref=e680] [cursor=pointer]
+                        - cell [ref=e681]
+                      - row "102 - createEffect(" [ref=e682]:
+                        - cell "102" [ref=e683] [cursor=pointer]
+                        - cell [ref=e684] [cursor=pointer]
+                        - cell "- createEffect(" [ref=e685]:
+                          - generic [ref=e686]: "- createEffect("
+                      - row "103 - on(" [ref=e687]:
+                        - cell "103" [ref=e688] [cursor=pointer]
+                        - cell [ref=e689] [cursor=pointer]
+                        - cell "- on(" [ref=e690]:
+                          - generic [ref=e691]: "- on("
+                      - row "104 - () => [opened(), terminal.active()] as const," [ref=e692]:
+                        - cell "104" [ref=e693] [cursor=pointer]
+                        - cell [ref=e694] [cursor=pointer]
+                        - cell "- () => [opened(), terminal.active()] as const," [ref=e695]:
+                          - generic [ref=e696]: "- () => [opened(), terminal.active()] as const,"
+                      - 'row "105 - ([next, id]) => {" [ref=e697]':
+                        - cell "105" [ref=e698] [cursor=pointer]
+                        - cell [ref=e699] [cursor=pointer]
+                        - 'cell "- ([next, id]) => {" [ref=e700]':
+                          - generic [ref=e701]: "- ([next, id]) => {"
+                      - row "106 - if (!next || !id) return" [ref=e702]:
+                        - cell "106" [ref=e703] [cursor=pointer]
+                        - cell [ref=e704] [cursor=pointer]
+                        - cell "- if (!next || !id) return" [ref=e705]:
+                          - generic [ref=e706]: "- if (!next || !id) return"
+                      - row "107 - const stop = focus(id)" [ref=e707]:
+                        - cell "107" [ref=e708] [cursor=pointer]
+                        - cell [ref=e709] [cursor=pointer]
+                        - cell "- const stop = focus(id)" [ref=e710]:
+                          - generic [ref=e711]: "- const stop = focus(id)"
+                      - row "108 - onCleanup(stop)" [ref=e712]:
+                        - cell "108" [ref=e713] [cursor=pointer]
+                        - cell [ref=e714] [cursor=pointer]
+                        - cell "- onCleanup(stop)" [ref=e715]:
+                          - generic [ref=e716]: "- onCleanup(stop)"
+                      - 'row "109 - }," [ref=e717]':
+                        - cell "109" [ref=e718] [cursor=pointer]
+                        - cell [ref=e719] [cursor=pointer]
+                        - 'cell "- }," [ref=e720]':
+                          - generic [ref=e721]: "- },"
+                      - row "110 - )," [ref=e722]:
+                        - cell "110" [ref=e723] [cursor=pointer]
+                        - cell [ref=e724] [cursor=pointer]
+                        - cell "- )," [ref=e725]:
+                          - generic [ref=e726]: "- ),"
+                      - row "111 - )" [ref=e727]:
+                        - cell "111" [ref=e728] [cursor=pointer]
+                        - cell [ref=e729] [cursor=pointer]
+                        - cell "- )" [ref=e730]:
+                          - generic [ref=e731]: "- )"
+                      - row "112 -" [ref=e732]:
+                        - cell "112" [ref=e733] [cursor=pointer]
+                        - cell [ref=e734] [cursor=pointer]
+                        - cell "-" [ref=e735]:
+                          - generic: "-"
+                      - 'row "113 102 createEffect(() => {" [ref=e736]':
+                        - cell "113" [ref=e737] [cursor=pointer]
+                        - cell "102" [ref=e738] [cursor=pointer]
+                        - 'cell "createEffect(() => {" [ref=e739]':
+                          - generic [ref=e740]: "createEffect(() => {"
+                      - row "114 103 if (opened()) return" [ref=e741]:
+                        - cell "114" [ref=e742] [cursor=pointer]
+                        - cell "103" [ref=e743] [cursor=pointer]
+                        - cell "if (opened()) return" [ref=e744]:
+                          - generic [ref=e745]: if (opened()) return
+                      - row "115 104 const active = document.activeElement" [ref=e746]:
+                        - cell "115" [ref=e747] [cursor=pointer]
+                        - cell "104" [ref=e748] [cursor=pointer]
+                        - cell "const active = document.activeElement" [ref=e749]:
+                          - generic [ref=e750]: const active = document.activeElement
+                      - row "Expand Down" [ref=e751]:
+                        - cell "Expand Down" [ref=e752] [cursor=pointer]:
+                          - link "Expand Down" [ref=e753]:
+                            - /url: "#diff-faf6599552f39e1155c2adf3c0749024f35e56a66deed733a69e32d0a578fe2e"
+                            - img [ref=e754]
+                        - cell [ref=e756]
+                - generic [ref=e758]:
+                  - generic [ref=e759]:
+                    - generic [ref=e760]:
+                      - button "Toggle diff contents" [expanded] [ref=e761] [cursor=pointer]:
+                        - img [ref=e762]
+                      - button "Expand all" [ref=e765] [cursor=pointer]:
+                        - img "Expand all" [ref=e766]
+                      - generic [ref=e768]: "1 change: 1 addition & 0 deletions"
+                      - generic [ref=e769]: "1"
+                      - generic [ref=e775]:
+                        - link "packages/opencode/package.json" [ref=e776] [cursor=pointer]:
+                          - /url: "#diff-84ae3715691f5652df84f2da0c2f5af76504f81807f362e0c27262db5a0c67f2"
+                        - button "Copy" [ref=e778]:
+                          - img [ref=e779]
+                    - group [ref=e785]:
+                      - button "Show options" [ref=e786] [cursor=pointer]:
+                        - img "Show options" [ref=e788]
+                  - table [ref=e793]:
+                    - rowgroup [ref=e794]:
+                      - row "Original file line number Diff line number Diff line change" [ref=e795]:
+                        - columnheader "Original file line number" [ref=e796]
+                        - columnheader "Diff line number" [ref=e797]
+                        - columnheader "Diff line change" [ref=e798]
+                    - rowgroup [ref=e799]:
+                      - row "Expand Up @@ -42,6 +42,7 @@" [ref=e800]:
+                        - cell "Expand Up" [ref=e801] [cursor=pointer]:
+                          - link "Expand Up" [ref=e802]:
+                            - /url: "#diff-84ae3715691f5652df84f2da0c2f5af76504f81807f362e0c27262db5a0c67f2"
+                            - img [ref=e803]
+                        - cell "@@ -42,6 +42,7 @@" [ref=e805]
+                      - 'row "42 42 }," [ref=e806]':
+                        - cell "42" [ref=e807] [cursor=pointer]
+                        - cell "42" [ref=e808] [cursor=pointer]
+                        - 'cell "}," [ref=e809]':
+                          - generic [ref=e810]: "},"
+                      - 'row "43 43 \"devDependencies\": {" [ref=e811]':
+                        - cell "43" [ref=e812] [cursor=pointer]
+                        - cell "43" [ref=e813] [cursor=pointer]
+                        - 'cell "\"devDependencies\": {" [ref=e814]':
+                          - generic [ref=e815]: "\"devDependencies\": {"
+                      - 'row "44 44 \"@babel/core\": \"7.28.4\"," [ref=e816]':
+                        - cell "44" [ref=e817] [cursor=pointer]
+                        - cell "44" [ref=e818] [cursor=pointer]
+                        - 'cell "\"@babel/core\": \"7.28.4\"," [ref=e819]':
+                          - generic [ref=e820]: "\"@babel/core\": \"7.28.4\","
+                      - 'row "45 + \"@babel/types\": \"7.29.0\"," [ref=e821]':
+                        - cell [ref=e822] [cursor=pointer]
+                        - cell "45" [ref=e823] [cursor=pointer]
+                        - 'cell "+ \"@babel/types\": \"7.29.0\"," [ref=e824]':
+                          - generic [ref=e825]: "+ \"@babel/types\": \"7.29.0\","
+                      - 'row "45 46 \"@effect/language-service\": \"0.84.2\"," [ref=e826]':
+                        - cell "45" [ref=e827] [cursor=pointer]
+                        - cell "46" [ref=e828] [cursor=pointer]
+                        - 'cell "\"@effect/language-service\": \"0.84.2\"," [ref=e829]':
+                          - generic [ref=e830]: "\"@effect/language-service\": \"0.84.2\","
+                      - 'row "46 47 \"@octokit/webhooks-types\": \"7.6.1\"," [ref=e831]':
+                        - cell "46" [ref=e832] [cursor=pointer]
+                        - cell "47" [ref=e833] [cursor=pointer]
+                        - 'cell "\"@octokit/webhooks-types\": \"7.6.1\"," [ref=e834]':
+                          - generic [ref=e835]: "\"@octokit/webhooks-types\": \"7.6.1\","
+                      - 'row "47 48 \"@opencode-ai/script\": \"workspace:*\"," [ref=e836]':
+                        - cell "47" [ref=e837] [cursor=pointer]
+                        - cell "48" [ref=e838] [cursor=pointer]
+                        - 'cell "\"@opencode-ai/script\": \"workspace:*\"," [ref=e839]':
+                          - generic [ref=e840]: "\"@opencode-ai/script\": \"workspace:*\","
+                      - row "Expand Down" [ref=e841]:
+                        - cell "Expand Down" [ref=e842] [cursor=pointer]:
+                          - link "Expand Down" [ref=e843]:
+                            - /url: "#diff-84ae3715691f5652df84f2da0c2f5af76504f81807f362e0c27262db5a0c67f2"
+                            - img [ref=e844]
+                        - cell [ref=e846]
+                - generic [ref=e848]:
+                  - generic [ref=e849]:
+                    - generic [ref=e850]:
+                      - button "Toggle diff contents" [expanded] [ref=e851] [cursor=pointer]:
+                        - img [ref=e852]
+                      - button "Expand all" [ref=e855] [cursor=pointer]:
+                        - img "Expand all" [ref=e856]
+                      - generic [ref=e858]: "4 changes: 3 additions & 1 deletion"
+                      - generic [ref=e859]: "4"
+                      - generic [ref=e865]:
+                        - link "packages/opencode/src/pty/index.ts" [ref=e866] [cursor=pointer]:
+                          - /url: "#diff-27ebd645736bf60084a22b18a3c489330fc305c5b7c012b1892626a9dc1624d4"
+                        - button "Copy" [ref=e868]:
+                          - img [ref=e869]
+                    - group [ref=e875]:
+                      - button "Show options" [ref=e876] [cursor=pointer]:
+                        - img "Show options" [ref=e878]
+                  - table [ref=e883]:
+                    - rowgroup [ref=e884]:
+                      - row "Original file line number Diff line number Diff line change" [ref=e885]:
+                        - columnheader "Original file line number" [ref=e886]
+                        - columnheader "Diff line number" [ref=e887]
+                        - columnheader "Diff line change" [ref=e888]
+                    - rowgroup [ref=e889]:
+                      - 'row "Expand Up @@ -62,18 +62,20 @@ export const Info = Schema.Struct({" [ref=e890]':
+                        - cell "Expand Up" [ref=e891] [cursor=pointer]:
+                          - link "Expand Up" [ref=e892]:
+                            - /url: "#diff-27ebd645736bf60084a22b18a3c489330fc305c5b7c012b1892626a9dc1624d4"
+                            - img [ref=e893]
+                        - 'cell "@@ -62,18 +62,20 @@ export const Info = Schema.Struct({" [ref=e895]'
+                      - 'row "62 62 cwd: Schema.String," [ref=e896]':
+                        - cell "62" [ref=e897] [cursor=pointer]
+                        - cell "62" [ref=e898] [cursor=pointer]
+                        - 'cell "cwd: Schema.String," [ref=e899]':
+                          - generic [ref=e900]: "cwd: Schema.String,"
+                      - 'row "63 63 status: Schema.Literals([\"running\", \"exited\"])," [ref=e901]':
+                        - cell "63" [ref=e902] [cursor=pointer]
+                        - cell "63" [ref=e903] [cursor=pointer]
+                        - 'cell "status: Schema.Literals([\"running\", \"exited\"])," [ref=e904]':
+                          - generic [ref=e905]: "status: Schema.Literals([\"running\", \"exited\"]),"
+                      - 'row "64 64 pid: Schema.Number," [ref=e906]':
+                        - cell "64" [ref=e907] [cursor=pointer]
+                        - cell "64" [ref=e908] [cursor=pointer]
+                        - 'cell "pid: Schema.Number," [ref=e909]':
+                          - generic [ref=e910]: "pid: Schema.Number,"
+                      - 'row "65 + source: Schema.optional(Schema.Literals([\"user\", \"agent\"]))," [ref=e911]':
+                        - cell [ref=e912] [cursor=pointer]
+                        - cell "65" [ref=e913] [cursor=pointer]
+                        - 'cell "+ source: Schema.optional(Schema.Literals([\"user\", \"agent\"]))," [ref=e914]':
+                          - generic [ref=e915]: "+ source: Schema.optional(Schema.Literals([\"user\", \"agent\"])),"
+                      - 'row "65 66 })" [ref=e916]':
+                        - cell "65" [ref=e917] [cursor=pointer]
+                        - cell "66" [ref=e918] [cursor=pointer]
+                        - 'cell "})" [ref=e919]':
+                          - generic [ref=e920]: "})"
+                      - 'row "66 67 .annotate({ identifier: \"Pty\" })" [ref=e921]':
+                        - cell "66" [ref=e922] [cursor=pointer]
+                        - cell "67" [ref=e923] [cursor=pointer]
+                        - 'cell ".annotate({ identifier: \"Pty\" })" [ref=e924]':
+                          - generic [ref=e925]: ".annotate({ identifier: \"Pty\" })"
+                      - 'row "67 68 .pipe(withStatics((s) => ({ zod: zod(s) })))" [ref=e926]':
+                        - cell "67" [ref=e927] [cursor=pointer]
+                        - cell "68" [ref=e928] [cursor=pointer]
+                        - 'cell ".pipe(withStatics((s) => ({ zod: zod(s) })))" [ref=e929]':
+                          - generic [ref=e930]: ".pipe(withStatics((s) => ({ zod: zod(s) })))"
+                      - row "68 69" [ref=e931]:
+                        - cell "68" [ref=e932] [cursor=pointer]
+                        - cell "69" [ref=e933] [cursor=pointer]
+                        - cell [ref=e934]
+                      - row "69 - export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>" [ref=e935]:
+                        - cell "69" [ref=e936] [cursor=pointer]
+                        - cell [ref=e937] [cursor=pointer]
+                        - cell "- export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>" [ref=e938]:
+                          - generic [ref=e939]: "- export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>"
+                      - row "70 + export type Info = Types.DeepMutable<Schema.Schema.Type<typof Info>>" [ref=e940]:
+                        - cell [ref=e941] [cursor=pointer]
+                        - cell "70" [ref=e942] [cursor=pointer]
+                        - cell "+ export type Info = Types.DeepMutable<Schema.Schema.Type<typof Info>>" [ref=e943]:
+                          - generic [ref=e944]: + export type Info = Types.DeepMutable<Schema.Schema.Type<typof Info>>
+                      - row "70 71" [ref=e945]:
+                        - cell "70" [ref=e946] [cursor=pointer]
+                        - cell "71" [ref=e947] [cursor=pointer]
+                        - cell [ref=e948]
+                      - 'row "71 72 export const CreateInput = Schema.Struct({" [ref=e949]':
+                        - cell "71" [ref=e950] [cursor=pointer]
+                        - cell "72" [ref=e951] [cursor=pointer]
+                        - 'cell "export const CreateInput = Schema.Struct({" [ref=e952]':
+                          - generic [ref=e953]: "export const CreateInput = Schema.Struct({"
+                      - 'row "72 73 command: Schema.optional(Schema.String)," [ref=e954]':
+                        - cell "72" [ref=e955] [cursor=pointer]
+                        - cell "73" [ref=e956] [cursor=pointer]
+                        - 'cell "command: Schema.optional(Schema.String)," [ref=e957]':
+                          - generic [ref=e958]: "command: Schema.optional(Schema.String),"
+                      - 'row "73 74 args: Schema.optional(Schema.Array(Schema.String))," [ref=e959]':
+                        - cell "73" [ref=e960] [cursor=pointer]
+                        - cell "74" [ref=e961] [cursor=pointer]
+                        - 'cell "args: Schema.optional(Schema.Array(Schema.String))," [ref=e962]':
+                          - generic [ref=e963]: "args: Schema.optional(Schema.Array(Schema.String)),"
+                      - 'row "74 75 cwd: Schema.optional(Schema.String)," [ref=e964]':
+                        - cell "74" [ref=e965] [cursor=pointer]
+                        - cell "75" [ref=e966] [cursor=pointer]
+                        - 'cell "cwd: Schema.optional(Schema.String)," [ref=e967]':
+                          - generic [ref=e968]: "cwd: Schema.optional(Schema.String),"
+                      - 'row "75 76 title: Schema.optional(Schema.String)," [ref=e969]':
+                        - cell "75" [ref=e970] [cursor=pointer]
+                        - cell "76" [ref=e971] [cursor=pointer]
+                        - 'cell "title: Schema.optional(Schema.String)," [ref=e972]':
+                          - generic [ref=e973]: "title: Schema.optional(Schema.String),"
+                      - 'row "76 77 env: Schema.optional(Schema.Record(Schema.String, Schema.String))," [ref=e974]':
+                        - cell "76" [ref=e975] [cursor=pointer]
+                        - cell "77" [ref=e976] [cursor=pointer]
+                        - 'cell "env: Schema.optional(Schema.Record(Schema.String, Schema.String))," [ref=e977]':
+                          - generic [ref=e978]: "env: Schema.optional(Schema.Record(Schema.String, Schema.String)),"
+                      - 'row "78 + source: Schema.optional(Schema.Literals([\"user\", \"agent\"]))," [ref=e979]':
+                        - cell [ref=e980] [cursor=pointer]
+                        - cell "78" [ref=e981] [cursor=pointer]
+                        - 'cell "+ source: Schema.optional(Schema.Literals([\"user\", \"agent\"]))," [ref=e982]':
+                          - generic [ref=e983]: "+ source: Schema.optional(Schema.Literals([\"user\", \"agent\"])),"
+                      - 'row "77 79 }).pipe(withStatics((s) => ({ zod: zod(s) })))" [ref=e984]':
+                        - cell "77" [ref=e985] [cursor=pointer]
+                        - cell "79" [ref=e986] [cursor=pointer]
+                        - 'cell "}).pipe(withStatics((s) => ({ zod: zod(s) })))" [ref=e987]':
+                          - generic [ref=e988]: "}).pipe(withStatics((s) => ({ zod: zod(s) })))"
+                      - row "78 80" [ref=e989]:
+                        - cell "78" [ref=e990] [cursor=pointer]
+                        - cell "80" [ref=e991] [cursor=pointer]
+                        - cell [ref=e992]
+                      - row "79 81 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>" [ref=e993]:
+                        - cell "79" [ref=e994] [cursor=pointer]
+                        - cell "81" [ref=e995] [cursor=pointer]
+                        - cell "export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>" [ref=e996]:
+                          - generic [ref=e997]: export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
+                      - row "Expand Down" [ref=e998]:
+                        - cell "Expand Down" [ref=e999] [cursor=pointer]:
+                          - link "Expand Down" [ref=e1000]:
+                            - /url: "#diff-27ebd645736bf60084a22b18a3c489330fc305c5b7c012b1892626a9dc1624d4"
+                            - img [ref=e1001]
+                        - cell [ref=e1003]
+                - generic [ref=e1005]:
+                  - generic [ref=e1006]:
+                    - generic [ref=e1007]:
+                      - button "Toggle diff contents" [expanded] [ref=e1008] [cursor=pointer]:
+                        - img [ref=e1009]
+                      - button "Expand all" [ref=e1012] [cursor=pointer]:
+                        - img "Expand all" [ref=e1013]
+                      - generic [ref=e1015]: "7 changes: 7 additions & 0 deletions"
+                      - generic [ref=e1016]: "7"
+                      - generic [ref=e1022]:
+                        - link "packages/opencode/src/tool/registry.ts" [ref=e1023] [cursor=pointer]:
+                          - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                        - button "Copy" [ref=e1025]:
+                          - img [ref=e1026]
+                    - group [ref=e1032]:
+                      - button "Show options" [ref=e1033] [cursor=pointer]:
+                        - img "Show options" [ref=e1035]
+                  - table [ref=e1040]:
+                    - rowgroup [ref=e1041]:
+                      - row "Original file line number Diff line number Diff line change" [ref=e1042]:
+                        - columnheader "Original file line number" [ref=e1043]
+                        - columnheader "Diff line number" [ref=e1044]
+                        - columnheader "Diff line change" [ref=e1045]
+                    - rowgroup [ref=e1046]:
+                      - 'row "Expand Up @@ -2,6 +2,7 @@ import { PlanExitTool } from \"./plan\"" [ref=e1047]':
+                        - cell "Expand Up" [ref=e1048] [cursor=pointer]:
+                          - link "Expand Up" [ref=e1049]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1050]
+                        - 'cell "@@ -2,6 +2,7 @@ import { PlanExitTool } from \"./plan\"" [ref=e1052]'
+                      - 'row "2 2 import { Session } from \"../session\"" [ref=e1053]':
+                        - cell "2" [ref=e1054] [cursor=pointer]
+                        - cell "2" [ref=e1055] [cursor=pointer]
+                        - 'cell "import { Session } from \"../session\"" [ref=e1056]':
+                          - generic [ref=e1057]: "import { Session } from \"../session\""
+                      - 'row "3 3 import { QuestionTool } from \"./question\"" [ref=e1058]':
+                        - cell "3" [ref=e1059] [cursor=pointer]
+                        - cell "3" [ref=e1060] [cursor=pointer]
+                        - 'cell "import { QuestionTool } from \"./question\"" [ref=e1061]':
+                          - generic [ref=e1062]: "import { QuestionTool } from \"./question\""
+                      - 'row "4 4 import { BashTool } from \"./bash\"" [ref=e1063]':
+                        - cell "4" [ref=e1064] [cursor=pointer]
+                        - cell "4" [ref=e1065] [cursor=pointer]
+                        - 'cell "import { BashTool } from \"./bash\"" [ref=e1066]':
+                          - generic [ref=e1067]: "import { BashTool } from \"./bash\""
+                      - 'row "5 + import { TerminalTool } from \"./terminal\"" [ref=e1068]':
+                        - cell [ref=e1069] [cursor=pointer]
+                        - cell "5" [ref=e1070] [cursor=pointer]
+                        - 'cell "+ import { TerminalTool } from \"./terminal\"" [ref=e1071]':
+                          - generic [ref=e1072]: "+ import { TerminalTool } from \"./terminal\""
+                      - 'row "5 6 import { EditTool } from \"./edit\"" [ref=e1073]':
+                        - cell "5" [ref=e1074] [cursor=pointer]
+                        - cell "6" [ref=e1075] [cursor=pointer]
+                        - 'cell "import { EditTool } from \"./edit\"" [ref=e1076]':
+                          - generic [ref=e1077]: "import { EditTool } from \"./edit\""
+                      - 'row "6 7 import { GlobTool } from \"./glob\"" [ref=e1078]':
+                        - cell "6" [ref=e1079] [cursor=pointer]
+                        - cell "7" [ref=e1080] [cursor=pointer]
+                        - 'cell "import { GlobTool } from \"./glob\"" [ref=e1081]':
+                          - generic [ref=e1082]: "import { GlobTool } from \"./glob\""
+                      - 'row "7 8 import { GrepTool } from \"./grep\"" [ref=e1083]':
+                        - cell "7" [ref=e1084] [cursor=pointer]
+                        - cell "8" [ref=e1085] [cursor=pointer]
+                        - 'cell "import { GrepTool } from \"./grep\"" [ref=e1086]':
+                          - generic [ref=e1087]: "import { GrepTool } from \"./grep\""
+                      - 'row "Expand Down Expand Up @@ -32,6 +33,7 @@ import { Glob } from \"@opencode-ai/shared/util/glob\"" [ref=e1088]':
+                        - cell "Expand Down Expand Up" [ref=e1089] [cursor=pointer]:
+                          - link "Expand Down" [ref=e1090]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1091]
+                          - link "Expand Up" [ref=e1093]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1094]
+                        - 'cell "@@ -32,6 +33,7 @@ import { Glob } from \"@opencode-ai/shared/util/glob\"" [ref=e1096]'
+                      - row "32 33 import path from \"path\"" [ref=e1097]:
+                        - cell "32" [ref=e1098] [cursor=pointer]
+                        - cell "33" [ref=e1099] [cursor=pointer]
+                        - cell "import path from \"path\"" [ref=e1100]:
+                          - generic [ref=e1101]: import path from "path"
+                      - 'row "33 34 import { pathToFileURL } from \"url\"" [ref=e1102]':
+                        - cell "33" [ref=e1103] [cursor=pointer]
+                        - cell "34" [ref=e1104] [cursor=pointer]
+                        - 'cell "import { pathToFileURL } from \"url\"" [ref=e1105]':
+                          - generic [ref=e1106]: "import { pathToFileURL } from \"url\""
+                      - 'row "34 35 import { Effect, Layer, Context } from \"effect\"" [ref=e1107]':
+                        - cell "34" [ref=e1108] [cursor=pointer]
+                        - cell "35" [ref=e1109] [cursor=pointer]
+                        - 'cell "import { Effect, Layer, Context } from \"effect\"" [ref=e1110]':
+                          - generic [ref=e1111]: "import { Effect, Layer, Context } from \"effect\""
+                      - 'row "36 + import { Pty } from \"@/pty\"" [ref=e1112]':
+                        - cell [ref=e1113] [cursor=pointer]
+                        - cell "36" [ref=e1114] [cursor=pointer]
+                        - 'cell "+ import { Pty } from \"@/pty\"" [ref=e1115]':
+                          - generic [ref=e1116]: "+ import { Pty } from \"@/pty\""
+                      - 'row "35 37 import { FetchHttpClient, HttpClient } from \"effect/unstable/http\"" [ref=e1117]':
+                        - cell "35" [ref=e1118] [cursor=pointer]
+                        - cell "37" [ref=e1119] [cursor=pointer]
+                        - 'cell "import { FetchHttpClient, HttpClient } from \"effect/unstable/http\"" [ref=e1120]':
+                          - generic [ref=e1121]: "import { FetchHttpClient, HttpClient } from \"effect/unstable/http\""
+                      - 'row "36 38 import { ChildProcessSpawner } from \"effect/unstable/process/ChildProcessSpawner\"" [ref=e1122]':
+                        - cell "36" [ref=e1123] [cursor=pointer]
+                        - cell "38" [ref=e1124] [cursor=pointer]
+                        - 'cell "import { ChildProcessSpawner } from \"effect/unstable/process/ChildProcessSpawner\"" [ref=e1125]':
+                          - generic [ref=e1126]: "import { ChildProcessSpawner } from \"effect/unstable/process/ChildProcessSpawner\""
+                      - row "37 39 import * as CrossSpawnSpawner from \"@/effect/cross-spawn-spawner\"" [ref=e1127]:
+                        - cell "37" [ref=e1128] [cursor=pointer]
+                        - cell "39" [ref=e1129] [cursor=pointer]
+                        - cell "import * as CrossSpawnSpawner from \"@/effect/cross-spawn-spawner\"" [ref=e1130]:
+                          - generic [ref=e1131]: import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+                      - 'row "Expand Down Expand Up @@ -86,6 +88,7 @@ export const layer: Layer.Layer<" [ref=e1132]':
+                        - cell "Expand Down Expand Up" [ref=e1133] [cursor=pointer]:
+                          - link "Expand Down" [ref=e1134]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1135]
+                          - link "Expand Up" [ref=e1137]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1138]
+                        - 'cell "@@ -86,6 +88,7 @@ export const layer: Layer.Layer<" [ref=e1140]'
+                      - row "86 88 | Bus.Service" [ref=e1141]:
+                        - cell "86" [ref=e1142] [cursor=pointer]
+                        - cell "88" [ref=e1143] [cursor=pointer]
+                        - cell "| Bus.Service" [ref=e1144]:
+                          - generic [ref=e1145]: "| Bus.Service"
+                      - row "87 89 | HttpClient.HttpClient" [ref=e1146]:
+                        - cell "87" [ref=e1147] [cursor=pointer]
+                        - cell "89" [ref=e1148] [cursor=pointer]
+                        - cell "| HttpClient.HttpClient" [ref=e1149]:
+                          - generic [ref=e1150]: "| HttpClient.HttpClient"
+                      - row "88 90 | ChildProcessSpawner" [ref=e1151]:
+                        - cell "88" [ref=e1152] [cursor=pointer]
+                        - cell "90" [ref=e1153] [cursor=pointer]
+                        - cell "| ChildProcessSpawner" [ref=e1154]:
+                          - generic [ref=e1155]: "| ChildProcessSpawner"
+                      - row "91 + | Pty.Service" [ref=e1156]:
+                        - cell [ref=e1157] [cursor=pointer]
+                        - cell "91" [ref=e1158] [cursor=pointer]
+                        - cell "+ | Pty.Service" [ref=e1159]:
+                          - generic [ref=e1160]: + | Pty.Service
+                      - row "89 92 | Ripgrep.Service" [ref=e1161]:
+                        - cell "89" [ref=e1162] [cursor=pointer]
+                        - cell "92" [ref=e1163] [cursor=pointer]
+                        - cell "| Ripgrep.Service" [ref=e1164]:
+                          - generic [ref=e1165]: "| Ripgrep.Service"
+                      - row "90 93 | Format.Service" [ref=e1166]:
+                        - cell "90" [ref=e1167] [cursor=pointer]
+                        - cell "93" [ref=e1168] [cursor=pointer]
+                        - cell "| Format.Service" [ref=e1169]:
+                          - generic [ref=e1170]: "| Format.Service"
+                      - row "91 94 | Truncate.Service" [ref=e1171]:
+                        - cell "91" [ref=e1172] [cursor=pointer]
+                        - cell "94" [ref=e1173] [cursor=pointer]
+                        - cell "| Truncate.Service" [ref=e1174]:
+                          - generic [ref=e1175]: "| Truncate.Service"
+                      - 'row "Expand All @@ -108,6 +111,7 @@ export const layer: Layer.Layer<" [ref=e1176]':
+                        - cell "Expand All" [ref=e1177] [cursor=pointer]:
+                          - link "Expand All" [ref=e1178]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1179]
+                        - 'cell "@@ -108,6 +111,7 @@ export const layer: Layer.Layer<" [ref=e1181]'
+                      - row "108 111 const webfetch = yield* WebFetchTool" [ref=e1182]:
+                        - cell "108" [ref=e1183] [cursor=pointer]
+                        - cell "111" [ref=e1184] [cursor=pointer]
+                        - cell "const webfetch = yield* WebFetchTool" [ref=e1185]:
+                          - generic [ref=e1186]: const webfetch = yield* WebFetchTool
+                      - row "109 112 const websearch = yield* WebSearchTool" [ref=e1187]:
+                        - cell "109" [ref=e1188] [cursor=pointer]
+                        - cell "112" [ref=e1189] [cursor=pointer]
+                        - cell "const websearch = yield* WebSearchTool" [ref=e1190]:
+                          - generic [ref=e1191]: const websearch = yield* WebSearchTool
+                      - row "110 113 const bash = yield* BashTool" [ref=e1192]:
+                        - cell "110" [ref=e1193] [cursor=pointer]
+                        - cell "113" [ref=e1194] [cursor=pointer]
+                        - cell "const bash = yield* BashTool" [ref=e1195]:
+                          - generic [ref=e1196]: const bash = yield* BashTool
+                      - row "114 + const terminal = yield* TerminalTool" [ref=e1197]:
+                        - cell [ref=e1198] [cursor=pointer]
+                        - cell "114" [ref=e1199] [cursor=pointer]
+                        - cell "+ const terminal = yield* TerminalTool" [ref=e1200]:
+                          - generic [ref=e1201]: + const terminal = yield* TerminalTool
+                      - row "111 115 const codesearch = yield* CodeSearchTool" [ref=e1202]:
+                        - cell "111" [ref=e1203] [cursor=pointer]
+                        - cell "115" [ref=e1204] [cursor=pointer]
+                        - cell "const codesearch = yield* CodeSearchTool" [ref=e1205]:
+                          - generic [ref=e1206]: const codesearch = yield* CodeSearchTool
+                      - row "112 116 const globtool = yield* GlobTool" [ref=e1207]:
+                        - cell "112" [ref=e1208] [cursor=pointer]
+                        - cell "116" [ref=e1209] [cursor=pointer]
+                        - cell "const globtool = yield* GlobTool" [ref=e1210]:
+                          - generic [ref=e1211]: const globtool = yield* GlobTool
+                      - row "113 117 const writetool = yield* WriteTool" [ref=e1212]:
+                        - cell "113" [ref=e1213] [cursor=pointer]
+                        - cell "117" [ref=e1214] [cursor=pointer]
+                        - cell "const writetool = yield* WriteTool" [ref=e1215]:
+                          - generic [ref=e1216]: const writetool = yield* WriteTool
+                      - 'row "Expand Down Expand Up @@ -189,6 +193,7 @@ export const layer: Layer.Layer<" [ref=e1217]':
+                        - cell "Expand Down Expand Up" [ref=e1218] [cursor=pointer]:
+                          - link "Expand Down" [ref=e1219]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1220]
+                          - link "Expand Up" [ref=e1222]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1223]
+                        - 'cell "@@ -189,6 +193,7 @@ export const layer: Layer.Layer<" [ref=e1225]'
+                      - 'row "189 193 const tool = yield* Effect.all({" [ref=e1226]':
+                        - cell "189" [ref=e1227] [cursor=pointer]
+                        - cell "193" [ref=e1228] [cursor=pointer]
+                        - 'cell "const tool = yield* Effect.all({" [ref=e1229]':
+                          - generic [ref=e1230]: "const tool = yield* Effect.all({"
+                      - 'row "190 194 invalid: Tool.init(invalid)," [ref=e1231]':
+                        - cell "190" [ref=e1232] [cursor=pointer]
+                        - cell "194" [ref=e1233] [cursor=pointer]
+                        - 'cell "invalid: Tool.init(invalid)," [ref=e1234]':
+                          - generic [ref=e1235]: "invalid: Tool.init(invalid),"
+                      - 'row "191 195 bash: Tool.init(bash)," [ref=e1236]':
+                        - cell "191" [ref=e1237] [cursor=pointer]
+                        - cell "195" [ref=e1238] [cursor=pointer]
+                        - 'cell "bash: Tool.init(bash)," [ref=e1239]':
+                          - generic [ref=e1240]: "bash: Tool.init(bash),"
+                      - 'row "196 + terminal: Tool.init(terminal)," [ref=e1241]':
+                        - cell [ref=e1242] [cursor=pointer]
+                        - cell "196" [ref=e1243] [cursor=pointer]
+                        - 'cell "+ terminal: Tool.init(terminal)," [ref=e1244]':
+                          - generic [ref=e1245]: "+ terminal: Tool.init(terminal),"
+                      - 'row "192 197 read: Tool.init(read)," [ref=e1246]':
+                        - cell "192" [ref=e1247] [cursor=pointer]
+                        - cell "197" [ref=e1248] [cursor=pointer]
+                        - 'cell "read: Tool.init(read)," [ref=e1249]':
+                          - generic [ref=e1250]: "read: Tool.init(read),"
+                      - 'row "193 198 glob: Tool.init(globtool)," [ref=e1251]':
+                        - cell "193" [ref=e1252] [cursor=pointer]
+                        - cell "198" [ref=e1253] [cursor=pointer]
+                        - 'cell "glob: Tool.init(globtool)," [ref=e1254]':
+                          - generic [ref=e1255]: "glob: Tool.init(globtool),"
+                      - 'row "194 199 grep: Tool.init(greptool)," [ref=e1256]':
+                        - cell "194" [ref=e1257] [cursor=pointer]
+                        - cell "199" [ref=e1258] [cursor=pointer]
+                        - 'cell "grep: Tool.init(greptool)," [ref=e1259]':
+                          - generic [ref=e1260]: "grep: Tool.init(greptool),"
+                      - 'row "Expand All @@ -212,6 +217,7 @@ export const layer: Layer.Layer<" [ref=e1261]':
+                        - cell "Expand All" [ref=e1262] [cursor=pointer]:
+                          - link "Expand All" [ref=e1263]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1264]
+                        - 'cell "@@ -212,6 +217,7 @@ export const layer: Layer.Layer<" [ref=e1266]'
+                      - row "212 217 tool.invalid," [ref=e1267]:
+                        - cell "212" [ref=e1268] [cursor=pointer]
+                        - cell "217" [ref=e1269] [cursor=pointer]
+                        - cell "tool.invalid," [ref=e1270]:
+                          - generic [ref=e1271]: tool.invalid,
+                      - 'row "213 218 ...(questionEnabled ? [tool.question] : [])," [ref=e1272]':
+                        - cell "213" [ref=e1273] [cursor=pointer]
+                        - cell "218" [ref=e1274] [cursor=pointer]
+                        - 'cell "...(questionEnabled ? [tool.question] : [])," [ref=e1275]':
+                          - generic [ref=e1276]: "...(questionEnabled ? [tool.question] : []),"
+                      - row "214 219 tool.bash," [ref=e1277]:
+                        - cell "214" [ref=e1278] [cursor=pointer]
+                        - cell "219" [ref=e1279] [cursor=pointer]
+                        - cell "tool.bash," [ref=e1280]:
+                          - generic [ref=e1281]: tool.bash,
+                      - row "220 + tool.terminal," [ref=e1282]:
+                        - cell [ref=e1283] [cursor=pointer]
+                        - cell "220" [ref=e1284] [cursor=pointer]
+                        - cell "+ tool.terminal," [ref=e1285]:
+                          - generic [ref=e1286]: + tool.terminal,
+                      - row "215 221 tool.read," [ref=e1287]:
+                        - cell "215" [ref=e1288] [cursor=pointer]
+                        - cell "221" [ref=e1289] [cursor=pointer]
+                        - cell "tool.read," [ref=e1290]:
+                          - generic [ref=e1291]: tool.read,
+                      - row "216 222 tool.glob," [ref=e1292]:
+                        - cell "216" [ref=e1293] [cursor=pointer]
+                        - cell "222" [ref=e1294] [cursor=pointer]
+                        - cell "tool.glob," [ref=e1295]:
+                          - generic [ref=e1296]: tool.glob,
+                      - row "217 223 tool.grep," [ref=e1297]:
+                        - cell "217" [ref=e1298] [cursor=pointer]
+                        - cell "223" [ref=e1299] [cursor=pointer]
+                        - cell "tool.grep," [ref=e1300]:
+                          - generic [ref=e1301]: tool.grep,
+                      - row "Expand Down Expand Up @@ -344,6 +350,7 @@ export const defaultLayer = Layer.suspend(() =>" [ref=e1302]:
+                        - cell "Expand Down Expand Up" [ref=e1303] [cursor=pointer]:
+                          - link "Expand Down" [ref=e1304]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1305]
+                          - link "Expand Up" [ref=e1307]:
+                            - /url: "#diff-ad7960a00d2deb1c00d8fbeec32463b591ca584be1316fee6958e5b5ad978184"
+                            - img [ref=e1308]
+                        - cell "@@ -344,6 +350,7 @@ export const defaultLayer = Layer.suspend(() =>" [ref=e1310]
+                      - row "344 350 Layer.provide(Format.defaultLayer)," [ref=e1311]:
+                        - cell "344" [ref=e1312] [cursor=pointer]
+                        - cell "350" [ref=e1313] [cursor=pointer]
+                        - cell "Layer.provide(Format.defaultLayer)," [ref=e1314]:
+                          - generic [ref=e1315]: Layer.provide(Format.defaultLayer),
+                      - row "345 351 Layer.provide(CrossSpawnSpawner.defaultLayer)," [ref=e1316]:
+                        - cell "345" [ref=e1317] [cursor=pointer]
+                        - cell "351" [ref=e1318] [cursor=pointer]
+                        - cell "Layer.provide(CrossSpawnSpawner.defaultLayer)," [ref=e1319]:
+                          - generic [ref=e1320]: Layer.provide(CrossSpawnSpawner.defaultLayer),
+                      - row "346 352 Layer.provide(Ripgrep.defaultLayer)," [ref=e1321]:
+                        - cell "346" [ref=e1322] [cursor=pointer]
+                        - cell "352" [ref=e1323] [cursor=pointer]
+                        - cell "Layer.provide(Ripgrep.defaultLayer)," [ref=e1324]:
+                          - generic [ref=e1325]: Layer.provide(Ripgrep.defaultLayer),
+                      - row "353 + Layer.provide(Pty.defaultLayer)," [ref=e1326]:
+                        - cell [ref=e1327] [cursor=pointer]
+                        - cell "353" [ref=e1328] [cursor=pointer]
+                        - cell "+ Layer.provide(Pty.defaultLayer)," [ref=e1329]:
+                          - generic [ref=e1330]: + Layer.provide(Pty.defaultLayer),
+                      - row "347 354 Layer.provide(Truncate.defaultLayer)," [ref=e1331]:
+                        - cell "347" [ref=e1332] [cursor=pointer]
+                        - cell "354" [ref=e1333] [cursor=pointer]
+                        - cell "Layer.provide(Truncate.defaultLayer)," [ref=e1334]:
+                          - generic [ref=e1335]: Layer.provide(Truncate.defaultLayer),
+                      - row "348 355 )," [ref=e1336]:
+                        - cell "348" [ref=e1337] [cursor=pointer]
+                        - cell "355" [ref=e1338] [cursor=pointer]
+                        - cell ")," [ref=e1339]:
+                          - generic [ref=e1340]: ),
+                      - row "349 356 )" [ref=e1341]:
+                        - cell "349" [ref=e1342] [cursor=pointer]
+                        - cell "356" [ref=e1343] [cursor=pointer]
+                        - cell ")" [ref=e1344]:
+                          - generic [ref=e1345]: )
+              - generic [ref=e1348]:
+                - img [ref=e1349]
+                - generic [ref=e1352]: Loading
+            - img [ref=e1353]
+  - contentinfo [ref=e1354]:
+    - heading "Footer" [level=2] [ref=e1355]
+    - generic [ref=e1356]:
+      - generic [ref=e1357]:
+        - link "GitHub Homepage" [ref=e1358] [cursor=pointer]:
+          - /url: https://github.com
+          - img [ref=e1359]
+        - generic [ref=e1361]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e1362]:
+        - heading "Footer navigation" [level=3] [ref=e1363]
+        - list "Footer navigation" [ref=e1364]:
+          - listitem [ref=e1365]:
+            - link "Terms" [ref=e1366] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e1367]:
+            - link "Privacy" [ref=e1368] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e1369]:
+            - link "Security" [ref=e1370] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e1371]:
+            - link "Status" [ref=e1372] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e1373]:
+            - link "Community" [ref=e1374] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e1375]:
+            - link "Docs" [ref=e1376] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e1377]:
+            - link "Contact" [ref=e1378] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e1379]:
+            - button "Manage cookies" [ref=e1381] [cursor=pointer]
+          - listitem [ref=e1382]:
+            - button "Do not share my personal information" [ref=e1384] [cursor=pointer]

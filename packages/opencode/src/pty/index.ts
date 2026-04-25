@@ -62,6 +62,7 @@ export const Info = Schema.Struct({
   cwd: Schema.String,
   status: Schema.Literals(["running", "exited"]),
   pid: Schema.Number,
+  source: Schema.optional(Schema.Literals(["user", "agent"])),
 })
   .annotate({ identifier: "Pty" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -74,6 +75,7 @@ export const CreateInput = Schema.Struct({
   cwd: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  source: Schema.optional(Schema.Literals(["user", "agent"])),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
@@ -215,6 +217,7 @@ export const layer = Layer.effect(
         cwd,
         status: "running",
         pid: proc.pid,
+        source: input.source ?? ("user" as const),
       } as const
       const session: Active = {
         info,

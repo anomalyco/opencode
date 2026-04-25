@@ -1,0 +1,10 @@
+[    2389ms] [ERROR] Error: Not connected to alive
+    at s (https://github.githubassets.com/assets/71482-c25b6c5b293ccef4.js:2:3336)
+    at https://github.githubassets.com/assets/11765-79df61123dab47bc.js:5:112782 @ https://github.githubassets.com/assets/11765-79df61123dab47bc.js:4
+[    2390ms] [ERROR] Error: Not connected to alive
+    at s (https://github.githubassets.com/assets/71482-c25b6c5b293ccef4.js:2:3336)
+    at https://github.githubassets.com/assets/11765-79df61123dab47bc.js:5:112782 @ https://github.githubassets.com/assets/11765-79df61123dab47bc.js:4
+[    2390ms] [ERROR] Error: Not connected to alive
+    at s (https://github.githubassets.com/assets/71482-c25b6c5b293ccef4.js:2:3336)
+    at https://github.githubassets.com/assets/11765-79df61123dab47bc.js:5:112782 @ https://github.githubassets.com/assets/11765-79df61123dab47bc.js:4
+[    2703ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://github.com/anomalyco/opencode/issues/23794/edit_form?textarea_id=issue-4306990847-body&comment_context=:0

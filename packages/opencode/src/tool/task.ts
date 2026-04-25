@@ -104,6 +104,8 @@ export const TaskTool = Tool.define(
         providerID: msg.info.providerID,
       }
 
+      const fallbackModels = next.fallbackChain ?? undefined
+
       yield* ctx.metadata({
         title: params.description,
         metadata: {
@@ -135,6 +137,7 @@ export const TaskTool = Tool.define(
                 modelID: model.modelID,
                 providerID: model.providerID,
               },
+              fallbackModels,
               agent: next.name,
               tools: {
                 ...(canTodo ? {} : { todowrite: false }),

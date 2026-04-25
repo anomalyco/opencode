@@ -122,6 +122,7 @@ export default function Layout(props: ParentProps) {
   const navigate = useNavigate()
   setNavigate(navigate)
   const providers = useProviders()
+
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
@@ -1096,7 +1097,7 @@ export default function Layout(props: ParentProps) {
         disabled: !params.dir || !params.id,
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
-          if (session) void archiveSession(session)
+          if (session) dialog.show(() => <DialogArchiveSession session={session} />)
         },
       },
       {
@@ -1746,6 +1747,36 @@ export default function Layout(props: ParentProps) {
             </Button>
             <Button variant="primary" size="large" disabled={state.status === "loading"} onClick={handleReset}>
               {language.t("workspace.reset.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
+  function DialogArchiveSession(props: { session: Session }) {
+    const name = createMemo(
+      () => sessionTitle(props.session.title) ?? language.t("command.session.new"),
+    )
+    const handleArchive = async () => {
+      await archiveSession(props.session)
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("session.archive.title")} fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              {language.t("session.archive.confirm", { name: name() })}
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleArchive}>
+              {language.t("session.archive.button")}
             </Button>
           </div>
         </div>

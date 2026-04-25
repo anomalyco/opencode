@@ -65,6 +65,21 @@ export function TerminalPanel() {
     setStore("autoCreated", true)
   })
 
+  // Auto-open terminal panel when agent creates a new PTY session
+  createEffect(
+    on(
+      () => terminal.all().length,
+      (count, prevCount) => {
+        if (prevCount === undefined || count <= prevCount) return
+        const all = terminal.all()
+        const last = all[all.length - 1]
+        if (last?.source !== "agent") return
+        if (!opened()) view().terminal.open()
+        terminal.open(last.id)
+      },
+    ),
+  )
+
   createEffect(
     on(
       () => terminal.all().length,

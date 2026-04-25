@@ -1712,6 +1712,11 @@ const ModelRef = Schema.Struct({
   modelID: ModelID,
 })
 
+const FallbackModelRef = Schema.Struct({
+  providerID: ProviderID,
+  modelID: ModelID,
+})
+
 export const PromptInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
@@ -1725,6 +1730,7 @@ export const PromptInput = Schema.Struct({
   format: Schema.optional(MessageV2.Format),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
+  fallbackModels: Schema.optional(Schema.Array(FallbackModelRef)),
   parts: Schema.Array(
     Schema.Union([
       MessageV2.TextPartInput,

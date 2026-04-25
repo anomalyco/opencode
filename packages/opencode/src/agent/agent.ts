@@ -41,6 +41,14 @@ export const Info = z
         providerID: ProviderID.zod,
       })
       .optional(),
+    fallbackChain: z
+      .array(
+        z.object({
+          providerID: ProviderID.zod,
+          modelID: ModelID.zod,
+        }),
+      )
+      .optional(),
     variant: z.string().optional(),
     prompt: z.string().optional(),
     options: z.record(z.string(), z.any()),
@@ -248,6 +256,8 @@ export const layer = Layer.effect(
               native: false,
             }
           if (value.model) item.model = Provider.parseModel(value.model)
+          if (value.fallback_model)
+            item.fallbackChain = value.fallback_model.map((m: string) => Provider.parseModel(m))
           item.variant = value.variant ?? item.variant
           item.prompt = value.prompt ?? item.prompt
           item.description = value.description ?? item.description
