@@ -2343,6 +2343,31 @@ test("parseManagedPlist parses enabled_providers", async () => {
   expect(config.enabled_providers).toEqual(["anthropic", "google"])
 })
 
+test("preserves zero-width-prefixed agent config keys", async () => {
+  const raw = "\u200Bprometheus"
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        agent: {
+          [raw]: {
+            description: "Invisible sorted agent",
+            mode: "subagent",
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const cfg = await load()
+      expect(Object.keys(cfg.agent ?? {})).toContain(raw)
+      expect(cfg.agent?.[raw]?.description).toBe("Invisible sorted agent")
+    },
+  })
+})
+
 test("parseManagedPlist handles empty config", async () => {
   const config = ConfigParse.schema(
     Config.Info,

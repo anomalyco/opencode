@@ -183,6 +183,30 @@ test("custom agent config overrides native agent properties", async () => {
   })
 })
 
+test("preserves zero-width-prefixed custom agent names for identity", async () => {
+  const raw = "\u200Bprometheus"
+  await using tmp = await tmpdir({
+    config: {
+      default_agent: raw,
+      agent: {
+        [raw]: {
+          description: "Invisible sorted agent",
+          mode: "primary",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const custom = await load(tmp.path, (svc) => svc.get(raw))
+      expect(custom?.name).toBe(raw)
+      expect(await load(tmp.path, (svc) => svc.defaultAgent())).toBe(raw)
+      expect((await load(tmp.path, (svc) => svc.list())).map((x) => x.name)).toContain(raw)
+    },
+  })
+})
+
 test("agent disable removes agent from list", async () => {
   await using tmp = await tmpdir({
     config: {
