@@ -15,6 +15,7 @@ import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "../../src/provider"
 import { Env } from "../../src/env"
+import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
@@ -808,6 +809,66 @@ it.live(
           expect(taskMsg.info.finish).toBeDefined()
         }),
       { git: true, config: cfg },
+    ),
+  30_000,
+)
+
+it.live(
+  "question tool part stays recoverable after session is interrupted",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ dir, llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const question = yield* Question.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "Pinned",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        })
+
+        yield* llm.tool("question", {
+          questions: [
+            {
+              question: "Pick one",
+              header: "Choice",
+              options: [{ label: "A", description: "Option A" }],
+            },
+          ],
+        })
+
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+
+        const pending = yield* Effect.gen(function* () {
+          for (let i = 0; i < 500; i++) {
+            const pending = yield* question.list()
+            if (pending.length > 0) return pending
+            yield* Effect.sleep("10 millis")
+          }
+          throw new Error("timed out waiting for question")
+        })
+
+        yield* prompt.cancel(chat.id)
+
+        const exit = yield* Fiber.await(fiber)
+        yield* Effect.promise(() => Instance.reload({ directory: dir }))
+        const recovered = yield* question.list()
+        const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+        const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
+        const tool = assistant?.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+
+        expect(Exit.isSuccess(exit)).toBe(true)
+        expect(pending).toHaveLength(1)
+        expect(tool?.state.status).toBe("running")
+        expect(recovered).toHaveLength(1)
+      }),
+      { git: true, config: providerCfg },
     ),
   30_000,
 )

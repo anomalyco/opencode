@@ -2,7 +2,10 @@ import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect"
-import { SessionID, MessageID } from "@/session/schema"
+import { SessionID, MessageID, PartID } from "@/session/schema"
+import { PartTable, SessionTable } from "@/session/session.sql"
+import { Database, eq } from "@/storage"
+import type { MessageV2 } from "@/session/message-v2"
 import { zod } from "@/util/effect-zod"
 import { Log } from "@/util"
 import { withStatics } from "@/util/schema"
@@ -107,12 +110,20 @@ export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("Que
 
 interface PendingEntry {
   info: Request
-  deferred: Deferred.Deferred<ReadonlyArray<Answer>, RejectedError>
+  deferred?: Deferred.Deferred<ReadonlyArray<Answer>, RejectedError>
+  part?: PartID
 }
 
 interface State {
   pending: Map<QuestionID, PendingEntry>
 }
+
+type RunningQuestionPart = MessageV2.ToolPart & {
+  tool: "question"
+  state: MessageV2.ToolStateRunning
+}
+
+type RunningQuestionData = Omit<RunningQuestionPart, "id" | "sessionID" | "messageID">
 
 // Service
 
@@ -142,7 +153,8 @@ export const layer = Layer.effect(
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
             for (const item of state.pending.values()) {
-              yield* Deferred.fail(item.deferred, new RejectedError())
+              if (item.info.tool) continue
+              if (item.deferred) yield* Deferred.fail(item.deferred, new RejectedError())
             }
             state.pending.clear()
           }),
@@ -151,6 +163,71 @@ export const layer = Layer.effect(
         return state
       }),
     )
+
+    function isRunning(part: MessageV2.Part): part is RunningQuestionPart
+    function isRunning(part: typeof PartTable.$inferSelect.data): part is RunningQuestionData
+    function isRunning(part: unknown): boolean {
+      if (!part || typeof part !== "object") return false
+      if (!("type" in part) || part.type !== "tool") return false
+      if (!("tool" in part) || part.tool !== "question") return false
+      if (!("state" in part) || !part.state || typeof part.state !== "object") return false
+      return "status" in part.state && part.state.status === "running"
+    }
+
+    function updatePart(
+      id: PartID,
+      build: (part: RunningQuestionData) => MessageV2.ToolStateCompleted | MessageV2.ToolStateError,
+    ) {
+      const row = Database.use((db) => db.select().from(PartTable).where(eq(PartTable.id, id)).get())
+      if (!row || !isRunning(row.data)) return
+      const part = row.data
+      const data = { ...part, state: build(part) }
+      Database.use((db) =>
+        db
+          .update(PartTable)
+          .set({ data, time_updated: Date.now() })
+          .where(eq(PartTable.id, id))
+          .run(),
+      )
+    }
+
+    const recover = Effect.fn("Question.recover")(function* () {
+      const pending = (yield* InstanceState.get(state)).pending
+      const directory = yield* InstanceState.directory
+
+      const rows = Database.use((db) =>
+        db
+          .select({ part: PartTable })
+          .from(PartTable)
+          .innerJoin(SessionTable, eq(PartTable.session_id, SessionTable.id))
+          .where(eq(SessionTable.directory, directory))
+          .orderBy(PartTable.id)
+          .all(),
+      )
+
+      const seen = new Set<string>()
+      for (const entry of pending.values()) {
+        if (entry.info.tool) seen.add(`${entry.info.tool.messageID}:${entry.info.tool.callID}`)
+      }
+
+      for (const row of rows) {
+        const data = row.part.data
+        if (!isRunning(data)) continue
+
+        const key = `${row.part.message_id}:${data.callID}`
+        if (seen.has(key)) continue
+        seen.add(key)
+
+        const id = QuestionID.ascending()
+        const info = Schema.decodeUnknownSync(Request)({
+          id,
+          sessionID: row.part.session_id,
+          questions: data.state.input.questions,
+          tool: { messageID: row.part.message_id, callID: data.callID },
+        })
+        pending.set(id, { info, part: row.part.id })
+      }
+    })
 
     const ask = Effect.fn("Question.ask")(function* (input: {
       sessionID: SessionID
@@ -196,7 +273,19 @@ export const layer = Layer.effect(
         requestID: existing.info.id,
         answers: input.answers.map((a) => [...a]),
       })
-      yield* Deferred.succeed(existing.deferred, input.answers)
+
+      if (existing.part) {
+        updatePart(existing.part, (part) => ({
+          status: "completed",
+          input: part.state.input,
+          output: `User answered: ${input.answers.map((x) => x.join(", ")).join(" | ")}`,
+          title: `Asked ${part.state.input.questions.length} question${part.state.input.questions.length === 1 ? "" : "s"}`,
+          metadata: { answers: input.answers },
+          time: { start: part.state.time.start, end: Date.now() },
+        }))
+      }
+
+      if (existing.deferred) yield* Deferred.succeed(existing.deferred, input.answers)
     })
 
     const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {
@@ -212,10 +301,21 @@ export const layer = Layer.effect(
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
       })
-      yield* Deferred.fail(existing.deferred, new RejectedError())
+
+      if (existing.part) {
+        updatePart(existing.part, (part) => ({
+          status: "error",
+          input: part.state.input,
+          error: "The user dismissed this question",
+          time: { start: part.state.time.start, end: Date.now() },
+        }))
+      }
+
+      if (existing.deferred) yield* Deferred.fail(existing.deferred, new RejectedError())
     })
 
     const list = Effect.fn("Question.list")(function* () {
+      yield* recover()
       const pending = (yield* InstanceState.get(state)).pending
       return Array.from(pending.values(), (x) => x.info)
     })

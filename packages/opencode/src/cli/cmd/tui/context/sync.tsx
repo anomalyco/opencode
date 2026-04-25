@@ -111,6 +111,26 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const fullSyncedSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
 
+    async function syncQuestions(workspace: string) {
+      const response = await sdk.client.question.list({ workspace })
+      const grouped: Record<string, QuestionRequest[]> = {}
+      for (const q of response.data ?? []) {
+        if (!grouped[q.sessionID]) grouped[q.sessionID] = []
+        grouped[q.sessionID].push(q)
+      }
+      setStore(
+        "question",
+        produce((draft) => {
+          for (const key of Object.keys(draft)) {
+            if (!grouped[key]) delete draft[key]
+          }
+          for (const [id, qs] of Object.entries(grouped)) {
+            draft[id] = qs.toSorted((a, b) => a.id.localeCompare(b.id))
+          }
+        }),
+      )
+    }
+
     event.subscribe((event) => {
       switch (event.type) {
         case "server.instance.disposed":
@@ -355,7 +375,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     async function bootstrap(input: { fatal?: boolean } = {}) {
       const fatal = input.fatal ?? true
-      const workspace = project.workspace.current()
+      const workspace = project.workspace.current() ?? ""
       if (workspace !== syncedWorkspace) {
         fullSyncedSessions.clear()
         syncedWorkspace = workspace
@@ -437,6 +457,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
+            syncQuestions(workspace),
             project.workspace.sync(),
           ]).then(() => {
             setStore("status", "complete")
@@ -497,7 +518,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
-          if (fullSyncedSessions.has(sessionID)) return
+          const workspace = project.workspace.current() ?? ""
+          if (fullSyncedSessions.has(sessionID)) {
+            await syncQuestions(workspace)
+            return
+          }
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
             sdk.client.session.messages({ sessionID, limit: 100 }),
@@ -518,6 +543,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           fullSyncedSessions.add(sessionID)
+          await syncQuestions(workspace)
         },
       },
       bootstrap,

@@ -197,6 +197,11 @@ export const layer: Layer.Layer<
       const failToolCall = Effect.fn("SessionProcessor.failToolCall")(function* (toolCallID: string, error: unknown) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return false
+        if (
+          match.part.tool === "question" &&
+          (aborted || (error instanceof DOMException && error.name === "AbortError"))
+        )
+          return false
         yield* session.updatePart({
           ...match.part,
           state: {
@@ -288,19 +293,21 @@ export const layer: Layer.Layer<
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
-            yield* updateToolCall(value.toolCallId, (match) => ({
-              ...match,
-              tool: value.toolName,
-              state: {
-                ...match.state,
-                status: "running",
-                input: value.input,
-                time: { start: Date.now() },
-              },
-              metadata: match.metadata?.providerExecuted
-                ? { ...value.providerMetadata, providerExecuted: true }
-                : value.providerMetadata,
-            }))
+            yield* Effect.uninterruptible(
+              updateToolCall(value.toolCallId, (match) => ({
+                ...match,
+                tool: value.toolName,
+                state: {
+                  ...match.state,
+                  status: "running",
+                  input: value.input,
+                  time: { start: Date.now() },
+                },
+                metadata: match.metadata?.providerExecuted
+                  ? { ...value.providerMetadata, providerExecuted: true }
+                  : value.providerMetadata,
+              })),
+            )
 
             const parts = MessageV2.parts(ctx.assistantMessage.id)
             const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
@@ -502,6 +509,7 @@ export const layer: Layer.Layer<
           const match = yield* readToolCall(toolCallID)
           if (!match) continue
           const part = match.part
+          if (part.tool === "question" && part.state.status === "running") continue
           const end = Date.now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
           yield* session.updatePart({
