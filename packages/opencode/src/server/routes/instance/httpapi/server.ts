@@ -11,6 +11,7 @@ import { Filesystem } from "@/util"
 import { authorizationLayer } from "./auth"
 import { ConfigApi, configHandlers } from "./config"
 import { FileApi, fileHandlers } from "./file"
+import { ExperimentalApi, experimentalHandlers } from "./experimental"
 import { InstanceApi, instanceHandlers } from "./instance"
 import { McpApi, mcpHandlers } from "./mcp"
 import { PermissionApi, permissionHandlers } from "./permission"
@@ -63,6 +64,7 @@ const instance = HttpRouter.middleware()(
 
 export const routes = Layer.mergeAll(
   HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
+  HttpApiBuilder.layer(ExperimentalApi).pipe(Layer.provide(experimentalHandlers)),
   HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),
   HttpApiBuilder.layer(InstanceApi).pipe(Layer.provide(instanceHandlers)),
   HttpApiBuilder.layer(McpApi).pipe(Layer.provide(mcpHandlers)),

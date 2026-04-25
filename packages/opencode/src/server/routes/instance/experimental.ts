@@ -394,7 +394,7 @@ export const ExperimentalRoutes = lazy(() =>
             description: "MCP resources",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), MCP.Resource)),
+                schema: resolver(z.record(z.string(), MCP.Resource.zod)),
               },
             },
           },

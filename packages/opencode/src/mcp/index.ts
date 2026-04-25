@@ -36,16 +36,16 @@ import { withStatics } from "@/util/schema"
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
 
-export const Resource = z
-  .object({
-    name: z.string(),
-    uri: z.string(),
-    description: z.string().optional(),
-    mimeType: z.string().optional(),
-    client: z.string(),
-  })
-  .meta({ ref: "McpResource" })
-export type Resource = z.infer<typeof Resource>
+export const Resource = Schema.Struct({
+  name: Schema.String,
+  uri: Schema.String,
+  description: Schema.optional(Schema.String),
+  mimeType: Schema.optional(Schema.String),
+  client: Schema.String,
+})
+  .annotate({ identifier: "McpResource" })
+  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+export type Resource = Schema.Schema.Type<typeof Resource>
 
 export const ToolsChanged = BusEvent.define(
   "mcp.tools.changed",

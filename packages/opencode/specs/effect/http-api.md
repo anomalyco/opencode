@@ -30,6 +30,29 @@ Plan for replacing instance Hono route implementations with Effect `HttpApi` whi
 - Regenerate the SDK after schema or OpenAPI-affecting changes and verify the diff is expected.
 - Do not delete a Hono route until the SDK/OpenAPI pipeline no longer depends on its Hono `describeRoute` entry.
 
+## Route Slice Checklist
+
+Use this checklist for each small HttpApi migration PR:
+
+1. Read the legacy Hono route and copy behavior exactly, including default values, headers, operation IDs, response schemas, and status codes.
+2. Put the new `HttpApiGroup`, route paths, DTO schemas, and handlers in `src/server/routes/instance/httpapi/*`.
+3. Mount the new paths in `src/server/routes/instance/index.ts` only inside the `OPENCODE_EXPERIMENTAL_HTTPAPI` block.
+4. Use `InstanceState.context` / `InstanceState.directory` inside HttpApi handlers instead of `Instance.directory`, `Instance.worktree`, or `Instance.project` ALS globals.
+5. Reuse existing services directly. If a service returns plain objects, use `Schema.Struct`; use `Schema.Class` only when handlers return actual class instances.
+6. Keep legacy Hono routes and `.zod` compatibility in place for SDK/OpenAPI generation.
+7. Add tests that hit the Hono-mounted bridge via `InstanceRoutes`, not only the raw `HttpApi` web handler, when the route depends on auth or instance context.
+8. Run `bun typecheck` from `packages/opencode`, relevant `bun run test:ci ...` tests from `packages/opencode`, and `./packages/sdk/js/script/build.ts` from the repo root.
+
+## Experimental Read Slice Guidance
+
+For the experimental route group, port read-only JSON routes before mutations:
+
+- Good first batch: `GET /console`, `GET /console/orgs`, `GET /tool/ids`, `GET /resource`.
+- Consider `GET /worktree` only if the handler uses `InstanceState.context` instead of `Instance.project`.
+- Defer `POST /console/switch`, worktree create/remove/reset, and `GET /session` to separate PRs because they mutate state or have broader pagination/session behavior.
+- Preserve response headers such as pagination cursors if a route is ported.
+- If SDK generation changes, explain whether it is a semantic contract change or a generator-equivalent type normalization.
+
 ## Schema Notes
 
 - Use `Schema.Struct(...).annotate({ identifier })` for named OpenAPI refs when handlers return plain objects.
@@ -141,7 +164,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `mcp`                    | `bridged` partial | status only                                            |
 | `workspace`              | `bridged`         | list, get, enter                                       |
 | top-level instance reads | `bridged`         | path, vcs, command, agent, skill, lsp, formatter       |
-| experimental JSON routes | `next/later`      | console, tool, worktree, resource, global session list |
+| experimental JSON routes | `bridged` partial | console reads, tool ids, resource list; worktree and global session list remain later |
 | `session`                | `later/special`   | large stateful surface plus streaming                  |
 | `sync`                   | `later`           | process/control side effects                           |
 | `event`                  | `special`         | SSE                                                    |
