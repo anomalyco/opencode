@@ -1,0 +1,103 @@
+import { afterEach, describe, expect, test } from "bun:test"
+import type { UpgradeWebSocket } from "hono/ws"
+import path from "path"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { GlobalBus } from "@/bus/global"
+import { Instance } from "../../src/project/instance"
+import { InstanceRoutes } from "../../src/server/routes/instance"
+import { InstancePaths } from "../../src/server/routes/instance/httpapi/instance"
+import { Log } from "../../src/util"
+import { resetDatabase } from "../fixture/db"
+import { tmpdir } from "../fixture/fixture"
+
+void Log.init({ print: false })
+
+const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
+const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
+
+function app() {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+  return InstanceRoutes(websocket)
+}
+
+afterEach(async () => {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
+  await Instance.disposeAll()
+  await resetDatabase()
+})
+
+describe("instance HttpApi", () => {
+  test("serves path and VCS read endpoints through Hono bridge", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Bun.write(path.join(tmp.path, "changed.txt"), "hello")
+
+    const vcsDiff = new URL(`http://localhost${InstancePaths.vcsDiff}`)
+    vcsDiff.searchParams.set("mode", "git")
+
+    const [paths, vcs, diff] = await Promise.all([
+      app().request(InstancePaths.path, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.vcs, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(vcsDiff, { headers: { "x-opencode-directory": tmp.path } }),
+    ])
+
+    expect(paths.status).toBe(200)
+    expect(await paths.json()).toMatchObject({ directory: tmp.path, worktree: tmp.path })
+
+    expect(vcs.status).toBe(200)
+    expect(await vcs.json()).toMatchObject({ branch: expect.any(String) })
+
+    expect(diff.status).toBe(200)
+    expect(await diff.json()).toContainEqual(
+      expect.objectContaining({ file: "changed.txt", additions: 1, status: "added" }),
+    )
+  })
+
+  test("serves catalog read endpoints through Hono bridge", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+
+    const [commands, agents, skills, lsp, formatter] = await Promise.all([
+      app().request(InstancePaths.command, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.agent, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.skill, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.lsp, { headers: { "x-opencode-directory": tmp.path } }),
+      app().request(InstancePaths.formatter, { headers: { "x-opencode-directory": tmp.path } }),
+    ])
+
+    expect(commands.status).toBe(200)
+    expect(await commands.json()).toContainEqual(expect.objectContaining({ name: "init", source: "command" }))
+
+    expect(agents.status).toBe(200)
+    expect(await agents.json()).toContainEqual(expect.objectContaining({ name: "build", mode: "primary" }))
+
+    expect(skills.status).toBe(200)
+    expect(await skills.json()).toBeArray()
+
+    expect(lsp.status).toBe(200)
+    expect(await lsp.json()).toEqual([])
+
+    expect(formatter.status).toBe(200)
+    expect(await formatter.json()).toEqual([])
+  })
+
+  test("serves instance dispose through Hono bridge", async () => {
+    await using tmp = await tmpdir()
+
+    const disposed = new Promise<string | undefined>((resolve) => {
+      const onEvent = (event: { directory?: string; payload: { type?: string } }) => {
+        if (event.payload.type !== "server.instance.disposed") return
+        GlobalBus.off("event", onEvent)
+        resolve(event.directory)
+      }
+      GlobalBus.on("event", onEvent)
+    })
+
+    const response = await app().request(InstancePaths.dispose, {
+      method: "POST",
+      headers: { "x-opencode-directory": tmp.path },
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toBe(true)
+    expect(await disposed).toBe(tmp.path)
+  })
+})

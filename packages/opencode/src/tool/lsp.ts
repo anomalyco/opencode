@@ -1,5 +1,4 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import path from "path"
 import { LSP } from "../lsp"
@@ -7,7 +6,7 @@ import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"
 import { pathToFileURL } from "url"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 const operations = [
   "goToDefinition",
@@ -21,20 +20,25 @@ const operations = [
   "outgoingCalls",
 ] as const
 
+export const Parameters = Schema.Struct({
+  operation: Schema.Literals(operations).annotate({ description: "The LSP operation to perform" }),
+  filePath: Schema.String.annotate({ description: "The absolute or relative path to the file" }),
+  line: Schema.Number.check(Schema.isInt())
+    .check(Schema.isGreaterThanOrEqualTo(1))
+    .annotate({ description: "The line number (1-based, as shown in editors)" }),
+  character: Schema.Number.check(Schema.isInt())
+    .check(Schema.isGreaterThanOrEqualTo(1))
+    .annotate({ description: "The character offset (1-based, as shown in editors)" }),
+})
+
 export const LspTool = Tool.define(
   "lsp",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
     const fs = yield* AppFileSystem.Service
-
     return {
       description: DESCRIPTION,
-      parameters: z.object({
-        operation: z.enum(operations).describe("The LSP operation to perform"),
-        filePath: z.string().describe("The absolute or relative path to the file"),
-        line: z.number().int().min(1).describe("The line number (1-based, as shown in editors)"),
-        character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
-      }),
+      parameters: Parameters,
       execute: (
         args: { operation: (typeof operations)[number]; filePath: string; line: number; character: number },
         ctx: Tool.Context,
@@ -42,12 +46,29 @@ export const LspTool = Tool.define(
         Effect.gen(function* () {
           const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
           yield* assertExternalDirectoryEffect(ctx, file)
-          yield* ctx.ask({ permission: "lsp", patterns: ["*"], always: ["*"], metadata: {} })
+          const meta =
+            args.operation === "workspaceSymbol"
+              ? { operation: args.operation }
+              : args.operation === "documentSymbol"
+                ? { operation: args.operation, filePath: file }
+                : { operation: args.operation, filePath: file, line: args.line, character: args.character }
+          yield* ctx.ask({
+            permission: "lsp",
+            patterns: ["*"],
+            always: ["*"],
+            metadata: meta,
+          })
 
           const uri = pathToFileURL(file).href
           const position = { file, line: args.line - 1, character: args.character - 1 }
           const relPath = path.relative(Instance.worktree, file)
-          const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
+          const detail =
+            args.operation === "workspaceSymbol"
+              ? ""
+              : args.operation === "documentSymbol"
+                ? relPath
+                : `${relPath}:${args.line}:${args.character}`
+          const title = detail ? `${args.operation} ${detail}` : args.operation
 
           const exists = yield* fs.existsSafe(file)
           if (!exists) throw new Error(`File not found: ${file}`)
@@ -85,7 +106,7 @@ export const LspTool = Tool.define(
             metadata: { result },
             output: result.length === 0 ? `No results found for ${args.operation}` : JSON.stringify(result, null, 2),
           }
-        }),
+        }).pipe(Effect.orDie),
     }
   }),
 )
