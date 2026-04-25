@@ -9,12 +9,15 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import * as Clipboard from "../../util/clipboard"
+import { useToast } from "../../ui/toast"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
+  const toast = useToast()
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -120,6 +123,17 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     pick(opt.label)
   }
 
+  function copyQuestion() {
+    const text = question()?.question?.trim()
+    if (!text) {
+      toast.show({ message: "No question text to copy", variant: "error" })
+      return
+    }
+    Clipboard.copy(text)
+      .then(() => toast.show({ message: "Question copied to clipboard", variant: "success" }))
+      .catch(() => toast.show({ message: "Failed to copy question", variant: "error" }))
+  }
+
   const dialog = useDialog()
 
   useKeyboard((evt) => {
@@ -215,6 +229,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         reject()
       }
     } else {
+      if (evt.name === "c" && !evt.ctrl && !evt.meta && !evt.shift) {
+        evt.preventDefault()
+        copyQuestion()
+        return
+      }
+
       const opts = options()
       const total = opts.length + (custom() ? 1 : 0)
       const max = Math.min(total, 9)
@@ -461,6 +481,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
           <text fg={theme.text}>
             esc <span style={{ fg: theme.textMuted }}>dismiss</span>
           </text>
+          <Show when={!confirm()}>
+            <text fg={theme.text} onMouseUp={() => copyQuestion()}>
+              c <span style={{ fg: theme.textMuted }}>copy question</span>
+            </text>
+          </Show>
         </box>
       </box>
     </box>
