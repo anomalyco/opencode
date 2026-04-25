@@ -6,6 +6,7 @@ import { ProviderID } from "@/provider/schema"
 import { mapValues } from "remeda"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "./auth"
 
 const root = "/provider"
 
@@ -59,7 +60,8 @@ export const ProviderApi = HttpApi.make("provider")
           title: "provider",
           description: "Experimental HttpApi provider routes.",
         }),
-      ),
+      )
+      .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({
