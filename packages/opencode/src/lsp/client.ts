@@ -682,6 +682,9 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     },
     async shutdown() {
       logger.info("shutting down")
+      pushDiagnostics.clear()
+      pullDiagnostics.clear()
+      for (const key of Object.keys(files)) delete files[key]
       connection.end()
       connection.dispose()
       await Process.stop(input.server.process)
