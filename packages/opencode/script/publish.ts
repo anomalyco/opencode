@@ -63,12 +63,26 @@ await publish(`./dist/${pkg.name}`, `${pkg.name}-ai`, version)
 
 const image = "ghcr.io/anomalyco/opencode"
 const platforms = "linux/amd64,linux/arm64"
-const tags = [`${image}:${version}`, `${image}:${Script.channel}`]
-const tagFlags = tags.flatMap((t) => ["-t", t])
+
+const buildImage = async (tags: string[], buildArgs: string[]) => {
+  const tagFlags = tags.flatMap((tag) => ["-t", tag])
+  await $`docker buildx build --platform ${platforms} ${tagFlags} ${buildArgs} --push .`
+}
 
 // registries
 if (!Script.preview) {
-  await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
+  await buildImage([`${image}:${version}`, `${image}:${Script.channel}`, `${image}:latest`], [
+    "--build-arg",
+    "BASE_IMAGE=alpine:3.21",
+    "--build-arg",
+    "DIST_SUFFIX=-musl",
+  ])
+  await buildImage([`${image}:ubuntu`], [
+    "--build-arg",
+    "BASE_IMAGE=ubuntu:24.04",
+    "--build-arg",
+    "DIST_SUFFIX=",
+  ])
   // Calculate SHA values
   const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
   const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
