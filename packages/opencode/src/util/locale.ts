@@ -59,18 +59,55 @@ export function duration(input: number) {
 }
 
 export function truncate(str: string, len: number): string {
-  if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  if (Bun.stringWidth(str) <= len) return str
+
+  const ellipsis = "…"
+  const ellipsisWidth = Bun.stringWidth(ellipsis)
+  const maxContentWidth = len - ellipsisWidth
+  if (maxContentWidth < 0) return ellipsis
+
+  let result = ""
+  let currentWidth = 0
+  for (const char of str) {
+    const charWidth = Bun.stringWidth(char)
+    if (currentWidth + charWidth > maxContentWidth) break
+    result += char
+    currentWidth += charWidth
+  }
+
+  return result + ellipsis
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
-  if (str.length <= maxLength) return str
+  if (Bun.stringWidth(str) <= maxLength) return str
 
   const ellipsis = "…"
-  const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-  const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
+  const ellipsisWidth = Bun.stringWidth(ellipsis)
+  const availableWidth = maxLength - ellipsisWidth
+  if (availableWidth < 0) return ellipsis
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  const startWidth = Math.ceil(availableWidth / 2)
+  const endWidth = Math.floor(availableWidth / 2)
+
+  let startResult = ""
+  let startCurrentWidth = 0
+  for (const char of str) {
+    const charWidth = Bun.stringWidth(char)
+    if (startCurrentWidth + charWidth > startWidth) break
+    startResult += char
+    startCurrentWidth += charWidth
+  }
+
+  let endResult = ""
+  let endCurrentWidth = 0
+  for (const char of Array.from(str).reverse()) {
+    const charWidth = Bun.stringWidth(char)
+    if (endCurrentWidth + charWidth > endWidth) break
+    endResult = char + endResult
+    endCurrentWidth += charWidth
+  }
+
+  return startResult + ellipsis + endResult
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
