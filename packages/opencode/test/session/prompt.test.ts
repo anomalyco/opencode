@@ -1078,6 +1078,30 @@ unix("shell completes a fast command on the preferred shell", () =>
   ),
 )
 
+unix("shell commands can change directory after startup", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { prompt, run, chat } = yield* boot()
+        const parent = path.dirname(dir)
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "cd .. && pwd",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(tool.state.output).toContain(parent)
+        expect(tool.state.metadata.output).toContain(parent)
+        yield* run.assertNotBusy(chat.id)
+      }),
+    { git: true, config: cfg },
+  ),
+)
+
 unix("shell lists files from the project directory", () =>
   provideTmpdirInstance(
     (dir) =>

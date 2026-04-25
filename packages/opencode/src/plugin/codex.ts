@@ -390,6 +390,16 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             output: 0,
             cache: { read: 0, write: 0 },
           }
+
+          // gpt-5.5 models temporarily have restricted context window size for codex plans
+          if (model.id.includes("gpt-5.5")) {
+            model.limit = {
+              context: 400_000,
+              //@ts-expect-error incorrect type for v1 sdk but works
+              input: 272_000,
+              output: 128_000,
+            }
+          }
         }
 
         return {
