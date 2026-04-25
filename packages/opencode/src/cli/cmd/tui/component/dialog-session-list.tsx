@@ -34,7 +34,7 @@ export function DialogSessionList() {
 
   const [searchResults, { refetch }] = createResource(search, async (query) => {
     if (!query) return undefined
-    const result = await sdk.client.session.list({ search: query, limit: 30 })
+    const result = await sdk.client.session.list({ search: query, limit: 30, roots: true })
     return result.data ?? []
   })
 
@@ -112,7 +112,6 @@ export function DialogSessionList() {
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return sessions()
-      .filter((x) => x.parentID === undefined)
       .toSorted((a, b) => {
         const updatedDay = new Date(b.time.updated).setHours(0, 0, 0, 0) - new Date(a.time.updated).setHours(0, 0, 0, 0)
         if (updatedDay !== 0) return updatedDay

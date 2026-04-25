@@ -362,7 +362,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
-        .list({ start: start })
+        .list({ start: start, roots: true })
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
@@ -482,7 +482,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         async refresh() {
           const start = Date.now() - 30 * 24 * 60 * 60 * 1000
           const list = await sdk.client.session
-            .list({ start })
+            .list({ start, roots: true })
             .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
           setStore("session", reconcile(list))
         },
