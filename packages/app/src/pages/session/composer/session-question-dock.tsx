@@ -124,14 +124,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const dock = root.closest('[data-component="session-prompt-dock"]')
     if (!(dock instanceof HTMLElement)) return
 
+    const header = document.querySelector("[data-session-title]")
     const scroller = document.querySelector(".scroll-view__viewport")
-    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
-    const sticky =
-      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
-    // Fall back to the scroller's top when no sticky header is present (e.g. on
-    // mobile with no session title) so the dock stays inside the visible content
-    // area instead of overflowing the viewport via the 100dvh CSS fallback.
-    const top = sticky || (scroller instanceof HTMLElement ? scroller.getBoundingClientRect().top : 0)
+    const top =
+      header instanceof HTMLElement
+        ? header.getBoundingClientRect().bottom
+        : scroller instanceof HTMLElement
+          ? scroller.getBoundingClientRect().top
+          : 0
 
     const dockBottom = dock.getBoundingClientRect().bottom
     const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
