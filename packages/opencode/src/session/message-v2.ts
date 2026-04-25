@@ -318,6 +318,7 @@ export const ToolStateCompleted = Schema.Struct({
 export type ToolStateCompleted = Types.DeepMutable<Schema.Schema.Type<typeof ToolStateCompleted>>
 
 function truncateToolOutput(text: string, maxChars?: number) {
+  if (!text) return ""
   if (!maxChars || text.length <= maxChars) return text
   const omitted = text.length - maxChars
   return `${text.slice(0, maxChars)}\n[Tool output truncated for compaction: omitted ${omitted} chars]`
@@ -853,7 +854,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           if (part.state.status === "completed") {
             const outputText = part.state.time.compacted
               ? "[Old tool result content cleared]"
-              : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
+              : truncateToolOutput(part.state.output ?? "", options?.toolOutputMaxChars)
             const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
             // For providers that don't support media in tool results, extract media files
