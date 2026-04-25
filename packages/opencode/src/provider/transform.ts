@@ -9,12 +9,18 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
+const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+
 function mimeToModality(mime: string): Modality | undefined {
   if (mime.startsWith("image/")) return "image"
   if (mime.startsWith("audio/")) return "audio"
   if (mime.startsWith("video/")) return "video"
   if (mime === "application/pdf") return "pdf"
   return undefined
+}
+
+function unsupportedImageMime(mime: string) {
+  return mime.startsWith("image/") && !SUPPORTED_IMAGE_MIME_TYPES.has(mime.toLowerCase())
 }
 
 export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
@@ -300,6 +306,14 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 
       const mime = part.type === "image" ? String(part.image).split(";")[0].replace("data:", "") : part.mediaType
       const filename = part.type === "file" ? part.filename : undefined
+      if (unsupportedImageMime(mime)) {
+        const name = filename ? `"${filename}"` : mime
+        return {
+          type: "text" as const,
+          text: `ERROR: Cannot read ${name} (unsupported image format ${mime}). Supported image formats are JPEG, PNG, GIF, and WebP. Inform the user.`,
+        }
+      }
+
       const modality = mimeToModality(mime)
       if (!modality) return part
       if (model.capabilities.input[modality]) return part

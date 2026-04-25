@@ -1055,6 +1055,44 @@ describe("ProviderTransform.message - empty image handling", () => {
     expect(result[0].content[1]).toEqual({ type: "image", image: `data:image/png;base64,${validBase64}` })
   })
 
+  test("should replace unsupported image mime types with error text", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Read this image spec" },
+          { type: "image", image: "data:image/avif;base64,Zm9v" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {})
+
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: "ERROR: Cannot read image/avif (unsupported image format image/avif). Supported image formats are JPEG, PNG, GIF, and WebP. Inform the user.",
+    })
+  })
+
+  test("should replace unsupported file image mime types with filename", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Read this file" },
+          { type: "file", filename: "spec.avif", mediaType: "image/avif", data: "Zm9v" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {})
+
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: 'ERROR: Cannot read "spec.avif" (unsupported image format image/avif). Supported image formats are JPEG, PNG, GIF, and WebP. Inform the user.',
+    })
+  })
+
   test("should handle mixed valid and empty images", () => {
     const validBase64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
