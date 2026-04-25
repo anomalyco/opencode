@@ -137,7 +137,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `provider`               | `bridged`         | list, auth, OAuth authorize/callback                   |
 | `config`                 | `bridged` partial | reads only; mutation remains Hono                      |
 | `project`                | `bridged` partial | reads only; git-init remains Hono                      |
-| `file`                   | `bridged` partial | list/content/status only                               |
+| `file`                   | `bridged` partial | find text/file/symbol, list/content/status             |
 | `mcp`                    | `bridged` partial | status only                                            |
 | `workspace`              | `bridged`         | list, get, enter                                       |
 | top-level instance reads | `bridged`         | path, vcs, command, agent, skill, lsp, formatter       |
