@@ -163,6 +163,7 @@ export const TuiThreadCommand = cmd({
       process.on("uncaughtException", error)
       process.on("unhandledRejection", error)
       process.on("SIGUSR2", reload)
+      process.on("SIGTERM", () => stop())
 
       let stopped = false
       const stop = async () => {
@@ -171,6 +172,7 @@ export const TuiThreadCommand = cmd({
         process.off("uncaughtException", error)
         process.off("unhandledRejection", error)
         process.off("SIGUSR2", reload)
+        process.off("SIGTERM", stop)
         await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
           Log.Default.warn("worker shutdown failed", {
             error: errorMessage(error),

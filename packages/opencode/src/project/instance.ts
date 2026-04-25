@@ -4,6 +4,7 @@ import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util"
+import { createLruCache } from "@/util/cache"
 import { LocalContext } from "../util"
 import * as Project from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
@@ -15,7 +16,9 @@ export interface InstanceContext {
 }
 
 const context = LocalContext.create<InstanceContext>("instance")
-const cache = new Map<string, Promise<InstanceContext>>()
+const cache = createLruCache<string, Promise<InstanceContext>>({
+  maxEntries: 20,
+})
 const project = makeRuntime(Project.Service, Project.defaultLayer)
 
 const disposal = {
