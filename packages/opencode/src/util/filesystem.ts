@@ -5,6 +5,9 @@ import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "@opencode-ai/core/util/glob"
+import { Log } from "@/util"
+
+const log = Log.create({ service: "filesystem" })
 
 // Fast sync version for metadata checks
 export async function exists(p: string): Promise<boolean> {
@@ -14,7 +17,8 @@ export async function exists(p: string): Promise<boolean> {
 export async function isDir(p: string): Promise<boolean> {
   try {
     return statSync(p).isDirectory()
-  } catch {
+  } catch (e) {
+    log.debug("statSync failed", { error: e, path: p })
     return false
   }
 }

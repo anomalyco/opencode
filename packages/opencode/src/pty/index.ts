@@ -124,11 +124,15 @@ export const layer = Layer.effect(
     function teardown(session: Active) {
       try {
         session.process.kill()
-      } catch {}
+      } catch (e) {
+        log.debug("process.kill failed", { error: e })
+      }
       for (const [sub, ws] of session.subscribers.entries()) {
         try {
           if (sock(ws) === sub) ws.close()
-        } catch {}
+        } catch (e) {
+          log.debug("ws.close failed", { error: e })
+        }
       }
       session.subscribers.clear()
     }
