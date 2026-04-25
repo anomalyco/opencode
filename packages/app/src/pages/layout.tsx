@@ -3940,6 +3940,7 @@ export default function Layout(props: ParentProps) {
           id: agent.id,
           label: () => language.t(agent.labelKey),
           active: () => routeDir() === agent.directory,
+          healthy: () => server.healthyFor(`extra-agent/${agent.id}`),
           icon: agent.icon,
           onOpen: () => openExtraAgent(agent.id),
         }))

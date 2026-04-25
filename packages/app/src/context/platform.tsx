@@ -67,6 +67,23 @@ export type OpenclawTest = {
   logs: string[]
 }
 
+export type GenericagentConfig = {
+  enabled: boolean
+  pythonExecutable?: string
+  genericAgentDir?: string
+}
+
+export type GenericagentServer = {
+  url: string
+  username?: string
+  password?: string
+}
+
+export type GenericagentTest = {
+  ok: boolean
+  logs: string[]
+}
+
 export type Platform = {
   /** Platform discriminator */
   platform: PlatformName
@@ -160,6 +177,18 @@ export type Platform = {
 
   /** Abort a running OpenClaw connection test (desktop only) */
   abortOpenclawTest?(): Promise<boolean>
+
+  /** Get the configured GenericAgent integration (desktop only) */
+  getGenericagentConfig?(): Promise<GenericagentConfig>
+
+  /** Set the configured GenericAgent integration (desktop only) */
+  setGenericagentConfig?(config: GenericagentConfig): Promise<void> | void
+
+  /** Save and test the configured GenericAgent integration (desktop only) */
+  testGenericagentConfig?(config: GenericagentConfig): Promise<GenericagentTest>
+
+  /** Abort a running GenericAgent connection test (desktop only) */
+  abortGenericagentTest?(): Promise<boolean>
 
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null

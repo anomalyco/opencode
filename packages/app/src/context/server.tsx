@@ -1,6 +1,6 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { useCheckServerHealth } from "@/utils/server-health"
 import {
@@ -154,13 +154,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const [state, setState] = createStore({
       active: props.defaultServer,
       lastNonExtraAgent: props.defaultServer,
-      healthy: undefined as boolean | undefined,
+      healthyByDomain: {} as Partial<Record<DomainId, boolean | undefined>>,
     })
     const trace = (_event: string, _extra?: Record<string, unknown>) => {}
 
-    const healthy = () => state.healthy
+    const healthyFor = (input: DomainId) => state.healthyByDomain[input]
+    const healthy = () => healthyFor(domain())
 
-    function startHealthPolling(conn: ServerConnection.Any) {
+    function startHealthPolling(conn: ServerConnection.Any, targetDomain: DomainId) {
       let alive = true
       let busy = false
 
@@ -170,7 +171,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         void check(conn)
           .then((next) => {
             if (!alive) return
-            setState("healthy", next)
+            setState("healthyByDomain", targetDomain, next)
           })
           .finally(() => {
             busy = false
@@ -235,16 +236,56 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
     const domain = createMemo(() => domainFromIntegration(current()?.integration))
 
+    const polls = new Map<ServerConnection.Key, { url: string; domain: DomainId; stop: () => void }>()
+
+    createEffect(() => {
+      const servers = allServers()
+      const byKey = new Map<ServerConnection.Key, { conn: ServerConnection.Any; domain: DomainId }>()
+      for (const conn of servers) {
+        const key = ServerConnection.key(conn)
+        byKey.set(key, { conn, domain: domainFromIntegration(conn.integration) })
+      }
+
+      for (const [key, { conn, domain: d }] of byKey) {
+        const existing = polls.get(key)
+        if (existing?.url === conn.http.url && existing.domain === d) continue
+        existing?.stop()
+        setState("healthyByDomain", d, undefined)
+        const stop = startHealthPolling(conn, d)
+        polls.set(key, { url: conn.http.url, domain: d, stop })
+      }
+
+      for (const [key, poll] of Array.from(polls.entries())) {
+        if (byKey.has(key)) continue
+        poll.stop()
+        polls.delete(key)
+      }
+
+      const domainsAlive = new Set<DomainId>()
+      for (const [, { domain: d }] of byKey) domainsAlive.add(d)
+      const known = Object.keys(state.healthyByDomain) as DomainId[]
+      const stale = known.filter((d) => !domainsAlive.has(d))
+      if (stale.length > 0) {
+        setState(
+          "healthyByDomain",
+          produce((draft) => {
+            for (const d of stale) delete draft[d]
+          }),
+        )
+      }
+    })
+
     createEffect(() => {
       const current_ = current()
       if (!current_) return
-
       if (!isExtraAgentIntegration(current_.integration)) {
         setState("lastNonExtraAgent", ServerConnection.key(current_))
       }
+    })
 
-      setState("healthy", undefined)
-      onCleanup(startHealthPolling(current_))
+    onCleanup(() => {
+      for (const poll of polls.values()) poll.stop()
+      polls.clear()
     })
 
     const origin = createMemo(() => {
@@ -266,6 +307,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     return {
       ready: isReady,
       healthy,
+      healthyFor,
       isLocal,
       get key() {
         return state.active

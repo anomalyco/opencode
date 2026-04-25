@@ -368,6 +368,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const extraAgentIntegration = createMemo(() => server.current?.integration)
   const extraAgentCaps = createMemo(() => extraAgentCapabilities(extraAgentIntegration()))
   const hasAgentChoose = createMemo(() => !!extraAgentCaps()?.agentChoose)
+  const hideAgentSelector = createMemo(() => !!extraAgentCaps()?.hideAgent)
+  const hideVariantSelector = createMemo(() => !!extraAgentCaps()?.hideVariant)
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
@@ -1933,23 +1935,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   when={hasAgentChoose()}
                   fallback={
                     <>
-                      <TooltipKeybind
-                        placement="top"
-                        gutter={4}
-                        title={language.t("command.agent.cycle")}
-                        keybind={command.keybind("agent.cycle")}
-                      >
-                        <Select
-                          size="normal"
-                          options={agentNames()}
-                          current={local.agent.current()?.name ?? ""}
-                          onSelect={local.agent.set}
-                          class="prompt-pick prompt-agent capitalize"
-                          valueClass="truncate"
-                          triggerStyle={control()}
-                          variant="ghost"
-                        />
-                      </TooltipKeybind>
+                      <Show when={!hideAgentSelector()}>
+                        <TooltipKeybind
+                          placement="top"
+                          gutter={4}
+                          title={language.t("command.agent.cycle")}
+                          keybind={command.keybind("agent.cycle")}
+                        >
+                          <Select
+                            size="normal"
+                            options={agentNames()}
+                            current={local.agent.current()?.name ?? ""}
+                            onSelect={local.agent.set}
+                            class="prompt-pick prompt-agent capitalize"
+                            valueClass="truncate"
+                            triggerStyle={control()}
+                            variant="ghost"
+                          />
+                        </TooltipKeybind>
+                      </Show>
                       <Show
                         when={providers.paid().length > 0}
                         fallback={
@@ -2009,24 +2013,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </ModelSelectorPopover>
                         </TooltipKeybind>
                       </Show>
-                      <TooltipKeybind
-                        placement="top"
-                        gutter={4}
-                        title={language.t("command.model.variant.cycle")}
-                        keybind={command.keybind("model.variant.cycle")}
-                      >
-                        <Select
-                          size="normal"
-                          options={variants()}
-                          current={local.model.variant.current() ?? "default"}
-                          label={variantLabel()}
-                          onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
-                          class="prompt-pick prompt-variant capitalize max-w-[160px]"
-                          valueClass="truncate"
-                          triggerStyle={control()}
-                          variant="ghost"
-                        />
-                      </TooltipKeybind>
+                      <Show when={!hideVariantSelector()}>
+                        <TooltipKeybind
+                          placement="top"
+                          gutter={4}
+                          title={language.t("command.model.variant.cycle")}
+                          keybind={command.keybind("model.variant.cycle")}
+                        >
+                          <Select
+                            size="normal"
+                            options={variants()}
+                            current={local.model.variant.current() ?? "default"}
+                            label={variantLabel()}
+                            onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
+                            class="prompt-pick prompt-variant capitalize max-w-[160px]"
+                            valueClass="truncate"
+                            triggerStyle={control()}
+                            variant="ghost"
+                          />
+                        </TooltipKeybind>
+                      </Show>
                     </>
                   }
                 >

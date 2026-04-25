@@ -2,7 +2,6 @@ import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo 
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import {
-  createContext,
   getOwner,
   createEffect,
   createSignal,
@@ -10,11 +9,11 @@ import {
   on,
   type ParentProps,
   untrack,
-  useContext,
 } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
+import { GlobalSyncProvider as GlobalSyncContextProvider, useGlobalSync } from "./global-sync-context"
 import { useGlobalSDK } from "./global-sdk"
 import {
   bootstrapDirectory,
@@ -846,17 +845,11 @@ function createGlobalSync() {
   }
 }
 
-const GlobalSyncContext = createContext<ReturnType<typeof createGlobalSync>>()
+export { createGlobalSync, useGlobalSync }
 
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
-  return <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
-}
-
-export function useGlobalSync() {
-  const context = useContext(GlobalSyncContext)
-  if (!context) throw new Error("useGlobalSync must be used within GlobalSyncProvider")
-  return context
+  return <GlobalSyncContextProvider value={value}>{props.children}</GlobalSyncContextProvider>
 }
 
 export function useQueryOptions() {

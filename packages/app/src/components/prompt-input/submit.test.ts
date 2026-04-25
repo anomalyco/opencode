@@ -22,6 +22,7 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const sentCommands: Array<{ directory: string; messageID?: string }> = []
+const abortedSessions: Array<{ directory: string; sessionID: string }> = []
 const syncedDirectories: string[] = []
 const messagePages: Record<string, Array<{ info: { id: string } }>> = {}
 
@@ -57,7 +58,10 @@ const clientFor = (directory: string, track = true) => {
         sentCommands.push({ directory, messageID: input.messageID })
         return { data: undefined }
       },
-      abort: async () => ({ data: undefined }),
+      abort: async (input: { sessionID: string }) => {
+        abortedSessions.push({ directory, sessionID: input.sessionID })
+        return { data: undefined }
+      },
     },
     worktree: {
       create: async () => ({ data: { directory: `${directory}/new` } }),
@@ -176,6 +180,9 @@ beforeAll(async () => {
 
   mock.module("@/context/global-sync", () => ({
     useGlobalSync: () => ({
+      todo: {
+        set: () => undefined,
+      },
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
@@ -224,6 +231,7 @@ beforeEach(() => {
   params = {}
   sentShell.length = 0
   sentCommands.length = 0
+  abortedSessions.length = 0
   syncedDirectories.length = 0
   toasts.length = 0
   current = "/repo/worktree-a"
@@ -432,5 +440,34 @@ describe("prompt submit worktree selection", () => {
     expect(ok).toBe(true)
     expect(toasts).toEqual([])
     expect(sentCommands).toEqual([])
+  })
+
+  test("abort still reaches the backend when a local pending prompt exists", async () => {
+    params = { id: "session-1" }
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      resetInputUndo: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+    await submit.abort()
+
+    expect(abortedSessions).toEqual([{ directory: "/repo/worktree-a", sessionID: "session-1" }])
   })
 })

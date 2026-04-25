@@ -19,6 +19,7 @@ export type SidebarExtraAgent = {
   id: string
   label: Accessor<string>
   active?: Accessor<boolean>
+  healthy?: Accessor<boolean | undefined>
   icon: IconName
   onOpen: () => void
 }
@@ -167,7 +168,18 @@ export const SidebarContent = (props: {
                       }}
                     >
                       <Icon name={agent.icon} class="size-5 shrink-0" />
-                      <span class="text-14-regular">{agent.label()}</span>
+                      <span class="text-14-regular flex-1 text-left">{agent.label()}</span>
+                      <Show when={agent.healthy}>
+                        <span
+                          aria-hidden="true"
+                          class="size-1.5 shrink-0 rounded-full"
+                          classList={{
+                            "bg-icon-success-base": agent.healthy?.() === true,
+                            "bg-icon-critical-base": agent.healthy?.() === false,
+                            "bg-border-weak-base": agent.healthy?.() === undefined,
+                          }}
+                        />
+                      </Show>
                     </button>
                   )}
                 </For>

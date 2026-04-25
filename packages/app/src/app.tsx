@@ -68,9 +68,31 @@ const SessionRoute = Object.assign(
 const SessionIndexRoute = () => <Navigate href="session" />
 
 const ConfigRoute = () => (
-  <Suspense fallback={<Loading />}>
-    <Config />
-  </Suspense>
+  <ErrorBoundary
+    fallback={(error, reset) => {
+      // 捕获 context 相关错误，提供重试机制
+      if (error.message?.includes("GlobalSyncProvider")) {
+        return (
+          <div class="flex size-full items-center justify-center">
+            <div class="flex flex-col items-center gap-4">
+              <div class="text-sm text-muted-foreground">配置页面加载失败</div>
+              <button
+                class="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
+                onClick={() => reset()}
+              >
+                重试
+              </button>
+            </div>
+          </div>
+        )
+      }
+      return <ErrorPage error={error} />
+    }}
+  >
+    <Suspense fallback={<Loading />}>
+      <Config />
+    </Suspense>
+  </ErrorBoundary>
 )
 
 function CrashProbe() {

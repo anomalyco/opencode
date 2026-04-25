@@ -30,7 +30,9 @@ export function createRefreshQueue(input: QueueInput) {
     if (timer) return
     timer = setTimeout(() => {
       timer = undefined
-      void drain()
+      void drain().catch((err) => {
+        console.error("[global-sync] queue drain failed", err)
+      })
     }, 0)
   }
 

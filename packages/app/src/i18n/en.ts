@@ -1136,6 +1136,17 @@ export const dict = {
   "config.claws.debug.logs": "Related logs",
   "config.claws.logs.testing":
     "Starting OpenClaw connection test\nGateway URL detected: {url}\nPreparing temporary adapter...\nHealth check in progress...",
+  "config.claws.note.genericagent": "Python GenericAgent runtime.",
+  "config.claws.field.pythonExecutable": "Python executable",
+  "config.claws.field.pythonExecutableDescription": "Override the Python interpreter. Defaults to `python3`.",
+  "config.claws.field.pythonExecutablePlaceholder": "python3",
+  "config.claws.field.genericAgentDir": "GenericAgent project directory",
+  "config.claws.field.genericAgentDirDescription":
+    "Absolute path to the GenericAgent project root (must contain `agentmain.py` and `mykey.py`).",
+  "config.claws.field.genericAgentDirPlaceholder": "/Users/you/apps/GenericAgent",
+  "config.claws.error.gaDirRequired": "GenericAgent directory is required when enabled.",
+  "config.claws.logs.testingGa":
+    "Starting GenericAgent connection test\nGenericAgent directory: {dir}\nSpawning Python subprocess...\nHealth check in progress...",
   "config.skills.title": "Skills",
   "config.skills.header": "Each skill opens its `SKILL.md` and companion folder structure.",
   "config.skills.empty": "Choose a skill to load its `SKILL.md` and inspect the package structure.",

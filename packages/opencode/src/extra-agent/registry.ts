@@ -20,10 +20,17 @@ const openclawBridge: ExtraAgentBridge = {
 const genericagentBridge: ExtraAgentBridge = {
   id: "genericagent",
   listen(opts) {
+    const config = opts.config ?? {}
     return GenericAgentBridge.listen({
       hostname: opts.hostname,
       port: opts.port,
       cors: opts.cors,
+      pythonExecutable:
+        readString(config, "pythonExecutable") ??
+        readEnv("OPENCODE_GENERICAGENT_PYTHON"),
+      genericAgentDir:
+        readString(config, "genericAgentDir") ??
+        readEnv("OPENCODE_GENERICAGENT_DIR"),
     })
   },
 }
@@ -47,5 +54,10 @@ export function listBridgeIds(): string[] {
 
 function readString(config: Record<string, unknown>, key: string): string | undefined {
   const value = config[key]
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+function readEnv(key: string): string | undefined {
+  const value = process.env[key]
   return typeof value === "string" && value.length > 0 ? value : undefined
 }

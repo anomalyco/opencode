@@ -267,11 +267,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const queued = pending.get(sessionID)
     if (queued) {
+      console.debug("[prompt-submit] abort local pending", { sessionID, directory: sdk.directory })
       queued.abort.abort()
       queued.cleanup()
       pending.delete(sessionID)
-      return Promise.resolve()
     }
+    console.debug("[prompt-submit] abort session", { sessionID, directory: sdk.directory, queued: !!queued })
     return sdk.client.session
       .abort({
         sessionID,

@@ -22,7 +22,7 @@ import {
   validateCustomProvider,
 } from "@/components/dialog-custom-provider-form"
 import { useLanguage } from "@/context/language"
-import { type ConfigTreeItem, type ConfigWorkspace, type OpenclawConfig, usePlatform } from "@/context/platform"
+import { type ConfigTreeItem, type ConfigWorkspace, type GenericagentConfig, type OpenclawConfig, usePlatform } from "@/context/platform"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -509,6 +509,21 @@ function clawCfg(input?: OpenclawConfig) {
     testing: false,
     err: {
       url: "",
+    },
+    test: undefined as undefined | { ok: boolean; logs: string[] },
+    run: 0,
+  }
+}
+
+function gaCfg(input?: GenericagentConfig) {
+  return {
+    enabled: input?.enabled ?? false,
+    pythonExecutable: input?.pythonExecutable ?? "",
+    genericAgentDir: input?.genericAgentDir ?? "",
+    saving: false,
+    testing: false,
+    err: {
+      genericAgentDir: "",
     },
     test: undefined as undefined | { ok: boolean; logs: string[] },
     run: 0,
@@ -1222,6 +1237,160 @@ function ClawEditor(props: {
   )
 }
 
+function GenericAgentEditor(props: {
+  item?: ClawItem
+  form: ReturnType<typeof gaCfg>
+  dirty: boolean
+  busy: boolean
+  canTest: boolean
+  onChange: (key: "enabled" | "pythonExecutable" | "genericAgentDir", value: string | boolean) => void
+  onSave: () => void
+  onTest: () => void
+  onAbort?: () => void
+}) {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  return (
+    <div class="flex h-full min-h-0 flex-col">
+      <Show
+        when={props.item}
+        fallback={<div class="px-4 py-10 text-13-regular text-text-weak">{language.t("config.claws.empty")}</div>}
+      >
+        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <div class="text-15-medium text-text-strong">{props.item?.label}</div>
+              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                {props.form.enabled
+                  ? language.t("config.claws.badge.enabled")
+                  : language.t("config.claws.badge.disabled")}
+              </span>
+            </div>
+            <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              size="small"
+              variant="ghost"
+              icon="reset"
+              onClick={props.onTest}
+              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            >
+              {language.t("config.claws.action.test")}
+            </Button>
+            <Show when={props.form.testing && props.onAbort}>
+              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
+                {language.t("config.claws.action.abort")}
+              </Button>
+            </Show>
+            <SaveButton
+              label={language.t("config.claws.action.save")}
+              onClick={props.onSave}
+              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
+            />
+          </div>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
+            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
+              <div class="flex flex-col gap-5">
+                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
+                  <div class="min-w-0">
+                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
+                    <div class="mt-1 text-12-regular text-text-weak">
+                      {language.t("config.claws.field.enabledDescription")}
+                    </div>
+                  </div>
+                  <Toggle
+                    checked={props.form.enabled}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("enabled", value)}
+                  >
+                    {language.t("config.claws.field.enabled")}
+                  </Toggle>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-2">
+                  <TextField
+                    type="text"
+                    label={language.t("config.claws.field.genericAgentDir")}
+                    description={language.t("config.claws.field.genericAgentDirDescription")}
+                    placeholder={language.t("config.claws.field.genericAgentDirPlaceholder")}
+                    value={props.form.genericAgentDir}
+                    validationState={props.form.err.genericAgentDir ? "invalid" : undefined}
+                    error={props.form.err.genericAgentDir}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("genericAgentDir", value)}
+                  />
+                  <TextField
+                    type="text"
+                    label={language.t("config.claws.field.pythonExecutable")}
+                    description={language.t("config.claws.field.pythonExecutableDescription")}
+                    placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
+                    value={props.form.pythonExecutable}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("pythonExecutable", value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Show when={props.form.testing || !!props.form.test}>
+              <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
+                <div class="text-13-medium text-text-strong">{language.t("config.claws.debug.title")}</div>
+                <div class="mt-1 text-12-regular text-text-weak">{language.t("config.claws.debug.description")}</div>
+                <div class="mt-4 rounded-xl border border-border-weak-base bg-background-base px-4 py-3">
+                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                    {language.t("config.claws.debug.status")}
+                  </div>
+                  <Show
+                    when={props.form.testing}
+                    fallback={
+                      <div
+                        class="mt-2 text-13-medium"
+                        classList={{
+                          "text-text-success": !!props.form.test?.ok,
+                          "text-text-danger-base": !props.form.test?.ok,
+                        }}
+                      >
+                        {props.form.test?.ok
+                          ? language.t("config.claws.status.success")
+                          : language.t("config.claws.status.failed")}
+                      </div>
+                    }
+                  >
+                    <div class="mt-2 inline-flex items-center gap-2 text-13-medium text-text-base">
+                      <Spinner class="size-4" />
+                      <span>{language.t("config.claws.status.testing")}</span>
+                    </div>
+                  </Show>
+                </div>
+                <div class="mt-4 rounded-xl border border-border-weak-base bg-background-base px-4 py-3">
+                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                    {language.t("config.claws.debug.logs")}
+                  </div>
+                  <pre
+                    class="mt-2 overflow-x-auto whitespace-pre-wrap break-all text-12-regular text-text-weak"
+                    style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
+                  >
+                    {props.form.testing
+                      ? language.t("config.claws.logs.testingGa", {
+                          dir: props.form.genericAgentDir.trim() || "-",
+                        })
+                      : props.form.test?.logs.join("\n") || ""}
+                  </pre>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
 function CustomEditor(props: {
   item?: ProviderItem
   form: CustomState
@@ -1494,6 +1663,7 @@ export default function ConfigPage() {
     customApiDirty: false,
     custom: providerCfg(undefined),
     claw: clawCfg(),
+    ga: gaCfg(),
     skillTitle: "",
     skillErr: "",
     skillPath: "",
@@ -1506,9 +1676,10 @@ export default function ConfigPage() {
     skillRev: 0,
     agentRev: 0,
     clawRev: 0,
+    gaRev: 0,
   })
 
-  function bump(...list: Array<"workspaceRev" | "skillRev" | "agentRev" | "clawRev">) {
+  function bump(...list: Array<"workspaceRev" | "skillRev" | "agentRev" | "clawRev" | "gaRev">) {
     list.forEach((key) => setState(key, (value) => value + 1))
   }
 
@@ -1545,6 +1716,15 @@ export default function ConfigPage() {
     },
   )
 
+  const [genericagent] = createResource(
+    () => (state.section === "claws" ? state.gaRev : -1),
+    async (rev) => {
+      if (rev === -1) return undefined
+      if (!platform.getGenericagentConfig) return undefined
+      return platform.getGenericagentConfig()
+    },
+  )
+
   const space = createMemo<ConfigWorkspace | undefined>(() => {
     const data = workspace() as ConfigWorkspace | undefined
     const root = globalSync.data.path.config
@@ -1574,6 +1754,10 @@ export default function ConfigPage() {
   const clawsEnabled = createMemo(
     () => !!platform.getOpenclawConfig && !!platform.setOpenclawConfig && !!platform.testOpenclawConfig,
   )
+  const gaPlatformEnabled = createMemo(
+    () => !!platform.getGenericagentConfig && !!platform.setGenericagentConfig && !!platform.testGenericagentConfig,
+  )
+  const clawsSectionEnabled = createMemo(() => clawsEnabled() || gaPlatformEnabled())
   const querySection = createMemo<Section | undefined>(() => {
     const value = query.section
     if (typeof value === "string" && isKnownSection(value)) {
@@ -1841,17 +2025,28 @@ export default function ConfigPage() {
   })
 
   const claws = createMemo<ClawItem[]>(() => {
-    const cfg = openclaw()
-    if (!clawsEnabled()) return []
-    return [
-      {
+    const list: ClawItem[] = []
+    if (clawsEnabled()) {
+      const cfg = openclaw()
+      list.push({
         id: "claw:openclaw",
         label: "OpenClaw",
         note: t("config.claws.note.openclaw"),
         meta: cfg?.url?.trim() || "ws://127.0.0.1:18789",
         enabled: cfg?.enabled ?? false,
-      },
-    ]
+      })
+    }
+    if (gaPlatformEnabled()) {
+      const cfg = genericagent()
+      list.push({
+        id: "claw:genericagent",
+        label: "GenericAgent",
+        note: t("config.claws.note.genericagent"),
+        meta: cfg?.genericAgentDir?.trim() || "/path/to/GenericAgent",
+        enabled: cfg?.enabled ?? false,
+      })
+    }
+    return list
   })
 
   const pluginDocs = createMemo<DocItem[]>(() =>
@@ -1967,6 +2162,16 @@ export default function ConfigPage() {
     )
   })
 
+  const gaDirty = createMemo(() => {
+    const cfg = genericagent()
+    if (!cfg || state.section !== "claws") return false
+    return (
+      state.ga.enabled !== (cfg.enabled ?? false) ||
+      state.ga.pythonExecutable.trim() !== (cfg.pythonExecutable?.trim() ?? "") ||
+      state.ga.genericAgentDir.trim() !== (cfg.genericAgentDir?.trim() ?? "")
+    )
+  })
+
   const currentSkillRoot = createMemo(() => {
     const item = currentSkill()
     if (!item) return undefined
@@ -2055,11 +2260,21 @@ export default function ConfigPage() {
     ),
   )
 
+  createEffect(
+    on(
+      () => genericagent(),
+      (item) => {
+        if (!item) return
+        setState("ga", gaCfg(item))
+      },
+    ),
+  )
+
   createEffect(() => {
     const section = querySection()
     const pick = query.pick
     if (!section) return
-    if (section === "claws" && !clawsEnabled()) return
+    if (section === "claws" && !clawsSectionEnabled()) return
     batch(() => {
       setState("section", section)
       if (typeof pick === "string") setState("pick", pick)
@@ -2332,6 +2547,95 @@ export default function ConfigPage() {
     setState("claw", key, value)
     if (key === "url") setState("claw", "err", "url", "")
     setState("claw", "test", undefined)
+  }
+
+  function validateGa(required = state.ga.enabled) {
+    const dir = state.ga.genericAgentDir.trim()
+    const err = required && !dir ? t("config.claws.error.gaDirRequired") : ""
+    setState("ga", "err", "genericAgentDir", err)
+    return !err
+  }
+
+  function gaInput(): GenericagentConfig {
+    return {
+      enabled: state.ga.enabled,
+      pythonExecutable: state.ga.pythonExecutable.trim() || undefined,
+      genericAgentDir: state.ga.genericAgentDir.trim() || undefined,
+    }
+  }
+
+  async function saveGa() {
+    if (!platform.setGenericagentConfig) return
+    if (!validateGa()) return
+    setState("ga", "saving", true)
+    setState("ga", "test", undefined)
+    if (server.current?.integration === "genericagent" && !state.ga.enabled) {
+      const key = server.lastNonExtraAgent
+      if (key) {
+        server.setActive(key)
+      }
+    }
+    await Promise.resolve(platform.setGenericagentConfig(gaInput()))
+      .then(async () => {
+        bump("gaRev")
+        showToast({ variant: "success", title: t("common.save"), description: "GenericAgent" })
+      })
+      .catch((err: unknown) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => setState("ga", "saving", false))
+  }
+
+  async function testGa() {
+    if (!platform.testGenericagentConfig) return
+    if (!validateGa(true)) return
+    const run = state.ga.run + 1
+    setState("ga", "run", run)
+    setState("ga", "testing", true)
+    setState("ga", "test", undefined)
+    await platform
+      .testGenericagentConfig(gaInput())
+      .then((item) => {
+        if (state.ga.run !== run) return
+        setState("ga", "test", { ok: item.ok, logs: item.logs })
+        showToast({
+          variant: item.ok ? "success" : "error",
+          icon: item.ok ? "circle-check" : undefined,
+          title: t("config.claws.action.test"),
+          description: item.ok
+            ? t("config.claws.test.success")
+            : (item.logs[item.logs.length - 1] ?? t("common.requestFailed")),
+        })
+      })
+      .catch((err: unknown) => {
+        if (state.ga.run !== run) return
+        const message = err instanceof Error ? err.message : String(err)
+        setState("ga", "test", { ok: false, logs: [message] })
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+      .finally(() => {
+        if (state.ga.run !== run) return
+        setState("ga", "testing", false)
+      })
+  }
+
+  async function abortGa() {
+    setState("ga", "run", (value) => value + 1)
+    setState("ga", "testing", false)
+    setState("ga", "test", {
+      ok: false,
+      logs: ["Starting GenericAgent connection test", "Test aborted by user"],
+    })
+    await platform.abortGenericagentTest?.().catch(() => false)
+  }
+
+  function setGa(key: "enabled" | "pythonExecutable" | "genericAgentDir", value: string | boolean) {
+    setState("ga", key, value)
+    if (key === "genericAgentDir") setState("ga", "err", "genericAgentDir", "")
+    setState("ga", "test", undefined)
   }
 
   function openFolder() {
@@ -2696,7 +3000,7 @@ export default function ConfigPage() {
                   icon={sectionIcon("agents")}
                   onClick={() => jump("agents")}
                 />
-                {clawsEnabled() && (
+                {clawsSectionEnabled() && (
                   <SectionButton
                     current={state.section === "claws"}
                     title={t("config.claws.title")}
@@ -2775,7 +3079,7 @@ export default function ConfigPage() {
                     <div class="text-15-medium text-text-strong">{t("config.agents.title")}</div>
                     <div class="mt-1 text-12-regular text-text-weak">{t("config.agents.header")}</div>
                   </Match>
-                  <Match when={state.section === "claws" && clawsEnabled()}>
+                  <Match when={state.section === "claws" && clawsSectionEnabled()}>
                     <div class="text-15-medium text-text-strong">{t("config.claws.title")}</div>
                     <div class="mt-1 text-12-regular text-text-weak">{t("config.claws.header")}</div>
                   </Match>
@@ -2946,7 +3250,7 @@ export default function ConfigPage() {
                       </Show>
                     </Match>
 
-                    <Match when={state.section === "claws" && clawsEnabled()}>
+                    <Match when={state.section === "claws" && clawsSectionEnabled()}>
                       <For each={claws()}>
                         {(item) => (
                           <ListButton
@@ -3209,18 +3513,35 @@ export default function ConfigPage() {
                 </Show>
               </Match>
 
-              <Match when={state.section === "claws" && clawsEnabled()}>
-                <ClawEditor
-                  item={selectedClaw()}
-                  form={state.claw}
-                  dirty={clawDirty()}
-                  busy={openclaw.loading}
-                  canTest={!!platform.testOpenclawConfig}
-                  onChange={setClaw}
-                  onSave={() => void saveClaw()}
-                  onTest={() => void testClaw()}
-                  onAbort={platform.abortOpenclawTest ? () => void abortClaw() : undefined}
-                />
+              <Match when={state.section === "claws" && clawsSectionEnabled()}>
+                <Show
+                  when={selectedClaw()?.id === "claw:genericagent"}
+                  fallback={
+                    <ClawEditor
+                      item={selectedClaw()}
+                      form={state.claw}
+                      dirty={clawDirty()}
+                      busy={openclaw.loading}
+                      canTest={!!platform.testOpenclawConfig}
+                      onChange={setClaw}
+                      onSave={() => void saveClaw()}
+                      onTest={() => void testClaw()}
+                      onAbort={platform.abortOpenclawTest ? () => void abortClaw() : undefined}
+                    />
+                  }
+                >
+                  <GenericAgentEditor
+                    item={selectedClaw()}
+                    form={state.ga}
+                    dirty={gaDirty()}
+                    busy={genericagent.loading}
+                    canTest={!!platform.testGenericagentConfig}
+                    onChange={setGa}
+                    onSave={() => void saveGa()}
+                    onTest={() => void testGa()}
+                    onAbort={platform.abortGenericagentTest ? () => void abortGa() : undefined}
+                  />
+                </Show>
               </Match>
 
               <Match when={state.section === "plugins"}>
