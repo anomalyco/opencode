@@ -22,7 +22,7 @@ function View(props: { api: TuiPluginApi }) {
       <Show when={list().length <= 2 || open()}>
         <Show when={list().length === 0}>
           <text fg={theme().textMuted}>
-            {off() ? "LSPs have been disabled in settings" : "LSPs will activate as files are read"}
+            {off() ? "LSPs have been disabled in settings" : "LSPs will activate as files are written"}
           </text>
         </Show>
         <For each={list()}>
