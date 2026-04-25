@@ -32,8 +32,8 @@
       "version": "1.14.24",
       "dependencies": {
         "@kobalte/core": "catalog:",
+        "@opencode-ai/core": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
-        "@opencode-ai/shared": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@shikijs/transformers": "3.9.2",
         "@solid-primitives/active-element": "2.1.3",
@@ -190,6 +190,30 @@
         "cloudflare": "5.2.0",
       },
     },
+    "packages/core": {
+      "name": "@opencode-ai/core",
+      "version": "1.14.24",
+      "bin": {
+        "opencode": "./bin/opencode",
+      },
+      "dependencies": {
+        "@effect/platform-node": "catalog:",
+        "@npmcli/arborist": "catalog:",
+        "effect": "catalog:",
+        "glob": "13.0.5",
+        "mime-types": "3.0.2",
+        "minimatch": "10.2.5",
+        "semver": "catalog:",
+        "xdg-basedir": "5.1.0",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/npmcli__arborist": "6.3.3",
+        "@types/semver": "catalog:",
+      },
+    },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
       "version": "1.14.24",
@@ -271,7 +295,7 @@
       "name": "@opencode-ai/enterprise",
       "version": "1.14.24",
       "dependencies": {
-        "@opencode-ai/shared": "workspace:*",
+        "@opencode-ai/core": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@pierre/diffs": "catalog:",
         "@solidjs/meta": "catalog:",
@@ -426,8 +450,8 @@
         "@babel/core": "7.28.4",
         "@effect/language-service": "0.84.2",
         "@octokit/webhooks-types": "7.6.1",
+        "@opencode-ai/core": "workspace:*",
         "@opencode-ai/script": "workspace:*",
-        "@opencode-ai/shared": "workspace:*",
         "@parcel/watcher-darwin-arm64": "2.5.1",
         "@parcel/watcher-darwin-x64": "2.5.1",
         "@parcel/watcher-linux-arm64-glibc": "2.5.1",
@@ -508,30 +532,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/shared": {
-      "name": "@opencode-ai/shared",
-      "version": "1.14.24",
-      "bin": {
-        "opencode": "./bin/opencode",
-      },
-      "dependencies": {
-        "@effect/platform-node": "catalog:",
-        "@npmcli/arborist": "catalog:",
-        "effect": "catalog:",
-        "glob": "13.0.5",
-        "mime-types": "3.0.2",
-        "minimatch": "10.2.5",
-        "semver": "catalog:",
-        "xdg-basedir": "5.1.0",
-        "zod": "catalog:",
-      },
-      "devDependencies": {
-        "@tsconfig/bun": "catalog:",
-        "@types/bun": "catalog:",
-        "@types/npmcli__arborist": "6.3.3",
-        "@types/semver": "catalog:",
-      },
-    },
     "packages/slack": {
       "name": "@opencode-ai/slack",
       "version": "1.14.24",
@@ -572,8 +572,8 @@
       "version": "1.14.24",
       "dependencies": {
         "@kobalte/core": "catalog:",
+        "@opencode-ai/core": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
-        "@opencode-ai/shared": "workspace:*",
         "@pierre/diffs": "catalog:",
         "@shikijs/transformers": "3.9.2",
         "@solid-primitives/bounds": "0.1.3",
@@ -1554,6 +1554,8 @@
 
     "@opencode-ai/console-resource": ["@opencode-ai/console-resource@workspace:packages/console/resource"],
 
+    "@opencode-ai/core": ["@opencode-ai/core@workspace:packages/core"],
+
     "@opencode-ai/desktop": ["@opencode-ai/desktop@workspace:packages/desktop"],
 
     "@opencode-ai/desktop-electron": ["@opencode-ai/desktop-electron@workspace:packages/desktop-electron"],
@@ -1567,8 +1569,6 @@
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@workspace:packages/sdk/js"],
-
-    "@opencode-ai/shared": ["@opencode-ai/shared@workspace:packages/shared"],
 
     "@opencode-ai/slack": ["@opencode-ai/slack@workspace:packages/slack"],
 

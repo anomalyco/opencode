@@ -1,4 +1,4 @@
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import matter from "gray-matter"
 import { z } from "zod"
 import { Filesystem } from "../util"

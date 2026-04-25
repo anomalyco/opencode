@@ -12,7 +12,7 @@ import { Process } from "../util"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { withStatics } from "@/util/schema"
 import { zod, ZodOverride } from "@/util/effect-zod"
 

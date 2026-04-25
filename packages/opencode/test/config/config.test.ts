@@ -3,13 +3,13 @@ import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config, ConfigManaged } from "../../src/config"
 import { ConfigParse } from "../../src/config/parse"
-import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
@@ -895,7 +895,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 })
 
 // Note: deduplication and serialization of npm installs is now handled by the
-// shared Npm.Service (via EffectFlock). Those behaviors are tested in the shared
+// core Npm.Service (via EffectFlock). Those behaviors are tested in the core
 // package's npm tests, not here.
 
 test("resolves scoped npm plugins in config", async () => {

@@ -3,7 +3,7 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
 import { Filesystem } from "../util"
-import { Flock } from "@opencode-ai/shared/util/flock"
+import { Flock } from "@opencode-ai/core/util/flock"
 
 const app = "opencode"
 
