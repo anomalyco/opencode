@@ -46,8 +46,8 @@ describe("llm transport", () => {
       )
 
       expect(response.status).toBe(202)
-      expect(response.headers.get("content-type")).toBe("text/plain")
-      expect(yield* Effect.promise(() => response.text())).toBe("ok")
+      expect(response.headers["content-type"]).toBe("text/plain")
+      expect(yield* response.text).toBe("ok")
     }),
   )
 })

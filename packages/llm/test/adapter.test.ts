@@ -1,16 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { LLM } from "../src"
 import { Adapter, client } from "../src/adapter"
 import { Patch } from "../src/patch"
-import {
-  LLMRequest,
-  ModelCapabilities,
-  ModelLimits,
-  ModelRef,
-  TransportRequest,
-} from "../src/schema"
+import { TransportRequest } from "../src/schema"
 import { Transport } from "../src/transport"
 import { testEffect } from "./lib/effect"
+
+const Json = Schema.fromJsonString(Schema.Unknown)
+const encodeJson = Schema.encodeSync(Json)
 
 type FakeDraft = {
   readonly body: string
@@ -21,27 +20,14 @@ type FakeChunk =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "finish"; readonly reason: "stop" }
 
-const capabilities = new ModelCapabilities({
-  input: { text: true, image: false, audio: false, video: false, pdf: false },
-  output: { text: true, reasoning: false },
-  tools: { calls: true, streamingInput: true, providerExecuted: false },
-  cache: { prompt: false, messageBlocks: false, contentBlocks: false },
-  reasoning: { efforts: [], summaries: false, encryptedContent: false },
-})
-
-const request = new LLMRequest({
+const request = LLM.request({
   id: "req_1",
-  model: new ModelRef({
+  model: LLM.model({
     id: "fake-model",
     provider: "fake-provider",
     protocol: "openai-chat",
-    capabilities,
-    limits: new ModelLimits({}),
   }),
-  system: [],
-  messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
-  tools: [],
-  generation: {},
+  prompt: "hello",
 })
 
 const fake = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
@@ -74,7 +60,9 @@ const fake = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
       }),
     ),
   parse: (response) =>
-    Stream.fromEffect(Effect.promise(async () => (await response.json()) as FakeChunk[])).pipe(Stream.flatMap(Stream.fromIterable)),
+    Stream.fromEffect(response.json.pipe(Effect.orDie, Effect.map((body) => body as FakeChunk[]))).pipe(
+      Stream.flatMap(Stream.fromIterable),
+    ),
   raise: (chunk) => {
     if (chunk.type === "finish") return Stream.make({ type: "request-finish", reason: chunk.reason })
     return Stream.make({ type: "text-delta", text: chunk.text })
@@ -86,7 +74,10 @@ const transportLayer = Layer.succeed(
   Transport.Service.of({
     fetch: (request) =>
       Effect.succeed(
-        new Response(JSON.stringify([{ type: "text", text: `echo:${request.body}` }, { type: "finish", reason: "stop" }])),
+        HttpClientResponse.fromWeb(
+          HttpClientRequest.post(request.url),
+          new Response(encodeJson([{ type: "text", text: `echo:${request.body}` }, { type: "finish", reason: "stop" }])),
+        ),
       ),
   }),
 )
@@ -155,7 +146,7 @@ describe("llm adapter", () => {
 
     const prepared = await Effect.runPromise(
       llm.prepare(
-        new LLMRequest({
+        LLM.request({
           ...request,
           tools: [{ name: "lookup", description: "original", inputSchema: {} }],
         }),
@@ -195,9 +186,9 @@ describe("llm adapter", () => {
     await expect(
       Effect.runPromise(
         llm.prepare(
-          new LLMRequest({
+          LLM.request({
             ...request,
-            model: new ModelRef({ ...request.model, protocol: "gemini" }),
+            model: LLM.model({ ...request.model, protocol: "gemini" }),
           }),
         ),
       ),

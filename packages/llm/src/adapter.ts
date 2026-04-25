@@ -1,4 +1,5 @@
 import { Effect, Stream } from "effect"
+import type { HttpClientResponse } from "effect/unstable/http"
 import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry, target as targetPatch } from "./patch"
 import type { TargetBuilder } from "./target"
@@ -40,7 +41,7 @@ export interface Adapter<Draft, Target, Chunk> {
   readonly redact: (target: Target) => unknown
   readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
   readonly toTransport: (target: Target, context: TransportContext) => Effect.Effect<TransportRequest, LLMError>
-  readonly parse: (response: Response) => Stream.Stream<Chunk, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<Chunk, LLMError>
   readonly raise: (chunk: Chunk, state: RaiseState) => Stream.Stream<LLMEvent, LLMError>
 }
 
@@ -52,7 +53,7 @@ export interface AdapterInput<Draft, Target, Chunk> {
   readonly redact: (target: Target) => unknown
   readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
   readonly toTransport: (target: Target, context: TransportContext) => Effect.Effect<TransportRequest, LLMError>
-  readonly parse: (response: Response) => Stream.Stream<Chunk, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<Chunk, LLMError>
   readonly raise: (chunk: Chunk, state: RaiseState) => Stream.Stream<LLMEvent, LLMError>
 }
 

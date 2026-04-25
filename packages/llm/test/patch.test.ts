@@ -1,28 +1,15 @@
 import { describe, expect, test } from "bun:test"
+import { LLM } from "../src"
 import { Model, Patch, Request, context, plan } from "../src/patch"
-import { LLMRequest, ModelCapabilities, ModelLimits, ModelRef } from "../src/schema"
 
-const capabilities = new ModelCapabilities({
-  input: { text: true, image: false, audio: false, video: false, pdf: false },
-  output: { text: true, reasoning: false },
-  tools: { calls: true, streamingInput: true, providerExecuted: false },
-  cache: { prompt: false, messageBlocks: false, contentBlocks: false },
-  reasoning: { efforts: [], summaries: false, encryptedContent: false },
-})
-
-const request = new LLMRequest({
+const request = LLM.request({
   id: "req_1",
-  model: new ModelRef({
+  model: LLM.model({
     id: "devstral-small",
     provider: "mistral",
     protocol: "openai-chat",
-    capabilities,
-    limits: new ModelLimits({}),
   }),
-  system: [],
-  messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-  tools: [],
-  generation: {},
+  prompt: "hi",
 })
 
 describe("llm patch", () => {

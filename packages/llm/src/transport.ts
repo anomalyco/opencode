@@ -1,9 +1,9 @@
-import { Cause, Context, Effect, Layer, Stream } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
+import { Cause, Context, Effect, Layer } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { TransportError, type LLMError, type TransportRequest } from "./schema"
 
 export interface Interface {
-  readonly fetch: (request: TransportRequest) => Effect.Effect<Response, LLMError>
+  readonly fetch: (request: TransportRequest) => Effect.Effect<HttpClientResponse.HttpClientResponse, LLMError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM/Transport") {}
@@ -34,11 +34,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
     return Service.of({
       fetch: (request) =>
         Effect.gen(function* () {
-          const response = yield* withTimeout(http.execute(toRequest(request)), request)
-          return new Response(Stream.toReadableStream(response.stream), {
-            status: response.status,
-            headers: response.headers,
-          })
+          return yield* withTimeout(http.execute(toRequest(request)), request)
         }).pipe(Effect.mapError(toTransportError)),
     })
   }),

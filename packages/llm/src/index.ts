@@ -1,7 +1,10 @@
 export * from "./adapter"
 export * from "./patch"
 export * from "./schema"
+export * from "./stream"
 export * from "./target"
 export * from "./transport"
 
+export * as LLM from "./llm"
 export * as Schema from "./schema"
+export { OpenAIChat } from "./provider/openai-chat"
