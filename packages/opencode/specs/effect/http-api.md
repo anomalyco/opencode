@@ -43,6 +43,23 @@ Use this checklist for each small HttpApi migration PR:
 7. Add tests that hit the Hono-mounted bridge via `InstanceRoutes`, not only the raw `HttpApi` web handler, when the route depends on auth or instance context.
 8. Run `bun typecheck` from `packages/opencode`, relevant `bun run test:ci ...` tests from `packages/opencode`, and `./packages/sdk/js/script/build.ts` from the repo root.
 
+## Hono Deletion Checklist
+
+Use this checklist before deleting any Hono route implementation. A route being `bridged` is not enough.
+
+1. `HttpApi` parity is complete for the route path, method, auth behavior, query parameters, request body, response status, response headers, and error status.
+2. The route is mounted by default, not only behind `OPENCODE_EXPERIMENTAL_HTTPAPI`.
+3. If a fallback flag exists, tests cover both the default `HttpApi` path and the fallback Hono path until the fallback is removed.
+4. OpenAPI generation uses the Effect `HttpApi` route as the source for that path.
+5. Generated SDK output is unchanged from the Hono-generated contract, or the SDK diff is intentionally reviewed and accepted.
+6. The legacy Hono `describeRoute`, validator, and handler for that path are removed.
+7. Any duplicate Zod-only DTOs are deleted or kept only as `.zod` compatibility on the canonical Effect Schema.
+8. Bridge tests exist for auth, instance selection, success response, and route-specific side effects.
+9. Mutation routes prove persisted side effects and cleanup behavior in tests. If the mutation disposes/reloads the active instance, disposal happens through an explicit post-response lifecycle hook rather than inline handler teardown.
+10. Streaming, SSE, websocket, and UI bridge routes have a specific non-Hono replacement plan. Do not force them through `HttpApi` if raw Effect HTTP is a better fit.
+
+Hono can be removed from the instance server only after all mounted Hono route groups meet this checklist and `server/routes/instance/index.ts` no longer depends on Hono routing for default behavior.
+
 ## Experimental Read Slice Guidance
 
 For the experimental route group, port read-only JSON routes before mutations:
@@ -158,7 +175,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `question`                | `bridged`         | `GET /question`, reply, reject                                                                     |
 | `permission`              | `bridged`         | list and reply                                                                                     |
 | `provider`                | `bridged`         | list, auth, OAuth authorize/callback                                                               |
-| `config`                  | `bridged` partial | reads only; mutation remains Hono                                                                  |
+| `config`                  | `bridged`         | read, providers, update                                                                            |
 | `project`                 | `bridged` partial | reads only; git-init remains Hono                                                                  |
 | `file`                    | `bridged` partial | find text/file/symbol, list/content/status                                                         |
 | `mcp`                     | `bridged` partial | status only                                                                                        |
