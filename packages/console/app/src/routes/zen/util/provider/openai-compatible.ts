@@ -61,7 +61,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentif
   },
   normalizeUsage: (usage: Usage) => {
     let inputTokens = usage.prompt_tokens ?? 0
-    const outputTokens = usage.completion_tokens ?? 0
+    const completionTokens = usage.completion_tokens ?? 0
     const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens ?? undefined
     let cacheReadTokens = usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined
     const cacheWriteTokens = usage.prompt_tokens_details?.cache_creation_input_tokens ?? undefined
@@ -70,9 +70,13 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentif
       cacheReadTokens = Math.floor(inputTokens * 0.9)
     }
 
+    // Per OpenAI chat-completions spec, completion_tokens already includes reasoning_tokens.
+    // Downstream cost calculation bills outputCost + reasoningCost, so we must subtract here
+    // to avoid double-counting reasoning. Some providers (e.g. Moonshot Kimi K2.6) report
+    // reasoning_tokens larger than completion_tokens, so clamp at 0.
     return {
       inputTokens: inputTokens - (cacheReadTokens ?? 0),
-      outputTokens,
+      outputTokens: Math.max(0, completionTokens - (reasoningTokens ?? 0)),
       reasoningTokens,
       cacheReadTokens,
       cacheWrite5mTokens: cacheWriteTokens,
