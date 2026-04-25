@@ -139,8 +139,8 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `project`                | `bridged` partial | reads only; git-init remains Hono                              |
 | `file`                   | `bridged` partial | list/content/status only                                       |
 | `mcp`                    | `bridged` partial | status only                                                    |
-| `workspace`              | `implemented`     | `HttpApi` group exists, but bridge mounting needs verification |
-| top-level instance reads | `next`            | path, vcs, command, agent, skill, lsp, formatter               |
+| `workspace`              | `bridged`         | list, get, enter                                                |
+| top-level instance reads | `bridged` partial | path and vcs reads; command, agent, skill, lsp, formatter next  |
 | experimental JSON routes | `next/later`      | console, tool, worktree, resource, global session list         |
 | `session`                | `later/special`   | large stateful surface plus streaming                          |
 | `sync`                   | `later`           | process/control side effects                                   |
@@ -150,11 +150,9 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 
 ## Next PRs
 
-1. Add bridge-level auth and instance-context tests for the current `HttpApi` bridge.
-2. Produce a generated route inventory from Hono registrations and update `Current Route Status` with exact paths.
-3. Fix the `workspace` status: mount it if it should be reachable, or remove it from the composed `HttpApi` layer.
-4. Port the top-level JSON reads.
-5. Start the Effect OpenAPI/SDK generation path for already-bridged routes.
+1. Produce a generated route inventory from Hono registrations and update `Current Route Status` with exact paths.
+2. Continue porting top-level JSON reads.
+3. Start the Effect OpenAPI/SDK generation path for already-bridged routes.
 
 ## Checklist
 
@@ -164,9 +162,9 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 - [x] Provide auth, instance lookup, and observability in the Effect route layer.
 - [x] Attach auth middleware in route modules.
 - [x] Support `auth_token` as a query security scheme.
-- [ ] Add bridge-level auth and instance tests.
+- [x] Add bridge-level auth and instance tests.
 - [ ] Complete exact Hono route inventory.
-- [ ] Resolve implemented-but-unmounted route groups.
+- [x] Resolve implemented-but-unmounted route groups.
 - [ ] Port remaining JSON routes.
 - [ ] Generate SDK/OpenAPI from Effect routes.
 - [ ] Flip ported JSON routes to default-on with fallback.
