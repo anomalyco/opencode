@@ -83,4 +83,28 @@ describe("mcp HttpApi", () => {
     expect(disconnected.status).toBe(200)
     expect(await disconnected.json()).toBe(true)
   })
+
+  test("serves deterministic OAuth endpoints", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        mcp: {
+          demo: {
+            type: "local",
+            command: ["echo", "demo"],
+            enabled: false,
+          },
+        },
+      },
+    })
+
+    const start = await request("/mcp/demo/auth", tmp.path, { method: "POST" })
+    expect(start.status).toBe(400)
+
+    const authenticate = await request("/mcp/demo/auth/authenticate", tmp.path, { method: "POST" })
+    expect(authenticate.status).toBe(400)
+
+    const removed = await request("/mcp/demo/auth", tmp.path, { method: "DELETE" })
+    expect(removed.status).toBe(200)
+    expect(await removed.json()).toEqual({ success: true })
+  })
 })

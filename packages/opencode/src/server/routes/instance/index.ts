@@ -80,6 +80,10 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(InstancePaths.formatter, (c) => handler(c.req.raw, context))
     app.get(McpPaths.status, (c) => handler(c.req.raw, context))
     app.post(McpPaths.status, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.auth, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.authCallback, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.authAuthenticate, (c) => handler(c.req.raw, context))
+    app.delete(McpPaths.auth, (c) => handler(c.req.raw, context))
     app.post(McpPaths.connect, (c) => handler(c.req.raw, context))
     app.post(McpPaths.disconnect, (c) => handler(c.req.raw, context))
   }

@@ -178,7 +178,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `config`                  | `bridged`         | read, providers, update                                                                            |
 | `project`                 | `bridged`         | list, current, git init, update                                                                    |
 | `file`                    | `bridged` partial | find text/file/symbol, list/content/status                                                         |
-| `mcp`                     | `bridged` partial | status, add, connect/disconnect; OAuth remains                                                     |
+| `mcp`                     | `bridged`         | status, add, OAuth, connect/disconnect                                                             |
 | `workspace`               | `bridged` partial | adaptor/list/status; create/remove/session-restore remain                                           |
 | top-level instance routes | `bridged`         | path, vcs, command, agent, skill, lsp, formatter, dispose                                          |
 | experimental JSON routes  | `bridged` partial | console reads, tool ids, worktree list/mutations, resource list; global session list remains later |
@@ -248,10 +248,10 @@ This checklist tracks bridge parity only. Checked routes are available through t
 
 - [x] `GET /mcp` - MCP status.
 - [x] `POST /mcp` - add MCP server at runtime.
-- [ ] `POST /mcp/:name/auth` - start MCP OAuth.
-- [ ] `POST /mcp/:name/auth/callback` - finish MCP OAuth callback.
-- [ ] `POST /mcp/:name/auth/authenticate` - run MCP OAuth authenticate flow.
-- [ ] `DELETE /mcp/:name/auth` - remove MCP OAuth credentials.
+- [x] `POST /mcp/:name/auth` - start MCP OAuth.
+- [x] `POST /mcp/:name/auth/callback` - finish MCP OAuth callback.
+- [x] `POST /mcp/:name/auth/authenticate` - run MCP OAuth authenticate flow.
+- [x] `DELETE /mcp/:name/auth` - remove MCP OAuth credentials.
 - [x] `POST /mcp/:name/connect` - connect MCP server.
 - [x] `POST /mcp/:name/disconnect` - disconnect MCP server.
 
@@ -349,7 +349,7 @@ Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays rev
 
 1. [x] Bridge `PATCH /project/:projectID`.
 2. [x] Bridge MCP add/connect/disconnect routes.
-3. [ ] Bridge MCP OAuth routes: start, callback, authenticate, remove.
+3. [x] Bridge MCP OAuth routes: start, callback, authenticate, remove.
 4. [ ] Bridge experimental console switch and tool list routes.
 5. [ ] Bridge experimental global session list.
 6. [ ] Bridge workspace create/remove/session-restore routes.
