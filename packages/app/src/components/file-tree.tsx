@@ -1,11 +1,18 @@
 import { useFile } from "@/context/file"
+import { useSDK } from "@/context/sdk"
 import { encodeFilePath } from "@/context/file/path"
+import { DialogFileTreePrompt, DialogFileTreeConfirm } from "@/components/dialog-file-tree"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
+import { showToast } from "@opencode-ai/ui/toast"
+import { invoke } from "@tauri-apps/api/core"
 import {
   createEffect,
   createMemo,
+  createSignal,
   For,
   Match,
   on,
@@ -23,6 +30,30 @@ const MAX_DEPTH = 128
 
 function pathToFileUrl(filepath: string): string {
   return `file://${encodeFilePath(filepath)}`
+}
+
+function trimTrailingSep(p: string): string {
+  return p.replace(/[/\\]+$/, "")
+}
+
+function lastSepIndex(p: string): number {
+  return Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"))
+}
+
+function basename(p: string): string {
+  const cleaned = trimTrailingSep(p)
+  const idx = lastSepIndex(cleaned)
+  return idx >= 0 ? cleaned.slice(idx + 1) : cleaned
+}
+
+function dirname(p: string): string {
+  const cleaned = trimTrailingSep(p)
+  const idx = lastSepIndex(cleaned)
+  return idx >= 0 ? cleaned.slice(0, idx) : ""
+}
+
+function joinAbs(parent: string, name: string): string {
+  return `${trimTrailingSep(parent)}/${name}`
 }
 
 type Kind = "add" | "del" | "mix"
@@ -119,6 +150,7 @@ const FileTreeNode = (
       kinds?: ReadonlyMap<string, Kind>
       marks?: Set<string>
       as?: "div" | "button"
+      contextOpen?: boolean
     },
 ) => {
   const [local, rest] = splitProps(p, [
@@ -130,6 +162,7 @@ const FileTreeNode = (
     "kinds",
     "marks",
     "as",
+    "contextOpen",
     "children",
     "class",
     "classList",
@@ -147,7 +180,7 @@ const FileTreeNode = (
       component={local.as ?? "div"}
       classList={{
         "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
-        "bg-surface-base-active": local.node.path === local.active,
+        "bg-surface-base-active": local.node.path === local.active || !!local.contextOpen,
         ...local.classList,
         [local.class ?? ""]: !!local.class,
         [local.nodeClass ?? ""]: !!local.nodeClass,
@@ -209,8 +242,134 @@ export default function FileTree(props: {
   _chain?: readonly string[]
 }) {
   const file = useFile()
+  const sdk = useSDK()
+  const dialog = useDialog()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
+
+  const promptNewFileAt = (targetAbs: string, targetRel: string, onAfter?: () => void) => {
+    dialog.show(() => (
+      <DialogFileTreePrompt
+        title="新建文件"
+        label="文件名"
+        defaultValue="untitled.md"
+        placeholder="文件名(默认 .md)"
+        confirmLabel="创建"
+        onConfirm={async (name) => {
+          await invoke("create_empty_file", { path: joinAbs(targetAbs, name) })
+          onAfter?.()
+          await file.tree.refresh(targetRel)
+        }}
+      />
+    ))
+  }
+
+  const promptNewFolderAt = (targetAbs: string, targetRel: string, onAfter?: () => void) => {
+    dialog.show(() => (
+      <DialogFileTreePrompt
+        title="新建文件夹"
+        label="文件夹名"
+        defaultValue=""
+        placeholder="新文件夹"
+        confirmLabel="创建"
+        onConfirm={async (name) => {
+          await invoke("create_directory", { path: joinAbs(targetAbs, name) })
+          onAfter?.()
+          await file.tree.refresh(targetRel)
+        }}
+      />
+    ))
+  }
+
+  const promptRename = (target: FileNode) => {
+    const oldName = basename(target.absolute)
+    const parentAbs = dirname(target.absolute)
+    const parentRel = dirname(target.path)
+    dialog.show(() => (
+      <DialogFileTreePrompt
+        title={target.type === "directory" ? "重命名文件夹" : "重命名文件"}
+        label="新名称"
+        defaultValue={oldName}
+        confirmLabel="重命名"
+        validate={(v) => (v === oldName ? "名称未变更" : undefined)}
+        onConfirm={async (name) => {
+          await invoke("rename_path", { from: target.absolute, to: joinAbs(parentAbs, name) })
+          await file.tree.refresh(parentRel)
+        }}
+      />
+    ))
+  }
+
+  const promptDelete = (target: FileNode) => {
+    dialog.show(() => (
+      <DialogFileTreeConfirm
+        title={target.type === "directory" ? "删除文件夹" : "删除文件"}
+        message={`确定要删除 "${basename(target.absolute)}" 吗?`}
+        detail="将移到系统回收站,可从回收站恢复。"
+        confirmLabel="删除"
+        onConfirm={async () => {
+          await invoke("trash_path", { path: target.absolute })
+          await file.tree.refresh(dirname(target.path))
+        }}
+      />
+    ))
+  }
+
+  const revealInFolder = (target: FileNode) => {
+    void invoke("reveal_in_folder", { path: target.absolute }).catch((e) => {
+      showToast({ variant: "error", title: "打开失败", description: String(e) })
+    })
+  }
+
+  const renderRowMenuItems = (target: FileNode) => {
+    const isFolder = target.type === "directory"
+    const newTargetAbs = isFolder ? target.absolute : dirname(target.absolute)
+    const newTargetRel = isFolder ? target.path : dirname(target.path)
+    const onAfterNew = isFolder ? () => file.tree.expand(target.path) : undefined
+    return (
+      <ContextMenu.Content>
+        <ContextMenu.Item onSelect={() => promptRename(target)}>
+          <ContextMenu.ItemLabel>重命名</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => revealInFolder(target)}>
+          <ContextMenu.ItemLabel>在文件夹中显示</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item disabled={isFolder} onSelect={() => window.print()}>
+          <ContextMenu.ItemLabel>打印</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+        <ContextMenu.Item onSelect={() => promptDelete(target)}>
+          <ContextMenu.ItemLabel>删除</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+        <ContextMenu.Item onSelect={() => promptNewFileAt(newTargetAbs, newTargetRel, onAfterNew)}>
+          <ContextMenu.ItemLabel>新建文件 (.md)</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => promptNewFolderAt(newTargetAbs, newTargetRel, onAfterNew)}>
+          <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+      </ContextMenu.Content>
+    )
+  }
+
+  const renderEmptyMenuItems = () => {
+    const rootAbs = sdk.directory
+    const rootRel = props.path
+    return (
+      <ContextMenu.Content>
+        <ContextMenu.Item onSelect={() => promptNewFileAt(rootAbs, rootRel)}>
+          <ContextMenu.ItemLabel>新建文件 (.md)</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => promptNewFolderAt(rootAbs, rootRel)}>
+          <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+        <ContextMenu.Item onSelect={() => void file.tree.refresh(rootRel)}>
+          <ContextMenu.ItemLabel>刷新</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+      </ContextMenu.Content>
+    )
+  }
 
   const key = (p: string) =>
     file
@@ -383,27 +542,83 @@ export default function FileTree(props: {
     return out
   })
 
-  return (
-    <div data-component="filetree" class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>
-      <For each={nodes()}>
+  const bodyClass = `flex flex-col gap-0.5 ${level === 0 ? "min-h-full" : ""} ${props.class ?? ""}`
+  const treeContent = (
+    <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
           const deep = () => deeps().get(node.path) ?? -1
           const kind = () => visibleKind(node, kinds(), marks())
           const active = () => !!kind() && !node.ignored
+          const [contextOpen, setContextOpen] = createSignal(false)
 
           return (
             <Switch>
               <Match when={node.type === "directory"}>
-                <Collapsible
-                  variant="ghost"
-                  class="w-full"
-                  data-scope="filetree"
-                  forceMount={false}
-                  open={expanded()}
-                  onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
-                >
-                  <Collapsible.Trigger>
+                <ContextMenu onOpenChange={setContextOpen}>
+                  <Collapsible
+                    variant="ghost"
+                    class="w-full"
+                    data-scope="filetree"
+                    forceMount={false}
+                    open={expanded()}
+                    onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
+                  >
+                    <ContextMenu.Trigger as="div" class="contents">
+                      <Collapsible.Trigger>
+                        <FileTreeNode
+                          node={node}
+                          level={level}
+                          active={props.active}
+                          nodeClass={props.nodeClass}
+                          draggable={draggable()}
+                          kinds={kinds()}
+                          marks={marks()}
+                          contextOpen={contextOpen()}
+                        >
+                          <div class="size-4 flex items-center justify-center text-icon-weak">
+                            <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+                          </div>
+                        </FileTreeNode>
+                      </Collapsible.Trigger>
+                    </ContextMenu.Trigger>
+                    <Collapsible.Content class="relative pt-0.5">
+                      <div
+                        classList={{
+                          "absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none": true,
+                          "group-hover/filetree:opacity-100": expanded() && deep() === level,
+                          "group-hover/filetree:opacity-50": !(expanded() && deep() === level),
+                        }}
+                        style={`left: ${Math.max(0, 8 + level * 12 - 4) + 8}px`}
+                      />
+                      <Show
+                        when={level < MAX_DEPTH && !chain.includes(key(node.path))}
+                        fallback={<div class="px-2 py-1 text-12-regular text-text-weak">...</div>}
+                      >
+                        <FileTree
+                          path={node.path}
+                          level={level + 1}
+                          allowed={props.allowed}
+                          modified={props.modified}
+                          kinds={props.kinds}
+                          active={props.active}
+                          draggable={props.draggable}
+                          onFileClick={props.onFileClick}
+                          _filter={filter()}
+                          _marks={marks()}
+                          _deeps={deeps()}
+                          _kinds={kinds()}
+                          _chain={chain}
+                        />
+                      </Show>
+                    </Collapsible.Content>
+                  </Collapsible>
+                  <ContextMenu.Portal>{renderRowMenuItems(node)}</ContextMenu.Portal>
+                </ContextMenu>
+              </Match>
+              <Match when={node.type === "file"}>
+                <ContextMenu onOpenChange={setContextOpen}>
+                  <ContextMenu.Trigger as="div" class="contents">
                     <FileTreeNode
                       node={node}
                       level={level}
@@ -412,95 +627,68 @@ export default function FileTree(props: {
                       draggable={draggable()}
                       kinds={kinds()}
                       marks={marks()}
+                      contextOpen={contextOpen()}
+                      as="button"
+                      type="button"
+                      onClick={() => props.onFileClick?.(node)}
                     >
-                      <div class="size-4 flex items-center justify-center text-icon-weak">
-                        <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
-                      </div>
+                      <div class="w-4 shrink-0" />
+                      <Switch>
+                        <Match when={node.ignored}>
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--mono"
+                            style="color: var(--icon-weak-base)"
+                            mono
+                          />
+                        </Match>
+                        <Match when={active()}>
+                          <FileIcon
+                            node={node}
+                            class="size-4 filetree-icon filetree-icon--mono"
+                            style={kindTextColor(kind()!)}
+                            mono
+                          />
+                        </Match>
+                        <Match when={!node.ignored}>
+                          <span class="filetree-iconpair size-4">
+                            <FileIcon
+                              node={node}
+                              class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
+                            />
+                            <FileIcon
+                              node={node}
+                              class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
+                              mono
+                            />
+                          </span>
+                        </Match>
+                      </Switch>
                     </FileTreeNode>
-                  </Collapsible.Trigger>
-                  <Collapsible.Content class="relative pt-0.5">
-                    <div
-                      classList={{
-                        "absolute top-0 bottom-0 w-px pointer-events-none bg-border-weak-base opacity-0 transition-opacity duration-150 ease-out motion-reduce:transition-none": true,
-                        "group-hover/filetree:opacity-100": expanded() && deep() === level,
-                        "group-hover/filetree:opacity-50": !(expanded() && deep() === level),
-                      }}
-                      style={`left: ${Math.max(0, 8 + level * 12 - 4) + 8}px`}
-                    />
-                    <Show
-                      when={level < MAX_DEPTH && !chain.includes(key(node.path))}
-                      fallback={<div class="px-2 py-1 text-12-regular text-text-weak">...</div>}
-                    >
-                      <FileTree
-                        path={node.path}
-                        level={level + 1}
-                        allowed={props.allowed}
-                        modified={props.modified}
-                        kinds={props.kinds}
-                        active={props.active}
-                        draggable={props.draggable}
-                        onFileClick={props.onFileClick}
-                        _filter={filter()}
-                        _marks={marks()}
-                        _deeps={deeps()}
-                        _kinds={kinds()}
-                        _chain={chain}
-                      />
-                    </Show>
-                  </Collapsible.Content>
-                </Collapsible>
-              </Match>
-              <Match when={node.type === "file"}>
-                <FileTreeNode
-                  node={node}
-                  level={level}
-                  active={props.active}
-                  nodeClass={props.nodeClass}
-                  draggable={draggable()}
-                  kinds={kinds()}
-                  marks={marks()}
-                  as="button"
-                  type="button"
-                  onClick={() => props.onFileClick?.(node)}
-                >
-                  <div class="w-4 shrink-0" />
-                  <Switch>
-                    <Match when={node.ignored}>
-                      <FileIcon
-                        node={node}
-                        class="size-4 filetree-icon filetree-icon--mono"
-                        style="color: var(--icon-weak-base)"
-                        mono
-                      />
-                    </Match>
-                    <Match when={active()}>
-                      <FileIcon
-                        node={node}
-                        class="size-4 filetree-icon filetree-icon--mono"
-                        style={kindTextColor(kind()!)}
-                        mono
-                      />
-                    </Match>
-                    <Match when={!node.ignored}>
-                      <span class="filetree-iconpair size-4">
-                        <FileIcon
-                          node={node}
-                          class="size-4 filetree-icon filetree-icon--color opacity-0 group-hover/filetree:opacity-100"
-                        />
-                        <FileIcon
-                          node={node}
-                          class="size-4 filetree-icon filetree-icon--mono group-hover/filetree:opacity-0"
-                          mono
-                        />
-                      </span>
-                    </Match>
-                  </Switch>
-                </FileTreeNode>
+                  </ContextMenu.Trigger>
+                  <ContextMenu.Portal>{renderRowMenuItems(node)}</ContextMenu.Portal>
+                </ContextMenu>
               </Match>
             </Switch>
           )
         }}
       </For>
-    </div>
+  )
+
+  if (level !== 0) {
+    return (
+      <div data-component="filetree" class={bodyClass}>
+        {treeContent}
+      </div>
+    )
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenu.Trigger as="div" data-component="filetree" class={bodyClass}>
+        {treeContent}
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>{renderEmptyMenuItems()}</ContextMenu.Portal>
+    </ContextMenu>
   )
 }

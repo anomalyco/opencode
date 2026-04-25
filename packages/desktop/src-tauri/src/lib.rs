@@ -193,6 +193,53 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
         .map_err(|e| format!("Failed to open path: {e}"))
 }
 
+#[tauri::command]
+#[specta::specta]
+fn reveal_in_folder(path: String) -> Result<(), String> {
+    tauri_plugin_opener::reveal_item_in_dir(path)
+        .map_err(|e| format!("Failed to reveal path: {e}"))
+}
+
+#[tauri::command]
+#[specta::specta]
+fn create_directory(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if p.exists() {
+        return Err(format!("already_exists: {}", path));
+    }
+    std::fs::create_dir_all(p).map_err(|e| format!("create_dir failed: {}: {}", path, e))
+}
+
+#[tauri::command]
+#[specta::specta]
+fn create_empty_file(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if p.exists() {
+        return Err(format!("already_exists: {}", path));
+    }
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create_parent failed: {}: {}", parent.display(), e))?;
+    }
+    std::fs::write(p, "").map_err(|e| format!("create_file failed: {}: {}", path, e))
+}
+
+#[tauri::command]
+#[specta::specta]
+fn rename_path(from: String, to: String) -> Result<(), String> {
+    let to_path = std::path::Path::new(&to);
+    if to_path.exists() {
+        return Err(format!("already_exists: {}", to));
+    }
+    std::fs::rename(&from, &to).map_err(|e| format!("rename failed: {} -> {}: {}", from, to, e))
+}
+
+#[tauri::command]
+#[specta::specta]
+fn trash_path(path: String) -> Result<(), String> {
+    trash::delete(&path).map_err(|e| format!("trash failed: {}: {}", path, e))
+}
+
 #[cfg(target_os = "macos")]
 fn check_macos_app(app_name: &str) -> bool {
     // Check common installation locations
@@ -389,6 +436,11 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             wsl_path,
             resolve_app_path,
             open_path,
+            reveal_in_folder,
+            create_directory,
+            create_empty_file,
+            rename_path,
+            trash_path,
             text_file::write_text_file,
             text_file::get_file_mtime,
             text_file::read_binary_file_base64

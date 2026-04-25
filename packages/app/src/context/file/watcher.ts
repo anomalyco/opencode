@@ -25,6 +25,7 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   if (!kind) return
 
   const path = ops.normalize(rawPath)
+  console.debug("[fs.watcher]", { rawPath, kind, normalized: path })
   if (!path) return
   if (path.startsWith(".git/")) return
 
@@ -47,6 +48,7 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   if (kind !== "add" && kind !== "unlink") return
 
   const parent = path.split("/").slice(0, -1).join("/")
+  console.debug("[fs.watcher] refresh", { parent, isLoaded: ops.isDirLoaded(parent) })
   if (!ops.isDirLoaded(parent)) return
 
   ops.refreshDir(parent)
