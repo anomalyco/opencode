@@ -11,8 +11,8 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { Config } from "../config"
-import { ConfigMarkdown } from "../config"
+import { Config } from "../config/config"
+import { ConfigMarkdown } from "../config/markdown"
 import { Glob } from "@opencode-ai/shared/util/glob"
 import { Log } from "../util"
 import { Discovery } from "./discovery"
@@ -81,7 +81,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
           : `Failed to parse skill ${match}`
-        const { Session } = yield* Effect.promise(() => import("@/session"))
+        const { Session } = yield* Effect.promise(() => import("@/session/session"))
         yield* bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load skill", { skill: match, err })
         return undefined

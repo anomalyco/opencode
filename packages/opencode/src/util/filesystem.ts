@@ -5,6 +5,9 @@ import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "@opencode-ai/shared/util/glob"
+import { Log } from "@/util"
+
+const log = Log.create({ service: "filesystem" })
 
 // Fast sync version for metadata checks
 export async function exists(p: string): Promise<boolean> {
@@ -14,7 +17,8 @@ export async function exists(p: string): Promise<boolean> {
 export async function isDir(p: string): Promise<boolean> {
   try {
     return statSync(p).isDirectory()
-  } catch {
+  } catch (e) {
+    log.debug("statSync failed", { error: e, path: p })
     return false
   }
 }
@@ -115,7 +119,8 @@ export function normalizePath(p: string): string {
   const resolved = win32.normalize(win32.resolve(windowsPath(p)))
   try {
     return realpathSync.native(resolved)
-  } catch {
+  } catch (e) {
+    log.debug("realpathSync.native failed", { error: e, path: resolved })
     return resolved
   }
 }
@@ -231,8 +236,8 @@ export async function globUp(pattern: string, start: string, stop?: string) {
         dot: true,
       })
       result.push(...matches)
-    } catch {
-      // Skip invalid glob patterns
+    } catch (e) {
+      log.debug("glob scan failed", { error: e, pattern, cwd: current })
     }
     if (stop === current) break
     const parent = dirname(current)

@@ -33,9 +33,24 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
 }
 
 const locks = new Map<string, Semaphore.Semaphore>()
+const evictionTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function scheduleEviction(resolvedFilePath: string) {
+  const timer = setTimeout(() => {
+    locks.delete(resolvedFilePath)
+    evictionTimers.delete(resolvedFilePath)
+  }, 60_000)
+  evictionTimers.set(resolvedFilePath, timer)
+}
 
 function lock(filePath: string) {
   const resolvedFilePath = AppFileSystem.resolve(filePath)
+  const existingTimer = evictionTimers.get(resolvedFilePath)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    evictionTimers.delete(resolvedFilePath)
+  }
+
   const hit = locks.get(resolvedFilePath)
   if (hit) return hit
 
@@ -166,6 +181,7 @@ export const EditTool = Tool.define(
               )
             }).pipe(Effect.orDie),
           )
+          scheduleEviction(AppFileSystem.resolve(filePath))
 
           let additions = 0
           let deletions = 0

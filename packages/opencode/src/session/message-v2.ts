@@ -20,6 +20,9 @@ import { zod, ZodOverride } from "@/util/effect-zod"
 import { NonNegativeInt, withStatics } from "@/util/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 import { EffectLogger } from "@/effect"
+import { Log } from "@/util"
+
+const log = Log.create({ service: "message-v2" })
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -1188,7 +1191,9 @@ export function fromError(
             },
           ).toObject()
         }
-      } catch {}
+      } catch (e) {
+        log.debug("failed to parse stream error", { error: e })
+      }
       return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
   }
 }

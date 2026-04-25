@@ -91,7 +91,6 @@ export class ACPSessionManager {
   setModel(sessionId: string, model: ACPSessionState["model"]) {
     const session = this.get(sessionId)
     session.model = model
-    this.sessions.set(sessionId, session)
     return session
   }
 
@@ -103,14 +102,12 @@ export class ACPSessionManager {
   setVariant(sessionId: string, variant?: string) {
     const session = this.get(sessionId)
     session.variant = variant
-    this.sessions.set(sessionId, session)
     return session
   }
 
   setMode(sessionId: string, modeId: string) {
     const session = this.get(sessionId)
     session.modeId = modeId
-    this.sessions.set(sessionId, session)
     return session
   }
 }

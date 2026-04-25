@@ -5,13 +5,13 @@ import type {
   PluginModule,
   WorkspaceAdaptor as PluginWorkspaceAdaptor,
 } from "@opencode-ai/plugin"
-import { Config } from "../config"
+import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
-import { Session } from "../session"
+import { Session } from "../session/session"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"

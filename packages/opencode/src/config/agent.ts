@@ -119,7 +119,7 @@ export async function load(dir: string) {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
         : `Failed to parse agent ${item}`
-      const { Session } = await import("@/session")
+      const { Session } = await import("@/session/session")
       void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load agent", { agent: item, err })
       return undefined
@@ -156,7 +156,7 @@ export async function loadMode(dir: string) {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
         : `Failed to parse mode ${item}`
-      const { Session } = await import("@/session")
+      const { Session } = await import("@/session/session")
       void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load mode", { mode: item, err })
       return undefined
