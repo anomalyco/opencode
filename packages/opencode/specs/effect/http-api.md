@@ -176,7 +176,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `permission`              | `bridged`         | list and reply                                                                                     |
 | `provider`                | `bridged`         | list, auth, OAuth authorize/callback                                                               |
 | `config`                  | `bridged`         | read, providers, update                                                                            |
-| `project`                 | `bridged`         | list, current, git init                                                                            |
+| `project`                 | `bridged`         | list, current, git init, update                                                                    |
 | `file`                    | `bridged` partial | find text/file/symbol, list/content/status                                                         |
 | `mcp`                     | `bridged` partial | status only                                                                                        |
 | `workspace`               | `bridged`         | list, get, enter                                                                                   |
@@ -188,10 +188,24 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `pty`                     | `special`         | websocket                                                                                          |
 | `tui`                     | `special`         | UI bridge                                                                                          |
 
-## Next PRs
+## Remaining PR Plan
 
-1. Produce a generated route inventory from Hono registrations and update `Current Route Status` with exact paths.
-2. Start the Effect OpenAPI/SDK generation path for already-bridged routes.
+Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays reviewable.
+
+1. Bridge `PATCH /project/:projectID`.
+2. Bridge MCP add/connect/disconnect routes.
+3. Bridge MCP OAuth routes: start, callback, authenticate, remove.
+4. Bridge experimental console switch and tool list routes.
+5. Bridge experimental global session list.
+6. Bridge sync start/replay/history routes.
+7. Bridge session read routes: list, status, get, children, todo, diff, messages.
+8. Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
+9. Bridge session share/summary/message/part mutation routes.
+10. Replace event SSE with non-Hono Effect HTTP.
+11. Replace pty websocket/control routes with non-Hono Effect HTTP.
+12. Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer.
+13. Switch OpenAPI/SDK generation to Effect routes and compare SDK output.
+14. Flip ported JSON routes default-on, keep a short fallback, then delete replaced Hono route files.
 
 ## Checklist
 

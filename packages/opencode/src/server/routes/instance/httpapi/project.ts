@@ -2,6 +2,7 @@ import * as InstanceState from "@/effect/instance-state"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Project } from "@/project"
 import { InstanceBootstrap } from "@/project/bootstrap"
+import { ProjectID } from "@/project/schema"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
@@ -38,6 +39,17 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.initGit",
             summary: "Initialize git repository",
             description: "Create a git repository for the current project and return the refreshed project info.",
+          }),
+        ),
+        HttpApiEndpoint.patch("update", `${root}/:projectID`, {
+          params: { projectID: ProjectID },
+          payload: Project.UpdatePayload,
+          success: Project.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.update",
+            summary: "Update project",
+            description: "Update project properties such as name, icon, and commands.",
           }),
         ),
       )
@@ -83,8 +95,15 @@ export const projectHandlers = Layer.unwrap(
       return next
     })
 
+    const update = Effect.fn("ProjectHttpApi.update")(function* (ctx: {
+      params: { projectID: ProjectID }
+      payload: Project.UpdatePayload
+    }) {
+      return yield* svc.update({ ...Project.UpdatePayload.zod.parse(ctx.payload), projectID: ctx.params.projectID })
+    })
+
     return HttpApiBuilder.group(ProjectApi, "project", (handlers) =>
-      handlers.handle("list", list).handle("current", current).handle("initGit", initGit),
+      handlers.handle("list", list).handle("current", current).handle("initGit", initGit).handle("update", update),
     )
   }),
 ).pipe(Layer.provide(Project.defaultLayer))

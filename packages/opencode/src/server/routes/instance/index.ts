@@ -62,6 +62,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get("/project", (c) => handler(c.req.raw, context))
     app.get("/project/current", (c) => handler(c.req.raw, context))
     app.post("/project/git/init", (c) => handler(c.req.raw, context))
+    app.patch("/project/:projectID", (c) => handler(c.req.raw, context))
     app.get(FilePaths.findText, (c) => handler(c.req.raw, context))
     app.get(FilePaths.findFile, (c) => handler(c.req.raw, context))
     app.get(FilePaths.findSymbol, (c) => handler(c.req.raw, context))
