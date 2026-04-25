@@ -6,10 +6,10 @@ import { LSP } from "@/lsp"
 import { Vcs } from "@/project"
 import { Skill } from "@/skill"
 import * as InstanceState from "@/effect/instance-state"
-import { Instance } from "@/project/instance"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
+import { markInstanceForDisposal } from "./lifecycle"
 
 const PathInfo = Schema.Struct({
   home: Schema.String,
@@ -150,13 +150,7 @@ export const instanceHandlers = Layer.unwrap(
     const vcs = yield* Vcs.Service
 
     const dispose = Effect.fn("InstanceHttpApi.dispose")(function* () {
-      const ctx = yield* InstanceState.context
-      yield* Effect.sync(() => {
-        // Disposing inline would invalidate the active request scope before HttpApi can send the response.
-        setTimeout(() => {
-          void Instance.restore(ctx, () => Instance.dispose())
-        }, 0)
-      })
+      yield* markInstanceForDisposal(yield* InstanceState.context)
       return true
     })
 

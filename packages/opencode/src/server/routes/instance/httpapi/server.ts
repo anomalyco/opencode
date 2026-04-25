@@ -19,6 +19,7 @@ import { ProjectApi, projectHandlers } from "./project"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
+import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 const Query = Schema.Struct({
@@ -83,6 +84,7 @@ export const routes = Layer.mergeAll(
 export const webHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {
     memoMap,
+    middleware: disposeMiddleware,
   }),
 )
 
