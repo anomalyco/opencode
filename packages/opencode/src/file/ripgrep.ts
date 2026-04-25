@@ -16,6 +16,7 @@ import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "ripgrep" })
 const VERSION = "15.1.0"
+const DOWNLOAD_TIMEOUT_MS = 30_000
 const PLATFORM = {
   "arm64-darwin": { platform: "aarch64-apple-darwin", extension: "tar.gz" },
   "arm64-linux": { platform: "aarch64-unknown-linux-gnu", extension: "tar.gz" },
@@ -172,6 +173,12 @@ function error(stderr: string, code: number) {
   return err
 }
 
+function downloadError(url: string) {
+  return new Error(
+    `Timed out downloading ripgrep from ${url}. Install ripgrep with your system package manager and restart opencode, or retry when GitHub releases are reachable.`,
+  )
+}
+
 function clean(file: string) {
   return path.normalize(file.replace(/^\.[\\/]/, ""))
 }
@@ -310,6 +317,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
           const bytes = yield* HttpClientRequest.get(url).pipe(
             http.execute,
             Effect.flatMap((response) => response.arrayBuffer),
+            Effect.timeoutOrElse({ duration: DOWNLOAD_TIMEOUT_MS, orElse: () => Effect.fail(downloadError(url)) }),
             Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
           )
           if (bytes.byteLength === 0) {
