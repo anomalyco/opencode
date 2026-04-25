@@ -416,8 +416,20 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
+            "X-title": "opencode",
           },
+          fetch: async (url: any, opts: any) => {
+            if (opts && typeof opts.body === "string" && opts.body.includes("deepseek-v4")) {
+              try {
+                const body = JSON.parse(opts.body);
+                if (body.model && body.model.includes("deepseek-v4")) {
+                  body.chat_template_kwargs = { enable_thinking: true, thinking: true };
+                  opts.body = JSON.stringify(body);
+                }
+              } catch(e) {}
+            }
+            return globalThis.fetch(url, opts);
+          }
         },
       }),
     vercel: () =>
