@@ -2,6 +2,44 @@ import { describe, expect, test } from "bun:test"
 import { ProviderTransform } from "../../src/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 
+describe("ProviderTransform.maxOutputTokens", () => {
+  const model = {
+    id: ModelID.make("test-model"),
+    providerID: ProviderID.make("test"),
+    name: "Test Model",
+    api: { id: "test-model", url: "", npm: "@ai-sdk/openai-compatible" },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: {
+      context: 128_000,
+      output: 65_536,
+    },
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    release_date: "",
+    variants: {},
+  } satisfies Parameters<typeof ProviderTransform.maxOutputTokens>[0]
+
+  test("respects configured output limits above the default fallback", () => {
+    expect(ProviderTransform.maxOutputTokens(model)).toBe(65_536)
+  })
+
+  test("uses the default fallback when no output limit is configured", () => {
+    expect(ProviderTransform.maxOutputTokens({ ...model, limit: { ...model.limit, output: 0 } })).toBe(
+      ProviderTransform.OUTPUT_TOKEN_MAX,
+    )
+  })
+})
+
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
 
