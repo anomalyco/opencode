@@ -242,6 +242,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
+        forAgent(agentName: string) {
+          return modelStore.model[agentName]
+        },
         async setForAgent(agentName: string, model: { providerID: string; modelID: string }) {
           if (!isModelValid(model)) {
             toast.show({

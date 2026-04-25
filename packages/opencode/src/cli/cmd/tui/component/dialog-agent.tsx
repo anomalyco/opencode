@@ -4,6 +4,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogModel } from "./dialog-model"
 import type { Keybind } from "@/util"
+import { iife } from "@/util/iife"
 
 const ctrlE: Keybind.Info = { name: "e", ctrl: true, meta: false, shift: false, super: false, leader: false }
 
@@ -12,16 +13,19 @@ export function DialogAgent() {
   const dialog = useDialog()
 
   const options = createMemo(() => {
-    // Show all visible agents (including subagents) so users can edit their models
     return local.agent.allVisible().map((item) => {
       return {
         value: item.name,
         title: item.name,
-        description: item.model
-          ? `${item.model.providerID}/${item.model.modelID}`
-          : item.native
-            ? "native — (default)"
-            : item.description ?? "(default)",
+        description: iife(() => {
+          const stored = local.model.forAgent(item.name)
+          const m = stored ?? item.model
+          return m
+            ? `${m.providerID}/${m.modelID}`
+            : item.native
+              ? "native — (default)"
+              : item.description ?? "(default)"
+        }),
       }
     })
   })
