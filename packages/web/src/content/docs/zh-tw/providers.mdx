@@ -1044,12 +1044,12 @@ npm install -g opencode-helicone-session
 
 ##### 常用 Helicone 請求標頭
 
-| 請求標頭                   | 描述                                                 |
-| -------------------------- | ---------------------------------------------------- |
-| `Helicone-Cache-Enabled`   | 啟用回應快取（`true`/`false`）                       |
-| `Helicone-User-Id`         | 按使用者追蹤指標                                     |
+| 請求標頭                       | 描述                                         |
+| -------------------------- | ------------------------------------------ |
+| `Helicone-Cache-Enabled`   | 啟用回應快取（`true`/`false`）                     |
+| `Helicone-User-Id`         | 按使用者追蹤指標                                   |
 | `Helicone-Property-[Name]` | 新增自訂屬性（例如 `Helicone-Property-Environment`） |
-| `Helicone-Prompt-Id`       | 將請求與提示詞版本關聯                               |
+| `Helicone-Prompt-Id`       | 將請求與提示詞版本關聯                                |
 
 有關所有可用請求標頭，請參閱 [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory)。
 
@@ -1691,10 +1691,10 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
 一些常用的路由選項：
 
-| 選項                | 描述                             |
-| ------------------- | -------------------------------- |
-| `order`             | 提供商嘗試順序                   |
-| `only`              | 限制為特定提供商                 |
+| 選項                  | 描述               |
+| ------------------- | ---------------- |
+| `order`             | 提供商嘗試順序          |
+| `only`              | 限制為特定提供商         |
 | `zeroDataRetention` | 僅使用具有零資料留存策略的提供商 |
 
 ---
