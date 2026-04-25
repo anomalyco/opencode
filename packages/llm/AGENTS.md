@@ -93,8 +93,8 @@ Replay is the default. `RECORD=true` records fresh cassettes and requires the li
 - [x] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
 - [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
 - [ ] Add OpenAI Chat recorded tests for tool-result follow-up, usage chunks, malformed chunks, and tool arguments that arrive in the first chunk.
-- [ ] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
-- [ ] Add provider patch examples from real opencode quirks, starting with prompt normalization and target-level provider options.
+- [x] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
+- [x] Add provider patch examples from real opencode quirks, starting with prompt normalization and target-level provider options.
 - [ ] Add an OpenAI Responses adapter once the Chat adapter shape feels stable.
 - [ ] Add Anthropic Messages adapter coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
 - [ ] Improve cassette ergonomics if more providers need custom matching, redaction, or multi-interaction flows.

@@ -6,5 +6,6 @@ export * from "./target"
 export * from "./transport"
 
 export * as LLM from "./llm"
+export * as ProviderPatch from "./provider/patch"
 export * as Schema from "./schema"
 export { OpenAIChat } from "./provider/openai-chat"

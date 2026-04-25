@@ -108,6 +108,34 @@ describe("OpenAI Chat adapter", () => {
     )
   })
 
+  test("rejects unsupported user media content", async () => {
+    await expect(
+      Effect.runPromise(
+        client({ adapter: OpenAIChat.adapter }).prepare(
+          LLM.request({
+            id: "req_media",
+            model,
+            messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          }),
+        ),
+      ),
+    ).rejects.toThrow("OpenAI Chat user messages only support text content for now")
+  })
+
+  test("rejects unsupported assistant reasoning content", async () => {
+    await expect(
+      Effect.runPromise(
+        client({ adapter: OpenAIChat.adapter }).prepare(
+          LLM.request({
+            id: "req_reasoning",
+            model,
+            messages: [LLM.assistant({ type: "reasoning", text: "hidden" })],
+          }),
+        ),
+      ),
+    ).rejects.toThrow("OpenAI Chat assistant messages only support text and tool-call content for now")
+  })
+
   testEffect(layer("text")).effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {
       const response = yield* client({ adapter: OpenAIChat.adapter }).generate(request)
@@ -153,6 +181,14 @@ describe("OpenAI Chat adapter", () => {
         { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
         { type: "request-finish", reason: "tool-calls", usage: undefined },
       ])
+    }),
+  )
+
+  testEffect(layer("malformed")).effect("fails on malformed stream chunks", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapter: OpenAIChat.adapter }).generate(request).pipe(Effect.flip)
+
+      expect(error.message).toContain("Invalid OpenAI Chat stream chunk")
     }),
   )
 })

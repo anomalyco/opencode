@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLM } from "../src"
+import { LLM, ProviderPatch } from "../src"
 import { Model, Patch, Request, context, plan } from "../src/patch"
 
 const request = LLM.request({
@@ -64,5 +64,45 @@ describe("llm patch", () => {
 
     expect(patchPlan.trace.map((item) => item.id)).toEqual(["prompt.a", "prompt.b"])
     expect(output.metadata).toEqual({ a: true, b: true })
+  })
+
+  test("provider patch examples remove empty Anthropic content", () => {
+    const input = LLM.request({
+      id: "anthropic_empty",
+      model: LLM.model({ id: "claude-sonnet", provider: "anthropic", protocol: "anthropic-messages" }),
+      system: "",
+      messages: [
+        LLM.user([{ type: "text", text: "" }, { type: "text", text: "hello" }]),
+        LLM.assistant({ type: "reasoning", text: "" }),
+      ],
+    })
+    const output = plan({
+      phase: "prompt",
+      context: context({ request: input }),
+      patches: [ProviderPatch.removeEmptyAnthropicContent],
+    }).apply(input)
+
+    expect(output.system).toEqual([])
+    expect(output.messages).toHaveLength(1)
+    expect(output.messages[0]?.content).toEqual([{ type: "text", text: "hello" }])
+  })
+
+  test("provider patch examples scrub model-specific tool call ids", () => {
+    const input = LLM.request({
+      id: "mistral_tool_ids",
+      model: LLM.model({ id: "devstral-small", provider: "mistral", protocol: "openai-chat" }),
+      messages: [
+        LLM.assistant([LLM.toolCall({ id: "call.bad/value-long", name: "lookup", input: {} })]),
+        LLM.toolMessage({ id: "call.bad/value-long", name: "lookup", result: "ok", resultType: "text" }),
+      ],
+    })
+    const output = plan({
+      phase: "prompt",
+      context: context({ request: input }),
+      patches: [ProviderPatch.scrubMistralToolIds],
+    }).apply(input)
+
+    expect(output.messages[0]?.content[0]).toMatchObject({ type: "tool-call", id: "callbadva" })
+    expect(output.messages[1]?.content[0]).toMatchObject({ type: "tool-result", id: "callbadva" })
   })
 })

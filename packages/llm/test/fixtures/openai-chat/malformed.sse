@@ -1,0 +1,3 @@
+data: {"id":"chatcmpl_fixture","choices":[{"delta":{"content":123},"finish_reason":null}],"usage":null}
+
+data: [DONE]
