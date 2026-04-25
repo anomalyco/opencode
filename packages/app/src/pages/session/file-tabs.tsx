@@ -648,6 +648,33 @@ export function FileTabContent(props: { tab: string }) {
 
   // 持久化选区高亮:textarea 获取焦点后 window.getSelection 会 collapse,
   // 用 CSS Custom Highlight API 单独画一层背景色保持视觉指示。
+  // Highlight Registry 是 document 全局(window.CSS.highlights),但 ::highlight() 样式规则是 per-tree,
+  // 所以非 md 文件走 Pierre 的 shadow DOM 时,需要把同一段 CSS 也注入到该 shadow root。
+  // 用 adoptedStyleSheets 注入,比 <style> 元素更稳,不会被 Pierre 内部 mutation 清掉。
+  // 颜色用红色:Pierre code viewer 行级活动区已是满黄底,叠 35% 黄看不出;红色对白底(md)和黄底(code)都清晰。
+  const HIGHLIGHT_CSS = `::highlight(md-quote-active){background-color:rgba(255,0,0,0.5);color:inherit;}`
+  let highlightSheet: CSSStyleSheet | null = null
+  const getHighlightSheet = (): CSSStyleSheet | null => {
+    if (highlightSheet) return highlightSheet
+    if (typeof CSSStyleSheet === "undefined") return null
+    try {
+      const sheet = new CSSStyleSheet()
+      sheet.replaceSync(HIGHLIGHT_CSS)
+      highlightSheet = sheet
+      return sheet
+    } catch {
+      return null
+    }
+  }
+  const ensureHighlightStyleIn = (root: Document | ShadowRoot) => {
+    const sheet = getHighlightSheet()
+    if (!sheet) return
+    const adopted = (root as unknown as { adoptedStyleSheets?: CSSStyleSheet[] }).adoptedStyleSheets
+    if (!adopted) return
+    if (adopted.includes(sheet)) return
+    ;(root as unknown as { adoptedStyleSheets: CSSStyleSheet[] }).adoptedStyleSheets = [...adopted, sheet]
+  }
+
   const setSelectionHighlight = (range: Range | null) => {
     const css = (typeof window !== "undefined" ? (window as any).CSS : undefined) as
       | { highlights?: { set: (k: string, v: unknown) => void; delete: (k: string) => void } }
@@ -660,6 +687,8 @@ export function FileTabContent(props: { tab: string }) {
       css.highlights.delete("md-quote-active")
       return
     }
+    const root = range.startContainer.getRootNode()
+    if (root instanceof ShadowRoot) ensureHighlightStyleIn(root)
     try {
       css.highlights.set("md-quote-active", new HighlightCtor(range))
     } catch {
@@ -667,14 +696,10 @@ export function FileTabContent(props: { tab: string }) {
     }
   }
 
-  // 一次性注入 ::highlight 样式
+  // 一次性把 ::highlight 样式 adopt 进 document
   onMount(() => {
     if (typeof document === "undefined") return
-    if (document.getElementById("md-quote-highlight-style")) return
-    const style = document.createElement("style")
-    style.id = "md-quote-highlight-style"
-    style.textContent = `::highlight(md-quote-active){background-color:rgba(255,196,0,0.35);color:inherit;}`
-    document.head.appendChild(style)
+    ensureHighlightStyleIn(document)
   })
 
   const closeMdMenu = () => {
@@ -685,11 +710,29 @@ export function FileTabContent(props: { tab: string }) {
 
   const handleSelectionContextMenu = (event: MouseEvent) => {
     if (editing()) return // 编辑态让 CodeMirror 拿到原生右键菜单
-    const selObj = typeof window !== "undefined" ? window.getSelection() : null
+    // Pierre viewer 把内容渲染在 shadow DOM。当事件冒泡到 light DOM 监听器时,event.target 已被 retarget
+    // 成 shadow host (<diffs-container>),用 event.target.getRootNode() 拿不到真正的 ShadowRoot。
+    // 必须用 event.composedPath() —— 它返回未 retarget 的完整路径,从中找出真实的 ShadowRoot。
+    let shadow: ShadowRoot | null = null
+    const path = typeof event.composedPath === "function" ? event.composedPath() : []
+    for (const node of path) {
+      if (node instanceof ShadowRoot) {
+        shadow = node
+        break
+      }
+    }
+    // shadow 内的真实选区要用 shadowRoot.getSelection(),window.getSelection 拿到的是投影到 host 的粗粒度 Range。
+    let selObj: Selection | null = null
+    if (shadow) {
+      selObj = (shadow as unknown as { getSelection?: () => Selection | null }).getSelection?.() ?? null
+    }
+    if (!selObj) selObj = typeof window !== "undefined" ? window.getSelection() : null
     const text = selObj?.toString() ?? ""
     event.preventDefault()
     if (text.trim() && selObj && selObj.rangeCount > 0) {
-      setSelectionHighlight(selObj.getRangeAt(0).cloneRange())
+      const range = selObj.getRangeAt(0).cloneRange()
+      if (shadow) ensureHighlightStyleIn(shadow)
+      setSelectionHighlight(range)
     }
     setMdComment("")
     setMdMenu({ open: true, x: event.clientX, y: event.clientY, text, mode: "menu" })
