@@ -1,5 +1,6 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
+import { Permission } from "@/permission"
 import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
@@ -66,34 +67,45 @@ export const TaskTool = Tool.define(
         : undefined
       const nextSession =
         session ??
-        (yield* sessions.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${next.name} subagent)`,
-          permission: [
-            ...(canTodo
-              ? []
-              : [
-                  {
-                    permission: "todowrite" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(canTask
-              ? []
-              : [
-                  {
-                    permission: id,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(cfg.experimental?.primary_tools?.map((item) => ({
-              pattern: "*",
-              action: "allow" as const,
-              permission: item,
-            })) ?? []),
-          ],
+        (yield* Effect.gen(function* () {
+          const parentSession = yield* sessions.get(ctx.sessionID).pipe(
+            Effect.catchCause(() => Effect.succeed(undefined)),
+          )
+
+          const childPermission = Permission.merge(
+            parentSession?.permission ?? [],
+            [
+              ...(canTodo
+                ? []
+                : [
+                    {
+                      permission: "todowrite" as const,
+                      pattern: "*" as const,
+                      action: "deny" as const,
+                    },
+                  ]),
+              ...(canTask
+                ? []
+                : [
+                    {
+                      permission: id,
+                      pattern: "*" as const,
+                      action: "deny" as const,
+                    },
+                  ]),
+              ...(cfg.experimental?.primary_tools?.map((item) => ({
+                pattern: "*",
+                action: "allow" as const,
+                permission: item,
+              })) ?? []),
+            ],
+          )
+
+          return yield* sessions.create({
+            parentID: ctx.sessionID,
+            title: params.description + ` (@${next.name} subagent)`,
+            permission: childPermission,
+          })
         }))
 
       const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))

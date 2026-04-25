@@ -384,4 +384,70 @@ describe("tool.task", () => {
       },
     ),
   )
+
+  it.live("inherits parent session permissions when spawning sub-agents", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const { chat, assistant } = yield* seed()
+          const tool = yield* TaskTool
+          const def = yield* tool.init()
+          let seen: SessionPrompt.PromptInput | undefined
+          const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+          // Simulate Plan mode by setting edit: deny on parent
+          yield* sessions.setPermission({
+            sessionID: chat.id,
+            permission: [
+              {
+                permission: "edit" as const,
+                pattern: "*" as const,
+                action: "deny" as const,
+              },
+            ],
+          })
+
+          const result = yield* def.execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+
+          const child = yield* sessions.get(result.metadata.sessionId)
+          expect(child.parentID).toBe(chat.id)
+
+          // Child should have inherited parent's edit: deny
+          const editRule = child.permission?.findLast(
+            (rule) => rule.permission === "edit",
+          )
+          expect(editRule?.action).toBe("deny")
+          // Child should still deny todowrite (subagent default)
+          const todoRule = child.permission?.findLast(
+            (rule) => rule.permission === "todowrite",
+          )
+          expect(todoRule?.action).toBe("deny")
+          // Child should deny task (subagent default)
+          const taskRule = child.permission?.findLast(
+            (rule) => rule.permission === "task",
+          )
+          expect(taskRule?.action).toBe("deny")
+        }),
+      {
+        config: {},
+      },
+    ),
+  )
 })
