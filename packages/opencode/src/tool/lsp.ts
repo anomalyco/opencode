@@ -36,7 +36,6 @@ export const LspTool = Tool.define(
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
     const fs = yield* AppFileSystem.Service
-
     return {
       description: DESCRIPTION,
       parameters: Parameters,
@@ -47,12 +46,29 @@ export const LspTool = Tool.define(
         Effect.gen(function* () {
           const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
           yield* assertExternalDirectoryEffect(ctx, file)
-          yield* ctx.ask({ permission: "lsp", patterns: ["*"], always: ["*"], metadata: {} })
+          const meta =
+            args.operation === "workspaceSymbol"
+              ? { operation: args.operation }
+              : args.operation === "documentSymbol"
+                ? { operation: args.operation, filePath: file }
+                : { operation: args.operation, filePath: file, line: args.line, character: args.character }
+          yield* ctx.ask({
+            permission: "lsp",
+            patterns: ["*"],
+            always: ["*"],
+            metadata: meta,
+          })
 
           const uri = pathToFileURL(file).href
           const position = { file, line: args.line - 1, character: args.character - 1 }
           const relPath = path.relative(Instance.worktree, file)
-          const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
+          const detail =
+            args.operation === "workspaceSymbol"
+              ? ""
+              : args.operation === "documentSymbol"
+                ? relPath
+                : `${relPath}:${args.line}:${args.character}`
+          const title = detail ? `${args.operation} ${detail}` : args.operation
 
           const exists = yield* fs.existsSafe(file)
           if (!exists) throw new Error(`File not found: ${file}`)
@@ -90,7 +106,7 @@ export const LspTool = Tool.define(
             metadata: { result },
             output: result.length === 0 ? `No results found for ${args.operation}` : JSON.stringify(result, null, 2),
           }
-        }),
+        }).pipe(Effect.orDie),
     }
   }),
 )
