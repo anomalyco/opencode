@@ -173,10 +173,16 @@ function error(stderr: string, code: number) {
   return err
 }
 
-function downloadError(url: string) {
+function downloadError(url: string, prefix: "Failed" | "Timed out", cause?: unknown) {
   return new Error(
-    `Timed out downloading ripgrep from ${url}. Install ripgrep with your system package manager and restart opencode, or retry when GitHub releases are reachable.`,
+    `${prefix} downloading ripgrep from ${url}. Install ripgrep with your system package manager and restart opencode, or retry when GitHub releases are reachable.`,
+    { cause },
   )
+}
+
+function normalizeDownloadError(url: string, cause: unknown) {
+  if (cause instanceof Error && cause.message.includes("downloading ripgrep")) return cause
+  return downloadError(url, "Failed", cause)
 }
 
 function clean(file: string) {
@@ -317,11 +323,14 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
           const bytes = yield* HttpClientRequest.get(url).pipe(
             http.execute,
             Effect.flatMap((response) => response.arrayBuffer),
-            Effect.timeoutOrElse({ duration: DOWNLOAD_TIMEOUT_MS, orElse: () => Effect.fail(downloadError(url)) }),
-            Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
+            Effect.timeoutOrElse({
+              duration: DOWNLOAD_TIMEOUT_MS,
+              orElse: () => Effect.fail(downloadError(url, "Timed out")),
+            }),
+            Effect.mapError((cause) => normalizeDownloadError(url, cause)),
           )
           if (bytes.byteLength === 0) {
-            return yield* Effect.fail(new Error(`failed to download ripgrep from ${url}`))
+            return yield* Effect.fail(downloadError(url, "Failed"))
           }
 
           yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
