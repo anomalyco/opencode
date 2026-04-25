@@ -1495,16 +1495,9 @@ test("merges legacy tools with existing permission config", async () => {
   })
 })
 
-test("permission config canonicalises known keys first, preserves rest-key insertion order", async () => {
-  // ConfigPermission.Info is a StructWithRest schema — the decoder reorders
-  // keys into declaration-order for known permission names (edit, read,
-  // todowrite, external_directory are declared in `config/permission.ts`),
-  // followed by rest keys in the user's insertion order.
-  //
-  // Rule precedence is NOT affected by this reordering: `Permission.fromConfig`
-  // sorts wildcards before specifics before iterating. See the
-  // "fromConfig - specific key beats wildcard regardless of JSON key order"
-  // test in test/permission/next.test.ts for the behavioural guarantee.
+test("permission config preserves user key order", async () => {
+  // Permission precedence follows the order users write in config, so parsing
+  // must not canonicalise known keys ahead of wildcard or custom keys.
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Filesystem.write(
@@ -1532,15 +1525,12 @@ test("permission config canonicalises known keys first, preserves rest-key inser
     fn: async () => {
       const config = await load()
       expect(Object.keys(config.permission!)).toEqual([
-        // known fields that the user provided, in declaration order from
-        // config/permission.ts (read, edit, ..., external_directory, todowrite)
-        "read",
-        "edit",
-        "external_directory",
-        "todowrite",
-        // rest keys (not in the known list), in user's insertion order
         "*",
+        "edit",
         "write",
+        "external_directory",
+        "read",
+        "todowrite",
         "thoughts_*",
         "reasoning_model_*",
         "tools_*",
