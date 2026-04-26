@@ -157,6 +157,8 @@ recorded.effect("streams text", () => Effect.gen(function* () {
 
 Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars. Cassettes are written as pretty-printed JSON so multi-interaction diffs stay reviewable.
 
+**Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON adapters omit the field and decode as text. To support a new binary content type, extend `BINARY_CONTENT_TYPES` in `test/record-replay.ts`.
+
 **Matching strategies.** Replay defaults to `defaultMatcher`, which finds an interaction by structurally comparing method, URL, allow-listed headers, and the canonical JSON body. This is the right choice for tool loops because each round's request differs (the message history grows). For scenarios where successive requests are byte-identical and expect different responses (retries, polling), pass `match: sequentialMatcher` in `RecordReplayOptions` — replay then walks the cassette in record order via an internal cursor. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 
 Do not blanket re-record an entire test file when adding one cassette. `RECORD=true` rewrites every recorded case that runs, and provider streams contain volatile IDs, timestamps, fingerprints, and obfuscation fields. Prefer deleting the one cassette you intend to refresh, or run a focused test pattern that only registers the scenario you want to record. Keep stable existing cassettes unchanged unless their request shape or expected behavior changed.
@@ -182,7 +184,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] Keep OpenAI Responses as a separate first-class protocol for providers that actually implement `/responses`; do not treat generic OpenAI-compatible providers as Responses-capable by default.
 - [x] Cover OpenAI-compatible provider families that can share the generic adapter first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
 - [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, xAI, Perplexity, and Cohere.
-- [ ] Add Bedrock Converse support or a clear compatibility layer before moving Amazon Bedrock traffic onto `packages/llm`.
+- [x] Add Bedrock Converse support: wire format (messages / system / inferenceConfig / toolConfig), AWS event stream binary framing via `@smithy/eventstream-codec`, SigV4 signing via `aws4fetch` (or Bearer API key path), text/reasoning/tool/usage/finish decoding, deterministic + recorded integration tests. Cache hints, image/document content, and additional model-specific fields are still TODO.
 - [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini as Gemini target/http patch vs adapter, and Vertex Anthropic as Anthropic target/http patch vs adapter.
 - [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible adapter and provider option patch model are stable.
 
@@ -226,6 +228,6 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] DeepInfra OpenAI-compatible Chat basic streaming text and tool-call flow.
 - [ ] Provider-error cassettes for stable, non-secret error bodies where the provider returns deterministic 4xx/5xx payloads.
 - [ ] Mistral, Groq, xAI, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
-- [ ] Bedrock Converse basic text, tool use/result, and cache-hint cassettes after Bedrock support lands.
+- [x] Bedrock Converse basic text and tool-call cassettes (recorded against `us.amazon.nova-micro-v1:0` in us-east-1). Cache-hint cassettes still TODO.
 - [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex adapter/patch shape is decided.
 - [ ] Gateway/OpenRouter routing-header cassettes after routing support lands.

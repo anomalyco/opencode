@@ -20,6 +20,9 @@
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
+    "@smithy/eventstream-codec": "4.2.14",
+    "@smithy/util-utf8": "4.2.2",
+    "aws4fetch": "1.0.20",
     "effect": "catalog:"
   }
 }

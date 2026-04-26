@@ -26,6 +26,11 @@ const ResponseSnapshot = Schema.Struct({
   status: Schema.Number,
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.String,
+  // Most provider responses are text (SSE, JSON). AWS Bedrock streams are
+  // binary AWS event-stream frames whose CRC32 fields would mangle through a
+  // UTF-8 round-trip — store those as base64. Older cassettes omit this field
+  // and decode as text by default.
+  bodyEncoding: Schema.optional(Schema.Literals(["text", "base64"])),
 })
 
 const Interaction = Schema.Struct({
@@ -152,6 +157,36 @@ const responseHeaders = (
   return merged
 }
 
+// Content types whose payloads are binary frames or arbitrary bytes — they
+// would not survive a UTF-8 text round-trip. The list intentionally matches
+// the substrings that appear in `Content-Type` headers, not full values.
+const BINARY_CONTENT_TYPES: ReadonlyArray<string> = [
+  "vnd.amazon.eventstream",
+  "octet-stream",
+]
+
+const isBinaryContentType = (contentType: string | undefined) => {
+  if (!contentType) return false
+  const lower = contentType.toLowerCase()
+  return BINARY_CONTENT_TYPES.some((token) => lower.includes(token))
+}
+
+const captureResponseBody = (
+  response: HttpClientResponse.HttpClientResponse,
+  contentType: string | undefined,
+) =>
+  Effect.gen(function* () {
+    if (!isBinaryContentType(contentType)) {
+      const text = yield* response.text
+      return { body: text, bodyEncoding: undefined as "text" | "base64" | undefined }
+    }
+    const bytes = yield* response.arrayBuffer
+    return { body: Buffer.from(bytes).toString("base64"), bodyEncoding: "base64" as const }
+  })
+
+const decodeResponseBody = (snapshot: Schema.Schema.Type<typeof ResponseSnapshot>) =>
+  snapshot.bodyEncoding === "base64" ? Buffer.from(snapshot.body, "base64") : snapshot.body
+
 const fixtureMissing = (request: HttpClientRequest.HttpClientRequest, name: string) =>
   new HttpClientError.HttpClientError({
     reason: new HttpClientError.TransportError({
@@ -251,19 +286,16 @@ export const layer = (
           return Effect.gen(function* () {
             const currentRequest = yield* snapshotRequest(request)
             const response = yield* upstream.execute(request)
-            const body = yield* response.text
+            const headers = responseHeaders(response, responseHeadersAllow)
+            const captured = yield* captureResponseBody(response, headers["content-type"])
             const interaction: Interaction = {
               request: currentRequest,
-              response: {
-                status: response.status,
-                headers: responseHeaders(response, responseHeadersAllow),
-                body,
-              },
+              response: { status: response.status, headers, body: captured.body, bodyEncoding: captured.bodyEncoding },
             }
             const interactions = yield* Ref.updateAndGet(recorded, (prev) => [...prev, interaction])
             yield* fileSystem.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
             yield* fileSystem.writeFileString(file, formatCassette(interactions)).pipe(Effect.orDie)
-            return HttpClientResponse.fromWeb(request, new Response(body, interaction.response))
+            return HttpClientResponse.fromWeb(request, new Response(decodeResponseBody(interaction.response), interaction.response))
           })
         }
 
@@ -275,7 +307,7 @@ export const layer = (
           const { interaction, detail } = yield* selectInteraction(cassette, incoming)
           if (!interaction) return yield* fixtureMismatch(request, name, detail)
 
-          return HttpClientResponse.fromWeb(request, new Response(interaction.response.body, interaction.response))
+          return HttpClientResponse.fromWeb(request, new Response(decodeResponseBody(interaction.response), interaction.response))
         })
       })
     }),

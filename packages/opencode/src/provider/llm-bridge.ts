@@ -1,4 +1,5 @@
 import * as LLM from "@opencode-ai/llm/llm"
+import { AmazonBedrock } from "@opencode-ai/llm/provider/amazon-bedrock"
 import { Anthropic } from "@opencode-ai/llm/provider/anthropic"
 import { Azure } from "@opencode-ai/llm/provider/azure"
 import { GitHubCopilot } from "@opencode-ai/llm/provider/github-copilot"
@@ -18,6 +19,7 @@ type Input = {
 }
 
 const PROVIDERS: Record<string, ProviderDefinition> = {
+  "@ai-sdk/amazon-bedrock": AmazonBedrock.provider,
   "@ai-sdk/anthropic": Anthropic.provider,
   "@ai-sdk/azure": Azure.provider,
   "@ai-sdk/baseten": OpenAICompatibleFamily.provider,
