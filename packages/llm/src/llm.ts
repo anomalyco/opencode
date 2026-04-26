@@ -1,5 +1,6 @@
 import {
   GenerationOptions,
+  LLMEvent,
   LLMRequest,
   LLMResponse,
   Message,
@@ -9,7 +10,6 @@ import {
   ToolChoice,
   ToolDefinition,
   type ContentPart,
-  type LLMEvent,
   type Protocol,
   type ReasoningEffort,
   type SystemPart,
@@ -153,6 +153,6 @@ export const request = (input: RequestInput) => {
 
 export const outputText = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) =>
   response.events
-    .filter((event) => event.type === "text-delta")
+    .filter(LLMEvent.guards["text-delta"])
     .map((event) => event.text)
     .join("")

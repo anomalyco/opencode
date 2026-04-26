@@ -6,7 +6,21 @@ import { context, emptyRegistry, plan, registry as makePatchRegistry, target as 
 import type { LLMError, LLMEvent, LLMRequest, ModelRef, PatchTrace, PreparedRequest, Protocol } from "./schema"
 import { LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema } from "./schema"
 
-type RuntimeAdapter = Adapter<unknown, unknown, unknown>
+interface RuntimeAdapter {
+  readonly id: string
+  readonly protocol: Protocol
+  readonly patches: ReadonlyArray<Patch<unknown>>
+  readonly redact: (target: unknown) => unknown
+  readonly prepare: (request: LLMRequest) => Effect.Effect<unknown, LLMError>
+  readonly validate: (draft: unknown) => Effect.Effect<unknown, LLMError>
+  readonly toHttp: (target: unknown, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<unknown, LLMError>
+  readonly raise: (chunk: unknown, state: RaiseState) => Stream.Stream<LLMEvent, LLMError>
+}
+
+interface RuntimeAdapterSource {
+  readonly runtime: RuntimeAdapter
+}
 
 export interface HttpContext {
   readonly request: LLMRequest
@@ -43,6 +57,7 @@ export interface AdapterInput<Draft, Target, Chunk> {
 }
 
 export interface AdapterDefinition<Draft, Target, Chunk> extends Adapter<Draft, Target, Chunk> {
+  readonly runtime: RuntimeAdapter
   readonly patch: (id: string, input: PatchInput<Draft>) => Patch<Draft>
   readonly withPatches: (patches: ReadonlyArray<Patch<Draft>>) => AdapterDefinition<Draft, Target, Chunk>
 }
@@ -53,16 +68,13 @@ export interface LLMClient {
   readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
 }
 
-export interface ClientOptions<Draft = unknown, Target = unknown, Chunk = unknown> {
-  readonly adapters: ReadonlyArray<Adapter<Draft, Target, Chunk>>
+export interface ClientOptions {
+  readonly adapters: ReadonlyArray<RuntimeAdapterSource>
   readonly patches?: PatchRegistry | ReadonlyArray<AnyPatch>
 }
 
 const noAdapter = (model: ModelRef) =>
   new NoAdapterError({ protocol: model.protocol, provider: model.provider, model: model.id })
-
-const runtimeAdapter = <Draft, Target, Chunk>(adapter: Adapter<Draft, Target, Chunk>): RuntimeAdapter =>
-  adapter as unknown as RuntimeAdapter
 
 const normalizeRegistry = (patches: PatchRegistry | ReadonlyArray<AnyPatch> | undefined): PatchRegistry => {
   if (!patches) return emptyRegistry
@@ -75,6 +87,9 @@ export function define<Draft, Target, Chunk>(input: AdapterInput<Draft, Target, 
     id: input.id,
     protocol: input.protocol,
     patches,
+    get runtime() {
+      return this as unknown as RuntimeAdapter
+    },
     redact: input.redact,
     prepare: input.prepare,
     validate: input.validate,
@@ -88,13 +103,13 @@ export function define<Draft, Target, Chunk>(input: AdapterInput<Draft, Target, 
   return build(input.patches ?? [])
 }
 
-export function client<Draft, Target, Chunk>(options: ClientOptions<Draft, Target, Chunk>): LLMClient {
+export function client(options: ClientOptions): LLMClient {
   const registry = normalizeRegistry(options.patches)
-  const adapters = options.adapters.map(runtimeAdapter)
+  const adapters = new Map(options.adapters.map((adapter) => [adapter.runtime.protocol, adapter.runtime] as const))
 
   const resolveAdapter = (request: LLMRequest) =>
     Effect.gen(function* () {
-      const adapter = adapters.find((adapter) => adapter.protocol === request.model.protocol)
+      const adapter = adapters.get(request.model.protocol)
       if (!adapter) return yield* noAdapter(request.model)
       return adapter
     })
@@ -180,12 +195,17 @@ export function client<Draft, Target, Chunk>(options: ClientOptions<Draft, Targe
     )
 
   const generate = Effect.fn("LLM.generate")(function* (request: LLMRequest) {
-    const events = Array.from(yield* stream(request).pipe(Stream.runCollect))
-    const usage = events.reduce<LLMResponse["usage"]>(
-      (last, event) => ("usage" in event && event.usage !== undefined ? event.usage : last),
-      undefined,
+    return new LLMResponse(
+      yield* stream(request).pipe(
+        Stream.runFold(
+          () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
+          (response, event) => ({
+            events: [...response.events, event],
+            usage: "usage" in event && event.usage !== undefined ? event.usage : response.usage,
+          }),
+        ),
+      ),
     )
-    return new LLMResponse({ events, usage })
   })
 
   return { prepare, stream, generate }
