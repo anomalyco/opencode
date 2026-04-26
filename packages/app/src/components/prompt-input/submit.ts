@@ -429,11 +429,21 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
-      input.onQueue?.(draft, input.editID?.() ?? undefined)
-      clearContext()
-      clearInput()
-      return
+    if (!isNewSession && mode === "normal") {
+      if (input.shouldQueue?.()) {
+        input.onQueue?.(draft, input.editID?.() ?? undefined)
+        clearContext()
+        clearInput()
+        return
+      }
+      
+      // If we shouldn't queue but the agent is busy, we cannot submit.
+      // This happens if the queue is full (e.g. max 1 message in steer/wrap mode).
+      // We must block the submission entirely.
+      const isBusy = sync.data.session_status[session.id]?.type !== "idle"
+      if (isBusy) {
+        return
+      }
     }
 
     input.onSubmit?.()
