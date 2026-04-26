@@ -412,7 +412,7 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     onHalt: finish,
   })
 
-export const adapter = Adapter.define<GeminiDraft, GeminiTarget, LLMEvent>({
+export const adapter = Adapter.define<GeminiDraft, GeminiTarget>({
   id: ADAPTER,
   protocol: "gemini",
   redact: (target) => target,
@@ -420,7 +420,6 @@ export const adapter = Adapter.define<GeminiDraft, GeminiTarget, LLMEvent>({
   validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
-  raise: (event) => Stream.make(event),
 })
 
 export const model = (input: GeminiModelInput) => {

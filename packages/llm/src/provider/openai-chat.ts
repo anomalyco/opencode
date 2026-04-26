@@ -374,7 +374,7 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     onHalt: finishEvents,
   })
 
-export const adapter = Adapter.define<OpenAIChatDraft, OpenAIChatTarget, LLMEvent>({
+export const adapter = Adapter.define<OpenAIChatDraft, OpenAIChatTarget>({
   id: ADAPTER,
   protocol: "openai-chat",
   redact: (target) => target,
@@ -382,7 +382,6 @@ export const adapter = Adapter.define<OpenAIChatDraft, OpenAIChatTarget, LLMEven
   validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
-  raise: (event) => Stream.make(event),
 })
 
 export const model = (input: OpenAIChatModelInput) => {

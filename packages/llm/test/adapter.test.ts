@@ -40,7 +40,12 @@ const request = LLM.request({
   prompt: "hello",
 })
 
-const fake = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
+const raiseChunk = (chunk: FakeChunk): import("../src/schema").LLMEvent =>
+  chunk.type === "finish"
+    ? { type: "request-finish", reason: chunk.reason }
+    : { type: "text-delta", text: chunk.text }
+
+const fake = Adapter.define<FakeDraft, FakeDraft>({
   id: "fake",
   protocol: "openai-chat",
   redact: (target) => ({ ...target, redacted: true }),
@@ -65,14 +70,11 @@ const fake = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
   parse: (response) =>
     Stream.fromEffect(response.json.pipe(Effect.orDie, Effect.map((body) => body as FakeChunk[]))).pipe(
       Stream.flatMap(Stream.fromIterable),
+      Stream.map(raiseChunk),
     ),
-  raise: (chunk) => {
-    if (chunk.type === "finish") return Stream.make({ type: "request-finish", reason: chunk.reason })
-    return Stream.make({ type: "text-delta", text: chunk.text })
-  },
 })
 
-const gemini = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
+const gemini = Adapter.define<FakeDraft, FakeDraft>({
   ...fake,
   id: "gemini-fake",
   protocol: "gemini",

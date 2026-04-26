@@ -419,7 +419,7 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     process: processChunk,
   })
 
-export const adapter = Adapter.define<AnthropicMessagesDraft, AnthropicMessagesTarget, LLMEvent>({
+export const adapter = Adapter.define<AnthropicMessagesDraft, AnthropicMessagesTarget>({
   id: ADAPTER,
   protocol: "anthropic-messages",
   redact: (target) => target,
@@ -427,7 +427,6 @@ export const adapter = Adapter.define<AnthropicMessagesDraft, AnthropicMessagesT
   validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
-  raise: (event) => Stream.make(event),
 })
 
 export const model = (input: AnthropicMessagesModelInput) => {

@@ -14,8 +14,7 @@ interface RuntimeAdapter {
   readonly prepare: (request: LLMRequest) => Effect.Effect<unknown, LLMError>
   readonly validate: (draft: unknown) => Effect.Effect<unknown, LLMError>
   readonly toHttp: (target: unknown, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<unknown, LLMError>
-  readonly raise: (chunk: unknown, state: RaiseState) => Stream.Stream<LLMEvent, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<LLMEvent, LLMError>
 }
 
 interface RuntimeAdapterSource {
@@ -27,12 +26,7 @@ export interface HttpContext {
   readonly patchTrace: ReadonlyArray<PatchTrace>
 }
 
-export interface RaiseState {
-  readonly request: LLMRequest
-  readonly patchTrace: ReadonlyArray<PatchTrace>
-}
-
-export interface Adapter<Draft, Target, Chunk> {
+export interface Adapter<Draft, Target> {
   readonly id: string
   readonly protocol: Protocol
   readonly patches: ReadonlyArray<Patch<Draft>>
@@ -40,11 +34,10 @@ export interface Adapter<Draft, Target, Chunk> {
   readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
   readonly validate: (draft: Draft) => Effect.Effect<Target, LLMError>
   readonly toHttp: (target: Target, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<Chunk, LLMError>
-  readonly raise: (chunk: Chunk, state: RaiseState) => Stream.Stream<LLMEvent, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<LLMEvent, LLMError>
 }
 
-export interface AdapterInput<Draft, Target, Chunk> {
+export interface AdapterInput<Draft, Target> {
   readonly id: string
   readonly protocol: Protocol
   readonly patches?: ReadonlyArray<Patch<Draft>>
@@ -52,14 +45,13 @@ export interface AdapterInput<Draft, Target, Chunk> {
   readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
   readonly validate: (draft: Draft) => Effect.Effect<Target, LLMError>
   readonly toHttp: (target: Target, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<Chunk, LLMError>
-  readonly raise: (chunk: Chunk, state: RaiseState) => Stream.Stream<LLMEvent, LLMError>
+  readonly parse: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<LLMEvent, LLMError>
 }
 
-export interface AdapterDefinition<Draft, Target, Chunk> extends Adapter<Draft, Target, Chunk> {
+export interface AdapterDefinition<Draft, Target> extends Adapter<Draft, Target> {
   readonly runtime: RuntimeAdapter
   readonly patch: (id: string, input: PatchInput<Draft>) => Patch<Draft>
-  readonly withPatches: (patches: ReadonlyArray<Patch<Draft>>) => AdapterDefinition<Draft, Target, Chunk>
+  readonly withPatches: (patches: ReadonlyArray<Patch<Draft>>) => AdapterDefinition<Draft, Target>
 }
 
 export interface LLMClient {
@@ -82,8 +74,8 @@ const normalizeRegistry = (patches: PatchRegistry | ReadonlyArray<AnyPatch> | un
   return makePatchRegistry(patches)
 }
 
-export function define<Draft, Target, Chunk>(input: AdapterInput<Draft, Target, Chunk>): AdapterDefinition<Draft, Target, Chunk> {
-  const build = (patches: ReadonlyArray<Patch<Draft>>): AdapterDefinition<Draft, Target, Chunk> => ({
+export function define<Draft, Target>(input: AdapterInput<Draft, Target>): AdapterDefinition<Draft, Target> {
+  const build = (patches: ReadonlyArray<Patch<Draft>>): AdapterDefinition<Draft, Target> => ({
     id: input.id,
     protocol: input.protocol,
     patches,
@@ -95,7 +87,6 @@ export function define<Draft, Target, Chunk>(input: AdapterInput<Draft, Target, 
     validate: input.validate,
     toHttp: input.toHttp,
     parse: input.parse,
-    raise: input.raise,
     patch: (id, patchInput) => targetPatch(`${input.id}.${id}`, patchInput),
     withPatches: (next) => build([...patches, ...next]),
   })
@@ -181,14 +172,7 @@ export function client(options: ClientOptions): LLMClient {
           context: context({ request: compiled.request }),
           patches: registry.stream,
         })
-        const events = compiled.adapter.parse(response).pipe(
-          Stream.flatMap((chunk) =>
-            compiled.adapter.raise(chunk, {
-              request: compiled.request,
-              patchTrace: compiled.patchTrace,
-            }),
-          ),
-        )
+        const events = compiled.adapter.parse(response)
         if (streamPlan.patches.length === 0) return events
         return events.pipe(Stream.map(streamPlan.apply))
       }),

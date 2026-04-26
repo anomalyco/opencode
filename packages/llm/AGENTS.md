@@ -31,7 +31,7 @@ const request = LLM.request({
 const response = yield* client({ adapters: [OpenAIChat.adapter] }).generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `client(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream, raises common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `client(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
 Use `client(...).stream(request)` when callers want incremental `LLMEvent`s. Use `client(...).generate(request)` when callers want those same events collected into an `LLMResponse`.
 
@@ -45,8 +45,7 @@ Adapters should stay boring and typed:
 - target patches mutate that draft before validation.
 - `validate` validates the final provider target with Schema.
 - `toHttp` creates the `HttpClientRequest`.
-- `parse` decodes provider chunks from `HttpClientResponse`.
-- `raise` converts provider chunks into common `LLMEvent`s.
+- `parse` decodes provider chunks into `LLMEvent`s. The shared `ProviderShared.sse` helper handles SSE framing, chunk decoding, and stateful chunk-to-event raising; adapters supply `decodeChunk` and a `process` callback that produces events.
 
 ### Patches
 

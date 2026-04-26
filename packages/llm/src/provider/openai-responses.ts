@@ -329,7 +329,7 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     process: processChunk,
   })
 
-export const adapter = Adapter.define<OpenAIResponsesDraft, OpenAIResponsesTarget, LLMEvent>({
+export const adapter = Adapter.define<OpenAIResponsesDraft, OpenAIResponsesTarget>({
   id: ADAPTER,
   protocol: "openai-responses",
   redact: (target) => target,
@@ -337,7 +337,6 @@ export const adapter = Adapter.define<OpenAIResponsesDraft, OpenAIResponsesTarge
   validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
-  raise: (event) => Stream.make(event),
 })
 
 export const model = (input: OpenAIResponsesModelInput) => {
