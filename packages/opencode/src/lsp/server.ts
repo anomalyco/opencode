@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
-import { Global } from "../global"
+import { Global } from "@opencode-ai/core/global"
 import { Log } from "../util"
 import { text } from "node:stream/consumers"
 import fs from "fs/promises"
@@ -13,7 +13,7 @@ import { Process } from "../util"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/core/util/module"
 import { spawn } from "./launch"
-import { Npm } from "../npm"
+import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "lsp.server" })
 const pathExists = async (p: string) =>

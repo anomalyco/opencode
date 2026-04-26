@@ -1,4 +1,4 @@
-import { Global } from "@/global"
+import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { rename, rm } from "fs/promises"
