@@ -156,8 +156,6 @@ const invalid = (message: string) => new InvalidRequestError({ message })
 const baseUrl = (request: LLMRequest) =>
   (request.model.baseURL ?? "https://generativelanguage.googleapis.com/v1beta").replace(/\/+$/, "")
 
-const text = (values: ReadonlyArray<{ readonly text: string }>) => values.map((part) => part.text).join("\n")
-
 const mediaData = (part: MediaPart) => typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
 
 const resultText = (part: ToolResultPart) => {
@@ -308,7 +306,7 @@ const prepare = Effect.fn("Gemini.prepare")(function* (request: LLMRequest) {
 
   return {
     contents: yield* lowerMessages(request),
-    systemInstruction: request.system.length === 0 ? undefined : { parts: [{ text: text(request.system) }] },
+    systemInstruction: request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
     tools: toolsEnabled ? [{ functionDeclarations: request.tools.map(lowerTool) }] : undefined,
     toolConfig: toolsEnabled && request.toolChoice ? yield* lowerToolConfig(request.toolChoice) : undefined,
     generationConfig: Object.values(generationConfig).some((value) => value !== undefined) ? generationConfig : undefined,

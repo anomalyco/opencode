@@ -168,8 +168,6 @@ const invalid = (message: string) => new InvalidRequestError({ message })
 
 const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.openai.com/v1").replace(/\/+$/, "")
 
-const text = (values: ReadonlyArray<{ readonly text: string }>) => values.map((part) => part.text).join("\n")
-
 const resultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
   return ProviderShared.encodeJson(part.result.value)
@@ -203,7 +201,7 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
 
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
-    request.system.length === 0 ? [] : [{ role: "system", content: text(request.system) }]
+    request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const messages: OpenAIChatMessage[] = [...system]
 
   for (const message of request.messages) {
@@ -213,7 +211,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
         if (part.type !== "text") return yield* invalid(`OpenAI Chat user messages only support text content for now`)
         content.push(part)
       }
-      messages.push({ role: "user", content: text(content) })
+      messages.push({ role: "user", content: ProviderShared.joinText(content) })
       continue
     }
 
@@ -233,7 +231,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
       }
       messages.push({
         role: "assistant",
-        content: content.length === 0 ? null : text(content),
+        content: content.length === 0 ? null : ProviderShared.joinText(content),
         tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
       })
       continue
@@ -313,11 +311,7 @@ const pushToolDelta = (tools: Record<number, ToolAccumulator>, delta: OpenAIChat
 const finalizeToolCalls = (tools: Record<number, ToolAccumulator>) =>
   Effect.forEach(Object.values(tools), (tool) =>
     Effect.gen(function* () {
-      const input = yield* ProviderShared.parseJson(
-        ADAPTER,
-        tool.input || "{}",
-        `Invalid JSON input for OpenAI Chat tool call ${tool.name}`,
-      )
+      const input = yield* ProviderShared.parseToolInput(ADAPTER, tool.name, tool.input)
       return { id: tool.id, name: tool.name, input } satisfies ParsedToolCall
     }),
   )

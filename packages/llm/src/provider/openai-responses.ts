@@ -153,8 +153,6 @@ const invalid = (message: string) => new InvalidRequestError({ message })
 
 const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.openai.com/v1").replace(/\/+$/, "")
 
-const text = (values: ReadonlyArray<{ readonly text: string }>) => values.map((part) => part.text).join("\n")
-
 const resultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
   return ProviderShared.encodeJson(part.result.value)
@@ -184,7 +182,7 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
 
 const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIResponsesInputItem[] =
-    request.system.length === 0 ? [] : [{ role: "system", content: text(request.system) }]
+    request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const input: OpenAIResponsesInputItem[] = [...system]
 
   for (const message of request.messages) {
@@ -281,12 +279,8 @@ const pushToolDelta = (tools: Record<string, ToolAccumulator>, itemId: string, d
 const finishToolCall = (tools: Record<string, ToolAccumulator>, item: NonNullable<OpenAIResponsesChunk["item"]>) =>
   Effect.gen(function* () {
     if (item.type !== "function_call" || !item.id || !item.call_id || !item.name) return [] as ReadonlyArray<LLMEvent>
-    const raw = item.arguments ?? tools[item.id]?.input ?? "{}"
-    const input = yield* ProviderShared.parseJson(
-      ADAPTER,
-      raw || "{}",
-      `Invalid JSON input for OpenAI Responses tool call ${item.name}`,
-    )
+    const raw = item.arguments ?? tools[item.id]?.input ?? ""
+    const input = yield* ProviderShared.parseToolInput(ADAPTER, item.name, raw)
     return [{ type: "tool-call" as const, id: item.call_id, name: item.name, input }]
   })
 

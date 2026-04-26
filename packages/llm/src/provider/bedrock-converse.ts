@@ -11,6 +11,7 @@ import {
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
+  type ProviderChunkError,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
@@ -473,11 +474,7 @@ interface ParserState {
 const finishToolCall = (tool: ToolAccumulator | undefined) =>
   Effect.gen(function* () {
     if (!tool) return [] as ReadonlyArray<LLMEvent>
-    const input = yield* ProviderShared.parseJson(
-      ADAPTER,
-      tool.input || "{}",
-      `Invalid JSON input for Bedrock Converse tool call ${tool.name}`,
-    )
+    const input = yield* ProviderShared.parseToolInput(ADAPTER, tool.name, tool.input)
     return [{ type: "tool-call" as const, id: tool.id, name: tool.name, input }]
   })
 
@@ -639,29 +636,30 @@ const consumeFrames = (state: FrameBufferState, chunk: Uint8Array) =>
     return [cursor, out] as const
   })
 
+// AWS event-stream framing: byte stream → already-parsed chunk objects.
+// `mapAccumEffect` flattens the per-step `ReadonlyArray` so the downstream
+// stream sees one parsed object per emitted frame.
+const eventStreamFraming = (bytes: Stream.Stream<Uint8Array, ProviderChunkError>) =>
+  bytes.pipe(Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames))
+
+// If a stream ends after `messageStop` but before `metadata` (rare but
+// possible on truncated transports), still surface a terminal finish.
+const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
+  state.pendingStopReason
+    ? [{ type: "request-finish", reason: mapFinishReason(state.pendingStopReason) }]
+    : []
+
 const parseStream = (response: HttpClientResponse.HttpClientResponse) =>
-  response.stream.pipe(
-    Stream.mapError((error) =>
-      ProviderShared.chunkError(ADAPTER, "Failed to read Bedrock Converse stream", String(error)),
-    ),
-    // Frame buffer: accumulate bytes, emit decoded chunk objects as they
-    // become available. `mapAccumEffect` flattens the per-step `ReadonlyArray`
-    // automatically so the downstream stream sees one chunk object per element.
-    Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames),
-    Stream.mapEffect(decodeChunk),
-    Stream.mapAccumEffect(
-      (): ParserState => ({ tools: {}, pendingStopReason: undefined }),
-      processChunk,
-      {
-        // If a stream ends after `messageStop` but before `metadata` (rare but
-        // possible on truncated transports), still surface a terminal finish.
-        onHalt: (state): ReadonlyArray<LLMEvent> =>
-          state.pendingStopReason
-            ? [{ type: "request-finish", reason: mapFinishReason(state.pendingStopReason) }]
-            : [],
-      },
-    ),
-  )
+  ProviderShared.framed({
+    adapter: ADAPTER,
+    response,
+    readError: "Failed to read Bedrock Converse stream",
+    framing: eventStreamFraming,
+    decodeChunk,
+    initial: (): ParserState => ({ tools: {}, pendingStopReason: undefined }),
+    process: processChunk,
+    onHalt,
+  })
 
 export const adapter = Adapter.define<BedrockConverseDraft, BedrockConverseTarget>({
   id: ADAPTER,

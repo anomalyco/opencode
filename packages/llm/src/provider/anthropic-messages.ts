@@ -211,8 +211,6 @@ const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.
 
 const cacheControl = (cache: CacheHint | undefined) => cache?.type === "ephemeral" ? { type: "ephemeral" as const } : undefined
 
-const text = (values: ReadonlyArray<{ readonly text: string }>) => values.map((part) => part.text).join("\n")
-
 const resultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
   return ProviderShared.encodeJson(part.result.value)
@@ -400,11 +398,7 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
 const finishToolCall = (tool: ToolAccumulator | undefined) =>
   Effect.gen(function* () {
     if (!tool) return [] as ReadonlyArray<LLMEvent>
-    const input = yield* ProviderShared.parseJson(
-      ADAPTER,
-      tool.input || "{}",
-      `Invalid JSON input for Anthropic Messages tool call ${tool.name}`,
-    )
+    const input = yield* ProviderShared.parseToolInput(ADAPTER, tool.name, tool.input)
     const event: LLMEvent = tool.providerExecuted
       ? { type: "tool-call", id: tool.id, name: tool.name, input, providerExecuted: true }
       : { type: "tool-call", id: tool.id, name: tool.name, input }
