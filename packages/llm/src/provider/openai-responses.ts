@@ -324,7 +324,6 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     adapter: ADAPTER,
     response,
     readError: "Failed to read OpenAI Responses stream",
-    invalidChunk: "Invalid OpenAI Responses stream chunk",
     decodeChunk,
     initial: (): ParserState => ({ tools: {} }),
     process: processChunk,

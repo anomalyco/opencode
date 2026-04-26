@@ -26,7 +26,6 @@ export const sse = <Chunk, State, Event>(input: {
   readonly adapter: string
   readonly response: HttpClientResponse.HttpClientResponse
   readonly readError: string
-  readonly invalidChunk: string
   readonly decodeChunk: (data: string) => Effect.Effect<Chunk, ProviderChunkError>
   readonly initial: () => State
   readonly process: (

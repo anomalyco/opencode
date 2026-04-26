@@ -406,7 +406,6 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     adapter: ADAPTER,
     response,
     readError: "Failed to read Gemini stream",
-    invalidChunk: "Invalid Gemini stream chunk",
     decodeChunk,
     initial: (): ParserState => ({ hasToolCalls: false, nextToolCallId: 0 }),
     process: processChunk,

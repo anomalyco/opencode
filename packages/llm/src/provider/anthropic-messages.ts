@@ -414,7 +414,6 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     adapter: ADAPTER,
     response,
     readError: "Failed to read Anthropic Messages stream",
-    invalidChunk: "Invalid Anthropic Messages stream chunk",
     decodeChunk,
     initial: (): ParserState => ({ tools: {} }),
     process: processChunk,

@@ -368,7 +368,6 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     adapter: ADAPTER,
     response,
     readError: "Failed to read OpenAI Chat stream",
-    invalidChunk: "Invalid OpenAI Chat stream chunk",
     decodeChunk,
     initial: (): ParserState => ({ tools: {}, toolCalls: [] }),
     process: processChunk,
