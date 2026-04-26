@@ -1,11 +1,22 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Effect, Schema, Stream } from "effect"
+import { HttpClientRequest } from "effect/unstable/http"
 import { LLM } from "../src"
 import { Adapter, client } from "../src/adapter"
-import { RequestExecutor } from "../src/executor"
 import { Patch } from "../src/patch"
+import type { LLMRequest } from "../src/schema"
 import { testEffect } from "./lib/effect"
+import { dynamicResponse } from "./lib/http"
+
+const mapText = (fn: (text: string) => string) => (request: LLMRequest): LLMRequest => ({
+  ...request,
+  messages: request.messages.map((message) => ({
+    ...message,
+    content: message.content.map((part) =>
+      part.type === "text" ? { ...part, text: fn(part.text) } : part,
+    ),
+  })),
+})
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -42,8 +53,7 @@ const fake = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
           .filter((part) => part.type === "text")
           .map((part) => part.text),
         ...request.tools.map((tool) => `tool:${tool.name}:${tool.description}`),
-      ]
-        .join("\n"),
+      ].join("\n"),
     }),
   toHttp: (target) =>
     Effect.succeed(
@@ -68,20 +78,18 @@ const gemini = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
   protocol: "gemini",
 })
 
-const httpLayer = Layer.succeed(
-  HttpClient.HttpClient,
-  HttpClient.make((request) =>
-    Effect.gen(function* () {
-      const web = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
-      return HttpClientResponse.fromWeb(
-        request,
-        new Response(encodeJson([{ type: "text", text: `echo:${yield* Effect.promise(() => web.text())}` }, { type: "finish", reason: "stop" }])),
-      )
-    }),
+const echoLayer = dynamicResponse(({ text }) =>
+  Effect.succeed(
+    new Response(
+      encodeJson([
+        { type: "text", text: `echo:${text}` },
+        { type: "finish", reason: "stop" },
+      ]),
+    ),
   ),
 )
 
-const it = testEffect(RequestExecutor.layer.pipe(Layer.provide(httpLayer)))
+const it = testEffect(echoLayer)
 
 describe("llm adapter", () => {
   it.effect("prepare applies target patches with trace", () =>
@@ -137,13 +145,7 @@ describe("llm adapter", () => {
           }),
           Patch.prompt("test.message", {
             reason: "rewrite prompt text",
-            apply: (request) => ({
-              ...request,
-              messages: request.messages.map((message) => ({
-                ...message,
-                content: message.content.map((part) => (part.type === "text" ? { ...part, text: "patched" } : part)),
-              })),
-            }),
+            apply: mapText(() => "patched"),
           }),
           Patch.toolSchema("test.description", {
             reason: "rewrite tool description",
@@ -167,6 +169,59 @@ describe("llm adapter", () => {
     }),
   )
 
+  it.effect("request patches feed into prompt-patch predicates so phases see updated context", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({
+        adapters: [fake],
+        patches: [
+          // Earlier phase rewrites the provider, later phase only fires for the
+          // rewritten provider. If `compile` re-uses a stale PatchContext this
+          // test fails because the prompt patch's `when` would not match.
+          Patch.request("rewrite-provider", {
+            reason: "swap provider before prompt phase",
+            apply: (request) => ({
+              ...request,
+              model: LLM.model({ ...request.model, provider: "rewritten" }),
+            }),
+          }),
+          Patch.prompt("rewrite-only-when-rewritten", {
+            reason: "rewrite prompt text only after provider swap",
+            when: (ctx) => ctx.model.provider === "rewritten",
+            apply: mapText((text) => `rewrote-${text}`),
+          }),
+        ],
+      }).prepare(request)
+
+      expect(prepared.target).toEqual({ body: "rewrote-hello" })
+      expect(prepared.patchTrace.map((item) => item.id)).toEqual([
+        "request.rewrite-provider",
+        "prompt.rewrite-only-when-rewritten",
+      ])
+    }),
+  )
+
+  it.effect("patches with the same order sort by id for deterministic application", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({
+        adapters: [fake],
+        patches: [
+          Patch.prompt("zeta", {
+            reason: "later id",
+            order: 1,
+            apply: mapText((text) => `${text}|zeta`),
+          }),
+          Patch.prompt("alpha", {
+            reason: "earlier id",
+            order: 1,
+            apply: mapText((text) => `${text}|alpha`),
+          }),
+        ],
+      }).prepare(request)
+
+      expect(prepared.target).toEqual({ body: "hello|alpha|zeta" })
+    }),
+  )
+
   it.effect("stream patches transform raised events", () =>
     Effect.gen(function* () {
       const llm = client({
@@ -182,6 +237,29 @@ describe("llm adapter", () => {
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
 
       expect(events[0]).toEqual({ type: "text-delta", text: 'ECHO:{"BODY":"HELLO"}' })
+    }),
+  )
+
+  it.effect("stream patches transform multiple events per stream", () =>
+    Effect.gen(function* () {
+      // Verifies stream patches run on every event, not just the first.
+      const seen: string[] = []
+      const llm = client({
+        adapters: [fake],
+        patches: [
+          Patch.stream("test.tap", {
+            reason: "record every event type",
+            apply: (event) => {
+              seen.push(event.type)
+              return event
+            },
+          }),
+        ],
+      })
+
+      yield* llm.stream(request).pipe(Stream.runDrain)
+
+      expect(seen).toEqual(["text-delta", "request-finish"])
     }),
   )
 

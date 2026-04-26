@@ -1,6 +1,12 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Effect, FileSystem, Layer, Schema } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Effect, FileSystem, Layer, Option, Ref, Schema } from "effect"
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -14,6 +20,7 @@ const RequestSnapshot = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.String,
 })
+type RequestSnapshot = Schema.Schema.Type<typeof RequestSnapshot>
 
 const ResponseSnapshot = Schema.Struct({
   status: Schema.Number,
@@ -25,6 +32,7 @@ const Interaction = Schema.Struct({
   request: RequestSnapshot,
   response: ResponseSnapshot,
 })
+type Interaction = Schema.Schema.Type<typeof Interaction>
 
 const Cassette = Schema.Struct({
   version: Schema.Literal(1),
@@ -32,31 +40,106 @@ const Cassette = Schema.Struct({
 })
 
 const CassetteJson = Schema.fromJsonString(Cassette)
-const RequestJson = Schema.fromJsonString(RequestSnapshot)
-
-const decodeCassette = Schema.decodeUnknownSync(Cassette)
 const decodeCassetteJson = Schema.decodeUnknownSync(CassetteJson)
 const encodeCassetteJson = Schema.encodeSync(CassetteJson)
-const encodeRequestJson = Schema.encodeSync(RequestJson)
+
+const JsonValue = Schema.fromJsonString(Schema.Unknown)
+const decodeJson = Schema.decodeUnknownOption(JsonValue)
 
 const isRecordMode = process.env.RECORD === "true"
 
 const fixturePath = (name: string) => path.join(FIXTURES_DIR, `${name}.json`)
 
-const requestHeaders = (headers: Headers) =>
-  Object.fromEntries(
-    [...headers.entries()].filter(([name]) => ["content-type", "accept", "openai-beta"].includes(name.toLowerCase())),
-  )
+/**
+ * Default request header allow-list. Provider adapters with custom auth
+ * (Anthropic `x-api-key`, Bedrock SigV4, etc.) should extend this via the
+ * `requestHeaders` option so cassette matching uses the right keys.
+ */
+export const DEFAULT_REQUEST_HEADERS: ReadonlyArray<string> = [
+  "content-type",
+  "accept",
+  "openai-beta",
+]
 
-const requestSnapshot = Effect.fnUntraced(function* (request: HttpClientRequest.HttpClientRequest) {
-  const web = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
-  return {
-    method: web.method,
-    url: web.url,
-    headers: requestHeaders(web.headers),
-    body: yield* Effect.promise(() => web.text()),
+const DEFAULT_RESPONSE_HEADERS: ReadonlyArray<string> = ["content-type"]
+
+export interface RecordReplayOptions {
+  /**
+   * Lower-cased request header names that participate in cassette matching and
+   * are persisted to disk. Anything not in this list is dropped.
+   */
+  readonly requestHeaders?: ReadonlyArray<string>
+  /**
+   * Lower-cased response header names persisted to disk. Defaults to
+   * `content-type` only. Add `x-request-id`, rate-limit headers, etc. when a
+   * test depends on them.
+   */
+  readonly responseHeaders?: ReadonlyArray<string>
+  /**
+   * Hook to redact secrets from request bodies before they are written. Runs
+   * on the parsed JSON value when the body decodes as JSON; non-JSON bodies
+   * pass through untouched.
+   */
+  readonly redactBody?: (body: unknown) => unknown
+  /**
+   * Custom request matcher. Defaults to `defaultMatcher`, which compares
+   * method, url, structurally-canonical JSON body, and the allow-listed
+   * headers.
+   */
+  readonly match?: RequestMatcher
+}
+
+export type RequestMatcher = (incoming: RequestSnapshot, recorded: RequestSnapshot) => boolean
+
+/**
+ * Sort object keys recursively so two semantically equal JSON values produce
+ * the same string. Arrays preserve order — provider request bodies care about
+ * `messages` ordering.
+ */
+const canonicalize = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .toSorted()
+        .map((key) => [key, canonicalize((value as Record<string, unknown>)[key])]),
+    )
   }
-})
+  return value
+}
+
+const canonicalSnapshot = (snapshot: RequestSnapshot): string =>
+  JSON.stringify({
+    method: snapshot.method,
+    url: snapshot.url,
+    headers: canonicalize(snapshot.headers),
+    body: Option.match(decodeJson(snapshot.body), {
+      onNone: () => snapshot.body,
+      onSome: canonicalize,
+    }),
+  })
+
+export const defaultMatcher: RequestMatcher = (incoming, recorded) =>
+  canonicalSnapshot(incoming) === canonicalSnapshot(recorded)
+
+const lowerHeaders = (headers: Record<string, string>, allow: ReadonlyArray<string>) => {
+  const allowed = new Set(allow.map((name) => name.toLowerCase()))
+  return Object.fromEntries(
+    Object.entries(headers)
+      .map(([name, value]) => [name.toLowerCase(), value] as const)
+      .filter(([name]) => allowed.has(name))
+      .toSorted(([a], [b]) => a.localeCompare(b)),
+  )
+}
+
+const responseHeaders = (
+  response: HttpClientResponse.HttpClientResponse,
+  allow: ReadonlyArray<string>,
+) => {
+  const merged = lowerHeaders(response.headers as Record<string, string>, allow)
+  if (!merged["content-type"]) merged["content-type"] = "text/event-stream"
+  return merged
+}
 
 const fixtureMissing = (request: HttpClientRequest.HttpClientRequest, name: string) =>
   new HttpClientError.HttpClientError({
@@ -74,16 +157,6 @@ const fixtureMismatch = (request: HttpClientRequest.HttpClientRequest, name: str
     }),
   })
 
-const responseSnapshot = (response: HttpClientResponse.HttpClientResponse, body: string) => ({
-  status: response.status,
-  headers: headers(response),
-  body,
-})
-
-const headers = (response: HttpClientResponse.HttpClientResponse) => ({
-  "content-type": response.headers["content-type"] ?? "text/event-stream",
-})
-
 export const hasFixtureSync = (name: string) => {
   try {
     decodeCassetteJson(fs.readFileSync(fixturePath(name), "utf8"))
@@ -93,7 +166,10 @@ export const hasFixtureSync = (name: string) => {
   }
 }
 
-export const layer = (name: string): Layer.Layer<HttpClient.HttpClient> =>
+export const layer = (
+  name: string,
+  options: RecordReplayOptions = {},
+): Layer.Layer<HttpClient.HttpClient> =>
   Layer.effect(
     HttpClient.HttpClient,
     Effect.gen(function* () {
@@ -101,22 +177,50 @@ export const layer = (name: string): Layer.Layer<HttpClient.HttpClient> =>
       const fileSystem = yield* FileSystem.FileSystem
       const file = fixturePath(name)
       const dir = path.dirname(file)
-      const recorded: Array<typeof Interaction.Type> = []
+      const requestHeadersAllow = options.requestHeaders ?? DEFAULT_REQUEST_HEADERS
+      const responseHeadersAllow = options.responseHeaders ?? DEFAULT_RESPONSE_HEADERS
+      const match = options.match ?? defaultMatcher
+      const recorded = yield* Ref.make<ReadonlyArray<Interaction>>([])
+
+      const snapshotRequest = (request: HttpClientRequest.HttpClientRequest) =>
+        Effect.gen(function* () {
+          const web = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
+          const raw = yield* Effect.promise(() => web.text())
+          const redact = options.redactBody
+          const body = redact
+            ? Option.match(decodeJson(raw), {
+                onNone: () => raw,
+                onSome: (parsed) => JSON.stringify(redact(parsed)),
+              })
+            : raw
+          return {
+            method: web.method,
+            url: web.url,
+            headers: lowerHeaders(Object.fromEntries(web.headers.entries()), requestHeadersAllow),
+            body,
+          }
+        })
 
       return HttpClient.make((request) => {
         if (isRecordMode) {
           return Effect.gen(function* () {
-            const currentRequest = yield* requestSnapshot(request)
+            const currentRequest = yield* snapshotRequest(request)
             const response = yield* upstream.execute(request)
             const body = yield* response.text
-            const interaction = decodeCassette({
-              version: 1,
-              interactions: [...recorded, { request: currentRequest, response: responseSnapshot(response, body) }],
-            })
-            recorded.splice(0, recorded.length, ...interaction.interactions)
+            const interaction: Interaction = {
+              request: currentRequest,
+              response: {
+                status: response.status,
+                headers: responseHeaders(response, responseHeadersAllow),
+                body,
+              },
+            }
+            const interactions = yield* Ref.updateAndGet(recorded, (prev) => [...prev, interaction])
             yield* fileSystem.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
-            yield* fileSystem.writeFileString(file, encodeCassetteJson(interaction)).pipe(Effect.orDie)
-            return HttpClientResponse.fromWeb(request, new Response(body, responseSnapshot(response, body)))
+            yield* fileSystem
+              .writeFileString(file, encodeCassetteJson({ version: 1, interactions }))
+              .pipe(Effect.orDie)
+            return HttpClientResponse.fromWeb(request, new Response(body, interaction.response))
           })
         }
 
@@ -124,11 +228,13 @@ export const layer = (name: string): Layer.Layer<HttpClient.HttpClient> =>
           const cassette = decodeCassetteJson(
             yield* fileSystem.readFileString(file).pipe(Effect.mapError(() => fixtureMissing(request, name))),
           )
-          const currentRequest = encodeRequestJson(yield* requestSnapshot(request))
-          const interaction = cassette.interactions.find((interaction) => encodeRequestJson(interaction.request) === currentRequest)
-          if (!interaction) {
-            return yield* fixtureMismatch(request, name)
-          }
+          const incoming = yield* snapshotRequest(request)
+          const incomingCanonical = canonicalSnapshot(incoming)
+          const interaction =
+            match === defaultMatcher
+              ? cassette.interactions.find((candidate) => canonicalSnapshot(candidate.request) === incomingCanonical)
+              : cassette.interactions.find((candidate) => match(incoming, candidate.request))
+          if (!interaction) return yield* fixtureMismatch(request, name)
 
           return HttpClientResponse.fromWeb(request, new Response(interaction.response.body, interaction.response))
         })

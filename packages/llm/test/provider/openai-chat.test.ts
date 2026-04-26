@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { LLM } from "../../src"
 import { client } from "../../src/adapter"
-import { RequestExecutor } from "../../src/executor"
 import { OpenAIChat } from "../../src/provider/openai-chat"
 import { testEffect } from "../lib/effect"
+import { fixedResponse, truncatedStream } from "../lib/http"
+import { sseEvents } from "../lib/sse"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(TargetJson)
@@ -26,27 +26,24 @@ const request = LLM.request({
 
 const it = testEffect(Layer.empty)
 
-const streamLayer = (body: string) =>
-  RequestExecutor.layer.pipe(
-    Layer.provide(
-      Layer.succeed(
-        HttpClient.HttpClient,
-        HttpClient.make((request) =>
-          Effect.succeed(
-            HttpClientResponse.fromWeb(
-              request,
-              new Response(body, { headers: { "content-type": "text/event-stream" } }),
-            ),
-          ),
-        ),
-      ),
-    ),
-  )
+const deltaChunk = (delta: object, finishReason: string | null = null) => ({
+  id: "chatcmpl_fixture",
+  choices: [{ delta, finish_reason: finishReason }],
+  usage: null,
+})
+
+const usageChunk = (usage: object) => ({
+  id: "chatcmpl_fixture",
+  choices: [],
+  usage,
+})
 
 describe("OpenAI Chat adapter", () => {
   it.effect("prepares OpenAI Chat target", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({ adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])] }).prepare(request)
+      const prepared = yield* client({
+        adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])],
+      }).prepare(request)
 
       expect(prepared.target).toEqual({
         model: "gpt-4o-mini",
@@ -133,18 +130,23 @@ describe("OpenAI Chat adapter", () => {
 
   it.effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {
-      const body = `data: {"id":"chatcmpl_fixture","choices":[{"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}],"usage":null}
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "Hello" }),
+        deltaChunk({ content: "!" }),
+        deltaChunk({}, "stop"),
+        usageChunk({
+          prompt_tokens: 5,
+          completion_tokens: 2,
+          total_tokens: 7,
+          prompt_tokens_details: { cached_tokens: 1 },
+          completion_tokens_details: { reasoning_tokens: 0 },
+        }),
+      )
+      const response = yield* client({ adapters: [OpenAIChat.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(fixedResponse(body)))
 
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{"content":"!"},"finish_reason":null}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{},"finish_reason":"stop"}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7,"prompt_tokens_details":{"cached_tokens":1},"completion_tokens_details":{"reasoning_tokens":0}}}
-
-data: [DONE]
-`
-      const response = yield* client({ adapters: [OpenAIChat.adapter] }).generate(request).pipe(Effect.provide(streamLayer(body)))
-
+      expect(LLM.outputText(response)).toBe("Hello!")
       expect(response.events).toEqual([
         { type: "text-delta", text: "Hello" },
         { type: "text-delta", text: "!" },
@@ -167,26 +169,29 @@ data: [DONE]
           },
         },
       ])
-      expect(response.usage?.totalTokens).toBe(7)
     }),
   )
 
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
-      const body = `data: {"id":"chatcmpl_fixture","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","function":{"name":"lookup","arguments":"{\\"query\\""}}]},"finish_reason":null}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\\"weather\\"}"}}]},"finish_reason":null}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":null}
-
-data: [DONE]
-`
-      const response = yield* client({ adapters: [OpenAIChat.adapter] }).generate(
-        LLM.request({
-          ...request,
-          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+      const body = sseEvents(
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [
+            { index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query"' } },
+          ],
         }),
-      ).pipe(Effect.provide(streamLayer(body)))
+        deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
+        deltaChunk({}, "tool_calls"),
+      )
+      const response = yield* client({ adapters: [OpenAIChat.adapter] })
+        .generate(
+          LLM.request({
+            ...request,
+            tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          }),
+        )
+        .pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.events).toEqual([
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
@@ -199,15 +204,46 @@ data: [DONE]
 
   it.effect("fails on malformed stream chunks", () =>
     Effect.gen(function* () {
-      const body = `data: {"id":"chatcmpl_fixture","choices":[{"delta":{"content":123},"finish_reason":null}],"usage":null}
-
-data: [DONE]
-`
+      const body = sseEvents(deltaChunk({ content: 123 }))
       const error = yield* client({ adapters: [OpenAIChat.adapter] })
         .generate(request)
-        .pipe(Effect.provide(streamLayer(body)), Effect.flip)
+        .pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
       expect(error.message).toContain("Invalid OpenAI Chat stream chunk")
+    }),
+  )
+
+  it.effect("surfaces transport errors that occur mid-stream", () =>
+    Effect.gen(function* () {
+      const layer = truncatedStream([
+        `data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}\n\n`,
+      ])
+      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(layer), Effect.flip)
+
+      expect(error.message).toContain("Failed to read OpenAI Chat stream")
+    }),
+  )
+
+  it.effect("short-circuits the upstream stream when the consumer takes a prefix", () =>
+    Effect.gen(function* () {
+      const llm = client({ adapters: [OpenAIChat.adapter] })
+      // The body has more chunks than we'll consume. If `Stream.take(1)` did
+      // not interrupt the upstream HTTP body the test would hang waiting for
+      // the rest of the stream to drain.
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "Hello" }),
+        deltaChunk({ content: " world" }),
+        deltaChunk({}, "stop"),
+      )
+
+      const events = Array.from(
+        yield* llm
+          .stream(request)
+          .pipe(Stream.take(1), Stream.runCollect, Effect.provide(fixedResponse(body))),
+      )
+      expect(events.map((event) => event.type)).toEqual(["text-delta"])
     }),
   )
 })

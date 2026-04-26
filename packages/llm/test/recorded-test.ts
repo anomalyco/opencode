@@ -2,21 +2,25 @@ import { test, type TestOptions } from "bun:test"
 import { Effect, Layer } from "effect"
 import { RequestExecutor } from "../src/executor"
 import { testEffect } from "./lib/effect"
-import { hasFixtureSync, layer as recordReplayLayer } from "./record-replay"
+import {
+  hasFixtureSync,
+  layer as recordReplayLayer,
+  type RecordReplayOptions,
+} from "./record-replay"
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
 
 type RecordedTestsOptions = {
   readonly prefix: string
   readonly requires?: ReadonlyArray<string>
+  readonly options?: RecordReplayOptions
 }
 
 type RecordedCaseOptions = {
   readonly cassette?: string
   readonly requires?: ReadonlyArray<string>
+  readonly options?: RecordReplayOptions
 }
-
-const cassettes = new Set<string>()
 
 const kebab = (value: string) =>
   value
@@ -32,6 +36,11 @@ const cassetteName = (prefix: string, name: string, options: RecordedCaseOptions
   options.cassette ?? `${prefix}/${kebab(name)}`
 
 export const recordedTests = (options: RecordedTestsOptions) => {
+  // Scoped to this `recordedTests` group rather than module-global so two
+  // describe files using different prefixes don't collide and parallelization
+  // at the file level stays safe.
+  const cassettes = new Set<string>()
+
   const run = <A, E>(
     name: string,
     caseOptions: RecordedCaseOptions,
@@ -50,7 +59,10 @@ export const recordedTests = (options: RecordedTestsOptions) => {
       return test.skip(name, () => {}, testOptions)
     }
 
-    return testEffect(RequestExecutor.layer.pipe(Layer.provide(recordReplayLayer(cassette)))).live(name, body, testOptions)
+    const layerOptions = caseOptions.options ?? options.options
+    return testEffect(
+      RequestExecutor.layer.pipe(Layer.provide(recordReplayLayer(cassette, layerOptions))),
+    ).live(name, body, testOptions)
   }
 
   const effect = <A, E>(

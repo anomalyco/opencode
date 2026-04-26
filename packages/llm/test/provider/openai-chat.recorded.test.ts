@@ -54,6 +54,9 @@ const toolResultRequest = LLM.request({
   generation: { maxTokens: 40, temperature: 0 },
 })
 
+// Cassettes are deterministic — assert exact stream contents instead of fuzzy
+// `length > 0` checks so adapter parsing regressions surface immediately.
+// Re-record (`RECORD=true`) only when intentionally refreshing a cassette.
 const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
 const openai = client({ adapters: [OpenAIChat.adapter] })
 const openaiWithUsage = client({ adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])] })
@@ -62,21 +65,34 @@ describe("OpenAI Chat recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
       const response = yield* openaiWithUsage.generate(request)
-      const text = LLM.outputText(response)
 
-      expect(text.length).toBeGreaterThan(0)
-      expect(response.usage?.totalTokens).toBeGreaterThan(0)
-      expect(response.events.at(-1)?.type).toBe("request-finish")
+      expect(LLM.outputText(response)).toBe("Hello!")
+      expect(response.usage).toMatchObject({
+        inputTokens: 22,
+        outputTokens: 2,
+        totalTokens: 24,
+        cacheReadInputTokens: 0,
+        reasoningTokens: 0,
+      })
+      expect(response.events.map((event) => event.type)).toEqual([
+        "text-delta",
+        "text-delta",
+        "request-finish",
+      ])
+      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
     }),
   )
 
   recorded.effect("streams tool call", () =>
     Effect.gen(function* () {
       const response = yield* openai.generate(toolRequest)
-      const toolCall = response.events.find((event) => event.type === "tool-call")
 
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
-      expect(toolCall).toMatchObject({ type: "tool-call", name: "get_weather", input: { city: "Paris" } })
+      expect(response.events.find((event) => event.type === "tool-call")).toMatchObject({
+        type: "tool-call",
+        name: "get_weather",
+        input: { city: "Paris" },
+      })
       expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
     }),
   )
@@ -84,10 +100,9 @@ describe("OpenAI Chat recorded", () => {
   recorded.effect("continues after tool result", () =>
     Effect.gen(function* () {
       const response = yield* openaiWithUsage.generate(toolResultRequest)
-      const text = LLM.outputText(response)
 
-      expect(text.toLowerCase()).toContain("sunny")
-      expect(response.usage?.totalTokens).toBeGreaterThan(0)
+      expect(LLM.outputText(response)).toBe("The weather in Paris is sunny with a temperature of 22°C.")
+      expect(response.usage).toMatchObject({ inputTokens: 59, outputTokens: 14, totalTokens: 73 })
       expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
     }),
   )
