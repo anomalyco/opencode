@@ -374,6 +374,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         })
       if (created) {
         seed(sessionDirectory, created)
+        void globalSync.project.loadSessions(sessionDirectory)
         session = created
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         local.session.promote(sessionDirectory, session.id)

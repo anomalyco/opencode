@@ -566,7 +566,7 @@ export default function Layout(props: ParentProps) {
     const direct = projects.find((p) => workspaceKey(p.worktree) === key)
     if (direct) return direct
 
-    const [child] = globalSync.child(directory, { bootstrap: false })
+    const [child] = globalSync.child(directory, { bootstrap: true })
     const id = child.project
     if (!id) return
 
@@ -1839,6 +1839,17 @@ export default function Layout(props: ParentProps) {
     ),
   )
 
+  createEffect(
+    on(
+      () => [route().slug, params.id, currentDir()] as const,
+      ([slug, _id, dir]) => {
+        if (!slug || !dir) return
+        void globalSync.project.loadSessions(dir)
+      },
+      { defer: true },
+    ),
+  )
+
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
     if (!id) return
@@ -2329,6 +2340,17 @@ export default function Layout(props: ParentProps) {
   }
 
   const projects = () => layout.projects.list()
+  const panelProject = createMemo(() => {
+    const current = currentProject()
+    if (current) return current
+    const directory = currentDir()
+    if (directory) {
+      const root = projectRoot(directory)
+      const fromRoot = projects().find((project) => workspaceKey(project.worktree) === workspaceKey(root))
+      if (fromRoot) return fromRoot
+    }
+    return projects()[0]
+  })
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
   const sidebarContent = (mobile?: boolean) => (
     <SidebarContent
@@ -2352,7 +2374,7 @@ export default function Layout(props: ParentProps) {
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
       renderPanel={() =>
-        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
+        mobile ? <SidebarPanel project={panelProject} mobile /> : <SidebarPanel project={panelProject} merged />
       }
     />
   )

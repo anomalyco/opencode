@@ -472,17 +472,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                     if (!tracked(directory, sessionID)) return
                     const data = session.data
                     if (!data) return
-                    setStore(
-                      "session",
-                      produce((draft) => {
-                        const match = Binary.search(draft, sessionID, (s) => s.id)
-                        if (match.found) {
-                          draft[match.index] = data
-                          return
-                        }
-                        draft.splice(match.index, 0, data)
-                      }),
-                    )
+                    const upsertSession = (setter: Setter) =>
+                      setter(
+                        "session",
+                        produce((draft) => {
+                          const match = Binary.search(draft, sessionID, (s) => s.id)
+                          if (match.found) {
+                            draft[match.index] = data
+                            return
+                          }
+                          draft.splice(match.index, 0, data)
+                        }),
+                      )
+                    upsertSession(setStore)
+                    if (data.directory !== directory) {
+                      const [, targetSetStore] = globalSync.child(data.directory)
+                      upsertSession(targetSetStore)
+                    }
                   })
 
             const messagesReq =

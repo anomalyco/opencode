@@ -3,6 +3,7 @@ import { type Session } from "@opencode-ai/sdk/v2/client"
 
 type SessionStore = {
   session?: Session[]
+  project?: string
   path: { directory: string }
 }
 
@@ -28,11 +29,14 @@ function sortSessions(now: number) {
   }
 }
 
-const isRootVisibleSession = (session: Session, directory: string) =>
-  workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
+const isRootVisibleSession = (session: Session, store: SessionStore) => {
+  if (session.parentID || session.time?.archived) return false
+  if (store.project && session.projectID && store.project === session.projectID) return true
+  return workspaceKey(session.directory) === workspaceKey(store.path.directory)
+}
 
 export const roots = (store: SessionStore) =>
-  (store.session ?? []).filter((session) => isRootVisibleSession(session, store.path.directory))
+  (store.session ?? []).filter((session) => isRootVisibleSession(session, store))
 
 export const sortedRootSessions = (store: SessionStore, now: number) => roots(store).sort(sortSessions(now))
 

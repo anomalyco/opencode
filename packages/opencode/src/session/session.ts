@@ -750,11 +750,8 @@ export function* list(input?: {
   if (input?.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
   }
-  if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-    if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
-    }
-  }
+  // Keep session list stable across cwd changes within the same project.
+  // Project scoping is already enforced via project_id above.
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
   }
