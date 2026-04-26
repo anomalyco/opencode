@@ -6,10 +6,10 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { Global } from "@/global"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Global } from "@opencode-ai/core/global"
 import { Log } from "@/util"
-import { sanitizedProcessEnv } from "@/util/opencode-process"
+import { sanitizedProcessEnv } from "@opencode-ai/core/util/opencode-process"
 import { which } from "@/util/which"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"

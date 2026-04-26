@@ -7,7 +7,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Global } from "@opencode-ai/core/global"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { Npm } from "../src/npm"
+import { Npm } from "@opencode-ai/core/npm"
 import { tmpdir } from "./fixture/fixture"
 
 const win = process.platform === "win32"
