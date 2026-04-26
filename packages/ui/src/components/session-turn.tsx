@@ -411,6 +411,7 @@ export function SessionTurn(
                     showAssistantCopyPartID={assistantCopyPartID()}
                     turnDurationMs={turnDurationMs()}
                     working={working()}
+                    status={status()}
                     showReasoningSummaries={showReasoningSummaries()}
                     shellToolDefaultOpen={props.shellToolDefaultOpen}
                     editToolDefaultOpen={props.editToolDefaultOpen}
