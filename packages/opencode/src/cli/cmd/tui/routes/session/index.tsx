@@ -1427,6 +1427,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
+              <Show when={props.message.tokens.input > 0 || props.message.tokens.output > 0}>
+                <span style={{ fg: theme.textMuted }}>
+                  {" · "}
+                  {Locale.number(props.message.tokens.input + props.message.tokens.cache.read)}↓{" "}
+                  {Locale.number(props.message.tokens.output + props.message.tokens.reasoning)}↑
+                </span>
+              </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
               </Show>

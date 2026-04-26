@@ -20,6 +20,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       return {
         tokens: 0,
         percent: null,
+        input: 0,
+        output: 0,
       }
     }
 
@@ -29,6 +31,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     return {
       tokens,
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
+      input: last.tokens.input + last.tokens.cache.read,
+      output: last.tokens.output + last.tokens.reasoning,
     }
   })
 
@@ -39,6 +43,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       </text>
       <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
       <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
+      <text fg={theme().textMuted}>{state().input.toLocaleString()}↓ in · {state().output.toLocaleString()}↑ out</text>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
     </box>
   )
