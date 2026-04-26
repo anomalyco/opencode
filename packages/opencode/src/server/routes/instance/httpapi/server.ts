@@ -11,14 +11,18 @@ import { Filesystem } from "@/util"
 import { authorizationLayer } from "./auth"
 import { ConfigApi, configHandlers } from "./config"
 import { FileApi, fileHandlers } from "./file"
+import { ExperimentalApi, experimentalHandlers } from "./experimental"
 import { InstanceApi, instanceHandlers } from "./instance"
 import { McpApi, mcpHandlers } from "./mcp"
 import { PermissionApi, permissionHandlers } from "./permission"
 import { ProjectApi, projectHandlers } from "./project"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
+import { SessionApi, sessionHandlers } from "./session"
+import { SyncApi, syncHandlers } from "./sync"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
-import { memoMap } from "@/effect/memo-map"
+import { disposeMiddleware } from "./lifecycle"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
@@ -63,6 +67,7 @@ const instance = HttpRouter.middleware()(
 
 export const routes = Layer.mergeAll(
   HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
+  HttpApiBuilder.layer(ExperimentalApi).pipe(Layer.provide(experimentalHandlers)),
   HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),
   HttpApiBuilder.layer(InstanceApi).pipe(Layer.provide(instanceHandlers)),
   HttpApiBuilder.layer(McpApi).pipe(Layer.provide(mcpHandlers)),
@@ -70,6 +75,8 @@ export const routes = Layer.mergeAll(
   HttpApiBuilder.layer(QuestionApi).pipe(Layer.provide(questionHandlers)),
   HttpApiBuilder.layer(PermissionApi).pipe(Layer.provide(permissionHandlers)),
   HttpApiBuilder.layer(ProviderApi).pipe(Layer.provide(providerHandlers)),
+  HttpApiBuilder.layer(SessionApi).pipe(Layer.provide(sessionHandlers)),
+  HttpApiBuilder.layer(SyncApi).pipe(Layer.provide(syncHandlers)),
   HttpApiBuilder.layer(WorkspaceApi).pipe(Layer.provide(workspaceHandlers)),
 ).pipe(
   Layer.provide(authorizationLayer),
@@ -81,6 +88,7 @@ export const routes = Layer.mergeAll(
 export const webHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {
     memoMap,
+    middleware: disposeMiddleware,
   }),
 )
 

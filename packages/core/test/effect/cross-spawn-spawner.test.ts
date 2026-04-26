@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import fs from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import { Effect, Exit, Stream } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { tmpdir } from "../fixture/fixture"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
 const live = CrossSpawnSpawner.defaultLayer
@@ -39,11 +39,21 @@ function alive(pid: number) {
   }
 }
 
+async function tmpdir() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-core-test-"))
+  return {
+    path: dir,
+    async [Symbol.asyncDispose]() {
+      await fs.rm(dir, { recursive: true, force: true })
+    },
+  }
+}
+
 async function gone(pid: number, timeout = 5_000) {
   const end = Date.now() + timeout
   while (Date.now() < end) {
     if (!alive(pid)) return true
-    await Bun.sleep(50)
+    await new Promise((resolve) => setTimeout(resolve, 50))
   }
   return !alive(pid)
 }
@@ -395,7 +405,7 @@ describe("cross-spawn spawner", () => {
         const file = path.join(dir, "echo cmd.cmd")
 
         yield* Effect.promise(() => fs.mkdir(dir, { recursive: true }))
-        yield* Effect.promise(() => Bun.write(file, "@echo off\r\nif %~1==--stdio exit /b 0\r\nexit /b 7\r\n"))
+        yield* Effect.promise(() => fs.writeFile(file, "@echo off\r\nif %~1==--stdio exit /b 0\r\nexit /b 7\r\n"))
 
         const code = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
           svc.exitCode(
