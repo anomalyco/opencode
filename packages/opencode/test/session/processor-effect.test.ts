@@ -867,7 +867,6 @@ it.live("session.processor effect tests allow graceful steer interrupt", () =>
               },
             ],
             tail: [],
-            tailDelay: 100,
             hang: true,
           }),
         )
