@@ -2492,7 +2492,7 @@ export class Session2 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
-      type?: "steer" | "wrap"
+      type?: "steer" | "wrap" | "clear"
     },
     options?: Options<never, ThrowOnError>,
   ) {

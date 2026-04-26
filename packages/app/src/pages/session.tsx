@@ -1633,7 +1633,13 @@ export default function Page() {
     if (!sessionID) return
     if (followupBusy(sessionID)) return
 
-    setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
+    setFollowup("items", sessionID, (items) => {
+      const nextItems = (items ?? []).filter((entry) => entry.id !== id)
+      if (nextItems.length === 0) {
+        void sdk.client.session.interrupt({ sessionID, type: "clear" })
+      }
+      return nextItems
+    })
     setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
   }
 

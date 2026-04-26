@@ -1022,13 +1022,17 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", z.object({ type: z.enum(["steer", "wrap"]) })),
+      validator("json", z.object({ type: z.enum(["steer", "wrap", "clear"]) })),
       async (c) =>
         jsonRequest("SessionRoutes.interrupt", c, function* () {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
           const state = yield* SessionRunState.Service
-          yield* state.requestInterrupt(sessionID, body.type)
+          if (body.type === "clear") {
+            yield* state.clearInterrupt(sessionID)
+          } else {
+            yield* state.requestInterrupt(sessionID, body.type)
+          }
           return true
         }),
     )

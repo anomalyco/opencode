@@ -4139,7 +4139,7 @@ export type SessionShellResponse = SessionShellResponses[keyof SessionShellRespo
 
 export type SessionInterruptData = {
   body?: {
-    type: "steer" | "wrap"
+    type: "steer" | "wrap" | "clear"
   }
   path: {
     sessionID: string
