@@ -53,14 +53,14 @@ async function createTextMessage(directory: string, sessionID: SessionID, text: 
             model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
             time: { created: Date.now() },
           })
-          yield* svc.updatePart({
+          const part = yield* svc.updatePart({
             id: PartID.ascending(),
             sessionID,
             messageID: info.id,
             type: "text",
             text,
           })
-          return info
+          return { info, part }
         }),
       ),
   })
@@ -123,11 +123,11 @@ describe("session HttpApi", () => {
 
     expect(
       await json<MessageV2.WithParts>(
-        await app().request(pathFor(SessionPaths.message, { sessionID: parent.id, messageID: message.id }), {
+        await app().request(pathFor(SessionPaths.message, { sessionID: parent.id, messageID: message.info.id }), {
           headers,
         }),
       ),
-    ).toMatchObject({ info: { id: message.id } })
+    ).toMatchObject({ info: { id: message.info.id } })
   })
 
   test("serves lifecycle mutation routes through Hono bridge", async () => {
@@ -170,6 +170,52 @@ describe("session HttpApi", () => {
     expect(
       await json<boolean>(
         await app().request(pathFor(SessionPaths.remove, { sessionID: created.id }), { method: "DELETE", headers }),
+      ),
+    ).toBe(true)
+  })
+
+  test("serves message mutation routes through Hono bridge", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const session = await createSession(tmp.path, { title: "messages" })
+    const first = await createTextMessage(tmp.path, session.id, "first")
+    const second = await createTextMessage(tmp.path, session.id, "second")
+
+    const updated = await json<MessageV2.Part>(
+      await app().request(
+        pathFor(SessionPaths.updatePart, {
+          sessionID: session.id,
+          messageID: first.info.id,
+          partID: first.part.id,
+        }),
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ ...first.part, text: "updated" }),
+        },
+      ),
+    )
+    expect(updated).toMatchObject({ id: first.part.id, type: "text", text: "updated" })
+
+    expect(
+      await json<boolean>(
+        await app().request(
+          pathFor(SessionPaths.deletePart, {
+            sessionID: session.id,
+            messageID: first.info.id,
+            partID: first.part.id,
+          }),
+          { method: "DELETE", headers },
+        ),
+      ),
+    ).toBe(true)
+
+    expect(
+      await json<boolean>(
+        await app().request(pathFor(SessionPaths.deleteMessage, { sessionID: session.id, messageID: second.info.id }), {
+          method: "DELETE",
+          headers,
+        }),
       ),
     ).toBe(true)
   })

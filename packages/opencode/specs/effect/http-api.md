@@ -297,15 +297,15 @@ This checklist tracks bridge parity only. Checked routes are available through t
 - [ ] `POST /session/:sessionID/init` - run project init command.
 - [x] `POST /session/:sessionID/fork` - fork session.
 - [x] `POST /session/:sessionID/abort` - abort session.
-- [ ] `POST /session/:sessionID/share` - share session.
+- [x] `POST /session/:sessionID/share` - share session.
 - [x] `GET /session/:sessionID/diff` - session diff.
-- [ ] `DELETE /session/:sessionID/share` - unshare session.
+- [x] `DELETE /session/:sessionID/share` - unshare session.
 - [ ] `POST /session/:sessionID/summarize` - summarize session.
 - [x] `GET /session/:sessionID/message` - list session messages.
 - [x] `GET /session/:sessionID/message/:messageID` - get message.
-- [ ] `DELETE /session/:sessionID/message/:messageID` - delete message.
-- [ ] `DELETE /session/:sessionID/message/:messageID/part/:partID` - delete part.
-- [ ] `PATCH /session/:sessionID/message/:messageID/part/:partID` - update part.
+- [x] `DELETE /session/:sessionID/message/:messageID` - delete message.
+- [x] `DELETE /session/:sessionID/message/:messageID/part/:partID` - delete part.
+- [x] `PATCH /session/:sessionID/message/:messageID/part/:partID` - update part.
 - [ ] `POST /session/:sessionID/message` - prompt with streaming response.
 - [ ] `POST /session/:sessionID/prompt_async` - async prompt.
 - [ ] `POST /session/:sessionID/command` - run command.

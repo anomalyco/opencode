@@ -6,10 +6,11 @@ import { SessionShare } from "@/share"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
+import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
-import { MessageID, SessionID } from "@/session/schema"
+import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
 import { Effect, Layer, Schema, Struct } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -57,6 +58,10 @@ export const SessionPaths = {
   update: `${root}/:sessionID`,
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
+  share: `${root}/:sessionID/share`,
+  deleteMessage: `${root}/:sessionID/message/:messageID`,
+  deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
+  updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
 } as const
 
 export const SessionApi = HttpApi.make("session")
@@ -194,6 +199,56 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.abort",
             summary: "Abort session",
             description: "Abort an active session and stop any ongoing AI processing or command execution.",
+          }),
+        ),
+        HttpApiEndpoint.post("share", SessionPaths.share, {
+          params: { sessionID: SessionID },
+          success: Session.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.share",
+            summary: "Share session",
+            description: "Create a shareable link for a session, allowing others to view the conversation.",
+          }),
+        ),
+        HttpApiEndpoint.delete("unshare", SessionPaths.share, {
+          params: { sessionID: SessionID },
+          success: Session.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.unshare",
+            summary: "Unshare session",
+            description: "Remove the shareable link for a session, making it private again.",
+          }),
+        ),
+        HttpApiEndpoint.delete("deleteMessage", SessionPaths.deleteMessage, {
+          params: { sessionID: SessionID, messageID: MessageID },
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.deleteMessage",
+            summary: "Delete message",
+            description:
+              "Permanently delete a specific message and all of its parts from a session without reverting file changes.",
+          }),
+        ),
+        HttpApiEndpoint.delete("deletePart", SessionPaths.deletePart, {
+          params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "part.delete",
+            description: "Delete a part from a message.",
+          }),
+        ),
+        HttpApiEndpoint.patch("updatePart", SessionPaths.updatePart, {
+          params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
+          payload: MessageV2.Part,
+          success: MessageV2.Part,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "part.update",
+            description: "Update a part in a message.",
           }),
         ),
       )
@@ -375,6 +430,91 @@ export const sessionHandlers = Layer.unwrap(
       return true
     })
 
+    const share = Effect.fn("SessionHttpApi.share")(function* (ctx: { params: { sessionID: SessionID } }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const share = yield* SessionShare.Service
+              const session = yield* Session.Service
+              yield* share.share(ctx.params.sessionID)
+              return yield* session.get(ctx.params.sessionID)
+            }).pipe(Effect.provide(SessionShare.defaultLayer)),
+          ),
+        ),
+      )
+    })
+
+    const unshare = Effect.fn("SessionHttpApi.unshare")(function* (ctx: { params: { sessionID: SessionID } }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const share = yield* SessionShare.Service
+              const session = yield* Session.Service
+              yield* share.unshare(ctx.params.sessionID)
+              return yield* session.get(ctx.params.sessionID)
+            }).pipe(Effect.provide(SessionShare.defaultLayer)),
+          ),
+        ),
+      )
+    })
+
+    const deleteMessage = Effect.fn("SessionHttpApi.deleteMessage")(function* (ctx: {
+      params: { sessionID: SessionID; messageID: MessageID }
+    }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const state = yield* SessionRunState.Service
+              const session = yield* Session.Service
+              yield* state.assertNotBusy(ctx.params.sessionID)
+              yield* session.removeMessage(ctx.params)
+            }).pipe(Effect.provide(SessionRunState.defaultLayer), Effect.provide(Session.defaultLayer)),
+          ),
+        ),
+      )
+      return true
+    })
+
+    const deletePart = Effect.fn("SessionHttpApi.deletePart")(function* (ctx: {
+      params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
+    }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(Session.Service.use((svc) => svc.removePart(ctx.params)).pipe(Effect.provide(Session.defaultLayer))),
+        ),
+      )
+      return true
+    })
+
+    const updatePart = Effect.fn("SessionHttpApi.updatePart")(function* (ctx: {
+      params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
+      payload: typeof MessageV2.Part.Type
+    }) {
+      const payload = MessageV2.Part.zod.parse(ctx.payload)
+      if (
+        payload.id !== ctx.params.partID ||
+        payload.messageID !== ctx.params.messageID ||
+        payload.sessionID !== ctx.params.sessionID
+      ) {
+        throw new Error(
+          `Part mismatch: body.id='${payload.id}' vs partID='${ctx.params.partID}', body.messageID='${payload.messageID}' vs messageID='${ctx.params.messageID}', body.sessionID='${payload.sessionID}' vs sessionID='${ctx.params.sessionID}'`,
+        )
+      }
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(Session.Service.use((svc) => svc.updatePart(payload)).pipe(Effect.provide(Session.defaultLayer))),
+        ),
+      )
+    })
+
     return HttpApiBuilder.group(SessionApi, "session", (handlers) =>
       handlers
         .handle("list", list)
@@ -389,11 +529,17 @@ export const sessionHandlers = Layer.unwrap(
         .handle("remove", remove)
         .handle("update", update)
         .handle("fork", fork)
-        .handle("abort", abort),
+        .handle("abort", abort)
+        .handle("share", share)
+        .handle("unshare", unshare)
+        .handle("deleteMessage", deleteMessage)
+        .handle("deletePart", deletePart)
+        .handle("updatePart", updatePart),
     )
   }),
 ).pipe(
   Layer.provide(Session.defaultLayer),
+  Layer.provide(SessionRunState.defaultLayer),
   Layer.provide(SessionStatus.defaultLayer),
   Layer.provide(Todo.defaultLayer),
   Layer.provide(SessionSummary.defaultLayer),
