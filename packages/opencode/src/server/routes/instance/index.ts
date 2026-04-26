@@ -20,6 +20,7 @@ import { ExperimentalPaths } from "./httpapi/experimental"
 import { FilePaths } from "./httpapi/file"
 import { InstancePaths } from "./httpapi/instance"
 import { McpPaths } from "./httpapi/mcp"
+import { SyncPaths } from "./httpapi/sync"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -89,6 +90,9 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.delete(McpPaths.auth, (c) => handler(c.req.raw, context))
     app.post(McpPaths.connect, (c) => handler(c.req.raw, context))
     app.post(McpPaths.disconnect, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
   }
 
   return app
