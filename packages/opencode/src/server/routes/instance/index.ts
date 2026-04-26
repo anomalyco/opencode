@@ -16,6 +16,7 @@ import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { EventPaths } from "./httpapi/event"
 import { ExperimentalPaths } from "./httpapi/experimental"
 import { FilePaths } from "./httpapi/file"
 import { InstancePaths } from "./httpapi/instance"
@@ -41,6 +42,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
     const handler = ExperimentalHttpApiServer.webHandler().handler
     const context = Context.empty() as Context.Context<unknown>
+    app.get(EventPaths.event, (c) => handler(c.req.raw, context))
     app.get("/question", (c) => handler(c.req.raw, context))
     app.post("/question/:requestID/reply", (c) => handler(c.req.raw, context))
     app.post("/question/:requestID/reject", (c) => handler(c.req.raw, context))

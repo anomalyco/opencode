@@ -10,6 +10,7 @@ import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util"
 import { authorizationLayer } from "./auth"
 import { ConfigApi, configHandlers } from "./config"
+import { eventRoute } from "./event"
 import { FileApi, fileHandlers } from "./file"
 import { ExperimentalApi, experimentalHandlers } from "./experimental"
 import { InstanceApi, instanceHandlers } from "./instance"
@@ -66,6 +67,7 @@ const instance = HttpRouter.middleware()(
 ).layer
 
 export const routes = Layer.mergeAll(
+  eventRoute,
   HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
   HttpApiBuilder.layer(ExperimentalApi).pipe(Layer.provide(experimentalHandlers)),
   HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),

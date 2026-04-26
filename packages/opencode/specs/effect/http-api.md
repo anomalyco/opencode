@@ -184,7 +184,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | experimental JSON routes  | `bridged`         | console, tool, worktree list/mutations, global session list, resource list |
 | `session`                 | `bridged`         | read, lifecycle, prompt, message/part mutations, revert, permission reply  |
 | `sync`                    | `bridged`         | start/replay/history                                                       |
-| `event`                   | `special`         | SSE                                                                        |
+| `event`                   | `bridged`         | SSE via raw Effect HTTP                                                    |
 | `pty`                     | `special`         | websocket                                                                  |
 | `tui`                     | `special`         | UI bridge                                                                  |
 
@@ -316,7 +316,7 @@ This checklist tracks bridge parity only. Checked routes are available through t
 
 ### Event Routes
 
-- [ ] `GET /event` - SSE event stream; replace with raw Effect HTTP, not `HttpApi`.
+- [x] `GET /event` - SSE event stream via raw Effect HTTP.
 
 ### PTY Routes
 
