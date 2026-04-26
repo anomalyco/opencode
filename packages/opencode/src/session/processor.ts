@@ -218,9 +218,13 @@ export const layer: Layer.Layer<
 
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
-          case "start":
-            yield* status.set(ctx.sessionID, { type: "busy" })
+          case "start": {
+            const currentStatus = yield* status.get(ctx.sessionID)
+            if (currentStatus?.type !== "steer" && currentStatus?.type !== "wrap") {
+              yield* status.set(ctx.sessionID, { type: "busy" })
+            }
             return
+          }
 
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return

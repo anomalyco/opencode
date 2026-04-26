@@ -1316,7 +1316,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const session = yield* sessions.get(sessionID)
 
         while (true) {
-          yield* status.set(sessionID, { type: "busy" })
+          const currentStatus = yield* status.get(sessionID)
+          if (currentStatus?.type !== "steer" && currentStatus?.type !== "wrap") {
+            yield* status.set(sessionID, { type: "busy" })
+          }
           yield* slog.info("loop", { step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
