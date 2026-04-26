@@ -208,14 +208,18 @@ function normalizeMessages(
         // Include reasoning_content | reasoning_details directly on the message for all assistant messages.
         // Always set the field even when empty — some providers (e.g. DeepSeek) may return empty
         // reasoning_content which still needs to be sent back in subsequent requests.
+        // Preserve existing providerOptions[field] when content no longer has reasoning
+        // parts (e.g. after a prior transform pass already extracted them). The first
+        // pass sets the field from reasoning parts; on subsequent passes reasoningText
+        // is empty and must not overwrite the preserved value from DB.
         return {
           ...msg,
           content: filteredContent,
           providerOptions: {
             ...msg.providerOptions,
             [sdk]: {
-              ...msg.providerOptions?.[sdk],
               [field]: reasoningText,
+              ...msg.providerOptions?.[sdk],
             },
           },
         }
