@@ -12,22 +12,7 @@ export type Protocol = Schema.Schema.Type<typeof Protocol>
 export const ReasoningEffort = Schema.Literals(["none", "minimal", "low", "medium", "high", "xhigh", "max"])
 export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 
-export const TargetSlot = Schema.Literals([
-  "model",
-  "system",
-  "messages",
-  "tools",
-  "tool-choice",
-  "generation",
-  "reasoning",
-  "cache",
-  "response-format",
-  "headers",
-  "extensions",
-])
-export type TargetSlot = Schema.Schema.Type<typeof TargetSlot>
-
-export const PatchPhase = Schema.Literals(["request", "prompt", "tool-schema", "target", "transport", "stream"])
+export const PatchPhase = Schema.Literals(["request", "prompt", "tool-schema", "target", "stream"])
 export type PatchPhase = Schema.Schema.Type<typeof PatchPhase>
 
 export const MessageRole = Schema.Literals(["user", "assistant", "tool"])
@@ -340,21 +325,12 @@ export class PatchTrace extends Schema.Class<PatchTrace>("LLM.PatchTrace")({
   reason: Schema.String,
 }) {}
 
-export class TransportRequest extends Schema.Class<TransportRequest>("LLM.TransportRequest")({
-  url: Schema.String,
-  method: Schema.Literal("POST"),
-  headers: Schema.Record(Schema.String, Schema.String),
-  body: Schema.String,
-  timeoutMs: Schema.optional(Schema.Number),
-}) {}
-
 export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.PreparedRequest")({
   id: Schema.String,
   adapter: Schema.String,
   model: ModelRef,
   target: Schema.Unknown,
   redactedTarget: Schema.Unknown,
-  transport: TransportRequest,
   patchTrace: Schema.Array(PatchTrace),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
@@ -378,30 +354,6 @@ export class NoAdapterError extends Schema.TaggedErrorClass<NoAdapterError>()("L
   }
 }
 
-export class TargetMergeError extends Schema.TaggedErrorClass<TargetMergeError>()("LLM.TargetMergeError", {
-  slot: TargetSlot,
-  message: Schema.String,
-}) {}
-
-export class TargetValidationError extends Schema.TaggedErrorClass<TargetValidationError>()(
-  "LLM.TargetValidationError",
-  {
-    adapter: Schema.String,
-    message: Schema.String,
-    patchTrace: Schema.Array(PatchTrace),
-  },
-) {}
-
-export class ProviderRequestError extends Schema.TaggedErrorClass<ProviderRequestError>()("LLM.ProviderRequestError", {
-  adapter: Schema.String,
-  provider: Schema.String,
-  model: Schema.String,
-  status: Schema.optional(Schema.Number),
-  message: Schema.String,
-  body: Schema.optional(Schema.String),
-  patchTrace: Schema.Array(PatchTrace),
-}) {}
-
 export class ProviderChunkError extends Schema.TaggedErrorClass<ProviderChunkError>()("LLM.ProviderChunkError", {
   adapter: Schema.String,
   message: Schema.String,
@@ -415,8 +367,5 @@ export class TransportError extends Schema.TaggedErrorClass<TransportError>()("L
 export type LLMError =
   | InvalidRequestError
   | NoAdapterError
-  | TargetMergeError
-  | TargetValidationError
-  | ProviderRequestError
   | ProviderChunkError
   | TransportError

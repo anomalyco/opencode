@@ -1,7 +1,0 @@
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","function":{"name":"lookup","arguments":"{\"query\""}}]},"finish_reason":null}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"weather\"}"}}]},"finish_reason":null}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":null}
-
-data: [DONE]

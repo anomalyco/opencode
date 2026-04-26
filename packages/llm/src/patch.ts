@@ -1,12 +1,10 @@
-import type { LLMEvent, LLMRequest, ModelRef, PatchPhase, Protocol, ToolDefinition, TransportRequest } from "./schema"
+import type { LLMEvent, LLMRequest, ModelRef, PatchPhase, Protocol, ToolDefinition } from "./schema"
 import { PatchTrace } from "./schema"
 
 export interface PatchContext {
   readonly request: LLMRequest
   readonly model: ModelRef
   readonly protocol: ModelRef["protocol"]
-  readonly small: boolean
-  readonly flags: Record<string, string | number | boolean | undefined>
 }
 
 export interface Patch<A> {
@@ -53,7 +51,6 @@ export interface PatchRegistry {
   readonly prompt: ReadonlyArray<Patch<LLMRequest>>
   readonly toolSchema: ReadonlyArray<Patch<ToolDefinition>>
   readonly target: ReadonlyArray<Patch<unknown>>
-  readonly transport: ReadonlyArray<Patch<TransportRequest>>
   readonly stream: ReadonlyArray<Patch<LLMEvent>>
 }
 
@@ -62,7 +59,6 @@ export const emptyRegistry: PatchRegistry = {
   prompt: [],
   toolSchema: [],
   target: [],
-  transport: [],
   stream: [],
 }
 
@@ -84,11 +80,6 @@ export const Model = {
   idIncludes: (value: string) => predicate((context) => context.model.id.toLowerCase().includes(value.toLowerCase())),
 }
 
-export const Request = {
-  small: () => predicate((context) => context.small),
-  flag: (name: string) => predicate((context) => context.flags[name] === true),
-}
-
 export const make = <A>(id: string, phase: PatchPhase, input: PatchInput<A>): Patch<A> => ({
   id,
   phase,
@@ -106,8 +97,6 @@ export const toolSchema = (id: string, input: PatchInput<ToolDefinition>) => mak
 
 export const target = <A>(id: string, input: PatchInput<A>) => make(`target.${id}`, "target", input)
 
-export const transport = (id: string, input: PatchInput<TransportRequest>) => make(`transport.${id}`, "transport", input)
-
 export const stream = (id: string, input: PatchInput<LLMEvent>) => make(`stream.${id}`, "stream", input)
 
 export function registry(patches: ReadonlyArray<AnyPatch>): PatchRegistry {
@@ -116,22 +105,17 @@ export function registry(patches: ReadonlyArray<AnyPatch>): PatchRegistry {
     prompt: patches.filter((patch): patch is Patch<LLMRequest> => patch.phase === "prompt"),
     toolSchema: patches.filter((patch): patch is Patch<ToolDefinition> => patch.phase === "tool-schema"),
     target: patches.filter((patch) => patch.phase === "target") as unknown as ReadonlyArray<Patch<unknown>>,
-    transport: patches.filter((patch): patch is Patch<TransportRequest> => patch.phase === "transport"),
     stream: patches.filter((patch): patch is Patch<LLMEvent> => patch.phase === "stream"),
   }
 }
 
 export function context(input: {
   readonly request: LLMRequest
-  readonly small?: boolean
-  readonly flags?: Record<string, string | number | boolean | undefined>
 }): PatchContext {
   return {
     request: input.request,
     model: input.request.model,
     protocol: input.request.model.protocol,
-    small: input.small ?? false,
-    flags: input.flags ?? {},
   }
 }
 
@@ -166,7 +150,6 @@ export function mergeRegistries(registries: ReadonlyArray<PatchRegistry>): Patch
       prompt: [...merged.prompt, ...registry.prompt],
       toolSchema: [...merged.toolSchema, ...registry.toolSchema],
       target: [...merged.target, ...registry.target],
-      transport: [...merged.transport, ...registry.transport],
       stream: [...merged.stream, ...registry.stream],
     }),
     emptyRegistry,

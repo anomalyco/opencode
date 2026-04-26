@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLM } from "../src"
 import { Adapter, client } from "../src/adapter"
+import { RequestExecutor } from "../src/executor"
 import { Patch } from "../src/patch"
-import { TransportRequest } from "../src/schema"
-import { Transport } from "../src/transport"
 import { testEffect } from "./lib/effect"
 
 const Json = Schema.fromJsonString(Schema.Unknown)
@@ -33,12 +32,8 @@ const request = LLM.request({
 const fake = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
   id: "fake",
   protocol: "openai-chat",
-  builder: {
-    empty: { body: "" },
-    concat: (left, right) => Effect.succeed({ ...left, ...right }),
-    validate: (draft) => Effect.succeed(draft),
-  },
   redact: (target) => ({ ...target, redacted: true }),
+  validate: (draft) => Effect.succeed(draft),
   prepare: (request) =>
     Effect.succeed({
       body: [
@@ -50,14 +45,12 @@ const fake = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
       ]
         .join("\n"),
     }),
-  toTransport: (target) =>
+  toHttp: (target) =>
     Effect.succeed(
-      new TransportRequest({
-        url: "https://fake.local/chat",
-        method: "POST",
-        headers: {},
-        body: JSON.stringify(target),
-      }),
+      HttpClientRequest.post("https://fake.local/chat").pipe(
+        HttpClientRequest.setHeader("content-type", "application/json"),
+        HttpClientRequest.bodyText(encodeJson(target), "application/json"),
+      ),
     ),
   parse: (response) =>
     Stream.fromEffect(response.json.pipe(Effect.orDie, Effect.map((body) => body as FakeChunk[]))).pipe(
@@ -75,48 +68,43 @@ const gemini = Adapter.define<FakeDraft, FakeDraft, FakeChunk>({
   protocol: "gemini",
 })
 
-const transportLayer = Layer.succeed(
-  Transport.Service,
-  Transport.Service.of({
-    fetch: (request) =>
-      Effect.succeed(
-        HttpClientResponse.fromWeb(
-          HttpClientRequest.post(request.url),
-          new Response(encodeJson([{ type: "text", text: `echo:${request.body}` }, { type: "finish", reason: "stop" }])),
-        ),
-      ),
-  }),
+const httpLayer = Layer.succeed(
+  HttpClient.HttpClient,
+  HttpClient.make((request) =>
+    Effect.gen(function* () {
+      const web = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
+      return HttpClientResponse.fromWeb(
+        request,
+        new Response(encodeJson([{ type: "text", text: `echo:${yield* Effect.promise(() => web.text())}` }, { type: "finish", reason: "stop" }])),
+      )
+    }),
+  ),
 )
 
-const it = testEffect(transportLayer)
+const it = testEffect(RequestExecutor.layer.pipe(Layer.provide(httpLayer)))
 
 describe("llm adapter", () => {
-  test("prepare applies target and transport patches with trace", async () => {
+  test("prepare applies target patches with trace", async () => {
     const llm = client({
-      adapter: fake.withPatches([
-        fake.patch("include-usage", {
-          reason: "fake target patch",
-          apply: (draft) => ({ ...draft, includeUsage: true }),
-        }),
-      ]),
-      patches: [
-        Patch.transport("fake.header", {
-          reason: "fake transport patch",
-          apply: (request) => ({ ...request, headers: { ...request.headers, "x-fake": "1" } }),
-        }),
+      adapters: [
+        fake.withPatches([
+          fake.patch("include-usage", {
+            reason: "fake target patch",
+            apply: (draft) => ({ ...draft, includeUsage: true }),
+          }),
+        ]),
       ],
     })
 
     const prepared = await Effect.runPromise(llm.prepare(request))
 
     expect(prepared.redactedTarget).toEqual({ body: "hello", includeUsage: true, redacted: true })
-    expect(prepared.transport.headers).toEqual({ "x-fake": "1" })
-    expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.fake.include-usage", "transport.fake.header"])
+    expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.fake.include-usage"])
   })
 
   it.effect("stream and generate use the adapter pipeline", () =>
     Effect.gen(function* () {
-      const llm = client({ adapter: fake })
+      const llm = client({ adapters: [fake] })
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
       const response = yield* llm.generate(request)
 
@@ -140,7 +128,7 @@ describe("llm adapter", () => {
 
   test("request, prompt, and tool-schema patches run before adapter prepare", async () => {
     const llm = client({
-      adapter: fake,
+      adapters: [fake],
       patches: [
         Patch.request("test.id", {
           reason: "rewrite request id",
@@ -184,7 +172,7 @@ describe("llm adapter", () => {
   it.effect("stream patches transform raised events", () =>
     Effect.gen(function* () {
       const llm = client({
-        adapter: fake,
+        adapters: [fake],
         patches: [
           Patch.stream("test.uppercase", {
             reason: "uppercase text deltas",
@@ -200,7 +188,7 @@ describe("llm adapter", () => {
   )
 
   test("rejects protocol mismatch", async () => {
-    const llm = client({ adapter: fake })
+    const llm = client({ adapters: [fake] })
 
     await expect(
       Effect.runPromise(

@@ -31,7 +31,9 @@ const request = LLM.request({
 const response = yield* client({ adapters: [OpenAIChat.adapter] }).generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `client(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, converts that target into a `TransportRequest`, sends it through `Transport.Service`, parses the provider stream, raises common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `client(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream, raises common `LLMEvent`s, and finally returns an `LLMResponse`.
+
+Use `client(...).stream(request)` when callers want incremental `LLMEvent`s. Use `client(...).generate(request)` when callers want those same events collected into an `LLMResponse`.
 
 ### Adapters
 
@@ -41,8 +43,8 @@ Adapters should stay boring and typed:
 
 - `prepare` lowers common `LLMRequest` into a provider draft.
 - target patches mutate that draft before validation.
-- `builder.validate` validates the final provider target with Schema.
-- `toTransport` creates the HTTP request.
+- `validate` validates the final provider target with Schema.
+- `toHttp` creates the `HttpClientRequest`.
 - `parse` decodes provider chunks from `HttpClientResponse`.
 - `raise` converts provider chunks into common `LLMEvent`s.
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { LLM, ProviderPatch } from "../src"
-import { Model, Patch, Request, context, plan } from "../src/patch"
+import { Model, Patch, context, plan } from "../src/patch"
 
 const request = LLM.request({
   id: "req_1",
@@ -33,11 +33,11 @@ describe("llm patch", () => {
   })
 
   test("predicates compose", () => {
-    const ctx = context({ request, small: true, flags: { experimental: true } })
+    const ctx = context({ request })
 
-    expect(Model.provider("mistral").and(Request.small())(ctx)).toBe(true)
+    expect(Model.provider("mistral").and(Model.protocol("openai-chat"))(ctx)).toBe(true)
     expect(Model.provider("anthropic").or(Model.idIncludes("devstral"))(ctx)).toBe(true)
-    expect(Request.flag("experimental").not()(ctx)).toBe(false)
+    expect(Model.provider("mistral").not()(ctx)).toBe(false)
   })
 
   test("plan filters, sorts, applies, and traces deterministically", () => {

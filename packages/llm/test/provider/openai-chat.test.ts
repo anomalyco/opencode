@@ -1,11 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { LLM } from "../../src"
 import { client } from "../../src/adapter"
+import { RequestExecutor } from "../../src/executor"
 import { OpenAIChat } from "../../src/provider/openai-chat"
-import { TransportRequest } from "../../src/schema"
-import { Transport } from "../../src/transport"
 import { testEffect } from "../lib/effect"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
@@ -25,54 +24,48 @@ const request = LLM.request({
   generation: { maxTokens: 20, temperature: 0 },
 })
 
-const fixture = (name: string) => Bun.file(new URL(`../fixtures/openai-chat/${name}.sse`, import.meta.url)).text()
+const it = testEffect(Layer.empty)
 
-const layer = (name: string) =>
-  Layer.succeed(
-    Transport.Service,
-    Transport.Service.of({
-      fetch: (request) =>
-        Effect.promise(async () =>
-          HttpClientResponse.fromWeb(
-            HttpClientRequest.post(request.url),
-            new Response(await fixture(name), { headers: { "content-type": "text/event-stream" } }),
+const streamLayer = (body: string) =>
+  RequestExecutor.layer.pipe(
+    Layer.provide(
+      Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              new Response(body, { headers: { "content-type": "text/event-stream" } }),
+            ),
           ),
         ),
-    }),
+      ),
+    ),
   )
 
 describe("OpenAI Chat adapter", () => {
-  test("prepares OpenAI Chat transport request", async () => {
-    const llm = client({ adapter: OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage]) })
+  it.effect("prepares OpenAI Chat target", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])] }).prepare(request)
 
-    const prepared = await Effect.runPromise(llm.prepare(request))
+      expect(prepared.target).toEqual({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are concise." },
+          { role: "user", content: "Say hello." },
+        ],
+        stream: true,
+        stream_options: { include_usage: true },
+        max_tokens: 20,
+        temperature: 0,
+      })
+      expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.openai-chat.include-usage"])
+    }),
+  )
 
-    expect(prepared.transport).toEqual(
-      new TransportRequest({
-        url: "https://api.openai.test/v1/chat/completions",
-        method: "POST",
-        headers: { authorization: "Bearer test", "content-type": "application/json" },
-        body: encodeJson({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: "You are concise." },
-            { role: "user", content: "Say hello." },
-          ],
-          stream: true,
-          stream_options: { include_usage: true },
-          max_tokens: 20,
-          temperature: 0,
-        }),
-      }),
-    )
-    expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.openai-chat.include-usage"])
-  })
-
-  test("prepares assistant tool-call and tool-result messages", async () => {
-    const llm = client({ adapter: OpenAIChat.adapter })
-
-    const prepared = await Effect.runPromise(
-      llm.prepare(
+  it.effect("prepares assistant tool-call and tool-result messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [OpenAIChat.adapter] }).prepare(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -82,11 +75,9 @@ describe("OpenAI Chat adapter", () => {
             LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
         }),
-      ),
-    )
+      )
 
-    expect(prepared.transport.body).toBe(
-      encodeJson({
+      expect(prepared.target).toEqual({
         model: "gpt-4o-mini",
         messages: [
           { role: "user", content: "What is the weather?" },
@@ -104,41 +95,55 @@ describe("OpenAI Chat adapter", () => {
           { role: "tool", tool_call_id: "call_1", content: encodeJson({ forecast: "sunny" }) },
         ],
         stream: true,
-      }),
-    )
-  })
+      })
+    }),
+  )
 
-  test("rejects unsupported user media content", async () => {
-    await expect(
-      Effect.runPromise(
-        client({ adapter: OpenAIChat.adapter }).prepare(
+  it.effect("rejects unsupported user media content", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+        .prepare(
           LLM.request({
             id: "req_media",
             model,
             messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
           }),
-        ),
-      ),
-    ).rejects.toThrow("OpenAI Chat user messages only support text content for now")
-  })
+        )
+        .pipe(Effect.flip)
 
-  test("rejects unsupported assistant reasoning content", async () => {
-    await expect(
-      Effect.runPromise(
-        client({ adapter: OpenAIChat.adapter }).prepare(
+      expect(error.message).toContain("OpenAI Chat user messages only support text content for now")
+    }),
+  )
+
+  it.effect("rejects unsupported assistant reasoning content", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+        .prepare(
           LLM.request({
             id: "req_reasoning",
             model,
             messages: [LLM.assistant({ type: "reasoning", text: "hidden" })],
           }),
-        ),
-      ),
-    ).rejects.toThrow("OpenAI Chat assistant messages only support text and tool-call content for now")
-  })
+        )
+        .pipe(Effect.flip)
 
-  testEffect(layer("text")).effect("parses text and usage stream fixtures", () =>
+      expect(error.message).toContain("OpenAI Chat assistant messages only support text and tool-call content for now")
+    }),
+  )
+
+  it.effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {
-      const response = yield* client({ adapter: OpenAIChat.adapter }).generate(request)
+      const body = `data: {"id":"chatcmpl_fixture","choices":[{"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl_fixture","choices":[{"delta":{"content":"!"},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl_fixture","choices":[{"delta":{},"finish_reason":"stop"}],"usage":null}
+
+data: {"id":"chatcmpl_fixture","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7,"prompt_tokens_details":{"cached_tokens":1},"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+`
+      const response = yield* client({ adapters: [OpenAIChat.adapter] }).generate(request).pipe(Effect.provide(streamLayer(body)))
 
       expect(response.events).toEqual([
         { type: "text-delta", text: "Hello" },
@@ -166,14 +171,22 @@ describe("OpenAI Chat adapter", () => {
     }),
   )
 
-  testEffect(layer("tool-call")).effect("assembles streamed tool call input", () =>
+  it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
-      const response = yield* client({ adapter: OpenAIChat.adapter }).generate(
+      const body = `data: {"id":"chatcmpl_fixture","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","function":{"name":"lookup","arguments":"{\\"query\\""}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl_fixture","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\\"weather\\"}"}}]},"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl_fixture","choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":null}
+
+data: [DONE]
+`
+      const response = yield* client({ adapters: [OpenAIChat.adapter] }).generate(
         LLM.request({
           ...request,
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
         }),
-      )
+      ).pipe(Effect.provide(streamLayer(body)))
 
       expect(response.events).toEqual([
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
@@ -184,9 +197,15 @@ describe("OpenAI Chat adapter", () => {
     }),
   )
 
-  testEffect(layer("malformed")).effect("fails on malformed stream chunks", () =>
+  it.effect("fails on malformed stream chunks", () =>
     Effect.gen(function* () {
-      const error = yield* client({ adapter: OpenAIChat.adapter }).generate(request).pipe(Effect.flip)
+      const body = `data: {"id":"chatcmpl_fixture","choices":[{"delta":{"content":123},"finish_reason":null}],"usage":null}
+
+data: [DONE]
+`
+      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(streamLayer(body)), Effect.flip)
 
       expect(error.message).toContain("Invalid OpenAI Chat stream chunk")
     }),

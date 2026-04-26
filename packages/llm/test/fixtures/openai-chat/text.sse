@@ -1,9 +1,0 @@
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{"content":"!"},"finish_reason":null}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[{"delta":{},"finish_reason":"stop"}],"usage":null}
-
-data: {"id":"chatcmpl_fixture","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7,"prompt_tokens_details":{"cached_tokens":1},"completion_tokens_details":{"reasoning_tokens":0}}}
-
-data: [DONE]

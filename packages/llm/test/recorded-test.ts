@@ -1,7 +1,6 @@
 import { test, type TestOptions } from "bun:test"
 import { Effect, Layer } from "effect"
-import type * as Scope from "effect/Scope"
-import { Transport } from "../src/transport"
+import { RequestExecutor } from "../src/executor"
 import { testEffect } from "./lib/effect"
 import { hasFixtureSync, layer as recordReplayLayer } from "./record-replay"
 
@@ -36,7 +35,7 @@ export const recordedTests = (options: RecordedTestsOptions) => {
   const run = <A, E>(
     name: string,
     caseOptions: RecordedCaseOptions,
-    body: Body<A, E, Transport.Service | Scope.Scope>,
+    body: Body<A, E, RequestExecutor.Service>,
     testOptions?: number | TestOptions,
   ) => {
     const cassette = cassetteName(options.prefix, name, caseOptions)
@@ -51,19 +50,19 @@ export const recordedTests = (options: RecordedTestsOptions) => {
       return test.skip(name, () => {}, testOptions)
     }
 
-    return testEffect(Transport.layer.pipe(Layer.provide(recordReplayLayer(cassette)))).live(name, body, testOptions)
+    return testEffect(RequestExecutor.layer.pipe(Layer.provide(recordReplayLayer(cassette)))).live(name, body, testOptions)
   }
 
   const effect = <A, E>(
     name: string,
-    body: Body<A, E, Transport.Service | Scope.Scope>,
+    body: Body<A, E, RequestExecutor.Service>,
     testOptions?: number | TestOptions,
   ) => run(name, {}, body, testOptions)
 
   effect.with = <A, E>(
     name: string,
     caseOptions: RecordedCaseOptions,
-    body: Body<A, E, Transport.Service | Scope.Scope>,
+    body: Body<A, E, RequestExecutor.Service>,
     testOptions?: number | TestOptions,
   ) => run(name, caseOptions, body, testOptions)
 

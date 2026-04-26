@@ -1,9 +1,8 @@
 export * from "./adapter"
+export * from "./executor"
 export * from "./patch"
 export * from "./schema"
 export * from "./stream"
-export * from "./target"
-export * from "./transport"
 
 export * as LLM from "./llm"
 export * as ProviderPatch from "./provider/patch"

@@ -1,11 +1,10 @@
 import { Effect, Schema, Stream } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
+import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import {
   InvalidRequestError,
   ProviderChunkError,
-  TransportRequest,
   Usage,
   type FinishReason,
   type ContentPart,
@@ -252,17 +251,15 @@ const prepare = Effect.fn("OpenAIChat.prepare")(function* (request: LLMRequest) 
   }
 })
 
-const toTransport = (target: OpenAIChatTarget, request: LLMRequest) =>
+const toHttp = (target: OpenAIChatTarget, request: LLMRequest) =>
   Effect.succeed(
-    new TransportRequest({
-      url: `${baseUrl(request)}/chat/completions`,
-      method: "POST",
-      headers: {
+    HttpClientRequest.post(`${baseUrl(request)}/chat/completions`).pipe(
+      HttpClientRequest.setHeaders({
         ...request.model.headers,
         "content-type": "application/json",
-      },
-      body: encodeTarget(target),
-    }),
+      }),
+      HttpClientRequest.bodyText(encodeTarget(target), "application/json"),
+    ),
   )
 
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
@@ -371,14 +368,10 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
 export const adapter = Adapter.define<OpenAIChatTarget, OpenAIChatTarget, LLMEvent>({
   id: "openai-chat",
   protocol: "openai-chat",
-  builder: {
-    empty: { model: "", messages: [], stream: true },
-    concat: (left, right) => Effect.succeed({ ...left, ...right }),
-    validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
-  },
   redact: (target) => target,
   prepare,
-  toTransport: (target, context) => toTransport(target, context.request),
+  validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
+  toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
   raise: (event) => Stream.make(event),
 })

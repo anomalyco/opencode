@@ -55,8 +55,8 @@ const toolResultRequest = LLM.request({
 })
 
 const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
-const openai = client({ adapter: OpenAIChat.adapter })
-const openaiWithUsage = client({ adapter: OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage]) })
+const openai = client({ adapters: [OpenAIChat.adapter] })
+const openaiWithUsage = client({ adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])] })
 
 describe("OpenAI Chat recorded", () => {
   recorded.effect("streams text", () =>
