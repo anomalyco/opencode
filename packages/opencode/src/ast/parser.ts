@@ -5,7 +5,6 @@ import { Effect, Layer, Context } from "effect"
 import { LANGUAGE_MAP, type SupportedLanguage } from "./languages"
 
 // Minimal structural types for web-tree-sitter (no @types package available).
-// Using interfaces instead of `any` to satisfy the no-any rule.
 interface TreeSitterNode {
   type: string
   text: string
@@ -29,10 +28,8 @@ interface TreeSitterModule {
   Language: { load: (path: string) => Promise<TreeSitterLanguage> }
 }
 
-// Single init-promise so concurrent callers share the same initialisation.
 let _initPromise: Promise<TreeSitterModule> | null = null
 let _Parser: TreeSitterModule | null = null
-
 const _grammarCache = new Map<string, TreeSitterLanguage>()
 
 async function loadTreeSitter(): Promise<TreeSitterModule> {
@@ -181,7 +178,6 @@ export const layer: Layer.Layer<Service> = Layer.effect(
 
     const nodeAtRange: Interface["nodeAtRange"] = (parseResult, startLine, endLine) =>
       Effect.sync(() => {
-        // Find the tightest node fully containing [startLine, endLine].
         const walk = (node: TreeSitterNode): TreeSitterNode | null => {
           if (node.startPosition.row > startLine || node.endPosition.row < endLine) return null
           return node.children.reduce<TreeSitterNode | null>((found, child) => found ?? walk(child), null) ?? node
@@ -193,5 +189,8 @@ export const layer: Layer.Layer<Service> = Layer.effect(
     return Service.of({ parse, query, queryFile, nodeAtRange })
   }),
 )
+
+/** Alias used by registry.ts — AstParser has no external dependencies so layer == defaultLayer. */
+export const defaultLayer = layer
 
 export { Service as AstParser }
