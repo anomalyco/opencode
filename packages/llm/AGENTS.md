@@ -101,7 +101,16 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.
 - [x] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
 - [x] Add provider patch examples from real opencode quirks, starting with prompt normalization and target-level provider options.
-- [ ] Add an OpenAI Responses adapter once the Chat adapter shape feels stable.
-- [ ] Add Anthropic Messages adapter coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
+- [x] Add an OpenAI Responses adapter once the Chat adapter shape feels stable.
+- [x] Add Anthropic Messages adapter coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
+- [x] Add Gemini adapter coverage for text, media input, tool calls, reasoning deltas, finish reasons, usage, and recorded cassettes.
 - [ ] Improve cassette ergonomics if more providers need custom matching, redaction, or multi-interaction flows.
-- [ ] Keep opencode integration out until the package handles the core text, tool-call, and tool-result loops cleanly in isolation.
+- [x] Extract or port OpenCode's `ProviderTransform.schema` Gemini sanitizer into a tested `packages/llm` tool-schema patch; do not keep a divergent adapter-local copy long term.
+- [ ] Add OpenAI-compatible Chat adapter support for non-OpenAI providers that still use `/chat/completions`.
+- [ ] Add Bedrock Converse support or a clear compatibility layer before moving Amazon Bedrock traffic onto `packages/llm`.
+- [ ] Decide whether Vertex Gemini and Vertex Anthropic are target patches over existing adapters or separate adapters with their own auth/URL handling.
+- [ ] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, and native provider metadata.
+- [ ] Build a `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tools, tool choice, generation options, reasoning variants, cache hints, and attachments.
+- [ ] Port OpenCode provider quirks into patches before integration: Anthropic empty content filtering, Claude tool ID scrubbing, Anthropic tool-use ordering, Mistral ID/message cleanup, DeepSeek/interleaved reasoning, unsupported attachment fallbacks, cache hints, provider option namespacing, and model-specific reasoning options.
+- [ ] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
+- [ ] Keep initial OpenCode integration behind a local flag/path until request payload parity and stream event parity are proven against the existing `session/llm.test.ts` cases.
