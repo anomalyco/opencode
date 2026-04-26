@@ -1558,13 +1558,14 @@ export default function Page() {
     return followupMutation.variables?.id
   })
 
-  const queueEnabled = createMemo(() => {
+  const queueEnabled = (editID?: string) => {
     const id = params.id
     if (!id) return false
     const mode = settings.general.followup()
-    if ((mode === "steer" || mode === "wrap") && queuedFollowups().length >= 1) return false
+    const isEditing = !!editID
+    if (!isEditing && (mode === "steer" || mode === "wrap") && queuedFollowups().length >= 1) return false
     return busy(id) && !composer.blocked() && !isChildSession()
-  })
+  }
 
   const followupText = (item: FollowupDraft) => {
     const text = item.prompt
@@ -1757,12 +1758,19 @@ export default function Page() {
 
     const item = queuedFollowups()[0]
     if (!item) return
+    
+    // In steer mode, the backend no longer goes idle to accept the message.
+    // It gracefully breaks the current loop and reads the next message on the next iteration.
+    // Therefore, we must send the message immediately without waiting for idle.
+    if (!item.isSteer) {
+      if (busy(sessionID)) return
+    }
+
     if (followupBusy(sessionID)) return
     if (followup.failed[sessionID] === item.id) return
     if (followup.paused[sessionID]) return
     if (isChildSession()) return
     if (composer.blocked()) return
-    if (busy(sessionID)) return
 
     void sendFollowup(sessionID, item.id)
   })

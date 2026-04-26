@@ -15,7 +15,9 @@ import {
   Show,
   on,
 } from "solid-js"
+import { produce } from "solid-js/store"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { Log } from "@/util"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -595,19 +597,22 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       keybind: "session_toggle_queue_mode",
       value: "session.toggle-queue-mode",
       onSelect: () => {
-        const current = sync.data.config.followup ?? "steer"
+        const current = sync.data.config?.followup ?? "steer"
         let next: "steer" | "wrap" | "queue" = "steer"
         if (current === "steer") next = "wrap"
         else if (current === "wrap") next = "queue"
         
+        sync.set("config", { ...sync.data.config, followup: next })
+        
         void sdk.client.config.update({
           config: { followup: next }
         })
+        
         toast.show({
-          message: `Queue mode changed to: ${next}`,
-          variant: "success",
+          message: "Queue mode changed to: " + next,
+          variant: "info",
+          duration: 2000,
         })
-        dialog.clear()
       },
       category: "Session",
     },

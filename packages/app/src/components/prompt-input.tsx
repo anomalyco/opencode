@@ -65,7 +65,7 @@ interface PromptInputProps {
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: ContextItem[] }
   onEditLoaded?: () => void
-  shouldQueue?: () => boolean
+  shouldQueue?: (editID?: string) => boolean
   onQueue?: (draft: FollowupDraft, editID?: string) => void
   onEditLastQueued?: () => boolean
   onAbort?: () => void
@@ -295,7 +295,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   const submitDisabled = createMemo(() => {
     if (!working() && blank()) return true
-    if (working() && !blank() && !props.shouldQueue?.()) return true
+    if (working() && !blank() && !props.shouldQueue?.(store.editID ?? undefined)) return true
     return false
   })
   const stopping = createMemo(() => working() && blank())
@@ -1094,7 +1094,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     clearEditID: () => setStore("editID", null),
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: () => props.shouldQueue?.() ?? false,
+    shouldQueue: () => props.shouldQueue?.(store.editID ?? undefined) ?? false,
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,

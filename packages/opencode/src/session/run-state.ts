@@ -105,7 +105,6 @@ export const layer = Layer.effect(
     const clearInterrupt = Effect.fn("SessionRunState.clearInterrupt")(function* (sessionID: SessionID) {
       const data = yield* InstanceState.get(state)
       data.interrupts.delete(sessionID)
-      yield* status.set(sessionID, { type: "busy" })
     })
 
     const getInterrupt = Effect.fn("SessionRunState.getInterrupt")(function* (sessionID: SessionID) {

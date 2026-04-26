@@ -1030,6 +1030,7 @@ export const SessionRoutes = lazy(() =>
           const state = yield* SessionRunState.Service
           if (body.type === "clear") {
             yield* state.clearInterrupt(sessionID)
+            yield* SessionStatus.Service.use((svc) => svc.set(sessionID, { type: "busy" }))
           } else {
             yield* state.requestInterrupt(sessionID, body.type)
           }

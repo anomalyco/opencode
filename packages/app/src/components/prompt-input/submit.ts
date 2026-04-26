@@ -190,7 +190,7 @@ type PromptSubmitInput = {
   clearEditID: () => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
-  shouldQueue?: Accessor<boolean>
+  shouldQueue?: (editID?: string) => boolean
   onQueue?: (draft: FollowupDraft, editID?: string) => void
   onAbort?: () => void
   onSubmit?: () => void
@@ -430,7 +430,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     if (!isNewSession && mode === "normal") {
-      if (input.shouldQueue?.()) {
+      if (input.shouldQueue?.(input.editID?.() ?? undefined)) {
         input.onQueue?.(draft, input.editID?.() ?? undefined)
         clearContext()
         clearInput()

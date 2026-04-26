@@ -810,6 +810,16 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      const followupMode = sync.data.config?.followup ?? "steer"
+      const isBusy = status().type !== "idle"
+      const isSteer = isBusy && followupMode === "steer"
+      
+      if (isBusy && followupMode === "steer") {
+        void sdk.client.session.interrupt({ sessionID, type: "steer" })
+      } else if (isBusy && followupMode === "wrap") {
+        void sdk.client.session.interrupt({ sessionID, type: "wrap" })
+      }
+
       sdk.client.session
         .prompt({
           sessionID,
@@ -818,6 +828,7 @@ export function Prompt(props: PromptProps) {
           agent: agent.name,
           model: selectedModel,
           variant,
+          isSteer,
           parts: [
             ...editorParts,
             {

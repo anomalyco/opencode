@@ -521,6 +521,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
       },
       bootstrap,
+      setStore,
     }
     return result
   },
