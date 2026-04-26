@@ -1,13 +1,19 @@
 import path from "path"
 import os from "os"
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { AppRuntime } from "../effect/app-runtime"
 import DESCRIPTION from "./cd.txt"
 import * as Tool from "./tool"
+
+const Parameters = Schema.Struct({
+  path: Schema.String.annotate({
+    description:
+      "The target directory path to change to. Supports absolute paths, relative paths, and ~ for home directory.",
+  }),
+})
 
 export const CdTool = Tool.define(
   "cd",
@@ -16,10 +22,8 @@ export const CdTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters: z.object({
-        path: z.string().describe("The target directory path to change to. Supports absolute paths, relative paths, and ~ for home directory."),
-      }),
-      execute: (params: { path: string }, _ctx: Tool.Context) =>
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, _ctx: Tool.Context) =>
         Effect.gen(function* () {
           const trimmed = params.path.trim()
           if (!trimmed) throw new Error("path parameter is required")
