@@ -39,6 +39,7 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
       },
       navigate(route: Route) {
         setStore(reconcile(route))
+        process.env.OPENCODE_SESSION_ID = route.type === "session" ? route.sessionID : undefined
       },
     }
   },
