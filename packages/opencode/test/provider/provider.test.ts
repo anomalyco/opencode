@@ -14,6 +14,7 @@ import { Env } from "../../src/env"
 import { Effect } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { makeRuntime } from "../../src/effect/run-service"
+import { Auth } from "../../src/auth"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
 const set = (k: string, v: string) => env.runSync((svc) => svc.set(k, v))
@@ -2440,6 +2441,42 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
         invoked_by: "test",
         project: "opencode",
       })
+    },
+  })
+})
+
+test("cloudflare-ai-gateway loads with auth metadata", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      // Set up auth with metadata (simulating `opencode auth login`)
+      await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const auth = yield* Auth.Service
+          yield* auth.set("cloudflare-ai-gateway", {
+            type: "api",
+            key: "test-api-key",
+            metadata: {
+              accountId: "test-account-id",
+              gatewayId: "test-gateway-id",
+            },
+          })
+        }),
+      )
+
+      // Verify provider loads using auth metadata (no env vars set)
+      const providers = await list()
+      expect(providers[ProviderID.make("cloudflare-ai-gateway")]).toBeDefined()
     },
   })
 })

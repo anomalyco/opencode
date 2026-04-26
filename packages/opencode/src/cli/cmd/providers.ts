@@ -461,6 +461,38 @@ export const ProvidersLoginCommand = cmd({
           prompts.log.info(
             "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
           )
+
+          const accountId = await prompts.text({
+            message: "Enter your Cloudflare Account ID",
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          })
+          if (prompts.isCancel(accountId)) throw new UI.CancelledError()
+
+          let gatewayId: string | symbol | undefined
+          if (provider === "cloudflare-ai-gateway") {
+            gatewayId = await prompts.text({
+              message: "Enter your Cloudflare Gateway ID",
+              validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+            })
+            if (prompts.isCancel(gatewayId)) throw new UI.CancelledError()
+          }
+
+          const key = await prompts.password({
+            message: "Enter your API key",
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          })
+          if (prompts.isCancel(key)) throw new UI.CancelledError()
+          await put(provider, {
+            type: "api",
+            key,
+            metadata: {
+              accountId,
+              ...(typeof gatewayId === "string" ? { gatewayId } : {}),
+            },
+          })
+
+          prompts.outro("Done")
+          return
         }
 
         const key = await prompts.password({
