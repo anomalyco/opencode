@@ -20,6 +20,8 @@ import { ExperimentalPaths } from "./httpapi/experimental"
 import { FilePaths } from "./httpapi/file"
 import { InstancePaths } from "./httpapi/instance"
 import { McpPaths } from "./httpapi/mcp"
+import { SessionPaths } from "./httpapi/session"
+import { SyncPaths } from "./httpapi/sync"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -89,6 +91,36 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.delete(McpPaths.auth, (c) => handler(c.req.raw, context))
     app.post(McpPaths.connect, (c) => handler(c.req.raw, context))
     app.post(McpPaths.disconnect, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.get, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.children, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.todo, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.diff, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.messages, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.message, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.create, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.remove, (c) => handler(c.req.raw, context))
+    app.patch(SessionPaths.update, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.init, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.fork, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.abort, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.share, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.share, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.summarize, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.prompt, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.promptAsync, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.command, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.shell, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.revert, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.unrevert, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.permissions, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.deleteMessage, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.deletePart, (c) => handler(c.req.raw, context))
+    app.patch(SessionPaths.updatePart, (c) => handler(c.req.raw, context))
   }
 
   return app

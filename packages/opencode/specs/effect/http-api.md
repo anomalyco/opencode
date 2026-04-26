@@ -182,8 +182,8 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `workspace`               | `bridged`         | adaptor/list/status/create/remove/session-restore                          |
 | top-level instance routes | `bridged`         | path, vcs, command, agent, skill, lsp, formatter, dispose                  |
 | experimental JSON routes  | `bridged`         | console, tool, worktree list/mutations, global session list, resource list |
-| `session`                 | `later/special`   | large stateful surface plus streaming                                      |
-| `sync`                    | `later`           | process/control side effects                                               |
+| `session`                 | `bridged`         | read, lifecycle, prompt, message/part mutations, revert, permission reply  |
+| `sync`                    | `bridged`         | start/replay/history                                                       |
 | `event`                   | `special`         | SSE                                                                        |
 | `pty`                     | `special`         | websocket                                                                  |
 | `tui`                     | `special`         | UI bridge                                                                  |
@@ -280,39 +280,39 @@ This checklist tracks bridge parity only. Checked routes are available through t
 
 ### Sync Routes
 
-- [ ] `POST /sync/start` - start workspace sync.
-- [ ] `POST /sync/replay` - replay sync events.
-- [ ] `POST /sync/history` - list sync event history.
+- [x] `POST /sync/start` - start workspace sync.
+- [x] `POST /sync/replay` - replay sync events.
+- [x] `POST /sync/history` - list sync event history.
 
 ### Session Routes
 
-- [ ] `GET /session` - list sessions.
-- [ ] `GET /session/status` - session status map.
-- [ ] `GET /session/:sessionID` - get session.
-- [ ] `GET /session/:sessionID/children` - get child sessions.
-- [ ] `GET /session/:sessionID/todo` - get session todos.
-- [ ] `POST /session` - create session.
-- [ ] `DELETE /session/:sessionID` - delete session.
-- [ ] `PATCH /session/:sessionID` - update session metadata.
-- [ ] `POST /session/:sessionID/init` - run project init command.
-- [ ] `POST /session/:sessionID/fork` - fork session.
-- [ ] `POST /session/:sessionID/abort` - abort session.
-- [ ] `POST /session/:sessionID/share` - share session.
-- [ ] `GET /session/:sessionID/diff` - session diff.
-- [ ] `DELETE /session/:sessionID/share` - unshare session.
-- [ ] `POST /session/:sessionID/summarize` - summarize session.
-- [ ] `GET /session/:sessionID/message` - list session messages.
-- [ ] `GET /session/:sessionID/message/:messageID` - get message.
-- [ ] `DELETE /session/:sessionID/message/:messageID` - delete message.
-- [ ] `DELETE /session/:sessionID/message/:messageID/part/:partID` - delete part.
-- [ ] `PATCH /session/:sessionID/message/:messageID/part/:partID` - update part.
-- [ ] `POST /session/:sessionID/message` - prompt with streaming response.
-- [ ] `POST /session/:sessionID/prompt_async` - async prompt.
-- [ ] `POST /session/:sessionID/command` - run command.
-- [ ] `POST /session/:sessionID/shell` - run shell command.
-- [ ] `POST /session/:sessionID/revert` - revert message.
-- [ ] `POST /session/:sessionID/unrevert` - restore reverted messages.
-- [ ] `POST /session/:sessionID/permissions/:permissionID` - deprecated permission response route.
+- [x] `GET /session` - list sessions.
+- [x] `GET /session/status` - session status map.
+- [x] `GET /session/:sessionID` - get session.
+- [x] `GET /session/:sessionID/children` - get child sessions.
+- [x] `GET /session/:sessionID/todo` - get session todos.
+- [x] `POST /session` - create session.
+- [x] `DELETE /session/:sessionID` - delete session.
+- [x] `PATCH /session/:sessionID` - update session metadata.
+- [x] `POST /session/:sessionID/init` - run project init command.
+- [x] `POST /session/:sessionID/fork` - fork session.
+- [x] `POST /session/:sessionID/abort` - abort session.
+- [x] `POST /session/:sessionID/share` - share session.
+- [x] `GET /session/:sessionID/diff` - session diff.
+- [x] `DELETE /session/:sessionID/share` - unshare session.
+- [x] `POST /session/:sessionID/summarize` - summarize session.
+- [x] `GET /session/:sessionID/message` - list session messages.
+- [x] `GET /session/:sessionID/message/:messageID` - get message.
+- [x] `DELETE /session/:sessionID/message/:messageID` - delete message.
+- [x] `DELETE /session/:sessionID/message/:messageID/part/:partID` - delete part.
+- [x] `PATCH /session/:sessionID/message/:messageID/part/:partID` - update part.
+- [x] `POST /session/:sessionID/message` - prompt with streaming response.
+- [x] `POST /session/:sessionID/prompt_async` - async prompt.
+- [x] `POST /session/:sessionID/command` - run command.
+- [x] `POST /session/:sessionID/shell` - run shell command.
+- [x] `POST /session/:sessionID/revert` - revert message.
+- [x] `POST /session/:sessionID/unrevert` - restore reverted messages.
+- [x] `POST /session/:sessionID/permissions/:permissionID` - deprecated permission response route.
 
 ### Event Routes
 
@@ -353,10 +353,10 @@ Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays rev
 4. [x] Bridge experimental console switch and tool list routes.
 5. [x] Bridge experimental global session list.
 6. [x] Bridge workspace create/remove/session-restore routes.
-7. [ ] Bridge sync start/replay/history routes.
-8. [ ] Bridge session read routes: list, status, get, children, todo, diff, messages.
-9. [ ] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
-10. [ ] Bridge session share/summary/message/part mutation routes.
+7. [x] Bridge sync start/replay/history routes.
+8. [x] Bridge session read routes: list, status, get, children, todo, diff, messages.
+9. [x] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
+10. [x] Bridge remaining session mutation and prompt routes.
 11. [ ] Replace event SSE with non-Hono Effect HTTP.
 12. [ ] Replace pty websocket/control routes with non-Hono Effect HTTP.
 13. [ ] Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer.
