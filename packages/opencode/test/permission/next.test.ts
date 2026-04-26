@@ -2,7 +2,7 @@ import { afterEach, test, expect } from "bun:test"
 import os from "os"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Bus } from "../../src/bus"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
@@ -126,6 +126,51 @@ test("fromConfig - expands $HOME without trailing slash", () => {
 test("fromConfig - does not expand tilde in middle of path", () => {
   const result = Permission.fromConfig({ external_directory: { "/some/~/path": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: "/some/~/path", action: "allow" }])
+})
+
+// Permission precedence follows config insertion order. `evaluate()` uses the
+// last matching rule, so later config entries intentionally override earlier
+// entries even when a wildcard appears after a specific permission.
+
+test("fromConfig - preserves top-level config key order", () => {
+  const wildcardFirst = Permission.fromConfig({ "*": "deny", bash: "allow" })
+  const specificFirst = Permission.fromConfig({ bash: "allow", "*": "deny" })
+
+  expect(wildcardFirst.map((r) => r.permission)).toEqual(["*", "bash"])
+  expect(specificFirst.map((r) => r.permission)).toEqual(["bash", "*"])
+
+  expect(Permission.evaluate("bash", "ls", wildcardFirst).action).toBe("allow")
+  expect(Permission.evaluate("bash", "ls", specificFirst).action).toBe("deny")
+})
+
+test("fromConfig - wildcard acts as fallback when it appears before specifics", () => {
+  const ruleset = Permission.fromConfig({ "*": "ask", bash: "allow" })
+  expect(Permission.evaluate("edit", "foo.ts", ruleset).action).toBe("ask")
+  expect(Permission.evaluate("bash", "ls", ruleset).action).toBe("allow")
+})
+
+test("fromConfig - top-level ordering is not sorted by wildcard specificity", () => {
+  const ruleset = Permission.fromConfig({
+    bash: "allow",
+    "*": "ask",
+    edit: "deny",
+    "mcp_*": "allow",
+  })
+  expect(ruleset.map((r) => r.permission)).toEqual(["bash", "*", "edit", "mcp_*"])
+})
+
+test("fromConfig - sub-pattern insertion order inside a tool key is preserved", () => {
+  const ruleset = Permission.fromConfig({ bash: { "*": "deny", "git *": "allow" } })
+  expect(ruleset.map((r) => r.pattern)).toEqual(["*", "git *"])
+  expect(Permission.evaluate("bash", "rm foo", ruleset).action).toBe("deny")
+  expect(Permission.evaluate("bash", "git status", ruleset).action).toBe("allow")
+})
+
+test("fromConfig - documented fallback-first example", () => {
+  const ruleset = Permission.fromConfig({ "*": "ask", bash: "allow", edit: "deny" })
+  expect(Permission.evaluate("bash", "ls", ruleset).action).toBe("allow")
+  expect(Permission.evaluate("edit", "foo.ts", ruleset).action).toBe("deny")
+  expect(Permission.evaluate("read", "foo.ts", ruleset).action).toBe("ask")
 })
 
 test("fromConfig - expands exact tilde to home directory", () => {
@@ -387,7 +432,7 @@ test("evaluate - wildcard permission fallback for unknown tool", () => {
   expect(result.action).toBe("ask")
 })
 
-test("evaluate - permission patterns sorted by length regardless of object order", () => {
+test("evaluate - later wildcard permission can override earlier specific permission", () => {
   const result = Permission.evaluate("bash", "rm", [
     { permission: "bash", pattern: "*", action: "allow" },
     { permission: "*", pattern: "*", action: "deny" },
@@ -422,9 +467,9 @@ test("disabled - disables tool when denied", () => {
   expect(result.has("read")).toBe(false)
 })
 
-test("disabled - disables edit/write/apply_patch/multiedit when edit denied", () => {
+test("disabled - disables edit/write/apply_patch when edit denied", () => {
   const result = Permission.disabled(
-    ["edit", "write", "apply_patch", "multiedit", "bash"],
+    ["edit", "write", "apply_patch", "bash"],
     [
       { permission: "*", pattern: "*", action: "allow" },
       { permission: "edit", pattern: "*", action: "deny" },
@@ -433,7 +478,6 @@ test("disabled - disables edit/write/apply_patch/multiedit when edit denied", ()
   expect(result.has("edit")).toBe(true)
   expect(result.has("write")).toBe(true)
   expect(result.has("apply_patch")).toBe(true)
-  expect(result.has("multiedit")).toBe(true)
   expect(result.has("bash")).toBe(false)
 })
 

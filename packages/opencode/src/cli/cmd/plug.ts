@@ -2,7 +2,7 @@ import { intro, log, outro, spinner } from "@clack/prompts"
 import type { Argv } from "yargs"
 
 import { ConfigPaths } from "../../config"
-import { Global } from "../../global"
+import { Global } from "@opencode-ai/core/global"
 import { installPlugin, patchPluginConfig, readPluginManifest } from "../../plugin/install"
 import { resolvePluginTarget } from "../../plugin/shared"
 import { Instance } from "../../project/instance"
