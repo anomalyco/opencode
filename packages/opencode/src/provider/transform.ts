@@ -175,20 +175,29 @@ function normalizeMessages(
     return result
   }
 
-  // Deepseek requires all assistant messages to have reasoning on them
+  // DeepSeek requires reasoning_content in providerOptions for all assistant messages.
+  // Always include it even when empty to satisfy the API requirement.
   if (model.api.id.includes("deepseek")) {
-    msgs = msgs.map((msg) => {
+    return msgs.map((msg) => {
       if (msg.role !== "assistant") return msg
-      if (Array.isArray(msg.content)) {
-        if (msg.content.some((part) => part.type === "reasoning")) return msg
-        return { ...msg, content: [...msg.content, { type: "reasoning", text: "" }] }
-      }
+      const parts = Array.isArray(msg.content)
+        ? msg.content
+        : msg.content
+          ? [{ type: "text" as const, text: msg.content as string }]
+          : []
+      const reasoningParts = parts.filter((part: any) => part.type === "reasoning")
+      const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+      const filteredContent = parts.filter((part: any) => part.type !== "reasoning")
       return {
         ...msg,
-        content: [
-          ...(msg.content ? [{ type: "text" as const, text: msg.content }] : []),
-          { type: "reasoning" as const, text: "" },
-        ],
+        content: filteredContent,
+        providerOptions: {
+          ...msg.providerOptions,
+          openaiCompatible: {
+            ...msg.providerOptions?.openaiCompatible,
+            reasoning_content: reasoningText,
+          },
+        },
       }
     })
   }
@@ -905,6 +914,15 @@ export function options(input: {
     !modelId.includes("kimi-k2-thinking")
   ) {
     result["enable_thinking"] = true
+  }
+
+  // Enable thinking for DeepSeek reasoning models.
+  // DeepSeek API requires thinking to be enabled to return reasoning_content.
+  if (
+    (input.model.api.id.includes("deepseek") || input.model.providerID.includes("deepseek")) &&
+    input.model.capabilities.reasoning
+  ) {
+    result["thinking"] = { type: "enabled" }
   }
 
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
