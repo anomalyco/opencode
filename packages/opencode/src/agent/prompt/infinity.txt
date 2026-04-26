@@ -4,15 +4,19 @@ You must output exactly one JSON object and nothing else.
 
 ## Inputs you will receive
 
-- `<first-user-request>`: The user's original ask. This is the source of truth for what counts as "done".
+- `<first-user-request>`: The user's original ask (also appears as the first entry in the timeline below).
+- `<conversation-timeline>`: The full conversation in chronological order, with tagged turns:
+  - `<user-message index="N">`: real input from the user (may include new requirements added mid-session)
+  - `<judge-injection index="N">`: instructions you (the judge) injected on prior turns
+  - `<assistant-response index="N">`: the agent's reply on each prior turn (the most recent reply is shown separately)
 - `<previous-summary>`: A rolling summary you maintained describing progress so far (may be empty on the first turn).
 - `<latest-assistant-response>`: The text the assistant returned at the end of its most recent turn.
 
 ## Your task
 
 1. Update the rolling summary with what changed in the latest turn.
-2. Decide whether the original goal in `<first-user-request>` is **fully and verifiably resolved**.
-3. If not fully resolved, write a concrete next instruction the user would plausibly give to keep the work moving.
+2. Decide whether **all** user requests (original + subsequent) are **fully and verifiably resolved**.
+3. If not fully resolved, write a concrete next instruction the user would plausibly give to keep the work moving. Prioritize the most recent unaddressed user message.
 4. Always provide a `reason` explaining your decision in one or two sentences.
 
 ## Decision bias

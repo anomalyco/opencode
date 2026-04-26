@@ -281,15 +281,73 @@ export const layer = Layer.effect(
       const judgeModel = (yield* provider.getSmallModel(input.user.model.providerID)) ?? input.model
       const latestReply = textFromMessage(input.assistant)
       const latestReplyInput = latestReply.length > 30_000 ? latestReply.slice(0, 30_000) : latestReply
-      const firstUserRequest = textFromMessage(
-        input.messages.find((msg) => msg.info.role === "user" && textFromMessage(msg).length > 0),
-      )
+
+      // Walk the message stream in chronological order so the judge sees the
+      // real interleaving: user1 -> agent1 -> judge1 -> agent2 -> user2 -> agent3 -> ...
+      // We classify each user message: those starting with "[Infinity mode" are
+      // judge-injected; the rest are real user input. Assistant messages are the
+      // agent's responses. The most recent assistant message is rendered as
+      // <latest-assistant-response> separately, so we exclude it from the timeline.
+      const latestAssistantID = input.assistant.info.id
+      type Turn =
+        | { kind: "user"; index: number; text: string }
+        | { kind: "judge"; index: number; text: string }
+        | { kind: "assistant"; index: number; text: string }
+      const turns: Turn[] = []
+      let userCounter = 0
+      let judgeCounter = 0
+      let assistantCounter = 0
+      let firstUserRequest = ""
+      for (const msg of input.messages) {
+        const text = textFromMessage(msg).trim()
+        if (!text) continue
+        if (msg.info.role === "user") {
+          if (text.startsWith("[Infinity mode")) {
+            judgeCounter++
+            turns.push({ kind: "judge", index: judgeCounter, text })
+          } else {
+            userCounter++
+            if (userCounter === 1) firstUserRequest = text
+            turns.push({ kind: "user", index: userCounter, text })
+          }
+        } else if (msg.info.role === "assistant") {
+          if (msg.info.id === latestAssistantID) continue
+          assistantCounter++
+          const truncated = text.length > 8_000 ? text.slice(0, 8_000) + "\n…(truncated)" : text
+          turns.push({ kind: "assistant", index: assistantCounter, text: truncated })
+        }
+      }
+
+      const timelineBlock =
+        turns.length === 0
+          ? "(empty)"
+          : turns
+              .map((t) => {
+                const tag =
+                  t.kind === "user"
+                    ? `user-message index="${t.index}"`
+                    : t.kind === "judge"
+                      ? `judge-injection index="${t.index}"`
+                      : `assistant-response index="${t.index}"`
+                return `<${tag}>\n${t.text}\n</${tag.split(" ")[0]}>`
+              })
+              .join("\n")
+
       const prompt = [
         "Decide whether the session should continue autonomously.",
         "",
         "<first-user-request>",
         firstUserRequest || "(missing)",
         "</first-user-request>",
+        "",
+        "<conversation-timeline>",
+        "Below is the full conversation in chronological order. Tags identify the sender:",
+        "  - <user-message>: real input from the user",
+        "  - <judge-injection>: instruction you (the judge) injected on a prior turn",
+        "  - <assistant-response>: the agent's reply (most recent reply is shown separately below as <latest-assistant-response>)",
+        "",
+        timelineBlock,
+        "</conversation-timeline>",
         "",
         "<previous-summary>",
         input.previousSummary?.trim() || "(none)",
@@ -299,6 +357,7 @@ export const layer = Layer.effect(
         latestReplyInput || "(no text response)",
         "</latest-assistant-response>",
         "",
+        "Treat every <user-message> as an authoritative requirement. Newer user messages refine, extend, or override earlier ones. Use <judge-injection> entries to see what you have already asked for and avoid repeating yourself. The session is only complete when ALL user requests are addressed by the assistant's actions, including any new requirements introduced mid-session.",
         "Return only JSON matching the required schema.",
       ].join("\n")
 
@@ -307,6 +366,9 @@ export const layer = Layer.effect(
         judgeModelID: judgeModel.id,
         judgeProviderID: judgeModel.providerID,
         firstUserRequestLen: firstUserRequest.length,
+        userMessageCount: userCounter,
+        judgeInjectionCount: judgeCounter,
+        assistantTurnCount: assistantCounter,
         latestReplyLen: latestReplyInput.length,
         previousSummaryLen: input.previousSummary?.length ?? 0,
       })
