@@ -5,6 +5,7 @@ import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { TuiPluginRuntime } from "../../plugin"
+import { SessionTabs } from "./session-tabs"
 
 import { getScrollAcceleration } from "../../util/scroll"
 
@@ -40,6 +41,14 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingRight={2}
         position={props.overlay ? "absolute" : "relative"}
       >
+        <SessionTabs />
+        <box
+          flexShrink={0}
+          height={1}
+          marginTop={1}
+          marginBottom={1}
+          backgroundColor={theme.background}
+        />
         <scrollbox
           flexGrow={1}
           scrollAcceleration={scrollAcceleration()}

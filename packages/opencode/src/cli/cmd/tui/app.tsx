@@ -29,6 +29,7 @@ import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { StartupLoading } from "@tui/component/startup-loading"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
+import { SessionTabsProvider, useSessionTabs } from "@tui/context/session-tabs"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -165,23 +166,25 @@ export function tui(input: {
                           <SyncProvider>
                             <ThemeProvider mode={mode}>
                               <LocalProvider>
-                                <KeybindProvider>
-                                  <PromptStashProvider>
-                                    <DialogProvider>
-                                      <CommandProvider>
-                                        <FrecencyProvider>
-                                          <PromptHistoryProvider>
-                                            <PromptRefProvider>
-                                              <EditorContextProvider>
-                                                <App onSnapshot={input.onSnapshot} />
-                                              </EditorContextProvider>
-                                            </PromptRefProvider>
-                                          </PromptHistoryProvider>
-                                        </FrecencyProvider>
-                                      </CommandProvider>
-                                    </DialogProvider>
-                                  </PromptStashProvider>
-                                </KeybindProvider>
+                                <SessionTabsProvider>
+                                  <KeybindProvider>
+                                    <PromptStashProvider>
+                                      <DialogProvider>
+                                        <CommandProvider>
+                                          <FrecencyProvider>
+                                            <PromptHistoryProvider>
+                                              <PromptRefProvider>
+                                                <EditorContextProvider>
+                                                  <App onSnapshot={input.onSnapshot} />
+                                                </EditorContextProvider>
+                                              </PromptRefProvider>
+                                            </PromptHistoryProvider>
+                                          </FrecencyProvider>
+                                        </CommandProvider>
+                                      </DialogProvider>
+                                    </PromptStashProvider>
+                                  </KeybindProvider>
+                                </SessionTabsProvider>
                               </LocalProvider>
                             </ThemeProvider>
                           </SyncProvider>
@@ -206,6 +209,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const renderer = useRenderer()
   const dialog = useDialog()
   const local = useLocal()
+  const sessionTabs = useSessionTabs()
   const kv = useKV()
   const command = useCommandDialog()
   const keybind = useKeybind()
@@ -428,6 +432,52 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         route.navigate({
           type: "home",
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Pin or unpin session tab",
+      value: "session.tab.pin",
+      keybind: "session_tab_pin",
+      category: "Session",
+      enabled: route.data.type === "session",
+      slash: { name: "pin" },
+      onSelect: () => {
+        sessionTabs.togglePinActive()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Close session tab",
+      value: "session.tab.close",
+      keybind: "session_tab_close",
+      category: "Session",
+      enabled: route.data.type === "session" && sessionTabs.isPinned(route.data.sessionID),
+      hidden: route.data.type !== "session" || !sessionTabs.isPinned(route.data.sessionID),
+      onSelect: () => {
+        sessionTabs.closeActive()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Next session tab",
+      value: "session.tab.next",
+      keybind: "session_tab_next",
+      category: "Session",
+      hidden: sessionTabs.pinned().length < 2,
+      onSelect: () => {
+        sessionTabs.next()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous session tab",
+      value: "session.tab.prev",
+      keybind: "session_tab_prev",
+      category: "Session",
+      hidden: sessionTabs.pinned().length < 2,
+      onSelect: () => {
+        sessionTabs.prev()
         dialog.clear()
       },
     },
