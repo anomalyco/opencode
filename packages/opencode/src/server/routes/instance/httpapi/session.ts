@@ -7,7 +7,7 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Struct } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
@@ -20,18 +20,12 @@ const ListQuery = Schema.Struct({
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
 })
-const DiffQuery = Schema.Struct({
-  messageID: Schema.optional(MessageID),
-})
+const DiffQuery = Schema.Struct(Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]))
 const MessagesQuery = Schema.Struct({
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
   before: Schema.optional(Schema.String),
 })
 const StatusMap = Schema.Record(Schema.String, SessionStatus.Info)
-const Message = Schema.Struct({
-  info: MessageV2.Info,
-  parts: Schema.Array(MessageV2.Part),
-}).annotate({ identifier: "SessionMessage" })
 
 export const SessionPaths = {
   list: root,
@@ -121,7 +115,7 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("message", SessionPaths.message, {
           params: { sessionID: SessionID, messageID: MessageID },
-          success: Message,
+          success: MessageV2.WithParts,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.message",
