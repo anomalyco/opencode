@@ -17,34 +17,18 @@ import { Config } from "../../config"
 import { errors } from "../error"
 
 const log = Log.create({ service: "server" })
+const SSE_QUEUE_MAX_SIZE = 256
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", Schema.Struct({}))
 
-async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
+async function streamEvents(
+  c: Context,
+  subscribe: (push: (data: string) => void, stop: () => void) => () => void,
+) {
   return streamSSE(c, async (stream) => {
-    const q = new AsyncQueue<string | null>()
+    const q = new AsyncQueue<string | null>(SSE_QUEUE_MAX_SIZE)
     let done = false
-
-    q.push(
-      JSON.stringify({
-        payload: {
-          type: "server.connected",
-          properties: {},
-        },
-      }),
-    )
-
-    // Send heartbeat every 10s to prevent stalled proxy streams.
-    const heartbeat = setInterval(() => {
-      q.push(
-        JSON.stringify({
-          payload: {
-            type: "server.heartbeat",
-            properties: {},
-          },
-        }),
-      )
-    }, 10_000)
+    let unsub = () => {}
 
     const stop = () => {
       if (done) return
@@ -55,7 +39,38 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       log.info("global event disconnected")
     }
 
-    const unsub = subscribe(q)
+    const push = (data: string) => {
+      if (done) return
+      if (q.size >= SSE_QUEUE_MAX_SIZE) {
+        log.warn("global event queue overflow")
+        stop()
+        return
+      }
+      q.push(data)
+    }
+
+    push(
+      JSON.stringify({
+        payload: {
+          type: "server.connected",
+          properties: {},
+        },
+      }),
+    )
+
+    // Send heartbeat every 10s to prevent stalled proxy streams.
+    const heartbeat = setInterval(() => {
+      push(
+        JSON.stringify({
+          payload: {
+            type: "server.heartbeat",
+            properties: {},
+          },
+        }),
+      )
+    }, 10_000)
+
+    unsub = subscribe(push, stop)
 
     stream.onAbort(stop)
 
@@ -127,9 +142,9 @@ export const GlobalRoutes = lazy(() =>
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
 
-        return streamEvents(c, (q) => {
+        return streamEvents(c, (push) => {
           async function handler(event: any) {
-            q.push(JSON.stringify(event))
+            push(JSON.stringify(event))
           }
           GlobalBus.on("event", handler)
           return () => GlobalBus.off("event", handler)

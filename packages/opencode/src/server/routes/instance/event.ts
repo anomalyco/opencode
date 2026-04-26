@@ -8,6 +8,7 @@ import { Bus } from "@/bus"
 import { AsyncQueue } from "@/util/queue"
 
 const log = Log.create({ service: "server" })
+const SSE_QUEUE_MAX_SIZE = 256
 
 export const EventRoutes = () =>
   new Hono().get(
@@ -37,25 +38,9 @@ export const EventRoutes = () =>
       c.header("X-Accel-Buffering", "no")
       c.header("X-Content-Type-Options", "nosniff")
       return streamSSE(c, async (stream) => {
-        const q = new AsyncQueue<string | null>()
+        const q = new AsyncQueue<string | null>(SSE_QUEUE_MAX_SIZE)
         let done = false
-
-        q.push(
-          JSON.stringify({
-            type: "server.connected",
-            properties: {},
-          }),
-        )
-
-        // Send heartbeat every 10s to prevent stalled proxy streams.
-        const heartbeat = setInterval(() => {
-          q.push(
-            JSON.stringify({
-              type: "server.heartbeat",
-              properties: {},
-            }),
-          )
-        }, 10_000)
+        let unsub = () => {}
 
         const stop = () => {
           if (done) return
@@ -66,8 +51,35 @@ export const EventRoutes = () =>
           log.info("event disconnected")
         }
 
-        const unsub = Bus.subscribeAll((event) => {
-          q.push(JSON.stringify(event))
+        const push = (data: string) => {
+          if (done) return
+          if (q.size >= SSE_QUEUE_MAX_SIZE) {
+            log.warn("event queue overflow")
+            stop()
+            return
+          }
+          q.push(data)
+        }
+
+        push(
+          JSON.stringify({
+            type: "server.connected",
+            properties: {},
+          }),
+        )
+
+        // Send heartbeat every 10s to prevent stalled proxy streams.
+        const heartbeat = setInterval(() => {
+          push(
+            JSON.stringify({
+              type: "server.heartbeat",
+              properties: {},
+            }),
+          )
+        }, 10_000)
+
+        unsub = Bus.subscribeAll((event) => {
+          push(JSON.stringify(event))
           if (event.type === Bus.InstanceDisposed.type) {
             stop()
           }

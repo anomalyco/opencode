@@ -1,5 +1,6 @@
 import path from "path"
 import os from "os"
+import { createWriteStream } from "node:fs"
 import z from "zod"
 import * as EffectZod from "@/util/effect-zod"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -66,8 +67,24 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+const SHELL_STREAM_PREVIEW_MAX_CHARS = 30_000
+const SHELL_STREAM_UPDATE_INTERVAL_MS = 50
+const TOOL_METADATA_UPDATE_INTERVAL_MS = 100
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
+
+function shellStreamPreview(text: string) {
+  if (text.length <= SHELL_STREAM_PREVIEW_MAX_CHARS) return text
+  return "...\n\n" + text.slice(-SHELL_STREAM_PREVIEW_MAX_CHARS)
+}
+
+function toolMetadataFingerprint(input: { title?: string; metadata?: Record<string, any> }) {
+  try {
+    return JSON.stringify(input)
+  } catch {
+    return undefined
+  }
+}
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -367,6 +384,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const tools: Record<string, AITool> = {}
       const run = yield* runner()
       const promptOps = yield* ops()
+      const toolMetadata = new Map<string, { at: number; key?: string }>()
 
       const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
         sessionID: input.session.id,
@@ -376,20 +394,28 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
         agent: input.agent.name,
         messages: input.messages,
-        metadata: (val) =>
-          input.processor.updateToolCall(options.toolCallId, (match) => {
+        metadata: (val) => {
+          const current = Date.now()
+          const previous = toolMetadata.get(options.toolCallId)
+          if (previous && current - previous.at < TOOL_METADATA_UPDATE_INTERVAL_MS) return Effect.void
+          const key = toolMetadataFingerprint(val)
+          if (key !== undefined && previous?.key === key) return Effect.void
+          toolMetadata.set(options.toolCallId, { at: current, key })
+          return input.processor.updateToolCall(options.toolCallId, (match) => {
             if (!["running", "pending"].includes(match.state.status)) return match
+            const running = match.state.status === "running" ? match.state : undefined
             return {
               ...match,
               state: {
-                title: val.title,
-                metadata: val.metadata,
+                title: val.title ?? running?.title,
+                metadata: val.metadata ?? running?.metadata,
                 status: "running",
                 input: args,
-                time: { start: Date.now() },
+                time: { start: running?.time.start ?? current },
               },
             }
-          }),
+          })
+        },
         ask: (req) =>
           permission
             .ask({
@@ -438,7 +464,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   yield* input.processor.completeToolCall(options.toolCallId, output)
                 }
                 return output
-              }),
+              }).pipe(Effect.ensuring(Effect.sync(() => toolMetadata.delete(options.toolCallId)))),
             )
           },
         })
@@ -517,7 +543,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 yield* input.processor.completeToolCall(opts.toolCallId, output)
               }
               return output
-            }),
+            }).pipe(Effect.ensuring(Effect.sync(() => toolMetadata.delete(opts.toolCallId)))),
           )
         tools[key] = item
       }
@@ -840,17 +866,69 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         forceKillAfter: "3 seconds",
       })
 
-      let output = ""
+      let bufferedOutput = ""
       let aborted = false
+      let outputPath: string | undefined
+      let outputSink: ReturnType<typeof createWriteStream> | undefined
+      let lastStreamUpdate = 0
+
+      const keep = limits.maxBytes * 2
+      const chunks: { text: string; size: number }[] = []
+      let used = 0
+
+      const appendOutput = Effect.fn("SessionPrompt.shellAppendOutput")(function* (chunk: string) {
+        const size = Buffer.byteLength(chunk, "utf-8")
+        chunks.push({ text: chunk, size })
+        used += size
+        while (used > keep && chunks.length > 1) {
+          const item = chunks.shift()
+          if (!item) break
+          used -= item.size
+        }
+
+        if (outputPath) {
+          yield* Effect.sync(() => outputSink?.write(chunk))
+          return
+        }
+
+        bufferedOutput += chunk
+        if (Buffer.byteLength(bufferedOutput, "utf-8") <= limits.maxBytes) return
+
+        outputPath = yield* truncate.write(bufferedOutput)
+        outputSink = createWriteStream(outputPath, { flags: "a" })
+        bufferedOutput = ""
+      })
+
+      const toolOutput = () => chunks.map((item) => item.text).join("")
 
       const finish = Effect.uninterruptible(
         Effect.gen(function* () {
           if (aborted) {
-            output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+            yield* appendOutput("\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n"))
           }
           if (!msg.time.completed) {
             msg.time.completed = Date.now()
             yield* sessions.updateMessage(msg)
+          }
+          const truncated = outputPath
+            ? {
+                content: [`...output truncated...`, "", `Full output saved to: ${outputPath}`, "", toolOutput() || "(no output)"].join(
+                  "\n",
+                ),
+                truncated: true as const,
+                outputPath,
+              }
+            : yield* truncate.output(bufferedOutput, {}, agent)
+          outputPath = truncated.truncated ? truncated.outputPath : undefined
+          if (outputSink) {
+            const stream = outputSink
+            yield* Effect.promise(
+              () =>
+                new Promise<void>((resolve) => {
+                  stream.end(() => resolve())
+                  stream.on("error", () => resolve())
+                }),
+            )
           }
           if (part.state.status === "running") {
             part.state = {
@@ -858,8 +936,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               time: { ...part.state.time, end: Date.now() },
               input: part.state.input,
               title: "",
-              metadata: { output, description: "" },
-              output,
+              metadata: {
+                output: shellStreamPreview(toolOutput()),
+                description: "",
+                truncated: truncated.truncated,
+                ...(outputPath && { outputPath }),
+              },
+              output: truncated.content,
             }
             yield* sessions.updatePart(part)
           }
@@ -869,12 +952,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const exit = yield* Effect.gen(function* () {
         const handle = yield* spawner.spawn(cmd)
         yield* Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
-          Effect.sync(() => {
-            output += chunk
-            if (part.state.status === "running") {
-              part.state.metadata = { output, description: "" }
-              void run.fork(sessions.updatePart(part))
+          Effect.gen(function* () {
+            yield* appendOutput(chunk)
+            if (part.state.status !== "running") return
+            if (Date.now() - lastStreamUpdate < SHELL_STREAM_UPDATE_INTERVAL_MS) return
+            lastStreamUpdate = Date.now()
+            part.state.metadata = {
+              output: shellStreamPreview(toolOutput()),
+              description: "",
+              truncated: !!outputPath,
+              ...(outputPath && { outputPath }),
             }
+            void run.fork(sessions.updatePart(part))
           }),
         )
         yield* handle.exitCode

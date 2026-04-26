@@ -7,6 +7,7 @@ import { InstanceState } from "@/effect"
 import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "bus" })
+const WILDCARD_CAPACITY = 1024
 
 type BusProperties<D extends BusEvent.Definition<string, Schema.Top>> = Schema.Schema.Type<D["properties"]>
 
@@ -45,7 +46,10 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const state = yield* InstanceState.make<State>(
       Effect.fn("Bus.state")(function* (ctx) {
-        const wildcard = yield* PubSub.unbounded<Payload>()
+        // Wildcard subscribers (SSE streams, plugins) can be much slower than high-frequency
+        // publishers such as message/tool updates. Keep only a recent sliding window so a
+        // stalled subscriber does not retain an unbounded event backlog in memory.
+        const wildcard = yield* PubSub.sliding<Payload>(WILDCARD_CAPACITY)
         const typed = new Map<string, PubSub.PubSub<Payload>>()
 
         yield* Effect.addFinalizer(() =>
