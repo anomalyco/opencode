@@ -63,7 +63,9 @@ function init() {
   useKeyboard((evt) => {
     if (suspended()) return
     if (dialog.stack.length > 0) return
-    if (evt.defaultPrevented) return
+    // evt.defaultPrevented is ignored here because some terminal input fields 
+    // over-aggressively consume non-text control sequences (like F4 or Ctrl+Y), 
+    // which prevents global hotkeys from firing.
     for (const option of entries()) {
       if (!isEnabled(option)) continue
       if (option.keybind && keybind.match(option.keybind, evt)) {
