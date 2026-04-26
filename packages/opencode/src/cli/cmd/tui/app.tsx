@@ -628,6 +628,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         
         void sdk.client.config.update({
           config: { followup: next }
+        }).then(() => {
+          void sync.bootstrap({ fatal: false })
         })
         
         toast.show({
