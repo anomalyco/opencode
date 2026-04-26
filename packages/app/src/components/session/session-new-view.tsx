@@ -4,7 +4,8 @@ import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Mark } from "@opencode-ai/ui/logo"
+// FORK: 直接从 branding 包 import 以拿到 variant prop 的类型 2026-04-26
+import { Mark } from "@opencode-ai/branding/logo"
 import { getDirectory, getFilename } from "@opencode-ai/shared/util/path"
 
 const MAIN_WORKTREE = "main"
@@ -53,7 +54,8 @@ export function NewSessionView(props: NewSessionViewProps) {
       <div class="flex-1 px-6 pb-30 flex items-center justify-center text-center">
         <div class="w-full max-w-200 flex flex-col items-center text-center gap-4">
           <div class="flex flex-col items-center gap-6">
-            <Mark class="w-10" />
+            {/* FORK: DeskFox branded variant + 加大 2x 2026-04-26 */}
+            <Mark variant="branded" class="w-20" />
             <div class="text-20-medium text-text-strong">{language.t("session.new.title")}</div>
           </div>
           <div class="w-full flex flex-col gap-4 items-center">

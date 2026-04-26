@@ -1,0 +1,42 @@
+/* [fork-only] DeskFox 主题色覆盖 + logo 专用 var,不与 sst/opencode 上游同步 */
+/* 在 packages/app/src/index.css 里 @import "@opencode-ai/ui/styles/tailwind" 之后再 @import 本文件 */
+/* 级联让本文件的 var 值赢,覆盖上游 packages/ui/src/styles/theme.css */
+/* 色值依据:D:\Kbase\奇思妙想\opencode\品牌设计\品牌设计.md 第三节(主色板)+ 第十节(深色映射) */
+
+:root {
+  /* === 5a 覆盖上游主题色(主品牌色 + 链接 + icon + 焦点) === */
+  --surface-brand-base: #1f2d44; /* Slate Navy 主品牌 */
+  --surface-brand-hover: #1a2538;
+  --text-interactive-base: #7295c4; /* Cool Blue 链接 */
+  --icon-interactive-base: #7295c4; /* Cool Blue icon */
+  --border-selected: rgba(114, 149, 196, 0.99); /* Cool Blue 焦点环 */
+
+  /* === 5b logo 专用 var(光暗成对,严格按品牌设计.md 第十节色映射) === */
+  --logo-text: #1f2d44; /* 主文字 / 主体 / 耳外(Slate Navy) */
+  --logo-text-secondary: #7295c4; /* 辅文字 Fo / 嘴(Cool Blue) */
+  --logo-text-accent: #9dbbe3; /* Splash 左下三角 / 高光(Light Blue) */
+  --logo-coral: #ff9a7a; /* 珊瑚点缀 / 耳内 / X 中心(Warm Coral,面积 ≤ 15%) */
+  --logo-eye: #f4f7fb; /* 眼睛(Off-white,与深主体对比) */
+  --logo-slogan: #6b7c9a; /* slogan(Cool Gray) */
+  --logo-container-from: #243353; /* 容器渐变上端(暂未使用,无容器版) */
+  --logo-container-to: #172238; /* 容器渐变下端 */
+
+  @media (prefers-color-scheme: dark) {
+    /* === dark 覆盖主题色 === */
+    --surface-brand-base: #7295c4; /* Cool Blue 提亮 */
+    --surface-brand-hover: #5d7eaa;
+    --text-interactive-base: #9dbbe3; /* Light Blue 链接 */
+    --icon-interactive-base: #9dbbe3;
+    --border-selected: #9dbbe3;
+
+    /* === dark logo var(深↔浅互换 + 提亮) === */
+    --logo-text: #f4f7fb; /* 主文字深↔浅互换 */
+    --logo-text-secondary: #9dbbe3; /* 辅文字提亮一档 */
+    --logo-text-accent: #b5d2f0; /* Splash 左下再提亮(深底对比) */
+    --logo-coral: #ffb89e; /* 珊瑚深底加亮 */
+    --logo-eye: #1f2d44; /* 眼睛反向深↔浅 */
+    --logo-slogan: #9cafcc; /* slogan 提亮(WCAG AA) */
+    --logo-container-from: #2d3f60; /* 容器轻提亮(elevated card 效果) */
+    --logo-container-to: #1f2d44;
+  }
+}

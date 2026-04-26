@@ -1,0 +1,25 @@
+{
+  "name": "@opencode-ai/branding",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "[fork-only] DeskFox 品牌层 — logo / theme overlay / icon assets / build hook,不与 sst/opencode 上游同步",
+  "exports": {
+    "./package.json": "./package.json",
+    "./logo": "./src/logo.tsx",
+    "./theme.css": "./src/theme.css"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "solid-js": "catalog:"
+  }
+}
