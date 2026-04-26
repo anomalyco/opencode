@@ -5,6 +5,16 @@ const defaults: Record<string, string> = {
   plan: "var(--icon-agent-plan-base)",
 }
 
+const themeColors: Record<string, string> = {
+  primary: "var(--syntax-info)",
+  secondary: "var(--syntax-property)",
+  accent: "var(--syntax-info)",
+  success: "var(--syntax-success)",
+  warning: "var(--syntax-warning)",
+  error: "var(--text-diff-delete-base)",
+  info: "var(--syntax-info)",
+}
+
 const palette = [
   "var(--icon-agent-ask-base)",
   "var(--icon-agent-build-base)",
@@ -26,8 +36,16 @@ function tone(name: string) {
   return palette[hash % palette.length]
 }
 
+function resolveCustomColor(custom?: string) {
+  if (!custom) return
+  const token = themeColors[custom.toLowerCase()]
+  if (token) return token
+  if (globalThis.CSS?.supports?.("color", custom)) return custom
+}
+
 export function agentColor(name: string, custom?: string) {
-  if (custom) return custom
+  const resolved = resolveCustomColor(custom)
+  if (resolved) return resolved
   return defaults[name] ?? defaults[name.toLowerCase()] ?? tone(name.toLowerCase())
 }
 
