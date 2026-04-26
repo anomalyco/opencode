@@ -29,6 +29,9 @@ import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { PatchFileTool } from "./patch_file"
+import { AstQueryTool } from "./ast_query"
+import { AstEditTool } from "./ast_edit"
+import { AstParser } from "../ast/parser"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -90,6 +93,7 @@ export const layer: Layer.Layer<
   | Ripgrep.Service
   | Format.Service
   | Truncate.Service
+  | AstParser.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -116,6 +120,8 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const patchfiletool = yield* PatchFileTool
+    const astquerytool = yield* AstQueryTool
+    const astedittool = yield* AstEditTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
@@ -198,6 +204,8 @@ export const layer: Layer.Layer<
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           patchfile: Tool.init(patchfiletool),
+          astquery: Tool.init(astquerytool),
+          astedit: Tool.init(astedittool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -222,6 +230,8 @@ export const layer: Layer.Layer<
             tool.skill,
             tool.patch,
             tool.patchfile,
+            tool.astquery,
+            tool.astedit,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
           ],
@@ -284,8 +294,10 @@ export const layer: Layer.Layer<
           input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
-        // patch_file is always available (complements edit for large files)
+        // patch_file, ast_query, ast_edit: always available
         if (tool.id === PatchFileTool.id) return true
+        if (tool.id === AstQueryTool.id) return true
+        if (tool.id === AstEditTool.id) return true
 
         return true
       })
@@ -345,5 +357,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
+    Layer.provide(AstParser.defaultLayer),
   ),
 )
