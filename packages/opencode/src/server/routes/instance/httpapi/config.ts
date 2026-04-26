@@ -1,8 +1,10 @@
 import { Config } from "@/config"
 import { Provider } from "@/provider"
+import * as InstanceState from "@/effect/instance-state"
 import { Effect, Layer } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
+import { markInstanceForDisposal } from "./lifecycle"
 
 const root = "/config"
 
@@ -17,6 +19,16 @@ export const ConfigApi = HttpApi.make("config")
             identifier: "config.get",
             summary: "Get configuration",
             description: "Retrieve the current OpenCode configuration settings and preferences.",
+          }),
+        ),
+        HttpApiEndpoint.patch("update", root, {
+          payload: Config.Info,
+          success: Config.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.update",
+            summary: "Update configuration",
+            description: "Update OpenCode configuration settings and preferences.",
           }),
         ),
         HttpApiEndpoint.get("providers", `${root}/providers`, {
@@ -54,6 +66,13 @@ export const configHandlers = Layer.unwrap(
       return yield* configSvc.get()
     })
 
+    const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
+      const payload = Config.Info.zod.parse(ctx.payload)
+      yield* configSvc.update(payload, { dispose: false })
+      yield* markInstanceForDisposal(yield* InstanceState.context)
+      return payload
+    })
+
     const providers = Effect.fn("ConfigHttpApi.providers")(function* () {
       const providers = yield* providerSvc.list()
       return {
@@ -63,7 +82,7 @@ export const configHandlers = Layer.unwrap(
     })
 
     return HttpApiBuilder.group(ConfigApi, "config", (handlers) =>
-      handlers.handle("get", get).handle("providers", providers),
+      handlers.handle("get", get).handle("update", update).handle("providers", providers),
     )
   }),
 ).pipe(Layer.provide(Provider.defaultLayer), Layer.provide(Config.defaultLayer))
