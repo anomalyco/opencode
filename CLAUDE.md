@@ -33,8 +33,9 @@
 ```
 新增行数 / 改上游行数 ≥ 3:1 是健康基线。
 
-### R4. 黑名单 override 双签
-改黑名单文件需:① commit message 标 `[override-blacklist: <理由>]` ② 改动日志写"为什么 wrapper 替代不可行" ③ 第二人 review 确认。
+### R4. 黑名单 override(团队双签 / single-person AI 二次确认)
+改黑名单文件需:① commit message 标 `[override-blacklist: <理由>]` ② 改动日志逐文件论证"为什么 wrapper 替代不可行" ③ 二次确认:**团队场景**第二人 review;**single-person 场景**实施 agent commit 前出复核报告(wrapper 不可行性 / 风险评估 / 改动日志论证 三项)→ user 审 → 点头 commit。无冷却期,复核嵌在测试通过 → commit 间隙。
+**配额按 commit 笔数算**:一笔 commit 触动多个黑名单文件、同时挂多个 override 标都算 1 笔。
 
 ## 五条设计原则(背后逻辑)
 
@@ -70,8 +71,10 @@
 
 | 指标 | 目标 |
 |---|---|
-| fork 偏离指数 = 修改上游文件数 / 总文件数 | < 5% |
-| 漂移 commit 数 = `dev..upstream/dev` | ≤ 100 |
-| override 累计数 | 每季 ≤ 2 |
+| **上游侵入率** = 修改上游文件数 / 总文件数 | < 5% |
+| **漂移 commit 数** = `dev..upstream/dev` | ≤ 100 |
+| **override 累计笔数**(按 commit 算) | 每季 ≤ 2 笔 |
 
-当前快照(2026-04-26):偏离 ~3% / 漂移 3 / override 1 — **健康**。
+> 上游侵入率:纯新增 fork-only 文件不算侵入(P1 鼓励),只算改上游文件占比。新文件多反而稀释比例,是健康信号。
+
+当前快照(2026-04-26):上游侵入率 ~3% / 漂移 3 / override 1 笔 — **健康**。
