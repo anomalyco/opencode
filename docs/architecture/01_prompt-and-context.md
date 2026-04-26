@@ -5,7 +5,7 @@
 The final system prompt that the model evaluates is dynamically composed of multiple artifacts concatenated together at runtime. This execution sequence is explicitly governed by the internal array construction logic (specifically documented within the codebase at [`src/session/prompt.ts`](../../packages/opencode/src/session/prompt.ts) and [`src/session/llm.ts`](../../packages/opencode/src/session/llm.ts)).
 
 ```mermaid
-flowchart LR
+flowchart TD
     Start[User Prompt] --> Check{Has Agent Prompt?}
     Check -- No --> Base[1a. Inject Base Provider Persona]
     Check -- Yes --> Agent[1b. Inject Agent-Specific Prompt]
@@ -17,131 +17,134 @@ flowchart LR
     Reminders --> LLM[Dispatch to Vercel AI SDK]
 ```
 
-### The System Prompt Composition Table
+### The System Prompt Composition
 
-<table>
-  <thead>
-    <tr>
-      <th style="min-width: 50px;">ID</th>
-      <th style="min-width: 150px;">Artifact / Component</th>
-      <th style="min-width: 300px;">Description</th>
-      <th style="min-width: 600px;">Example Value</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>1.1</strong></td>
-      <td><strong>Base Provider Persona</strong></td>
-      <td>A highly-optimized, model-specific base persona (e.g., <code>beast.txt</code>, <code>gemini.txt</code>). Defines the fundamental operational rules, safety boundaries, and tool utilization conventions. These personas are continuously tuned to combat the specific quirks, laziness, and failure modes of each vendor's foundation model.</td>
-      <td>
-        <details>
-          <summary style="cursor: pointer; color: #3b82f6; font-weight: bold;">Example 1: Gemini Persona (Base)</summary>
-          <pre style="white-space: pre-wrap; font-size: 0.8em; max-height: 500px; overflow-y: auto; padding: 12px; border-radius: 6px; margin-top: 8px; line-height: 1.4;">You are opencode, an interactive CLI agent specializing in software engineering tasks. Your primary goal is to help users safely and efficiently, adhering strictly to the following instructions and utilizing your available tools...</pre>
-        </details>
-        <details style="margin-top: 12px;">
-          <summary style="cursor: pointer; color: #3b82f6; font-weight: bold;">Example 2: Claude Persona</summary>
-          <pre style="white-space: pre-wrap; font-size: 0.8em; max-height: 500px; overflow-y: auto; padding: 12px; border-radius: 6px; margin-top: 8px; line-height: 1.4;">You are OpenCode, the best coding agent on the planet.
-You are an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user...</pre>
-        </details>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>1.2</strong></td>
-      <td><strong>Environment Context</strong></td>
-      <td>A dynamically injected string indicating the runtime model, followed by an <code>&lt;env&gt;</code> block containing the working directory, workspace root, OS platform, and timestamp.</td>
-      <td>
-        <details>
-          <summary style="cursor: pointer; color: #3b82f6; font-weight: bold;">Example 1: Windows Git Environment</summary>
-          <pre style="white-space: pre-wrap; font-size: 0.8em; max-height: 500px; overflow-y: auto; padding: 12px; border-radius: 6px; margin-top: 8px; line-height: 1.4;">You are powered by the model named gemini-3.1-pro-preview. The exact model ID is google/gemini-3.1-pro-preview
+#### 1a. Base Provider Persona
+
+A highly-optimized, model-specific base persona (e.g., `beast.txt`, `gemini.txt`). Defines the fundamental operational rules, safety boundaries, and tool utilization conventions. These personas are continuously tuned to combat the specific quirks, laziness, and failure modes of each vendor's foundation model.
+
+**Example: Gemini Persona (Base)**
+
+```text
+You are opencode, an interactive CLI agent specializing in software engineering tasks. Your primary goal is to help users safely and efficiently, adhering strictly to the following instructions and utilizing your available tools.
+
+# Core Mandates
+
+- **Conventions:** Rigorously adhere to existing project conventions when reading or modifying code.
+- **Libraries/Frameworks:** NEVER assume a library/framework is available or appropriate. Verify its established usage...
+- **Style & Structure:** Mimic the style (formatting, naming), structure, framework choices, typing, and architectural patterns...
+...
+
+# Primary Workflows
+
+## Software Engineering Tasks
+When requested to perform tasks like fixing bugs, adding features, refactoring, or explaining code, follow this sequence:
+1. **Understand:** Think about the user's request and the relevant codebase context. Use 'grep' and 'glob' search tools extensively...
+2. **Plan:** Build a coherent and grounded plan for how you intend to resolve the user's task...
+3. **Implement:** Use the available tools to act on the plan, strictly adhering to the project's established conventions...
+...
+
+## New Applications
+**Goal:** Autonomously implement and deliver a visually appealing, substantially complete, and functional prototype. Utilize all tools at your disposal...
+...
+
+# Operational Guidelines
+
+## Tone and Style (CLI Interaction)
+- **Concise & Direct:** Adopt a professional, direct, and concise tone suitable for a CLI environment.
+- **Minimal Output:** Aim for fewer than 3 lines of text output...
+...
+
+## Security and Safety Rules
+- **Explain Critical Commands:** Before executing commands with 'bash' that modify the file system, codebase, or system state, you *must* provide a brief explanation...
+...
+
+## Tool Usage
+- **File Paths:** Always use absolute paths when referring to files with tools like 'read' or 'write'...
+...
+
+# Final Reminder
+Your core function is efficient and safe assistance. Balance extreme conciseness with the crucial need for clarity, especially regarding safety and potential system modifications. Always prioritize user control and project conventions. Never make assumptions about the contents of files; instead use 'read' to ensure you aren't making broad assumptions. Finally, you are an agent - please keep going until the user's query is completely resolved.
+```
+
+#### 1b. Agent-Specific Prompt
+
+A tailored system prompt completely overriding (not supplementing) the base persona for a specific subagent (e.g., the `@explore` agent, the `@compaction` agent).
+
+**Example: @compaction Agent Prompt**
+
+```text
+You are a helpful AI assistant tasked with summarizing conversations.
+
+When asked to summarize, provide a detailed but concise summary of the older conversation history.
+The most recent turns may be preserved verbatim outside your summary, so focus on information that would still be needed to continue the work with that recent context available.
+```
+
+#### 2. Environment Context
+
+A dynamically injected string indicating the runtime model, followed by an `<env>` block containing the working directory, workspace root, OS platform, and timestamp.
+
+**Example: Windows Git Environment**
+
+```text
+You are powered by the model named gemini-3.1-pro-preview. The exact model ID is google/gemini-3.1-pro-preview
 Here is some useful information about the environment you are running in:
-&lt;env&gt;
+<env>
   Working directory: E:\projects_large\opencode
   Workspace root folder: E:\projects_large\opencode
   Is directory a git repo: yes
   Platform: win32
   Today's date: Sat Apr 25 2026
-&lt;/env&gt;</pre>
-        </details>
-      </td>
-    </tr>
-    <tr>
-      <td><strong>1.3</strong></td>
-      <td><strong>Skills Registry</strong></td>
-      <td>A verbose registry of available "Skills" (custom programmatic workflows) injected if the agent possesses the required permissions.</td>
-      <td>
-        <details>
-          <summary style="cursor: pointer; color: #3b82f6; font-weight: bold;">Example 1: Populated Registry</summary>
-          <pre style="white-space: pre-wrap; font-size: 0.8em; max-height: 500px; overflow-y: auto; padding: 12px; border-radius: 6px; margin-top: 8px; line-height: 1.4;">Skills provide specialized instructions and workflows for specific tasks.
+</env>
+```
+
+#### 3. Skills Registry
+
+A verbose registry of available "Skills" (custom programmatic workflows) injected if the agent possesses the required permissions.
+
+**Example: Populated Registry**
+
+```text
+Skills provide specialized instructions and workflows for specific tasks.
 Use the skill tool to load a skill when a task matches its description.
 
 Available skills:
 
 - git-rebase: Handles conflict resolution workflows for git rebases.
-- react-component: Scaffolds a new React component with tests and stories.</pre>
-  </details>
-  </td>
-    </tr>
-    <tr>
-      <td><strong>1.4</strong></td>
-      <td><strong>Agent-Specific Prompt</strong></td>
-      <td>A tailored system prompt completely overriding (not supplementing) the base persona for a specific subagent (e.g., the `@explore` agent, the `@compaction` agent).</td>
-      <td>
-        <details>
-          <summary style="cursor: pointer; color: #3b82f6; font-weight: bold;">Example 1: @compaction Agent Prompt</summary>
-          <pre style="white-space: pre-wrap; font-size: 0.8em; max-height: 500px; overflow-y: auto; padding: 12px; border-radius: 6px; margin-top: 8px; line-height: 1.4;">You are a helpful AI assistant tasked with summarizing conversations.
+- react-component: Scaffolds a new React component with tests and stories.
+```
 
-When asked to summarize, provide a detailed but concise summary of the older conversation history.
-The most recent turns may be preserved verbatim outside your summary, so focus on information that would still be needed to continue the work with that recent context available.</pre>
+#### 4. File-Based Instructions
 
-</details>
-</td>
-</tr>
-<tr>
-<td><strong>1.5</strong></td>
-<td><strong>File-Based Instructions</strong></td>
-<td>Automatically scraped context from local repositories (e.g., <code>AGENTS.md</code>, <code>CLAUDE.md</code>) and user-configured global instruction files.</td>
-<td>
-<details>
-<summary style="cursor: pointer; color: #3b82f6; font-weight: bold;">Example 1: Project-Level (AGENTS.md)</summary>
-<pre style="white-space: pre-wrap; font-size: 0.8em; max-height: 500px; overflow-y: auto; padding: 12px; border-radius: 6px; margin-top: 8px; line-height: 1.4;">Instructions from: E:\projects_large\opencode\AGENTS.md
+Automatically scraped context from local repositories (e.g., `AGENTS.md`, `CLAUDE.md`) and user-configured global instruction files.
+
+**Example: Project-Level (AGENTS.md)**
+
+```text
+Instructions from: E:\projects_large\opencode\AGENTS.md
 
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
-- Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.</pre>
-  </details>
-  </td>
-  </tr>
-  <tr>
-  <td><strong>1.6</strong></td>
-  <td><strong>Mode Reminders</strong></td>
-  <td>State-based XML blocks appended to the <strong>last User Message</strong> (not the system prompt). Placing these at the end of the user message ensures high attention weighting. For example, appending a strict read-only constraint when the user requests a "plan".</td>
-  <td>
-  <details>
-  <summary style="cursor: pointer; color: #3b82f6; font-weight: bold;">Example 1: Build Mode Transition</summary>
-  <pre style="white-space: pre-wrap; font-size: 0.8em; max-height: 500px; overflow-y: auto; padding: 12px; border-radius: 6px; margin-top: 8px; line-height: 1.4;">&lt;system-reminder&gt;
-  Your operational mode has changed from plan to build.
-  You are no longer in read-only mode.
-  You are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.
-  &lt;/system-reminder&gt;</pre>
-  </details>
-  <details style="margin-top: 12px;">
-  <summary style="cursor: pointer; color: #3b82f6; font-weight: bold;">Example 2: Plan Mode (Read-Only)</summary>
-  <pre style="white-space: pre-wrap; font-size: 0.8em; max-height: 500px; overflow-y: auto; padding: 12px; border-radius: 6px; margin-top: 8px; line-height: 1.4;">&lt;system-reminder&gt;
+- Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
+```
+
+#### 5. Mode Reminders
+
+State-based XML blocks appended to the **last User Message** (not the system prompt). Placing these at the end of the user message ensures high attention weighting. For example, appending a strict read-only constraint when the user requests a "plan".
+
+**Example: Plan Mode (Read-Only)**
+
+```text
+<system-reminder>
 
 # Plan Mode - System Reminder
 
 CRITICAL: Plan mode ACTIVE - you are in READ-ONLY phase. STRICTLY FORBIDDEN:
 ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
 or ANY other bash command to manipulate files - commands may ONLY read/inspect.
-&lt;/system-reminder&gt;</pre>
-
-</details>
-</td>
-</tr>
-
-  </tbody>
-</table>
+</system-reminder>
+```
 
 ---
 

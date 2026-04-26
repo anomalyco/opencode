@@ -91,7 +91,7 @@ All of this happens asynchronously without the core AI loop ever waiting for the
 
 ```mermaid
 graph TD
-    subgraph "Execution Loop"
+    subgraph execution_loop ["Execution Loop"]
         LLM[Agent] -->|Calls Tool| Harness[Session Harness]
         Harness -->|Invokes| Edit[Edit Tool]
         Edit -->|Writes| FS[(File System)]
@@ -99,18 +99,21 @@ graph TD
         Harness -->|Updates State| Meta[Tool Metadata]
     end
 
-    subgraph "Event Bus (Sync Events)"
-        Harness -->|Publishes message.part.updated| Bus[PubSub Channel]
+    subgraph event_bus ["Event Bus (Sync Events)"]
+        Bus[PubSub Channel]
         Bus -->|message.part.updated| TUI
         Bus -->|Wildcard Event| Log
     end
 
-    subgraph "Reactors"
+    subgraph reactors ["Reactors"]
         TUI[Terminal UI] -->|Re-renders| Render[Diff Viewer]
         Log[Telemetry Logger] -->|Writes| Disk[(Logs)]
     end
 
-    classDef nonBlocking fill:#1e1e1e,stroke:#3b82f6,stroke-width:2px;
+    Meta ~~~ Bus
+    Harness -->|Publishes message.part.updated| Bus
+
+    classDef nonBlocking fill:#f3f4f6,stroke:#3b82f6,stroke-width:2px,color:#000;
     class TUI,Log nonBlocking;
 ```
 
