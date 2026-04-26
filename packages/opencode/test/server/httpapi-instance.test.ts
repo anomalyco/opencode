@@ -20,6 +20,24 @@ function app() {
   return InstanceRoutes(websocket)
 }
 
+async function waitDisposed(directory: string) {
+  return await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      GlobalBus.off("event", onEvent)
+      reject(new Error("timed out waiting for instance disposal"))
+    }, 10_000)
+
+    function onEvent(event: { directory?: string; payload: { type?: string } }) {
+      if (event.payload.type !== "server.instance.disposed" || event.directory !== directory) return
+      clearTimeout(timer)
+      GlobalBus.off("event", onEvent)
+      resolve()
+    }
+
+    GlobalBus.on("event", onEvent)
+  })
+}
+
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await Instance.disposeAll()
@@ -77,6 +95,51 @@ describe("instance HttpApi", () => {
 
     expect(formatter.status).toBe(200)
     expect(await formatter.json()).toEqual([])
+  })
+
+  test("serves project git init through Hono bridge", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+    const disposed = waitDisposed(tmp.path)
+
+    const response = await app().request("/project/git/init", {
+      method: "POST",
+      headers: { "x-opencode-directory": tmp.path },
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ vcs: "git", worktree: tmp.path })
+    await disposed
+
+    const current = await app().request("/project/current", { headers: { "x-opencode-directory": tmp.path } })
+    expect(current.status).toBe(200)
+    expect(await current.json()).toMatchObject({ vcs: "git", worktree: tmp.path })
+  })
+
+  test("serves project update through Hono bridge", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+
+    const current = await app().request("/project/current", { headers: { "x-opencode-directory": tmp.path } })
+    expect(current.status).toBe(200)
+    const project = (await current.json()) as { id: string }
+
+    const response = await app().request(`/project/${project.id}`, {
+      method: "PATCH",
+      headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
+      body: JSON.stringify({ name: "patched-project", commands: { start: "bun dev" } }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      id: project.id,
+      name: "patched-project",
+      commands: { start: "bun dev" },
+    })
+
+    const list = await app().request("/project", { headers: { "x-opencode-directory": tmp.path } })
+    expect(list.status).toBe(200)
+    expect(await list.json()).toContainEqual(
+      expect.objectContaining({ id: project.id, name: "patched-project", commands: { start: "bun dev" } }),
+    )
   })
 
   test("serves instance dispose through Hono bridge", async () => {

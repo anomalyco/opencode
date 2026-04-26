@@ -91,6 +91,15 @@ export const UpdateInput = z.object({
 })
 export type UpdateInput = z.infer<typeof UpdateInput>
 
+export const UpdatePayload = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
+})
+  .annotate({ identifier: "ProjectUpdateInput" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
+
 // ---------------------------------------------------------------------------
 // Effect service
 // ---------------------------------------------------------------------------

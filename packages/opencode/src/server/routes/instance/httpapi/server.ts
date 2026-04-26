@@ -18,6 +18,8 @@ import { PermissionApi, permissionHandlers } from "./permission"
 import { ProjectApi, projectHandlers } from "./project"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
+import { SessionApi, sessionHandlers } from "./session"
+import { SyncApi, syncHandlers } from "./sync"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
@@ -73,6 +75,8 @@ export const routes = Layer.mergeAll(
   HttpApiBuilder.layer(QuestionApi).pipe(Layer.provide(questionHandlers)),
   HttpApiBuilder.layer(PermissionApi).pipe(Layer.provide(permissionHandlers)),
   HttpApiBuilder.layer(ProviderApi).pipe(Layer.provide(providerHandlers)),
+  HttpApiBuilder.layer(SessionApi).pipe(Layer.provide(sessionHandlers)),
+  HttpApiBuilder.layer(SyncApi).pipe(Layer.provide(syncHandlers)),
   HttpApiBuilder.layer(WorkspaceApi).pipe(Layer.provide(workspaceHandlers)),
 ).pipe(
   Layer.provide(authorizationLayer),
