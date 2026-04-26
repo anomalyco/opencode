@@ -157,11 +157,12 @@ export function createChildStoreManager(input: {
       const init = () =>
         createRoot((dispose) => {
           const initialIcon = icon[0].value
+          const initialProjectMeta = meta[0].value
 
           const pathQuery = useQuery(() => loadPathQuery(directory))
           const child = createStore<State>({
             project: "",
-            projectMeta: undefined,
+            projectMeta: initialProjectMeta,
             icon: initialIcon,
             provider_ready: false,
             provider: { all: [], connected: [], default: {} },
@@ -194,11 +195,15 @@ export function createChildStoreManager(input: {
           disposers.set(directory, dispose)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
-            if (!(init instanceof Promise)) return
-            void init.then(() => {
+            const apply = () => {
               if (children[directory] !== child) return
               run()
-            })
+            }
+            if (init instanceof Promise) {
+              void init.then(apply)
+              return
+            }
+            queueMicrotask(apply)
           }
 
           onPersistedInit(vcs[2], () => {
@@ -210,6 +215,11 @@ export function createChildStoreManager(input: {
           onPersistedInit(icon[2], () => {
             if (child[0].icon !== initialIcon) return
             child[1]("icon", icon[0].value)
+          })
+
+          onPersistedInit(meta[2], () => {
+            if (child[0].projectMeta !== initialProjectMeta) return
+            child[1]("projectMeta", meta[0].value)
           })
         })
 

@@ -13,7 +13,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { zod } from "@/util/effect-zod"
+import { ZodOverride, zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "project" })
@@ -30,6 +30,22 @@ const ProjectCommands = Schema.Struct({
   start: Schema.optional(
     Schema.String.annotate({ description: "Startup script to run when creating a new workspace (worktree)" }),
   ),
+  run: Schema.optional(
+    Schema.mutable(
+      Schema.Array(
+        Schema.Struct({
+          name: Schema.String,
+          command: Schema.String,
+          cwd: Schema.optional(Schema.String),
+        }),
+      ),
+    ).annotate({ description: "Named run commands available in the web UI" }),
+  ),
+}).annotate({
+  [ZodOverride]: z.object({
+    start: z.string().optional(),
+    run: z.array(z.object({ name: z.string(), command: z.string(), cwd: z.string().optional() })).optional(),
+  }),
 })
 
 const ProjectTime = Schema.Struct({

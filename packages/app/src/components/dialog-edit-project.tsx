@@ -83,7 +83,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
           directory: props.project.worktree,
           name,
           icon: { color: store.color || "", override: store.iconOverride || "" },
-          commands: { start },
+          commands: { start, run: props.project.commands?.run ?? [] },
         })
         globalSync.project.icon(props.project.worktree, store.iconOverride || undefined)
         dialog.close()
@@ -93,7 +93,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
       globalSync.project.meta(props.project.worktree, {
         name,
         icon: { color: store.color || undefined, override: store.iconOverride || undefined },
-        commands: { start: start || undefined },
+        commands: { start: start || undefined, run: props.project.commands?.run ?? [] },
       })
       dialog.close()
     },

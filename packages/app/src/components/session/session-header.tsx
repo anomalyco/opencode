@@ -1,5 +1,6 @@
 import { AppIcon } from "@opencode-ai/ui/app-icon"
 import { Button } from "@opencode-ai/ui/button"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -20,6 +21,7 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
+import { runConfigList, type RunConfig } from "@/pages/session/run-config"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
@@ -133,6 +135,7 @@ export function SessionHeader() {
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
+  const dialog = useDialog()
   const platform = usePlatform()
   const language = useLanguage()
   const settings = useSettings()
@@ -216,9 +219,25 @@ export function SessionHeader() {
 
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
+  const [runMenu, setRunMenu] = createStore({ open: false, selected: undefined as string | undefined })
   const [openRequest, setOpenRequest] = createStore({
     app: undefined as OpenApp | undefined,
   })
+
+  const projectCommands = () => {
+    const current = project()
+    if (!current?.commands && !sync.project?.commands) return
+    return { ...sync.project?.commands, ...current?.commands }
+  }
+  const runConfigs = () =>
+    runConfigList({
+      projectStart: projectCommands()?.start?.trim(),
+      projectStartTitle: language.t("run.project.start"),
+      customRuns: projectCommands()?.run,
+    })
+  const selectedRunConfig = createMemo(
+    () => runConfigs().find((config) => config.id === runMenu.selected) ?? runConfigs()[0],
+  )
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
   const current = createMemo(
@@ -269,6 +288,100 @@ export function SessionHeader() {
       .catch((err: unknown) => showRequestError(language, err))
   }
 
+  const editRunConfigs = () => {
+    const current = project()
+    if (!current) return
+    void import("@/components/dialog-edit-run-configs").then((x) => {
+      dialog.show(() => <x.DialogEditRunConfigs project={{ ...current, commands: projectCommands() }} />)
+    })
+  }
+
+  const runSelectedConfig = async (config: RunConfig | undefined = selectedRunConfig()) => {
+    if (!config) return
+    if (terminal.running(config)) {
+      await terminal.stop(config)
+      return
+    }
+
+    const id = await terminal.run(config)
+    if (!id) return
+    view().terminal.open()
+  }
+
+  const runControls = () => (
+    <div class="flex h-[24px] min-w-0 box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
+      <Show when={runConfigs().length > 0}>
+        <DropdownMenu
+          gutter={4}
+          placement="bottom-end"
+          open={runMenu.open}
+          onOpenChange={(open) => setRunMenu("open", open)}
+        >
+          <DropdownMenu.Trigger
+            as={Button}
+            variant="ghost"
+            class="rounded-none h-full min-w-0 max-w-[180px] py-0 pl-2 pr-1 gap-1.5 border-none shadow-none data-[expanded]:bg-surface-raised-base-active"
+            aria-label={language.t("run.selector.placeholder")}
+          >
+            <Icon name="terminal" size="small" class="shrink-0 text-icon-base" />
+            <span class="min-w-0 truncate text-12-regular text-text-strong">{selectedRunConfig()?.title}</span>
+            <Icon name="chevron-down" size="small" class="shrink-0 text-icon-weak" />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content class="max-w-80 [&_[data-slot=dropdown-menu-radio-item]]:pl-1">
+              <DropdownMenu.RadioGroup
+                class="max-h-80 overflow-y-auto no-scrollbar"
+                value={selectedRunConfig()?.id}
+                onChange={(value) => setRunMenu("selected", typeof value === "string" ? value : undefined)}
+              >
+                <For each={runConfigs()}>
+                  {(config) => (
+                    <DropdownMenu.RadioItem
+                      value={config.id}
+                      onSelect={() => {
+                        setRunMenu("open", false)
+                        setRunMenu("selected", config.id)
+                      }}
+                    >
+                      <div class="flex size-5 shrink-0 items-center justify-center">
+                        <Icon name="terminal" size="small" class="text-icon-weak" />
+                      </div>
+                      <DropdownMenu.ItemLabel>
+                        <div class="flex min-w-0 flex-col">
+                          <span class="truncate">{config.title}</span>
+                          <span class="truncate text-11-regular text-text-weak font-mono">{config.command}</span>
+                        </div>
+                      </DropdownMenu.ItemLabel>
+                      <DropdownMenu.ItemIndicator>
+                        <Icon name="check-small" size="small" class="text-icon-weak" />
+                      </DropdownMenu.ItemIndicator>
+                    </DropdownMenu.RadioItem>
+                  )}
+                </For>
+              </DropdownMenu.RadioGroup>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu>
+        <Button
+          variant="ghost"
+          class="rounded-none h-full w-[28px] p-0 border-none shadow-none border-l border-border-weaker-base"
+          icon={terminal.running(selectedRunConfig()) ? "stop" : "play"}
+          disabled={!selectedRunConfig()}
+          aria-label={language.t(terminal.running(selectedRunConfig()) ? "run.stop" : "run.run")}
+          onClick={() => void runSelectedConfig()}
+        />
+      </Show>
+      <Button
+        variant="ghost"
+        class="rounded-none h-full w-[28px] p-0 border-none shadow-none"
+        classList={{ "border-l border-border-weaker-base": runConfigs().length > 0 }}
+        icon="sliders"
+        onClick={editRunConfigs}
+        aria-label={language.t("dialog.project.edit.runConfigs")}
+      />
+    </div>
+  )
+
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)
   const [rightMount, setRightMount] = createSignal<HTMLElement | null>(null)
   onMount(() => {
@@ -313,7 +426,7 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <div class="flex items-center gap-2">
               <Show when={projectDirectory()}>
-                <div class="hidden xl:flex items-center">
+                <div class="hidden xl:flex items-center gap-2">
                   <Show
                     when={canOpen()}
                     fallback={
@@ -417,12 +530,26 @@ export function SessionHeader() {
                                   {language.t("session.header.open.copyPath")}
                                 </DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
+                              <DropdownMenu.Item
+                                onSelect={() => {
+                                  setMenu("open", false)
+                                  editRunConfigs()
+                                }}
+                              >
+                                <div class="flex size-5 shrink-0 items-center justify-center">
+                                  <Icon name="sliders" size="small" class="text-icon-weak" />
+                                </div>
+                                <DropdownMenu.ItemLabel>
+                                  {language.t("dialog.project.edit.runConfigs")}
+                                </DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
                             </DropdownMenu.Content>
                           </DropdownMenu.Portal>
                         </DropdownMenu>
                       </div>
                     </div>
                   </Show>
+                  {runControls()}
                 </div>
               </Show>
               <div class="flex items-center gap-1">

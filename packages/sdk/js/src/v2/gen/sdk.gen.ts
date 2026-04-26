@@ -1047,6 +1047,14 @@ export class Project extends HeyApiClient {
          * Startup script to run when creating a new workspace (worktree)
          */
         start?: string
+        /**
+         * Named run commands available in the web UI
+         */
+        run?: Array<{
+          name: string
+          command: string
+          cwd?: string
+        }>
       }
     },
     options?: Options<never, ThrowOnError>,
@@ -1120,6 +1128,7 @@ export class Pty extends HeyApiClient {
       directory?: string
       workspace?: string
       command?: string
+      shellCommand?: string
       args?: Array<string>
       cwd?: string
       title?: string
@@ -1137,6 +1146,7 @@ export class Pty extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "command" },
+            { in: "body", key: "shellCommand" },
             { in: "body", key: "args" },
             { in: "body", key: "cwd" },
             { in: "body", key: "title" },

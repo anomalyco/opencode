@@ -19,6 +19,14 @@ export type Project = {
      * Startup script to run when creating a new workspace (worktree)
      */
     start?: string
+    /**
+     * Named run commands available in the web UI
+     */
+    run?: Array<{
+      name: string
+      command: string
+      cwd?: string
+    }>
   }
   time: {
     created: number
@@ -2660,6 +2668,14 @@ export type ProjectUpdateData = {
        * Startup script to run when creating a new workspace (worktree)
        */
       start?: string
+      /**
+       * Named run commands available in the web UI
+       */
+      run?: Array<{
+        name: string
+        command: string
+        cwd?: string
+      }>
     }
   }
   path: {
@@ -2716,6 +2732,7 @@ export type PtyListResponse = PtyListResponses[keyof PtyListResponses]
 export type PtyCreateData = {
   body?: {
     command?: string
+    shellCommand?: string
     args?: Array<string>
     cwd?: string
     title?: string
