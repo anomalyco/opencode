@@ -112,6 +112,7 @@ export function DialogSessionList() {
   const options = createMemo(() => {
     const today = new Date().toDateString()
     return sessions()
+      .filter((x) => x.parentID === undefined)
       .toSorted((a, b) => {
         const updatedDay = new Date(b.time.updated).setHours(0, 0, 0, 0) - new Date(a.time.updated).setHours(0, 0, 0, 0)
         if (updatedDay !== 0) return updatedDay
