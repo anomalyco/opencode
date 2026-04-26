@@ -143,7 +143,9 @@ export async function restoreWorkspaceSession(input: {
 
   try {
     await input.sync.bootstrap({ fatal: false })
-  } catch (e) {}
+  } catch (e) {
+    log.warn("workspace bootstrap failed during restore", { error: errorData(e) })
+  }
 
   await Promise.all([input.project.workspace.sync(), input.sync.session.sync(input.sessionID)]).catch((err) => {
     log.error("session restore refresh failed", {
