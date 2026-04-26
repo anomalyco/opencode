@@ -94,6 +94,7 @@ export const layer = Layer.effect(
     ) {
       const data = yield* InstanceState.get(state)
       data.interrupts.set(sessionID, type)
+      yield* status.set(sessionID, { type })
       if (type === "steer") {
         yield* cancel(sessionID)
       }
@@ -102,6 +103,7 @@ export const layer = Layer.effect(
     const clearInterrupt = Effect.fn("SessionRunState.clearInterrupt")(function* (sessionID: SessionID) {
       const data = yield* InstanceState.get(state)
       data.interrupts.delete(sessionID)
+      yield* status.set(sessionID, { type: "busy" })
     })
 
     const getInterrupt = Effect.fn("SessionRunState.getInterrupt")(function* (sessionID: SessionID) {
