@@ -1,7 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { AwsV4Signer } from "aws4fetch"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -11,7 +11,6 @@ import {
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
-  type TextPart,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
@@ -204,17 +203,25 @@ const BedrockChunk = Schema.Struct({
 })
 type BedrockChunk = Schema.Schema.Type<typeof BedrockChunk>
 
-const BedrockChunkJson = Schema.fromJsonString(BedrockChunk)
-const BedrockTargetJson = Schema.fromJsonString(BedrockConverseTarget)
-const decodeChunkSync = Schema.decodeUnknownSync(BedrockChunkJson)
+// The eventstream codec already gives us a UTF-8 payload that we parse once
+// per frame; we then wrap it under the `:event-type` key and hand the parsed
+// object to `decodeChunkSync`. This keeps a single JSON parse per frame —
+// avoid `Schema.fromJsonString` here which would add an extra decode/encode
+// roundtrip.
+const decodeChunkSync = Schema.decodeUnknownSync(BedrockChunk)
 
-const decodeChunk = (data: string) =>
+const decodeChunk = (data: unknown) =>
   Effect.try({
     try: () => decodeChunkSync(data),
-    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid Bedrock Converse stream chunk", data),
+    catch: () =>
+      ProviderShared.chunkError(
+        ADAPTER,
+        "Invalid Bedrock Converse stream chunk",
+        typeof data === "string" ? data : JSON.stringify(data),
+      ),
   })
 
-const encodeTarget = Schema.encodeSync(BedrockTargetJson)
+const encodeTarget = Schema.encodeSync(Schema.fromJsonString(BedrockConverseTarget))
 const decodeTarget = Schema.decodeUnknownEffect(BedrockConverseDraft.pipe(Schema.decodeTo(BedrockConverseTarget)))
 
 const invalid = (message: string) => new InvalidRequestError({ message })
@@ -222,7 +229,6 @@ const invalid = (message: string) => new InvalidRequestError({ message })
 const region = (request: LLMRequest) => {
   const fromNative = request.model.native?.aws_region
   if (typeof fromNative === "string" && fromNative !== "") return fromNative
-  if (typeof request.model.native?.region === "string") return request.model.native.region as string
   return "us-east-1"
 }
 
@@ -231,8 +237,6 @@ const baseUrl = (request: LLMRequest) => {
   if (configured) return configured.replace(/\/+$/, "")
   return `https://bedrock-runtime.${region(request)}.amazonaws.com`
 }
-
-const text = (values: ReadonlyArray<{ readonly text: string }>) => values.map((part) => part.text).join("\n")
 
 const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   toolSpec: {
@@ -260,14 +264,16 @@ const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
   },
 })
 
-const lowerToolResult = (part: ToolResultPart): BedrockToolResultBlock => {
-  const status = part.result.type === "error" ? ("error" as const) : ("success" as const)
-  const content =
-    part.result.type === "text" || part.result.type === "error"
-      ? [{ text: String(part.result.value) }]
-      : [{ json: part.result.value }]
-  return { toolResult: { toolUseId: part.id, content, status } }
-}
+const lowerToolResult = (part: ToolResultPart): BedrockToolResultBlock => ({
+  toolResult: {
+    toolUseId: part.id,
+    content:
+      part.result.type === "text" || part.result.type === "error"
+        ? [{ text: String(part.result.value) }]
+        : [{ json: part.result.value }],
+    status: part.result.type === "error" ? "error" : "success",
+  },
+})
 
 const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (request: LLMRequest) {
   const messages: BedrockMessage[] = []
@@ -325,7 +331,6 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
 
 const prepare = Effect.fn("BedrockConverse.prepare")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
-  const useTools = request.tools.length > 0 && request.toolChoice?.type !== "none"
   return {
     modelId: request.model.id,
     messages: yield* lowerMessages(request),
@@ -342,57 +347,57 @@ const prepare = Effect.fn("BedrockConverse.prepare")(function* (request: LLMRequ
             topP: request.generation.topP,
             stopSequences: request.generation.stop,
           },
-    toolConfig: useTools
-      ? { tools: request.tools.map(lowerTool), toolChoice }
-      : undefined,
+    toolConfig:
+      request.tools.length > 0 && request.toolChoice?.type !== "none"
+        ? { tools: request.tools.map(lowerTool), toolChoice }
+        : undefined,
   }
 })
 
-const credentialsFromInput = (request: LLMRequest): BedrockCredentials | undefined => {
-  const native = request.model.native
-  if (!native) return undefined
-  const creds = native.aws_credentials
-  if (!creds || typeof creds !== "object") return undefined
-  const obj = creds as Record<string, unknown>
-  if (typeof obj.accessKeyId !== "string" || typeof obj.secretAccessKey !== "string") return undefined
-  return {
-    region: typeof obj.region === "string" ? obj.region : region(request),
-    accessKeyId: obj.accessKeyId,
-    secretAccessKey: obj.secretAccessKey,
-    sessionToken: typeof obj.sessionToken === "string" ? obj.sessionToken : undefined,
-  }
-}
+// Credentials live on `model.native.aws_credentials` so the OpenCode bridge
+// can resolve them via `@aws-sdk/credential-providers` and stuff them in
+// without exposing the auth machinery to the rest of the LLM core. Schema
+// decode keeps this boundary honest — anything that doesn't match the shape
+// is treated as "no credentials".
+const NativeCredentials = Schema.Struct({
+  accessKeyId: Schema.String,
+  secretAccessKey: Schema.String,
+  region: Schema.optional(Schema.String),
+  sessionToken: Schema.optional(Schema.String),
+})
+const decodeNativeCredentials = Schema.decodeUnknownOption(NativeCredentials)
+
+const credentialsFromInput = (request: LLMRequest): BedrockCredentials | undefined =>
+  decodeNativeCredentials(request.model.native?.aws_credentials).pipe(
+    Option.map((creds) => ({ ...creds, region: creds.region ?? region(request) })),
+    Option.getOrUndefined,
+  )
 
 const isBearerAuth = (headers: Record<string, string> | undefined) => {
   const auth = headers?.authorization ?? headers?.Authorization
   return typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")
 }
 
-const signRequest = (
-  url: string,
-  body: string,
-  headers: Record<string, string>,
-  credentials: BedrockCredentials,
-) =>
+const signRequest = (input: {
+  readonly url: string
+  readonly body: string
+  readonly headers: Record<string, string>
+  readonly credentials: BedrockCredentials
+}) =>
   Effect.tryPromise({
     try: async () => {
-      const signer = new AwsV4Signer({
-        url,
+      const signed = await new AwsV4Signer({
+        url: input.url,
         method: "POST",
-        headers: Object.entries(headers),
-        body,
-        region: credentials.region,
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-        sessionToken: credentials.sessionToken,
+        headers: Object.entries(input.headers),
+        body: input.body,
+        region: input.credentials.region,
+        accessKeyId: input.credentials.accessKeyId,
+        secretAccessKey: input.credentials.secretAccessKey,
+        sessionToken: input.credentials.sessionToken,
         service: "bedrock",
-      })
-      const signed = await signer.sign()
-      const out: Record<string, string> = {}
-      signed.headers.forEach((value, key) => {
-        out[key] = value
-      })
-      return out
+      }).sign()
+      return Object.fromEntries(signed.headers.entries())
     },
     catch: (error) =>
       new InvalidRequestError({
@@ -421,14 +426,14 @@ const toHttp = Effect.fn("BedrockConverse.toHttp")(function* (target: BedrockCon
       "Bedrock Converse requires either a Bearer API key in headers or AWS credentials in model.native.aws_credentials",
     )
   }
-  const signed = yield* signRequest(url, body, baseHeaders, credentials)
+  const signed = yield* signRequest({ url, body, headers: baseHeaders, credentials })
   return HttpClientRequest.post(url).pipe(
     HttpClientRequest.setHeaders({ ...baseHeaders, ...signed }),
     HttpClientRequest.bodyText(body, "application/json"),
   )
 })
 
-const mapFinishReason = (reason: string | undefined): FinishReason => {
+const mapFinishReason = (reason: string): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence") return "stop"
   if (reason === "max_tokens") return "length"
   if (reason === "tool_use") return "tool-calls"
@@ -459,9 +464,10 @@ interface ToolAccumulator {
 interface ParserState {
   readonly tools: Record<number, ToolAccumulator>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
-  // `metadata` (carries usage). We accumulate both before emitting a single
-  // `request-finish` event so consumers see one terminal event with both.
-  readonly finishReason: FinishReason | undefined
+  // `metadata` (carries usage). The raw stop reason is held here until
+  // `metadata` arrives, then mapped + emitted together as a single terminal
+  // `request-finish` event so consumers see one event with both.
+  readonly pendingStopReason: string | undefined
 }
 
 const finishToolCall = (tool: ToolAccumulator | undefined) =>
@@ -536,14 +542,14 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
       // Stash the reason — emit `request-finish` once `metadata` arrives with
       // usage, so consumers see one terminal event carrying both. If metadata
       // never arrives the `onHalt` fallback emits a usage-less finish.
-      return [{ ...state, finishReason: mapFinishReason(chunk.messageStop.stopReason) }, []] as const
+      return [{ ...state, pendingStopReason: chunk.messageStop.stopReason }, []] as const
     }
 
     if (chunk.metadata) {
-      const reason = state.finishReason ?? "stop"
+      const reason = state.pendingStopReason ? mapFinishReason(state.pendingStopReason) : "stop"
       const usage = mapUsage(chunk.metadata.usage)
       return [
-        { ...state, finishReason: undefined },
+        { ...state, pendingStopReason: undefined },
         [{ type: "request-finish" as const, reason, usage }],
       ] as const
     }
@@ -576,23 +582,39 @@ const processChunk = (state: ParserState, chunk: BedrockChunk) =>
 const eventCodec = new EventStreamCodec(toUtf8, fromUtf8)
 const utf8 = new TextDecoder()
 
-const concat = (left: Uint8Array, right: Uint8Array) => {
-  const next = new Uint8Array(left.length + right.length)
-  next.set(left)
-  next.set(right, left.length)
-  return next
+// Cursor-tracking buffer state. Bytes accumulate in `buffer`; `offset` is the
+// read position. Reading by `subarray` is zero-copy. We only allocate a fresh
+// buffer when (a) a new network chunk arrives and we need to append, or (b)
+// the consumed prefix is more than half the buffer (compaction).
+interface FrameBufferState {
+  readonly buffer: Uint8Array
+  readonly offset: number
 }
 
-const consumeFrames = (state: Uint8Array, chunk: Uint8Array) =>
+const initialFrameBuffer: FrameBufferState = { buffer: new Uint8Array(0), offset: 0 }
+
+const appendChunk = (state: FrameBufferState, chunk: Uint8Array): FrameBufferState => {
+  const remaining = state.buffer.length - state.offset
+  // Compact: drop the consumed prefix and append the new chunk in one alloc.
+  // This bounds buffer growth to at most one network chunk past the live
+  // window, regardless of stream length.
+  const next = new Uint8Array(remaining + chunk.length)
+  next.set(state.buffer.subarray(state.offset), 0)
+  next.set(chunk, remaining)
+  return { buffer: next, offset: 0 }
+}
+
+const consumeFrames = (state: FrameBufferState, chunk: Uint8Array) =>
   Effect.gen(function* () {
-    let buffer = concat(state, chunk)
-    const out: string[] = []
-    while (buffer.length >= 4) {
-      const totalLength = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength).getUint32(0, false)
-      if (buffer.length < totalLength) break
+    let cursor = appendChunk(state, chunk)
+    const out: object[] = []
+    while (cursor.buffer.length - cursor.offset >= 4) {
+      const view = cursor.buffer.subarray(cursor.offset)
+      const totalLength = new DataView(view.buffer, view.byteOffset, view.byteLength).getUint32(0, false)
+      if (view.length < totalLength) break
 
       const decoded = yield* Effect.try({
-        try: () => eventCodec.decode(buffer.subarray(0, totalLength)),
+        try: () => eventCodec.decode(view.subarray(0, totalLength)),
         catch: (error) =>
           ProviderShared.chunkError(
             ADAPTER,
@@ -601,7 +623,7 @@ const consumeFrames = (state: Uint8Array, chunk: Uint8Array) =>
             }`,
           ),
       })
-      buffer = buffer.slice(totalLength)
+      cursor = { buffer: cursor.buffer, offset: cursor.offset + totalLength }
 
       if (decoded.headers[":message-type"]?.value !== "event") continue
       const eventType = decoded.headers[":event-type"]?.value
@@ -609,12 +631,12 @@ const consumeFrames = (state: Uint8Array, chunk: Uint8Array) =>
       const payload = utf8.decode(decoded.body)
       if (!payload) continue
       // The AWS event stream pads short payloads with a `p` field. Drop it
-      // before re-validating against the chunk schema.
+      // before handing the object to the chunk schema.
       const parsed = JSON.parse(payload) as Record<string, unknown>
       delete parsed.p
-      out.push(JSON.stringify({ [eventType]: parsed }))
+      out.push({ [eventType]: parsed })
     }
-    return [buffer, out] as const
+    return [cursor, out] as const
   })
 
 const parseStream = (response: HttpClientResponse.HttpClientResponse) =>
@@ -622,19 +644,21 @@ const parseStream = (response: HttpClientResponse.HttpClientResponse) =>
     Stream.mapError((error) =>
       ProviderShared.chunkError(ADAPTER, "Failed to read Bedrock Converse stream", String(error)),
     ),
-    // Frame buffer: accumulate bytes, emit decoded JSON event strings as they
+    // Frame buffer: accumulate bytes, emit decoded chunk objects as they
     // become available. `mapAccumEffect` flattens the per-step `ReadonlyArray`
-    // automatically so the downstream stream sees one JSON string per element.
-    Stream.mapAccumEffect(() => new Uint8Array(0), consumeFrames),
+    // automatically so the downstream stream sees one chunk object per element.
+    Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames),
     Stream.mapEffect(decodeChunk),
     Stream.mapAccumEffect(
-      (): ParserState => ({ tools: {}, finishReason: undefined }),
+      (): ParserState => ({ tools: {}, pendingStopReason: undefined }),
       processChunk,
       {
         // If a stream ends after `messageStop` but before `metadata` (rare but
         // possible on truncated transports), still surface a terminal finish.
         onHalt: (state): ReadonlyArray<LLMEvent> =>
-          state.finishReason ? [{ type: "request-finish", reason: state.finishReason }] : [],
+          state.pendingStopReason
+            ? [{ type: "request-finish", reason: mapFinishReason(state.pendingStopReason) }]
+            : [],
       },
     ),
   )

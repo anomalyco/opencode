@@ -175,14 +175,11 @@ const captureResponseBody = (
   response: HttpClientResponse.HttpClientResponse,
   contentType: string | undefined,
 ) =>
-  Effect.gen(function* () {
-    if (!isBinaryContentType(contentType)) {
-      const text = yield* response.text
-      return { body: text, bodyEncoding: undefined as "text" | "base64" | undefined }
-    }
-    const bytes = yield* response.arrayBuffer
-    return { body: Buffer.from(bytes).toString("base64"), bodyEncoding: "base64" as const }
-  })
+  isBinaryContentType(contentType)
+    ? response.arrayBuffer.pipe(
+        Effect.map((bytes) => ({ body: Buffer.from(bytes).toString("base64"), bodyEncoding: "base64" as const })),
+      )
+    : response.text.pipe(Effect.map((body) => ({ body })))
 
 const decodeResponseBody = (snapshot: Schema.Schema.Type<typeof ResponseSnapshot>) =>
   snapshot.bodyEncoding === "base64" ? Buffer.from(snapshot.body, "base64") : snapshot.body
@@ -290,7 +287,7 @@ export const layer = (
             const captured = yield* captureResponseBody(response, headers["content-type"])
             const interaction: Interaction = {
               request: currentRequest,
-              response: { status: response.status, headers, body: captured.body, bodyEncoding: captured.bodyEncoding },
+              response: { status: response.status, headers, ...captured },
             }
             const interactions = yield* Ref.updateAndGet(recorded, (prev) => [...prev, interaction])
             yield* fileSystem.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)

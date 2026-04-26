@@ -33,10 +33,14 @@ const SSE_HEADERS = { "content-type": "text/event-stream" } as const
 
 /**
  * Layer that returns a single fixed response body. Use for stream-parser
- * fixture tests where the request shape is irrelevant.
+ * fixture tests where the request shape is irrelevant. The body type widens
+ * to whatever `Response` accepts so binary fixtures (`Uint8Array`,
+ * `ReadableStream`, etc.) flow through without casts.
  */
-export const fixedResponse = (body: string, init: ResponseInit = { headers: SSE_HEADERS }) =>
-  executorWith(handlerLayer((input) => Effect.succeed(input.respond(body, init))))
+export const fixedResponse = (
+  body: ConstructorParameters<typeof Response>[0],
+  init: ResponseInit = { headers: SSE_HEADERS },
+) => executorWith(handlerLayer((input) => Effect.succeed(input.respond(body, init))))
 
 /**
  * Layer that builds a response per request. Useful for echo servers.

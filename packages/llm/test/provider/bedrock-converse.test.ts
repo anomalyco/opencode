@@ -6,7 +6,7 @@ import { LLM } from "../../src"
 import { client } from "../../src/adapter"
 import { BedrockConverse } from "../../src/provider/bedrock-converse"
 import { testEffect } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
+import { fixedResponse } from "../lib/http"
 import { recordedTests } from "../recorded-test"
 
 const codec = new EventStreamCodec(toUtf8, fromUtf8)
@@ -39,10 +39,10 @@ const concat = (frames: ReadonlyArray<Uint8Array>) => {
 const eventStreamBody = (...payloads: ReadonlyArray<readonly [string, object]>) =>
   concat(payloads.map(([type, payload]) => eventFrame(type, payload)))
 
+// Override the default SSE content-type with the binary event-stream type so
+// the cassette layer treats the body as bytes when recording.
 const fixedBytes = (bytes: Uint8Array) =>
-  dynamicResponse((input) =>
-    Effect.succeed(input.respond(bytes, { headers: { "content-type": "application/vnd.amazon.eventstream" } })),
-  )
+  fixedResponse(bytes, { headers: { "content-type": "application/vnd.amazon.eventstream" } })
 
 const model = BedrockConverse.model({
   id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
