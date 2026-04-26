@@ -495,6 +495,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Произошла ошибка",
 
   "home.recentProjects": "Недавние проекты",
+  "home.recentWorkspaces": "Недавние рабочие пространства",
   "home.empty.title": "Нет недавних проектов",
   "home.empty.description": "Начните с открытия локального проекта",
 
@@ -821,6 +822,11 @@ export const dict = {
   "session.delete.confirm": 'Удалить сессию "{{name}}"?',
   "session.delete.button": "Удалить сессию",
 
+  "workspace.open": "Открыть рабочее пространство",
+  "workspace.create": "Создать рабочее пространство",
+  "workspace.close": "Закрыть рабочее пространство",
+  "workspace.addFolder": "Добавить папку в рабочее пространство",
+  "workspace.removeFolder": "Удалить папку из рабочего пространства",
   "workspace.new": "Новое рабочее пространство",
   "workspace.type.local": "локальное",
   "workspace.type.sandbox": "песочница",
@@ -935,4 +941,18 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Не удалось создать постоянный значок проекта",
   "error.childStore.storeCreateFailed": "Не удалось создать хранилище",
   "terminal.connectionLost.abnormalClose": "WebSocket закрыт аварийно: {{code}}",
+  "dialog.workspace.open.title": "Open Workspace",
+  "dialog.workspace.search.placeholder": "Search workspaces",
+  "dialog.workspace.empty": "No workspaces yet. Create one first!",
+  "dialog.workspace.open.button": "Open",
+  "dialog.workspace.delete.confirm": "Delete this workspace?",
+  "dialog.workspace.folders": "{{count}} folders",
+  "dialog.workspace.create.title": "Create Workspace",
+  "dialog.workspace.create.name": "Workspace name",
+  "dialog.workspace.create.name.placeholder": "My workspace",
+  "dialog.workspace.create.folders": "Folders",
+  "dialog.workspace.create.folders.empty": "No folders added yet",
+  "dialog.workspace.create.addFolder": "Add Folder",
+  "dialog.workspace.create.removeFolder": "Remove folder",
+  "dialog.workspace.create.button": "Create Workspace",
 }

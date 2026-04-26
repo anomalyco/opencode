@@ -203,6 +203,10 @@ export default defineConfig({
           link: "windows-wsl",
         },
         {
+          label: "Workspaces",
+          link: "workspace",
+        },
+        {
           label: "Usage",
           translations: {
             en: "Usage",

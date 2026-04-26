@@ -493,6 +493,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "发生错误",
 
   "home.recentProjects": "最近项目",
+  "home.recentWorkspaces": "最近工作区",
   "home.empty.title": "没有最近项目",
   "home.empty.description": "通过打开本地项目开始使用",
 
@@ -805,6 +806,11 @@ export const dict = {
   "session.delete.confirm": '删除会话 "{{name}}"？',
   "session.delete.button": "删除会话",
 
+  "workspace.open": "打开工作区",
+  "workspace.create": "创建工作区",
+  "workspace.close": "关闭工作区",
+  "workspace.addFolder": "添加文件夹到工作区",
+  "workspace.removeFolder": "从工作区移除文件夹",
   "workspace.new": "新建工作区",
   "workspace.type.local": "本地",
   "workspace.type.sandbox": "沙盒",
@@ -830,6 +836,22 @@ export const dict = {
   "workspace.reset.archived.one": "将归档 1 个会话。",
   "workspace.reset.archived.many": "将归档 {{count}} 个会话。",
   "workspace.reset.note": "这将把工作区重置为与默认分支一致。",
+
+  "dialog.workspace.open.title": "打开工作区",
+  "dialog.workspace.search.placeholder": "搜索工作区",
+  "dialog.workspace.empty": "暂无工作区，请先创建一个！",
+  "dialog.workspace.open.button": "打开",
+  "dialog.workspace.delete.confirm": "删除此工作区？",
+  "dialog.workspace.folders": "{{count}} 个文件夹",
+
+  "dialog.workspace.create.title": "创建工作区",
+  "dialog.workspace.create.name": "工作区名称",
+  "dialog.workspace.create.name.placeholder": "我的工作区",
+  "dialog.workspace.create.folders": "文件夹",
+  "dialog.workspace.create.folders.empty": "尚未添加文件夹",
+  "dialog.workspace.create.addFolder": "添加文件夹",
+  "dialog.workspace.create.removeFolder": "移除文件夹",
+  "dialog.workspace.create.button": "创建工作区",
   "common.open": "打开",
   "dialog.releaseNotes.action.getStarted": "开始",
   "dialog.releaseNotes.action.next": "下一步",

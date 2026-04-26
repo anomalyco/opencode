@@ -6,6 +6,7 @@ import { Log } from "../util"
 import { text } from "node:stream/consumers"
 import fs from "fs/promises"
 import { Filesystem } from "../util"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import type { InstanceContext } from "../project/instance"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Archive } from "../util"
@@ -31,13 +32,30 @@ export interface Handle {
 
 type RootFunction = (file: string, ctx: InstanceContext) => Promise<string | undefined>
 
+/**
+ * Pick the workspace root that contains the given file. For single-root
+ * instances this is `ctx.directory`. For multi-root instances, we pick the
+ * matching folder from `ctx.roots`, preferring the most specific (deepest)
+ * match so each LSP server spawned for a file is scoped to its own folder.
+ * Falls back to `ctx.directory` when no root contains the file.
+ */
+export function containingRoot(file: string, ctx: InstanceContext): string {
+  let best: string | undefined
+  for (const root of ctx.roots) {
+    if (!AppFileSystem.contains(root, file)) continue
+    if (!best || root.length > best.length) best = root
+  }
+  return best ?? ctx.directory
+}
+
 const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): RootFunction => {
   return async (file, ctx) => {
+    const stop = containingRoot(file, ctx)
     if (excludePatterns) {
       const excludedFiles = Filesystem.up({
         targets: excludePatterns,
         start: path.dirname(file),
-        stop: ctx.directory,
+        stop,
       })
       const excluded = await excludedFiles.next()
       await excludedFiles.return()
@@ -46,11 +64,11 @@ const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): Roo
     const files = Filesystem.up({
       targets: includePatterns,
       start: path.dirname(file),
-      stop: ctx.directory,
+      stop,
     })
     const first = await files.next()
     await files.return()
-    if (!first.value) return ctx.directory
+    if (!first.value) return stop
     return path.dirname(first.value)
   }
 }
@@ -69,7 +87,7 @@ export const Deno: Info = {
     const files = Filesystem.up({
       targets: ["deno.json", "deno.jsonc"],
       start: path.dirname(file),
-      stop: ctx.directory,
+      stop: containingRoot(file, ctx),
     })
     const first = await files.next()
     await files.return()
@@ -1647,7 +1665,7 @@ export const Ocaml: Info = {
 export const BashLS: Info = {
   id: "bash",
   extensions: [".sh", ".bash", ".zsh", ".ksh"],
-  root: async (_file, ctx) => ctx.directory,
+  root: async (file, ctx) => containingRoot(file, ctx),
   async spawn(root) {
     let binary = which("bash-language-server")
     const args: string[] = []
@@ -1842,7 +1860,7 @@ export const TexLab: Info = {
 export const DockerfileLS: Info = {
   id: "dockerfile",
   extensions: [".dockerfile", "Dockerfile"],
-  root: async (_file, ctx) => ctx.directory,
+  root: async (file, ctx) => containingRoot(file, ctx),
   async spawn(root) {
     let binary = which("docker-langserver")
     const args: string[] = []
@@ -1908,15 +1926,16 @@ export const Nixd: Info = {
   id: "nixd",
   extensions: [".nix"],
   root: async (file, ctx) => {
+    const containing = containingRoot(file, ctx)
     // First, look for flake.nix - the most reliable Nix project root indicator
     const flakeRoot = await NearestRoot(["flake.nix"])(file, ctx)
-    if (flakeRoot && flakeRoot !== ctx.directory) return flakeRoot
+    if (flakeRoot && flakeRoot !== containing) return flakeRoot
 
     // If no flake.nix, fall back to git repository root
-    if (ctx.worktree && ctx.worktree !== ctx.directory) return ctx.worktree
+    if (ctx.worktree && ctx.worktree !== containing) return ctx.worktree
 
-    // Finally, use the instance directory as fallback
-    return ctx.directory
+    // Finally, use the containing workspace root as fallback
+    return containing
   },
   async spawn(root) {
     const nixd = which("nixd")

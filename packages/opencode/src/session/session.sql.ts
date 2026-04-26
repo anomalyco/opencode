@@ -7,6 +7,7 @@ import type { Permission } from "../permission"
 import type { ProjectID } from "../project/schema"
 import type { SessionID, MessageID, PartID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
+import type { MultiRootWorkspaceID } from "../workspace/schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
@@ -21,6 +22,7 @@ export const SessionTable = sqliteTable(
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text().$type<WorkspaceID>(),
+    multi_root_workspace_id: text().$type<MultiRootWorkspaceID>(),
     parent_id: text().$type<SessionID>(),
     slug: text().notNull(),
     directory: text().notNull(),
@@ -40,6 +42,7 @@ export const SessionTable = sqliteTable(
   (table) => [
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
+    index("session_multi_root_workspace_idx").on(table.multi_root_workspace_id),
     index("session_parent_idx").on(table.parent_id),
   ],
 )

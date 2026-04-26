@@ -7,11 +7,27 @@ import { Log } from "@/util"
 import { LocalContext } from "../util"
 import * as Project from "./project"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
+import type { MultiRootWorkspaceID } from "@/workspace/schema"
 
 export interface InstanceContext {
   directory: string
   worktree: string
   project: Project.Info
+  /**
+   * Full list of directories available to this instance.
+   * Always includes `directory` as the first entry. For multi-root workspaces,
+   * extra folders are appended. Tools use this via `containsPath` to determine
+   * whether a path is internal (no permission prompt) or external.
+   */
+  roots: string[]
+  /**
+   * When the instance was created inside a multi-root workspace session, this
+   * carries the workspace id that was resolved at middleware time. The set of
+   * `roots` above is derived from this workspace's folder list at resolution
+   * time; it is re-resolved on every request so folder add/remove is reflected
+   * at the next request.
+   */
+  multiRootWorkspaceID?: MultiRootWorkspaceID
 }
 
 const context = LocalContext.create<InstanceContext>("instance")
@@ -22,9 +38,31 @@ const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
-function boot(input: { directory: string; init?: () => Promise<any>; worktree?: string; project?: Project.Info }) {
+function normalizeRoots(directory: string, extra?: string[]) {
+  const seen = new Set<string>()
+  const out: string[] = []
+  const push = (p: string) => {
+    const resolved = AppFileSystem.resolve(p)
+    if (seen.has(resolved)) return
+    seen.add(resolved)
+    out.push(resolved)
+  }
+  push(directory)
+  for (const r of extra ?? []) push(r)
+  return out
+}
+
+function boot(input: {
+  directory: string
+  init?: () => Promise<any>
+  worktree?: string
+  project?: Project.Info
+  roots?: string[]
+  multiRootWorkspaceID?: MultiRootWorkspaceID
+}) {
   return iife(async () => {
-    const ctx =
+    const roots = normalizeRoots(input.directory, input.roots)
+    const base =
       input.project && input.worktree
         ? {
             directory: input.directory,
@@ -38,6 +76,11 @@ function boot(input: { directory: string; init?: () => Promise<any>; worktree?: 
               worktree: sandbox,
               project,
             }))
+    const ctx: InstanceContext = {
+      ...base,
+      roots,
+      multiRootWorkspaceID: input.multiRootWorkspaceID,
+    }
     await context.provide(ctx, async () => {
       await input.init?.()
     })
@@ -45,26 +88,45 @@ function boot(input: { directory: string; init?: () => Promise<any>; worktree?: 
   })
 }
 
-function track(directory: string, next: Promise<InstanceContext>) {
+function track(key: string, next: Promise<InstanceContext>) {
   const task = next.catch((error) => {
-    if (cache.get(directory) === task) cache.delete(directory)
+    if (cache.get(key) === task) cache.delete(key)
     throw error
   })
-  cache.set(directory, task)
+  cache.set(key, task)
   return task
 }
 
+function cacheKey(directory: string, roots: string[], multiRootWorkspaceID?: MultiRootWorkspaceID) {
+  const sortedRoots = [...roots].sort().join("\u0000")
+  return `${directory}\u0000${multiRootWorkspaceID ?? ""}\u0000${sortedRoots}`
+}
+
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+  async provide<R>(input: {
+    directory: string
+    init?: () => Promise<any>
+    fn: () => R
+    roots?: string[]
+    multiRootWorkspaceID?: MultiRootWorkspaceID
+  }): Promise<R> {
     const directory = AppFileSystem.resolve(input.directory)
-    let existing = cache.get(directory)
+    const normalizedRoots = normalizeRoots(directory, input.roots)
+    const key = cacheKey(directory, normalizedRoots, input.multiRootWorkspaceID)
+    let existing = cache.get(key)
     if (!existing) {
-      Log.Default.info("creating instance", { directory })
-      existing = track(
+      Log.Default.info("creating instance", {
         directory,
+        roots: normalizedRoots,
+        multiRootWorkspaceID: input.multiRootWorkspaceID,
+      })
+      existing = track(
+        key,
         boot({
           directory,
           init: input.init,
+          roots: normalizedRoots,
+          multiRootWorkspaceID: input.multiRootWorkspaceID,
         }),
       )
     }
@@ -85,15 +147,23 @@ export const Instance = {
   get project() {
     return context.use().project
   },
+  get roots() {
+    return context.use().roots
+  },
+  get multiRootWorkspaceID() {
+    return context.use().multiRootWorkspaceID
+  },
 
   /**
    * Check if a path is within the project boundary.
-   * Returns true if path is inside Instance.directory OR Instance.worktree.
+   * Returns true if path is inside any of `Instance.roots` OR `Instance.worktree`.
    * Paths within the worktree but outside the working directory should not trigger external_directory permission.
    */
   containsPath(filepath: string, ctx?: InstanceContext) {
     const instance = ctx ?? Instance
-    if (AppFileSystem.contains(instance.directory, filepath)) return true
+    for (const root of instance.roots) {
+      if (AppFileSystem.contains(root, filepath)) return true
+    }
     // Non-git projects set worktree to "/" which would match ANY absolute path.
     // Skip worktree check in this case to preserve external_directory permissions.
     if (instance.worktree === "/") return false
@@ -116,12 +186,21 @@ export const Instance = {
   restore<R>(ctx: InstanceContext, fn: () => R): R {
     return context.provide(ctx, fn)
   },
-  async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+  async reload(input: {
+    directory: string
+    init?: () => Promise<any>
+    project?: Project.Info
+    worktree?: string
+    roots?: string[]
+    multiRootWorkspaceID?: MultiRootWorkspaceID
+  }) {
     const directory = AppFileSystem.resolve(input.directory)
-    Log.Default.info("reloading instance", { directory })
+    const roots = normalizeRoots(directory, input.roots)
+    const key = cacheKey(directory, roots, input.multiRootWorkspaceID)
+    Log.Default.info("reloading instance", { directory, multiRootWorkspaceID: input.multiRootWorkspaceID })
     await disposeInstance(directory)
-    cache.delete(directory)
-    const next = track(directory, boot({ ...input, directory }))
+    cache.delete(key)
+    const next = track(key, boot({ ...input, directory, roots }))
 
     GlobalBus.emit("event", {
       directory,
@@ -138,11 +217,13 @@ export const Instance = {
     return await next
   },
   async dispose() {
-    const directory = Instance.directory
-    const project = Instance.project
-    Log.Default.info("disposing instance", { directory })
+    const ctx = context.use()
+    const directory = ctx.directory
+    const project = ctx.project
+    const key = cacheKey(directory, ctx.roots, ctx.multiRootWorkspaceID)
+    Log.Default.info("disposing instance", { directory, multiRootWorkspaceID: ctx.multiRootWorkspaceID })
     await disposeInstance(directory)
-    cache.delete(directory)
+    cache.delete(key)
 
     GlobalBus.emit("event", {
       directory,

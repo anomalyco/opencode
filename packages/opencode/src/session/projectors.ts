@@ -39,6 +39,7 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     id: grab(info, "id"),
     project_id: grab(info, "projectID"),
     workspace_id: grab(info, "workspaceID"),
+    multi_root_workspace_id: grab(info, "multiRootWorkspaceID"),
     parent_id: grab(info, "parentID"),
     slug: grab(info, "slug"),
     directory: grab(info, "directory"),

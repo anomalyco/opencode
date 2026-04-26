@@ -6,6 +6,14 @@ import { useSDK } from "./sdk"
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
+type MultiRootWorkspaceInfo = {
+  id: string
+  name: string
+  filePath: string
+  folders: Array<{ path: string; name?: string }>
+  time: { created: number; updated: number }
+}
+
 export const { use: useProject, provider: ProjectProvider } = createSimpleContext({
   name: "Project",
   init: () => {
@@ -30,6 +38,10 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
         current: undefined as string | undefined,
         list: [] as Workspace[],
         status: {} as Record<string, WorkspaceStatus>,
+      },
+      multiRootWorkspace: {
+        current: undefined as string | undefined,
+        list: [] as MultiRootWorkspaceInfo[],
       },
     })
 
@@ -59,6 +71,20 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
           setStore("workspace", "current", undefined)
         }
       })
+    }
+
+    async function syncMultiRootWorkspace() {
+      try {
+        const res = await sdk.fetch(new URL("/workspace", sdk.url))
+        if (!res.ok) return
+        const data = (await res.json()) as MultiRootWorkspaceInfo[]
+        batch(() => {
+          setStore("multiRootWorkspace", "list", reconcile(data))
+          if (data.every((item) => item.id !== store.multiRootWorkspace.current)) {
+            setStore("multiRootWorkspace", "current", undefined)
+          }
+        })
+      } catch {}
     }
 
     sdk.event.on("event", (event) => {
@@ -102,6 +128,24 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
           return store.workspace.status
         },
         sync: syncWorkspace,
+      },
+      multiRootWorkspace: {
+        current() {
+          return store.multiRootWorkspace.current
+        },
+        set(next?: string | null) {
+          const workspace = next ?? undefined
+          if (store.multiRootWorkspace.current === workspace) return
+          setStore("multiRootWorkspace", "current", workspace)
+          sdk.setMultiRootWorkspaceID?.(workspace)
+        },
+        list() {
+          return store.multiRootWorkspace.list
+        },
+        get(workspaceID: string) {
+          return store.multiRootWorkspace.list.find((item) => item.id === workspaceID)
+        },
+        sync: syncMultiRootWorkspace,
       },
       sync,
     }

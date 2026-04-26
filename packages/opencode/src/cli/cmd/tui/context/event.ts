@@ -1,6 +1,13 @@
 import type { Event } from "@opencode-ai/sdk/v2"
+import { homedir } from "os"
+import { resolve } from "path"
 import { useProject } from "./project"
 import { useSDK } from "./sdk"
+
+function normalizePath(p: string) {
+  if (p.startsWith("~/")) return resolve(homedir(), p.slice(2))
+  return resolve(p)
+}
 
 export function useEvent() {
   const project = useProject()
@@ -22,6 +29,15 @@ export function useEvent() {
           handler(event.payload)
         }
 
+        return
+      }
+
+      const multiRootID = project.multiRootWorkspace.current()
+      if (multiRootID) {
+        const ws = project.multiRootWorkspace.get(multiRootID)
+        if (ws?.folders.some((f) => event.directory === normalizePath(f.path))) {
+          handler(event.payload)
+        }
         return
       }
 

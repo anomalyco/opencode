@@ -21,6 +21,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -59,6 +60,9 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
+import { DialogWorkspaceCreate } from "@/components/dialog-workspace-create"
+import { DialogWorkspaceOpen } from "@/components/dialog-workspace-open"
+import { useWorkspace } from "@/context/workspace"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
@@ -126,6 +130,7 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  const workspace = useWorkspace()
   const initialDirectory = decode64(params.dir)
   const location = useLocation()
   const route = createMemo(() => {
@@ -1104,11 +1109,106 @@ export default function Layout(props: ParentProps) {
         title: language.t("workspace.new"),
         category: language.t("command.category.workspace"),
         keybind: "mod+shift+w",
-        disabled: !workspaceSetting(),
         onSelect: () => {
           const project = currentProject()
           if (!project) return
           return createWorkspace(project)
+        },
+      },
+      {
+        id: "workspace.open",
+        title: language.t("workspace.open"),
+        category: language.t("command.category.workspace"),
+        onSelect: () => dialog.show(() => <DialogWorkspaceOpen />),
+      },
+      {
+        id: "workspace.create",
+        title: language.t("workspace.create"),
+        category: language.t("command.category.workspace"),
+        onSelect: () =>
+          dialog.show(() => (
+            <DialogWorkspaceCreate
+              onCreate={async (name, folders) => {
+                await workspace.workspaces.create(
+                  name,
+                  folders.map((path) => ({ path })),
+                )
+              }}
+            />
+          )),
+      },
+      {
+        id: "workspace.close",
+        title: language.t("workspace.close"),
+        category: language.t("command.category.workspace"),
+        disabled: !workspace.workspaces.current(),
+        onSelect: () => workspace.workspaces.close(),
+      },
+      {
+        id: "workspace.addFolder",
+        title: language.t("workspace.addFolder"),
+        category: language.t("command.category.workspace"),
+        disabled: !workspace.workspaces.current(),
+        onSelect: async () => {
+          const current = workspace.workspaces.current()
+          if (!current) return
+          if (platform.openDirectoryPickerDialog && server.isLocal()) {
+            const result = await platform.openDirectoryPickerDialog({
+              title: language.t("workspace.addFolder"),
+              multiple: false,
+            })
+            if (result && typeof result === "string") {
+              await workspace.workspaces.addFolder(current.id, { path: result })
+            }
+            return
+          }
+          const run = ++dialogRun
+          void import("@/components/dialog-select-directory").then((x) => {
+            if (dialogDead || dialogRun !== run) return
+            dialog.show(() => (
+              <x.DialogSelectDirectory
+                multiple={false}
+                onSelect={(result) => {
+                  if (result && typeof result === "string") {
+                    void workspace.workspaces.addFolder(current.id, { path: result })
+                  }
+                }}
+              />
+            ))
+          })
+        },
+      },
+      {
+        id: "workspace.removeFolder",
+        title: language.t("workspace.removeFolder"),
+        category: language.t("command.category.workspace"),
+        disabled: !workspace.workspaces.current() || workspace.workspaces.current()!.folders.length === 0,
+        onSelect: () => {
+          const current = workspace.workspaces.current()
+          if (!current || current.folders.length === 0) return
+          dialog.show(() => (
+            <Dialog title={language.t("workspace.removeFolder")}>
+              <div class="flex flex-col gap-2 p-4">
+                <For each={current.folders}>
+                  {(folder) => (
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-14-regular text-text-base truncate">{folder.path}</span>
+                      <Button
+                        variant="ghost"
+                        size="small"
+                        onClick={() => {
+                          void workspace.workspaces.removeFolder(current.id, folder.path)
+                          dialog.close()
+                        }}
+                      >
+                        <Icon name="trash" size="small" class="text-icon-weak" />
+                      </Button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Dialog>
+          ))
         },
       },
       {
@@ -2354,6 +2454,8 @@ export default function Layout(props: ParentProps) {
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
+      clearHoverProjectSoon={clearHoverProjectSoon}
+      prefetchSession={prefetchSession}
     />
   )
 

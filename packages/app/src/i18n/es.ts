@@ -495,6 +495,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Ocurrió un error",
 
   "home.recentProjects": "Proyectos recientes",
+  "home.recentWorkspaces": "Espacios de trabajo recientes",
   "home.empty.title": "Sin proyectos recientes",
   "home.empty.description": "Empieza abriendo un proyecto local",
 
@@ -825,6 +826,11 @@ export const dict = {
   "session.delete.confirm": '¿Eliminar sesión "{{name}}"?',
   "session.delete.button": "Eliminar sesión",
 
+  "workspace.open": "Abrir espacio de trabajo",
+  "workspace.create": "Crear espacio de trabajo",
+  "workspace.close": "Cerrar espacio de trabajo",
+  "workspace.addFolder": "Añadir carpeta al espacio de trabajo",
+  "workspace.removeFolder": "Eliminar carpeta del espacio de trabajo",
   "workspace.new": "Nuevo espacio de trabajo",
   "workspace.type.local": "local",
   "workspace.type.sandbox": "sandbox",
@@ -939,4 +945,18 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Error al crear icono de proyecto persistente",
   "error.childStore.storeCreateFailed": "Error al crear almacén",
   "terminal.connectionLost.abnormalClose": "WebSocket cerrado anormalmente: {{code}}",
+  "dialog.workspace.open.title": "Open Workspace",
+  "dialog.workspace.search.placeholder": "Search workspaces",
+  "dialog.workspace.empty": "No workspaces yet. Create one first!",
+  "dialog.workspace.open.button": "Open",
+  "dialog.workspace.delete.confirm": "Delete this workspace?",
+  "dialog.workspace.folders": "{{count}} folders",
+  "dialog.workspace.create.title": "Create Workspace",
+  "dialog.workspace.create.name": "Workspace name",
+  "dialog.workspace.create.name.placeholder": "My workspace",
+  "dialog.workspace.create.folders": "Folders",
+  "dialog.workspace.create.folders.empty": "No folders added yet",
+  "dialog.workspace.create.addFolder": "Add Folder",
+  "dialog.workspace.create.removeFolder": "Remove folder",
+  "dialog.workspace.create.button": "Create Workspace",
 }

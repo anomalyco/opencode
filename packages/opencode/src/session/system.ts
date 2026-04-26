@@ -47,19 +47,28 @@ export const layer = Layer.effect(
     return Service.of({
       environment(model) {
         const project = Instance.project
-        return [
-          [
-            `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
-            `Here is some useful information about the environment you are running in:`,
-            `<env>`,
-            `  Working directory: ${Instance.directory}`,
-            `  Workspace root folder: ${Instance.worktree}`,
-            `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
-            `  Platform: ${process.platform}`,
-            `  Today's date: ${new Date().toDateString()}`,
-            `</env>`,
-          ].join("\n"),
+        const roots = Instance.roots
+        const extraRoots = roots.filter((r) => r !== Instance.directory)
+        const lines: string[] = [
+          `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
+          `Here is some useful information about the environment you are running in:`,
+          `<env>`,
+          `  Working directory: ${Instance.directory}`,
+          `  Workspace root folder: ${Instance.worktree}`,
         ]
+        if (extraRoots.length > 0) {
+          lines.push(`  Workspace folders:`)
+          for (const root of roots) {
+            lines.push(`    - ${root}`)
+          }
+        }
+        lines.push(
+          `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
+          `  Platform: ${process.platform}`,
+          `  Today's date: ${new Date().toDateString()}`,
+          `</env>`,
+        )
+        return [lines.join("\n")]
       },
 
       skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {

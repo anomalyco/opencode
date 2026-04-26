@@ -3,7 +3,6 @@ import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
-import z from "zod"
 import { type ProviderMetadata, type LanguageModelUsage } from "ai"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -21,6 +20,7 @@ import { InstanceState } from "@/effect"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
+import { MultiRootWorkspaceID } from "../workspace/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider"
@@ -64,6 +64,7 @@ export function fromRow(row: SessionRow): Info {
     slug: row.slug,
     projectID: row.project_id,
     workspaceID: row.workspace_id ?? undefined,
+    multiRootWorkspaceID: row.multi_root_workspace_id ?? undefined,
     directory: row.directory,
     parentID: row.parent_id ?? undefined,
     title: row.title,
@@ -86,6 +87,7 @@ export function toRow(info: Info) {
     id: info.id,
     project_id: info.projectID,
     workspace_id: info.workspaceID,
+    multi_root_workspace_id: info.multiRootWorkspaceID,
     parent_id: info.parentID,
     slug: info.slug,
     directory: info.directory,
@@ -145,6 +147,7 @@ export const Info = Schema.Struct({
   slug: Schema.String,
   projectID: ProjectID,
   workspaceID: Schema.optional(WorkspaceID),
+  multiRootWorkspaceID: Schema.optional(MultiRootWorkspaceID),
   directory: Schema.String,
   parentID: Schema.optional(SessionID),
   summary: Schema.optional(Summary),
@@ -182,6 +185,7 @@ export const CreateInput = Schema.optional(
     title: Schema.optional(Schema.String),
     permission: Schema.optional(Permission.Ruleset),
     workspaceID: Schema.optional(WorkspaceID),
+    multiRootWorkspaceID: Schema.optional(MultiRootWorkspaceID),
   }),
 ).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
@@ -235,6 +239,7 @@ const UpdatedInfo = Schema.Struct({
   slug: Schema.optional(Schema.NullOr(Schema.String)),
   projectID: Schema.optional(Schema.NullOr(ProjectID)),
   workspaceID: Schema.optional(Schema.NullOr(WorkspaceID)),
+  multiRootWorkspaceID: Schema.optional(Schema.NullOr(MultiRootWorkspaceID)),
   directory: Schema.optional(Schema.NullOr(Schema.String)),
   parentID: Schema.optional(Schema.NullOr(SessionID)),
   summary: Schema.optional(Schema.NullOr(Summary)),
@@ -373,6 +378,7 @@ export interface Interface {
     title?: string
     permission?: Permission.Ruleset
     workspaceID?: WorkspaceID
+    multiRootWorkspaceID?: MultiRootWorkspaceID
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
@@ -432,6 +438,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       title?: string
       parentID?: SessionID
       workspaceID?: WorkspaceID
+      multiRootWorkspaceID?: MultiRootWorkspaceID
       directory: string
       permission?: Permission.Ruleset
     }) {
@@ -443,6 +450,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
         projectID: ctx.project.id,
         directory: input.directory,
         workspaceID: input.workspaceID,
+        multiRootWorkspaceID: input.multiRootWorkspaceID,
         parentID: input.parentID,
         title: input.title ?? createDefaultTitle(!!input.parentID),
         permission: input.permission,
@@ -556,15 +564,18 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       title?: string
       permission?: Permission.Ruleset
       workspaceID?: WorkspaceID
+      multiRootWorkspaceID?: MultiRootWorkspaceID
     }) {
       const directory = yield* InstanceState.directory
       const workspace = yield* InstanceState.workspaceID
+      const multiRoot = yield* InstanceState.multiRootWorkspaceID
       return yield* createNext({
         parentID: input?.parentID,
         directory,
         title: input?.title,
         permission: input?.permission,
-        workspaceID: workspace,
+        workspaceID: input?.workspaceID ?? workspace,
+        multiRootWorkspaceID: input?.multiRootWorkspaceID ?? multiRoot,
       })
     })
 
@@ -575,6 +586,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       const session = yield* createNext({
         directory,
         workspaceID: original.workspaceID,
+        multiRootWorkspaceID: original.multiRootWorkspaceID,
         title,
       })
       const msgs = yield* messages({ sessionID: input.sessionID })
@@ -739,6 +751,7 @@ export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(S
 export function* list(input?: {
   directory?: string
   workspaceID?: WorkspaceID
+  multiRootWorkspaceID?: MultiRootWorkspaceID
   roots?: boolean
   start?: number
   search?: string
@@ -749,6 +762,9 @@ export function* list(input?: {
 
   if (input?.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
+  }
+  if (input?.multiRootWorkspaceID) {
+    conditions.push(eq(SessionTable.multi_root_workspace_id, input.multiRootWorkspaceID))
   }
   if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
     if (input?.directory) {
@@ -783,6 +799,7 @@ export function* list(input?: {
 
 export function* listGlobal(input?: {
   directory?: string
+  multiRootWorkspaceID?: MultiRootWorkspaceID
   roots?: boolean
   start?: number
   cursor?: number
@@ -794,6 +811,9 @@ export function* listGlobal(input?: {
 
   if (input?.directory) {
     conditions.push(eq(SessionTable.directory, input.directory))
+  }
+  if (input?.multiRootWorkspaceID) {
+    conditions.push(eq(SessionTable.multi_root_workspace_id, input.multiRootWorkspaceID))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))

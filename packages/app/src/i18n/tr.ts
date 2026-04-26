@@ -499,6 +499,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Bir hata oluştu",
 
   "home.recentProjects": "Son projeler",
+  "home.recentWorkspaces": "Son çalışma alanları",
   "home.empty.title": "Son proje yok",
   "home.empty.description": "Yerel bir proje açarak başlayın",
 
@@ -828,6 +829,11 @@ export const dict = {
   "session.delete.confirm": '"{{name}}" oturumu silinsin mi?',
   "session.delete.button": "Oturumu sil",
 
+  "workspace.open": "Çalışma alanı aç",
+  "workspace.create": "Çalışma alanı oluştur",
+  "workspace.close": "Çalışma alanını kapat",
+  "workspace.addFolder": "Çalışma alanına klasör ekle",
+  "workspace.removeFolder": "Çalışma alanından klasör kaldır",
   "workspace.new": "Yeni çalışma alanı",
   "workspace.type.local": "yerel",
   "workspace.type.sandbox": "sandbox",
@@ -941,4 +947,18 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Kalıcı proje simgesi oluşturulamadı",
   "error.childStore.storeCreateFailed": "Depo oluşturulamadı",
   "terminal.connectionLost.abnormalClose": "WebSocket anormal şekilde kapandı: {{code}}",
+  "dialog.workspace.open.title": "Open Workspace",
+  "dialog.workspace.search.placeholder": "Search workspaces",
+  "dialog.workspace.empty": "No workspaces yet. Create one first!",
+  "dialog.workspace.open.button": "Open",
+  "dialog.workspace.delete.confirm": "Delete this workspace?",
+  "dialog.workspace.folders": "{{count}} folders",
+  "dialog.workspace.create.title": "Create Workspace",
+  "dialog.workspace.create.name": "Workspace name",
+  "dialog.workspace.create.name.placeholder": "My workspace",
+  "dialog.workspace.create.folders": "Folders",
+  "dialog.workspace.create.folders.empty": "No folders added yet",
+  "dialog.workspace.create.addFolder": "Add Folder",
+  "dialog.workspace.create.removeFolder": "Remove folder",
+  "dialog.workspace.create.button": "Create Workspace",
 } satisfies Partial<Record<Keys, string>>

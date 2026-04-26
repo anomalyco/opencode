@@ -1,4 +1,4 @@
-import { createMemo, For, Match, Switch } from "solid-js"
+import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
@@ -13,6 +13,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { useWorkspace } from "@/context/workspace"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -22,6 +23,7 @@ export default function Home() {
   const navigate = useNavigate()
   const server = useServer()
   const language = useLanguage()
+  const workspace = useWorkspace()
   const homedir = createMemo(() => sync.data.path.home)
   const recent = createMemo(() => {
     return sync.data.project
@@ -29,6 +31,8 @@ export default function Home() {
       .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
       .slice(0, 5)
   })
+
+  const recentWorkspaces = createMemo(() => workspace.workspaces.list().slice(0, 5))
 
   const serverDotClass = createMemo(() => {
     const healthy = server.healthy()
@@ -134,6 +138,30 @@ export default function Home() {
           </div>
         </Match>
       </Switch>
+      <Show when={workspace.workspaces.list().length > 0}>
+        <div class="mt-8 w-full flex flex-col gap-4">
+          <div class="flex gap-2 items-center justify-between pl-3">
+            <div class="text-14-medium text-text-strong">{language.t("home.recentWorkspaces")}</div>
+          </div>
+          <ul class="flex flex-col gap-2">
+            <For each={recentWorkspaces()}>
+              {(w) => (
+                <Button
+                  size="large"
+                  variant="ghost"
+                  class="text-14-mono text-left justify-between px-3"
+                  onClick={() => workspace.workspaces.open(w.id)}
+                >
+                  {w.name}
+                  <div class="text-14-regular text-text-weak">
+                    {language.t("dialog.workspace.folders", { count: w.folders.length })}
+                  </div>
+                </Button>
+              )}
+            </For>
+          </ul>
+        </div>
+      </Show>
     </div>
   )
 }
