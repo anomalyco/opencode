@@ -13,21 +13,6 @@ import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util"
 
-const namedAgentColors: Record<string, string> = {
-  black: "#000000",
-  white: "#ffffff",
-  red: "#ef4444",
-  orange: "#f97316",
-  yellow: "#eab308",
-  green: "#22c55e",
-  blue: "#3b82f6",
-  purple: "#a855f7",
-  pink: "#ec4899",
-  cyan: "#06b6d4",
-  gray: "#6b7280",
-  grey: "#6b7280",
-}
-
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -106,10 +91,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
           if (agent?.color) {
             const color = agent.color
-            if (color.startsWith("#")) return RGBA.fromHex(color)
-            const named = namedAgentColors[color]
-            if (named) return RGBA.fromHex(named)
-            return (theme[color as keyof typeof theme] as RGBA | undefined) ?? colors()[index % colors().length]
+            const themed = theme[color as keyof typeof theme]
+            if (themed instanceof RGBA) return themed
+            const hex = Bun.color(color, "hex")
+            if (hex) return RGBA.fromHex(hex)
           }
           return colors()[index % colors().length]
         },

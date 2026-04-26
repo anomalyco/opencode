@@ -15,25 +15,6 @@ import { ConfigPermission } from "./permission"
 
 const log = Log.create({ service: "config" })
 
-const Color = Schema.Union([
-  Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
-  Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
-  Schema.Literals([
-    "black",
-    "white",
-    "red",
-    "orange",
-    "yellow",
-    "green",
-    "blue",
-    "purple",
-    "pink",
-    "cyan",
-    "gray",
-    "grey",
-  ]),
-])
-
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
     model: Schema.optional(ConfigModelID),
@@ -53,8 +34,9 @@ const AgentSchema = Schema.StructWithRest(
       description: "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
     }),
     options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-    color: Schema.optional(Color).annotate({
-      description: "Hex color code (e.g., #FF5733), theme color (e.g., primary), or common named color (e.g., blue)",
+    color: Schema.optional(Schema.String).annotate({
+      description:
+        "Visual color hint. Hex colors, theme color tokens, and CSS color names are applied when supported; unsupported values fall back to the automatic palette.",
     }),
     steps: Schema.optional(PositiveInt).annotate({
       description: "Maximum number of agentic iterations before forcing text-only response",

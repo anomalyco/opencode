@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test"
 import { Effect } from "effect"
 import path from "path"
+import { mkdir } from "fs/promises"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Config } from "../../src/config"
@@ -23,6 +24,7 @@ test("agent color parsed from project config", async () => {
             build: { color: "#FFA500" },
             plan: { color: "primary" },
             general: { color: "blue" },
+            explore: { color: "not-a-real-color" },
           },
         }),
       )
@@ -35,6 +37,29 @@ test("agent color parsed from project config", async () => {
       expect(cfg.agent?.["build"]?.color).toBe("#FFA500")
       expect(cfg.agent?.["plan"]?.color).toBe("primary")
       expect(cfg.agent?.["general"]?.color).toBe("blue")
+      expect(cfg.agent?.["explore"]?.color).toBe("not-a-real-color")
+    },
+  })
+})
+
+test("agent frontmatter tolerates unsupported color values", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await mkdir(path.join(dir, ".opencode", "agents", "testing"), { recursive: true })
+      await Bun.write(
+        path.join(dir, ".opencode", "agents", "testing", "testing-tool-evaluator.md"),
+        `---
+color: not-a-real-color
+---
+Testing prompt`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const cfg = await load()
+      expect(cfg.agent?.["testing/testing-tool-evaluator"]?.color).toBe("not-a-real-color")
     },
   })
 })
