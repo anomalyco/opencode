@@ -165,6 +165,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [syncPromptContext, setSyncPromptContext] = kv.signal("sync_prompt_context_on_session_switch", true)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -679,6 +680,15 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setShowGenericToolOutput((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: syncPromptContext() ? "Keep model/agent when switching sessions" : "Restore model/agent per session",
+      value: "session.toggle.sync_prompt_context",
+      category: "Session",
+      onSelect: (dialog) => {
+        setSyncPromptContext((prev) => !prev)
         dialog.clear()
       },
     },

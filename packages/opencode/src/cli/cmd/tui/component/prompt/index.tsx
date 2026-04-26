@@ -238,6 +238,9 @@ export function Prompt(props: PromptProps) {
 
       syncedSessionID = sessionID
 
+      const shouldSync = kv.get("sync_prompt_context_on_session_switch", true)
+      if (!shouldSync) return
+
       // Only set agent if it's a primary agent (not a subagent)
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
