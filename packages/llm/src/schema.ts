@@ -10,7 +10,8 @@ export const Protocol = Schema.Literals([
 ])
 export type Protocol = Schema.Schema.Type<typeof Protocol>
 
-export const ReasoningEffort = Schema.Literals(["none", "minimal", "low", "medium", "high", "xhigh", "max"])
+export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export const ReasoningEffort = Schema.Literals(ReasoningEfforts)
 export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 
 export const PatchPhase = Schema.Literals(["request", "prompt", "tool-schema", "target", "stream"])

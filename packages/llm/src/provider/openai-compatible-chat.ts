@@ -4,6 +4,7 @@ import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import { InvalidRequestError, ProviderChunkError, type LLMError, type LLMRequest } from "../schema"
 import { OpenAIChat, type OpenAIChatTarget } from "./openai-chat"
+import { families, type ProviderFamily } from "./openai-compatible-family"
 import { ProviderShared } from "./shared"
 
 const ADAPTER = "openai-compatible-chat"
@@ -18,20 +19,6 @@ export type OpenAICompatibleChatModelInput = Omit<ModelInput, "protocol" | "head
 export type ProviderFamilyModelInput = Omit<OpenAICompatibleChatModelInput, "provider" | "baseURL"> & {
   readonly baseURL?: string
 }
-
-interface ProviderFamily {
-  readonly provider: string
-  readonly baseURL: string
-}
-
-const families = {
-  baseten: { provider: "baseten", baseURL: "https://inference.baseten.co/v1" },
-  cerebras: { provider: "cerebras", baseURL: "https://api.cerebras.ai/v1" },
-  deepinfra: { provider: "deepinfra", baseURL: "https://api.deepinfra.com/v1/openai" },
-  deepseek: { provider: "deepseek", baseURL: "https://api.deepseek.com/v1" },
-  fireworks: { provider: "fireworks", baseURL: "https://api.fireworks.ai/inference/v1" },
-  togetherai: { provider: "togetherai", baseURL: "https://api.together.xyz/v1" },
-} as const satisfies Record<string, ProviderFamily>
 
 const invalid = (message: string) => new InvalidRequestError({ message })
 
@@ -74,12 +61,10 @@ const mapParseError = (error: LLMError) => {
   })
 }
 
-export const adapter = Adapter.define<OpenAIChatTarget, OpenAIChatTarget>({
+export const adapter = Adapter.compose<OpenAIChatTarget, OpenAIChatTarget>({
   id: ADAPTER,
+  base: OpenAIChat.adapter,
   protocol: "openai-compatible-chat",
-  redact: OpenAIChat.adapter.redact,
-  prepare: OpenAIChat.adapter.prepare,
-  validate: OpenAIChat.adapter.validate,
   toHttp: (target, context) => toHttp(target, context.request),
   parse: (response) => OpenAIChat.adapter.parse(response).pipe(Stream.mapError(mapParseError)),
 })

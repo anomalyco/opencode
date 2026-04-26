@@ -8,6 +8,7 @@ import { LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema }
 
 interface RuntimeAdapter {
   readonly id: string
+  readonly provider?: string
   readonly protocol: Protocol
   readonly patches: ReadonlyArray<Patch<unknown>>
   readonly redact: (target: unknown) => unknown
@@ -28,6 +29,7 @@ export interface HttpContext {
 
 export interface Adapter<Draft, Target> {
   readonly id: string
+  readonly provider?: string
   readonly protocol: Protocol
   readonly patches: ReadonlyArray<Patch<Draft>>
   readonly redact: (target: Target) => unknown
@@ -39,6 +41,7 @@ export interface Adapter<Draft, Target> {
 
 export interface AdapterInput<Draft, Target> {
   readonly id: string
+  readonly provider?: string
   readonly protocol: Protocol
   readonly patches?: ReadonlyArray<Patch<Draft>>
   readonly redact: (target: Target) => unknown
@@ -52,6 +55,19 @@ export interface AdapterDefinition<Draft, Target> extends Adapter<Draft, Target>
   readonly runtime: RuntimeAdapter
   readonly patch: (id: string, input: PatchInput<Draft>) => Patch<Draft>
   readonly withPatches: (patches: ReadonlyArray<Patch<Draft>>) => AdapterDefinition<Draft, Target>
+}
+
+export interface ComposeInput<Draft, Target> {
+  readonly id: string
+  readonly provider?: string
+  readonly protocol?: Protocol
+  readonly base: Adapter<Draft, Target>
+  readonly patches?: ReadonlyArray<Patch<Draft>>
+  readonly redact?: (target: Target) => unknown
+  readonly prepare?: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
+  readonly validate?: (draft: Draft) => Effect.Effect<Target, LLMError>
+  readonly toHttp?: (target: Target, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
+  readonly parse?: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<LLMEvent, LLMError>
 }
 
 export interface LLMClient {
@@ -77,6 +93,7 @@ const normalizeRegistry = (patches: PatchRegistry | ReadonlyArray<AnyPatch> | un
 export function define<Draft, Target>(input: AdapterInput<Draft, Target>): AdapterDefinition<Draft, Target> {
   const build = (patches: ReadonlyArray<Patch<Draft>>): AdapterDefinition<Draft, Target> => ({
     id: input.id,
+    provider: input.provider,
     protocol: input.protocol,
     patches,
     get runtime() {
@@ -94,13 +111,41 @@ export function define<Draft, Target>(input: AdapterInput<Draft, Target>): Adapt
   return build(input.patches ?? [])
 }
 
+export function compose<Draft, Target>(input: ComposeInput<Draft, Target>): AdapterDefinition<Draft, Target> {
+  return define({
+    id: input.id,
+    provider: input.provider,
+    protocol: input.protocol ?? input.base.protocol,
+    patches: [...input.base.patches, ...(input.patches ?? [])],
+    redact: input.redact ?? input.base.redact,
+    prepare: input.prepare ?? input.base.prepare,
+    validate: input.validate ?? input.base.validate,
+    toHttp: input.toHttp ?? input.base.toHttp,
+    parse: input.parse ?? input.base.parse,
+  })
+}
+
 export function client(options: ClientOptions): LLMClient {
   const registry = normalizeRegistry(options.patches)
-  const adapters = new Map(options.adapters.map((adapter) => [adapter.runtime.protocol, adapter.runtime] as const))
+  const adapters = options.adapters.map((adapter) => adapter.runtime)
+  const providerAdapters = adapters
+    .filter((adapter): adapter is RuntimeAdapter & { readonly provider: string } => adapter.provider !== undefined)
+    .reduce((map, adapter) => {
+      const current = map.get(adapter.provider) ?? new Map<Protocol, RuntimeAdapter>()
+      current.set(adapter.protocol, adapter)
+      return map.set(adapter.provider, current)
+    }, new Map<string, Map<Protocol, RuntimeAdapter>>())
+  const protocolAdapters = new Map(
+    adapters
+      .filter((adapter) => adapter.provider === undefined)
+      .map((adapter) => [adapter.protocol, adapter] as const),
+  )
 
   const resolveAdapter = (request: LLMRequest) =>
     Effect.gen(function* () {
-      const adapter = adapters.get(request.model.protocol)
+      const adapter =
+        providerAdapters.get(request.model.provider)?.get(request.model.protocol) ??
+        protocolAdapters.get(request.model.protocol)
       if (!adapter) return yield* noAdapter(request.model)
       return adapter
     })
