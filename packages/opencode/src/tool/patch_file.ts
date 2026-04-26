@@ -20,10 +20,6 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Bom from "@/util/bom"
 import { trimDiff } from "./edit"
 
-// ---------------------------------------------------------------------------
-// Schema
-// ---------------------------------------------------------------------------
-
 export const PatchSchema = Schema.Struct({
   anchor_hash: Schema.String.annotate({
     description:
@@ -31,7 +27,8 @@ export const PatchSchema = Schema.Struct({
       "Obtain via compute_anchors=true first. DO NOT guess this value.",
   }),
   context_lines: Schema.optional(Schema.Number).annotate({
-    description: "Lines of surrounding context included in the anchor hash (default 5). " +
+    description:
+      "Lines of surrounding context included in the anchor hash (default 5). " +
       "Must match the value used when computing anchors.",
   }),
   search: Schema.String.annotate({
@@ -56,15 +53,10 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-// ---------------------------------------------------------------------------
-// Anchor helpers
-// ---------------------------------------------------------------------------
-
 function computeAnchor(lines: string[], centerLine: number, contextLines: number): string {
-  const from = Math.max(0, centerLine - contextLines)
-  const to   = Math.min(lines.length - 1, centerLine + contextLines)
-  const window = lines.slice(from, to + 1).join("\n")
-  return crypto.createHash("sha256").update(window).digest("hex")
+  const from   = Math.max(0, centerLine - contextLines)
+  const to     = Math.min(lines.length - 1, centerLine + contextLines)
+  return crypto.createHash("sha256").update(lines.slice(from, to + 1).join("\n")).digest("hex")
 }
 
 interface AnchorInfo {
@@ -84,57 +76,47 @@ function buildAnchorMap(content: string, contextLines: number): AnchorInfo[] {
   }))
 }
 
-// ---------------------------------------------------------------------------
-// Patch resolution
-// ---------------------------------------------------------------------------
-
 interface ResolvedPatch {
-  startLine:    number
-  endLine:      number
-  search:       string
-  replace:      string
+  startLine: number
+  endLine:   number
+  search:    string
+  replace:   string
 }
 
 function resolvePatch(
   lines: string[],
   patch: Schema.Schema.Type<typeof PatchSchema>,
-): ResolvedPatch | null {
+): ResolvedPatch {
   const ctxLines = patch.context_lines ?? 5
   for (let i = 0; i < lines.length; i++) {
     if (computeAnchor(lines, i, ctxLines) !== patch.anchor_hash) continue
-    const from = Math.max(0, i - ctxLines)
-    const to   = Math.min(lines.length - 1, i + ctxLines)
+    const from       = Math.max(0, i - ctxLines)
+    const to         = Math.min(lines.length - 1, i + ctxLines)
     const windowText = lines.slice(from, to + 1).join("\n")
-    if (!windowText.includes(patch.search)) return null
+    if (!windowText.includes(patch.search))
+      throw new Error(`patch_file: anchor found but search text not present in window (line ${i}).`)
     return { startLine: from, endLine: to, search: patch.search, replace: patch.replace }
   }
-  return null
+  throw new Error(`patch_file: anchor_hash "${patch.anchor_hash}" not found. Re-run with compute_anchors=true.`)
 }
 
 function applyPatches(content: string, resolved: ResolvedPatch[]): string {
-  // Apply in reverse line order to prevent offset drift
-  const sorted = [...resolved].sort((a, b) => b.startLine - a.startLine)
-  let result = content
-  for (const p of sorted) {
-    const lines = result.split("\n")
-    const windowText = lines.slice(p.startLine, p.endLine + 1).join("\n")
-    if (!windowText.includes(p.search)) {
-      throw new Error(
-        `patch_file: search text not found in anchor window (lines ${p.startLine}–${p.endLine}). ` +
-          "Re-run with compute_anchors=true to refresh anchors.",
-      )
-    }
-    const patched  = windowText.replace(p.search, p.replace)
-    const newLines = patched.split("\n")
-    lines.splice(p.startLine, p.endLine - p.startLine + 1, ...newLines)
-    result = lines.join("\n")
-  }
-  return result
+  // Apply in reverse line order to prevent offset drift.
+  return [...resolved]
+    .sort((a, b) => b.startLine - a.startLine)
+    .reduce((acc, p) => {
+      const lines      = acc.split("\n")
+      const windowText = lines.slice(p.startLine, p.endLine + 1).join("\n")
+      if (!windowText.includes(p.search))
+        throw new Error(
+          `patch_file: search text not found in anchor window (lines ${p.startLine}–${p.endLine}). ` +
+            "Re-run with compute_anchors=true to refresh anchors.",
+        )
+      const newLines = windowText.replace(p.search, p.replace).split("\n")
+      lines.splice(p.startLine, p.endLine - p.startLine + 1, ...newLines)
+      return lines.join("\n")
+    }, content)
 }
-
-// ---------------------------------------------------------------------------
-// Tool definition
-// ---------------------------------------------------------------------------
 
 export const PatchFileTool = Tool.define(
   "patch_file",
@@ -154,12 +136,10 @@ export const PatchFileTool = Tool.define(
             : path.join(Instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filePath)
 
-          const source  = yield* Bom.readFile(afs, filePath)
-          const content = source.text
+          const source = yield* Bom.readFile(afs, filePath)
 
-          // ---- compute_anchors mode (read-only) ----
           if (params.compute_anchors) {
-            const anchors = buildAnchorMap(content, 5)
+            const anchors = buildAnchorMap(source.text, 5)
             return {
               title:    `Anchors for ${path.relative(Instance.worktree, filePath)}`,
               output:   JSON.stringify(anchors, null, 2),
@@ -168,39 +148,18 @@ export const PatchFileTool = Tool.define(
           }
 
           const patches = params.patches
-          if (!patches || patches.length === 0) {
+          if (!patches || patches.length === 0)
             throw new Error("patches array is required when compute_anchors is not set.")
-          }
 
-          // ---- resolve all patches ----
-          const lines = content.split("\n")
-          const resolved: ResolvedPatch[] = []
+          const lines    = source.text.split("\n")
+          const resolved = patches.map((p) => resolvePatch(lines, p))
 
-          for (const patch of patches) {
-            const r = resolvePatch(lines, patch)
-            if (!r) {
-              throw new Error(
-                `patch_file: anchor_hash "${patch.anchor_hash}" not found in ` +
-                  `${path.relative(Instance.worktree, filePath)}. ` +
-                  "The file may have changed — re-run with compute_anchors=true.",
-              )
-            }
-            resolved.push(r)
-          }
-
-          // ---- overlap check ----
           const sortedR = [...resolved].sort((a, b) => a.startLine - b.startLine)
-          for (let i = 1; i < sortedR.length; i++) {
-            if (sortedR[i].startLine <= sortedR[i - 1].endLine) {
-              throw new Error(
-                `patch_file: patches overlap at lines ${sortedR[i - 1].startLine}–${sortedR[i - 1].endLine} ` +
-                  `and ${sortedR[i].startLine}–${sortedR[i].endLine}. Patches must target non-overlapping sections.`,
-              )
-            }
-          }
+          if (sortedR.some((p, i) => i > 0 && p.startLine <= sortedR[i - 1].endLine))
+            throw new Error("patch_file: patches overlap. Each patch must target a non-overlapping section.")
 
-          const contentNew = applyPatches(content, resolved)
-          const diff       = trimDiff(createTwoFilesPatch(filePath, filePath, content, contentNew))
+          const contentNew = applyPatches(source.text, resolved)
+          const diff       = trimDiff(createTwoFilesPatch(filePath, filePath, source.text, contentNew))
 
           yield* ctx.ask({
             permission: "edit",
@@ -213,29 +172,27 @@ export const PatchFileTool = Tool.define(
           const desiredBom = source.bom || next.bom
           yield* afs.writeWithDirs(filePath, Bom.join(next.text, desiredBom))
 
-          if (yield* format.file(filePath)) {
-            yield* Bom.syncFile(afs, filePath, desiredBom)
-          }
-          yield* bus.publish(File.Event.Edited,        { file: filePath })
-          yield* bus.publish(FileWatcher.Event.Updated, { file: filePath, event: "change" })
+          if (yield* format.file(filePath)) yield* Bom.syncFile(afs, filePath, desiredBom)
 
-          let additions = 0
-          let deletions = 0
-          for (const change of diffLines(content, contentNew)) {
-            if (change.added)   additions += change.count || 0
-            if (change.removed) deletions += change.count || 0
-          }
+          yield* bus.publish(File.Event.Edited,         { file: filePath })
+          yield* bus.publish(FileWatcher.Event.Updated,  { file: filePath, event: "change" })
+
+          const { additions, deletions } = diffLines(source.text, contentNew).reduce(
+            (acc, c) => ({
+              additions: acc.additions + (c.added   ? c.count ?? 0 : 0),
+              deletions: acc.deletions + (c.removed ? c.count ?? 0 : 0),
+            }),
+            { additions: 0, deletions: 0 },
+          )
           const filediff: Snapshot.FileDiff = { file: filePath, patch: diff, additions, deletions }
 
           yield* ctx.metadata({ metadata: { diff, filediff, diagnostics: {} } })
 
-          let output = `Applied ${patches.length} patch${patches.length > 1 ? "es" : ""} successfully.`
-
           yield* lsp.touchFile(filePath, "document")
-          const diagnostics         = yield* lsp.diagnostics()
-          const normalizedFilePath  = AppFileSystem.normalizePath(filePath)
-          const block               = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
-          if (block) output += `\n\nLSP errors detected, please fix:\n${block}`
+          const diagnostics = yield* lsp.diagnostics()
+          const block = LSP.Diagnostic.report(filePath, diagnostics[AppFileSystem.normalizePath(filePath)] ?? [])
+          const output = `Applied ${patches.length} patch${patches.length > 1 ? "es" : ""} successfully.` +
+            (block ? `\n\nLSP errors detected, please fix:\n${block}` : "")
 
           return {
             metadata: { diagnostics, diff, filediff },
