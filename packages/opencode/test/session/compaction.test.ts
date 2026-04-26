@@ -25,7 +25,7 @@ import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 
 void Log.init({ print: false })
 
@@ -38,7 +38,7 @@ const svc = {
   create(input?: SessionNs.CreateInput) {
     return run(SessionNs.Service.use((svc) => svc.create(input)))
   },
-  messages(input: z.output<typeof SessionNs.MessagesInput>) {
+  messages(input: z.output<typeof SessionNs.MessagesInput.zod>) {
     return run(SessionNs.Service.use((svc) => svc.messages(input)))
   },
   updateMessage<T extends MessageV2.Info>(msg: T) {
