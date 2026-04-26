@@ -1588,6 +1588,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const templateParts = yield* resolvePromptParts(template)
       const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
+      const invocation = input.arguments ? `/${input.command} ${input.arguments}` : `/${input.command}`
+      const commandParts = [...templateParts, ...(input.parts ?? [])]
+      const firstText = commandParts.findIndex((part) => part.type === "text")
       const parts = isSubtask
         ? [
             {
@@ -1599,7 +1602,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
-        : [...templateParts, ...(input.parts ?? [])]
+        : commandParts.map((part, index) => {
+            if (part.type !== "text" || index !== firstText) return part
+            return {
+              ...part,
+              metadata: {
+                ...part.metadata,
+                command: {
+                  name: input.command,
+                  arguments: input.arguments,
+                  source: cmd.source ?? "command",
+                  invocation,
+                },
+              },
+            }
+          })
 
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultAgent())) : agentName
       const userModel = isSubtask

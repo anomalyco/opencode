@@ -1882,6 +1882,44 @@ it.live("applies agent variant only when using agent model", () =>
 // Agent / command resolution errors
 
 it.live(
+  "command prompts tag first text part with slash invocation metadata",
+  () =>
+    provideTmpdirServer(
+      Effect.fnUntraced(function* ({ llm }) {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({ title: "Pinned" })
+        yield* llm.text("done")
+
+        yield* prompt.command({
+          sessionID: chat.id,
+          command: "init",
+          arguments: "alpha beta",
+        })
+
+        const messages = yield* sessions.messages({ sessionID: chat.id })
+        const user = messages.find((message) => message.info.role === "user")
+        expect(user).toBeDefined()
+        if (!user) return
+
+        const text = user.parts.find((part) => part.type === "text" && !part.synthetic)
+        expect(text?.type).toBe("text")
+        if (!text || text.type !== "text") return
+
+        const command = (text.metadata as Record<string, unknown> | undefined)?.["command"] as
+          | Record<string, unknown>
+          | undefined
+        expect(command?.["name"]).toBe("init")
+        expect(command?.["arguments"]).toBe("alpha beta")
+        expect(command?.["source"]).toBe("command")
+        expect(command?.["invocation"]).toBe("/init alpha beta")
+      }),
+      { git: true, config: providerCfg },
+    ),
+  30_000,
+)
+
+it.live(
   "unknown agent throws typed error",
   () =>
     provideTmpdirInstance(
