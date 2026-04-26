@@ -9,6 +9,7 @@ import * as InstanceState from "@/effect/instance-state"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
+import { markInstanceForDisposal } from "./lifecycle"
 
 const PathInfo = Schema.Struct({
   home: Schema.String,
@@ -23,6 +24,7 @@ const VcsDiffQuery = Schema.Struct({
 })
 
 export const InstancePaths = {
+  dispose: "/instance/dispose",
   path: "/path",
   vcs: "/vcs",
   vcsDiff: "/vcs/diff",
@@ -37,6 +39,15 @@ export const InstanceApi = HttpApi.make("instance")
   .add(
     HttpApiGroup.make("instance")
       .add(
+        HttpApiEndpoint.post("dispose", InstancePaths.dispose, {
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "instance.dispose",
+            summary: "Dispose instance",
+            description: "Clean up and dispose the current OpenCode instance, releasing all resources.",
+          }),
+        ),
         HttpApiEndpoint.get("path", InstancePaths.path, {
           success: PathInfo,
         }).annotateMerge(
@@ -138,6 +149,11 @@ export const instanceHandlers = Layer.unwrap(
     const skill = yield* Skill.Service
     const vcs = yield* Vcs.Service
 
+    const dispose = Effect.fn("InstanceHttpApi.dispose")(function* () {
+      yield* markInstanceForDisposal(yield* InstanceState.context)
+      return true
+    })
+
     const getPath = Effect.fn("InstanceHttpApi.path")(function* () {
       const ctx = yield* InstanceState.context
       return {
@@ -180,6 +196,7 @@ export const instanceHandlers = Layer.unwrap(
 
     return HttpApiBuilder.group(InstanceApi, "instance", (handlers) =>
       handlers
+        .handle("dispose", dispose)
         .handle("path", getPath)
         .handle("vcs", getVcs)
         .handle("vcsDiff", getVcsDiff)

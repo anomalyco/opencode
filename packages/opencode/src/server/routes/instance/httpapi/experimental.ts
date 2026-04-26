@@ -1,11 +1,16 @@
 import { Account } from "@/account/account"
+import { AccountID, OrgID } from "@/account/schema"
+import { Agent } from "@/agent/agent"
 import { Config } from "@/config"
 import { InstanceState } from "@/effect"
 import { MCP } from "@/mcp"
 import { Project } from "@/project"
+import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolRegistry } from "@/tool"
+import * as EffectZod from "@/util/effect-zod"
+import { Worktree } from "@/worktree"
 import { Effect, Layer, Option, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
 const ConsoleStateResponse = Schema.Struct({
@@ -27,15 +32,33 @@ const ConsoleOrgList = Schema.Struct({
   orgs: Schema.Array(ConsoleOrgOption),
 }).annotate({ identifier: "ConsoleOrgList" })
 
+const ConsoleSwitchPayload = Schema.Struct({
+  accountID: AccountID,
+  orgID: OrgID,
+}).annotate({ identifier: "ConsoleSwitchInput" })
+
 const ToolIDs = Schema.Array(Schema.String).annotate({ identifier: "ToolIDs" })
+const ToolListItem = Schema.Struct({
+  id: Schema.String,
+  description: Schema.String,
+  parameters: Schema.Record(Schema.String, Schema.Any),
+}).annotate({ identifier: "ToolListItem" })
+const ToolList = Schema.Array(ToolListItem).annotate({ identifier: "ToolList" })
+const ToolListQuery = Schema.Struct({
+  provider: ProviderID,
+  model: ModelID,
+})
 
 const WorktreeList = Schema.Array(Schema.String).annotate({ identifier: "WorktreeList" })
 
 export const ExperimentalPaths = {
   console: "/experimental/console",
   consoleOrgs: "/experimental/console/orgs",
+  consoleSwitch: "/experimental/console/switch",
+  tool: "/experimental/tool",
   toolIDs: "/experimental/tool/ids",
   worktree: "/experimental/worktree",
+  worktreeReset: "/experimental/worktree/reset",
   resource: "/experimental/resource",
 } as const
 
@@ -61,6 +84,27 @@ export const ExperimentalApi = HttpApi.make("experimental")
             description: "Get the available Console orgs across logged-in accounts, including the current active org.",
           }),
         ),
+        HttpApiEndpoint.post("consoleSwitch", ExperimentalPaths.consoleSwitch, {
+          payload: ConsoleSwitchPayload,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.console.switchOrg",
+            summary: "Switch active Console org",
+            description: "Persist a new active Console account/org selection for the current local OpenCode state.",
+          }),
+        ),
+        HttpApiEndpoint.get("tool", ExperimentalPaths.tool, {
+          query: ToolListQuery,
+          success: ToolList,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "tool.list",
+            summary: "List tools",
+            description:
+              "Get a list of available tools with their JSON schema parameters for a specific provider and model combination.",
+          }),
+        ),
         HttpApiEndpoint.get("toolIDs", ExperimentalPaths.toolIDs, {
           success: ToolIDs,
         }).annotateMerge(
@@ -78,6 +122,36 @@ export const ExperimentalApi = HttpApi.make("experimental")
             identifier: "worktree.list",
             summary: "List worktrees",
             description: "List all sandbox worktrees for the current project.",
+          }),
+        ),
+        HttpApiEndpoint.post("worktreeCreate", ExperimentalPaths.worktree, {
+          payload: Schema.optional(Worktree.CreateInput),
+          success: Worktree.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "worktree.create",
+            summary: "Create worktree",
+            description: "Create a new git worktree for the current project and run any configured startup scripts.",
+          }),
+        ),
+        HttpApiEndpoint.delete("worktreeRemove", ExperimentalPaths.worktree, {
+          payload: Worktree.RemoveInput,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "worktree.remove",
+            summary: "Remove worktree",
+            description: "Remove a git worktree and delete its branch.",
+          }),
+        ),
+        HttpApiEndpoint.post("worktreeReset", ExperimentalPaths.worktreeReset, {
+          payload: Worktree.ResetInput,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "worktree.reset",
+            summary: "Reset worktree",
+            description: "Reset a worktree branch to the primary default branch.",
           }),
         ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {
@@ -109,10 +183,12 @@ export const ExperimentalApi = HttpApi.make("experimental")
 export const experimentalHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const account = yield* Account.Service
+    const agents = yield* Agent.Service
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
     const project = yield* Project.Service
     const registry = yield* ToolRegistry.Service
+    const worktreeSvc = yield* Worktree.Service
 
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
       const [state, groups] = yield* Effect.all(
@@ -150,6 +226,28 @@ export const experimentalHandlers = Layer.unwrap(
       }
     })
 
+    const switchConsole = Effect.fn("ExperimentalHttpApi.consoleSwitch")(function* (ctx: {
+      payload: typeof ConsoleSwitchPayload.Type
+    }) {
+      yield* account
+        .use(ctx.payload.accountID, Option.some(ctx.payload.orgID))
+        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+      return true
+    })
+
+    const tool = Effect.fn("ExperimentalHttpApi.tool")(function* (ctx: { query: typeof ToolListQuery.Type }) {
+      const list = yield* registry.tools({
+        providerID: ctx.query.provider,
+        modelID: ctx.query.model,
+        agent: yield* agents.get(yield* agents.defaultAgent()),
+      })
+      return list.map((item) => ({
+        id: item.id,
+        description: item.description,
+        parameters: EffectZod.toJsonSchema(item.parameters),
+      }))
+    })
+
     const toolIDs = Effect.fn("ExperimentalHttpApi.toolIDs")(function* () {
       return yield* registry.ids()
     })
@@ -157,6 +255,28 @@ export const experimentalHandlers = Layer.unwrap(
     const worktree = Effect.fn("ExperimentalHttpApi.worktree")(function* () {
       const ctx = yield* InstanceState.context
       return yield* project.sandboxes(ctx.project.id)
+    })
+
+    const worktreeCreate = Effect.fn("ExperimentalHttpApi.worktreeCreate")(function* (ctx: {
+      payload: Worktree.CreateInput | undefined
+    }) {
+      return yield* worktreeSvc.create(ctx.payload)
+    })
+
+    const worktreeRemove = Effect.fn("ExperimentalHttpApi.worktreeRemove")(function* (input: {
+      payload: Worktree.RemoveInput
+    }) {
+      const ctx = yield* InstanceState.context
+      yield* worktreeSvc.remove(input.payload)
+      yield* project.removeSandbox(ctx.project.id, input.payload.directory)
+      return true
+    })
+
+    const worktreeReset = Effect.fn("ExperimentalHttpApi.worktreeReset")(function* (ctx: {
+      payload: Worktree.ResetInput
+    }) {
+      yield* worktreeSvc.reset(ctx.payload)
+      return true
     })
 
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {
@@ -167,15 +287,22 @@ export const experimentalHandlers = Layer.unwrap(
       handlers
         .handle("console", getConsole)
         .handle("consoleOrgs", listConsoleOrgs)
+        .handle("consoleSwitch", switchConsole)
+        .handle("tool", tool)
         .handle("toolIDs", toolIDs)
         .handle("worktree", worktree)
+        .handle("worktreeCreate", worktreeCreate)
+        .handle("worktreeRemove", worktreeRemove)
+        .handle("worktreeReset", worktreeReset)
         .handle("resource", resource),
     )
   }),
 ).pipe(
   Layer.provide(Account.defaultLayer),
+  Layer.provide(Agent.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(MCP.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(ToolRegistry.defaultLayer),
+  Layer.provide(Worktree.defaultLayer),
 )
