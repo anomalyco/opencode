@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { LLM } from "../../src"
+import { LLM, ProviderChunkError } from "../../src"
 import { client } from "../../src/adapter"
 import { Gemini } from "../../src/provider/gemini"
 import { testEffect } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
-import { sseEvents } from "../lib/sse"
+import { sseEvents, sseRaw } from "../lib/sse"
 
 const model = Gemini.model({
   id: "gemini-2.5-flash",
@@ -190,6 +190,75 @@ describe("Gemini adapter", () => {
           usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6, native: { promptTokenCount: 5, candidatesTokenCount: 1 } },
         },
       ])
+    }),
+  )
+
+  it.effect("assigns unique ids to multiple streamed tool calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          candidates: [{
+            content: {
+              role: "model",
+              parts: [
+                { functionCall: { name: "lookup", args: { query: "weather" } } },
+                { functionCall: { name: "lookup", args: { query: "news" } } },
+              ],
+            },
+            finishReason: "STOP",
+          }],
+        },
+      )
+      const response = yield* client({ adapters: [Gemini.adapter] })
+        .generate(
+          LLM.request({
+            ...request,
+            tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          }),
+        )
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      expect(LLM.outputToolCalls(response)).toEqual([
+        { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
+        { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
+      ])
+      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
+    }),
+  )
+
+  it.effect("maps length and content-filter finish reasons", () =>
+    Effect.gen(function* () {
+      const length = yield* client({ adapters: [Gemini.adapter] })
+        .generate(request)
+        .pipe(
+          Effect.provide(
+            fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "MAX_TOKENS" }] })),
+          ),
+        )
+      const filtered = yield* client({ adapters: [Gemini.adapter] })
+        .generate(request)
+        .pipe(
+          Effect.provide(
+            fixedResponse(sseEvents({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "SAFETY" }] })),
+          ),
+        )
+
+      expect(length.events).toEqual([{ type: "request-finish", reason: "length" }])
+      expect(filtered.events).toEqual([{ type: "request-finish", reason: "content-filter" }])
+    }),
+  )
+
+  it.effect("fails invalid stream chunks", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [Gemini.adapter] })
+        .generate(request)
+        .pipe(
+          Effect.provide(fixedResponse(sseRaw("data: {not json}"))),
+          Effect.flip,
+        )
+
+      expect(error).toBeInstanceOf(ProviderChunkError)
+      expect(error.message).toContain("Invalid Gemini stream chunk")
     }),
   )
 
