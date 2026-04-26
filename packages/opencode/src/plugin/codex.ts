@@ -1,7 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Log } from "../util"
 import { Installation } from "../installation"
-import { InstallationVersion } from "../installation/version"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -378,6 +378,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         for (const [modelId, model] of Object.entries(provider.models)) {
           if (modelId.includes("codex")) continue
           if (allowedModels.has(model.api.id)) continue
+          const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
+          if (match && parseFloat(match[1]) > 5.4) continue
           delete provider.models[modelId]
         }
 
@@ -387,6 +389,16 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             input: 0,
             output: 0,
             cache: { read: 0, write: 0 },
+          }
+
+          // gpt-5.5 models temporarily have restricted context window size for codex plans
+          if (model.id.includes("gpt-5.5")) {
+            model.limit = {
+              context: 400_000,
+              //@ts-expect-error incorrect type for v1 sdk but works
+              input: 272_000,
+              output: 128_000,
+            }
           }
         }
 

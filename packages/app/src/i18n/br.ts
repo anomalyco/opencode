@@ -210,7 +210,7 @@ export const dict = {
   "common.saving": "Salvando...",
   "common.default": "Padrão",
   "common.attachment": "anexo",
-  "prompt.placeholder.shell": "Digite comando do shell...",
+  "prompt.placeholder.shell": "Digite comando do shell... {{example}}",
   "prompt.placeholder.normal": 'Pergunte qualquer coisa... "{{example}}"',
   "prompt.placeholder.simple": "Pergunte qualquer coisa...",
   "prompt.placeholder.summarizeComments": "Resumir comentários…",
