@@ -3,7 +3,7 @@ import { Effect, Layer, Path, Schema, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Global } from "../global"
+import { Global } from "@opencode-ai/core/global"
 import { Log } from "../util"
 
 const skillConcurrency = 4
