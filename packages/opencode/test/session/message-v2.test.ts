@@ -873,6 +873,79 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("preserves OpenRouter reasoning details through provider transform", async () => {
+    const assistantID = "m-assistant"
+    const openrouterModel: Provider.Model = {
+      ...model,
+      id: ModelID.make("deepseek/deepseek-v4-pro"),
+      providerID: ProviderID.make("openrouter"),
+      api: {
+        id: "deepseek/deepseek-v4-pro",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+      capabilities: {
+        ...model.capabilities,
+        reasoning: true,
+        interleaved: { field: "reasoning_details" },
+      },
+    }
+    const reasoningDetails = [
+      {
+        type: "reasoning.text",
+        text: "thinking",
+        format: "unknown",
+        index: 0,
+      },
+    ]
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: openrouterModel.providerID,
+          modelID: openrouterModel.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0 },
+            metadata: {
+              openrouter: {
+                reasoning_details: reasoningDetails,
+              },
+            },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "text",
+            text: "answer",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(
+      ProviderTransform.message(await MessageV2.toModelMessages(input, openrouterModel), openrouterModel, {}),
+    ).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking",
+            providerOptions: {
+              openrouter: {
+                reasoning_details: reasoningDetails,
+              },
+            },
+          },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ])
+  })
+
   test("splits assistant messages on step-start boundaries", async () => {
     const assistantID = "m-assistant"
 

@@ -1,4 +1,4 @@
-import { Global } from "../global"
+import { Global } from "@opencode-ai/core/global"
 import { Log } from "../util"
 import path from "path"
 import { Schema } from "effect"

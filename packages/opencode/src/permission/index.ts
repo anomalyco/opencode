@@ -22,13 +22,14 @@ export const Action = Schema.Literals(["allow", "deny", "ask"])
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Action = Schema.Schema.Type<typeof Action>
 
-export class Rule extends Schema.Class<Rule>("PermissionRule")({
+export const Rule = Schema.Struct({
   permission: Schema.String,
   pattern: Schema.String,
   action: Action,
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "PermissionRule" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Rule = Schema.Schema.Type<typeof Rule>
 
 export const Ruleset = Schema.mutable(Schema.Array(Rule))
   .annotate({ identifier: "PermissionRuleset" })

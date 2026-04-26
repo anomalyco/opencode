@@ -2,7 +2,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@/global"
+import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util"
 import { Flock } from "@opencode-ai/core/util/flock"
 
