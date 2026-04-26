@@ -1,0 +1,57 @@
+Search a source file for AST nodes matching a tree-sitter query pattern.
+
+Unlike `grep` (text search) or `codesearch` (repo-wide text), `ast_query` understands
+code structure. It finds functions, classes, imports, variables, and any other named
+construct — by type, not by coincidental string match.
+
+## When to use
+
+- You need to find all functions/methods in a file before deciding which one to edit
+- You want the exact line range of a class or function without reading the full file
+- You need to verify an import exists, or find where a symbol is declared
+- You are about to call `ast_edit` or `patch_file` and need the precise line range
+
+## Pattern syntax (tree-sitter S-expressions)
+
+Patterns use tree-sitter's query syntax. A capture group `@name` marks the node to return.
+
+Common patterns:
+
+| Language  | Pattern                                      | Finds                        |
+|-----------|----------------------------------------------|------------------------------|
+| TS/JS     | `(function_declaration) @fn`                 | function declarations        |
+| TS/JS     | `(class_declaration) @cls`                   | class declarations           |
+| TS/JS     | `(arrow_function) @arrow`                    | arrow functions              |
+| TS/JS     | `(import_statement) @imp`                    | import statements            |
+| TS/JS     | `(variable_declarator) @var`                 | variable declarations        |
+| TS/JS     | `(method_definition) @method`               | class methods                |
+| TS        | `(interface_declaration) @iface`             | interface declarations       |
+| TS        | `(type_alias_declaration) @type`             | type aliases                 |
+| Python    | `(function_definition) @fn`                  | def statements               |
+| Python    | `(class_definition) @cls`                    | class statements             |
+| Bash      | `(function_definition) @fn`                  | function definitions         |
+
+For specific names, use field predicates:
+`(function_declaration name: (identifier) @id (#eq? @id "myFunction")) @fn`
+
+## Returns
+
+One line per match:
+`L{start}-{end} [{node_type}] "{name}": {text_preview}`
+
+The `start_line` / `end_line` in metadata are 0-indexed and can be passed directly
+to `ast_edit` for targeted replacement.
+
+## Supported languages
+
+TypeScript, TSX, JavaScript, JSX, Python, Bash.
+Language is auto-detected from file extension; use `language` param to override.
+
+## Example
+
+```json
+{
+  "filePath": "/abs/path/src/server.ts",
+  "pattern": "(function_declaration) @fn"
+}
+```
