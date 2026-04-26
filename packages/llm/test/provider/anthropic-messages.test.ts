@@ -163,6 +163,174 @@ describe("Anthropic Messages adapter", () => {
     }),
   )
 
+  it.effect("decodes server_tool_use + web_search_tool_result as provider-executed events", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        { type: "content_block_start", index: 0, content_block: { type: "server_tool_use", id: "srvtoolu_abc", name: "web_search" } },
+        { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":"effect 4"}' } },
+        { type: "content_block_stop", index: 0 },
+        {
+          type: "content_block_start",
+          index: 1,
+          content_block: {
+            type: "web_search_tool_result",
+            tool_use_id: "srvtoolu_abc",
+            content: [{ type: "web_search_result", url: "https://example.com", title: "Example" }],
+          },
+        },
+        { type: "content_block_stop", index: 1 },
+        { type: "content_block_start", index: 2, content_block: { type: "text", text: "" } },
+        { type: "content_block_delta", index: 2, delta: { type: "text_delta", text: "Found it." } },
+        { type: "content_block_stop", index: 2 },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
+      )
+      const response = yield* client({ adapters: [AnthropicMessages.adapter] })
+        .generate(
+          LLM.request({
+            ...request,
+            tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
+          }),
+        )
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      const toolCall = response.events.find((event) => event.type === "tool-call")
+      expect(toolCall).toEqual({
+        type: "tool-call",
+        id: "srvtoolu_abc",
+        name: "web_search",
+        input: { query: "effect 4" },
+        providerExecuted: true,
+      })
+      const toolResult = response.events.find((event) => event.type === "tool-result")
+      expect(toolResult).toEqual({
+        type: "tool-result",
+        id: "srvtoolu_abc",
+        name: "web_search",
+        result: { type: "json", value: [{ type: "web_search_result", url: "https://example.com", title: "Example" }] },
+        providerExecuted: true,
+      })
+      expect(LLM.outputText(response)).toBe("Found it.")
+      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+    }),
+  )
+
+  it.effect("decodes web_search_tool_result_error as provider-executed error result", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        { type: "content_block_start", index: 0, content_block: { type: "server_tool_use", id: "srvtoolu_x", name: "web_search" } },
+        { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":"q"}' } },
+        { type: "content_block_stop", index: 0 },
+        {
+          type: "content_block_start",
+          index: 1,
+          content_block: {
+            type: "web_search_tool_result",
+            tool_use_id: "srvtoolu_x",
+            content: { type: "web_search_tool_result_error", error_code: "max_uses_exceeded" },
+          },
+        },
+        { type: "content_block_stop", index: 1 },
+        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+      )
+      const response = yield* client({ adapters: [AnthropicMessages.adapter] })
+        .generate(
+          LLM.request({
+            ...request,
+            tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
+          }),
+        )
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      const toolResult = response.events.find((event) => event.type === "tool-result")
+      expect(toolResult).toMatchObject({
+        type: "tool-result",
+        id: "srvtoolu_x",
+        name: "web_search",
+        result: { type: "error" },
+        providerExecuted: true,
+      })
+    }),
+  )
+
+  it.effect("round-trips provider-executed assistant content into server tool blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [AnthropicMessages.adapter] }).prepare(
+        LLM.request({
+          id: "req_round_trip",
+          model,
+          messages: [
+            LLM.user("Search for something."),
+            LLM.assistant([
+              {
+                type: "tool-call",
+                id: "srvtoolu_abc",
+                name: "web_search",
+                input: { query: "effect 4" },
+                providerExecuted: true,
+              },
+              {
+                type: "tool-result",
+                id: "srvtoolu_abc",
+                name: "web_search",
+                result: { type: "json", value: [{ url: "https://example.com" }] },
+                providerExecuted: true,
+              },
+              { type: "text", text: "Found it." },
+            ]),
+            LLM.user("Thanks."),
+          ],
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        messages: [
+          { role: "user", content: [{ type: "text", text: "Search for something." }] },
+          {
+            role: "assistant",
+            content: [
+              { type: "server_tool_use", id: "srvtoolu_abc", name: "web_search", input: { query: "effect 4" } },
+              {
+                type: "web_search_tool_result",
+                tool_use_id: "srvtoolu_abc",
+                content: [{ url: "https://example.com" }],
+              },
+              { type: "text", text: "Found it." },
+            ],
+          },
+          { role: "user", content: [{ type: "text", text: "Thanks." }] },
+        ],
+      })
+    }),
+  )
+
+  it.effect("rejects round-trip for unknown server tool names", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [AnthropicMessages.adapter] })
+        .prepare(
+          LLM.request({
+            id: "req_unknown_server_tool",
+            model,
+            messages: [
+              LLM.assistant([
+                {
+                  type: "tool-result",
+                  id: "srvtoolu_abc",
+                  name: "future_server_tool",
+                  result: { type: "json", value: {} },
+                  providerExecuted: true,
+                },
+              ]),
+            ],
+          }),
+        )
+        .pipe(Effect.flip)
+
+      expect(error.message).toContain("future_server_tool")
+    }),
+  )
+
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
       const error = yield* client({ adapters: [AnthropicMessages.adapter] })

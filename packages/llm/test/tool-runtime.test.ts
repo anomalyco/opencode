@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { LLM, LLMEvent } from "../src"
-import { client } from "../src/adapter"
+import { client, type LLMClient } from "../src/adapter"
+import { RequestExecutor } from "../src/executor"
 import { OpenAIChat } from "../src/provider/openai-chat"
 import { tool, ToolFailure } from "../src/tool"
 import { ToolRuntime } from "../src/tool-runtime"
@@ -181,6 +182,67 @@ describe("ToolRuntime", () => {
 
       expect(events.filter(LLMEvent.guards["request-finish"])).toHaveLength(1)
       expect(events.find(LLMEvent.guards["tool-result"])).toBeUndefined()
+    }),
+  )
+
+  it.effect("does not dispatch provider-executed tool calls", () =>
+    Effect.gen(function* () {
+      // Stub client emits a provider-executed tool-call followed by its
+      // tool-result and a stop. The runtime must not dispatch a handler (no
+      // tool-error for unknown name) and must not loop (no second stream).
+      let streams = 0
+      const stub: LLMClient = {
+        prepare: () => Effect.die("not used"),
+        generate: () => Effect.die("not used"),
+        stream: () => {
+          streams++
+          return Stream.fromIterable<LLMEvent>([
+            { type: "request-start", id: "req_1", model: baseRequest.model },
+            {
+              type: "tool-call",
+              id: "srvtoolu_abc",
+              name: "web_search",
+              input: { query: "x" },
+              providerExecuted: true,
+            },
+            {
+              type: "tool-result",
+              id: "srvtoolu_abc",
+              name: "web_search",
+              result: { type: "json", value: { results: [] } },
+              providerExecuted: true,
+            },
+            { type: "text-delta", text: "Done." },
+            { type: "request-finish", reason: "stop" },
+          ])
+        },
+      }
+
+      // The runtime's stream type carries `RequestExecutor.Service` because
+      // adapters use it. Our stub never executes HTTP, but the type still
+      // demands the service — provide a noop so the test compiles.
+      const noopExecutor = Layer.succeed(RequestExecutor.Service, {
+        execute: () => Effect.die("stub client never executes HTTP"),
+      })
+      const events = Array.from(
+        yield* ToolRuntime.run(stub, { request: baseRequest, tools: {} }).pipe(
+          Stream.runCollect,
+          Effect.provide(noopExecutor),
+        ),
+      )
+
+      expect(streams).toBe(1)
+      expect(events.find(LLMEvent.guards["tool-error"])).toBeUndefined()
+      expect(events.filter(LLMEvent.guards["tool-call"])).toEqual([
+        {
+          type: "tool-call",
+          id: "srvtoolu_abc",
+          name: "web_search",
+          input: { query: "x" },
+          providerExecuted: true,
+        },
+      ])
+      expect(LLM.outputText({ events })).toBe("Done.")
     }),
   )
 

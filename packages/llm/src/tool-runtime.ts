@@ -10,6 +10,7 @@ import {
   type LLMEvent,
   LLMRequest,
   type ToolCallPart,
+  type ToolResultPart,
   type ToolResultValue,
 } from "./schema"
 import { ToolFailure } from "./schema"
@@ -127,9 +128,30 @@ const accumulate = (state: StepState, event: LLMEvent) => {
     return
   }
   if (event.type === "tool-call") {
-    const part: ToolCallPart = { type: "tool-call", id: event.id, name: event.name, input: event.input }
+    const part: ToolCallPart = {
+      type: "tool-call",
+      id: event.id,
+      name: event.name,
+      input: event.input,
+      providerExecuted: event.providerExecuted,
+    }
     state.assistantContent.push(part)
-    state.toolCalls.push(part)
+    // Provider-executed tools are dispatched by the provider; the runtime must
+    // not invoke a client handler. The matching `tool-result` event arrives
+    // later in the same stream and is folded into `assistantContent` so the
+    // next round's message history carries it.
+    if (!event.providerExecuted) state.toolCalls.push(part)
+    return
+  }
+  if (event.type === "tool-result" && event.providerExecuted) {
+    const part: ToolResultPart = {
+      type: "tool-result",
+      id: event.id,
+      name: event.name,
+      result: event.result,
+      providerExecuted: true,
+    }
+    state.assistantContent.push(part)
     return
   }
   if (event.type === "request-finish") {

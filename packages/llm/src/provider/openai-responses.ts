@@ -94,7 +94,22 @@ const OpenAIResponsesStreamItem = Schema.Struct({
   call_id: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
   arguments: Schema.optional(Schema.String),
+  // Hosted (provider-executed) tool fields. Each hosted tool item carries its
+  // own subset of these — we capture them generically so we can surface the
+  // call's typed input portion and round-trip the full result payload without
+  // hand-rolling a per-tool schema.
+  status: Schema.optional(Schema.String),
+  action: Schema.optional(Schema.Unknown),
+  queries: Schema.optional(Schema.Unknown),
+  results: Schema.optional(Schema.Unknown),
+  code: Schema.optional(Schema.String),
+  container_id: Schema.optional(Schema.String),
+  outputs: Schema.optional(Schema.Unknown),
+  server_label: Schema.optional(Schema.String),
+  output: Schema.optional(Schema.Unknown),
+  error: Schema.optional(Schema.Unknown),
 })
+type OpenAIResponsesStreamItem = Schema.Schema.Type<typeof OpenAIResponsesStreamItem>
 
 const OpenAIResponsesChunk = Schema.Struct({
   type: Schema.String,
@@ -275,6 +290,57 @@ const finishToolCall = (tools: Record<string, ToolAccumulator>, item: NonNullabl
     return [{ type: "tool-call" as const, id: item.call_id, name: item.name, input }]
   })
 
+// Hosted tool items (provider-executed) ship their typed input + status + result
+// fields all in one item. We expose them as a `tool-call` + `tool-result` pair
+// so consumers can treat them uniformly with client tools, only differentiated
+// by `providerExecuted: true`.
+//
+// item.type → tool name. Each entry is the OpenAI Responses item type that
+// represents a hosted (provider-executed) tool call.
+const HOSTED_TOOL_NAMES: Record<string, string> = {
+  web_search_call: "web_search",
+  web_search_preview_call: "web_search_preview",
+  file_search_call: "file_search",
+  code_interpreter_call: "code_interpreter",
+  computer_use_call: "computer_use",
+  image_generation_call: "image_generation",
+  mcp_call: "mcp",
+  local_shell_call: "local_shell",
+}
+
+const isHostedToolItem = (item: OpenAIResponsesStreamItem): item is OpenAIResponsesStreamItem & { id: string } =>
+  item.type in HOSTED_TOOL_NAMES && typeof item.id === "string" && item.id.length > 0
+
+// Pick the input fields the model actually populated when invoking the tool.
+// The shape is tool-specific. Keep this list explicit so each tool's input is
+// reviewable at a glance — fall back to `{}` for tools we haven't typed yet.
+const hostedToolInput = (item: OpenAIResponsesStreamItem): unknown => {
+  if (item.type === "web_search_call" || item.type === "web_search_preview_call") return item.action ?? {}
+  if (item.type === "file_search_call") return { queries: item.queries ?? [] }
+  if (item.type === "code_interpreter_call") return { code: item.code, container_id: item.container_id }
+  if (item.type === "computer_use_call") return item.action ?? {}
+  if (item.type === "local_shell_call") return item.action ?? {}
+  if (item.type === "mcp_call") return { server_label: item.server_label, name: item.name, arguments: item.arguments }
+  return {}
+}
+
+// Round-trip the full item as the structured result so consumers can extract
+// outputs / sources / status without re-decoding.
+const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
+  const isError = typeof item.error !== "undefined" && item.error !== null
+  return isError
+    ? ({ type: "error" as const, value: item.error })
+    : ({ type: "json" as const, value: item })
+}
+
+const hostedToolEvents = (item: OpenAIResponsesStreamItem & { id: string }): ReadonlyArray<LLMEvent> => {
+  const name = HOSTED_TOOL_NAMES[item.type]!
+  return [
+    { type: "tool-call", id: item.id, name, input: hostedToolInput(item), providerExecuted: true },
+    { type: "tool-result", id: item.id, name, result: hostedToolResult(item), providerExecuted: true },
+  ]
+}
+
 const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
   Effect.gen(function* () {
     if (chunk.type === "response.output_text.delta" && chunk.delta) {
@@ -304,6 +370,10 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
     if (chunk.type === "response.output_item.done" && chunk.item?.type === "function_call") {
       const events = yield* finishToolCall(state.tools, chunk.item)
       return [state, events] as const
+    }
+
+    if (chunk.type === "response.output_item.done" && chunk.item && isHostedToolItem(chunk.item)) {
+      return [state, hostedToolEvents(chunk.item)] as const
     }
 
     if (chunk.type === "response.completed" || chunk.type === "response.incomplete") {

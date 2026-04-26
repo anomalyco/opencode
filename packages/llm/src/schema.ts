@@ -121,6 +121,7 @@ export const ToolResultPart = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   result: ToolResultValue,
+  providerExecuted: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "LLM.Content.ToolResult" })
 export type ToolResultPart = Schema.Schema.Type<typeof ToolResultPart>
@@ -262,6 +263,7 @@ export const ToolCall = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   input: Schema.Unknown,
+  providerExecuted: Schema.optional(Schema.Boolean),
 }).annotate({ identifier: "LLM.Event.ToolCall" })
 export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 
@@ -270,6 +272,7 @@ export const ToolResult = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   result: ToolResultValue,
+  providerExecuted: Schema.optional(Schema.Boolean),
 }).annotate({ identifier: "LLM.Event.ToolResult" })
 export type ToolResult = Schema.Schema.Type<typeof ToolResult>
 

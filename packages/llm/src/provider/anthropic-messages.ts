@@ -48,6 +48,35 @@ const AnthropicToolUseBlock = Schema.Struct({
 })
 type AnthropicToolUseBlock = Schema.Schema.Type<typeof AnthropicToolUseBlock>
 
+const AnthropicServerToolUseBlock = Schema.Struct({
+  type: Schema.Literal("server_tool_use"),
+  id: Schema.String,
+  name: Schema.String,
+  input: Schema.Unknown,
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+type AnthropicServerToolUseBlock = Schema.Schema.Type<typeof AnthropicServerToolUseBlock>
+
+// Server tool result blocks: web_search_tool_result, code_execution_tool_result,
+// and web_fetch_tool_result. The provider executes the tool and inlines the
+// structured result into the assistant turn — there is no client tool_result
+// round-trip. We round-trip the structured `content` payload as opaque JSON so
+// the next request can echo it back when continuing the conversation.
+const AnthropicServerToolResultType = Schema.Literals([
+  "web_search_tool_result",
+  "code_execution_tool_result",
+  "web_fetch_tool_result",
+])
+type AnthropicServerToolResultType = Schema.Schema.Type<typeof AnthropicServerToolResultType>
+
+const AnthropicServerToolResultBlock = Schema.Struct({
+  type: AnthropicServerToolResultType,
+  tool_use_id: Schema.String,
+  content: Schema.Unknown,
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+type AnthropicServerToolResultBlock = Schema.Schema.Type<typeof AnthropicServerToolResultBlock>
+
 const AnthropicToolResultBlock = Schema.Struct({
   type: Schema.Literal("tool_result"),
   tool_use_id: Schema.String,
@@ -57,7 +86,13 @@ const AnthropicToolResultBlock = Schema.Struct({
 })
 
 const AnthropicUserBlock = Schema.Union([AnthropicTextBlock, AnthropicToolResultBlock])
-const AnthropicAssistantBlock = Schema.Union([AnthropicTextBlock, AnthropicThinkingBlock, AnthropicToolUseBlock])
+const AnthropicAssistantBlock = Schema.Union([
+  AnthropicTextBlock,
+  AnthropicThinkingBlock,
+  AnthropicToolUseBlock,
+  AnthropicServerToolUseBlock,
+  AnthropicServerToolResultBlock,
+])
 type AnthropicAssistantBlock = Schema.Schema.Type<typeof AnthropicAssistantBlock>
 type AnthropicToolResultBlock = Schema.Schema.Type<typeof AnthropicToolResultBlock>
 
@@ -118,6 +153,11 @@ const AnthropicStreamBlock = Schema.Struct({
   text: Schema.optional(Schema.String),
   thinking: Schema.optional(Schema.String),
   input: Schema.optional(Schema.Unknown),
+  // *_tool_result blocks arrive whole as content_block_start (no streaming
+  // delta) with the structured payload in `content` and the originating
+  // server_tool_use id in `tool_use_id`.
+  tool_use_id: Schema.optional(Schema.String),
+  content: Schema.optional(Schema.Unknown),
 })
 
 const AnthropicStreamDelta = Schema.Struct({
@@ -145,6 +185,7 @@ interface ToolAccumulator {
   readonly id: string
   readonly name: string
   readonly input: string
+  readonly providerExecuted: boolean
 }
 
 interface ParserState {
@@ -200,6 +241,29 @@ const lowerToolCall = (part: ToolCallPart): AnthropicToolUseBlock => ({
   input: part.input,
 })
 
+const lowerServerToolCall = (part: ToolCallPart): AnthropicServerToolUseBlock => ({
+  type: "server_tool_use",
+  id: part.id,
+  name: part.name,
+  input: part.input,
+})
+
+// Server tool result blocks are typed by name. Anthropic ships three today;
+// extend this list when new server tools land. The block content is the
+// structured payload returned by the provider, which we round-trip as-is.
+const serverToolResultType = (name: string): AnthropicServerToolResultType | undefined => {
+  if (name === "web_search") return "web_search_tool_result"
+  if (name === "code_execution") return "code_execution_tool_result"
+  if (name === "web_fetch") return "web_fetch_tool_result"
+  return undefined
+}
+
+const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult")(function* (part: ToolResultPart) {
+  const wireType = serverToolResultType(part.name)
+  if (!wireType) return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
+  return { type: wireType, tool_use_id: part.id, content: part.result.value } satisfies AnthropicServerToolResultBlock
+})
+
 const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (request: LLMRequest) {
   const messages: AnthropicMessage[] = []
 
@@ -226,7 +290,11 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (re
           continue
         }
         if (part.type === "tool-call") {
-          content.push(lowerToolCall(part))
+          content.push(part.providerExecuted ? lowerServerToolCall(part) : lowerToolCall(part))
+          continue
+        }
+        if (part.type === "tool-result" && part.providerExecuted) {
+          content.push(yield* lowerServerToolResult(part))
           continue
         }
         return yield* invalid(`Anthropic Messages assistant messages only support text, reasoning, and tool-call content for now`)
@@ -337,8 +405,43 @@ const finishToolCall = (tool: ToolAccumulator | undefined) =>
       tool.input || "{}",
       `Invalid JSON input for Anthropic Messages tool call ${tool.name}`,
     )
-    return [{ type: "tool-call" as const, id: tool.id, name: tool.name, input }]
+    const event: LLMEvent = tool.providerExecuted
+      ? { type: "tool-call", id: tool.id, name: tool.name, input, providerExecuted: true }
+      : { type: "tool-call", id: tool.id, name: tool.name, input }
+    return [event]
   })
+
+// Server tool result blocks come whole in `content_block_start` (no streaming
+// delta sequence). We convert the payload to a `tool-result` event with
+// `providerExecuted: true`. The runtime appends it to the assistant message
+// for round-trip; downstream consumers can inspect `result.value` for the
+// structured payload.
+const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = {
+  web_search_tool_result: "web_search",
+  code_execution_tool_result: "code_execution",
+  web_fetch_tool_result: "web_fetch",
+}
+
+const isServerToolResultType = (type: string): type is AnthropicServerToolResultType =>
+  type in SERVER_TOOL_RESULT_NAMES
+
+const serverToolResultEvent = (block: NonNullable<AnthropicChunk["content_block"]>): LLMEvent | undefined => {
+  if (!block.type || !isServerToolResultType(block.type)) return undefined
+  const errorPayload =
+    typeof block.content === "object" && block.content !== null && "type" in block.content
+      ? String((block.content as Record<string, unknown>).type)
+      : ""
+  const isError = errorPayload.endsWith("_tool_result_error")
+  return {
+    type: "tool-result",
+    id: block.tool_use_id ?? "",
+    name: SERVER_TOOL_RESULT_NAMES[block.type],
+    result: isError
+      ? { type: "error", value: block.content }
+      : { type: "json", value: block.content },
+    providerExecuted: true,
+  }
+}
 
 const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
   Effect.gen(function* () {
@@ -347,7 +450,11 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
       return [usage ? { ...state, usage: mergeUsage(state.usage, usage) } : state, []] as const
     }
 
-    if (chunk.type === "content_block_start" && chunk.index !== undefined && chunk.content_block?.type === "tool_use") {
+    if (
+      chunk.type === "content_block_start" &&
+      chunk.index !== undefined &&
+      (chunk.content_block?.type === "tool_use" || chunk.content_block?.type === "server_tool_use")
+    ) {
       return [{
         ...state,
         tools: {
@@ -356,6 +463,7 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
             id: chunk.content_block.id ?? String(chunk.index),
             name: chunk.content_block.name ?? "",
             input: "",
+            providerExecuted: chunk.content_block.type === "server_tool_use",
           },
         },
       }, []] as const
@@ -367,6 +475,11 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
 
     if (chunk.type === "content_block_start" && chunk.content_block?.type === "thinking" && chunk.content_block.thinking) {
       return [state, [{ type: "reasoning-delta", text: chunk.content_block.thinking }]] as const
+    }
+
+    if (chunk.type === "content_block_start" && chunk.content_block) {
+      const event = serverToolResultEvent(chunk.content_block)
+      if (event) return [state, [event]] as const
     }
 
     if (chunk.type === "content_block_delta" && chunk.delta?.type === "text_delta" && chunk.delta.text) {

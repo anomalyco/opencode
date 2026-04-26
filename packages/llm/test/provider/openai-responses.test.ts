@@ -158,6 +158,80 @@ describe("OpenAI Responses adapter", () => {
     }),
   )
 
+  it.effect("decodes web_search_call as provider-executed tool-call + tool-result", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "web_search_call",
+        id: "ws_1",
+        status: "completed",
+        action: { type: "search", query: "effect 4" },
+      }
+      const body = sseEvents(
+        { type: "response.output_item.added", item },
+        { type: "response.output_item.done", item },
+        { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+      )
+      const response = yield* client({ adapters: [OpenAIResponses.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      const callsAndResults = response.events.filter((event) => event.type === "tool-call" || event.type === "tool-result")
+      expect(callsAndResults).toEqual([
+        {
+          type: "tool-call",
+          id: "ws_1",
+          name: "web_search",
+          input: { type: "search", query: "effect 4" },
+          providerExecuted: true,
+        },
+        {
+          type: "tool-result",
+          id: "ws_1",
+          name: "web_search",
+          result: { type: "json", value: item },
+          providerExecuted: true,
+        },
+      ])
+    }),
+  )
+
+  it.effect("decodes code_interpreter_call as provider-executed events with code input", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "code_interpreter_call",
+        id: "ci_1",
+        status: "completed",
+        code: "print(1+1)",
+        container_id: "cnt_xyz",
+        outputs: [{ type: "logs", logs: "2\n" }],
+      }
+      const body = sseEvents(
+        { type: "response.output_item.done", item },
+        { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+      )
+      const response = yield* client({ adapters: [OpenAIResponses.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      const toolCall = response.events.find((event) => event.type === "tool-call")
+      expect(toolCall).toEqual({
+        type: "tool-call",
+        id: "ci_1",
+        name: "code_interpreter",
+        input: { code: "print(1+1)", container_id: "cnt_xyz" },
+        providerExecuted: true,
+      })
+      const toolResult = response.events.find((event) => event.type === "tool-result")
+      expect(toolResult).toEqual({
+        type: "tool-result",
+        id: "ci_1",
+        name: "code_interpreter",
+        result: { type: "json", value: item },
+        providerExecuted: true,
+      })
+    }),
+  )
+
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
       const error = yield* client({ adapters: [OpenAIResponses.adapter] })
