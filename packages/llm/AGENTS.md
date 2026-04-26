@@ -107,9 +107,13 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 ### Provider Coverage
 
-- [ ] Add OpenAI-compatible Chat adapter support for non-OpenAI providers that still use `/chat/completions`.
+- [x] Add a generic OpenAI-compatible Chat adapter for non-OpenAI providers that expose `/chat/completions`; use `../ai/packages/openai-compatible` as the behavior reference.
+- [ ] Keep OpenAI Responses as a separate first-class protocol for providers that actually implement `/responses`; do not treat generic OpenAI-compatible providers as Responses-capable by default.
+- [ ] Cover OpenAI-compatible provider families that can share the generic adapter first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
+- [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, xAI, Perplexity, and Cohere.
 - [ ] Add Bedrock Converse support or a clear compatibility layer before moving Amazon Bedrock traffic onto `packages/llm`.
-- [ ] Decide whether Vertex Gemini and Vertex Anthropic are target patches over existing adapters or separate adapters with their own auth/URL handling.
+- [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini as Gemini target/http patch vs adapter, and Vertex Anthropic as Anthropic target/http patch vs adapter.
+- [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible adapter and provider option patch model are stable.
 
 ### OpenCode Parity Patches
 
@@ -118,13 +122,15 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [ ] Port DeepSeek reasoning handling and interleaved reasoning field mapping.
 - [ ] Add unsupported attachment fallback patches keyed by model capabilities.
 - [ ] Add cache hint patches for Anthropic, OpenRouter, Bedrock, OpenAI-compatible, Copilot, and Alibaba-style providers.
-- [ ] Add provider option namespacing patches for Gateway, OpenRouter, Azure, and other provider-specific option bags.
+- [ ] Add provider option namespacing patches for Gateway, OpenRouter, Azure, OpenAI-compatible wrappers, and other provider-specific option bags.
 - [ ] Add model-specific reasoning option patches for providers that need effort, summary, or native reasoning fields.
+- [ ] Add provider-specific metadata extraction patches only where OpenCode needs returned reasoning, citations, usage details, or provider-native fields.
 
 ### OpenCode Bridge
 
-- [ ] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, and native provider metadata.
+- [ ] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, native provider metadata, and OpenAI-compatible provider family detection.
 - [ ] Build a `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tools, tool choice, generation options, reasoning variants, cache hints, and attachments.
+- [ ] Keep auth and deployment concerns in the OpenCode bridge where possible: Bedrock credentials/region/profile, Vertex project/location/token, Azure deployment/API version, and Gateway/OpenRouter routing headers.
 - [ ] Keep initial OpenCode integration behind a local flag/path until request payload parity and stream event parity are proven against the existing `session/llm.test.ts` cases.
 
 ### Test And Recording Gaps
@@ -133,3 +139,4 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Cover provider-error and HTTP-status sad paths with deterministic fixtures across adapters (Anthropic mid-stream + 4xx; OpenAI Responses mid-stream + 4xx; OpenAI Chat 4xx). Live recordings of provider errors are still TODO when stable cassettes can be captured.
 - [ ] Improve cassette ergonomics if more providers need custom matching, redaction, or multi-interaction flows.
 - [ ] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
+- [ ] Add adapter parity fixtures against `../ai` behavior for generic OpenAI-compatible Chat before adding provider-specific wrappers.

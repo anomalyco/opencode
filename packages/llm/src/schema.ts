@@ -2,6 +2,7 @@ import { Schema } from "effect"
 
 export const Protocol = Schema.Literals([
   "openai-chat",
+  "openai-compatible-chat",
   "openai-responses",
   "anthropic-messages",
   "gemini",
