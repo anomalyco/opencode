@@ -1,6 +1,6 @@
 import path from "path"
 import { exec } from "child_process"
-import { Filesystem } from "../../util/filesystem"
+import { Filesystem } from "../../util"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
@@ -18,19 +18,22 @@ import type {
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { ModelsDev } from "../../provider/models"
+import { ModelsDev } from "../../provider"
 import { Instance } from "@/project/instance"
 import { bootstrap } from "../bootstrap"
+import { SessionShare } from "@/share"
 import { Session } from "../../session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
-import { Provider } from "../../provider/provider"
+import { Provider } from "../../provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Process } from "@/util/process"
-import { git } from "@/util/git"
+import { Process } from "@/util"
+import { Effect } from "effect"
 
 type GitHubAuthor = {
   login: string
@@ -257,7 +260,9 @@ export const GithubInstallCommand = cmd({
             }
 
             // Get repo info
-            const info = (await git(["remote", "get-url", "origin"], { cwd: Instance.worktree })).text().trim()
+            const info = await AppRuntime.runPromise(
+              Git.Service.use((git) => git.run(["remote", "get-url", "origin"], { cwd: Instance.worktree })),
+            ).then((x) => x.text().trim())
             const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
@@ -357,7 +362,7 @@ export const GithubInstallCommand = cmd({
 
               retries++
               await sleep(1000)
-            } while (true)
+            } while (true) // oxlint-disable-line no-constant-condition
 
             s.stop("Installed GitHub app")
 
@@ -496,20 +501,21 @@ export const GithubRunCommand = cmd({
           : "issue"
         : undefined
       const gitText = async (args: string[]) => {
-        const result = await git(args, { cwd: Instance.worktree })
+        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result.text().trim()
       }
       const gitRun = async (args: string[]) => {
-        const result = await git(args, { cwd: Instance.worktree })
+        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result
       }
-      const gitStatus = (args: string[]) => git(args, { cwd: Instance.worktree })
+      const gitStatus = (args: string[]) =>
+        AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
       const commitChanges = async (summary: string, actor?: string) => {
         const args = ["commit", "-m", summary]
         if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)
@@ -546,20 +552,24 @@ export const GithubRunCommand = cmd({
 
         // Setup opencode session
         const repoData = await fetchRepo()
-        session = await Session.create({
-          permission: [
-            {
-              permission: "question",
-              action: "deny",
-              pattern: "*",
-            },
-          ],
-        })
+        session = await AppRuntime.runPromise(
+          Session.Service.use((svc) =>
+            svc.create({
+              permission: [
+                {
+                  permission: "question",
+                  action: "deny",
+                  pattern: "*",
+                },
+              ],
+            }),
+          ),
+        )
         subscribeSessionEvents()
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
-          await Session.share(session.id)
+          await AppRuntime.runPromise(SessionShare.Service.use((svc) => svc.share(session.id)))
           return session.id.slice(-8)
         })()
         console.log("opencode session", session.id)
@@ -921,7 +931,7 @@ export const GithubRunCommand = cmd({
       async function summarize(response: string) {
         try {
           return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
-        } catch (e) {
+        } catch {
           const title = issueEvent
             ? issueEvent.issue.title
             : (payload as PullRequestReviewCommentEvent).pull_request.title
@@ -932,96 +942,86 @@ export const GithubRunCommand = cmd({
       async function chat(message: string, files: PromptFiles = []) {
         console.log("Sending message to opencode...")
 
-        const result = await SessionPrompt.prompt({
-          sessionID: session.id,
-          messageID: MessageID.ascending(),
-          variant,
-          model: {
-            providerID,
-            modelID,
-          },
-          // agent is omitted - server will use default_agent from config or fall back to "build"
-          parts: [
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: message,
-            },
-            ...files.flatMap((f) => [
-              {
-                id: PartID.ascending(),
-                type: "file" as const,
-                mime: f.mime,
-                url: `data:${f.mime};base64,${f.content}`,
-                filename: f.filename,
-                source: {
-                  type: "file" as const,
-                  text: {
-                    value: f.replacement,
-                    start: f.start,
-                    end: f.end,
-                  },
-                  path: f.filename,
-                },
+        return AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const prompt = yield* SessionPrompt.Service
+            const result = yield* prompt.prompt({
+              sessionID: session.id,
+              messageID: MessageID.ascending(),
+              variant,
+              model: {
+                providerID,
+                modelID,
               },
-            ]),
-          ],
-        })
+              // agent is omitted - server will use default_agent from config or fall back to "build"
+              parts: [
+                {
+                  id: PartID.ascending(),
+                  type: "text",
+                  text: message,
+                },
+                ...files.flatMap((f) => [
+                  {
+                    id: PartID.ascending(),
+                    type: "file" as const,
+                    mime: f.mime,
+                    url: `data:${f.mime};base64,${f.content}`,
+                    filename: f.filename,
+                    source: {
+                      type: "file" as const,
+                      text: {
+                        value: f.replacement,
+                        start: f.start,
+                        end: f.end,
+                      },
+                      path: f.filename,
+                    },
+                  },
+                ]),
+              ],
+            })
 
-        // result should always be assistant just satisfying type checker
-        if (result.info.role === "assistant" && result.info.error) {
-          const err = result.info.error
-          console.error("Agent error:", err)
+            if (result.info.role === "assistant" && result.info.error) {
+              const err = result.info.error
+              console.error("Agent error:", err)
+              if (err.name === "ContextOverflowError") throw new Error(formatPromptTooLargeError(files))
+              throw new Error(`${err.name}: ${err.data?.message || ""}`)
+            }
 
-          if (err.name === "ContextOverflowError") {
-            throw new Error(formatPromptTooLargeError(files))
-          }
+            const text = extractResponseText(result.parts)
+            if (text) return text
 
-          const errorMsg = err.data?.message || ""
-          throw new Error(`${err.name}: ${errorMsg}`)
-        }
+            console.log("Requesting summary from agent...")
+            const summary = yield* prompt.prompt({
+              sessionID: session.id,
+              messageID: MessageID.ascending(),
+              variant,
+              model: {
+                providerID,
+                modelID,
+              },
+              tools: { "*": false },
+              parts: [
+                {
+                  id: PartID.ascending(),
+                  type: "text",
+                  text: "Summarize the actions (tool calls & reasoning) you did for the user in 1-2 sentences.",
+                },
+              ],
+            })
 
-        const text = extractResponseText(result.parts)
-        if (text) return text
+            if (summary.info.role === "assistant" && summary.info.error) {
+              const err = summary.info.error
+              console.error("Summary agent error:", err)
+              if (err.name === "ContextOverflowError") throw new Error(formatPromptTooLargeError(files))
+              throw new Error(`${err.name}: ${err.data?.message || ""}`)
+            }
 
-        // No text part (tool-only or reasoning-only) - ask agent to summarize
-        console.log("Requesting summary from agent...")
-        const summary = await SessionPrompt.prompt({
-          sessionID: session.id,
-          messageID: MessageID.ascending(),
-          variant,
-          model: {
-            providerID,
-            modelID,
-          },
-          tools: { "*": false }, // Disable all tools to force text response
-          parts: [
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: "Summarize the actions (tool calls & reasoning) you did for the user in 1-2 sentences.",
-            },
-          ],
-        })
-
-        if (summary.info.role === "assistant" && summary.info.error) {
-          const err = summary.info.error
-          console.error("Summary agent error:", err)
-
-          if (err.name === "ContextOverflowError") {
-            throw new Error(formatPromptTooLargeError(files))
-          }
-
-          const errorMsg = err.data?.message || ""
-          throw new Error(`${err.name}: ${errorMsg}`)
-        }
-
-        const summaryText = extractResponseText(summary.parts)
-        if (!summaryText) {
-          throw new Error("Failed to get summary from agent")
-        }
-
-        return summaryText
+            const summaryText = extractResponseText(summary.parts)
+            if (!summaryText) throw new Error("Failed to get summary from agent")
+            return summaryText
+          }),
+        )
       }
 
       async function getOidcToken() {
@@ -1031,6 +1031,7 @@ export const GithubRunCommand = cmd({
           console.error("Failed to get OIDC token:", error instanceof Error ? error.message : error)
           throw new Error(
             "Could not fetch an OIDC token. Make sure to add `id-token: write` to your workflow permissions.",
+            { cause: error },
           )
         }
       }
@@ -1221,7 +1222,7 @@ export const GithubRunCommand = cmd({
           console.log(`  permission: ${permission}`)
         } catch (error) {
           console.error(`Failed to check permissions: ${error}`)
-          throw new Error(`Failed to check permissions for user ${actor}: ${error}`)
+          throw new Error(`Failed to check permissions for user ${actor}: ${error}`, { cause: error })
         }
 
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)

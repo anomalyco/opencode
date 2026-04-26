@@ -1,7 +1,3 @@
-import { dict as en } from "./en"
-
-type Keys = keyof typeof en
-
 export const dict = {
   "command.category.suggested": "추천",
   "command.category.view": "보기",
@@ -570,7 +566,9 @@ export const dict = {
   "settings.general.row.theme.title": "테마",
   "settings.general.row.theme.description": "OpenCode 테마 사용자 지정",
   "settings.general.row.font.title": "코드 글꼴",
-  "settings.general.row.font.description": "코드 블록과 터미널에 사용되는 글꼴을 사용자 지정",
+  "settings.general.row.font.description": "코드 블록에 사용되는 글꼴을 사용자 지정",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI 글꼴",
   "settings.general.row.uiFont.description": "인터페이스 전반에 사용되는 글꼴을 사용자 지정",
   "settings.general.row.followup.title": "후속 조치 동작",
@@ -585,6 +583,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "edit 도구 파트 펼치기",
   "settings.general.row.editToolPartsExpanded.description":
     "타임라인에서 기본적으로 edit, write, patch 도구 파트를 펼친 상태로 표시합니다",
+  "settings.general.row.showSessionProgressBar.title": "세션 진행 표시줄 표시",
+  "settings.general.row.showSessionProgressBar.description":
+    "에이전트가 작업 중일 때 세션 상단에 애니메이션 진행 표시줄을 표시합니다",
   "settings.general.row.wayland.title": "네이티브 Wayland 사용",
   "settings.general.row.wayland.description": "Wayland에서 X11 폴백을 비활성화합니다. 다시 시작해야 합니다.",
   "settings.general.row.wayland.tooltip":

@@ -1,8 +1,13 @@
-import { describe, expect, test, spyOn, beforeEach, afterEach } from "bun:test"
-import { z } from "zod"
+import { describe, expect } from "bun:test"
+import { Effect, Fiber, Layer } from "effect"
 import { QuestionTool } from "../../src/tool/question"
-import * as QuestionModule from "../../src/question"
+import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Agent } from "../../src/agent/agent"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Truncate } from "../../src/tool"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-session"),
@@ -11,59 +16,75 @@ const ctx = {
   agent: "test-agent",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
+const it = testEffect(
+  Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
+)
+
+const pending = Effect.fn("QuestionToolTest.pending")(function* (question: Question.Interface) {
+  for (;;) {
+    const items = yield* question.list()
+    const item = items[0]
+    if (item) return item
+    yield* Effect.sleep("10 millis")
+  }
+})
+
 describe("tool.question", () => {
-  let askSpy: any
+  it.live("should successfully execute with valid question parameters", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const question = yield* Question.Service
+        const toolInfo = yield* QuestionTool
+        const tool = yield* toolInfo.init()
+        const questions = [
+          {
+            question: "What is your favorite color?",
+            header: "Color",
+            options: [
+              { label: "Red", description: "The color of passion" },
+              { label: "Blue", description: "The color of sky" },
+            ],
+            multiple: false,
+          },
+        ]
 
-  beforeEach(() => {
-    askSpy = spyOn(QuestionModule.Question, "ask").mockImplementation(async () => {
-      return []
-    })
-  })
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+        const item = yield* pending(question)
+        yield* question.reply({ requestID: item.id, answers: [["Red"]] })
 
-  afterEach(() => {
-    askSpy.mockRestore()
-  })
+        const result = yield* Fiber.join(fiber)
+        expect(result.title).toBe("Asked 1 question")
+      }),
+    ),
+  )
 
-  test("should successfully execute with valid question parameters", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What is your favorite color?",
-        header: "Color",
-        options: [
-          { label: "Red", description: "The color of passion" },
-          { label: "Blue", description: "The color of sky" },
-        ],
-        multiple: false,
-      },
-    ]
+  it.live("should now pass with a header longer than 12 but less than 30 chars", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const question = yield* Question.Service
+        const toolInfo = yield* QuestionTool
+        const tool = yield* toolInfo.init()
+        const questions = [
+          {
+            question: "What is your favorite animal?",
+            header: "This Header is Over 12",
+            options: [{ label: "Dog", description: "Man's best friend" }],
+          },
+        ]
 
-    askSpy.mockResolvedValueOnce([["Red"]])
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+        const item = yield* pending(question)
+        yield* question.reply({ requestID: item.id, answers: [["Dog"]] })
 
-    const result = await tool.execute({ questions }, ctx)
-    expect(askSpy).toHaveBeenCalledTimes(1)
-    expect(result.title).toBe("Asked 1 question")
-  })
-
-  test("should now pass with a header longer than 12 but less than 30 chars", async () => {
-    const tool = await QuestionTool.init()
-    const questions = [
-      {
-        question: "What is your favorite animal?",
-        header: "This Header is Over 12",
-        options: [{ label: "Dog", description: "Man's best friend" }],
-      },
-    ]
-
-    askSpy.mockResolvedValueOnce([["Dog"]])
-
-    const result = await tool.execute({ questions }, ctx)
-    expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
-  })
+        const result = yield* Fiber.join(fiber)
+        expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
+      }),
+    ),
+  )
 
   // intentionally removed the zod validation due to tool call errors, hoping prompting is gonna be good enough
   //   test("should throw an Error for header exceeding 30 characters", async () => {

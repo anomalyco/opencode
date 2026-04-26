@@ -7,12 +7,14 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@opencode-ai/ui/toast"
-import { findLast } from "@opencode-ai/util/array"
+import { findLast } from "@opencode-ai/shared/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -39,8 +41,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const language = useLanguage()
   const local = useLocal()
   const permission = usePermission()
+  const platform = usePlatform()
   const prompt = usePrompt()
   const sdk = useSDK()
+  const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
@@ -52,11 +56,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return
     return sync.session.get(id)
   }
-  const hasReview = () => {
-    const id = params.id
-    if (!id) return false
-    return Math.max(info()?.summary?.files ?? 0, (sync.data.session_diff[id] ?? []).length) > 0
-  }
+  const hasReview = () => !!params.id
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
     return file.tab(tab)
@@ -70,6 +70,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
+  const shown = () =>
+    platform.platform !== "desktop" ||
+    import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" ||
+    settings.general.showFileTree()
 
   const idle = { type: "idle" as const }
   const status = () => sync.data.session_status[params.id ?? ""] ?? idle
@@ -461,12 +465,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     }),
-    viewCommand({
-      id: "fileTree.toggle",
-      title: language.t("command.fileTree.toggle"),
-      keybind: "mod+\\",
-      onSelect: () => layout.fileTree.toggle(),
-    }),
+    ...(shown()
+      ? [
+          viewCommand({
+            id: "fileTree.toggle",
+            title: language.t("command.fileTree.toggle"),
+            keybind: "mod+\\",
+            onSelect: () => layout.fileTree.toggle(),
+          }),
+        ]
+      : []),
     viewCommand({
       id: "input.focus",
       title: language.t("command.input.focus"),

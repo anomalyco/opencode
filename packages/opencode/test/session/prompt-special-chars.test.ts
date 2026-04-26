@@ -2,13 +2,29 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
-import { Log } from "../../src/util/log"
+import { Log } from "../../src/util"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import { MessageV2 } from "../../src/session/message-v2"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
+
+function sessionCreate(input?: Session.CreateInput) {
+  return AppRuntime.runPromise(Session.Service.use((svc) => svc.create(input)))
+}
+
+function sessionRemove(id: Session.Info["id"]) {
+  return AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(id)))
+}
+
+function resolvePromptParts(template: string) {
+  return AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.resolvePromptParts(template)))
+}
+
+function sessionPrompt(input: SessionPrompt.PromptInput) {
+  return AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.prompt(input)))
+}
 
 describe("session.prompt special characters", () => {
   test("handles filenames with # character", async () => {
@@ -22,9 +38,9 @@ describe("session.prompt special characters", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const session = await Session.create({})
+        const session = await sessionCreate({})
         const template = "Read @file#name.txt"
-        const parts = await SessionPrompt.resolvePromptParts(template)
+        const parts = await resolvePromptParts(template)
         const fileParts = parts.filter((part) => part.type === "file")
 
         expect(fileParts.length).toBe(1)
@@ -37,19 +53,18 @@ describe("session.prompt special characters", () => {
         const decodedPath = fileURLToPath(fileParts[0].url)
         expect(decodedPath).toBe(path.join(tmp.path, "file#name.txt"))
 
-        const message = await SessionPrompt.prompt({
+        const message = await sessionPrompt({
           sessionID: session.id,
           parts,
           noReply: true,
         })
-        const stored = await MessageV2.get({ sessionID: session.id, messageID: message.info.id })
 
-        // Verify the file content was read correctly
-        const textParts = stored.parts.filter((part) => part.type === "text")
+        // Verify the file content was read correctly from stored message parts
+        const textParts = message.parts.filter((part) => part.type === "text")
         const hasContent = textParts.some((part) => part.text.includes("special content"))
         expect(hasContent).toBe(true)
 
-        await Session.remove(session.id)
+        await sessionRemove(session.id)
       },
     })
   })

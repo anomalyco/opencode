@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
 import { Pty } from "../../src/pty"
 import { tmpdir } from "../fixture/fixture"
@@ -10,48 +12,48 @@ describe("pty", () => {
 
     await Instance.provide({
       directory: dir.path,
-      fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
-        const b = await Pty.create({ command: "cat", title: "b" })
-        try {
-          const outA: string[] = []
-          const outB: string[] = []
+      fn: () =>
+        AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            const a = yield* pty.create({ command: "cat", title: "a" })
+            const b = yield* pty.create({ command: "cat", title: "b" })
+            try {
+              const outA: string[] = []
+              const outB: string[] = []
 
-          const ws = {
-            readyState: 1,
-            data: { events: { connection: "a" } },
-            send: (data: unknown) => {
-              outA.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
-            },
-            close: () => {
-              // no-op (simulate abrupt drop)
-            },
-          }
+              const ws = {
+                readyState: 1,
+                data: { events: { connection: "a" } },
+                send: (data: unknown) => {
+                  outA.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
+                },
+                close: () => {
+                  // no-op (simulate abrupt drop)
+                },
+              }
 
-          // Connect "a" first with ws.
-          Pty.connect(a.id, ws as any)
+              yield* pty.connect(a.id, ws as any)
 
-          // Now "reuse" the same ws object for another connection.
-          ws.data = { events: { connection: "b" } }
-          ws.send = (data: unknown) => {
-            outB.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
-          }
-          Pty.connect(b.id, ws as any)
+              ws.data = { events: { connection: "b" } }
+              ws.send = (data: unknown) => {
+                outB.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
+              }
+              yield* pty.connect(b.id, ws as any)
 
-          // Clear connect metadata writes.
-          outA.length = 0
-          outB.length = 0
+              outA.length = 0
+              outB.length = 0
 
-          // Output from a must never show up in b.
-          Pty.write(a.id, "AAA\n")
-          await sleep(100)
+              yield* pty.write(a.id, "AAA\n")
+              yield* Effect.promise(() => sleep(100))
 
-          expect(outB.join("")).not.toContain("AAA")
-        } finally {
-          await Pty.remove(a.id)
-          await Pty.remove(b.id)
-        }
-      },
+              expect(outB.join("")).not.toContain("AAA")
+            } finally {
+              yield* pty.remove(a.id)
+              yield* pty.remove(b.id)
+            }
+          }),
+        ),
     })
   })
 
@@ -60,42 +62,43 @@ describe("pty", () => {
 
     await Instance.provide({
       directory: dir.path,
-      fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
-        try {
-          const outA: string[] = []
-          const outB: string[] = []
+      fn: () =>
+        AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            const a = yield* pty.create({ command: "cat", title: "a" })
+            try {
+              const outA: string[] = []
+              const outB: string[] = []
 
-          const ws = {
-            readyState: 1,
-            data: { events: { connection: "a" } },
-            send: (data: unknown) => {
-              outA.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
-            },
-            close: () => {
-              // no-op (simulate abrupt drop)
-            },
-          }
+              const ws = {
+                readyState: 1,
+                data: { events: { connection: "a" } },
+                send: (data: unknown) => {
+                  outA.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
+                },
+                close: () => {
+                  // no-op (simulate abrupt drop)
+                },
+              }
 
-          // Connect "a" first.
-          Pty.connect(a.id, ws as any)
-          outA.length = 0
+              yield* pty.connect(a.id, ws as any)
+              outA.length = 0
 
-          // Simulate Bun reusing the same websocket object for another
-          // connection before the next onOpen calls Pty.connect.
-          ws.data = { events: { connection: "b" } }
-          ws.send = (data: unknown) => {
-            outB.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
-          }
+              ws.data = { events: { connection: "b" } }
+              ws.send = (data: unknown) => {
+                outB.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
+              }
 
-          Pty.write(a.id, "AAA\n")
-          await sleep(100)
+              yield* pty.write(a.id, "AAA\n")
+              yield* Effect.promise(() => sleep(100))
 
-          expect(outB.join("")).not.toContain("AAA")
-        } finally {
-          await Pty.remove(a.id)
-        }
-      },
+              expect(outB.join("")).not.toContain("AAA")
+            } finally {
+              yield* pty.remove(a.id)
+            }
+          }),
+        ),
     })
   })
 
@@ -104,38 +107,40 @@ describe("pty", () => {
 
     await Instance.provide({
       directory: dir.path,
-      fn: async () => {
-        const a = await Pty.create({ command: "cat", title: "a" })
-        try {
-          const out: string[] = []
+      fn: () =>
+        AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            const a = yield* pty.create({ command: "cat", title: "a" })
+            try {
+              const out: string[] = []
 
-          const ctx = { connId: 1 }
-          const ws = {
-            readyState: 1,
-            data: ctx,
-            send: (data: unknown) => {
-              out.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
-            },
-            close: () => {
-              // no-op
-            },
-          }
+              const ctx = { connId: 1 }
+              const ws = {
+                readyState: 1,
+                data: ctx,
+                send: (data: unknown) => {
+                  out.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
+                },
+                close: () => {
+                  // no-op
+                },
+              }
 
-          Pty.connect(a.id, ws as any)
-          out.length = 0
+              yield* pty.connect(a.id, ws as any)
+              out.length = 0
 
-          // Mutating fields on ws.data should not look like a new
-          // connection lifecycle when the object identity stays stable.
-          ctx.connId = 2
+              ctx.connId = 2
 
-          Pty.write(a.id, "AAA\n")
-          await sleep(100)
+              yield* pty.write(a.id, "AAA\n")
+              yield* Effect.promise(() => sleep(100))
 
-          expect(out.join("")).toContain("AAA")
-        } finally {
-          await Pty.remove(a.id)
-        }
-      },
+              expect(out.join("")).toContain("AAA")
+            } finally {
+              yield* pty.remove(a.id)
+            }
+          }),
+        ),
     })
   })
 })

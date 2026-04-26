@@ -60,6 +60,7 @@ function render(template: string, params?: Record<string, unknown>) {
   return template.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => {
     const value = params[key.trim()]
     if (value === undefined || value === null) return ""
+    // oxlint-disable-next-line no-base-to-string -- value is Record<string, unknown>, always coerced intentionally
     return String(value)
   })
 }

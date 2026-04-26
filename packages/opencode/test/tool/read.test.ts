@@ -1,12 +1,20 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
+import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
-import { ReadTool } from "../../src/tool/read"
-import { Instance } from "../../src/project/instance"
-import { Filesystem } from "../../src/util/filesystem"
-import { tmpdir } from "../fixture/fixture"
-import { Permission } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { LSP } from "../../src/lsp"
+import { Permission } from "../../src/permission"
+import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Instruction } from "../../src/session/instruction"
+import { ReadTool } from "../../src/tool/read"
+import { Truncate } from "../../src/tool"
+import { Tool } from "../../src/tool"
+import { Filesystem } from "../../src/util"
+import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -21,177 +29,176 @@ const ctx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
+
+const it = testEffect(
+  Layer.mergeAll(
+    Agent.defaultLayer,
+    AppFileSystem.defaultLayer,
+    CrossSpawnSpawner.defaultLayer,
+    Instruction.defaultLayer,
+    LSP.defaultLayer,
+    Truncate.defaultLayer,
+  ),
+)
+
+const init = Effect.fn("ReadToolTest.init")(function* () {
+  const info = yield* ReadTool
+  return yield* info.init()
+})
+
+const run = Effect.fn("ReadToolTest.run")(function* (
+  args: Tool.InferParameters<typeof ReadTool>,
+  next: Tool.Context = ctx,
+) {
+  const tool = yield* init()
+  return yield* tool.execute(args, next)
+})
+
+const exec = Effect.fn("ReadToolTest.exec")(function* (
+  dir: string,
+  args: Tool.InferParameters<typeof ReadTool>,
+  next: Tool.Context = ctx,
+) {
+  return yield* provideInstance(dir)(run(args, next))
+})
+
+const fail = Effect.fn("ReadToolTest.fail")(function* (
+  dir: string,
+  args: Tool.InferParameters<typeof ReadTool>,
+  next: Tool.Context = ctx,
+) {
+  const exit = yield* exec(dir, args, next).pipe(Effect.exit)
+  if (Exit.isFailure(exit)) {
+    const err = Cause.squash(exit.cause)
+    return err instanceof Error ? err : new Error(String(err))
+  }
+  throw new Error("expected read to fail")
+})
 
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
+const put = Effect.fn("ReadToolTest.put")(function* (p: string, content: string | Buffer | Uint8Array) {
+  const fs = yield* AppFileSystem.Service
+  yield* fs.writeWithDirs(p, content)
+})
+const load = Effect.fn("ReadToolTest.load")(function* (p: string) {
+  const fs = yield* AppFileSystem.Service
+  return yield* fs.readFileString(p)
+})
+const asks = () => {
+  const items: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  return {
+    items,
+    next: {
+      ...ctx,
+      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+        Effect.sync(() => {
+          items.push(req)
+        }),
+    },
+  }
+}
 
 describe("tool.read external_directory permission", () => {
-  test("allows reading absolute path inside project directory", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "test.txt"), "hello world")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "test.txt") }, ctx)
-        expect(result.output).toContain("hello world")
-      },
-    })
-  })
+  it.live("allows reading absolute path inside project directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "test.txt"), "hello world")
 
-  test("allows reading file in subdirectory inside project directory", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "subdir", "test.txt"), "nested content")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "subdir", "test.txt") }, ctx)
-        expect(result.output).toContain("nested content")
-      },
-    })
-  })
+      const result = yield* exec(dir, { filePath: path.join(dir, "test.txt") })
+      expect(result.output).toContain("hello world")
+    }),
+  )
 
-  test("asks for external_directory permission when reading absolute path outside project", async () => {
-    await using outerTmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "secret.txt"), "secret data")
-      },
-    })
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        const testCtx = {
-          ...ctx,
-          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-            requests.push(req)
-          },
-        }
-        await read.execute({ filePath: path.join(outerTmp.path, "secret.txt") }, testCtx)
-        const extDirReq = requests.find((r) => r.permission === "external_directory")
-        expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp.path, "*")))
-      },
-    })
-  })
+  it.live("allows reading file in subdirectory inside project directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "subdir", "test.txt"), "nested content")
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "subdir", "test.txt") })
+      expect(result.output).toContain("nested content")
+    }),
+  )
+
+  it.live("asks for external_directory permission when reading absolute path outside project", () =>
+    Effect.gen(function* () {
+      const outer = yield* tmpdirScoped()
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(outer, "secret.txt"), "secret data")
+
+      const { items, next } = asks()
+
+      yield* exec(dir, { filePath: path.join(outer, "secret.txt") }, next)
+      const ext = items.find((item) => item.permission === "external_directory")
+      expect(ext).toBeDefined()
+      expect(ext!.patterns).toContain(glob(path.join(outer, "*")))
+    }),
+  )
 
   if (process.platform === "win32") {
-    test("normalizes read permission paths on Windows", async () => {
-      await using tmp = await tmpdir({
-        git: true,
-        init: async (dir) => {
-          await Bun.write(path.join(dir, "test.txt"), "hello world")
-        },
-      })
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const read = await ReadTool.init()
-          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-          const testCtx = {
-            ...ctx,
-            ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-              requests.push(req)
-            },
-          }
-          const target = path.join(tmp.path, "test.txt")
-          const alt = target
-            .replace(/^[A-Za-z]:/, "")
-            .replaceAll("\\", "/")
-            .toLowerCase()
-          await read.execute({ filePath: alt }, testCtx)
-          const readReq = requests.find((r) => r.permission === "read")
-          expect(readReq).toBeDefined()
-          expect(readReq!.patterns).toEqual([full(target)])
-        },
-      })
-    })
+    it.live("normalizes read permission paths on Windows", () =>
+      Effect.gen(function* () {
+        const dir = yield* tmpdirScoped({ git: true })
+        yield* put(path.join(dir, "test.txt"), "hello world")
+
+        const { items, next } = asks()
+        const target = path.join(dir, "test.txt")
+        const alt = target
+          .replace(/^[A-Za-z]:/, "")
+          .replaceAll("\\", "/")
+          .toLowerCase()
+
+        yield* exec(dir, { filePath: alt }, next)
+        const read = items.find((item) => item.permission === "read")
+        expect(read).toBeDefined()
+        expect(read!.patterns).toEqual([full(target)])
+      }),
+    )
   }
 
-  test("asks for directory-scoped external_directory permission when reading external directory", async () => {
-    await using outerTmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "external", "a.txt"), "a")
-      },
-    })
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        const testCtx = {
-          ...ctx,
-          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-            requests.push(req)
-          },
-        }
-        await read.execute({ filePath: path.join(outerTmp.path, "external") }, testCtx)
-        const extDirReq = requests.find((r) => r.permission === "external_directory")
-        expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp.path, "external", "*")))
-      },
-    })
-  })
+  it.live("asks for directory-scoped external_directory permission when reading external directory", () =>
+    Effect.gen(function* () {
+      const outer = yield* tmpdirScoped()
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(outer, "external", "a.txt"), "a")
 
-  test("asks for external_directory permission when reading relative path outside project", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        const testCtx = {
-          ...ctx,
-          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-            requests.push(req)
-          },
-        }
-        // This will fail because file doesn't exist, but we can check if permission was asked
-        await read.execute({ filePath: "../outside.txt" }, testCtx).catch(() => {})
-        const extDirReq = requests.find((r) => r.permission === "external_directory")
-        expect(extDirReq).toBeDefined()
-      },
-    })
-  })
+      const { items, next } = asks()
 
-  test("does not ask for external_directory permission when reading inside project", async () => {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "internal.txt"), "internal content")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        const testCtx = {
-          ...ctx,
-          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-            requests.push(req)
-          },
-        }
-        await read.execute({ filePath: path.join(tmp.path, "internal.txt") }, testCtx)
-        const extDirReq = requests.find((r) => r.permission === "external_directory")
-        expect(extDirReq).toBeUndefined()
-      },
-    })
-  })
+      yield* exec(dir, { filePath: path.join(outer, "external") }, next)
+      const ext = items.find((item) => item.permission === "external_directory")
+      expect(ext).toBeDefined()
+      expect(ext!.patterns).toContain(glob(path.join(outer, "external", "*")))
+    }),
+  )
+
+  it.live("asks for external_directory permission when reading relative path outside project", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+
+      const { items, next } = asks()
+
+      yield* fail(dir, { filePath: "../outside.txt" }, next)
+      const ext = items.find((item) => item.permission === "external_directory")
+      expect(ext).toBeDefined()
+    }),
+  )
+
+  it.live("does not ask for external_directory permission when reading inside project", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "internal.txt"), "internal content")
+
+      const { items, next } = asks()
+
+      yield* exec(dir, { filePath: path.join(dir, "internal.txt") }, next)
+      const ext = items.find((item) => item.permission === "external_directory")
+      expect(ext).toBeUndefined()
+    }),
+  )
 })
 
 describe("tool.read env file permissions", () => {
@@ -205,261 +212,218 @@ describe("tool.read env file permissions", () => {
     ["environment.ts", false],
   ]
 
-  describe.each(["build", "plan"])("agent=%s", (agentName) => {
-    test.each(cases)("%s asks=%s", async (filename, shouldAsk) => {
-      await using tmp = await tmpdir({
-        init: (dir) => Bun.write(path.join(dir, filename), "content"),
-      })
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const agent = await Agent.get(agentName)
-          let askedForEnv = false
-          const ctxWithPermissions = {
-            ...ctx,
-            ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-              for (const pattern of req.patterns) {
-                const rule = Permission.evaluate(req.permission, pattern, agent.permission)
-                if (rule.action === "ask" && req.permission === "read") {
-                  askedForEnv = true
+  for (const agentName of ["build", "plan"] as const) {
+    describe(`agent=${agentName}`, () => {
+      for (const [filename, shouldAsk] of cases) {
+        it.live(`${filename} asks=${shouldAsk}`, () =>
+          Effect.gen(function* () {
+            const dir = yield* tmpdirScoped()
+            yield* put(path.join(dir, filename), "content")
+
+            const asked = yield* provideInstance(dir)(
+              Effect.gen(function* () {
+                const agent = yield* Agent.Service
+                const info = yield* agent.get(agentName)
+                let asked = false
+                const next = {
+                  ...ctx,
+                  ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+                    Effect.sync(() => {
+                      for (const pattern of req.patterns) {
+                        const rule = Permission.evaluate(req.permission, pattern, info.permission)
+                        if (rule.action === "ask" && req.permission === "read") {
+                          asked = true
+                        }
+                        if (rule.action === "deny") {
+                          throw new Permission.DeniedError({ ruleset: info.permission })
+                        }
+                      }
+                    }),
                 }
-                if (rule.action === "deny") {
-                  throw new Permission.DeniedError({ ruleset: agent.permission })
-                }
-              }
-            },
-          }
-          const read = await ReadTool.init()
-          await read.execute({ filePath: path.join(tmp.path, filename) }, ctxWithPermissions)
-          expect(askedForEnv).toBe(shouldAsk)
-        },
-      })
+
+                yield* run({ filePath: path.join(dir, filename) }, next)
+                return asked
+              }),
+            )
+
+            expect(asked).toBe(shouldAsk)
+          }),
+        )
+      }
     })
-  })
+  }
 })
 
 describe("tool.read truncation", () => {
-  test("truncates large file by bytes and sets truncated metadata", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const base = await Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json"))
-        const target = 60 * 1024
-        const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
-        await Filesystem.write(path.join(dir, "large.json"), content)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "large.json") }, ctx)
-        expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("Output capped at")
-        expect(result.output).toContain("Use offset=")
-      },
-    })
-  })
+  it.live("truncates large file by bytes and sets truncated metadata", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const base = yield* load(path.join(FIXTURES_DIR, "models-api.json"))
+      const target = 60 * 1024
+      const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
+      yield* put(path.join(dir, "large.json"), content)
 
-  test("truncates by line count when limit is specified", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
-        await Bun.write(path.join(dir, "many-lines.txt"), lines)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "many-lines.txt"), limit: 10 }, ctx)
-        expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("Showing lines 1-10 of 100")
-        expect(result.output).toContain("Use offset=11")
-        expect(result.output).toContain("line0")
-        expect(result.output).toContain("line9")
-        expect(result.output).not.toContain("line10")
-      },
-    })
-  })
+      const result = yield* exec(dir, { filePath: path.join(dir, "large.json") })
+      expect(result.metadata.truncated).toBe(true)
+      expect(result.output).toContain("Output capped at")
+      expect(result.output).toContain("Use offset=")
+    }),
+  )
 
-  test("does not truncate small file", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "small.txt"), "hello world")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "small.txt") }, ctx)
-        expect(result.metadata.truncated).toBe(false)
-        expect(result.output).toContain("End of file")
-      },
-    })
-  })
+  it.live("truncates by line count when limit is specified", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
+      yield* put(path.join(dir, "many-lines.txt"), lines)
 
-  test("respects offset parameter", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")
-        await Bun.write(path.join(dir, "offset.txt"), lines)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "offset.txt"), offset: 10, limit: 5 }, ctx)
-        expect(result.output).toContain("10: line10")
-        expect(result.output).toContain("14: line14")
-        expect(result.output).not.toContain("9: line10")
-        expect(result.output).not.toContain("15: line15")
-        expect(result.output).toContain("line10")
-        expect(result.output).toContain("line14")
-        expect(result.output).not.toContain("line0")
-        expect(result.output).not.toContain("line15")
-      },
-    })
-  })
+      const result = yield* exec(dir, { filePath: path.join(dir, "many-lines.txt"), limit: 10 })
+      expect(result.metadata.truncated).toBe(true)
+      expect(result.output).toContain("Showing lines 1-10 of 100")
+      expect(result.output).toContain("Use offset=11")
+      expect(result.output).toContain("line0")
+      expect(result.output).toContain("line9")
+      expect(result.output).not.toContain("line10")
+    }),
+  )
 
-  test("throws when offset is beyond end of file", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const lines = Array.from({ length: 3 }, (_, i) => `line${i + 1}`).join("\n")
-        await Bun.write(path.join(dir, "short.txt"), lines)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        await expect(
-          read.execute({ filePath: path.join(tmp.path, "short.txt"), offset: 4, limit: 5 }, ctx),
-        ).rejects.toThrow("Offset 4 is out of range for this file (3 lines)")
-      },
-    })
-  })
+  it.live("does not truncate small file", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "small.txt"), "hello world")
 
-  test("allows reading empty file at default offset", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "empty.txt"), "")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "empty.txt") }, ctx)
-        expect(result.metadata.truncated).toBe(false)
-        expect(result.output).toContain("End of file - total 0 lines")
-      },
-    })
-  })
+      const result = yield* exec(dir, { filePath: path.join(dir, "small.txt") })
+      expect(result.metadata.truncated).toBe(false)
+      expect(result.output).toContain("End of file")
+    }),
+  )
 
-  test("throws when offset > 1 for empty file", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "empty.txt"), "")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        await expect(read.execute({ filePath: path.join(tmp.path, "empty.txt"), offset: 2 }, ctx)).rejects.toThrow(
-          "Offset 2 is out of range for this file (0 lines)",
-        )
-      },
-    })
-  })
+  it.live("respects offset parameter", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")
+      yield* put(path.join(dir, "offset.txt"), lines)
 
-  test("does not mark final directory page as truncated", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Promise.all(
-          Array.from({ length: 10 }, (_, i) => Bun.write(path.join(dir, "dir", `file-${i + 1}.txt`), `line${i}`)),
-        )
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "dir"), offset: 6, limit: 5 }, ctx)
-        expect(result.metadata.truncated).toBe(false)
-        expect(result.output).not.toContain("Showing 5 of 10 entries")
-      },
-    })
-  })
+      const result = yield* exec(dir, { filePath: path.join(dir, "offset.txt"), offset: 10, limit: 5 })
+      expect(result.output).toContain("10: line10")
+      expect(result.output).toContain("14: line14")
+      expect(result.output).not.toContain("9: line10")
+      expect(result.output).not.toContain("15: line15")
+      expect(result.output).toContain("line10")
+      expect(result.output).toContain("line14")
+      expect(result.output).not.toContain("line0")
+      expect(result.output).not.toContain("line15")
+    }),
+  )
 
-  test("truncates long lines", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const longLine = "x".repeat(3000)
-        await Bun.write(path.join(dir, "long-line.txt"), longLine)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "long-line.txt") }, ctx)
-        expect(result.output).toContain("(line truncated to 2000 chars)")
-        expect(result.output.length).toBeLessThan(3000)
-      },
-    })
-  })
+  it.live("throws when offset is beyond end of file", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const lines = Array.from({ length: 3 }, (_, i) => `line${i + 1}`).join("\n")
+      yield* put(path.join(dir, "short.txt"), lines)
 
-  test("image files set truncated to false", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        // 1x1 red PNG
-        const png = Buffer.from(
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
-          "base64",
-        )
-        await Bun.write(path.join(dir, "image.png"), png)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "image.png") }, ctx)
-        expect(result.metadata.truncated).toBe(false)
-        expect(result.attachments).toBeDefined()
-        expect(result.attachments?.length).toBe(1)
-        expect(result.attachments?.[0]).not.toHaveProperty("id")
-        expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
-        expect(result.attachments?.[0]).not.toHaveProperty("messageID")
-      },
-    })
-  })
+      const err = yield* fail(dir, { filePath: path.join(dir, "short.txt"), offset: 4, limit: 5 })
+      expect(err.message).toContain("Offset 4 is out of range for this file (3 lines)")
+    }),
+  )
 
-  test("large image files are properly attached without error", async () => {
-    await Instance.provide({
-      directory: FIXTURES_DIR,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(FIXTURES_DIR, "large-image.png") }, ctx)
-        expect(result.metadata.truncated).toBe(false)
-        expect(result.attachments).toBeDefined()
-        expect(result.attachments?.length).toBe(1)
-        expect(result.attachments?.[0].type).toBe("file")
-        expect(result.attachments?.[0]).not.toHaveProperty("id")
-        expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
-        expect(result.attachments?.[0]).not.toHaveProperty("messageID")
-      },
-    })
-  })
+  it.live("allows reading empty file at default offset", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "empty.txt"), "")
 
-  test(".fbs files (FlatBuffers schema) are read as text, not images", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        // FlatBuffers schema content
-        const fbsContent = `namespace MyGame;
+      const result = yield* exec(dir, { filePath: path.join(dir, "empty.txt") })
+      expect(result.metadata.truncated).toBe(false)
+      expect(result.output).toContain("End of file - total 0 lines")
+    }),
+  )
+
+  it.live("throws when offset > 1 for empty file", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "empty.txt"), "")
+
+      const err = yield* fail(dir, { filePath: path.join(dir, "empty.txt"), offset: 2 })
+      expect(err.message).toContain("Offset 2 is out of range for this file (0 lines)")
+    }),
+  )
+
+  it.live("does not mark final directory page as truncated", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* Effect.forEach(
+        Array.from({ length: 10 }, (_, i) => i),
+        (i) => put(path.join(dir, "dir", `file-${i + 1}.txt`), `line${i}`),
+        {
+          concurrency: "unbounded",
+        },
+      )
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "dir"), offset: 6, limit: 5 })
+      expect(result.metadata.truncated).toBe(false)
+      expect(result.output).not.toContain("Showing 5 of 10 entries")
+    }),
+  )
+
+  it.live("truncates long lines", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "long-line.txt"), "x".repeat(3000))
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "long-line.txt") })
+      expect(result.output).toContain("(line truncated to 2000 chars)")
+      expect(result.output.length).toBeLessThan(3000)
+    }),
+  )
+
+  it.live("image files set truncated to false", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+        "base64",
+      )
+      yield* put(path.join(dir, "image.png"), png)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "image.png") })
+      expect(result.metadata.truncated).toBe(false)
+      expect(result.attachments).toBeDefined()
+      expect(result.attachments?.length).toBe(1)
+      expect(result.attachments?.[0]).not.toHaveProperty("id")
+      expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
+      expect(result.attachments?.[0]).not.toHaveProperty("messageID")
+    }),
+  )
+
+  it.live("detects attachment media from file contents", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01])
+      yield* put(path.join(dir, "image.bin"), jpeg)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "image.bin") })
+      expect(result.output).toBe("Image read successfully")
+      expect(result.attachments?.[0].mime).toBe("image/jpeg")
+      expect(result.attachments?.[0].url.startsWith("data:image/jpeg;base64,")).toBe(true)
+    }),
+  )
+
+  it.live("large image files are properly attached without error", () =>
+    Effect.gen(function* () {
+      const result = yield* exec(FIXTURES_DIR, { filePath: path.join(FIXTURES_DIR, "large-image.png") })
+      expect(result.metadata.truncated).toBe(false)
+      expect(result.attachments).toBeDefined()
+      expect(result.attachments?.length).toBe(1)
+      expect(result.attachments?.[0].type).toBe("file")
+      expect(result.attachments?.[0]).not.toHaveProperty("id")
+      expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
+      expect(result.attachments?.[0]).not.toHaveProperty("messageID")
+    }),
+  )
+
+  it.live(".fbs files (FlatBuffers schema) are read as text, not images", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const fbs = `namespace MyGame;
 
 table Monster {
   pos:Vec3;
@@ -468,79 +432,52 @@ table Monster {
 }
 
 root_type Monster;`
-        await Bun.write(path.join(dir, "schema.fbs"), fbsContent)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "schema.fbs") }, ctx)
-        // Should be read as text, not as image
-        expect(result.attachments).toBeUndefined()
-        expect(result.output).toContain("namespace MyGame")
-        expect(result.output).toContain("table Monster")
-      },
-    })
-  })
+      yield* put(path.join(dir, "schema.fbs"), fbs)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "schema.fbs") })
+      expect(result.attachments).toBeUndefined()
+      expect(result.output).toContain("namespace MyGame")
+      expect(result.output).toContain("table Monster")
+    }),
+  )
 })
 
 describe("tool.read loaded instructions", () => {
-  test("loads AGENTS.md from parent directory and includes in metadata", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "subdir", "AGENTS.md"), "# Test Instructions\nDo something special.")
-        await Bun.write(path.join(dir, "subdir", "nested", "test.txt"), "test content")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "subdir", "nested", "test.txt") }, ctx)
-        expect(result.output).toContain("test content")
-        expect(result.output).toContain("system-reminder")
-        expect(result.output).toContain("Test Instructions")
-        expect(result.metadata.loaded).toBeDefined()
-        expect(result.metadata.loaded).toContain(path.join(tmp.path, "subdir", "AGENTS.md"))
-      },
-    })
-  })
+  it.live("loads AGENTS.md from parent directory and includes in metadata", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "subdir", "AGENTS.md"), "# Test Instructions\nDo something special.")
+      yield* put(path.join(dir, "subdir", "nested", "test.txt"), "test content")
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "subdir", "nested", "test.txt") })
+      expect(result.output).toContain("test content")
+      expect(result.output).toContain("system-reminder")
+      expect(result.output).toContain("Test Instructions")
+      expect(result.metadata.loaded).toBeDefined()
+      expect(result.metadata.loaded).toContain(path.join(dir, "subdir", "AGENTS.md"))
+    }),
+  )
 })
 
 describe("tool.read binary detection", () => {
-  test("rejects text extension files with null bytes", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const bytes = Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x77, 0x6f, 0x72, 0x6c, 0x64])
-        await Bun.write(path.join(dir, "null-byte.txt"), bytes)
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        await expect(read.execute({ filePath: path.join(tmp.path, "null-byte.txt") }, ctx)).rejects.toThrow(
-          "Cannot read binary file",
-        )
-      },
-    })
-  })
+  it.live("rejects text extension files with null bytes", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const bytes = Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x77, 0x6f, 0x72, 0x6c, 0x64])
+      yield* put(path.join(dir, "null-byte.txt"), bytes)
 
-  test("rejects known binary extensions", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "module.wasm"), "not really wasm")
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        await expect(read.execute({ filePath: path.join(tmp.path, "module.wasm") }, ctx)).rejects.toThrow(
-          "Cannot read binary file",
-        )
-      },
-    })
-  })
+      const err = yield* fail(dir, { filePath: path.join(dir, "null-byte.txt") })
+      expect(err.message).toContain("Cannot read binary file")
+    }),
+  )
+
+  it.live("rejects known binary extensions", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "module.wasm"), "not really wasm")
+
+      const err = yield* fail(dir, { filePath: path.join(dir, "module.wasm") })
+      expect(err.message).toContain("Cannot read binary file")
+    }),
+  )
 })

@@ -1,6 +1,6 @@
 import { JSX } from "solid-js"
 
-export function IconZen(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+export function IconZen(_props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg width="84" height="30" viewBox="0 0 84 30" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M24 24H6V18H18V12H24V24ZM6 18H0V12H6V18Z" fill="currentColor" fill-opacity="0.2" />
@@ -13,7 +13,7 @@ export function IconZen(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   )
 }
 
-export function IconGo(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+export function IconGo(_props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg width="54" height="30" viewBox="0 0 54 30" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M24 30H0V0H24V6H6V24H18V18H12V12H24V30Z" fill="currentColor" />

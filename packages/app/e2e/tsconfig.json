@@ -5,5 +5,5 @@
     "rootDir": "..",
     "types": ["node", "bun"]
   },
-  "include": ["./**/*.ts", "../src/testing/terminal.ts"]
+  "include": ["./**/*.ts"]
 }

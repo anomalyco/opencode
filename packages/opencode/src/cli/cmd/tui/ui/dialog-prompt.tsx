@@ -45,6 +45,13 @@ export function DialogPrompt(props: DialogPromptProps) {
 
   createEffect(() => {
     if (!textarea || textarea.isDestroyed) return
+    const traits = props.busy
+      ? {
+          suspend: true,
+          status: "BUSY",
+        }
+      : {}
+    textarea.traits = traits
     if (props.busy) {
       textarea.blur()
       return
@@ -71,7 +78,9 @@ export function DialogPrompt(props: DialogPromptProps) {
           }}
           height={3}
           keyBindings={props.busy ? [] : [{ name: "return", action: "submit" }]}
-          ref={(val: TextareaRenderable) => (textarea = val)}
+          ref={(val: TextareaRenderable) => {
+            textarea = val
+          }}
           initialValue={props.value}
           placeholder={props.placeholder ?? "Enter text"}
           placeholderColor={theme.textMuted}

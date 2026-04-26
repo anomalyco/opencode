@@ -82,8 +82,6 @@ function themeCurrent(): HostPluginApi["theme"]["current"] {
 
 type Opts = {
   client?: HostPluginApi["client"] | (() => HostPluginApi["client"])
-  scopedClient?: HostPluginApi["scopedClient"]
-  workspace?: Partial<HostPluginApi["workspace"]>
   renderer?: HostPluginApi["renderer"]
   count?: Count
   keybind?: Partial<HostPluginApi["keybind"]>
@@ -95,7 +93,6 @@ type Opts = {
     provider?: HostPluginApi["state"]["provider"]
     path?: HostPluginApi["state"]["path"]
     vcs?: HostPluginApi["state"]["vcs"]
-    workspace?: Partial<HostPluginApi["state"]["workspace"]>
     session?: Partial<HostPluginApi["state"]["session"]>
     part?: HostPluginApi["state"]["part"]
     lsp?: HostPluginApi["state"]["lsp"]
@@ -127,11 +124,6 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         ? () => opts.client as HostPluginApi["client"]
         : fallback
   const client = () => read()
-  const scopedClient = opts.scopedClient ?? ((_workspaceID?: string) => client())
-  const workspace: HostPluginApi["workspace"] = {
-    current: opts.workspace?.current ?? (() => undefined),
-    set: opts.workspace?.set ?? (() => {}),
-  }
   let depth = 0
   let size: "medium" | "large" | "xlarge" = "medium"
   const has = opts.theme?.has ?? (() => false)
@@ -171,8 +163,6 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     get client() {
       return client()
     },
-    scopedClient,
-    workspace,
     event: {
       on: () => {
         if (count) count.event_add += 1
@@ -211,6 +201,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         }
       },
       trigger: () => {},
+      show: () => {},
     },
     route: {
       register: () => {
@@ -231,6 +222,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       DialogConfirm: () => null,
       DialogPrompt: () => null,
       DialogSelect: () => null,
+      Slot: () => null,
       Prompt: () => null,
       toast: () => {},
       dialog: {
@@ -284,14 +276,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return opts.state?.provider ?? []
       },
       get path() {
-        return opts.state?.path ?? { state: "", config: "", worktree: "", directory: "" }
+        return opts.state?.path ?? { home: "", state: "", config: "", worktree: "", directory: "" }
       },
       get vcs() {
         return opts.state?.vcs
-      },
-      workspace: {
-        list: opts.state?.workspace?.list ?? (() => []),
-        get: opts.state?.workspace?.get ?? (() => undefined),
       },
       session: {
         count: opts.state?.session?.count ?? (() => 0),

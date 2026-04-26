@@ -1,6 +1,6 @@
 import { NodeHttpServer, NodeHttpServerRequest } from "@effect/platform-node"
 import * as Http from "node:http"
-import { Deferred, Effect, Layer, ServiceMap, Stream } from "effect"
+import { Deferred, Effect, Layer, Context, Stream } from "effect"
 import * as HttpServer from "effect/unstable/http/HttpServer"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 
@@ -254,6 +254,16 @@ function responseToolArgs(id: string, text: string, seq: number) {
   }
 }
 
+function responseToolArgsDone(id: string, args: string, seq: number) {
+  return {
+    type: "response.function_call_arguments.done",
+    sequence_number: seq,
+    output_index: 0,
+    item_id: id,
+    arguments: args,
+  }
+}
+
 function responseToolDone(tool: { id: string; item: string; name: string; args: string }, seq: number) {
   return {
     type: "response.output_item.done",
@@ -390,6 +400,8 @@ function responses(item: Sse, model: string) {
     lines.push(responseReasonDone(reason, seq))
   }
   if (call && !item.hang && !item.error) {
+    seq += 1
+    lines.push(responseToolArgsDone(call.item, call.args, seq))
     seq += 1
     lines.push(responseToolDone(call, seq))
   }
@@ -584,28 +596,9 @@ function hit(url: string, body: unknown) {
   } satisfies Hit
 }
 
-/** Auto-acknowledging tool-result follow-ups avoids requiring tests to queue two responses per tool call. */
-function isToolResultFollowUp(body: unknown): boolean {
+function isTitleRequest(body: unknown): boolean {
   if (!body || typeof body !== "object") return false
-  // OpenAI chat format: last message has role "tool"
-  if ("messages" in body && Array.isArray(body.messages)) {
-    const last = body.messages[body.messages.length - 1]
-    return last?.role === "tool"
-  }
-  // Responses API: input contains function_call_output
-  if ("input" in body && Array.isArray(body.input)) {
-    return body.input.some((item: Record<string, unknown>) => item?.type === "function_call_output")
-  }
-  return false
-}
-
-function requestSummary(body: unknown): string {
-  if (!body || typeof body !== "object") return "empty body"
-  if ("messages" in body && Array.isArray(body.messages)) {
-    const roles = body.messages.map((m: Record<string, unknown>) => m.role).join(",")
-    return `messages=[${roles}]`
-  }
-  return `keys=[${Object.keys(body).join(",")}]`
+  return JSON.stringify(body).includes("Generate a title for this conversation")
 }
 
 namespace TestLLMServer {
@@ -623,6 +616,7 @@ namespace TestLLMServer {
     readonly error: (status: number, body: unknown) => Effect.Effect<void>
     readonly hang: Effect.Effect<void>
     readonly hold: (value: string, wait: PromiseLike<unknown>) => Effect.Effect<void>
+    readonly reset: Effect.Effect<void>
     readonly hits: Effect.Effect<Hit[]>
     readonly calls: Effect.Effect<number>
     readonly wait: (count: number) => Effect.Effect<void>
@@ -632,7 +626,7 @@ namespace TestLLMServer {
   }
 }
 
-export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServer.Service>()("@test/LLMServer") {
+export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.Service>()("@test/LLMServer") {
   static readonly layer = Layer.effect(
     TestLLMServer,
     Effect.gen(function* () {
@@ -671,21 +665,20 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         const req = yield* HttpServerRequest.HttpServerRequest
         const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
         const current = hit(req.originalUrl, body)
+        if (isTitleRequest(body)) {
+          hits = [...hits, current]
+          yield* notify()
+          const auto: Sse = { type: "sse", head: [role()], tail: [textLine("E2E Title"), finishLine("stop")] }
+          if (mode === "responses") return send(responses(auto, modelFrom(body)))
+          return send(auto)
+        }
         const next = pull(current)
         if (!next) {
-          // Auto-acknowledge tool-result follow-ups so tests only need to
-          // queue one response per tool call instead of two.
-          if (isToolResultFollowUp(body)) {
-            hits = [...hits, current]
-            yield* notify()
-            const auto: Sse = { type: "sse", head: [role()], tail: [textLine("ok"), finishLine("stop")] }
-            if (mode === "responses") return send(responses(auto, modelFrom(body)))
-            return send(auto)
-          }
-          misses = [...misses, current]
-          const summary = requestSummary(body)
-          console.warn(`[TestLLMServer] unmatched request: ${req.originalUrl} (${summary}, pending=${list.length})`)
-          return HttpServerResponse.text(`unexpected request: ${summary}`, { status: 500 })
+          hits = [...hits, current]
+          yield* notify()
+          const auto: Sse = { type: "sse", head: [role()], tail: [textLine("ok"), finishLine("stop")] }
+          if (mode === "responses") return send(responses(auto, modelFrom(body)))
+          return send(auto)
         }
         hits = [...hits, current]
         yield* notify()
@@ -754,6 +747,12 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         }).pipe(Effect.withSpan("TestLLMServer.hang")),
         hold: Effect.fn("TestLLMServer.hold")(function* (value: string, wait: PromiseLike<unknown>) {
           queue(reply().wait(wait).text(value).stop().item())
+        }),
+        reset: Effect.sync(() => {
+          hits = []
+          list = []
+          waits = []
+          misses = []
         }),
         hits: Effect.sync(() => [...hits]),
         calls: Effect.sync(() => hits.length),

@@ -11,6 +11,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@tui/*": ["./src/cli/cmd/tui/*"],
+      "@test/*": ["./test/*"],
       "@plugin/*": ["./plugin/*"],
       "@shell-mode": ["./plugin/shell-mode/index.ts"],
       "@shell-mode/*": ["./plugin/shell-mode/*"],

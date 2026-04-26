@@ -38,7 +38,7 @@ export function Avatar(props: AvatarProps) {
       data-size={split.size || "normal"}
       data-has-image={src ? "" : undefined}
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
       style={{

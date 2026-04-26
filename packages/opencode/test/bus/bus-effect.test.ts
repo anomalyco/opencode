@@ -1,10 +1,10 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Layer, Stream } from "effect"
 import z from "zod"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -13,9 +13,7 @@ const TestEvent = {
   Pong: BusEvent.define("test.effect.pong", z.object({ message: z.string() })),
 }
 
-const node = NodeChildProcessSpawner.layer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-)
+const node = CrossSpawnSpawner.defaultLayer
 
 const live = Layer.mergeAll(Bus.layer, node)
 

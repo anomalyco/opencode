@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createSignal, createMemo, createEffect, on, For, Show, Index, batch } from "solid-js"
+import { createSignal, createMemo, createEffect, on, For, Show, batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import type {
   Message,
@@ -9,7 +9,6 @@ import type {
   TextPart,
   ReasoningPart,
   ToolPart,
-  CompactionPart,
   FilePart,
   AgentPart,
 } from "@opencode-ai/sdk/v2"
@@ -555,10 +554,6 @@ function toolPart(sample: (typeof TOOL_SAMPLES)[keyof typeof TOOL_SAMPLES], stat
   } as ToolPart
 }
 
-function compactionPart(): CompactionPart {
-  return { id: uid(), type: "compaction", auto: true } as CompactionPart
-}
-
 // ---------------------------------------------------------------------------
 // CSS Controls definition
 // ---------------------------------------------------------------------------
@@ -568,6 +563,7 @@ const MD = "markdown.css"
 const MP = "message-part.css"
 const ST = "session-turn.css"
 const CL = "collapsible.css"
+const BT = "basic-tool.css"
 
 /**
  * Source mapping for a CSS control.
@@ -607,10 +603,10 @@ const CSS_CONTROLS: CSSControl[] = [
   // --- Timeline spacing ---
   {
     key: "turn-gap",
-    label: "Turn gap",
+    label: "Above user messages",
     group: "Timeline Spacing",
     type: "range",
-    initial: "48",
+    initial: "32",
     selector: '[data-slot="session-turn-list"]',
     property: "gap",
     min: "0",
@@ -621,10 +617,10 @@ const CSS_CONTROLS: CSSControl[] = [
   },
   {
     key: "container-gap",
-    label: "Container gap",
+    label: "Below user messages",
     group: "Timeline Spacing",
     type: "range",
-    initial: "18",
+    initial: "0",
     selector: '[data-slot="session-turn-message-container"]',
     property: "gap",
     min: "0",
@@ -1041,11 +1037,39 @@ const CSS_CONTROLS: CSSControl[] = [
 
   // --- Tool parts ---
   {
+    key: "tool-subtitle-font-size",
+    label: "Subtitle font size",
+    group: "Tool Parts",
+    type: "range",
+    initial: "14",
+    selector: '[data-slot="basic-tool-tool-subtitle"]',
+    property: "font-size",
+    min: "10",
+    max: "22",
+    step: "1",
+    unit: "px",
+    source: { file: BT, anchor: '[data-slot="basic-tool-tool-subtitle"]', prop: "font-size", format: px },
+  },
+  {
+    key: "exa-output-font-size",
+    label: "Search output font size",
+    group: "Tool Parts",
+    type: "range",
+    initial: "14",
+    selector: '[data-component="exa-tool-output"]',
+    property: "font-size",
+    min: "10",
+    max: "22",
+    step: "1",
+    unit: "px",
+    source: { file: MP, anchor: '[data-component="exa-tool-output"]', prop: "font-size", format: px },
+  },
+  {
     key: "tool-content-gap",
     label: "Trigger/content gap",
     group: "Tool Parts",
     type: "range",
-    initial: "8",
+    initial: "4",
     selector: '[data-component="collapsible"].tool-collapsible',
     property: "--tool-content-gap",
     min: "0",
@@ -1059,7 +1083,7 @@ const CSS_CONTROLS: CSSControl[] = [
     label: "Explored tool gap",
     group: "Explored Group",
     type: "range",
-    initial: "14",
+    initial: "4",
     selector: '[data-component="context-tool-group-list"]',
     property: "gap",
     min: "0",

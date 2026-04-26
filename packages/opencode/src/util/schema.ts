@@ -6,7 +6,7 @@ import { Schema } from "effect"
  * @example
  *   export const Foo = fooSchema.pipe(
  *     withStatics((schema) => ({
- *       zero: schema.makeUnsafe(0),
+ *       zero: schema.make(0),
  *       from: Schema.decodeUnknownOption(schema),
  *     }))
  *   )
@@ -26,7 +26,7 @@ type NewtypeBrand<Tag extends string> = { readonly [NewtypeBrand]: Tag }
  * @example
  *   class QuestionID extends Newtype<QuestionID>()("QuestionID", Schema.String) {
  *     static make(id: string): QuestionID {
- *       return this.makeUnsafe(id)
+ *       return this.make(id)
  *     }
  *   }
  *
@@ -39,7 +39,7 @@ export function Newtype<Self>() {
     abstract class Base {
       declare readonly [NewtypeBrand]: Tag
 
-      static makeUnsafe(value: Schema.Schema.Type<S>): Self {
+      static make(value: Schema.Schema.Type<S>): Self {
         return value as unknown as Self
       }
     }
@@ -47,7 +47,7 @@ export function Newtype<Self>() {
     Object.setPrototypeOf(Base, schema)
 
     return Base as unknown as (abstract new (_: never) => Branded) & {
-      readonly makeUnsafe: (value: Schema.Schema.Type<S>) => Self
-    } & Omit<Schema.Opaque<Self, S, {}>, "makeUnsafe">
+      readonly make: (value: Schema.Schema.Type<S>) => Self
+    } & Omit<Schema.Opaque<Self, S, {}>, "make">
   }
 }
