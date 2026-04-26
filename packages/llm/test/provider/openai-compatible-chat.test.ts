@@ -212,7 +212,7 @@ describe("OpenAI-compatible Chat adapter", () => {
                     { role: "user", content: "Say hello." },
                   ],
                 })
-                return new Response(
+                return input.respond(
                   sseEvents(
                     deltaChunk({ role: "assistant", content: "Hello" }),
                     deltaChunk({ content: "!" }),

@@ -1,12 +1,13 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Ref, Schema, Stream } from "effect"
-import { LLM } from "../src"
+import { Effect, Layer, Schema, Stream } from "effect"
+import { LLM, LLMEvent } from "../src"
 import { client } from "../src/adapter"
 import { OpenAIChat } from "../src/provider/openai-chat"
 import { tool, ToolFailure } from "../src/tool"
 import { ToolRuntime } from "../src/tool-runtime"
 import { testEffect } from "./lib/effect"
-import { dynamicResponse } from "./lib/http"
+import { scriptedResponses } from "./lib/http"
+import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
 
 const model = OpenAIChat.model({
@@ -22,38 +23,6 @@ const baseRequest = LLM.request({
 })
 
 const it = testEffect(Layer.empty)
-
-const deltaChunk = (delta: object, finishReason: string | null = null) => ({
-  id: "chatcmpl_x",
-  choices: [{ delta, finish_reason: finishReason }],
-  usage: null,
-})
-
-const toolCallChunk = (id: string, name: string, args: string) =>
-  deltaChunk({
-    role: "assistant",
-    tool_calls: [{ index: 0, id, function: { name, arguments: args } }],
-  })
-
-const finishChunk = (reason: string) => deltaChunk({}, reason)
-
-/**
- * Builds an HTTP layer where successive requests return successive bodies.
- * Used to script multi-step model exchanges.
- */
-const scriptedResponses = (bodies: ReadonlyArray<string>) =>
-  Layer.unwrap(
-    Effect.gen(function* () {
-      const cursor = yield* Ref.make(0)
-      return dynamicResponse(() =>
-        Effect.gen(function* () {
-          const index = yield* Ref.getAndUpdate(cursor, (n) => n + 1)
-          const body = bodies[index] ?? bodies.at(-1)!
-          return new Response(body, { headers: { "content-type": "text/event-stream" } })
-        }),
-      )
-    }),
-  )
 
 const get_weather = tool({
   description: "Get current weather for a city.",
@@ -71,33 +40,25 @@ describe("ToolRuntime", () => {
     Effect.gen(function* () {
       const llm = client({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
-        sseEvents(
-          toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'),
-          finishChunk("tool_calls"),
-        ),
-        sseEvents(
-          deltaChunk({ role: "assistant", content: "It's sunny in Paris." }),
-          finishChunk("stop"),
-        ),
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
+        sseEvents(deltaChunk({ role: "assistant", content: "It's sunny in Paris." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: baseRequest,
-          tools: { get_weather },
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
       )
 
-      const types = events.map((event) => event.type)
-      expect(types).toContain("tool-call")
-      expect(types).toContain("tool-result")
-      expect(events.find((event) => event.type === "tool-result")).toMatchObject({
+      const result = events.find(LLMEvent.guards["tool-result"])
+      expect(result).toMatchObject({
         type: "tool-result",
         id: "call_1",
         name: "get_weather",
         result: { type: "json", value: { temperature: 22, condition: "sunny" } },
       })
-      expect(types.at(-1)).toBe("request-finish")
+      expect(events.at(-1)?.type).toBe("request-finish")
       expect(LLM.outputText({ events })).toBe("It's sunny in Paris.")
     }),
   )
@@ -106,27 +67,20 @@ describe("ToolRuntime", () => {
     Effect.gen(function* () {
       const llm = client({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
-        sseEvents(
-          toolCallChunk("call_1", "missing_tool", "{}"),
-          finishChunk("tool_calls"),
-        ),
+        sseEvents(toolCallChunk("call_1", "missing_tool", "{}"), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Sorry." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: baseRequest,
-          tools: { get_weather },
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
       )
 
-      const toolError = events.find((event) => event.type === "tool-error")
-      expect(toolError).toMatchObject({
-        type: "tool-error",
-        id: "call_1",
-        name: "missing_tool",
-      })
-      expect((toolError as { message: string }).message).toContain("Unknown tool")
+      const toolError = events.find(LLMEvent.guards["tool-error"])
+      expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "missing_tool" })
+      expect(toolError?.message).toContain("Unknown tool")
     }),
   )
 
@@ -134,23 +88,20 @@ describe("ToolRuntime", () => {
     Effect.gen(function* () {
       const llm = client({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
-        sseEvents(
-          toolCallChunk("call_1", "get_weather", '{"city":42}'),
-          finishChunk("tool_calls"),
-        ),
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":42}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: baseRequest,
-          tools: { get_weather },
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
       )
 
-      const toolError = events.find((event) => event.type === "tool-error")
+      const toolError = events.find(LLMEvent.guards["tool-error"])
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
-      expect((toolError as { message: string }).message).toContain("Invalid tool input")
+      expect(toolError?.message).toContain("Invalid tool input")
     }),
   )
 
@@ -158,38 +109,33 @@ describe("ToolRuntime", () => {
     Effect.gen(function* () {
       const llm = client({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
-        sseEvents(
-          toolCallChunk("call_1", "get_weather", '{"city":"FAIL"}'),
-          finishChunk("tool_calls"),
-        ),
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"FAIL"}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Sorry." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: baseRequest,
-          tools: { get_weather },
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
       )
 
-      const toolError = events.find((event) => event.type === "tool-error")
+      const toolError = events.find(LLMEvent.guards["tool-error"])
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
-      expect((toolError as { message: string }).message).toBe("Weather lookup failed for FAIL")
+      expect(toolError?.message).toBe("Weather lookup failed for FAIL")
     }),
   )
 
   it.effect("stops when the model finishes without requesting more tools", () =>
     Effect.gen(function* () {
       const llm = client({ adapters: [OpenAIChat.adapter] })
-      const layer = scriptedResponses([
-        sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
-      ])
+      const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: baseRequest,
-          tools: { get_weather },
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
       )
 
       expect(events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
@@ -203,22 +149,17 @@ describe("ToolRuntime", () => {
       // Every script entry asks for another tool call. With maxSteps: 2 the
       // runtime should run at most two model rounds and then exit even though
       // the model still wants to keep going.
-      const toolCallStep = sseEvents(
-        toolCallChunk("call_x", "get_weather", '{"city":"Paris"}'),
-        finishChunk("tool_calls"),
-      )
+      const toolCallStep = sseEvents(toolCallChunk("call_x", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls"))
       const layer = scriptedResponses([toolCallStep, toolCallStep, toolCallStep])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: baseRequest,
-          tools: { get_weather },
-          maxSteps: 2,
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather }, maxSteps: 2 }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
       )
 
-      const finishEvents = events.filter((event) => event.type === "request-finish")
-      expect(finishEvents).toHaveLength(2)
+      expect(events.filter(LLMEvent.guards["request-finish"])).toHaveLength(2)
     }),
   )
 
@@ -226,10 +167,7 @@ describe("ToolRuntime", () => {
     Effect.gen(function* () {
       const llm = client({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
-        sseEvents(
-          toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'),
-          finishChunk("tool_calls"),
-        ),
+        sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Should not run." }), finishChunk("stop")),
       ])
 
@@ -241,53 +179,38 @@ describe("ToolRuntime", () => {
         }).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
-      const finishEvents = events.filter((event) => event.type === "request-finish")
-      expect(finishEvents).toHaveLength(1)
-      // No tool-result was emitted because stopWhen fired before dispatch
-      expect(events.some((event) => event.type === "tool-result")).toBe(false)
+      expect(events.filter(LLMEvent.guards["request-finish"])).toHaveLength(1)
+      expect(events.find(LLMEvent.guards["tool-result"])).toBeUndefined()
     }),
   )
 
   it.effect("dispatches multiple tool calls in one step concurrently", () =>
     Effect.gen(function* () {
       const llm = client({ adapters: [OpenAIChat.adapter] })
-      // Two tool calls in the same step; each accumulates in its own index.
-      const body = `data: ${JSON.stringify({
-        id: "x",
-        choices: [
-          {
-            delta: {
-              role: "assistant",
-              tool_calls: [
-                { index: 0, id: "c1", function: { name: "get_weather", arguments: '{"city":"Paris"}' } },
-                { index: 1, id: "c2", function: { name: "get_weather", arguments: '{"city":"Tokyo"}' } },
-              ],
-            },
-            finish_reason: null,
-          },
-        ],
-        usage: null,
-      })}\n\ndata: ${JSON.stringify({
-        id: "x",
-        choices: [{ delta: {}, finish_reason: "tool_calls" }],
-        usage: null,
-      })}\n\ndata: [DONE]\n\n`
-
       const layer = scriptedResponses([
-        body,
+        sseEvents(
+          deltaChunk({
+            role: "assistant",
+            tool_calls: [
+              { index: 0, id: "c1", function: { name: "get_weather", arguments: '{"city":"Paris"}' } },
+              { index: 1, id: "c2", function: { name: "get_weather", arguments: '{"city":"Tokyo"}' } },
+            ],
+          }),
+          finishChunk("tool_calls"),
+        ),
         sseEvents(deltaChunk({ role: "assistant", content: "Both done." }), finishChunk("stop")),
       ])
 
       const events = Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: baseRequest,
-          tools: { get_weather },
-        }).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* ToolRuntime.run(llm, { request: baseRequest, tools: { get_weather } }).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
       )
 
-      const results = events.filter((event) => event.type === "tool-result")
+      const results = events.filter(LLMEvent.guards["tool-result"])
       expect(results).toHaveLength(2)
-      expect(results.map((event) => (event as { id: string }).id).sort()).toEqual(["c1", "c2"])
+      expect(results.map((event) => event.id).toSorted()).toEqual(["c1", "c2"])
     }),
   )
 })

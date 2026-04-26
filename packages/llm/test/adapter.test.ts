@@ -80,9 +80,9 @@ const gemini = Adapter.define<FakeDraft, FakeDraft>({
   protocol: "gemini",
 })
 
-const echoLayer = dynamicResponse(({ text }) =>
+const echoLayer = dynamicResponse(({ text, respond }) =>
   Effect.succeed(
-    new Response(
+    respond(
       encodeJson([
         { type: "text", text: `echo:${text}` },
         { type: "finish", reason: "stop" },
