@@ -49,6 +49,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionRunState } from "../../src/session/run-state"
 import { SessionStatus } from "../../src/session/status"
 import { Snapshot } from "../../src/snapshot"
+import { AstParser } from "../../src/ast/parser"
 import { ToolRegistry } from "../../src/tool"
 import { Truncate } from "../../src/tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -130,6 +131,7 @@ function makeHttp() {
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
+    Layer.provide(AstParser.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),

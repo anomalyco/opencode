@@ -6,15 +6,28 @@ import * as Tool from "./tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Instance } from "../project/instance"
 import { Service as AstParserService } from "../ast/parser"
-import type { SupportedLanguage } from "../ast/languages"
+import { LANGUAGE_MAP } from "../ast/languages"
 import * as Bom from "@/util/bom"
 import DESCRIPTION from "./ast_query.txt"
 
-const LanguageSchema = Schema.Literal(
-  "typescript", "tsx", "javascript", "python", "bash",
-  "go", "rust", "ruby", "java", "c", "cpp",
-  "css", "html", "json", "yaml", "toml",
-)
+const LanguageSchema = Schema.Union([
+  Schema.Literal("typescript"),
+  Schema.Literal("tsx"),
+  Schema.Literal("javascript"),
+  Schema.Literal("python"),
+  Schema.Literal("bash"),
+  Schema.Literal("go"),
+  Schema.Literal("rust"),
+  Schema.Literal("ruby"),
+  Schema.Literal("java"),
+  Schema.Literal("c"),
+  Schema.Literal("cpp"),
+  Schema.Literal("css"),
+  Schema.Literal("html"),
+  Schema.Literal("json"),
+  Schema.Literal("yaml"),
+  Schema.Literal("toml"),
+])
 
 export const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Absolute path to the file to query." }),
@@ -49,15 +62,16 @@ export const AstQueryTool = Tool.define(
             filePath,
             (yield* Bom.readFile(afs, filePath)).text,
             params.pattern,
-            params.language as SupportedLanguage | undefined,
+            params.language,
           )
 
-          if (matches.length === 0)
+          if (matches.length === 0) {
             return {
-              title:    `ast_query: no matches in ${path.relative(Instance.worktree, filePath)}`,
+              title:    `[ast_query] no matches in ${path.relative(Instance.worktree, filePath)}`,
               output:   `No nodes matched pattern: ${params.pattern}`,
               metadata: { matches: [] },
             }
+          }
 
           return {
             title:  `${path.relative(Instance.worktree, filePath)} — ${matches.length} match${matches.length !== 1 ? "es" : ""}`,
@@ -71,7 +85,7 @@ export const AstQueryTool = Tool.define(
               .join("\n"),
             metadata: { matches },
           }
-        }),
+        }).pipe(Effect.orDie),
     }
   }),
 )

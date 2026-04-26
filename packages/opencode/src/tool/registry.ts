@@ -146,7 +146,7 @@ export const layer: Layer.Layer<
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
-                const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                const result = yield* Effect.promise(() => def.execute(args as z.infer<typeof zodParams>, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const info = yield* agent.get(toolCtx.agent)
@@ -169,20 +169,21 @@ export const layer: Layer.Layer<
           Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
         )
         if (matches.length) yield* config.waitForDependencies()
-        for (const match of matches) {
-          const namespace = path.basename(match, path.extname(match))
-          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
-          for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-            custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
-          }
-        }
+        const toolDefs = yield* Effect.forEach(
+          matches,
+          Effect.fnUntraced(function* (match) {
+            const namespace = path.basename(match, path.extname(match))
+            const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
+            return Object.entries<ToolDefinition>(mod).map(([id, def]) =>
+              fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def),
+            )
+          }),
+          { concurrency: "unbounded" },
+        )
+        custom.push(...toolDefs.flat())
 
         const plugins = yield* plugin.list()
-        for (const p of plugins) {
-          for (const [id, def] of Object.entries(p.tool ?? {})) {
-            custom.push(fromPlugin(id, def))
-          }
-        }
+        custom.push(...plugins.flatMap((p) => Object.entries(p.tool ?? {}).map(([id, def]) => fromPlugin(id, def))))
 
         yield* config.get()
         const questionEnabled =
@@ -260,7 +261,7 @@ export const layer: Layer.Layer<
         "",
         "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
         "",
-        'Tool output includes a `<skill_content name="...">` block with the loaded content.',
+        '<skill_content name="..."> block with the loaded content.',
         "",
         "The following skills provide specialized sets of instructions for particular tasks",
         "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
