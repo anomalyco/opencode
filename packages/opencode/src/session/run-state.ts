@@ -97,9 +97,9 @@ export const layer = Layer.effect(
       const data = yield* InstanceState.get(state)
       data.interrupts.set(sessionID, type)
       yield* status.set(sessionID, { type })
-      if (type === "steer") {
-        yield* cancel(sessionID)
-      }
+      // We no longer call cancel(sessionID) for "steer" here.
+      // The stream processor will detect the "steer" interrupt, abort the stream,
+      // and let the existing runner gracefully read the new message on the next loop iteration.
     })
 
     const clearInterrupt = Effect.fn("SessionRunState.clearInterrupt")(function* (sessionID: SessionID) {

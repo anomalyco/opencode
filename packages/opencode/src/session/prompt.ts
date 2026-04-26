@@ -1295,7 +1295,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         if (input.noReply === true) return message
-        return yield* loop({ sessionID: input.sessionID })
+        return yield* loop({ sessionID: input.sessionID, isSteer: input.isSteer })
       },
     )
 
@@ -1525,6 +1525,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             if (interrupt === "wrap") {
               yield* state.clearInterrupt(sessionID)
               return "break" as const
+            }
+            if (interrupt === "steer") {
+              yield* state.clearInterrupt(sessionID)
             }
 
             if (result === "compact") {

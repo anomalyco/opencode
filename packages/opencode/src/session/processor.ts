@@ -554,20 +554,25 @@ export const layer: Layer.Layer<
             ctx.reasoningMap = {}
             const stream = llm.stream(streamInput)
 
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
+            yield* Effect.raceFirst(
+              stream.pipe(
+                Stream.tap((event) => handleEvent(event)),
+                Stream.takeUntil(() => ctx.needsCompaction),
+                Stream.runDrain,
+              ),
+              Effect.gen(function* () {
+                while (true) {
+                  yield* Effect.sleep("50 millis")
+                  if ((yield* runState.getInterrupt(ctx.sessionID)) === "steer") {
+                    return
+                  }
+                }
+              })
             )
           }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
                 aborted = true
-                const interruptType = yield* runState.getInterrupt(ctx.sessionID)
-                if (interruptType === "steer") {
-                  yield* runState.clearInterrupt(ctx.sessionID)
-                  return // Don't halt, just return so we can process the steer
-                }
                 if (!ctx.assistantMessage.error) {
                   yield* halt(new DOMException("Aborted", "AbortError"))
                 }
