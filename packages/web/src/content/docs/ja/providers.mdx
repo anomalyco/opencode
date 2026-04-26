@@ -331,58 +331,38 @@ Pro/Max サブスクリプションをお持ちでない場合は、[**API キ�
 
 ### Atomic Chat
 
-[Atomic Chat](https://atomic.chat) は、ローカル LLM を実行するためのデスクトップアプリケーションです。固定ポート `1337` 上で OpenAI 互換の API サーバーを公開します。
+opencode は、OpenAI 互換の API サーバーの背後でローカル LLM を実行するデスクトップアプリケーション [Atomic Chat](https://atomic.chat) 経由でローカルモデルを使うように設定できます（デフォルトのエンドポイントは `http://127.0.0.1:1337/v1`）。
 
-:::tip
-ポート `1337` は Atomic Chat の公開契約です。バージョン間で変更されないため、この設定はすべてのユーザーにとって安定しています。
-:::
-
-1. Atomic Chat アプリを起動し、少なくとも 1 つのモデル（たとえば _Qwen3.5 9B_、_Gemma 4 E4B_、_MiniMax M2.5_）を読み込みます。
-
-2. ローカルサーバーが応答していることを確認します:
-
-   ```bash
-   curl http://127.0.0.1:1337/v1/models
-   ```
-
-3. 設定ファイルを使って Atomic Chat を利用するように OpenCode を構成します:
-
-   ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "atomic-chat": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "Atomic Chat (local)",
-         "options": {
-           "baseURL": "http://127.0.0.1:1337/v1"
-         },
-         "models": {
-           "Qwen3_5-9B-IQ4_XS": {
-             "name": "Qwen3.5 9B (local)"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-4. `/models` コマンドを実行して、読み込んだモデルを選択します。
-
-   ```txt
-   /models
-   ```
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
 
 この例では:
 
-- `atomic-chat` はプロバイダー識別子です。任意の文字列を指定できます。
-- `npm` は AI SDK パッケージです。Atomic Chat が OpenAI 互換 API を公開しているため `@ai-sdk/openai-compatible` が使用されます。
-- `name` は UI に表示される名前です。
-- `options.baseURL` はローカルサーバーのエンドポイントです。
-- `models` はモデル ID のマップです。各 ID は `GET /v1/models` が返す `id` と一致している必要があります（Atomic Chat は名前を正規化します — 作者のプレフィックスは削除され、ドットはアンダースコアに置き換えられます）。
+- `atomic-chat` はカスタムプロバイダー ID です。任意の文字列を指定できます。
+- `npm` はこのプロバイダーに使用するパッケージを指定します。ここでは、任意の OpenAI 互換 API に対して `@ai-sdk/openai-compatible` を使用しています。
+- `name` は UI に表示されるプロバイダー名です。
+- `options.baseURL` はローカルサーバーのエンドポイントです。Atomic Chat のセットアップに合わせてホストとポートを変更してください。
+- `models` はモデル ID と表示名のマップです。各 ID は `GET /v1/models` が返す `id` と一致する必要があります。Atomic Chat に現在ロードされている ID の一覧は `curl http://127.0.0.1:1337/v1/models` を実行して確認できます。
 
-:::note
-Atomic Chat のエントリが [Models.dev](https://models.dev) にマージされると、プロバイダーとすべての祝福されたモデルは設定不要で `/connect` および `/models` に自動的に表示されます。
+:::tip
+ツール呼び出しがうまく動作しない場合は、ツール呼び出しに強いロード済みモデル（例えば Qwen-Coder や DeepSeek-Coder のバリアント）を選択してください。
 :::
 
 ---

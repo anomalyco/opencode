@@ -323,58 +323,38 @@ OpenCode Go คือแผนการสมัครสมาชิกรา�
 
 ### Atomic Chat
 
-[Atomic Chat](https://atomic.chat) เป็นแอปพลิเคชันเดสก์ท็อปสำหรับรัน LLM ในเครื่อง โดยเปิดเซิร์ฟเวอร์ API ที่เข้ากันได้กับ OpenAI บนพอร์ตคงที่ `1337`
+คุณสามารถกำหนดค่า opencode ให้ใช้โมเดลท้องถิ่นผ่าน [Atomic Chat](https://atomic.chat) ซึ่งเป็นแอปพลิเคชันเดสก์ท็อปที่เรียกใช้ LLM ในเครื่องภายใต้เซิร์ฟเวอร์ API ที่เข้ากันได้กับ OpenAI (ปลายทางเริ่มต้น `http://127.0.0.1:1337/v1`)
 
-:::tip
-พอร์ต `1337` คือสัญญาสาธารณะของ Atomic Chat และจะไม่เปลี่ยนแปลงระหว่างเวอร์ชัน ดังนั้นการตั้งค่านี้จึงเสถียรสำหรับผู้ใช้ทุกคน
-:::
-
-1. เปิดแอป Atomic Chat และโหลดโมเดลอย่างน้อยหนึ่งรายการ (เช่น _Qwen3.5 9B_, _Gemma 4 E4B_ หรือ _MiniMax M2.5_)
-
-2. ตรวจสอบว่าเซิร์ฟเวอร์ในเครื่องกำลังตอบสนอง:
-
-   ```bash
-   curl http://127.0.0.1:1337/v1/models
-   ```
-
-3. กำหนดค่า OpenCode ให้ใช้ Atomic Chat ผ่านไฟล์กำหนดค่าของคุณ:
-
-   ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "atomic-chat": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "Atomic Chat (local)",
-         "options": {
-           "baseURL": "http://127.0.0.1:1337/v1"
-         },
-         "models": {
-           "Qwen3_5-9B-IQ4_XS": {
-             "name": "Qwen3.5 9B (local)"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-4. รันคำสั่ง `/models` เพื่อเลือกโมเดลที่โหลดไว้
-
-   ```txt
-   /models
-   ```
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
 
 ในตัวอย่างนี้:
 
-- `atomic-chat` คือตัวระบุผู้ให้บริการ สามารถเป็นสตริงใดก็ได้ตามที่คุณต้องการ
-- `npm` คือแพ็กเกจ AI SDK ใช้ `@ai-sdk/openai-compatible` เนื่องจาก Atomic Chat เปิด API ที่เข้ากันได้กับ OpenAI
-- `name` คือชื่อที่แสดงใน UI
-- `options.baseURL` คือ endpoint ของเซิร์ฟเวอร์ในเครื่อง
-- `models` คือแผนที่ของ ID โมเดล แต่ละ ID ต้องตรงกับ `id` ที่ `GET /v1/models` คืนค่า (Atomic Chat ทำให้ชื่อเป็นรูปแบบมาตรฐาน — คำนำหน้าของผู้สร้างจะถูกตัดออก และจุดจะถูกแทนที่ด้วยเครื่องหมายขีดล่าง)
+- `atomic-chat` คือรหัสผู้ให้บริการที่กำหนดเอง สามารถเป็นสตริงใดก็ได้ที่คุณต้องการ
+- `npm` ระบุแพ็กเกจที่จะใช้สำหรับผู้ให้บริการนี้ ที่นี่ใช้ `@ai-sdk/openai-compatible` สำหรับ API ใดๆ ที่เข้ากันได้กับ OpenAI
+- `name` คือชื่อแสดงของผู้ให้บริการในอินเทอร์เฟซ
+- `options.baseURL` คือปลายทางของเซิร์ฟเวอร์ท้องถิ่น เปลี่ยนโฮสต์และพอร์ตให้ตรงกับการตั้งค่า Atomic Chat ของคุณ
+- `models` คือแผนที่ระหว่างรหัสโมเดลกับชื่อแสดง แต่ละรหัสต้องตรงกับ `id` ที่ส่งคืนโดย `GET /v1/models` — รัน `curl http://127.0.0.1:1337/v1/models` เพื่อแสดงรายการรหัสที่โหลดอยู่ใน Atomic Chat
 
-:::note
-เมื่อรายการ Atomic Chat ถูกรวมเข้าไปใน [Models.dev](https://models.dev) ผู้ให้บริการและโมเดลที่ได้รับพรทั้งหมดจะปรากฏใน `/connect` และ `/models` โดยอัตโนมัติ — ไม่ต้องกำหนดค่าใดๆ
+:::tip
+หากการเรียกเครื่องมือทำงานได้ไม่ดี ให้เลือกโมเดลที่โหลดแล้วซึ่งรองรับ tool calling ได้ดี (ตัวอย่างเช่น รุ่น Qwen-Coder หรือ DeepSeek-Coder)
 :::
 
 ---

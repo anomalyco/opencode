@@ -317,58 +317,38 @@ Eller hvis du allerede har en API-nøgle, kan du vælge **Manually enter API Key
 
 ### Atomic Chat
 
-[Atomic Chat](https://atomic.chat) er et skrivebordsprogram til at køre lokale LLM'er. Det eksponerer en OpenAI-kompatibel API-server på den faste port `1337`.
+Du kan konfigurere opencode til at bruge lokale modeller via [Atomic Chat](https://atomic.chat) — en desktopapplikation, der kører lokale LLM'er bag en OpenAI-kompatibel API-server (standard-endpoint `http://127.0.0.1:1337/v1`).
 
-:::tip
-Port `1337` er Atomic Chats offentlige kontrakt. Den ændrer sig ikke mellem versioner, så denne konfiguration er stabil for alle brugere.
-:::
-
-1. Start Atomic Chat-appen og indlæs mindst én model (for eksempel _Qwen3.5 9B_, _Gemma 4 E4B_ eller _MiniMax M2.5_).
-
-2. Bekræft, at den lokale server svarer:
-
-   ```bash
-   curl http://127.0.0.1:1337/v1/models
-   ```
-
-3. Konfigurer OpenCode til at bruge Atomic Chat via din konfigurationsfil:
-
-   ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "atomic-chat": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "Atomic Chat (local)",
-         "options": {
-           "baseURL": "http://127.0.0.1:1337/v1"
-         },
-         "models": {
-           "Qwen3_5-9B-IQ4_XS": {
-             "name": "Qwen3.5 9B (local)"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-4. Kør kommandoen `/models` for at vælge den indlæste model.
-
-   ```txt
-   /models
-   ```
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
 
 I dette eksempel:
 
-- `atomic-chat` er udbyder-id'et. Det kan være en hvilken som helst streng, du ønsker.
-- `npm` er AI SDK-pakken. `@ai-sdk/openai-compatible` bruges, fordi Atomic Chat eksponerer et OpenAI-kompatibelt API.
-- `name` er det navn, der vises i UI'en.
-- `options.baseURL` er den lokale servers endpoint.
-- `models` er et kort over model-id'er. Hvert id skal matche det `id`, som `GET /v1/models` returnerer (Atomic Chat normaliserer navne — forfatter-præfikset fjernes, og punktummer erstattes med understregninger).
+- `atomic-chat` er det brugerdefinerede udbyder-ID. Det kan være en vilkårlig streng.
+- `npm` specificerer pakken, der skal bruges for denne udbyder. Her bruges `@ai-sdk/openai-compatible` til enhver OpenAI-kompatibel API.
+- `name` er det viste navn på udbyderen i grænsefladen.
+- `options.baseURL` er endpoint'et for den lokale server. Ændr vært og port for at matche din Atomic Chat-opsætning.
+- `models` er en afbildning af model-ID'er til deres viste navne. Hvert ID skal matche det `id`, der returneres af `GET /v1/models` — kør `curl http://127.0.0.1:1337/v1/models` for at liste ID'erne, der i øjeblikket er indlæst i Atomic Chat.
 
-:::note
-Når Atomic Chat-posten er flettet ind i [Models.dev](https://models.dev), vises udbyderen og alle velsignede modeller automatisk i `/connect` og `/models` — uden konfiguration.
+:::tip
+Hvis værktøjskald ikke fungerer godt, så vælg en indlæst model med god tool calling-understøttelse (for eksempel en Qwen-Coder- eller DeepSeek-Coder-variant).
 :::
 
 ---

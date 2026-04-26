@@ -301,58 +301,38 @@ Oppure se hai già una chiave API, puoi selezionare **Manually enter API Key** e
 
 ### Atomic Chat
 
-[Atomic Chat](https://atomic.chat) è un'applicazione desktop per eseguire LLM in locale. Espone un server API compatibile con OpenAI sulla porta fissa `1337`.
+Puoi configurare opencode per utilizzare modelli locali tramite [Atomic Chat](https://atomic.chat), un'applicazione desktop che esegue LLM locali dietro un server API compatibile OpenAI (endpoint predefinito `http://127.0.0.1:1337/v1`).
 
-:::tip
-La porta `1337` è il contratto pubblico di Atomic Chat. Non cambia tra le versioni, quindi questa configurazione è stabile per ogni utente.
-:::
-
-1. Avvia l'applicazione Atomic Chat e carica almeno un modello (ad esempio _Qwen3.5 9B_, _Gemma 4 E4B_ o _MiniMax M2.5_).
-
-2. Verifica che il server locale stia rispondendo:
-
-   ```bash
-   curl http://127.0.0.1:1337/v1/models
-   ```
-
-3. Configura OpenCode per utilizzare Atomic Chat tramite il tuo file di configurazione:
-
-   ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "atomic-chat": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "Atomic Chat (local)",
-         "options": {
-           "baseURL": "http://127.0.0.1:1337/v1"
-         },
-         "models": {
-           "Qwen3_5-9B-IQ4_XS": {
-             "name": "Qwen3.5 9B (local)"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-4. Esegui il comando `/models` per selezionare il modello caricato.
-
-   ```txt
-   /models
-   ```
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
 
 In questo esempio:
 
-- `atomic-chat` è l'identificatore del provider. Può essere una qualsiasi stringa.
-- `npm` è il pacchetto AI SDK. Viene utilizzato `@ai-sdk/openai-compatible` poiché Atomic Chat espone un'API compatibile con OpenAI.
-- `name` è il nome visualizzato nell'interfaccia utente.
-- `options.baseURL` è l'endpoint del server locale.
-- `models` è una mappa di ID dei modelli. Ogni ID deve corrispondere all'`id` restituito da `GET /v1/models` (Atomic Chat normalizza i nomi — il prefisso dell'autore viene rimosso e i punti vengono sostituiti con underscore).
+- `atomic-chat` è l'ID personalizzato del provider. Può essere qualsiasi stringa.
+- `npm` specifica il pacchetto da utilizzare per questo provider. Qui viene usato `@ai-sdk/openai-compatible` per qualsiasi API compatibile OpenAI.
+- `name` è il nome visualizzato del provider nell'interfaccia.
+- `options.baseURL` è l'endpoint del server locale. Modifica host e porta in base alla tua configurazione Atomic Chat.
+- `models` è una mappa di ID modello ai rispettivi nomi visualizzati. Ogni ID deve corrispondere all'`id` restituito da `GET /v1/models` — esegui `curl http://127.0.0.1:1337/v1/models` per elencare gli ID attualmente caricati in Atomic Chat.
 
-:::note
-Una volta che la voce Atomic Chat sarà integrata in [Models.dev](https://models.dev), il provider e tutti i modelli benedetti appariranno automaticamente in `/connect` e `/models` — senza alcuna configurazione.
+:::tip
+Se le chiamate agli strumenti non funzionano bene, scegli un modello caricato con buon supporto per il tool calling (ad esempio, una variante Qwen-Coder o DeepSeek-Coder).
 :::
 
 ---

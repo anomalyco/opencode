@@ -325,58 +325,38 @@ Veya zaten bir API anahtarınız varsa **API Anahtarını Manuel Olarak Girin** 
 
 ### Atomic Chat
 
-[Atomic Chat](https://atomic.chat), yerel LLM'leri çalıştırmak için bir masaüstü uygulamasıdır. Sabit `1337` portu üzerinde OpenAI uyumlu bir API sunucusu sunar.
+opencode'u, yerel LLM'leri OpenAI uyumlu bir API sunucusunun arkasında çalıştıran bir masaüstü uygulaması olan [Atomic Chat](https://atomic.chat) aracılığıyla yerel modelleri kullanacak şekilde yapılandırabilirsiniz (varsayılan uç nokta `http://127.0.0.1:1337/v1`).
 
-:::tip
-`1337` portu, Atomic Chat'in kamuya açık sözleşmesidir. Sürümler arasında değişmez, bu nedenle bu yapılandırma tüm kullanıcılar için stabildir.
-:::
-
-1. Atomic Chat uygulamasını başlatın ve en az bir model yükleyin (örneğin, _Qwen3.5 9B_, _Gemma 4 E4B_ veya _MiniMax M2.5_).
-
-2. Yerel sunucunun yanıt verdiğini doğrulayın:
-
-   ```bash
-   curl http://127.0.0.1:1337/v1/models
-   ```
-
-3. OpenCode'u yapılandırma dosyanız aracılığıyla Atomic Chat'i kullanacak şekilde yapılandırın:
-
-   ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "atomic-chat": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "Atomic Chat (local)",
-         "options": {
-           "baseURL": "http://127.0.0.1:1337/v1"
-         },
-         "models": {
-           "Qwen3_5-9B-IQ4_XS": {
-             "name": "Qwen3.5 9B (local)"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-4. Yüklenen modeli seçmek için `/models` komutunu çalıştırın.
-
-   ```txt
-   /models
-   ```
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
 
 Bu örnekte:
 
-- `atomic-chat`, sağlayıcı tanımlayıcısıdır. İstediğiniz herhangi bir dize olabilir.
-- `npm`, AI SDK paketidir. Atomic Chat OpenAI uyumlu bir API sunduğundan `@ai-sdk/openai-compatible` kullanılır.
-- `name`, arayüzde gösterilen addır.
-- `options.baseURL`, yerel sunucu uç noktasıdır.
-- `models`, model kimliklerinin bir eşlemesidir. Her kimlik, `GET /v1/models` tarafından döndürülen `id` ile eşleşmelidir (Atomic Chat adları normalleştirir — yazar öneki kaldırılır ve noktalar alt çizgilerle değiştirilir).
+- `atomic-chat` özel sağlayıcı kimliğidir. İstediğiniz herhangi bir dize olabilir.
+- `npm` bu sağlayıcı için kullanılacak paketi belirtir. Burada, herhangi bir OpenAI uyumlu API için `@ai-sdk/openai-compatible` kullanılır.
+- `name` sağlayıcının arayüzde görüntülenen adıdır.
+- `options.baseURL` yerel sunucunun uç noktasıdır. Host ve portu Atomic Chat kurulumunuzla eşleşecek şekilde değiştirin.
+- `models` model kimliklerini görüntüleme adlarına eşleyen bir haritadır. Her ID, `GET /v1/models` tarafından döndürülen `id` ile eşleşmelidir — Atomic Chat'te yüklü kimlikleri listelemek için `curl http://127.0.0.1:1337/v1/models` çalıştırın.
 
-:::note
-Atomic Chat girişi [Models.dev](https://models.dev)'e birleştirildikten sonra sağlayıcı ve tüm kutsanmış modeller, herhangi bir yapılandırmaya gerek kalmadan `/connect` ve `/models` içinde otomatik olarak görünür.
+:::tip
+Araç çağrıları iyi çalışmıyorsa, tool calling desteği güçlü olan yüklü bir model seçin (örneğin, bir Qwen-Coder veya DeepSeek-Coder varyantı).
 :::
 
 ---

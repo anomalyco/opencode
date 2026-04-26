@@ -297,58 +297,38 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
 
 ### Atomic Chat
 
-[Atomic Chat](https://atomic.chat) 是一款用于运行本地 LLM 的桌面应用程序。它在固定端口 `1337` 上公开一个与 OpenAI 兼容的 API 服务器。
+你可以通过 [Atomic Chat](https://atomic.chat) 配置 opencode 以使用本地模型。Atomic Chat 是一款桌面应用程序，它在 OpenAI 兼容的 API 服务器后面运行本地 LLM（默认端点 `http://127.0.0.1:1337/v1`）。
 
-:::tip
-端口 `1337` 是 Atomic Chat 的公开契约。它不会在版本之间更改，因此此配置对每个用户都是稳定的。
-:::
-
-1. 启动 Atomic Chat 应用并加载至少一个模型（例如 _Qwen3.5 9B_、_Gemma 4 E4B_ 或 _MiniMax M2.5_）。
-
-2. 验证本地服务器是否响应：
-
-   ```bash
-   curl http://127.0.0.1:1337/v1/models
-   ```
-
-3. 通过配置文件配置 OpenCode 使用 Atomic Chat：
-
-   ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "atomic-chat": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "Atomic Chat (local)",
-         "options": {
-           "baseURL": "http://127.0.0.1:1337/v1"
-         },
-         "models": {
-           "Qwen3_5-9B-IQ4_XS": {
-             "name": "Qwen3.5 9B (local)"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-4. 运行 `/models` 命令以选择已加载的模型。
-
-   ```txt
-   /models
-   ```
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
 
 在此示例中：
 
-- `atomic-chat` 是提供商标识符。可以是任何你喜欢的字符串。
-- `npm` 是 AI SDK 包。由于 Atomic Chat 公开了与 OpenAI 兼容的 API，因此使用 `@ai-sdk/openai-compatible`。
-- `name` 是 UI 中显示的名称。
-- `options.baseURL` 是本地服务器端点。
-- `models` 是模型 ID 的映射。每个 ID 必须与 `GET /v1/models` 返回的 `id` 相匹配（Atomic Chat 会规范化名称——移除作者前缀，点号替换为下划线）。
+- `atomic-chat` 是自定义的提供商 ID。可以是任何你想要的字符串。
+- `npm` 指定此提供商使用的包。这里使用 `@ai-sdk/openai-compatible` 来连接任何 OpenAI 兼容的 API。
+- `name` 是提供商在界面中显示的名称。
+- `options.baseURL` 是本地服务器的端点。根据你的 Atomic Chat 设置修改主机和端口。
+- `models` 是模型 ID 到其显示名称的映射。每个 ID 必须与 `GET /v1/models` 返回的 `id` 匹配——运行 `curl http://127.0.0.1:1337/v1/models` 可列出 Atomic Chat 当前已加载的 ID。
 
-:::note
-一旦 Atomic Chat 条目合并到 [Models.dev](https://models.dev)，提供商和所有加持的模型将自动显示在 `/connect` 和 `/models` 中——无需配置。
+:::tip
+如果工具调用工作不佳，请选择一个对 tool calling 支持较好的已加载模型（例如 Qwen-Coder 或 DeepSeek-Coder 的变体）。
 :::
 
 ---

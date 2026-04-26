@@ -326,58 +326,38 @@ Ili ako već imate API ključ, možete odabrati **Ručno unesite API ključ** i 
 
 ### Atomic Chat
 
-[Atomic Chat](https://atomic.chat) je desktop aplikacija za pokretanje lokalnih LLM-ova. Izlaže OpenAI-kompatibilan API server na fiksnom portu `1337`.
+Možete konfigurirati opencode za korištenje lokalnih modela preko [Atomic Chata](https://atomic.chat) — desktop aplikacije koja pokreće lokalne LLM-ove iza OpenAI-kompatibilnog API servera (zadana krajnja tačka `http://127.0.0.1:1337/v1`).
 
-:::tip
-Port `1337` je javni ugovor Atomic Chata. Ne mijenja se između verzija, pa je ova konfiguracija stabilna za sve korisnike.
-:::
-
-1. Pokrenite Atomic Chat aplikaciju i učitajte najmanje jedan model (na primjer, _Qwen3.5 9B_, _Gemma 4 E4B_ ili _MiniMax M2.5_).
-
-2. Provjerite da li lokalni server odgovara:
-
-   ```bash
-   curl http://127.0.0.1:1337/v1/models
-   ```
-
-3. Konfigurišite OpenCode da koristi Atomic Chat putem vaše konfiguracijske datoteke:
-
-   ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "atomic-chat": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "Atomic Chat (local)",
-         "options": {
-           "baseURL": "http://127.0.0.1:1337/v1"
-         },
-         "models": {
-           "Qwen3_5-9B-IQ4_XS": {
-             "name": "Qwen3.5 9B (local)"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-4. Pokrenite naredbu `/models` za odabir učitanog modela.
-
-   ```txt
-   /models
-   ```
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
 
 U ovom primjeru:
 
-- `atomic-chat` je identifikator dobavljača. Može biti bilo koji string koji želite.
-- `npm` je AI SDK paket. Koristi se `@ai-sdk/openai-compatible` jer Atomic Chat izlaže OpenAI-kompatibilan API.
-- `name` je ime prikazano u korisničkom sučelju.
-- `options.baseURL` je krajnja tačka lokalnog servera.
-- `models` je mapa ID-jeva modela. Svaki ID mora odgovarati `id` koji vraća `GET /v1/models` (Atomic Chat normalizira imena — prefiks autora se uklanja, a tačke se zamjenjuju donjim crticama).
+- `atomic-chat` je prilagođeni ID provajdera. Može biti bilo koji niz.
+- `npm` specificira paket koji se koristi za ovog provajdera. Ovdje se koristi `@ai-sdk/openai-compatible` za svaki OpenAI-kompatibilni API.
+- `name` je prikazano ime provajdera u interfejsu.
+- `options.baseURL` je krajnja tačka lokalnog servera. Promijenite host i port da odgovaraju vašoj Atomic Chat konfiguraciji.
+- `models` je mapa ID-ova modela u njihova prikazana imena. Svaki ID mora odgovarati `id` vrijednosti koju vraća `GET /v1/models` — pokrenite `curl http://127.0.0.1:1337/v1/models` da vidite ID-ove trenutno učitane u Atomic Chat.
 
-:::note
-Kada se unos Atomic Chata spoji u [Models.dev](https://models.dev), dobavljač i svi blagoslovljeni modeli automatski će se pojaviti u `/connect` i `/models` — bez potrebe za konfiguracijom.
+:::tip
+Ako pozivi alata ne rade dobro, odaberite učitani model sa jakom podrškom za tool calling (na primjer, Qwen-Coder ili DeepSeek-Coder varijantu).
 :::
 
 ---
