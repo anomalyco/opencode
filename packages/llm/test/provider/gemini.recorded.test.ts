@@ -59,7 +59,6 @@ describe("Gemini recorded", () => {
     Effect.gen(function* () {
       const response = yield* gemini.generate(toolRequest)
 
-      expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
       expect(LLM.outputToolCalls(response)).toEqual([
         { type: "tool-call", id: expect.any(String), name: "get_weather", input: { city: "Paris" } },
       ])

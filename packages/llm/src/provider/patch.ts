@@ -1,6 +1,58 @@
 import { Model, Patch } from "../patch"
 import type { ContentPart, LLMRequest } from "../schema"
 
+const schemaIntentKeys = [
+  "type",
+  "properties",
+  "items",
+  "prefixItems",
+  "enum",
+  "const",
+  "$ref",
+  "additionalProperties",
+  "patternProperties",
+  "required",
+  "not",
+  "if",
+  "then",
+  "else",
+]
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const hasCombiner = (schema: unknown) =>
+  isRecord(schema) && (Array.isArray(schema.anyOf) || Array.isArray(schema.oneOf) || Array.isArray(schema.allOf))
+
+const hasSchemaIntent = (schema: unknown) => isRecord(schema) && (hasCombiner(schema) || schemaIntentKeys.some((key) => key in schema))
+
+const sanitizeGeminiSchemaNode = (schema: unknown): unknown => {
+  if (!isRecord(schema)) return Array.isArray(schema) ? schema.map(sanitizeGeminiSchemaNode) : schema
+
+  const result: Record<string, unknown> = Object.fromEntries(
+    Object.entries(schema).map(([key, value]) => [key, key === "enum" && Array.isArray(value) ? value.map(String) : sanitizeGeminiSchemaNode(value)]),
+  )
+
+  if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) result.type = "string"
+
+  const properties = result.properties
+  if (result.type === "object" && isRecord(properties) && Array.isArray(result.required)) {
+    result.required = result.required.filter((field) => typeof field === "string" && field in properties)
+  }
+
+  if (result.type === "array" && !hasCombiner(result)) {
+    result.items = result.items ?? {}
+    if (isRecord(result.items) && !hasSchemaIntent(result.items)) result.items = { ...result.items, type: "string" }
+  }
+
+  if (typeof result.type === "string" && result.type !== "object" && !hasCombiner(result)) {
+    delete result.properties
+    delete result.required
+  }
+
+  return result
+}
+
 const removeEmptyParts = (content: ReadonlyArray<ContentPart>) =>
   content.filter((part) => (part.type === "text" || part.type === "reasoning" ? part.text !== "" : true))
 
@@ -42,6 +94,15 @@ export const scrubMistralToolIds = Patch.prompt("mistral.scrub-tool-call-ids", {
   apply: (request) => rewriteToolIds(request, (id) => id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 9).padEnd(9, "0")),
 })
 
-export const defaults = [removeEmptyAnthropicContent, scrubClaudeToolIds, scrubMistralToolIds]
+export const sanitizeGeminiToolSchema = Patch.toolSchema("gemini.sanitize-tool-schema", {
+  reason: "Gemini rejects integer enums, dangling required fields, untyped arrays, and object keywords on scalar schemas",
+  when: Model.protocol("gemini").or(Model.provider("google"), Model.idIncludes("gemini")),
+  apply: (tool) => ({
+    ...tool,
+    inputSchema: sanitizeGeminiSchemaNode(tool.inputSchema) as Record<string, unknown>,
+  }),
+})
+
+export const defaults = [removeEmptyAnthropicContent, scrubClaudeToolIds, scrubMistralToolIds, sanitizeGeminiToolSchema]
 
 export * as ProviderPatch from "./patch"

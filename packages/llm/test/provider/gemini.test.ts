@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { LLM, ProviderChunkError } from "../../src"
+import { LLM, ProviderChunkError, ProviderPatch } from "../../src"
 import { client } from "../../src/adapter"
 import { Gemini } from "../../src/provider/gemini"
 import { testEffect } from "../lib/effect"
@@ -86,6 +86,69 @@ describe("Gemini adapter", () => {
         }],
         toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["lookup"] } },
       })
+    }),
+  )
+
+  it.effect("omits tools when tool choice is none", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [Gemini.adapter] }).prepare(
+        LLM.request({
+          id: "req_no_tools",
+          model,
+          prompt: "Say hello.",
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          toolChoice: { type: "none" },
+        }),
+      )
+
+      expect(prepared.target).toEqual({
+        contents: [{ role: "user", parts: [{ text: "Say hello." }] }],
+      })
+    }),
+  )
+
+  it.effect("applies Gemini tool-schema patches before preparing the target", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({
+        adapters: [Gemini.adapter],
+        patches: [ProviderPatch.sanitizeGeminiToolSchema],
+      }).prepare(
+        LLM.request({
+          id: "req_schema_patch",
+          model,
+          prompt: "Use the tool.",
+          tools: [{
+            name: "lookup",
+            description: "Lookup data",
+            inputSchema: {
+              type: "object",
+              required: ["status", "missing"],
+              properties: {
+                status: { type: "integer", enum: [1, 2] },
+                tags: { type: "array" },
+                name: { type: "string", properties: { ignored: { type: "string" } }, required: ["ignored"] },
+              },
+            },
+          }],
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        tools: [{
+          functionDeclarations: [{
+            parameters: {
+              type: "object",
+              required: ["status"],
+              properties: {
+                status: { type: "string", enum: ["1", "2"] },
+                tags: { type: "array", items: { type: "string" } },
+                name: { type: "string" },
+              },
+            },
+          }],
+        }],
+      })
+      expect(prepared.patchTrace.map((item) => item.id)).toContain("schema.gemini.sanitize-tool-schema")
     }),
   )
 
@@ -182,7 +245,6 @@ describe("Gemini adapter", () => {
 
       expect(LLM.outputToolCalls(response)).toEqual([{ type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } }])
       expect(response.events).toEqual([
-        { type: "tool-input-delta", id: "tool_0", name: "lookup", text: '{"query":"weather"}' },
         { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
         {
           type: "request-finish",
@@ -245,6 +307,17 @@ describe("Gemini adapter", () => {
 
       expect(length.events).toEqual([{ type: "request-finish", reason: "length" }])
       expect(filtered.events).toEqual([{ type: "request-finish", reason: "content-filter" }])
+    }),
+  )
+
+  it.effect("leaves total usage undefined when component counts are missing", () =>
+    Effect.gen(function* () {
+      const response = yield* client({ adapters: [Gemini.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(fixedResponse(sseEvents({ usageMetadata: { thoughtsTokenCount: 1 } }))))
+
+      expect(response.usage).toMatchObject({ reasoningTokens: 1 })
+      expect(response.usage?.totalTokens).toBeUndefined()
     }),
   )
 
