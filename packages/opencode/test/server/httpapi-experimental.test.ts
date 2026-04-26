@@ -5,6 +5,7 @@ import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../src/project/instance"
 import { InstanceRoutes } from "../../src/server/routes/instance"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/experimental"
+import { Database } from "../../src/storage"
 import { Log } from "../../src/util"
 import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
@@ -14,6 +15,7 @@ void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
+const testWorktreeMutations = process.platform === "win32" ? test.skip : test
 
 function app() {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
@@ -61,9 +63,10 @@ describe("experimental HttpApi", () => {
     })
 
     const headers = { "x-opencode-directory": tmp.path }
-    const [consoleState, consoleOrgs, toolIDs, worktrees, resources] = await Promise.all([
+    const [consoleState, consoleOrgs, toolList, toolIDs, worktrees, resources] = await Promise.all([
       app().request(ExperimentalPaths.console, { headers }),
       app().request(ExperimentalPaths.consoleOrgs, { headers }),
+      app().request(`${ExperimentalPaths.tool}?provider=opencode&model=gpt-5`, { headers }),
       app().request(ExperimentalPaths.toolIDs, { headers }),
       app().request(ExperimentalPaths.worktree, { headers }),
       app().request(ExperimentalPaths.resource, { headers }),
@@ -78,6 +81,15 @@ describe("experimental HttpApi", () => {
     expect(consoleOrgs.status).toBe(200)
     expect(await consoleOrgs.json()).toEqual({ orgs: [] })
 
+    expect(toolList.status).toBe(200)
+    expect(await toolList.json()).toContainEqual(
+      expect.objectContaining({
+        id: "bash",
+        description: expect.any(String),
+        parameters: expect.any(Object),
+      }),
+    )
+
     expect(toolIDs.status).toBe(200)
     expect(await toolIDs.json()).toContain("bash")
 
@@ -88,7 +100,33 @@ describe("experimental HttpApi", () => {
     expect(await resources.json()).toEqual({})
   })
 
-  test("serves worktree mutations through Hono bridge", async () => {
+  test("serves Console org switch through Hono bridge", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+    Database.Client()
+      .$client.prepare(
+        "INSERT INTO account (id, email, url, access_token, refresh_token, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "account-test",
+        "test@example.com",
+        "https://console.example.com",
+        "access",
+        "refresh",
+        Date.now(),
+        Date.now(),
+      )
+
+    const switched = await app().request(ExperimentalPaths.consoleSwitch, {
+      method: "POST",
+      headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
+      body: JSON.stringify({ accountID: "account-test", orgID: "org-test" }),
+    })
+
+    expect(switched.status).toBe(200)
+    expect(await switched.json()).toBe(true)
+  })
+
+  testWorktreeMutations("serves worktree mutations through Hono bridge", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
 
     const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
@@ -107,14 +145,16 @@ describe("experimental HttpApi", () => {
     expect(listed.status).toBe(200)
     expect(await listed.json()).toContain(info.directory)
 
-    const reset = await app().request(ExperimentalPaths.worktreeReset, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ directory: info.directory }),
-    })
+    if (process.platform !== "win32") {
+      const reset = await app().request(ExperimentalPaths.worktreeReset, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ directory: info.directory }),
+      })
 
-    expect(reset.status).toBe(200)
-    expect(await reset.json()).toBe(true)
+      expect(reset.status).toBe(200)
+      expect(await reset.json()).toBe(true)
+    }
 
     const removed = await app().request(ExperimentalPaths.worktree, {
       method: "DELETE",

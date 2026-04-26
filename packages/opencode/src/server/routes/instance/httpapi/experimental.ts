@@ -1,12 +1,16 @@
 import { Account } from "@/account/account"
+import { AccountID, OrgID } from "@/account/schema"
+import { Agent } from "@/agent/agent"
 import { Config } from "@/config"
 import { InstanceState } from "@/effect"
 import { MCP } from "@/mcp"
 import { Project } from "@/project"
+import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolRegistry } from "@/tool"
+import * as EffectZod from "@/util/effect-zod"
 import { Worktree } from "@/worktree"
 import { Effect, Layer, Option, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
 const ConsoleStateResponse = Schema.Struct({
@@ -28,13 +32,30 @@ const ConsoleOrgList = Schema.Struct({
   orgs: Schema.Array(ConsoleOrgOption),
 }).annotate({ identifier: "ConsoleOrgList" })
 
+const ConsoleSwitchPayload = Schema.Struct({
+  accountID: AccountID,
+  orgID: OrgID,
+}).annotate({ identifier: "ConsoleSwitchInput" })
+
 const ToolIDs = Schema.Array(Schema.String).annotate({ identifier: "ToolIDs" })
+const ToolListItem = Schema.Struct({
+  id: Schema.String,
+  description: Schema.String,
+  parameters: Schema.Record(Schema.String, Schema.Any),
+}).annotate({ identifier: "ToolListItem" })
+const ToolList = Schema.Array(ToolListItem).annotate({ identifier: "ToolList" })
+const ToolListQuery = Schema.Struct({
+  provider: ProviderID,
+  model: ModelID,
+})
 
 const WorktreeList = Schema.Array(Schema.String).annotate({ identifier: "WorktreeList" })
 
 export const ExperimentalPaths = {
   console: "/experimental/console",
   consoleOrgs: "/experimental/console/orgs",
+  consoleSwitch: "/experimental/console/switch",
+  tool: "/experimental/tool",
   toolIDs: "/experimental/tool/ids",
   worktree: "/experimental/worktree",
   worktreeReset: "/experimental/worktree/reset",
@@ -61,6 +82,27 @@ export const ExperimentalApi = HttpApi.make("experimental")
             identifier: "experimental.console.listOrgs",
             summary: "List switchable Console orgs",
             description: "Get the available Console orgs across logged-in accounts, including the current active org.",
+          }),
+        ),
+        HttpApiEndpoint.post("consoleSwitch", ExperimentalPaths.consoleSwitch, {
+          payload: ConsoleSwitchPayload,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.console.switchOrg",
+            summary: "Switch active Console org",
+            description: "Persist a new active Console account/org selection for the current local OpenCode state.",
+          }),
+        ),
+        HttpApiEndpoint.get("tool", ExperimentalPaths.tool, {
+          query: ToolListQuery,
+          success: ToolList,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "tool.list",
+            summary: "List tools",
+            description:
+              "Get a list of available tools with their JSON schema parameters for a specific provider and model combination.",
           }),
         ),
         HttpApiEndpoint.get("toolIDs", ExperimentalPaths.toolIDs, {
@@ -141,6 +183,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
 export const experimentalHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const account = yield* Account.Service
+    const agents = yield* Agent.Service
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
     const project = yield* Project.Service
@@ -183,6 +226,28 @@ export const experimentalHandlers = Layer.unwrap(
       }
     })
 
+    const switchConsole = Effect.fn("ExperimentalHttpApi.consoleSwitch")(function* (ctx: {
+      payload: typeof ConsoleSwitchPayload.Type
+    }) {
+      yield* account
+        .use(ctx.payload.accountID, Option.some(ctx.payload.orgID))
+        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+      return true
+    })
+
+    const tool = Effect.fn("ExperimentalHttpApi.tool")(function* (ctx: { query: typeof ToolListQuery.Type }) {
+      const list = yield* registry.tools({
+        providerID: ctx.query.provider,
+        modelID: ctx.query.model,
+        agent: yield* agents.get(yield* agents.defaultAgent()),
+      })
+      return list.map((item) => ({
+        id: item.id,
+        description: item.description,
+        parameters: EffectZod.toJsonSchema(item.parameters),
+      }))
+    })
+
     const toolIDs = Effect.fn("ExperimentalHttpApi.toolIDs")(function* () {
       return yield* registry.ids()
     })
@@ -222,6 +287,8 @@ export const experimentalHandlers = Layer.unwrap(
       handlers
         .handle("console", getConsole)
         .handle("consoleOrgs", listConsoleOrgs)
+        .handle("consoleSwitch", switchConsole)
+        .handle("tool", tool)
         .handle("toolIDs", toolIDs)
         .handle("worktree", worktree)
         .handle("worktreeCreate", worktreeCreate)
@@ -232,6 +299,7 @@ export const experimentalHandlers = Layer.unwrap(
   }),
 ).pipe(
   Layer.provide(Account.defaultLayer),
+  Layer.provide(Agent.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(MCP.defaultLayer),
   Layer.provide(Project.defaultLayer),
