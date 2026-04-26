@@ -1,11 +1,9 @@
-import { Cause, Effect, Schema, Stream } from "effect"
-import * as Sse from "effect/unstable/encoding/Sse"
+import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import {
   InvalidRequestError,
-  ProviderChunkError,
   Usage,
   type FinishReason,
   type ContentPart,
@@ -16,6 +14,9 @@ import {
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema"
+import { ProviderShared } from "./shared"
+
+const ADAPTER = "openai-chat"
 
 export type OpenAIChatModelInput = Omit<ModelInput, "provider" | "protocol" | "headers"> & {
   readonly apiKey?: string
@@ -131,9 +132,6 @@ const OpenAIChatChunk = Schema.Struct({
 })
 type OpenAIChatChunk = Schema.Schema.Type<typeof OpenAIChatChunk>
 
-const Json = Schema.fromJsonString(Schema.Unknown)
-const decodeJson = Schema.decodeUnknownSync(Json)
-const encodeJson = Schema.encodeSync(Json)
 const OpenAIChatChunkJson = Schema.fromJsonString(OpenAIChatChunk)
 const OpenAIChatTargetJson = Schema.fromJsonString(OpenAIChatTarget)
 const decodeChunk = Schema.decodeUnknownSync(OpenAIChatChunkJson)
@@ -161,7 +159,7 @@ const text = (values: ReadonlyArray<{ readonly text: string }>) => values.map((p
 
 const resultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
-  return encodeJson(part.result.value)
+  return ProviderShared.encodeJson(part.result.value)
 }
 
 const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
@@ -188,7 +186,7 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   type: "function",
   function: {
     name: part.name,
-    arguments: encodeJson(part.input),
+    arguments: ProviderShared.encodeJson(part.input),
   },
 })
 
@@ -286,35 +284,11 @@ const mapUsage = (usage: OpenAIChatChunk["usage"]): Usage | undefined => {
   })
 }
 
-const chunkError = (message: string, raw?: string) => new ProviderChunkError({ adapter: "openai-chat", message, raw })
-
-const streamError = (cause: Cause.Cause<unknown>) => {
-  const failed = cause.reasons.find(Cause.isFailReason)?.error
-  if (failed instanceof ProviderChunkError) return failed
-  return chunkError("Failed to read OpenAI Chat stream", Cause.pretty(cause))
-}
-
-const parseJson = (input: string, message: string) => {
-  try {
-    return decodeJson(input)
-  } catch {
-    throw chunkError(message, input)
-  }
-}
-
-const parseChunk = (data: string) => {
-  try {
-    return decodeChunk(data)
-  } catch {
-    throw chunkError("Invalid OpenAI Chat stream chunk", data)
-  }
-}
-
 const pushToolDelta = (tools: Record<number, ToolAccumulator>, delta: OpenAIChatToolCallDelta) => {
   const current = tools[delta.index]
   const id = delta.id ?? current?.id
   const name = delta.function?.name ?? current?.name
-  if (!id || !name) throw chunkError("OpenAI Chat tool call delta is missing id or name")
+  if (!id || !name) throw ProviderShared.chunkError(ADAPTER, "OpenAI Chat tool call delta is missing id or name")
 
   return {
     id,
@@ -328,7 +302,7 @@ const finishToolCalls = (state: ParserState) =>
     type: "tool-call" as const,
     id: tool.id,
     name: tool.name,
-    input: parseJson(tool.input || "{}", `Invalid JSON input for OpenAI Chat tool call ${tool.name}`),
+    input: ProviderShared.parseJson(ADAPTER, tool.input || "{}", `Invalid JSON input for OpenAI Chat tool call ${tool.name}`),
   }))
 
 const processChunk = (state: ParserState, chunk: OpenAIChatChunk): readonly [ParserState, ReadonlyArray<LLMEvent>] => {
@@ -363,24 +337,19 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
 }
 
 const events = (response: HttpClientResponse.HttpClientResponse) =>
-  response.stream.pipe(
-    Stream.mapError((error) => chunkError("Failed to read OpenAI Chat stream", String(error))),
-    Stream.decodeText(),
-    Stream.pipeThroughChannel(Sse.decode()),
-    Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]"),
-    Stream.mapEffect((event) =>
-      Effect.try({
-        try: () => parseChunk(event.data),
-        catch: (error) =>
-          error instanceof ProviderChunkError ? error : chunkError("Invalid OpenAI Chat stream chunk", event.data),
-      }),
-    ),
-    Stream.mapAccum((): ParserState => ({ tools: {} }), processChunk, { onHalt: finishEvents }),
-    Stream.catchCause((cause) => Stream.fail(streamError(cause))),
-  )
+  ProviderShared.sse({
+    adapter: ADAPTER,
+    response,
+    readError: "Failed to read OpenAI Chat stream",
+    invalidChunk: "Invalid OpenAI Chat stream chunk",
+    decodeChunk,
+    initial: (): ParserState => ({ tools: {} }),
+    process: processChunk,
+    onHalt: finishEvents,
+  })
 
 export const adapter = Adapter.define<OpenAIChatDraft, OpenAIChatTarget, LLMEvent>({
-  id: "openai-chat",
+  id: ADAPTER,
   protocol: "openai-chat",
   redact: (target) => target,
   prepare,
