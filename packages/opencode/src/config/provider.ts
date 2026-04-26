@@ -55,6 +55,10 @@ export const Model = Schema.Struct({
   ),
   options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  system_prompt: Schema.optional(Schema.String).annotate({
+    description:
+      "Override the default system prompt for this model with content from a file path or URL. Supports: absolute paths ('/home/user/prompt.md'), home-relative paths ('~/prompt.md'), relative paths ('./prompt.md' - resolved from current working directory where opencode is run), and remote URLs ('https://example.com/prompt.md'). When set, this completely replaces the default system prompt.",
+  }),
   variants: Schema.optional(
     Schema.Record(
       Schema.String,

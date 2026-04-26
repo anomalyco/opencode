@@ -884,6 +884,7 @@ export const Model = Schema.Struct({
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
+  system_prompt: Schema.optional(Schema.String),
   variants: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
 })
   .annotate({ identifier: "Model" })
@@ -1196,6 +1197,7 @@ const layer: Layer.Layer<
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
+              system_prompt: model.system_prompt ?? existingModel?.system_prompt,
               variants: {},
             }
             const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})

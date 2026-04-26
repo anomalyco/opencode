@@ -59,7 +59,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 const live: Layer.Layer<
   Service,
   never,
-  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service
+  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service | SystemPrompt.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -68,6 +68,7 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
+    const sys = yield* SystemPrompt.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log
@@ -97,10 +98,13 @@ const live: Layer.Layer<
       const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
 
       const system: string[] = []
+      const providerPrompt = input.agent.prompt
+        ? [input.agent.prompt]
+        : yield* sys.provider(input.model)
       system.push(
         [
           // use agent prompt otherwise provider prompt
-          ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+          ...providerPrompt,
           // any custom prompt passed into this call
           ...input.system,
           // any custom prompt from last user message
@@ -440,6 +444,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
+    Layer.provide(SystemPrompt.defaultLayer),
   ),
 )
 

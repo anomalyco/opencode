@@ -1,4 +1,5 @@
 import { Context, Effect, Layer } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 
 import { Instance } from "../project/instance"
 
@@ -15,8 +16,12 @@ import type { Provider } from "@/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { withTransientReadRetry } from "@/util/effect-http-client"
+import path from "path"
+import os from "os"
 
-export function provider(model: Provider.Model) {
+function defaultProvider(model: Provider.Model): string[] {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
     return [PROMPT_BEAST]
   if (model.api.id.includes("gpt")) {
@@ -35,14 +40,49 @@ export function provider(model: Provider.Model) {
 export interface Interface {
   readonly environment: (model: Provider.Model) => string[]
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly provider: (model: Provider.Model) => Effect.Effect<string[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
 
-export const layer = Layer.effect(
+export const layer: Layer.Layer<
+  Service,
+  never,
+  Skill.Service | AppFileSystem.Service | HttpClient.HttpClient
+> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
+    const fs = yield* AppFileSystem.Service
+    const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
+
+    const loadSystemPrompt = Effect.fn("SystemPrompt.loadSystemPrompt")(function* (promptPath: string) {
+      if (promptPath.startsWith("https://") || promptPath.startsWith("http://")) {
+        const res = yield* http
+          .execute(HttpClientRequest.get(promptPath))
+          .pipe(Effect.timeout(10000), Effect.catch(() => Effect.succeed(null)))
+        if (!res) return ""
+        const body = yield* res.arrayBuffer.pipe(Effect.catch(() => Effect.succeed(new ArrayBuffer(0))))
+        return new TextDecoder().decode(body)
+      }
+
+      let resolvedPath = promptPath
+      if (promptPath.startsWith("~/")) {
+        resolvedPath = path.join(os.homedir(), promptPath.slice(2))
+      } else if (!path.isAbsolute(promptPath)) {
+        resolvedPath = path.resolve(Instance.directory, promptPath)
+      }
+
+      return yield* fs.readFileString(resolvedPath).pipe(Effect.catch(() => Effect.succeed("")))
+    })
+
+    const provider = Effect.fn("SystemPrompt.provider")(function* (model: Provider.Model) {
+      if (model.system_prompt) {
+        const content = yield* loadSystemPrompt(model.system_prompt)
+        if (content) return [content]
+      }
+      return defaultProvider(model)
+    })
 
     return Service.of({
       environment(model) {
@@ -75,10 +115,16 @@ export const layer = Layer.effect(
           Skill.fmt(list, { verbose: true }),
         ].join("\n")
       }),
+
+      provider,
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Skill.defaultLayer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FetchHttpClient.layer),
+)
 
 export * as SystemPrompt from "./system"
