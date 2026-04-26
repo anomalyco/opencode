@@ -187,6 +187,22 @@ Start a new session. _Alias_: `/clear`
 
 ---
 
+### pin
+
+Pin or unpin the current session as a tab in the right sidebar. Pinned sessions are listed in the **SESSIONS** panel at the top of the sidebar with a live status indicator (spinner when the model is generating, retry glyph for retry, dot for idle). Click a row to switch to that session.
+
+Pinned sessions persist between TUI restarts. Sessions you've opened in the current run that aren't pinned, plus any session that's currently busy elsewhere, also show up in the panel as ephemeral entries (open dot). They're cleared on restart unless you pin them.
+
+```bash frame="none"
+/pin
+```
+
+**Keybind:** `ctrl+x p`
+
+Switch between tabs with `ctrl+up` / `ctrl+down`. Close the active tab with `ctrl+x w`.
+
+---
+
 ### redo
 
 Redo a previously undone message. Only available after using `/undo`.
