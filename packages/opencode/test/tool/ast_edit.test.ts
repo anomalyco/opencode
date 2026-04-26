@@ -116,12 +116,12 @@ describe("AstEditTool", () => {
     })
   }, 30000)
 
-  test("returns error when pattern matches more than one node", async () => {
+  test("picks the largest span when multiple nodes match", async () => {
     await using tmp = await tmpdir()
     const file = path.join(tmp.path, "test.ts")
     await fs.writeFile(
       file,
-      `function one() {}\nfunction two() {}\n`,
+      `function one() {}\nfunction two() {\n  console.log(2)\n}\n`,
     )
 
     await Instance.provide({
@@ -139,8 +139,12 @@ describe("AstEditTool", () => {
           ),
         )
 
-        expect(result.title).toContain("ambiguous match")
-        expect(result.output).toContain("Pattern matched 2 nodes")
+        // Should pick the larger function (two) and replace it
+        expect(result.output).toContain("Edit applied")
+        const updated = await fs.readFile(file, "utf-8")
+        expect(updated).toContain("function one() {}")
+        expect(updated).toContain("function replaced() {}")
+        expect(updated).not.toContain("function two()")
       },
     })
   }, 30000)

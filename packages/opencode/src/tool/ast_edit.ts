@@ -98,34 +98,13 @@ export const AstEditTool = Tool.define(
             metadata: { diff: undefined, filediff: undefined, diagnostics: undefined },
           }
 
-        if (matches.length > 1)
-          return {
-            title:  `ast_edit: ambiguous match in ${path.relative(Instance.worktree, filePath)}`,
-            output:
-              `Pattern matched ${matches.length} nodes. Refine the query so it captures exactly one node.\n` +
-              matches
-                .map((m) => `  L${m.start_line + 1}-${m.end_line + 1} [${m.node_type}]${
-                  m.name ? ` "${m.name}"` : ""
-                }: ${m.text_preview}`)
-                .join("\n"),
-            metadata: { diff: undefined, filediff: undefined, diagnostics: undefined },
-          }
+        const match = matches.reduce((best, m) =>
+          (m.end_index - m.start_index) > (best.end_index - best.start_index) ? m : best
+        )
 
-        const match = matches[0]!
-
-        // Apply replacement using exact byte offsets from the parser — immune to
-        // CRLF, multi-byte UTF-8, and any other encoding/line-ending concerns.
-        const encoder = new TextEncoder()
-        const decoder = new TextDecoder()
-        const bytes = encoder.encode(content)
-        const before = bytes.slice(0, match.start_byte)
-        const after = bytes.slice(match.end_byte)
-        const replacementBytes = encoder.encode(params.newContent)
-        const newBytes = new Uint8Array(before.length + replacementBytes.length + after.length)
-        newBytes.set(before, 0)
-        newBytes.set(replacementBytes, before.length)
-        newBytes.set(after, before.length + replacementBytes.length)
-        const newContent = decoder.decode(newBytes)
+        // Use the UTF-16 character offsets directly — tree-sitter's startIndex/endIndex
+        // are UTF-16 code-unit offsets, identical to JavaScript's String.prototype.slice().
+        const newContent = content.slice(0, match.start_index) + params.newContent + content.slice(match.end_index)
 
         const diff = trimDiff(createTwoFilesPatch(filePath, filePath, content, newContent))
 

@@ -161,15 +161,15 @@ describe("QueryMatch fields", () => {
     expect(result[0].name).toBe("hello")
   }, 10000)
 
-  it("includes byte offsets", async () => {
+  it("includes char offsets", async () => {
     const filePath = await writeTempFile("function hello() {}", "ts")
     const result = await withParser(async (parser) => {
       const parsed = await Effect.runPromise(parser.parse(filePath, await fs.readFile(filePath, "utf-8")))
       return await Effect.runPromise(parser.query(parsed, "(function_declaration) @fn"))
     })
     expect(result.length).toBe(1)
-    expect(result[0].start_byte).toBeGreaterThanOrEqual(0)
-    expect(result[0].end_byte).toBeGreaterThan(result[0].start_byte)
+    expect(result[0].start_index).toBeGreaterThanOrEqual(0)
+    expect(result[0].end_index).toBeGreaterThan(result[0].start_index)
   }, 10000)
 
   it("handles multi-byte UTF-8 correctly", async () => {
@@ -180,6 +180,6 @@ describe("QueryMatch fields", () => {
     })
     expect(result.length).toBe(1)
     expect(result[0].name).toBe("你好")
-    expect(result[0].end_byte).toBeGreaterThan(result[0].start_byte)
+    expect(result[0].end_index).toBeGreaterThan(result[0].start_index)
   }, 10000)
 })

@@ -17,9 +17,7 @@ interface TreeSitterNode {
   endIndex:   number
 }
 interface TreeSitterTree   { rootNode: TreeSitterNode }
-interface TreeSitterLanguage {
-  query: (pattern: string) => TreeSitterQuery
-}
+interface TreeSitterLanguage {}
 interface TreeSitterQuery {
   readonly captureNames: string[]
   matches: (node: TreeSitterNode) => Array<{
@@ -30,6 +28,12 @@ interface TreeSitterQuery {
 interface TreeSitterParser {
   setLanguage: (lang: TreeSitterLanguage) => void
   parse:       (src: string) => TreeSitterTree
+}
+interface TreeSitterModule {
+  init:     () => Promise<void>
+  Parser:   new () => TreeSitterParser
+  Language: { load: (path: string) => Promise<TreeSitterLanguage> }
+  Query:    new (language: TreeSitterLanguage, source: string) => TreeSitterQuery
 }
 // web-tree-sitter 0.25+ exports named classes: Parser (with static init) and
 // Language (with static load). We keep a minimal promise gate for init().
@@ -93,9 +97,10 @@ export function detectLanguage(filePath: string): SupportedLanguage | null {
 }
 
 export interface ParseResult {
-  tree:     TreeSitterTree
-  language: SupportedLanguage
-  rootNode: TreeSitterNode
+  tree:         TreeSitterTree
+  language:     SupportedLanguage
+  rootNode:     TreeSitterNode
+  language_obj: TreeSitterLanguage
 }
 
 export interface QueryMatch {
@@ -105,8 +110,8 @@ export interface QueryMatch {
   end_line:     number
   start_col:    number
   end_col:      number
-  start_byte:   number
-  end_byte:     number
+  start_index:  number // UTF-16 character offset — use for string.slice()
+  end_index:    number // UTF-16 character offset — use for string.slice()
   text_preview: string
 }
 
@@ -128,8 +133,8 @@ function nodeToMatch(node: TreeSitterNode): QueryMatch {
     end_line:     node.endPosition.row,
     start_col:    node.startPosition.column,
     end_col:      node.endPosition.column,
-    start_byte:   node.startIndex,
-    end_byte:     node.endIndex,
+    start_index:  node.startIndex,
+    end_index:    node.endIndex,
     text_preview: node.text.slice(0, 120).replace(/\n/g, "↵"),
   }
 }
@@ -145,7 +150,7 @@ async function buildParseResult(content: string, language: SupportedLanguage): P
     return p
   })()
   const tree = parser.parse(content)
-  return { tree, language, rootNode: tree.rootNode }
+  return { tree, language, rootNode: tree.rootNode, language_obj: grammar }
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AstParser") {}
@@ -167,21 +172,20 @@ export const layer: Layer.Layer<Service> = Layer.effect(
     const query: Interface["query"] = (parseResult, pattern, lastCaptureOnly) =>
       Effect.tryPromise({
         try: async () => {
-          const grammar = await loadGrammar(parseResult.language)
-          const q = grammar.query(pattern)
-          const captureNames = q.captureNames
+          const { Query } = await import("web-tree-sitter") as unknown as TreeSitterModule
+          const q = new Query(parseResult.language_obj, pattern)
           return q
             .matches(parseResult.rootNode)
             .flatMap((match) => {
               if (lastCaptureOnly) {
-                // Find the capture whose name has the highest index in captureNames.
-                // This corresponds to the last capture defined in the query pattern.
+                // Pick the capture whose node has the largest span.
+                // This is always the outermost node the user wants to replace.
                 const best = match.captures.reduce<
-                  { idx: number; capture: typeof match.captures[number] | null }
+                  { span: number; capture: typeof match.captures[number] | null }
                 >((acc, c) => {
-                  const idx = captureNames.indexOf(c.name)
-                  return idx > acc.idx ? { idx, capture: c } : acc
-                }, { idx: -1, capture: null })
+                  const span = c.node.endIndex - c.node.startIndex
+                  return span > acc.span ? { span, capture: c } : acc
+                }, { span: -1, capture: null })
                 return best.capture ? [nodeToMatch(best.capture.node)] : []
               }
               return match.captures.map((capture) => nodeToMatch(capture.node))
