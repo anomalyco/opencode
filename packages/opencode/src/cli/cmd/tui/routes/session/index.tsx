@@ -2012,7 +2012,8 @@ function Task(props: ToolProps<typeof TaskTool>) {
     }
 
     if (props.part.state.status === "completed") {
-      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+      const d = duration()
+      content.push(`└ ${tools().length} toolcalls · ${d > 0 ? Locale.duration(d) : "In Progress"}`)
     }
 
     return content.join("\n")
