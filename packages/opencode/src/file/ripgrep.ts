@@ -8,7 +8,7 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
-import { Log } from "@/util"
+import { Archive, Log } from "@/util"
 import { sanitizedProcessEnv } from "@opencode-ai/core/util/opencode-process"
 import { which } from "@/util/which"
 import { zod } from "@/util/effect-zod"
@@ -253,16 +253,10 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
         const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: "ripgrep-" })
 
         if (config.extension === "zip") {
-          const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
-          const result = yield* run(shell, [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
-          ])
-          if (result.code !== 0) {
-            return yield* Effect.fail(error(result.stderr || result.stdout, result.code))
-          }
+          yield* Effect.tryPromise({
+            try: () => Archive.extractZip(archive, dir),
+            catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+          })
         }
 
         if (config.extension === "tar.gz") {
