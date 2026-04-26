@@ -241,6 +241,15 @@ export const extraAgentByDirectory = (directory?: string) => {
   return extraAgents.find((agent) => workspaceKey(agent.directory) === workspaceKey(directory))
 }
 
+export const extraAgentActive = (
+  id: ExtraAgentId,
+  input?: { directory?: string; integration?: string; pathname?: string },
+) => {
+  if (input?.integration !== id) return false
+  if (extraAgentByDirectory(input.directory)?.id !== id) return false
+  return !!input.pathname?.match(/\/session(?:\/|$)/)
+}
+
 export const domainFromDirectory = (directory?: string): DomainId => {
   const agent = extraAgentByDirectory(directory)
   return agent ? extraAgentDomain(agent.id) : mainDomain
