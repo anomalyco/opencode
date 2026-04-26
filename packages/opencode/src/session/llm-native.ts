@@ -2,7 +2,10 @@ import * as LLMCore from "@opencode-ai/llm/llm"
 import type { Message as CoreMessage } from "@opencode-ai/llm/schema"
 import { Effect, Schema } from "effect"
 import { ProviderLLMBridge } from "@/provider/llm-bridge"
+import { ProviderTransform } from "@/provider"
+import * as EffectZod from "@/util/effect-zod"
 import type { Provider } from "@/provider"
+import type { Tool } from "@/tool"
 import type { MessageV2 } from "./message-v2"
 
 export class UnsupportedModelError extends Schema.TaggedErrorClass<UnsupportedModelError>()(
@@ -23,6 +26,7 @@ export type RequestInput = {
   readonly model: Provider.Model
   readonly system?: ReadonlyArray<string>
   readonly messages: ReadonlyArray<MessageV2.WithParts>
+  readonly tools?: ReadonlyArray<Tool.Def>
   readonly generation?: LLMCore.RequestInput["generation"]
   readonly metadata?: Record<string, unknown>
   readonly native?: Record<string, unknown>
@@ -46,6 +50,18 @@ const message = (input: MessageV2.WithParts): CoreMessage | undefined => {
   })
 }
 
+export const toolDefinition = (input: { readonly model: Provider.Model; readonly tool: Tool.Def }) =>
+  LLMCore.tool({
+    name: input.tool.id,
+    description: input.tool.description,
+    inputSchema: Object.fromEntries(
+      Object.entries(ProviderTransform.schema(input.model, EffectZod.toJsonSchema(input.tool.parameters))),
+    ),
+    native: {
+      opencodeToolID: input.tool.id,
+    },
+  })
+
 export const request = Effect.fn("LLMNative.request")(function* (input: RequestInput) {
   const model = ProviderLLMBridge.toModelRef({ provider: input.provider, model: input.model })
   if (!model) {
@@ -60,7 +76,7 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
     model,
     system: input.system?.filter((part) => part.trim() !== "").map(LLMCore.system) ?? [],
     messages: input.messages.map(message).filter(isDefined),
-    tools: [],
+    tools: input.tools?.map((tool) => toolDefinition({ model: input.model, tool })) ?? [],
     generation: input.generation,
     metadata: input.metadata,
     native: {

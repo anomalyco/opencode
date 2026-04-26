@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { LLMNative } from "../../src/session/llm-native"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ProviderTest } from "../fake/provider"
 import type { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider"
+import type { Tool } from "../../src/tool"
 
 const sessionID = SessionID.descending()
 
@@ -65,6 +66,17 @@ const assistantMessage = (
   }
 }
 
+const lookupParameters = Schema.Struct({
+  query: Schema.String.annotate({ description: "Search query" }),
+})
+
+const lookupTool = {
+  id: "lookup",
+  description: "Lookup project data",
+  parameters: lookupParameters,
+  execute: () => Effect.succeed({ title: "", metadata: {}, output: "" }),
+} satisfies Tool.Def<typeof lookupParameters>
+
 describe("LLMNative.request", () => {
   test("builds a text-only native LLM request", async () => {
     const mdl = model()
@@ -102,5 +114,36 @@ describe("LLMNative.request", () => {
       { id: userID, role: "user", content: [{ type: "text", text: "Hello" }] },
       { id: assistantID, role: "assistant", content: [{ type: "text", text: "Hi" }] },
     ])
+  })
+
+  test("converts native tool definitions", async () => {
+    const mdl = model()
+    const request = await Effect.runPromise(
+      LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+        model: mdl,
+        messages: [],
+        tools: [lookupTool],
+      }),
+    )
+
+    expect(request.tools).toHaveLength(1)
+    expect(request.tools[0]).toMatchObject({
+      name: "lookup",
+      description: "Lookup project data",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Search query",
+          },
+        },
+        required: ["query"],
+      },
+      native: {
+        opencodeToolID: "lookup",
+      },
+    })
   })
 })
