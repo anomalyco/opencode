@@ -1,20 +1,22 @@
-export * as Npm from "."
+export * as Npm from "./npm"
 
 import path from "path"
 import { fileURLToPath } from "url"
 import npa from "npm-package-arg"
 import semver from "semver"
+// @ts-expect-error npm does not publish types for this internal config API.
 import Config from "@npmcli/config"
+// @ts-expect-error npm does not publish types for this internal config API.
 import { definitions, flatten, nerfDarts, shorthands } from "@npmcli/config/lib/definitions/index.js"
 import { Effect, Schema, Context, Layer, Option, FileSystem, Stream } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { Global } from "@opencode-ai/shared/global"
-import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+import { AppFileSystem } from "./filesystem"
+import { Global } from "./global"
+import { EffectFlock } from "./util/effect-flock"
+import { makeRuntime } from "./effect/runtime"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
-import * as CrossSpawnSpawner from "../effect/cross-spawn-spawner"
-import { makeRuntime } from "../effect/runtime"
+import { CrossSpawnSpawner } from "./cross-spawn-spawner"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
@@ -45,7 +47,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
 
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
-const npmPath = fileURLToPath(new URL("../..", import.meta.url))
+const npmPath = fileURLToPath(new URL("..", import.meta.url))
 
 export function sanitize(pkg: string) {
   if (!illegal) return pkg

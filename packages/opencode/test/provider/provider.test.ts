@@ -3,7 +3,7 @@ import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
-import { Global } from "../../src/global"
+import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin/index"
 import { ModelsDev } from "../../src/provider"

@@ -1,5 +1,5 @@
 import { Cause, Effect, Logger, References } from "effect"
-import { Log } from "@/util"
+import * as Log from "../util/log"
 
 type Fields = Record<string, unknown>
 

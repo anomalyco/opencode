@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import type { UpgradeWebSocket } from "hono/ws"
-import { Flag } from "../../src/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { InstanceRoutes } from "../../src/server/routes/instance"
 import { FilePaths } from "../../src/server/routes/instance/httpapi/file"

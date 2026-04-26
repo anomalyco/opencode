@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.14.24",
-  "name": "@opencode-ai/shared",
+  "version": "1.14.25",
+  "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -18,18 +18,28 @@
   "imports": {},
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
-    "@types/semver": "catalog:",
     "@types/bun": "catalog:",
-    "@types/npmcli__arborist": "6.3.3"
+    "@types/cross-spawn": "catalog:",
+    "@types/npm-package-arg": "6.1.4",
+    "@types/npmcli__arborist": "6.3.3",
+    "@types/semver": "catalog:"
   },
   "dependencies": {
+    "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@npmcli/arborist": "catalog:",
+    "@npmcli/arborist": "9.4.0",
+    "@npmcli/config": "10.8.1",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/context-async-hooks": "2.6.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.214.0",
+    "@opentelemetry/sdk-trace-base": "2.6.1",
     "effect": "catalog:",
+    "cross-spawn": "catalog:",
     "glob": "13.0.5",
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
-    "semver": "catalog:",
+    "npm-package-arg": "13.0.2",
+    "semver": "^7.6.3",
     "xdg-basedir": "5.1.0",
     "zod": "catalog:"
   },
