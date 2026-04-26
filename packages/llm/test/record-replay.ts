@@ -1,4 +1,5 @@
-import { Effect, Layer, Schema } from "effect"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Effect, FileSystem, Layer, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import * as fs from "node:fs"
 import * as path from "node:path"
@@ -97,6 +98,9 @@ export const layer = (name: string): Layer.Layer<HttpClient.HttpClient> =>
     HttpClient.HttpClient,
     Effect.gen(function* () {
       const upstream = yield* HttpClient.HttpClient
+      const fileSystem = yield* FileSystem.FileSystem
+      const file = fixturePath(name)
+      const dir = path.dirname(file)
       const recorded: Array<typeof Interaction.Type> = []
 
       return HttpClient.make((request) => {
@@ -110,18 +114,15 @@ export const layer = (name: string): Layer.Layer<HttpClient.HttpClient> =>
               interactions: [...recorded, { request: currentRequest, response: responseSnapshot(response, body) }],
             })
             recorded.splice(0, recorded.length, ...interaction.interactions)
-            fs.mkdirSync(path.dirname(fixturePath(name)), { recursive: true })
-            yield* Effect.promise(() => Bun.write(fixturePath(name), encodeCassetteJson(interaction)))
+            yield* fileSystem.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
+            yield* fileSystem.writeFileString(file, encodeCassetteJson(interaction)).pipe(Effect.orDie)
             return HttpClientResponse.fromWeb(request, new Response(body, responseSnapshot(response, body)))
           })
         }
 
         return Effect.gen(function* () {
           const cassette = decodeCassetteJson(
-            yield* Effect.tryPromise({
-              try: () => Bun.file(fixturePath(name)).text(),
-              catch: () => fixtureMissing(request, name),
-            }),
+            yield* fileSystem.readFileString(file).pipe(Effect.mapError(() => fixtureMissing(request, name))),
           )
           const currentRequest = encodeRequestJson(yield* requestSnapshot(request))
           const interaction = cassette.interactions.find((interaction) => encodeRequestJson(interaction.request) === currentRequest)
@@ -133,4 +134,4 @@ export const layer = (name: string): Layer.Layer<HttpClient.HttpClient> =>
         })
       })
     }),
-  ).pipe(Layer.provide(FetchHttpClient.layer))
+  ).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(NodeFileSystem.layer))

@@ -14,6 +14,7 @@
     "./*": "./src/*.ts"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"

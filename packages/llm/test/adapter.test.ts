@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLM } from "../src"
@@ -84,23 +84,23 @@ const httpLayer = Layer.succeed(
 const it = testEffect(RequestExecutor.layer.pipe(Layer.provide(httpLayer)))
 
 describe("llm adapter", () => {
-  test("prepare applies target patches with trace", async () => {
-    const llm = client({
-      adapters: [
-        fake.withPatches([
-          fake.patch("include-usage", {
-            reason: "fake target patch",
-            apply: (draft) => ({ ...draft, includeUsage: true }),
-          }),
-        ]),
-      ],
-    })
+  it.effect("prepare applies target patches with trace", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({
+        adapters: [
+          fake.withPatches([
+            fake.patch("include-usage", {
+              reason: "fake target patch",
+              apply: (draft) => ({ ...draft, includeUsage: true }),
+            }),
+          ]),
+        ],
+      }).prepare(request)
 
-    const prepared = await Effect.runPromise(llm.prepare(request))
-
-    expect(prepared.redactedTarget).toEqual({ body: "hello", includeUsage: true, redacted: true })
-    expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.fake.include-usage"])
-  })
+      expect(prepared.redactedTarget).toEqual({ body: "hello", includeUsage: true, redacted: true })
+      expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.fake.include-usage"])
+    }),
+  )
 
   it.effect("stream and generate use the adapter pipeline", () =>
     Effect.gen(function* () {
@@ -113,61 +113,59 @@ describe("llm adapter", () => {
     }),
   )
 
-  test("selects adapters by request protocol", async () => {
-    const prepared = await Effect.runPromise(
-      client({ adapters: [fake, gemini] }).prepare(
+  it.effect("selects adapters by request protocol", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [fake, gemini] }).prepare(
         LLM.request({
           ...request,
           model: LLM.model({ ...request.model, protocol: "gemini" }),
         }),
-      ),
-    )
+      )
 
-    expect(prepared.adapter).toBe("gemini-fake")
-  })
+      expect(prepared.adapter).toBe("gemini-fake")
+    }),
+  )
 
-  test("request, prompt, and tool-schema patches run before adapter prepare", async () => {
-    const llm = client({
-      adapters: [fake],
-      patches: [
-        Patch.request("test.id", {
-          reason: "rewrite request id",
-          apply: (request) => ({ ...request, id: "req_patched" }),
-        }),
-        Patch.prompt("test.message", {
-          reason: "rewrite prompt text",
-          apply: (request) => ({
-            ...request,
-            messages: request.messages.map((message) => ({
-              ...message,
-              content: message.content.map((part) => (part.type === "text" ? { ...part, text: "patched" } : part)),
-            })),
+  it.effect("request, prompt, and tool-schema patches run before adapter prepare", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({
+        adapters: [fake],
+        patches: [
+          Patch.request("test.id", {
+            reason: "rewrite request id",
+            apply: (request) => ({ ...request, id: "req_patched" }),
           }),
-        }),
-        Patch.toolSchema("test.description", {
-          reason: "rewrite tool description",
-          apply: (tool) => ({ ...tool, description: "patched tool" }),
-        }),
-      ],
-    })
-
-    const prepared = await Effect.runPromise(
-      llm.prepare(
+          Patch.prompt("test.message", {
+            reason: "rewrite prompt text",
+            apply: (request) => ({
+              ...request,
+              messages: request.messages.map((message) => ({
+                ...message,
+                content: message.content.map((part) => (part.type === "text" ? { ...part, text: "patched" } : part)),
+              })),
+            }),
+          }),
+          Patch.toolSchema("test.description", {
+            reason: "rewrite tool description",
+            apply: (tool) => ({ ...tool, description: "patched tool" }),
+          }),
+        ],
+      }).prepare(
         LLM.request({
           ...request,
           tools: [{ name: "lookup", description: "original", inputSchema: {} }],
         }),
-      ),
-    )
+      )
 
-    expect(prepared.id).toBe("req_patched")
-    expect(prepared.target).toEqual({ body: "patched\ntool:lookup:patched tool" })
-    expect(prepared.patchTrace.map((item) => item.id)).toEqual([
-      "request.test.id",
-      "prompt.test.message",
-      "schema.test.description",
-    ])
-  })
+      expect(prepared.id).toBe("req_patched")
+      expect(prepared.target).toEqual({ body: "patched\ntool:lookup:patched tool" })
+      expect(prepared.patchTrace.map((item) => item.id)).toEqual([
+        "request.test.id",
+        "prompt.test.message",
+        "schema.test.description",
+      ])
+    }),
+  )
 
   it.effect("stream patches transform raised events", () =>
     Effect.gen(function* () {
@@ -187,18 +185,18 @@ describe("llm adapter", () => {
     }),
   )
 
-  test("rejects protocol mismatch", async () => {
-    const llm = client({ adapters: [fake] })
-
-    await expect(
-      Effect.runPromise(
-        llm.prepare(
+  it.effect("rejects protocol mismatch", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [fake] })
+        .prepare(
           LLM.request({
             ...request,
             model: LLM.model({ ...request.model, protocol: "gemini" }),
           }),
-        ),
-      ),
-    ).rejects.toThrow("No LLM adapter")
-  })
+        )
+        .pipe(Effect.flip)
+
+      expect(error.message).toContain("No LLM adapter")
+    }),
+  )
 })

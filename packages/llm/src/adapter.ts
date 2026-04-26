@@ -3,24 +3,8 @@ import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http
 import { RequestExecutor } from "./executor"
 import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry, target as targetPatch } from "./patch"
-import type {
-  LLMError,
-  LLMEvent,
-  LLMRequest,
-  ModelRef,
-  PatchTrace,
-  PreparedRequest,
-  Protocol,
-} from "./schema"
+import type { LLMError, LLMEvent, LLMRequest, ModelRef, PatchTrace, PreparedRequest, Protocol } from "./schema"
 import { LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema } from "./schema"
-
-interface Compiled<Target> {
-  readonly request: LLMRequest
-  readonly adapter: RuntimeAdapter
-  readonly target: Target
-  readonly http: HttpClientRequest.HttpClientRequest
-  readonly patchTrace: ReadonlyArray<PatchTrace>
-}
 
 type RuntimeAdapter = Adapter<unknown, unknown, unknown>
 
