@@ -26,6 +26,10 @@ export function errorMessage(error: unknown): string {
     return error.message
   }
 
+  if (isRecord(error) && isRecord(error.data) && typeof error.data.message === "string" && error.data.message) {
+    return error.data.message
+  }
+
   const text = String(error)
   if (text && text !== "[object Object]") return text
 

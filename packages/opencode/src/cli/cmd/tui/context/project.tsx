@@ -10,18 +10,21 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
   name: "Project",
   init: () => {
     const sdk = useSDK()
+
+    const defaultPath = {
+      home: "",
+      state: "",
+      config: "",
+      worktree: "",
+      directory: sdk.directory ?? "",
+    } satisfies Path
+
     const [store, setStore] = createStore({
       project: {
         id: undefined as string | undefined,
       },
       instance: {
-        path: {
-          home: "",
-          state: "",
-          config: "",
-          worktree: "",
-          directory: sdk.directory ?? "",
-        } satisfies Path,
+        path: defaultPath,
       },
       workspace: {
         current: undefined as string | undefined,
@@ -38,7 +41,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
       ])
 
       batch(() => {
-        setStore("instance", "path", reconcile(path.data!))
+        setStore("instance", "path", reconcile(path.data || defaultPath))
         setStore("project", "id", project.data?.id)
       })
     }

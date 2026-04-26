@@ -4,7 +4,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
-import { Global } from "../../../src/global"
+import { Global } from "@opencode-ai/core/global"
 import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 import { Filesystem } from "../../../src/util/"
 
@@ -331,7 +331,7 @@ export default {
     const localOpts = {
       fn_marker: tmp.extra.fnMarker,
       marker: tmp.extra.localMarker,
-      source: tmp.extra.localDest.replace(".opencode/themes/", ""),
+      source: path.join(tmp.path, tmp.extra.localThemeFile),
       dest: tmp.extra.localDest,
       theme_path: `./${tmp.extra.localThemeFile}`,
       theme_name: tmp.extra.localThemeName,

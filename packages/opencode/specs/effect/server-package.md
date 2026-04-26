@@ -40,13 +40,13 @@ Everything still lives in `packages/opencode`.
 Important current facts:
 
 - there is no `packages/core` or `packages/cli` workspace yet
-- `packages/server` now exists as a minimal scaffold package, but it does not own any real route contracts, handlers, or runtime composition yet
+- there is no `packages/server` workspace yet on this branch
 - the main host server is still Hono-based in `src/server/server.ts`
 - current OpenAPI generation is Hono-based through `Server.openapi()` and `cli/cmd/generate.ts`
 - the Effect runtime and app layer are centralized in `src/effect/app-runtime.ts` and `src/effect/run-service.ts`
-- there is already one experimental Effect `HttpApi` slice at `src/server/instance/httpapi/question.ts`
-- that experimental slice is mounted under `/experimental/httpapi/question`
-- that experimental slice already has an end-to-end test at `test/server/question-httpapi.test.ts`
+- there are already bridged Effect `HttpApi` slices under `src/server/routes/instance/httpapi/*`
+- those slices are mounted into the Hono server behind `OPENCODE_EXPERIMENTAL_HTTPAPI`
+- the bridge currently covers `question`, `permission`, `provider`, partial `config`, and partial `project` routes
 
 This means the package split should start from an extraction path, not from greenfield package ownership.
 
@@ -209,17 +209,19 @@ Current host and route composition:
 
 - `src/server/server.ts`
 - `src/server/control/index.ts`
-- `src/server/instance/index.ts`
+- `src/server/routes/instance/index.ts`
 - `src/server/middleware.ts`
 - `src/server/adapter.bun.ts`
 - `src/server/adapter.node.ts`
 
-Current experimental `HttpApi` slice:
+Current bridged `HttpApi` slices:
 
-- `src/server/instance/httpapi/question.ts`
-- `src/server/instance/httpapi/index.ts`
-- `src/server/instance/experimental.ts`
-- `test/server/question-httpapi.test.ts`
+- `src/server/routes/instance/httpapi/question.ts`
+- `src/server/routes/instance/httpapi/permission.ts`
+- `src/server/routes/instance/httpapi/provider.ts`
+- `src/server/routes/instance/httpapi/config.ts`
+- `src/server/routes/instance/httpapi/project.ts`
+- `src/server/routes/instance/httpapi/server.ts`
 
 Current OpenAPI flow:
 
@@ -245,7 +247,7 @@ Keep in `packages/opencode` for now:
 
 - `src/server/server.ts`
 - `src/server/control/index.ts`
-- `src/server/instance/*.ts`
+- `src/server/routes/**/*.ts`
 - `src/server/middleware.ts`
 - `src/server/adapter.*.ts`
 - `src/effect/app-runtime.ts`
@@ -305,14 +307,13 @@ Bad early migration targets:
 
 ## First vertical slice
 
-The first slice for the package split is the existing experimental `question` group.
+The first slice for the package split is still the existing `question` `HttpApi` group.
 
 Why `question` first:
 
 - it already exists as an experimental `HttpApi` slice
 - it already follows the desired contract and implementation split in one file
 - it is already mounted through the current Hono host
-- it already has an end-to-end test
 - it is JSON-only
 - it has low blast radius
 
@@ -357,7 +358,7 @@ Done means:
 
 Scope:
 
-- extract the pure `HttpApi` contract from `src/server/instance/httpapi/question.ts`
+- extract the pure `HttpApi` contract from `src/server/routes/instance/httpapi/question.ts`
 - place it in `packages/server/src/definition/question.ts`
 - aggregate it in `packages/server/src/definition/api.ts`
 - generate OpenAPI in `packages/server/src/openapi.ts`
@@ -399,8 +400,9 @@ Scope:
 
 - replace local experimental question route wiring in `packages/opencode`
 - keep the same mount path:
-- `/experimental/httpapi/question`
-- `/experimental/httpapi/question/doc`
+- `/question`
+- `/question/:requestID/reply`
+- `/question/:requestID/reject`
 
 Rules:
 
@@ -569,7 +571,7 @@ For package-split PRs, validate the smallest useful thing.
 Typical validation for the first waves:
 
 - `bun typecheck` in the touched package directory or directories
-- the relevant route test, especially `test/server/question-httpapi.test.ts`
+- the relevant server / route coverage for the migrated slice
 - merged OpenAPI coverage if the PR touches spec generation
 
 Do not run tests from repo root.

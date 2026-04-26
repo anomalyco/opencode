@@ -100,6 +100,24 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+
+  test("should set store=true for azure provider by default", () => {
+    const azureModel = {
+      ...mockModel,
+      providerID: "azure",
+      api: {
+        id: "gpt-4",
+        url: "https://azure.com",
+        npm: "@ai-sdk/azure",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: azureModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBe(true)
+  })
 })
 
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {
@@ -2095,7 +2113,24 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("mistral returns empty object", () => {
+  test("mistral with reasoning returns variants", () => {
+    const model = createMockModel({
+      id: "mistral/mistral-small-latest",
+      providerID: "mistral",
+      api: {
+        id: "mistral-small-latest",
+        url: "https://api.mistral.com",
+        npm: "@ai-sdk/mistral",
+      },
+      capabilities: { reasoning: true },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      high: { reasoningEffort: "high" },
+    })
+  })
+
+  test("mistral without reasoning returns empty object", () => {
     const model = createMockModel({
       id: "mistral/mistral-large",
       providerID: "mistral",
@@ -2104,6 +2139,22 @@ describe("ProviderTransform.variants", () => {
         url: "https://api.mistral.com",
         npm: "@ai-sdk/mistral",
       },
+      capabilities: { reasoning: false },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({})
+  })
+
+  test("mistral large with reasoning returns empty object (only small supports reasoning)", () => {
+    const model = createMockModel({
+      id: "mistral/mistral-large",
+      providerID: "mistral",
+      api: {
+        id: "mistral-large-latest",
+        url: "https://api.mistral.com",
+        npm: "@ai-sdk/mistral",
+      },
+      capabilities: { reasoning: true },
     })
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({})
@@ -2244,6 +2295,46 @@ describe("ProviderTransform.variants", () => {
         },
         effort: "high",
       })
+    })
+
+    test("anthropic opus 4.7 models return adaptive thinking options with xhigh", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-7",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-opus-4-7",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.xhigh).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "xhigh",
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "max",
+      })
+    })
+
+    test("anthropic opus 4.7 dot-format models return adaptive thinking options with xhigh", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-7",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-opus-4.7",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
     })
 
     test("anthropic models return anthropic thinking options", () => {
@@ -2654,6 +2745,34 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
+    test("opus 4.7 returns adaptive thinking options with xhigh", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-opus-4-7",
+        providerID: "anthropic",
+        api: {
+          id: "claude-opus-4-7",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.xhigh).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "xhigh",
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+        },
+        effort: "max",
+      })
+    })
+
     test("returns high and max with thinking config", () => {
       const model = createMockModel({
         id: "anthropic/claude-4",
@@ -2698,6 +2817,34 @@ describe("ProviderTransform.variants", () => {
         reasoningConfig: {
           type: "adaptive",
           maxReasoningEffort: "max",
+        },
+      })
+    })
+
+    test("anthropic opus 4.7 returns adaptive reasoning options with xhigh", () => {
+      const model = createMockModel({
+        id: "bedrock/anthropic-claude-opus-4-7",
+        providerID: "bedrock",
+        api: {
+          id: "anthropic.claude-opus-4-7",
+          url: "https://bedrock.amazonaws.com",
+          npm: "@ai-sdk/amazon-bedrock",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(result.xhigh).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "xhigh",
+          display: "summarized",
+        },
+      })
+      expect(result.max).toEqual({
+        reasoningConfig: {
+          type: "adaptive",
+          maxReasoningEffort: "max",
+          display: "summarized",
         },
       })
     })

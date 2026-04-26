@@ -3,7 +3,7 @@ import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
-import { Global } from "../../src/global"
+import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin/index"
 import { ModelsDev } from "../../src/provider"
@@ -53,6 +53,14 @@ async function getSmallModel(providerID: ProviderID) {
 
 async function defaultModel() {
   return run((provider) => provider.defaultModel())
+}
+
+async function markPluginDependenciesReady(dir: string) {
+  await mkdir(path.join(dir, "node_modules"), { recursive: true })
+  await Bun.write(
+    path.join(dir, "package-lock.json"),
+    JSON.stringify({ packages: { "": { dependencies: { "@opencode-ai/plugin": "0.0.0" } } } }),
+  )
 }
 
 function paid(providers: Awaited<ReturnType<typeof list>>) {
@@ -1916,7 +1924,7 @@ test("mode cost preserves over-200k pricing from base model", () => {
         },
       },
     },
-  } as ModelsDev.Provider
+  } as unknown as ModelsDev.Provider
 
   const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4-fast"]
   expect(model.cost.input).toEqual(5)
@@ -1932,6 +1940,38 @@ test("mode cost preserves over-200k pricing from base model", () => {
       write: 0,
     },
   })
+})
+
+test("models.dev normalization fills required response fields", () => {
+  const provider = {
+    id: "gateway",
+    name: "Gateway",
+    env: [],
+    models: {
+      "gpt-5.4": {
+        id: "gpt-5.4",
+        name: "GPT-5.4",
+        family: "gpt",
+        cost: {
+          input: 2.5,
+          output: 15,
+        },
+        limit: {
+          context: 1_050_000,
+          input: 922_000,
+          output: 128_000,
+        },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const model = Provider.fromModelsDevProvider(provider).models["gpt-5.4"]
+  expect(model.api.url).toBe("")
+  expect(model.capabilities.temperature).toBe(false)
+  expect(model.capabilities.reasoning).toBe(false)
+  expect(model.capabilities.attachment).toBe(false)
+  expect(model.capabilities.toolcall).toBe(true)
+  expect(model.release_date).toBe("")
 })
 
 test("model variants are generated for reasoning models", async () => {
@@ -2407,8 +2447,11 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
 test("plugin config providers persist after instance dispose", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const root = path.join(dir, ".opencode", "plugin")
+      const configDir = path.join(dir, ".opencode")
+      const root = path.join(configDir, "plugin")
       await mkdir(root, { recursive: true })
+      await markPluginDependenciesReady(configDir)
+      await markPluginDependenciesReady(Global.Path.config)
       await Bun.write(
         path.join(root, "demo-provider.ts"),
         [

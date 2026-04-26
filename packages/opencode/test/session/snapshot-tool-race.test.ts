@@ -33,7 +33,6 @@ import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
 import { Config } from "../../src/config"
-import { FileTime } from "../../src/file/time"
 import { LSP } from "../../src/lsp"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
@@ -52,8 +51,8 @@ import { SessionStatus } from "../../src/session/status"
 import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "../../src/tool"
 import { Truncate } from "../../src/tool"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 
@@ -102,16 +101,6 @@ const lsp = Layer.succeed(
   }),
 )
 
-const filetime = Layer.succeed(
-  FileTime.Service,
-  FileTime.Service.of({
-    read: () => Effect.void,
-    get: () => Effect.succeed(undefined),
-    assert: () => Effect.void,
-    withLock: (_filepath, fn) => fn(),
-  }),
-)
-
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
@@ -128,7 +117,6 @@ function makeHttp() {
     Plugin.defaultLayer,
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
-    filetime,
     lsp,
     mcp,
     AppFileSystem.defaultLayer,

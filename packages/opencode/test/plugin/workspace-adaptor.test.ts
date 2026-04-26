@@ -7,14 +7,13 @@ import { tmpdir } from "../fixture/fixture"
 const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
 process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 
-const { Flag } = await import("../../src/flag/flag")
+const { Flag } = await import("@opencode-ai/core/flag/flag")
 const { Plugin } = await import("../../src/plugin/index")
 const { Workspace } = await import("../../src/control-plane/workspace")
 const { Instance } = await import("../../src/project/instance")
 
 const experimental = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
-// @ts-expect-error tests override the flag directly
 Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
 
 afterEach(async () => {
@@ -28,7 +27,6 @@ afterAll(() => {
     process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
   }
 
-  // @ts-expect-error restore original test flag value
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = experimental
 })
 

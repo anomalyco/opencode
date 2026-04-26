@@ -1,17 +1,19 @@
-import { test, expect, describe, mock, afterEach, beforeEach, spyOn } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Option } from "effect"
+import { test, expect, describe, mock, afterEach, beforeEach } from "bun:test"
+import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Config } from "../../src/config"
-import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+import { Config, ConfigManaged } from "../../src/config"
+import { ConfigParse } from "../../src/config/parse"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
-import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { Account } from "../../src/account/account"
+import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
 import { provideTmpdirInstance } from "../fixture/fixture"
-import { tmpdir, tmpdirScoped } from "../fixture/fixture"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { tmpdir } from "../fixture/fixture"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
@@ -21,12 +23,11 @@ const infra = CrossSpawnSpawner.defaultLayer.pipe(
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
-import { Global } from "../../src/global"
+import { Global } from "@opencode-ai/core/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util"
-import * as Network from "../../src/util/network"
 import { ConfigPlugin } from "@/config/plugin"
-import { Npm } from "@opencode-ai/shared/npm"
+import { Npm } from "@opencode-ai/core/npm"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),
@@ -241,6 +242,42 @@ test("loads JSON config file", async () => {
       const config = await load()
       expect(config.model).toBe("test/model")
       expect(config.username).toBe("testuser")
+    },
+  })
+})
+
+test("loads formatter boolean config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        formatter: true,
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.formatter).toBe(true)
+    },
+  })
+})
+
+test("loads lsp boolean config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        lsp: true,
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.lsp).toBe(true)
     },
   })
 })
@@ -712,6 +749,33 @@ Test agent prompt`,
   })
 })
 
+test("agent markdown permission config preserves user key order", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".opencode", "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(agentDir, "ordered.md"),
+        `---
+permission:
+  bash: allow
+  "*": deny
+  edit: ask
+---
+Ordered permissions`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
+    },
+  })
+})
+
 test("loads agents from .opencode/agents (plural)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -861,7 +925,7 @@ test("updates config and writes to file", async () => {
       const newConfig = { model: "updated/model" }
       await save(newConfig as any)
 
-      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "config.json"))
+      const writtenConfig = await Filesystem.readJson<{ model: string }>(path.join(tmp.path, "config.json"))
       expect(writtenConfig.model).toBe("updated/model")
     },
   })
@@ -950,6 +1014,9 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
       },
     })
 
+    // TODO: this is a hack to wait for backgruounded gitignore
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
     expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(true)
     expect(await Filesystem.readText(path.join(tmp.extra, ".gitignore"))).toContain("package-lock.json")
   } finally {
@@ -959,7 +1026,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 })
 
 // Note: deduplication and serialization of npm installs is now handled by the
-// shared Npm.Service (via EffectFlock). Those behaviors are tested in the shared
+// core Npm.Service (via EffectFlock). Those behaviors are tested in the core
 // package's npm tests, not here.
 
 test("resolves scoped npm plugins in config", async () => {
@@ -1491,35 +1558,6 @@ test("migrates legacy patch tool to edit permission", async () => {
   })
 })
 
-test("migrates legacy multiedit tool to edit permission", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                multiedit: false,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await load()
-      expect(config.agent?.["test"]?.permission).toEqual({
-        edit: "deny",
-      })
-    },
-  })
-})
-
 test("migrates mixed legacy tools config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -1588,7 +1626,9 @@ test("merges legacy tools with existing permission config", async () => {
   })
 })
 
-test("permission config preserves key order", async () => {
+test("permission config preserves user key order", async () => {
+  // Permission precedence follows the order users write in config, so parsing
+  // must not canonicalise known keys ahead of wildcard or custom keys.
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Filesystem.write(
@@ -1629,6 +1669,29 @@ test("permission config preserves key order", async () => {
       ])
     },
   })
+})
+
+test("Effect config parser preserves permission order while rejecting unknown top-level keys", () => {
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    {
+      permission: {
+        bash: "allow",
+        "*": "deny",
+        edit: "ask",
+      },
+    },
+    "test",
+  )
+
+  expect(Object.keys(config.permission!)).toEqual(["bash", "*", "edit"])
+  try {
+    ConfigParse.effectSchema(Config.Info, { invalid_field: true }, "test")
+    throw new Error("expected config parse to fail")
+  } catch (err) {
+    const error = err as { data?: { issues?: Array<{ code?: string; keys?: string[]; path?: string[] }> } }
+    expect(error.data?.issues?.[0]).toMatchObject({ code: "unrecognized_keys", keys: ["invalid_field"], path: [] })
+  }
 })
 
 // MCP config merging tests
@@ -1964,14 +2027,14 @@ describe("resolvePluginSpec", () => {
     })
 
     const file = path.join(tmp.path, "opencode.json")
-    const hit = await Config.resolvePluginSpec("./plugin", file)
-    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
+    const hit = await ConfigPlugin.resolvePluginSpec("./plugin", file)
+    expect(ConfigPlugin.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
   })
 })
 
 describe("deduplicatePluginOrigins", () => {
-  const dedupe = (plugins: Config.PluginSpec[]) =>
-    Config.deduplicatePluginOrigins(
+  const dedupe = (plugins: ConfigPlugin.Spec[]) =>
+    ConfigPlugin.deduplicatePluginOrigins(
       plugins.map((spec) => ({
         spec,
         source: "",
@@ -2041,8 +2104,8 @@ describe("deduplicatePluginOrigins", () => {
         const config = await load()
         const plugins = config.plugin ?? []
 
-        expect(plugins.some((p) => Config.pluginSpecifier(p) === "my-plugin@1.0.0")).toBe(true)
-        expect(plugins.some((p) => Config.pluginSpecifier(p).startsWith("file://"))).toBe(true)
+        expect(plugins.some((p) => ConfigPlugin.pluginSpecifier(p) === "my-plugin@1.0.0")).toBe(true)
+        expect(plugins.some((p) => ConfigPlugin.pluginSpecifier(p).startsWith("file://"))).toBe(true)
       },
     })
   })
@@ -2313,17 +2376,23 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 // parseManagedPlist unit tests — pure function, no OS interaction
 
 test("parseManagedPlist strips MDM metadata keys", async () => {
-  const config = await Config.parseManagedPlist(
-    JSON.stringify({
-      PayloadDisplayName: "OpenCode Managed",
-      PayloadIdentifier: "ai.opencode.managed.test",
-      PayloadType: "ai.opencode.managed",
-      PayloadUUID: "AAAA-BBBB-CCCC",
-      PayloadVersion: 1,
-      _manualProfile: true,
-      share: "disabled",
-      model: "mdm/model",
-    }),
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          PayloadDisplayName: "OpenCode Managed",
+          PayloadIdentifier: "ai.opencode.managed.test",
+          PayloadType: "ai.opencode.managed",
+          PayloadUUID: "AAAA-BBBB-CCCC",
+          PayloadVersion: 1,
+          _manualProfile: true,
+          share: "disabled",
+          model: "mdm/model",
+        }),
+      ),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.share).toBe("disabled")
@@ -2335,12 +2404,18 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
 })
 
 test("parseManagedPlist parses server settings", async () => {
-  const config = await Config.parseManagedPlist(
-    JSON.stringify({
-      $schema: "https://opencode.ai/config.json",
-      server: { hostname: "127.0.0.1", mdns: false },
-      autoupdate: true,
-    }),
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          server: { hostname: "127.0.0.1", mdns: false },
+          autoupdate: true,
+        }),
+      ),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.server?.hostname).toBe("127.0.0.1")
@@ -2349,18 +2424,24 @@ test("parseManagedPlist parses server settings", async () => {
 })
 
 test("parseManagedPlist parses permission rules", async () => {
-  const config = await Config.parseManagedPlist(
-    JSON.stringify({
-      $schema: "https://opencode.ai/config.json",
-      permission: {
-        "*": "ask",
-        bash: { "*": "ask", "rm -rf *": "deny", "curl *": "deny" },
-        grep: "allow",
-        glob: "allow",
-        webfetch: "ask",
-        "~/.ssh/*": "deny",
-      },
-    }),
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission: {
+            "*": "ask",
+            bash: { "*": "ask", "rm -rf *": "deny", "curl *": "deny" },
+            grep: "allow",
+            glob: "allow",
+            webfetch: "ask",
+            "~/.ssh/*": "deny",
+          },
+        }),
+      ),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.permission?.["*"]).toBe("ask")
@@ -2373,19 +2454,29 @@ test("parseManagedPlist parses permission rules", async () => {
 })
 
 test("parseManagedPlist parses enabled_providers", async () => {
-  const config = await Config.parseManagedPlist(
-    JSON.stringify({
-      $schema: "https://opencode.ai/config.json",
-      enabled_providers: ["anthropic", "google"],
-    }),
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_providers: ["anthropic", "google"],
+        }),
+      ),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.enabled_providers).toEqual(["anthropic", "google"])
 })
 
 test("parseManagedPlist handles empty config", async () => {
-  const config = await Config.parseManagedPlist(
-    JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(JSON.stringify({ $schema: "https://opencode.ai/config.json" })),
+      "test:mobileconfig",
+    ),
     "test:mobileconfig",
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")

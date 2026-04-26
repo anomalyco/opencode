@@ -18,7 +18,7 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
-import { InstallationVersion } from "@/installation/version"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
 type RouteEntry = {
   key: symbol
@@ -91,7 +91,7 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
       name: "session",
       params: {
         sessionID: route.data.sessionID,
-        initialPrompt: route.data.initialPrompt,
+        prompt: route.data.prompt,
       },
     }
   }

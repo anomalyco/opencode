@@ -45,6 +45,7 @@ import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { Resource } from "@opencode-ai/console-resource"
 import { i18n, type Key } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
+import { createModelTpmLimiter } from "./modelTpmLimiter"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -100,12 +101,13 @@ export async function handler(
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
+    const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
       is_stream: isStream,
       session: sessionId,
       request: requestId,
       client: ocClient,
-      ...(model === "mimo-v2-pro-free" && JSON.stringify(body).length < 1000 ? { payload: JSON.stringify(body) } : {}),
+      user_agent: userAgent,
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
@@ -121,6 +123,8 @@ export async function handler(
     const authInfo = await authenticate(modelInfo, zenApiKey)
     const billingSource = validateBilling(authInfo, modelInfo)
     logger.metric({ source: billingSource })
+    const modelTpmLimiter = createModelTpmLimiter(modelInfo.providers)
+    const modelTpmLimits = await modelTpmLimiter?.check()
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
       const providerInfo = selectProvider(
@@ -133,6 +137,7 @@ export async function handler(
         trialProviders,
         retry,
         stickyProvider,
+        modelTpmLimits,
       )
       validateModelSettings(billingSource, authInfo)
       updateProviderKey(authInfo, providerInfo)
@@ -183,6 +188,8 @@ export async function handler(
       // Try another provider => stop retrying if using fallback provider
       if (
         res.status !== 200 &&
+        // ie. 400 error is usually provider error like malformed request
+        res.status !== 400 &&
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
         res.status !== 404 &&
         // ie. cannot change codex model providers mid-session
@@ -222,16 +229,20 @@ export async function handler(
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
     // Handle non-streaming response
-    if (!isStream || res.status === 429) {
+    if (!isStream || [400, 404, 429].includes(res.status)) {
       const json = await res.json()
       await rateLimiter?.track()
       if (json.usage) {
         const usageInfo = providerInfo.normalizeUsage(json.usage)
         const costInfo = calculateCost(modelInfo, usageInfo)
         await trialLimiter?.track(usageInfo)
+        await modelTpmLimiter?.track(providerInfo.id, providerInfo.model, usageInfo)
         await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
         await reload(billingSource, authInfo, costInfo)
         json.cost = calculateOccurredCost(billingSource, costInfo)
+      }
+      if (res.status === 400) {
+        logger.metric({ "error.response": JSON.stringify(json) })
       }
       if (json.error?.message) {
         json.error.message = `Error from provider${providerInfo.displayName ? ` (${providerInfo.displayName})` : ""}: ${json.error.message}`
@@ -278,6 +289,7 @@ export async function handler(
                   const usageInfo = providerInfo.normalizeUsage(usage)
                   const costInfo = calculateCost(modelInfo, usageInfo)
                   await trialLimiter?.track(usageInfo)
+                  await modelTpmLimiter?.track(providerInfo.id, providerInfo.model, usageInfo)
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
                   const cost = calculateOccurredCost(billingSource, costInfo)
@@ -387,7 +399,7 @@ export async function handler(
         type: "error",
         error: {
           type: "error",
-          message: error.message,
+          message: "Internal server error",
         },
       }),
       { status: 500 },
@@ -433,12 +445,16 @@ export async function handler(
     trialProviders: string[] | undefined,
     retry: RetryOptions,
     stickyProvider: string | undefined,
+    modelTpmLimits: Record<string, number> | undefined,
   ) {
     const modelProvider = (() => {
+      // Byok is top priority b/c if user set their own API key, we should use it
+      // instead of using the sticky provider for the same session
       if (authInfo?.provider?.credentials) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
       }
 
+      // Always use the same provider for the same session
       if (stickyProvider) {
         const provider = modelInfo.providers.find((provider) => provider.id === stickyProvider)
         if (provider) return provider
@@ -451,10 +467,22 @@ export async function handler(
       }
 
       if (retry.retryCount !== MAX_FAILOVER_RETRIES) {
+        let topPriority = Infinity
         const providers = modelInfo.providers
           .filter((provider) => !provider.disabled)
+          .filter((provider) => provider.weight !== 0)
           .filter((provider) => !retry.excludeProviders.includes(provider.id))
-          .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
+          .filter((provider) => {
+            if (!provider.tpmLimit) return true
+            const usage = modelTpmLimits?.[`${provider.id}/${provider.model}`] ?? 0
+            return usage < provider.tpmLimit * 1_000_000
+          })
+          .map((provider) => {
+            topPriority = Math.min(topPriority, provider.priority)
+            return provider
+          })
+          .filter((p) => p.priority <= topPriority)
+          .flatMap((provider) => Array<typeof provider>(provider.weight).fill(provider))
 
         // Use the last 4 characters of session ID to select a provider
         const identifier = sessionId.length ? sessionId : ip
@@ -742,7 +770,8 @@ export async function handler(
     const billing = authInfo.billing
     const billingUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/billing`
     const membersUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/members`
-    if (!billing.paymentMethodID) throw new CreditsError(t("zen.api.error.noPaymentMethod", { billingUrl }))
+    if (!billing.paymentMethodID && billing.balance <= 0)
+      throw new CreditsError(t("zen.api.error.noPaymentMethod", { billingUrl }))
     if (billing.balance <= 0) throw new CreditsError(t("zen.api.error.insufficientBalance", { billingUrl }))
 
     const now = new Date()
