@@ -4,6 +4,7 @@ import { WorkspaceAdaptorEntry } from "@/control-plane/types"
 import * as InstanceState from "@/effect/instance-state"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "./auth"
 
 const root = "/experimental/workspace"
 export const WorkspacePaths = {
@@ -49,7 +50,8 @@ export const WorkspaceApi = HttpApi.make("workspace")
           title: "workspace",
           description: "Experimental HttpApi workspace routes.",
         }),
-      ),
+      )
+      .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({

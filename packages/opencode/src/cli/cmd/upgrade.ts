@@ -3,7 +3,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "../../installation"
-import { InstallationVersion } from "../../installation/version"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",

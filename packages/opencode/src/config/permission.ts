@@ -18,17 +18,9 @@ export const Rule = Schema.Union([Action, Object])
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Rule = Schema.Schema.Type<typeof Rule>
 
-// Known permission keys get explicit types — most are full Rule (either a
-// single Action or a per-pattern object), but a handful of tools take no
-// sub-target patterns and are Action-only. Unknown keys fall through the
-// Record rest signature as Rule.
-//
-// StructWithRest canonicalises key order on decode (known first, then rest),
-// which used to require the `__originalKeys` preprocess hack because
-// `Permission.fromConfig` depended on the user's insertion order. That
-// dependency is gone — `fromConfig` now sorts top-level keys so wildcard
-// permissions come before specifics, making the final precedence
-// order-independent.
+// Known permission keys get explicit types in the Effect schema for generated
+// docs/types. Runtime config parsing uses Effect's `propertyOrder: "original"`
+// parse option so user key order is preserved for permission precedence.
 const InputObject = Schema.StructWithRest(
   Schema.Struct({
     read: Schema.optional(Rule),
