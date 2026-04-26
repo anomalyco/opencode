@@ -291,12 +291,12 @@ This checklist tracks bridge parity only. Checked routes are available through t
 - [x] `GET /session/:sessionID` - get session.
 - [x] `GET /session/:sessionID/children` - get child sessions.
 - [x] `GET /session/:sessionID/todo` - get session todos.
-- [ ] `POST /session` - create session.
-- [ ] `DELETE /session/:sessionID` - delete session.
-- [ ] `PATCH /session/:sessionID` - update session metadata.
+- [x] `POST /session` - create session.
+- [x] `DELETE /session/:sessionID` - delete session.
+- [x] `PATCH /session/:sessionID` - update session metadata.
 - [ ] `POST /session/:sessionID/init` - run project init command.
-- [ ] `POST /session/:sessionID/fork` - fork session.
-- [ ] `POST /session/:sessionID/abort` - abort session.
+- [x] `POST /session/:sessionID/fork` - fork session.
+- [x] `POST /session/:sessionID/abort` - abort session.
 - [ ] `POST /session/:sessionID/share` - share session.
 - [x] `GET /session/:sessionID/diff` - session diff.
 - [ ] `DELETE /session/:sessionID/share` - unshare session.
@@ -355,7 +355,7 @@ Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays rev
 6. [x] Bridge workspace create/remove/session-restore routes.
 7. [x] Bridge sync start/replay/history routes.
 8. [x] Bridge session read routes: list, status, get, children, todo, diff, messages.
-9. [ ] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
+9. [x] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
 10. [ ] Bridge session share/summary/message/part mutation routes.
 11. [ ] Replace event SSE with non-Hono Effect HTTP.
 12. [ ] Replace pty websocket/control routes with non-Hono Effect HTTP.

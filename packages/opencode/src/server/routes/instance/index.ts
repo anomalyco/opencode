@@ -102,6 +102,11 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(SessionPaths.diff, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.messages, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.message, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.create, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.remove, (c) => handler(c.req.raw, context))
+    app.patch(SessionPaths.update, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.fork, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.abort, (c) => handler(c.req.raw, context))
   }
 
   return app

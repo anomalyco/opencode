@@ -105,4 +105,48 @@ describe("session HttpApi", () => {
 
     expect(await json<MessageV2.WithParts>(await app().request(pathFor(SessionPaths.message, { sessionID: parent.id, messageID: message.id }), { headers }))).toMatchObject({ info: { id: message.id } })
   })
+
+  test("serves lifecycle mutation routes through Hono bridge", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false, share: "disabled" } })
+    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+
+    const created = await json<Session.Info>(
+      await app().request(SessionPaths.create, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ title: "created" }),
+      }),
+    )
+    expect(created.title).toBe("created")
+
+    const updated = await json<Session.Info>(
+      await app().request(pathFor(SessionPaths.update, { sessionID: created.id }), {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ title: "updated", time: { archived: 1 } }),
+      }),
+    )
+    expect(updated).toMatchObject({ id: created.id, title: "updated", time: { archived: 1 } })
+
+    const forked = await json<Session.Info>(
+      await app().request(pathFor(SessionPaths.fork, { sessionID: created.id }), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      }),
+    )
+    expect(forked.id).not.toBe(created.id)
+
+    expect(
+      await json<boolean>(
+        await app().request(pathFor(SessionPaths.abort, { sessionID: created.id }), { method: "POST", headers }),
+      ),
+    ).toBe(true)
+
+    expect(
+      await json<boolean>(
+        await app().request(pathFor(SessionPaths.remove, { sessionID: created.id }), { method: "DELETE", headers }),
+      ),
+    ).toBe(true)
+  })
 })

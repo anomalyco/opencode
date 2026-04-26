@@ -1,7 +1,11 @@
 import * as InstanceState from "@/effect/instance-state"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Permission } from "@/permission"
 import { Instance } from "@/project/instance"
+import { SessionShare } from "@/share"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
+import { SessionPrompt } from "@/session/prompt"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
@@ -26,6 +30,18 @@ const MessagesQuery = Schema.Struct({
   before: Schema.optional(Schema.String),
 })
 const StatusMap = Schema.Record(Schema.String, SessionStatus.Info)
+const UpdatePayload = Schema.Struct({
+  title: Schema.optional(Schema.String),
+  permission: Schema.optional(Permission.Ruleset),
+  time: Schema.optional(
+    Schema.Struct({
+      archived: Schema.optional(Schema.Number),
+    }),
+  ),
+}).annotate({ identifier: "SessionUpdateInput" })
+const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"])).annotate({
+  identifier: "SessionForkInput",
+})
 
 export const SessionPaths = {
   list: root,
@@ -36,6 +52,11 @@ export const SessionPaths = {
   diff: `${root}/:sessionID/diff`,
   messages: `${root}/:sessionID/message`,
   message: `${root}/:sessionID/message/:messageID`,
+  create: root,
+  remove: `${root}/:sessionID`,
+  update: `${root}/:sessionID`,
+  fork: `${root}/:sessionID/fork`,
+  abort: `${root}/:sessionID/abort`,
 } as const
 
 export const SessionApi = HttpApi.make("session")
@@ -121,6 +142,58 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.message",
             summary: "Get message",
             description: "Retrieve a specific message from a session by its message ID.",
+          }),
+        ),
+        HttpApiEndpoint.post("create", SessionPaths.create, {
+          payload: Session.CreateInput,
+          success: Session.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.create",
+            summary: "Create session",
+            description: "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
+          }),
+        ),
+        HttpApiEndpoint.delete("remove", SessionPaths.remove, {
+          params: { sessionID: SessionID },
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.delete",
+            summary: "Delete session",
+            description: "Delete a session and permanently remove all associated data, including messages and history.",
+          }),
+        ),
+        HttpApiEndpoint.patch("update", SessionPaths.update, {
+          params: { sessionID: SessionID },
+          payload: UpdatePayload,
+          success: Session.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.update",
+            summary: "Update session",
+            description: "Update properties of an existing session, such as title or other metadata.",
+          }),
+        ),
+        HttpApiEndpoint.post("fork", SessionPaths.fork, {
+          params: { sessionID: SessionID },
+          payload: ForkPayload,
+          success: Session.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.fork",
+            summary: "Fork session",
+            description: "Create a new session by forking an existing session at a specific message point.",
+          }),
+        ),
+        HttpApiEndpoint.post("abort", SessionPaths.abort, {
+          params: { sessionID: SessionID },
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.abort",
+            summary: "Abort session",
+            description: "Abort an active session and stop any ongoing AI processing or command execution.",
           }),
         ),
       )
@@ -222,6 +295,86 @@ export const sessionHandlers = Layer.unwrap(
       )
     })
 
+    const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload: Session.CreateInput }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(SessionShare.Service.use((svc) => svc.create(ctx.payload)).pipe(Effect.provide(SessionShare.defaultLayer))),
+        ),
+      )
+    })
+
+    const remove = Effect.fn("SessionHttpApi.remove")(function* (ctx: { params: { sessionID: SessionID } }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(ctx.params.sessionID)).pipe(Effect.provide(Session.defaultLayer))),
+        ),
+      )
+      return true
+    })
+
+    const update = Effect.fn("SessionHttpApi.update")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof UpdatePayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            Session.Service.use((svc) =>
+              Effect.gen(function* () {
+                const current = yield* svc.get(ctx.params.sessionID)
+                if (ctx.payload.title !== undefined) {
+                  yield* svc.setTitle({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
+                }
+                if (ctx.payload.permission !== undefined) {
+                  yield* svc.setPermission({
+                    sessionID: ctx.params.sessionID,
+                    permission: Permission.merge(current.permission ?? [], ctx.payload.permission),
+                  })
+                }
+                if (ctx.payload.time?.archived !== undefined) {
+                  yield* svc.setArchived({ sessionID: ctx.params.sessionID, time: ctx.payload.time.archived })
+                }
+                return yield* svc.get(ctx.params.sessionID)
+              }),
+            ).pipe(Effect.provide(Session.defaultLayer)),
+          ),
+        ),
+      )
+    })
+
+    const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof ForkPayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            Session.Service.use((svc) => svc.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload.messageID })).pipe(
+              Effect.provide(Session.defaultLayer),
+            ),
+          ),
+        ),
+      )
+    })
+
+    const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            SessionPrompt.Service.use((svc) => svc.cancel(ctx.params.sessionID)).pipe(
+              Effect.provide(SessionPrompt.defaultLayer),
+            ),
+          ),
+        ),
+      )
+      return true
+    })
+
     return HttpApiBuilder.group(SessionApi, "session", (handlers) =>
       handlers
         .handle("list", list)
@@ -231,7 +384,12 @@ export const sessionHandlers = Layer.unwrap(
         .handle("todo", todo)
         .handle("diff", diff)
         .handle("messages", messages)
-        .handle("message", message),
+        .handle("message", message)
+        .handle("create", create)
+        .handle("remove", remove)
+        .handle("update", update)
+        .handle("fork", fork)
+        .handle("abort", abort),
     )
   }),
 ).pipe(
