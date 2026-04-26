@@ -371,6 +371,20 @@ export class TransportError extends Schema.TaggedErrorClass<TransportError>()("L
   message: Schema.String,
 }) {}
 
+/**
+ * Failure type for tool execute handlers. Handlers must map their internal
+ * errors to this shape; the runtime catches `ToolFailure`s and surfaces them
+ * as `tool-error` events plus a `tool-result` of `type: "error"` so the model
+ * can self-correct.
+ *
+ * Anything thrown or yielded by a handler that is not a `ToolFailure` is
+ * treated as a defect and fails the stream.
+ */
+export class ToolFailure extends Schema.TaggedErrorClass<ToolFailure>()("LLM.ToolFailure", {
+  message: Schema.String,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+}) {}
+
 export type LLMError =
   | InvalidRequestError
   | NoAdapterError

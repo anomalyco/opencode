@@ -2,6 +2,8 @@ export * from "./adapter"
 export * from "./executor"
 export * from "./patch"
 export * from "./schema"
+export * from "./tool"
+export * from "./tool-runtime"
 
 export * as LLM from "./llm"
 export * as ProviderPatch from "./provider/patch"

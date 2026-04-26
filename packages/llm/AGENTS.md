@@ -74,6 +74,67 @@ const followUp = LLM.request({
 
 Adapters lower this into provider-native assistant tool-call messages and tool-result messages. Streaming providers should emit `tool-input-delta` events while arguments arrive, then a final `tool-call` event with parsed input.
 
+### Tool runtime
+
+`ToolRuntime.run(client, options)` orchestrates the tool loop with full type safety:
+
+```ts
+const get_weather = tool({
+  description: "Get current weather for a city",
+  parameters: Schema.Struct({ city: Schema.String }),
+  success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
+  execute: ({ city }) =>
+    Effect.gen(function* () {
+      // city: string  — typed from parameters Schema
+      const data = yield* WeatherApi.fetch(city)
+      return { temperature: data.temp, condition: data.cond }
+      // return type checked against success Schema
+    }),
+})
+
+const events = yield* ToolRuntime.run(client, {
+  request,
+  tools: { get_weather, get_time, ... },
+  maxSteps: 10,
+  stopWhen: (state) => false,
+}).pipe(Stream.runCollect)
+```
+
+The runtime:
+
+- Adds tool definitions (derived from each tool's `parameters` Schema via `Schema.toJsonSchemaDocument`) onto `request.tools`.
+- Streams the model.
+- On `tool-call`: looks up the named tool, decodes input against `parameters` Schema, dispatches to the typed `execute`, encodes the result against `success` Schema, emits `tool-result`.
+- Loops when the step finishes with `tool-calls`, appending the assistant + tool messages.
+- Stops on a non-`tool-calls` finish, when `maxSteps` is reached, or when `stopWhen` returns `true`.
+
+Handler dependencies (services, permissions, plugin hooks, abort handling) are closed over by the consumer at tool-construction time. The runtime's only environment requirement is `RequestExecutor.Service`. Build the tools record inside an `Effect.gen` once and reuse it across many runs:
+
+```ts
+const tools = Effect.gen(function* () {
+  const fs = yield* FileSystem
+  const permission = yield* Permission
+  return {
+    read_file: tool({
+      ...
+      execute: ({ path }) =>
+        Effect.gen(function* () {
+          yield* permission.ask({ tool: "read_file", path })
+          return { content: yield* fs.readFile(path) }
+        }),
+    }),
+  }
+})
+```
+
+Errors must be expressed as `ToolFailure`. The runtime catches it and emits a `tool-error` event, then a `tool-result` of `type: "error"`, so the model can self-correct on the next step. Anything that is not a `ToolFailure` is treated as a defect and fails the stream. Three recoverable error paths produce `tool-error` events:
+
+- The model called an unknown tool name.
+- Input failed the `parameters` Schema.
+- The handler returned a `ToolFailure`.
+
+Provider-defined tools (e.g. OpenAI built-in `web_search`) should go directly into `request.tools` without a runtime entry. The runtime currently raises `tool-error` for unknown names; if you need pass-through, file an issue.
+
 ### Recording Tests
 
 Recorded tests use one cassette per scenario. Use `recordedTests({ prefix, requires })` and let the helper derive cassette names from test names:
@@ -130,6 +191,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 - [ ] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, native provider metadata, and OpenAI-compatible provider family detection.
 - [ ] Build a `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tools, tool choice, generation options, reasoning variants, cache hints, and attachments.
+- [x] Add a typed `ToolRuntime` that drives the tool loop with Schema-typed parameters/success per tool, single-`ToolFailure` error channel, and `maxSteps`/`stopWhen` controls. Provider-defined tool pass-through is still TODO.
 - [ ] Keep auth and deployment concerns in the OpenCode bridge where possible: Bedrock credentials/region/profile, Vertex project/location/token, Azure deployment/API version, and Gateway/OpenRouter routing headers.
 - [ ] Keep initial OpenCode integration behind a local flag/path until request payload parity and stream event parity are proven against the existing `session/llm.test.ts` cases.
 
@@ -139,4 +201,4 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Cover provider-error and HTTP-status sad paths with deterministic fixtures across adapters (Anthropic mid-stream + 4xx; OpenAI Responses mid-stream + 4xx; OpenAI Chat 4xx). Live recordings of provider errors are still TODO when stable cassettes can be captured.
 - [ ] Improve cassette ergonomics if more providers need custom matching, redaction, or multi-interaction flows.
 - [ ] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
-- [ ] Add adapter parity fixtures against `../ai` behavior for generic OpenAI-compatible Chat before adding provider-specific wrappers.
+- [x] Add adapter parity fixtures against `../ai` behavior for generic OpenAI-compatible Chat before adding provider-specific wrappers.
