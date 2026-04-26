@@ -68,8 +68,8 @@ flowchart TD
     end
 
     subgraph tool_interception [Tool Interception]
-        Tool[Tool Invoked] --> Eval{evaluate()}
-
+        Tool[Tool Invoked] --> Eval{evaluate}
+        
         Eval -->|allow| Run[Execute Tool]
         Eval -->|deny| Fail[Throw DeniedError]
         Eval -->|ask| Pause[Suspend Fiber & Prompt User]
