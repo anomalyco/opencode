@@ -979,6 +979,102 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   })
 })
 
+describe("ProviderTransform.message - reasoning details", () => {
+  const kimiModel = {
+    id: ModelID.make("moonshotai/kimi-k2.6"),
+    providerID: ProviderID.make("kilo"),
+    api: {
+      id: "moonshotai/kimi-k2.6",
+      url: "https://api.kilo.ai/api/gateway",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Kimi K2.6",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: {
+        field: "reasoning_details",
+      },
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 262144,
+      output: 262144,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-04-20",
+  } as any
+
+  test("does not synthesize string reasoning_details from reasoning text", () => {
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "Prior model reasoning should not become reasoning_details." },
+            {
+              type: "tool-call",
+              toolCallId: "test",
+              toolName: "bash",
+              input: { command: "pwd" },
+            },
+          ],
+        },
+      ] as any[],
+      kimiModel,
+      {},
+    ) as any[]
+
+    expect(result[0].content).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "test",
+        toolName: "bash",
+        input: { command: "pwd" },
+      },
+    ])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_details).toBeUndefined()
+  })
+
+  test("preserves structured reasoning_details from provider options", () => {
+    const reasoningDetails = [{ type: "reasoning.text", text: "structured reasoning" }]
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "reasoning",
+              text: "structured reasoning",
+              providerOptions: {
+                openaiCompatible: {
+                  reasoning_details: reasoningDetails,
+                },
+              },
+            },
+            { type: "text", text: "Answer" },
+          ],
+        },
+      ] as any[],
+      kimiModel,
+      {},
+    ) as any[]
+
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
+    expect(result[0].providerOptions.openaiCompatible.reasoning_details).toEqual(reasoningDetails)
+  })
+})
+
 describe("ProviderTransform.message - empty image handling", () => {
   const mockModel = {
     id: "anthropic/claude-3-5-sonnet",

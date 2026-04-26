@@ -198,12 +198,43 @@ function normalizeMessages(
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
 
         // Filter out reasoning parts from content
         const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+        if (field === "reasoning_details") {
+          const existingDetails = msg.providerOptions?.openaiCompatible?.reasoning_details
+          const reasoningDetails = [
+            ...(Array.isArray(existingDetails) ? existingDetails : []),
+            ...reasoningParts.flatMap((part: any) => {
+              const details = part.providerOptions?.openaiCompatible?.reasoning_details
+              if (Array.isArray(details)) return details
+              return []
+            }),
+          ]
 
-        // Include reasoning_content | reasoning_details directly on the message for all assistant messages.
+          if (reasoningDetails.length === 0) {
+            return {
+              ...msg,
+              content: filteredContent,
+            }
+          }
+
+          return {
+            ...msg,
+            content: filteredContent,
+            providerOptions: {
+              ...msg.providerOptions,
+              openaiCompatible: {
+                ...msg.providerOptions?.openaiCompatible,
+                reasoning_details: reasoningDetails,
+              },
+            },
+          }
+        }
+
+        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+
+        // Include reasoning_content directly on the message for all assistant messages.
         // Always set the field even when empty — some providers (e.g. DeepSeek) may return empty
         // reasoning_content which still needs to be sent back in subsequent requests.
         return {
