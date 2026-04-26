@@ -101,12 +101,13 @@ export async function handler(
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
+    const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
       is_stream: isStream,
       session: sessionId,
       request: requestId,
       client: ocClient,
-      ...(model === "mimo-v2-pro-free" && JSON.stringify(body).length < 1000 ? { payload: JSON.stringify(body) } : {}),
+      user_agent: userAgent,
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)

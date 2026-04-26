@@ -1,6 +1,6 @@
 import { Log } from "../util"
 import path from "path"
-import { Global } from "../global"
+import { Global } from "@opencode-ai/core/global"
 import { NamedError } from "@opencode-ai/core/util/error"
 import z from "zod"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"

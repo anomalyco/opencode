@@ -9,7 +9,7 @@ import { migrateTuiConfig } from "./tui-migrate"
 import { TuiInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
-import { Global } from "@/global"
+import { Global } from "@opencode-ai/core/global"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
@@ -18,7 +18,7 @@ import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/instal
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Filesystem, Log } from "@/util"
 import { ConfigVariable } from "@/config/variable"
-import { Npm } from "@/npm"
+import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "tui.config" })
 

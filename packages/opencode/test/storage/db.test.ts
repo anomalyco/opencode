@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Global } from "../../src/global"
+import { Global } from "@opencode-ai/core/global"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { Database } from "../../src/storage"
 

@@ -25,7 +25,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider"
 import { Permission } from "@/permission"
-import { Global } from "@/global"
+import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
