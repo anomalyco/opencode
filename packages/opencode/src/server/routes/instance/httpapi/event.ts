@@ -1,6 +1,6 @@
 import { Bus } from "@/bus"
 import { Log } from "@/util"
-import { Effect, Queue } from "effect"
+import { Effect } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
 
@@ -19,36 +19,20 @@ export const eventRoute = HttpRouter.add(
   EventPaths.event,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const events = bus.subscribeAll().pipe(Stream.takeUntil((event) => event.type === Bus.InstanceDisposed.type))
+    const heartbeat = Stream.tick("10 seconds").pipe(
+      Stream.drop(1),
+      Stream.map(() => ({ type: "server.heartbeat", properties: {} })),
+    )
+
+    log.info("event connected")
     return HttpServerResponse.stream(
-      Stream.callback<string>((queue) =>
-        Effect.gen(function* () {
-          let done = false
-          let unsubscribe = () => {}
-          const push = (data: unknown) => Queue.offerUnsafe(queue, eventData(data))
-          const stop = () => {
-            if (done) return
-            done = true
-            clearInterval(heartbeat)
-            unsubscribe()
-            Queue.endUnsafe(queue)
-            log.info("event disconnected")
-          }
-
-          log.info("event connected")
-          push({ type: "server.connected", properties: {} })
-
-          const heartbeat = setInterval(() => {
-            push({ type: "server.heartbeat", properties: {} })
-          }, 10_000)
-
-          unsubscribe = yield* bus.subscribeAllCallback((event) => {
-            push(event)
-            if (event.type === Bus.InstanceDisposed.type) stop()
-          })
-
-          yield* Effect.addFinalizer(() => Effect.sync(stop))
-        }),
-      ).pipe(Stream.encodeText),
+      Stream.make({ type: "server.connected", properties: {} }).pipe(
+        Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
+        Stream.map(eventData),
+        Stream.encodeText,
+        Stream.ensuring(Effect.sync(() => log.info("event disconnected"))),
+      ),
       {
         contentType: "text/event-stream",
         headers: {
