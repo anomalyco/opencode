@@ -302,6 +302,15 @@ export const layer = Layer.effect(
         "Return only JSON matching the required schema.",
       ].join("\n")
 
+      yield* elog.info("infinity judge invoking", {
+        sessionID: input.sessionID,
+        judgeModelID: judgeModel.id,
+        judgeProviderID: judgeModel.providerID,
+        firstUserRequestLen: firstUserRequest.length,
+        latestReplyLen: latestReplyInput.length,
+        previousSummaryLen: input.previousSummary?.length ?? 0,
+      })
+
       const raw = yield* llm
         .stream({
           agent: judgeAgent,
@@ -321,18 +330,47 @@ export const layer = Layer.effect(
           Effect.orDie,
         )
 
+      yield* elog.info("infinity judge raw output", { sessionID: input.sessionID, raw })
+
       const judged = parseInfinityJudgeOutput(raw)
       if (judged?.should_continue) {
         const nextPrompt = judged.prompt?.trim() || latestReplyInput
-        return { summary: judged.summary, shouldContinue: true as const, prompt: nextPrompt }
+        yield* elog.info("infinity judge decided continue", {
+          sessionID: input.sessionID,
+          reason: judged.reason,
+          summary: judged.summary,
+          promptPreview: nextPrompt.slice(0, 200),
+        })
+        return {
+          summary: judged.summary,
+          shouldContinue: true as const,
+          prompt: nextPrompt,
+          reason: judged.reason,
+        }
       }
-      if (judged) return { summary: judged.summary, shouldContinue: false as const }
+      if (judged) {
+        yield* elog.info("infinity judge decided stop", {
+          sessionID: input.sessionID,
+          reason: judged.reason,
+          summary: judged.summary,
+        })
+        return {
+          summary: judged.summary,
+          shouldContinue: false as const,
+          reason: judged.reason,
+        }
+      }
 
+      yield* elog.warn("infinity judge parse failed, continuing with fallback", {
+        sessionID: input.sessionID,
+        rawPreview: raw.slice(0, 500),
+      })
       const fallbackSummary = [input.previousSummary?.trim(), latestReplyInput.trim()].filter(Boolean).join("\n\n")
       return {
         summary: fallbackSummary || "No summary available.",
         shouldContinue: true as const,
         prompt: latestReplyInput,
+        reason: "Judge output unparseable; continuing with previous response as next instruction.",
       }
     })
 
@@ -1484,18 +1522,47 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               })
               inf.summary = judged.summary
               if (!judged.shouldContinue) {
-                yield* slog.info("infinity complete")
+                yield* slog.info("infinity complete", { reason: judged.reason })
+                yield* createUserMessage({
+                  sessionID,
+                  agent: lastUser.agent,
+                  model: lastUser.model,
+                  noReply: true,
+                  parts: [
+                    {
+                      type: "text",
+                      text: [
+                        "[Infinity mode — Judge decided to stop]",
+                        judged.reason ? `Reason: ${judged.reason}` : "",
+                        judged.summary ? `Summary: ${judged.summary}` : "",
+                      ]
+                        .filter(Boolean)
+                        .join("\n"),
+                    },
+                  ],
+                })
                 break
               }
+              const judgePrompt = [
+                "[Infinity mode — Judge requested next step]",
+                judged.reason ? `Judge reason: ${judged.reason}` : "",
+                "",
+                judged.prompt,
+              ]
+                .filter(Boolean)
+                .join("\n")
               yield* createUserMessage({
                 sessionID,
                 agent: lastUser.agent,
                 model: lastUser.model,
                 noReply: true,
-                parts: [{ type: "text", text: judged.prompt }],
+                parts: [{ type: "text", text: judgePrompt }],
               })
               yield* sessions.touch(sessionID)
-              yield* slog.info("infinity continuing", { prompt: judged.prompt?.slice(0, 100) })
+              yield* slog.info("infinity continuing", {
+                reason: judged.reason,
+                promptPreview: judged.prompt?.slice(0, 100),
+              })
               continue
             }
             yield* slog.info("exiting loop")
