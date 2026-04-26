@@ -1,0 +1,13 @@
+Change the working directory of the current OpenCode session.
+
+This tool changes the process working directory and reinitializes the instance context (project info, LSP, file watchers, etc.) for the new directory. After calling this tool, all subsequent tool calls (Bash, Read, Write, Edit, Glob, Grep, etc.) will resolve relative paths based on the new directory.
+
+Usage:
+- Use this tool when you need to switch to a different project directory or a git worktree.
+- Supports absolute paths, relative paths (resolved from current directory), and ~ for home directory.
+- The directory must exist.
+- After switching, the TUI will automatically refresh to reflect the new directory context.
+
+IMPORTANT:
+- This tool changes global session state. Use it intentionally, not casually.
+- All existing LSP connections, file watchers, and other instance-level services will be reinitialized for the new directory.
