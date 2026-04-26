@@ -255,7 +255,28 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     })
 
   useKeyboard((evt) => {
-    require("fs").appendFileSync("keys.log", JSON.stringify(evt) + "\n")
+    if (evt.ctrl && evt.name === "y") {
+      const current = sync.data.config?.followup ?? "steer"
+      let next: "steer" | "wrap" | "queue" = "steer"
+      if (current === "steer") next = "wrap"
+      else if (current === "wrap") next = "queue"
+      
+      sync.set("config", { ...sync.data.config, followup: next })
+      
+      void sdk.client.config.update({
+        config: { followup: next }
+      })
+      
+      toast.show({
+        message: "Queue mode changed to: " + next,
+        variant: "info",
+        duration: 2000,
+      })
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
     const sel = renderer.getSelection()
     if (!sel) return
