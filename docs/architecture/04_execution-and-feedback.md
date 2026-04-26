@@ -61,11 +61,11 @@ A fundamental feature of Opencode is its ability to seamlessly execute terminal 
 
 ### Process Spawning & Streams
 
-When the `@build` agent invokes the `bash` tool, Opencode relies on standard `child_process` execution primitives securely wrapped by Effect-TS (`ChildProcessSpawner`). 
+When the `@build` agent invokes the `bash` tool, Opencode relies on standard `child_process` execution primitives securely wrapped by Effect-TS (`ChildProcessSpawner`).
 
-Rather than executing in a fully interactive Pseudo-Terminal (PTY), Opencode intentionally executes the `bash` tool with `TERM="dumb"` to suppress interactive prompts and pagination (like `less` or `more`) that would otherwise hang an autonomous agent. However, to ensure it doesn't lose visibility during long-running commands, it continuously multiplexes and streams `stdout` and `stderr` back to the context metadata in real-time, rather than waiting for the process to exit.
+Rather than executing in a fully interactive Pseudo-Terminal (PTY), Opencode intentionally executes the `bash` tool with `TERM="dumb"` to suppress interactive prompts and pagination (like `less` or `more`) that would otherwise hang an autonomous agent. (Note: This `TERM="dumb"` injection actually occurs upstream in [`src/session/prompt.ts`](../../packages/opencode/src/session/prompt.ts) before it reaches the bash tool execution). However, to ensure it doesn't lose visibility during long-running commands, it continuously multiplexes and streams `stdout` and `stderr` back to the context metadata in real-time, rather than waiting for the process to exit.
 
-(Note: Opencode *does* utilize true PTYs via `node-pty`/`bun-pty`, but strictly for the user-facing Terminal UI components, keeping agent execution safely decoupled from interactive UI layers).
+(Note: Opencode _does_ utilize true PTYs via `node-pty`/`bun-pty`, but strictly for the user-facing Terminal UI components, keeping agent execution safely decoupled from interactive UI layers).
 
 ### Sanitizing Output for the LLM
 

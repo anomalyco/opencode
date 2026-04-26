@@ -1,6 +1,6 @@
 # Core Framework & Observability
 
-Opencode embraces a **hybrid concurrency architecture** that blends the robust functional programming primitives of **Effect-TS** with native Node.js `async/await` and `try/catch` patterns. 
+Opencode embraces a **hybrid concurrency architecture** that blends the robust functional programming primitives of **Effect-TS** with native Node.js `async/await` and `try/catch` patterns.
 
 Rather than dogmatically forcing all code into functional pipelines, Opencode strategically applies Effect-TS to solve complex architectural problems—like lifecycle management, pub/sub orchestration, and context sandboxing—while retaining native JavaScript paradigms for localized, straightforward logic.
 
@@ -18,10 +18,10 @@ Opencode utilizes Effect-TS specifically for enterprise-grade orchestration chal
 ```typescript
 // ❌ Standard Node.js (Dangling process risk)
 function startMCP() {
-  const child = spawn("npx", ["mcp-server"]);
+  const child = spawn("npx", ["mcp-server"])
   // If the parent function errors out before attaching exit handlers,
   // this child process becomes an orphaned zombie.
-  return child;
+  return child
 }
 
 // ✅ Effect-TS (Resource Safety)
@@ -31,9 +31,10 @@ const startMCP = Effect.acquireUseRelease(
   // 2. Use
   (child) => connectToTransport(child),
   // 3. Release (Guaranteed to run, even on crash/abort)
-  (child) => Effect.sync(() => child.kill())
-);
+  (child) => Effect.sync(() => child.kill()),
+)
 ```
+
 </details>
 
 - **Background Daemons (`Effect.forkIn`):** When the primary loop needs to execute an invisible background operation—like generating a `@title` label or executing token `@compaction`—it utilizes `Effect.forkIn(scope)`. This safely tethers the concurrent thread to the session lifecycle, rather than relying on dangling `setTimeout` or `Promise.then` operations.
@@ -44,28 +45,26 @@ const startMCP = Effect.acquireUseRelease(
 ```typescript
 // ❌ Standard Node.js (Uncaught promise risk)
 async function chatTurn() {
-  const response = await llm.chat();
-  
+  const response = await llm.chat()
+
   // Fire and forget - if this errors, it might crash the whole app silently
-  generateTitleAsync(response.text).catch(console.error); 
-  
-  return response;
+  generateTitleAsync(response.text).catch(console.error)
+
+  return response
 }
 
 // ✅ Effect-TS (Structured Concurrency)
 const chatTurn = Effect.gen(function* () {
-  const response = yield* llm.chat();
-  
+  const response = yield* llm.chat()
+
   // Forks the task safely into the current scope.
   // If the parent scope is interrupted, the fiber is safely canceled.
-  yield* generateTitle(response.text).pipe(
-    Effect.ignore,
-    Effect.forkIn(scope)
-  );
-  
-  return response;
-});
+  yield* generateTitle(response.text).pipe(Effect.ignore, Effect.forkIn(scope))
+
+  return response
+})
 ```
+
 </details>
 
 - **Sandboxed Context (`InstanceState`):** Opencode strictly isolates state (like SQLite connections or file watchers) per workspace. Effect's `ScopedCache` powers the `InstanceState` layer, guaranteeing that services are instantiated exactly once per directory and cleanly disposed of when the workspace changes.
@@ -119,7 +118,7 @@ graph TD
 
 ## 3. Observability & Telemetry
 
-Opencode integrates robust observability mechanisms, primarily leveraging OpenTelemetry to gain deep insights into agent execution and underlying operational lifecycles. 
+Opencode integrates robust observability mechanisms, primarily leveraging OpenTelemetry to gain deep insights into agent execution and underlying operational lifecycles.
 
 ### OpenTelemetry Binding
 
@@ -130,8 +129,8 @@ When telemetry is enabled, Opencode dynamically loads and injects the `OtelTrace
 ```typescript
 // (from src/agent/agent.ts)
 const tracer = cfg.experimental?.openTelemetry
-  ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
-  : undefined;
+  ? Option.getOrUndefined(yield * Effect.serviceOption(OtelTracer.OtelTracer))
+  : undefined
 ```
 
 ### Vercel AI SDK Integration
@@ -148,7 +147,7 @@ const params = {
     },
   },
   // ...
-};
+}
 ```
 
 Because of this direct handoff, Opencode captures deep diagnostic data, including context assembly times, raw provider latency, and token consumption metrics uniformly across various model adapters (OpenAI, Anthropic, Gemini, etc.).

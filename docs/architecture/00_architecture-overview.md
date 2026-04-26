@@ -18,14 +18,14 @@ This documentation suite is broken down into 7 logical components that map the a
 
 ## 1. Core Architecture Principles
 
-Opencode is designed as a highly stateful, event-driven client/server architecture built natively on the **Effect-TS** runtime. It is designed to bridge the stateless nature of Large Language Models with the highly stateful, permission-gated environment of a local codebase. 
+Opencode is designed as a highly stateful, event-driven client/server architecture built natively on the **Effect-TS** runtime. It is designed to bridge the stateless nature of Large Language Models with the highly stateful, permission-gated environment of a local codebase.
 
-- **Provider Independence:** Utilizes the **Vercel AI SDK** purely as a standardized network boundary, decoupling internal reasoning and tool orchestration from any specific vendor API. Seamlessly hot-swaps between massive cloud models and local models. *(See [SDK Bridging](./01_prompt-and-context.md#3-bridging-the-vercel-ai-sdk))*
-- **Agentic Kernel:** Acts as an operating system managing Token Budgets (context limits) and Execution Threads (tool orchestration). Allows the agent to run in cyclic, autonomous loops (`Thought -> Action -> Observation`) before ever yielding control back to the user. *(See [Agents & Modes](./02_agents-and-modes.md))*
-- **Reactive & Deliberative Loops:** Wraps the model's native reasoning in deterministic, harness-level loops. A 'Fast Loop' intercepts execution failures (e.g., catching a broken build or malformed artifact) and autonomously re-prompts the agent to fix it in the background. A 'Slow Loop' handles high-level task planning. *(See [Feedback Loops](./04_execution-and-feedback.md))*
-- **Functional Concurrency & Resource Safety:** Opencode is built natively on the **Effect-TS** functional programming runtime. It blends native Node.js async/await with structured concurrency (Scopes) for safe resource management. Guarantees flawless garbage collection of background processes (like MCP servers) and file watchers upon interruption. *(See [Garbage Collection](./07_core-framework.md))*
-- **Event-Driven Pub/Sub UI:** Decouples the terminal UI from the execution loop using a centralized `Effect.PubSub` event bus. Tool executions and database updates broadcast sync events, allowing the UI to reactively render updates without polling or blocking the main agent loop. *(See [Pub/Sub Bus](./07_core-framework.md))*
-- **Dual-Mode Architecture:** Hardcodes a rigid, two-state workflow engine ("Plan" vs "Build") directly into the core execution loop. Physically strips editing tools and injects explicit read-only constraints at the API level during the "Plan" phase. *(See [Mode Structure](./02_agents-and-modes.md#2-the-mode-structure))*
+- **Provider Independence:** Utilizes the **Vercel AI SDK** purely as a standardized network boundary, decoupling internal reasoning and tool orchestration from any specific vendor API. Seamlessly hot-swaps between massive cloud models and local models. _(See [SDK Bridging](./01_prompt-and-context.md#3-bridging-the-vercel-ai-sdk))_
+- **Agentic Kernel:** Acts as an operating system managing Token Budgets (context limits) and Execution Threads (tool orchestration). Allows the agent to run in cyclic, autonomous loops (`Thought -> Action -> Observation`) before ever yielding control back to the user. _(See [Agents & Modes](./02_agents-and-modes.md))_
+- **Reactive & Deliberative Loops:** Wraps the model's native reasoning in deterministic, harness-level loops. A 'Fast Loop' intercepts execution failures (e.g., catching a broken build or malformed artifact) and autonomously re-prompts the agent to fix it in the background. A 'Slow Loop' handles high-level task planning. _(See [Feedback Loops](./04_execution-and-feedback.md))_
+- **Functional Concurrency & Resource Safety:** Opencode is built natively on the **Effect-TS** functional programming runtime. It blends native Node.js async/await with structured concurrency (Scopes) for safe resource management. Guarantees flawless garbage collection of background processes (like MCP servers) and file watchers upon interruption. _(See [Garbage Collection](./07_core-framework.md))_
+- **Event-Driven Pub/Sub UI:** Decouples the terminal UI from the execution loop using a centralized `Effect.PubSub` event bus. Tool executions and database updates broadcast sync events, allowing the UI to reactively render updates without polling or blocking the main agent loop. _(See [Pub/Sub Bus](./07_core-framework.md))_
+- **Dual-Mode Architecture:** Hardcodes a rigid, two-state workflow engine ("Plan" vs "Build") directly into the core execution loop. Physically strips editing tools and injects explicit read-only constraints at the API level during the "Plan" phase. _(See [Mode Structure](./02_agents-and-modes.md#2-the-mode-structure))_
 
 ---
 
@@ -33,11 +33,11 @@ Opencode is designed as a highly stateful, event-driven client/server architectu
 
 Beyond structural differences, Opencode's daily execution loop relies on explicit, deterministic tooling (e.g., `grep`, `glob`, `read`) rather than passive, noisy semantic search.
 
-- **Sandboxed State & Context:** Relies on "Filesystem-as-State" injected dynamically, with execution contexts strictly sandboxed per-directory using `InstanceState` scopes. *(See [Doc 01](./01_prompt-and-context.md) & [Doc 05](./05_state-and-memory.md))*
-- **Strict Permission Gating:** Utilizes a robust `allow/deny/ask` ruleset engine that evaluates permissions before tool injection. Hardcodes read-only constraints for specific architectural agents (e.g., "Plan" mode). *(See [Doc 02](./02_agents-and-modes.md) & [Doc 06](./06_security-and-configuration.md))*
-- **Dynamic Extensibility (MCP & Skills):** Natively translates Model Context Protocol (MCP) JSON-RPC schemas into SDK tools, handles complex OAuth flows, and dynamically loads local `SKILL.md` workflows from disk. *(See [Doc 03](./03_tooling-and-capabilities.md))*
-- **Synthesized Feedback Loops:** Intercepts codebase modifications to inject deterministic feedback (e.g., Language Server Protocol [LSP] diagnostics, bash `stderr`) directly back into the LLM's observation window. *(See [Doc 04](./04_execution-and-feedback.md))*
-- **Memory & Checkpointing:** Employs an invisible secondary Git tree for surgical reversions, background daemons for token compaction, and a stateful SQLite `TodoTable` for tracking multi-step plans. *(See [Doc 05](./05_state-and-memory.md))*
+- **Sandboxed State & Context:** Relies on "Filesystem-as-State" injected dynamically, with execution contexts strictly sandboxed per-directory using `InstanceState` scopes. _(See [Doc 01](./01_prompt-and-context.md) & [Doc 05](./05_state-and-memory.md))_
+- **Strict Permission Gating:** Utilizes a robust `allow/deny/ask` ruleset engine that evaluates permissions before tool injection. Hardcodes read-only constraints for specific architectural agents (e.g., "Plan" mode). _(See [Doc 02](./02_agents-and-modes.md) & [Doc 06](./06_security-and-configuration.md))_
+- **Dynamic Extensibility (MCP & Skills):** Natively translates Model Context Protocol (MCP) JSON-RPC schemas into SDK tools, handles complex OAuth flows, and dynamically loads local `SKILL.md` workflows from disk. _(See [Doc 03](./03_tooling-and-capabilities.md))_
+- **Synthesized Feedback Loops:** Intercepts codebase modifications to inject deterministic feedback (e.g., Language Server Protocol [LSP] diagnostics, bash `stderr`) directly back into the LLM's observation window. _(See [Doc 04](./04_execution-and-feedback.md))_
+- **Memory & Checkpointing:** Employs an invisible secondary Git tree for surgical reversions, background daemons for token compaction, and a stateful SQLite `TodoTable` for tracking multi-step plans. _(See [Doc 05](./05_state-and-memory.md))_
 
 ---
 
@@ -50,4 +50,5 @@ To navigate the implementation details discussed in this report, here is a brief
 - **`packages/opencode/src/`**: The core execution harness, tool registry, and session processor.
 - **`packages/sdk/`**: Contains the generated openAPI schemas and client definitions.
 - **`packages/ui/`**: A SolidJS-based web component library (e.g., for webview or desktop applications), completely decoupled from the CLI interface.
-- **`packages/shared/`**: Common utilities, SQLite database schemas, and shared types.
+- **`packages/core/`**: Shared utilities, foundational types, and system-level primitives (e.g., filesystem, hashing, process management).
+- SQLite database schemas are domain-collocated, primarily within `packages/opencode/src/**/*.sql.ts`.

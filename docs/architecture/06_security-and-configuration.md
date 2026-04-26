@@ -20,9 +20,9 @@ The system searches for the `.opencode` directory in the following deterministic
 
 ### Deep Merging Strategy
 
-Once the relevant `.opencode` directories and `opencode.jsonc` files are located, the configuration engine does not simply overwrite settings; it performs a **deep merge**. As implemented in [`src/config/config.ts`](../../packages/opencode/src/config/config.ts), the properties are overlaid. 
+Once the relevant `.opencode` directories and `opencode.jsonc` files are located, the configuration engine does not simply overwrite settings; it performs a **deep merge**. As implemented in [`src/config/config.ts`](../../packages/opencode/src/config/config.ts), the properties are overlaid.
 
-*Example:* A user can define a complex `@plan` agent globally in `~/.opencode/agents.jsonc`, and a specific project can override just the `model` property of that `@plan` agent in `/path/to/project/.opencode/agents.jsonc`, without needing to redefine the agent's prompts or permissions.
+_Example:_ A user can define a complex `@plan` agent globally in `~/.opencode/agents.jsonc`, and a specific project can override just the `model` property of that `@plan` agent in `/path/to/project/.opencode/agents.jsonc`, without needing to redefine the agent's prompts or permissions.
 
 ---
 
@@ -57,23 +57,23 @@ flowchart TD
         R1[Rule 1: edit:* = allow]
         R2[Rule 2: edit:src/* = ask]
         R3[Rule 3: edit:src/secret.ts = deny]
-        
+
         R1 --> R2
         R2 --> R3
-        
+
         R3 -.->|Overrides| R2
         R2 -.->|Overrides| R1
-        
+
         Note[Because of findLast, later rules override earlier ones.<br>If no rule matches, it inherently defaults to 'ask'.]
     end
 
     subgraph tool_interception [Tool Interception]
         Tool[Tool Invoked] --> Eval{evaluate()}
-        
+
         Eval -->|allow| Run[Execute Tool]
         Eval -->|deny| Fail[Throw DeniedError]
         Eval -->|ask| Pause[Suspend Fiber & Prompt User]
-        
+
         Pause -->|User says Yes| Run
         Pause -->|User says Always| Save[Save Rule & Execute Tool]
         Pause -->|User says No| Fail
@@ -87,7 +87,7 @@ flowchart TD
 Permissions operate dynamically across a fallback chain composed of three tiers:
 
 1. **Agent Level ([`src/config/agent.ts`](../../packages/opencode/src/config/agent.ts))**: Each agent defines its operational boundaries. A `permission` block explicitly maps allowed and denied tools for that specialized agent (e.g., forcing the `@plan` agent to have `edit: "deny"`).
-2. **Project / Workspace Level ([`src/session/session.sql.ts`](../../packages/opencode/src/session/session.sql.ts))**: If a user approves an "ask" request with the `"always"` modifier, that rule is written to the `PermissionTable` via Drizzle ORM. This table has a `project_id` primary key, acting as a persistent Project-scoped memory cache.
+2. **Project / Workspace Level ([`src/permission/index.ts`](../../packages/opencode/src/permission/index.ts))**: If a user approves an "ask" request with the `"always"` modifier, that rule is written to the `PermissionTable` via Drizzle ORM. This table has a `project_id` primary key, acting as a persistent Project-scoped memory cache.
 3. **Session Level ([`src/session/session.sql.ts`](../../packages/opencode/src/session/session.sql.ts))**: The `SessionTable` possesses a `permission: text` column, allowing explicit permission overrides or historical snapshots of rules to be scoped to a single conversational session thread.
 
 ---

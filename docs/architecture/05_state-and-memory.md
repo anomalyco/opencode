@@ -6,9 +6,9 @@ Opencode establishes a dedicated shadow directory within the user's application 
 
 To capture the state efficiently, the checkpointing mechanism utilizes `git write-tree` to generate silent, near-instantaneous snapshots of the active workspace. Before the agent executes any tool that modifies the filesystem, the harness quietly records these point-in-time tree objects, guaranteeing a reliable recovery vector exists for every conversational turn.
 
-When the user chooses to revert a chat turn, Opencode relies on a targeted `git checkout <hash> -- <file>` operation rather than a destructive hard reset. This surgical recovery approach ensures that only the specific files altered by the agent are rolled back, safely preserving any concurrent human edits made elsewhere in the codebase. However, if the agent newly *creates* a file (meaning it did not exist in the snapshot hash), running `git checkout <hash> -- <file>` will fail. The implementation handles this reactively: if the `checkout` operation fails, it subsequently queries `git ls-tree` to verify if the file existed in the snapshot tree. If the file is missing from the tree, the engine executes a hard file deletion (`yield* remove(op.file)`).
+When the user chooses to revert a chat turn, Opencode relies on a targeted `git checkout <hash> -- <file>` operation rather than a destructive hard reset. This surgical recovery approach ensures that only the specific files altered by the agent are rolled back, safely preserving any concurrent human edits made elsewhere in the codebase. However, if the agent newly _creates_ a file (meaning it did not exist in the snapshot hash), running `git checkout <hash> -- <file>` will fail. The implementation handles this reactively: if the `checkout` operation fails, it subsequently queries `git ls-tree` to verify if the file existed in the snapshot tree. If the file is missing from the tree, the engine executes a hard file deletion (`yield* remove(op.file)`).
 
-*(Note: These Git operations are completely encapsulated behind the `Snapshot.Service` in [`src/snapshot/index.ts`](../../packages/opencode/src/snapshot/index.ts). The `SessionRevert` engine delegates all snapshotting and reversion logic to this service, rather than invoking bash commands directly).*
+_(Note: These Git operations are completely encapsulated behind the `Snapshot.Service` in [`src/snapshot/index.ts`](../../packages/opencode/src/snapshot/index.ts). The `SessionRevert` engine delegates all snapshotting and reversion logic to this service, rather than invoking bash commands directly)._
 
 **Crucially, this revert mechanism is purely deterministic, not "smart."** It strictly reverts local filesystem diffs via Git. It has absolutely zero awareness of—and makes no intelligent attempt to rollback—external side effects.
 
@@ -49,7 +49,7 @@ Large coding sessions can accumulate thousands of parts and enormous `ToolState`
 
 To maintain highly performant execution and UI rendering, Opencode employs aggressive linear pagination via SQLite.
 
-As implemented in [`src/session/message-v2.ts`](../../packages/opencode/src/session/message-v2.ts), the `page()` function retrieves a limited chunk of `MessageTable` rows, and subsequently hydrates the attached `PartTable` entities *only* for the messages in the active window. This guarantees that deep historical context does not cause memory bloat on load.
+As implemented in [`src/session/message-v2.ts`](../../packages/opencode/src/session/message-v2.ts), the `page()` function retrieves a limited chunk of `MessageTable` rows, and subsequently hydrates the attached `PartTable` entities _only_ for the messages in the active window. This guarantees that deep historical context does not cause memory bloat on load.
 
 ---
 

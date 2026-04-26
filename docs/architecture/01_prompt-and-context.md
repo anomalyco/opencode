@@ -92,6 +92,7 @@ Available skills:
 
 When asked to summarize, provide a detailed but concise summary of the older conversation history.
 The most recent turns may be preserved verbatim outside your summary, so focus on information that would still be needed to continue the work with that recent context available.</pre>
+
 </details>
 </td>
 </tr>
@@ -134,6 +135,7 @@ CRITICAL: Plan mode ACTIVE - you are in READ-ONLY phase. STRICTLY FORBIDDEN:
 ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
 or ANY other bash command to manipulate files - commands may ONLY read/inspect.
 &lt;/system-reminder&gt;</pre>
+
 </details>
 </td>
 </tr>
@@ -193,13 +195,13 @@ flowchart TD
 
     subgraph pipeline ["toModelMessagesEffect Pipeline"]
         P1[Parse MessageV2]
-        
+
         P4{Is Tool Artifact?}
         P5[Map to tool_call/tool_result]
 
         P6{Model Supports Media in Tool Results?}
         P7[Strip Base64 Media]
-        P8[Append as Synthetic User Message]
+        P8[Append Media as Synthetic User Message]
     end
 
     subgraph sdk [Vercel AI SDK]
@@ -213,8 +215,9 @@ flowchart TD
 
     P5 --> P6
     P6 -- No --> P7
-    P7 --> P8
+    P7 -->|Media| P8
     P8 --> V1
+    P7 -->|Text Output| V2
 
     P6 -- Yes --> V2
     P4 -- No --> V1

@@ -7,7 +7,7 @@ Prior to every LLM turn, Opencode dynamically evaluates and structures the avail
 ### Pre-Flight Filtering via `ToolRegistry`
 
 Before the LLM is given a tool in its prompt payload, the `ToolRegistry` evaluates permissions. It calculates the strict intersection of **Session Permissions** and **Agent Permissions**.
-If a specialized agent (e.g., `@explore`) lacks write privileges, tools from the `edit` umbrella (e.g., `edit`, `write`, `apply_patch`) are pruned from the Vercel AI payload entirely. This prevents the agent from making destructive file modifications. **Important Distinction:** The `bash` tool is *not* part of the `edit` umbrella. By default, it is provided to the agent and relies on explicit prompt-level instructions (like the Plan mode reminder) to prevent the execution of destructive shell commands.
+If a specialized agent (e.g., `@explore`) lacks write privileges, tools from the `edit` umbrella (e.g., `edit`, `write`, `apply_patch`) are pruned from the Vercel AI payload entirely. This prevents the agent from making destructive file modifications. **Important Distinction:** The `bash` tool is _not_ part of the `edit` umbrella. By default, it is provided to the agent and relies on explicit prompt-level instructions (like the Plan mode reminder) to prevent the execution of destructive shell commands.
 
 ### Context Topologies & Isolation
 
