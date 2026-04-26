@@ -618,7 +618,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       title: "Toggle Queue Mode",
       keybind: "session_toggle_queue_mode",
       value: "session.toggle-queue-mode",
-      onSelect: () => {
+      onSelect: (dialog) => {
         const current = sync.data.config?.followup ?? "steer"
         let next: "steer" | "wrap" | "queue" = "steer"
         if (current === "steer") next = "wrap"
@@ -628,8 +628,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         
         void sdk.client.config.update({
           config: { followup: next }
-        }).then(() => {
-          void sync.bootstrap({ fatal: false })
         })
         
         toast.show({
@@ -637,6 +635,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           variant: "info",
           duration: 2000,
         })
+        
+        dialog.clear()
       },
       category: "Session",
     },
