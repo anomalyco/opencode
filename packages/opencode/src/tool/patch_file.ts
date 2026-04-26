@@ -28,32 +28,31 @@ export const PatchSchema = Schema.Struct({
   anchor_hash: Schema.String.annotate({
     description:
       "SHA-256 hash of the context window around the target section. " +
-      "Computed automatically by first calling read_file; DO NOT guess this value. " +
-      "The tool returns anchors when you call it with compute_anchors=true.",
+      "Obtain via compute_anchors=true first. DO NOT guess this value.",
   }),
   context_lines: Schema.optional(Schema.Number).annotate({
-    description: "Number of lines of surrounding context included in the anchor hash (default 5).",
+    description: "Lines of surrounding context included in the anchor hash (default 5). " +
+      "Must match the value used when computing anchors.",
   }),
   search: Schema.String.annotate({
-    description: "The exact lines to find within the anchored section (must match exactly, including indentation).",
+    description: "Exact lines to find within the anchored window (indentation-sensitive).",
   }),
   replace: Schema.String.annotate({
-    description: "The replacement text for the matched lines.",
+    description: "Replacement text for the matched lines.",
   }),
 })
 
 export const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Absolute path to the file to modify." }),
-  patches: Schema.Array(PatchSchema).annotate({
+  patches: Schema.optional(Schema.Array(PatchSchema)).annotate({
     description:
-      "One or more patches to apply. Each patch targets an independent code section " +
-      "identified by its anchor hash. Patches must not overlap. " +
-      "All patches are applied in a single atomic operation.",
+      "One or more patches. Each targets an independent section identified by its anchor_hash. " +
+      "Patches must not overlap. All patches apply atomically.",
   }),
   compute_anchors: Schema.optional(Schema.Boolean).annotate({
     description:
-      "When true, the tool reads the file and returns anchor hashes for every N-line window " +
-      "without making any changes. Use this to obtain anchor_hash values before patching.",
+      "When true, returns anchor hashes for every line without modifying the file. " +
+      "Use this to obtain anchor_hash values before calling with patches.",
   }),
 })
 
@@ -61,48 +60,39 @@ export const Parameters = Schema.Struct({
 // Anchor helpers
 // ---------------------------------------------------------------------------
 
-function computeAnchor(lines: string[], centerStart: number, centerEnd: number, contextLines: number): string {
-  const from = Math.max(0, centerStart - contextLines)
-  const to = Math.min(lines.length - 1, centerEnd + contextLines)
+function computeAnchor(lines: string[], centerLine: number, contextLines: number): string {
+  const from = Math.max(0, centerLine - contextLines)
+  const to   = Math.min(lines.length - 1, centerLine + contextLines)
   const window = lines.slice(from, to + 1).join("\n")
   return crypto.createHash("sha256").update(window).digest("hex")
 }
 
 interface AnchorInfo {
-  anchor_hash: string
-  start_line: number
-  end_line: number
+  anchor_hash:   string
+  line:          number
   context_lines: number
-  preview: string
+  preview:       string
 }
 
 function buildAnchorMap(content: string, contextLines: number): AnchorInfo[] {
   const lines = content.split("\n")
-  const anchors: AnchorInfo[] = []
-  // Slide a window of `contextLines*2+1` lines across the file
-  for (let i = 0; i < lines.length; i++) {
-    const hash = computeAnchor(lines, i, i, contextLines)
-    anchors.push({
-      anchor_hash: hash,
-      start_line: i,
-      end_line: i,
-      context_lines: contextLines,
-      preview: lines[i].slice(0, 80),
-    })
-  }
-  return anchors
+  return lines.map((line, i) => ({
+    anchor_hash:   computeAnchor(lines, i, contextLines),
+    line:          i,
+    context_lines: contextLines,
+    preview:       line.slice(0, 80),
+  }))
 }
 
 // ---------------------------------------------------------------------------
-// Patch application
+// Patch resolution
 // ---------------------------------------------------------------------------
 
 interface ResolvedPatch {
-  startLine: number
-  endLine: number
-  search: string
-  replace: string
-  contextLines: number
+  startLine:    number
+  endLine:      number
+  search:       string
+  replace:      string
 }
 
 function resolvePatch(
@@ -110,38 +100,31 @@ function resolvePatch(
   patch: Schema.Schema.Type<typeof PatchSchema>,
 ): ResolvedPatch | null {
   const ctxLines = patch.context_lines ?? 5
-  // Scan all possible center positions and compare anchor hash
   for (let i = 0; i < lines.length; i++) {
-    const candidate = computeAnchor(lines, i, i, ctxLines)
-    if (candidate === patch.anchor_hash) {
-      // Found anchor — now locate search string in the context window
-      const from = Math.max(0, i - ctxLines)
-      const to = Math.min(lines.length - 1, i + ctxLines)
-      const windowText = lines.slice(from, to + 1).join("\n")
-      if (windowText.includes(patch.search)) {
-        return { startLine: from, endLine: to, search: patch.search, replace: patch.replace, contextLines: ctxLines }
-      }
-      return null
-    }
+    if (computeAnchor(lines, i, ctxLines) !== patch.anchor_hash) continue
+    const from = Math.max(0, i - ctxLines)
+    const to   = Math.min(lines.length - 1, i + ctxLines)
+    const windowText = lines.slice(from, to + 1).join("\n")
+    if (!windowText.includes(patch.search)) return null
+    return { startLine: from, endLine: to, search: patch.search, replace: patch.replace }
   }
   return null
 }
 
 function applyPatches(content: string, resolved: ResolvedPatch[]): string {
-  // Sort patches in reverse order to avoid offset drift
+  // Apply in reverse line order to prevent offset drift
   const sorted = [...resolved].sort((a, b) => b.startLine - a.startLine)
   let result = content
   for (const p of sorted) {
     const lines = result.split("\n")
-    const windowLines = lines.slice(p.startLine, p.endLine + 1)
-    const windowText = windowLines.join("\n")
+    const windowText = lines.slice(p.startLine, p.endLine + 1).join("\n")
     if (!windowText.includes(p.search)) {
       throw new Error(
-        `patch_file: search text not found in anchor window at lines ${p.startLine}-${p.endLine}. ` +
-          "Re-run with compute_anchors=true to refresh anchor hashes.",
+        `patch_file: search text not found in anchor window (lines ${p.startLine}–${p.endLine}). ` +
+          "Re-run with compute_anchors=true to refresh anchors.",
       )
     }
-    const patched = windowText.replace(p.search, p.replace)
+    const patched  = windowText.replace(p.search, p.replace)
     const newLines = patched.split("\n")
     lines.splice(p.startLine, p.endLine - p.startLine + 1, ...newLines)
     result = lines.join("\n")
@@ -156,108 +139,107 @@ function applyPatches(content: string, resolved: ResolvedPatch[]): string {
 export const PatchFileTool = Tool.define(
   "patch_file",
   Effect.gen(function* () {
-    const lsp = yield* LSP.Service
-    const afs = yield* AppFileSystem.Service
+    const lsp    = yield* LSP.Service
+    const afs    = yield* AppFileSystem.Service
     const format = yield* Format.Service
-    const bus = yield* Bus.Service
+    const bus    = yield* Bus.Service
 
     return {
       description: DESCRIPTION,
-      parameters: Parameters,
+      parameters:  Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          if (!params.filePath) throw new Error("filePath is required")
-
           const filePath = path.isAbsolute(params.filePath)
             ? params.filePath
             : path.join(Instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filePath)
 
-          const source = yield* Bom.readFile(afs, filePath)
+          const source  = yield* Bom.readFile(afs, filePath)
           const content = source.text
 
-          // ---- compute_anchors mode: return anchor map, no changes ----
+          // ---- compute_anchors mode (read-only) ----
           if (params.compute_anchors) {
-            const contextLines = params.patches?.[0]?.context_lines ?? 5
-            const anchors = buildAnchorMap(content, contextLines)
+            const anchors = buildAnchorMap(content, 5)
             return {
-              title: `Anchors for ${path.relative(Instance.worktree, filePath)}`,
-              output: JSON.stringify(anchors, null, 2),
+              title:    `Anchors for ${path.relative(Instance.worktree, filePath)}`,
+              output:   JSON.stringify(anchors, null, 2),
               metadata: { anchors },
             }
           }
 
-          if (!params.patches || params.patches.length === 0) {
+          const patches = params.patches
+          if (!patches || patches.length === 0) {
             throw new Error("patches array is required when compute_anchors is not set.")
           }
 
-          // ---- resolve all patches (with one retry on mismatch) ----
+          // ---- resolve all patches ----
           const lines = content.split("\n")
-          let resolved: ResolvedPatch[] = []
+          const resolved: ResolvedPatch[] = []
 
-          for (const patch of params.patches) {
-            let r = resolvePatch(lines, patch)
+          for (const patch of patches) {
+            const r = resolvePatch(lines, patch)
             if (!r) {
               throw new Error(
-                `patch_file: anchor_hash "${patch.anchor_hash}" not found in ${path.relative(Instance.worktree, filePath)}. ` +
-                  "The file may have changed. Re-run with compute_anchors=true to obtain fresh anchors.",
+                `patch_file: anchor_hash "${patch.anchor_hash}" not found in ` +
+                  `${path.relative(Instance.worktree, filePath)}. ` +
+                  "The file may have changed — re-run with compute_anchors=true.",
               )
             }
             resolved.push(r)
           }
 
-          // Detect overlapping patches
-          const sortedResolved = [...resolved].sort((a, b) => a.startLine - b.startLine)
-          for (let i = 1; i < sortedResolved.length; i++) {
-            if (sortedResolved[i].startLine <= sortedResolved[i - 1].endLine) {
+          // ---- overlap check ----
+          const sortedR = [...resolved].sort((a, b) => a.startLine - b.startLine)
+          for (let i = 1; i < sortedR.length; i++) {
+            if (sortedR[i].startLine <= sortedR[i - 1].endLine) {
               throw new Error(
-                `patch_file: patches overlap at lines ${sortedResolved[i - 1].startLine}-${sortedResolved[i - 1].endLine} ` +
-                  `and ${sortedResolved[i].startLine}-${sortedResolved[i].endLine}. Patches must target non-overlapping sections.`,
+                `patch_file: patches overlap at lines ${sortedR[i - 1].startLine}–${sortedR[i - 1].endLine} ` +
+                  `and ${sortedR[i].startLine}–${sortedR[i].endLine}. Patches must target non-overlapping sections.`,
               )
             }
           }
 
           const contentNew = applyPatches(content, resolved)
-
-          const diff = trimDiff(createTwoFilesPatch(filePath, filePath, content, contentNew))
+          const diff       = trimDiff(createTwoFilesPatch(filePath, filePath, content, contentNew))
 
           yield* ctx.ask({
             permission: "edit",
-            patterns: [path.relative(Instance.worktree, filePath)],
-            always: ["*"],
-            metadata: { filepath: filePath, diff },
+            patterns:   [path.relative(Instance.worktree, filePath)],
+            always:     ["*"],
+            metadata:   { filepath: filePath, diff },
           })
 
-          const next = Bom.split(contentNew)
+          const next       = Bom.split(contentNew)
           const desiredBom = source.bom || next.bom
           yield* afs.writeWithDirs(filePath, Bom.join(next.text, desiredBom))
 
           if (yield* format.file(filePath)) {
             yield* Bom.syncFile(afs, filePath, desiredBom)
           }
-          yield* bus.publish(File.Event.Edited, { file: filePath })
+          yield* bus.publish(File.Event.Edited,        { file: filePath })
           yield* bus.publish(FileWatcher.Event.Updated, { file: filePath, event: "change" })
 
           let additions = 0
           let deletions = 0
           for (const change of diffLines(content, contentNew)) {
-            if (change.added) additions += change.count || 0
+            if (change.added)   additions += change.count || 0
             if (change.removed) deletions += change.count || 0
           }
           const filediff: Snapshot.FileDiff = { file: filePath, patch: diff, additions, deletions }
 
           yield* ctx.metadata({ metadata: { diff, filediff, diagnostics: {} } })
 
-          let output = `Applied ${params.patches.length} patch(es) successfully.`
+          let output = `Applied ${patches.length} patch${patches.length > 1 ? "es" : ""} successfully.`
+
           yield* lsp.touchFile(filePath, "document")
-          const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = AppFileSystem.normalizePath(filePath)
-          const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
-          if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+          const diagnostics         = yield* lsp.diagnostics()
+          const normalizedFilePath  = AppFileSystem.normalizePath(filePath)
+          const block               = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
+          if (block) output += `\n\nLSP errors detected, please fix:\n${block}`
 
           return {
             metadata: { diagnostics, diff, filediff },
-            title: `${path.relative(Instance.worktree, filePath)} (${params.patches.length} patch${params.patches.length > 1 ? "es" : ""})`,
+            title:    `${path.relative(Instance.worktree, filePath)} (${patches.length} patch${patches.length > 1 ? "es" : ""})`,
             output,
           }
         }),

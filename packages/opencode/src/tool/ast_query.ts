@@ -1,12 +1,12 @@
 // ast_query tool — semantic symbol search via web-tree-sitter
-// Returns structured matches with line ranges; no full-file content in context.
 
 import * as path from "path"
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Instance } from "../project/instance"
-import { AstParser } from "../ast/parser"
+import { Service as AstParserService } from "../ast/parser"
+import type { SupportedLanguage } from "../ast/languages"
 import * as Bom from "@/util/bom"
 import DESCRIPTION from "./ast_query.txt"
 
@@ -26,6 +26,17 @@ export const Parameters = Schema.Struct({
       Schema.Literal("javascript"),
       Schema.Literal("python"),
       Schema.Literal("bash"),
+      Schema.Literal("go"),
+      Schema.Literal("rust"),
+      Schema.Literal("ruby"),
+      Schema.Literal("java"),
+      Schema.Literal("c"),
+      Schema.Literal("cpp"),
+      Schema.Literal("css"),
+      Schema.Literal("html"),
+      Schema.Literal("json"),
+      Schema.Literal("yaml"),
+      Schema.Literal("toml"),
     ),
   ).annotate({
     description: "Override language detection. If omitted, language is inferred from file extension.",
@@ -36,7 +47,7 @@ export const AstQueryTool = Tool.define(
   "ast_query",
   Effect.gen(function* () {
     const afs = yield* AppFileSystem.Service
-    const astParser = yield* AstParser.Service
+    const astParser = yield* AstParserService
 
     return {
       description: DESCRIPTION,
@@ -48,7 +59,13 @@ export const AstQueryTool = Tool.define(
             : path.join(Instance.directory, params.filePath)
 
           const source = yield* Bom.readFile(afs, filePath)
-          const matches = yield* astParser.queryFile(filePath, source.text, params.pattern)
+          // Forward explicit language override so the param actually takes effect
+          const matches = yield* astParser.queryFile(
+            filePath,
+            source.text,
+            params.pattern,
+            params.language as SupportedLanguage | undefined,
+          )
 
           if (matches.length === 0) {
             return {

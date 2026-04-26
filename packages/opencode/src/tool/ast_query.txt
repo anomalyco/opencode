@@ -17,19 +17,27 @@ Patterns use tree-sitter's query syntax. A capture group `@name` marks the node 
 
 Common patterns:
 
-| Language  | Pattern                                      | Finds                        |
-|-----------|----------------------------------------------|------------------------------|
-| TS/JS     | `(function_declaration) @fn`                 | function declarations        |
-| TS/JS     | `(class_declaration) @cls`                   | class declarations           |
-| TS/JS     | `(arrow_function) @arrow`                    | arrow functions              |
-| TS/JS     | `(import_statement) @imp`                    | import statements            |
-| TS/JS     | `(variable_declarator) @var`                 | variable declarations        |
-| TS/JS     | `(method_definition) @method`               | class methods                |
-| TS        | `(interface_declaration) @iface`             | interface declarations       |
-| TS        | `(type_alias_declaration) @type`             | type aliases                 |
-| Python    | `(function_definition) @fn`                  | def statements               |
-| Python    | `(class_definition) @cls`                    | class statements             |
-| Bash      | `(function_definition) @fn`                  | function definitions         |
+| Language      | Pattern                                              | Finds                        |
+|---------------|------------------------------------------------------|------------------------------|
+| TS/JS         | `(function_declaration) @fn`                         | function declarations        |
+| TS/JS         | `(class_declaration) @cls`                           | class declarations           |
+| TS/JS         | `(arrow_function) @arrow`                            | arrow functions              |
+| TS/JS         | `(import_statement) @imp`                            | import statements            |
+| TS/JS         | `(variable_declarator) @var`                         | variable declarations        |
+| TS/JS         | `(method_definition) @method`                        | class methods                |
+| TS            | `(interface_declaration) @iface`                     | interface declarations       |
+| TS            | `(type_alias_declaration) @type`                     | type aliases                 |
+| Python        | `(function_definition) @fn`                          | def statements               |
+| Python        | `(class_definition) @cls`                            | class statements             |
+| Go            | `(function_declaration) @fn`                         | func declarations            |
+| Go            | `(method_declaration) @method`                       | method declarations          |
+| Rust          | `(function_item) @fn`                                | fn items                     |
+| Rust          | `(impl_item) @impl`                                  | impl blocks                  |
+| Ruby          | `(method) @method`                                   | def methods                  |
+| Java          | `(method_declaration) @method`                       | method declarations          |
+| Java          | `(class_declaration) @cls`                           | class declarations           |
+| C/C++         | `(function_definition) @fn`                          | function definitions         |
+| Bash          | `(function_definition) @fn`                          | function definitions         |
 
 For specific names, use field predicates:
 `(function_declaration name: (identifier) @id (#eq? @id "myFunction")) @fn`
@@ -44,7 +52,7 @@ to `ast_edit` for targeted replacement.
 
 ## Supported languages
 
-TypeScript, TSX, JavaScript, JSX, Python, Bash.
+TypeScript, TSX, JavaScript/JSX, Python, Bash, Go, Rust, Ruby, Java, C, C++, CSS, HTML, JSON, YAML, TOML.
 Language is auto-detected from file extension; use `language` param to override.
 
 ## Example
