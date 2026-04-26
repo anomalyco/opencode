@@ -124,6 +124,72 @@ describe("OpenAI-compatible Chat adapter", () => {
     }),
   )
 
+  it.effect("matches AI SDK compatible basic request body fixture", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [OpenAICompatibleChat.adapter] }).prepare(request)
+
+      expect(prepared.target).toEqual({
+        model: "deepseek-chat",
+        messages: [
+          { role: "system", content: "You are concise." },
+          { role: "user", content: "Say hello." },
+        ],
+        stream: true,
+        max_tokens: 20,
+        temperature: 0,
+      })
+    }),
+  )
+
+  it.effect("matches AI SDK compatible tool request body fixture", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [OpenAICompatibleChat.adapter] }).prepare(
+        LLM.request({
+          id: "req_tool_parity",
+          model,
+          tools: [{
+            name: "lookup",
+            description: "Lookup data",
+            inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+          }],
+          toolChoice: "lookup",
+          messages: [
+            LLM.user("What is the weather?"),
+            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+          ],
+        }),
+      )
+
+      expect(prepared.target).toEqual({
+        model: "deepseek-chat",
+        messages: [
+          { role: "user", content: "What is the weather?" },
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [{
+              id: "call_1",
+              type: "function",
+              function: { name: "lookup", arguments: '{"query":"weather"}' },
+            }],
+          },
+          { role: "tool", tool_call_id: "call_1", content: '{"forecast":"sunny"}' },
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "lookup",
+            description: "Lookup data",
+            parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "lookup" } },
+        stream: true,
+      })
+    }),
+  )
+
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
       const response = yield* client({
