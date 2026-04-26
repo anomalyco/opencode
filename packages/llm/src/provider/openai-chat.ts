@@ -184,15 +184,13 @@ const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
   },
 })
 
-const lowerToolChoice = (
+const lowerToolChoice = Effect.fn("OpenAIChat.lowerToolChoice")(function* (
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-): Effect.Effect<NonNullable<OpenAIChatDraft["tool_choice"]>, InvalidRequestError> => {
-  if (toolChoice.type === "tool") {
-    if (!toolChoice.name) return Effect.fail(invalid(`OpenAI Chat tool choice requires a tool name`))
-    return Effect.succeed({ type: "function", function: { name: toolChoice.name } })
-  }
-  return Effect.succeed(toolChoice.type)
-}
+) {
+  if (toolChoice.type !== "tool") return toolChoice.type
+  if (!toolChoice.name) return yield* invalid("OpenAI Chat tool choice requires a tool name")
+  return { type: "function" as const, function: { name: toolChoice.name } }
+})
 
 const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   id: part.id,

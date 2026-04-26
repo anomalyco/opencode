@@ -202,6 +202,34 @@ describe("OpenAI Chat adapter", () => {
     }),
   )
 
+  it.effect("does not finalize streamed tool calls without a finish reason", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [
+            { index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query"' } },
+          ],
+        }),
+        deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
+      )
+      const response = yield* client({ adapters: [OpenAIChat.adapter] })
+        .generate(
+          LLM.request({
+            ...request,
+            tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          }),
+        )
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toEqual([
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
+      ])
+      expect(LLM.outputToolCalls(response)).toEqual([])
+    }),
+  )
+
   it.effect("fails on malformed stream chunks", () =>
     Effect.gen(function* () {
       const body = sseEvents(deltaChunk({ content: 123 }))

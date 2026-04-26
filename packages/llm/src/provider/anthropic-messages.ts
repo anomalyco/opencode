@@ -183,17 +183,15 @@ const lowerTool = (tool: ToolDefinition): AnthropicTool => ({
   input_schema: tool.inputSchema,
 })
 
-const lowerToolChoice = (
+const lowerToolChoice = Effect.fn("AnthropicMessages.lowerToolChoice")(function* (
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-): Effect.Effect<NonNullable<AnthropicMessagesDraft["tool_choice"]> | undefined, InvalidRequestError> => {
-  if (toolChoice.type === "none") return Effect.succeed(undefined)
-  if (toolChoice.type === "required") return Effect.succeed({ type: "any" })
-  if (toolChoice.type === "tool") {
-    if (!toolChoice.name) return Effect.fail(invalid(`Anthropic Messages tool choice requires a tool name`))
-    return Effect.succeed({ type: "tool", name: toolChoice.name })
-  }
-  return Effect.succeed({ type: "auto" })
-}
+) {
+  if (toolChoice.type === "none") return undefined
+  if (toolChoice.type === "required") return { type: "any" as const }
+  if (toolChoice.type !== "tool") return { type: "auto" as const }
+  if (!toolChoice.name) return yield* invalid("Anthropic Messages tool choice requires a tool name")
+  return { type: "tool" as const, name: toolChoice.name }
+})
 
 const lowerToolCall = (part: ToolCallPart): AnthropicToolUseBlock => ({
   type: "tool_use",

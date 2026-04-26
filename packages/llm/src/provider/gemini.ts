@@ -207,20 +207,17 @@ const lowerTool = (tool: ToolDefinition) => ({
   parameters: convertJsonSchema(tool.inputSchema),
 })
 
-const lowerToolConfig = (
+const lowerToolConfig = Effect.fn("Gemini.lowerToolConfig")(function* (
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-): Effect.Effect<GeminiTarget["toolConfig"], InvalidRequestError> => {
-  if (toolChoice.type === "tool") {
-    if (!toolChoice.name) return Effect.fail(invalid("Gemini tool choice requires a tool name"))
-    return Effect.succeed({
-      functionCallingConfig: { mode: "ANY", allowedFunctionNames: [toolChoice.name] },
-    })
+) {
+  if (toolChoice.type === "required") return { functionCallingConfig: { mode: "ANY" as const } }
+  if (toolChoice.type === "none") return { functionCallingConfig: { mode: "NONE" as const } }
+  if (toolChoice.type !== "tool") return { functionCallingConfig: { mode: "AUTO" as const } }
+  if (!toolChoice.name) return yield* invalid("Gemini tool choice requires a tool name")
+  return {
+    functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [toolChoice.name] },
   }
-
-  if (toolChoice.type === "required") return Effect.succeed({ functionCallingConfig: { mode: "ANY" } })
-  if (toolChoice.type === "none") return Effect.succeed({ functionCallingConfig: { mode: "NONE" } })
-  return Effect.succeed({ functionCallingConfig: { mode: "AUTO" } })
-}
+})
 
 const lowerUserPart = (part: TextPart | MediaPart) =>
   part.type === "text"

@@ -152,15 +152,13 @@ const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   parameters: tool.inputSchema,
 })
 
-const lowerToolChoice = (
+const lowerToolChoice = Effect.fn("OpenAIResponses.lowerToolChoice")(function* (
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-): Effect.Effect<NonNullable<OpenAIResponsesDraft["tool_choice"]>, InvalidRequestError> => {
-  if (toolChoice.type === "tool") {
-    if (!toolChoice.name) return Effect.fail(invalid(`OpenAI Responses tool choice requires a tool name`))
-    return Effect.succeed({ type: "function", name: toolChoice.name })
-  }
-  return Effect.succeed(toolChoice.type)
-}
+) {
+  if (toolChoice.type !== "tool") return toolChoice.type
+  if (!toolChoice.name) return yield* invalid("OpenAI Responses tool choice requires a tool name")
+  return { type: "function" as const, name: toolChoice.name }
+})
 
 const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
   type: "function_call",
