@@ -7,7 +7,7 @@ Prior to every LLM turn, Opencode dynamically evaluates and structures the avail
 ### Pre-Flight Filtering via `ToolRegistry`
 
 Before the LLM is given a tool in its prompt payload, the `ToolRegistry` evaluates permissions. It calculates the strict intersection of **Session Permissions** and **Agent Permissions**.
-If a specialized agent (e.g., `@explore`) lacks write privileges, modifying tools (e.g., `bash`, `edit`, `write`) are pruned from the Vercel AI payload entirely. This makes it physically impossible for read-only agents to hallucinate destructive actions, acting as a fundamental safety limit.
+If a specialized agent (e.g., `@explore`) lacks write privileges, tools from the `edit` umbrella (e.g., `edit`, `write`, `apply_patch`) are pruned from the Vercel AI payload entirely. This prevents the agent from making destructive file modifications. **Important Distinction:** The `bash` tool is *not* part of the `edit` umbrella. By default, it is provided to the agent and relies on explicit prompt-level instructions (like the Plan mode reminder) to prevent the execution of destructive shell commands.
 
 ### Context Topologies & Isolation
 
@@ -39,10 +39,10 @@ The tool intercepts this call, locates the corresponding `SKILL.md` instruction 
 Skills in Opencode are fundamentally just standard directories containing a `SKILL.md` file. As implemented in [`src/skill/index.ts`](../../packages/opencode/src/skill/index.ts), the system automatically discovers skills via a multi-tiered glob scan across:
 
 1. **Project Scope:** Local directories like `.opencode/skills/**/SKILL.md`.
-2. **Global OS Scope:** User-level directories like `~/.agents/**/SKILL.md`, `~/.claude/**/SKILL.md`, and `~/.opencode/skills/**/SKILL.md`.
+2. **Global OS Scope:** User-level directories like `~/.agents/skills/**/SKILL.md`, `~/.claude/skills/**/SKILL.md`, and `~/.opencode/skills/**/SKILL.md`.
 3. **Remote Scope:** Remote URLs defined in the user's config, which are fetched and unpacked into a local cache directory.
 
-**Autonomous Creation:** Because skills are simply files on disk, users do not need to create them manually. A user can simply prompt the primary `build` agent: _"Create a skill called 'deploy-staging' that includes a bash script to push this repo to our server."_ The agent will utilize its standard `write` tools to create the directory, write the bash script, and construct the `SKILL.md` file. On the very next execution turn, the Opencode Glob scanner will detect the new directory, parse the frontmatter, and instantly make the skill available in the agent's tool registry.
+**Autonomous Creation:** Because skills are simply files on disk, users do not need to create them manually. A user can simply prompt the primary `@build` agent: _"Create a skill called 'deploy-staging' that includes a bash script to push this repo to our server."_ The agent will utilize its standard `write` tools to create the directory, write the bash script, and construct the `SKILL.md` file. On the very next execution turn, the Opencode Glob scanner will detect the new directory, parse the frontmatter, and instantly make the skill available in the agent's tool registry.
 
 ---
 
@@ -51,5 +51,7 @@ Skills in Opencode are fundamentally just standard directories containing a `SKI
 The mechanics discussed in this document are primarily implemented in the following files:
 
 - **[`src/tool/registry.ts`](../../packages/opencode/src/tool/registry.ts)**: The core `ToolRegistry` service responsible for pre-flight filtering and aggregating available capabilities before passing them to the Vercel AI SDK.
+- **[`src/skill/index.ts`](../../packages/opencode/src/skill/index.ts)**: The discovery engine for Skills, handling the multi-tiered directory globbing across Project, Global, and Remote scopes.
 - **[`src/tool/skill.ts`](../../packages/opencode/src/tool/skill.ts)**: The tool implementation that intercepts `call:skill` requests, parses the frontmatter, and injects the raw `SKILL.md` content into the conversational context.
 - **[`src/tool/task.ts`](../../packages/opencode/src/tool/task.ts)**: The sub-agent delegation tool used to spin up completely fresh, isolated context windows (like `@explore`), returning only synthesized answers to the primary thread.
+- **[`src/mcp/index.ts`](../../packages/opencode/src/mcp/index.ts)**: Implements the Model Context Protocol integration, translating external JSON-RPC tool schemas into native capabilities for the LLM.
