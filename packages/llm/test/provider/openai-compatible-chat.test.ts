@@ -41,6 +41,15 @@ const usageChunk = (usage: object) => ({
   usage,
 })
 
+const providerFamilies = [
+  ["baseten", OpenAICompatibleChat.baseten, "https://inference.baseten.co/v1"],
+  ["cerebras", OpenAICompatibleChat.cerebras, "https://api.cerebras.ai/v1"],
+  ["deepinfra", OpenAICompatibleChat.deepinfra, "https://api.deepinfra.com/v1/openai"],
+  ["deepseek", OpenAICompatibleChat.deepseek, "https://api.deepseek.com/v1"],
+  ["fireworks", OpenAICompatibleChat.fireworks, "https://api.fireworks.ai/inference/v1"],
+  ["togetherai", OpenAICompatibleChat.togetherai, "https://api.together.xyz/v1"],
+] as const
+
 describe("OpenAI-compatible Chat adapter", () => {
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
@@ -72,6 +81,45 @@ describe("OpenAI-compatible Chat adapter", () => {
         stream: true,
         max_tokens: 20,
         temperature: 0,
+      })
+    }),
+  )
+
+  it.effect("provides model helpers for compatible provider families", () =>
+    Effect.gen(function* () {
+      expect(
+        providerFamilies.map(([provider, makeModel, baseURL]) => {
+          const model = makeModel({ id: `${provider}-model`, apiKey: "test-key" })
+          return {
+            id: model.id,
+            provider: model.provider,
+            protocol: model.protocol,
+            baseURL: model.baseURL,
+            headers: model.headers,
+            native: model.native,
+          }
+        }),
+      ).toEqual(
+        providerFamilies.map(([provider, _, baseURL]) => ({
+          id: `${provider}-model`,
+          provider,
+          protocol: "openai-compatible-chat",
+          baseURL,
+          headers: { authorization: "Bearer test-key" },
+          native: { openaiCompatibleProvider: provider },
+        })),
+      )
+
+      const custom = OpenAICompatibleChat.deepseek({
+        id: "deepseek-chat",
+        apiKey: "test-key",
+        baseURL: "https://custom.deepseek.test/v1",
+      })
+      expect(custom).toMatchObject({
+        provider: "deepseek",
+        protocol: "openai-compatible-chat",
+        baseURL: "https://custom.deepseek.test/v1",
+        native: { openaiCompatibleProvider: "deepseek" },
       })
     }),
   )

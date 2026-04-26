@@ -15,6 +15,24 @@ export type OpenAICompatibleChatModelInput = Omit<ModelInput, "protocol" | "head
   readonly queryParams?: Record<string, string>
 }
 
+export type ProviderFamilyModelInput = Omit<OpenAICompatibleChatModelInput, "provider" | "baseURL"> & {
+  readonly baseURL?: string
+}
+
+interface ProviderFamily {
+  readonly provider: string
+  readonly baseURL: string
+}
+
+const families = {
+  baseten: { provider: "baseten", baseURL: "https://inference.baseten.co/v1" },
+  cerebras: { provider: "cerebras", baseURL: "https://api.cerebras.ai/v1" },
+  deepinfra: { provider: "deepinfra", baseURL: "https://api.deepinfra.com/v1/openai" },
+  deepseek: { provider: "deepseek", baseURL: "https://api.deepseek.com/v1" },
+  fireworks: { provider: "fireworks", baseURL: "https://api.fireworks.ai/inference/v1" },
+  togetherai: { provider: "togetherai", baseURL: "https://api.together.xyz/v1" },
+} as const satisfies Record<string, ProviderFamily>
+
 const invalid = (message: string) => new InvalidRequestError({ message })
 
 const isStringRecord = (value: unknown): value is Record<string, string> =>
@@ -76,6 +94,26 @@ export const model = (input: OpenAICompatibleChatModelInput) => {
     capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
   })
 }
+
+const familyModel = (family: ProviderFamily, input: ProviderFamilyModelInput) =>
+  model({
+    ...input,
+    provider: family.provider,
+    baseURL: input.baseURL ?? family.baseURL,
+    native: { ...input.native, openaiCompatibleProvider: family.provider },
+  })
+
+export const baseten = (input: ProviderFamilyModelInput) => familyModel(families.baseten, input)
+
+export const cerebras = (input: ProviderFamilyModelInput) => familyModel(families.cerebras, input)
+
+export const deepinfra = (input: ProviderFamilyModelInput) => familyModel(families.deepinfra, input)
+
+export const deepseek = (input: ProviderFamilyModelInput) => familyModel(families.deepseek, input)
+
+export const fireworks = (input: ProviderFamilyModelInput) => familyModel(families.fireworks, input)
+
+export const togetherai = (input: ProviderFamilyModelInput) => familyModel(families.togetherai, input)
 
 export const includeUsage = adapter.patch("include-usage", {
   reason: "request final usage chunk from OpenAI-compatible Chat streaming responses",
