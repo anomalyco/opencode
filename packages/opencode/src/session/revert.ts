@@ -18,6 +18,7 @@ export const RevertInput = Schema.Struct({
   sessionID: SessionID,
   messageID: MessageID,
   partID: Schema.optional(PartID),
+  keepFiles: Schema.optional(Schema.Boolean),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
@@ -71,10 +72,12 @@ export const layer = Layer.effect(
 
       if (!rev) return session
 
-      rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
-      if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
-      yield* snap.revert(patches)
-      if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot as string)
+      if (!input.keepFiles) {
+        rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
+        if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
+        yield* snap.revert(patches)
+        if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot as string)
+      }
       const range = all.filter((msg) => msg.info.id >= rev!.messageID)
       const diffs = yield* summary.computeDiff({ messages: range })
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)

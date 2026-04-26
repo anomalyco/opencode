@@ -6,6 +6,7 @@ import { useRoute } from "@tui/context/route"
 import * as Clipboard from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
 import { strip } from "@tui/component/prompt/part"
+import type { DialogContext } from "@tui/ui/dialog"
 
 export function DialogMessage(props: {
   messageID: string
@@ -17,6 +18,34 @@ export function DialogMessage(props: {
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
 
+  const handleRevert = (dialog: DialogContext, keepFiles: boolean) => {
+    const msg = message()
+    if (!msg) return
+
+    void sdk.client.session.revert({
+      sessionID: props.sessionID,
+      messageID: msg.id,
+      keepFiles,
+    })
+
+    if (props.setPrompt) {
+      const parts = sync.data.part[msg.id]
+      const promptInfo = parts.reduce(
+        (agg, part) => {
+          if (part.type === "text") {
+            if (!part.synthetic) agg.input += part.text
+          }
+          if (part.type === "file") agg.parts.push(strip(part))
+          return agg
+        },
+        { input: "", parts: [] as PromptInfo["parts"] },
+      )
+      props.setPrompt(promptInfo)
+    }
+
+    dialog.clear()
+  }
+
   return (
     <DialogSelect
       title="Message Actions"
@@ -25,32 +54,13 @@ export function DialogMessage(props: {
           title: "Revert",
           value: "session.revert",
           description: "undo messages and file changes",
-          onSelect: (dialog) => {
-            const msg = message()
-            if (!msg) return
-
-            void sdk.client.session.revert({
-              sessionID: props.sessionID,
-              messageID: msg.id,
-            })
-
-            if (props.setPrompt) {
-              const parts = sync.data.part[msg.id]
-              const promptInfo = parts.reduce(
-                (agg, part) => {
-                  if (part.type === "text") {
-                    if (!part.synthetic) agg.input += part.text
-                  }
-                  if (part.type === "file") agg.parts.push(strip(part))
-                  return agg
-                },
-                { input: "", parts: [] as PromptInfo["parts"] },
-              )
-              props.setPrompt(promptInfo)
-            }
-
-            dialog.clear()
-          },
+          onSelect: (dialog) => handleRevert(dialog, false),
+        },
+        {
+          title: "Revert conversation only",
+          value: "session.revert-conversation-only",
+          description: "undo messages but preserve file changes",
+          onSelect: (dialog) => handleRevert(dialog, true),
         },
         {
           title: "Copy",

@@ -4141,6 +4141,7 @@ export type SessionRevertData = {
   body?: {
     messageID: string
     partID?: string
+    keepFiles?: boolean
   }
   path: {
     sessionID: string
