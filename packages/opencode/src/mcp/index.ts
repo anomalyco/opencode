@@ -166,9 +166,10 @@ function fetchFromClient<T extends { name: string }>(
 ) {
   return Effect.tryPromise({
     try: () => listFn(client),
-    catch: (e: any) => {
-      log.error(`failed to get ${label}`, { clientName, error: e.message })
-      return e
+    catch: (e) => {
+      const msg = e instanceof Error ? e.message : String(e)
+      log.error(`failed to get ${label}`, { clientName, error: msg })
+      return e instanceof Error ? e : new Error(msg)
     },
   }).pipe(
     Effect.map((items) => {
@@ -689,9 +690,10 @@ export const layer = Layer.effect(
       }
       return yield* Effect.tryPromise({
         try: () => fn(client),
-        catch: (e: any) => {
-          log.error(`failed to ${label}`, { clientName, ...meta, error: e?.message })
-          return e
+        catch: (e) => {
+          const msg = e instanceof Error ? e.message : String(e)
+          log.error(`failed to ${label}`, { clientName, ...meta, error: msg })
+          return e instanceof Error ? e : new Error(msg)
         },
       }).pipe(Effect.orElseSucceed(() => undefined))
     })
