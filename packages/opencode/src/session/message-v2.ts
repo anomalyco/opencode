@@ -391,6 +391,13 @@ export const User = Schema.Struct({
   }),
   system: Schema.optional(Schema.String),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  command: Schema.optional(
+    Schema.Struct({
+      name: Schema.String,
+      arguments: Schema.String,
+      source: Schema.Literals(["command", "mcp", "skill"]),
+    }),
+  ),
 })
   .annotate({ identifier: "UserMessage" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))

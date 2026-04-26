@@ -956,6 +956,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
         system: input.system,
         format: input.format,
+        ...(input.command ? { command: input.command } : {}),
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
@@ -1655,6 +1656,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         agent: userAgent,
         parts,
         variant: input.variant,
+        command: {
+          name: input.command,
+          arguments: input.arguments,
+          source: cmd.source ?? "command",
+        },
       })
       yield* bus.publish(Command.Event.Executed, {
         name: input.command,
@@ -1724,6 +1730,13 @@ export const PromptInput = Schema.Struct({
   format: Schema.optional(MessageV2.Format),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
+  command: Schema.optional(
+    Schema.Struct({
+      name: Schema.String,
+      arguments: Schema.String,
+      source: Schema.Literals(["command", "mcp", "skill"]),
+    }),
+  ),
   parts: Schema.Array(
     Schema.Union([
       MessageV2.TextPartInput,
