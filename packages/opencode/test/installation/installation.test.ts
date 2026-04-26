@@ -3,7 +3,7 @@ import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
-import { InstallationChannel } from "../../src/installation/version"
+import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
 const encoder = new TextEncoder()
 
