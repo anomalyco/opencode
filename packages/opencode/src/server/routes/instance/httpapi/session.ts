@@ -1,22 +1,41 @@
 import * as InstanceState from "@/effect/instance-state"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Agent } from "@/agent/agent"
+import { Bus } from "@/bus"
+import { Command } from "@/command"
 import { Permission } from "@/permission"
+import { PermissionID } from "@/permission/schema"
 import { Instance } from "@/project/instance"
+import { ModelID, ProviderID } from "@/provider/schema"
 import { SessionShare } from "@/share"
 import { Session } from "@/session"
+import { SessionCompaction } from "@/session/compaction"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
+import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
+import { Log } from "@/util"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { Effect, Layer, Schema, Struct } from "effect"
+import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import {
+  HttpApi,
+  HttpApiBuilder,
+  HttpApiEndpoint,
+  HttpApiError,
+  HttpApiGroup,
+  HttpApiSchema,
+  OpenApi,
+} from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
+const log = Log.create({ service: "server" })
 const root = "/session"
 const ListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
@@ -43,6 +62,31 @@ const UpdatePayload = Schema.Struct({
 const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"])).annotate({
   identifier: "SessionForkInput",
 })
+const InitPayload = Schema.Struct({
+  modelID: ModelID,
+  providerID: ProviderID,
+  messageID: MessageID,
+}).annotate({ identifier: "SessionInitInput" })
+const SummarizePayload = Schema.Struct({
+  providerID: ProviderID,
+  modelID: ModelID,
+  auto: Schema.optional(Schema.Boolean),
+}).annotate({ identifier: "SessionSummarizeInput" })
+const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"])).annotate({
+  identifier: "SessionPromptInput",
+})
+const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"])).annotate({
+  identifier: "SessionCommandInput",
+})
+const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"])).annotate({
+  identifier: "SessionShellInput",
+})
+const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"])).annotate({
+  identifier: "SessionRevertInput",
+})
+const PermissionResponsePayload = Schema.Struct({
+  response: Permission.Reply,
+}).annotate({ identifier: "SessionPermissionResponseInput" })
 
 export const SessionPaths = {
   list: root,
@@ -59,6 +103,15 @@ export const SessionPaths = {
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
   share: `${root}/:sessionID/share`,
+  init: `${root}/:sessionID/init`,
+  summarize: `${root}/:sessionID/summarize`,
+  prompt: `${root}/:sessionID/message`,
+  promptAsync: `${root}/:sessionID/prompt_async`,
+  command: `${root}/:sessionID/command`,
+  shell: `${root}/:sessionID/shell`,
+  revert: `${root}/:sessionID/revert`,
+  unrevert: `${root}/:sessionID/unrevert`,
+  permissions: `${root}/:sessionID/permissions/:permissionID`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
@@ -201,6 +254,18 @@ export const SessionApi = HttpApi.make("session")
             description: "Abort an active session and stop any ongoing AI processing or command execution.",
           }),
         ),
+        HttpApiEndpoint.post("init", SessionPaths.init, {
+          params: { sessionID: SessionID },
+          payload: InitPayload,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.init",
+            summary: "Initialize session",
+            description:
+              "Analyze the current application and create an AGENTS.md file with project-specific agent configurations.",
+          }),
+        ),
         HttpApiEndpoint.post("share", SessionPaths.share, {
           params: { sessionID: SessionID },
           success: Session.Info,
@@ -219,6 +284,95 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.unshare",
             summary: "Unshare session",
             description: "Remove the shareable link for a session, making it private again.",
+          }),
+        ),
+        HttpApiEndpoint.post("summarize", SessionPaths.summarize, {
+          params: { sessionID: SessionID },
+          payload: SummarizePayload,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.summarize",
+            summary: "Summarize session",
+            description: "Generate a concise summary of the session using AI compaction to preserve key information.",
+          }),
+        ),
+        HttpApiEndpoint.post("prompt", SessionPaths.prompt, {
+          params: { sessionID: SessionID },
+          payload: PromptPayload,
+          success: MessageV2.WithParts,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.prompt",
+            summary: "Send message",
+            description: "Create and send a new message to a session, streaming the AI response.",
+          }),
+        ),
+        HttpApiEndpoint.post("promptAsync", SessionPaths.promptAsync, {
+          params: { sessionID: SessionID },
+          payload: PromptPayload,
+          success: HttpApiSchema.NoContent,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.prompt_async",
+            summary: "Send async message",
+            description:
+              "Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.",
+          }),
+        ),
+        HttpApiEndpoint.post("command", SessionPaths.command, {
+          params: { sessionID: SessionID },
+          payload: CommandPayload,
+          success: MessageV2.WithParts,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.command",
+            summary: "Send command",
+            description: "Send a new command to a session for execution by the AI assistant.",
+          }),
+        ),
+        HttpApiEndpoint.post("shell", SessionPaths.shell, {
+          params: { sessionID: SessionID },
+          payload: ShellPayload,
+          success: MessageV2.WithParts,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.shell",
+            summary: "Run shell command",
+            description: "Execute a shell command within the session context and return the AI's response.",
+          }),
+        ),
+        HttpApiEndpoint.post("revert", SessionPaths.revert, {
+          params: { sessionID: SessionID },
+          payload: RevertPayload,
+          success: Session.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.revert",
+            summary: "Revert message",
+            description: "Revert a specific message in a session, undoing its effects and restoring the previous state.",
+          }),
+        ),
+        HttpApiEndpoint.post("unrevert", SessionPaths.unrevert, {
+          params: { sessionID: SessionID },
+          success: Session.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.unrevert",
+            summary: "Restore reverted messages",
+            description: "Restore all previously reverted messages in a session.",
+          }),
+        ),
+        HttpApiEndpoint.post("permissionRespond", SessionPaths.permissions, {
+          params: { sessionID: SessionID, permissionID: PermissionID },
+          payload: PermissionResponsePayload,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "permission.respond",
+            summary: "Respond to permission",
+            description: "Approve or deny a permission request from the AI assistant.",
+            deprecated: true,
           }),
         ),
         HttpApiEndpoint.delete("deleteMessage", SessionPaths.deleteMessage, {
@@ -317,6 +471,14 @@ export const sessionHandlers = Layer.unwrap(
       params: { sessionID: SessionID }
       query: typeof MessagesQuery.Type
     }) {
+      if (ctx.query.before !== undefined && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
+      if (ctx.query.before !== undefined) {
+        const before = ctx.query.before
+        yield* Effect.try({
+          try: () => MessageV2.cursor.decode(before),
+          catch: () => new HttpApiError.BadRequest({}),
+        })
+      }
       if (ctx.query.limit === undefined || ctx.query.limit === 0) {
         yield* session.get(ctx.params.sessionID)
         return yield* session.messages({ sessionID: ctx.params.sessionID })
@@ -434,6 +596,29 @@ export const sessionHandlers = Layer.unwrap(
       return true
     })
 
+    const init = Effect.fn("SessionHttpApi.init")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof InitPayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            SessionPrompt.Service.use((svc) =>
+              svc.command({
+                sessionID: ctx.params.sessionID,
+                messageID: ctx.payload.messageID,
+                model: `${ctx.payload.providerID}/${ctx.payload.modelID}`,
+                command: Command.Default.INIT,
+                arguments: "",
+              }),
+            ).pipe(Effect.provide(SessionPrompt.defaultLayer)),
+          ),
+        ),
+      )
+      return true
+    })
+
     const share = Effect.fn("SessionHttpApi.share")(function* (ctx: { params: { sessionID: SessionID } }) {
       const instance = yield* InstanceState.context
       return yield* Effect.promise(() =>
@@ -464,6 +649,174 @@ export const sessionHandlers = Layer.unwrap(
           ),
         ),
       )
+    })
+
+    const summarize = Effect.fn("SessionHttpApi.summarize")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof SummarizePayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            Effect.gen(function* () {
+              const session = yield* Session.Service
+              const revert = yield* SessionRevert.Service
+              const compact = yield* SessionCompaction.Service
+              const prompt = yield* SessionPrompt.Service
+              const agent = yield* Agent.Service
+
+              yield* revert.cleanup(yield* session.get(ctx.params.sessionID))
+              const messages = yield* session.messages({ sessionID: ctx.params.sessionID })
+              const defaultAgent = yield* agent.defaultAgent()
+              const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
+
+              yield* compact.create({
+                sessionID: ctx.params.sessionID,
+                agent: currentAgent,
+                model: {
+                  providerID: ctx.payload.providerID,
+                  modelID: ctx.payload.modelID,
+                },
+                auto: ctx.payload.auto ?? false,
+              })
+              yield* prompt.loop({ sessionID: ctx.params.sessionID })
+            }).pipe(
+              Effect.provide(SessionRevert.defaultLayer),
+              Effect.provide(SessionCompaction.defaultLayer),
+              Effect.provide(SessionPrompt.defaultLayer),
+              Effect.provide(Agent.defaultLayer),
+              Effect.provide(Session.defaultLayer),
+            ),
+          ),
+        ),
+      )
+      return true
+    })
+
+    const prompt = Effect.fn("SessionHttpApi.prompt")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof PromptPayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      return HttpServerResponse.stream(
+        Stream.fromEffect(
+          Effect.promise(() =>
+            Instance.restore(instance, () =>
+              AppRuntime.runPromise(
+                SessionPrompt.Service.use((svc) =>
+                  svc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID } as unknown as SessionPrompt.PromptInput),
+                ).pipe(Effect.provide(SessionPrompt.defaultLayer)),
+              ),
+            ),
+          ),
+        ).pipe(Stream.map((message) => JSON.stringify(message)), Stream.encodeText),
+        { contentType: "application/json" },
+      )
+    })
+
+    const promptAsync = Effect.fn("SessionHttpApi.promptAsync")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof PromptPayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.sync(() => {
+        Instance.restore(instance, () => {
+          void AppRuntime.runPromise(
+            SessionPrompt.Service.use((svc) =>
+              svc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID } as unknown as SessionPrompt.PromptInput),
+            ).pipe(Effect.provide(SessionPrompt.defaultLayer)),
+          ).catch((error) => {
+            log.error("prompt_async failed", { sessionID: ctx.params.sessionID, error })
+            void Bus.publish(Session.Event.Error, {
+              sessionID: ctx.params.sessionID,
+              error: new NamedError.Unknown({
+                message: error instanceof Error ? error.message : String(error),
+              }).toObject(),
+            })
+          })
+        })
+      })
+      return HttpApiSchema.NoContent.make()
+    })
+
+    const command = Effect.fn("SessionHttpApi.command")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof CommandPayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            SessionPrompt.Service.use((svc) =>
+              svc.command({ ...ctx.payload, sessionID: ctx.params.sessionID } as SessionPrompt.CommandInput),
+            ).pipe(Effect.provide(SessionPrompt.defaultLayer)),
+          ),
+        ),
+      )
+    })
+
+    const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof ShellPayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            SessionPrompt.Service.use((svc) =>
+              svc.shell({ ...ctx.payload, sessionID: ctx.params.sessionID } as SessionPrompt.ShellInput),
+            ).pipe(Effect.provide(SessionPrompt.defaultLayer)),
+          ),
+        ),
+      )
+    })
+
+    const revert = Effect.fn("SessionHttpApi.revert")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof RevertPayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      log.info("revert", ctx.payload)
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            SessionRevert.Service.use((svc) =>
+              svc.revert({ sessionID: ctx.params.sessionID, ...ctx.payload }),
+            ).pipe(Effect.provide(SessionRevert.defaultLayer)),
+          ),
+        ),
+      )
+    })
+
+    const unrevert = Effect.fn("SessionHttpApi.unrevert")(function* (ctx: { params: { sessionID: SessionID } }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            SessionRevert.Service.use((svc) => svc.unrevert({ sessionID: ctx.params.sessionID })).pipe(
+              Effect.provide(SessionRevert.defaultLayer),
+            ),
+          ),
+        ),
+      )
+    })
+
+    const permissionRespond = Effect.fn("SessionHttpApi.permissionRespond")(function* (ctx: {
+      params: { permissionID: PermissionID }
+      payload: typeof PermissionResponsePayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            Permission.Service.use((svc) =>
+              svc.reply({ requestID: ctx.params.permissionID, reply: ctx.payload.response }),
+            ).pipe(Effect.provide(Permission.defaultLayer)),
+          ),
+        ),
+      )
+      return true
     })
 
     const deleteMessage = Effect.fn("SessionHttpApi.deleteMessage")(function* (ctx: {
@@ -501,7 +854,7 @@ export const sessionHandlers = Layer.unwrap(
       params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
       payload: typeof MessageV2.Part.Type
     }) {
-      const payload = MessageV2.Part.zod.parse(ctx.payload)
+      const payload = ctx.payload as MessageV2.Part
       if (
         payload.id !== ctx.params.partID ||
         payload.messageID !== ctx.params.messageID ||
@@ -534,8 +887,17 @@ export const sessionHandlers = Layer.unwrap(
         .handle("update", update)
         .handle("fork", fork)
         .handle("abort", abort)
+        .handle("init", init)
         .handle("share", share)
         .handle("unshare", unshare)
+        .handle("summarize", summarize)
+        .handle("prompt", prompt)
+        .handle("promptAsync", promptAsync)
+        .handle("command", command)
+        .handle("shell", shell)
+        .handle("revert", revert)
+        .handle("unrevert", unrevert)
+        .handle("permissionRespond", permissionRespond)
         .handle("deleteMessage", deleteMessage)
         .handle("deletePart", deletePart)
         .handle("updatePart", updatePart),

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import type { UpgradeWebSocket } from "hono/ws"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instance } from "../../src/project/instance"
 import { InstanceRoutes } from "../../src/server/routes/instance"
@@ -118,8 +119,24 @@ describe("session HttpApi", () => {
       headers,
     })
     const messagePage = await json<MessageV2.WithParts[]>(messages)
-    expect(messages.headers.get("x-next-cursor")).toBeTruthy()
+    const nextCursor = messages.headers.get("x-next-cursor")
+    expect(nextCursor).toBeTruthy()
     expect(messagePage[0]?.parts[0]).toMatchObject({ type: "text" })
+
+    expect(
+      (
+        await app().request(`${pathFor(SessionPaths.messages, { sessionID: parent.id })}?before=${nextCursor}`, {
+          headers,
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await app().request(`${pathFor(SessionPaths.messages, { sessionID: parent.id })}?limit=1&before=invalid`, {
+          headers,
+        })
+      ).status,
+    ).toBe(400)
 
     expect(
       await json<MessageV2.WithParts>(
@@ -216,6 +233,47 @@ describe("session HttpApi", () => {
           method: "DELETE",
           headers,
         }),
+      ),
+    ).toBe(true)
+  })
+
+  test("serves remaining non-LLM session mutation routes through Hono bridge", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const session = await createSession(tmp.path, { title: "remaining" })
+
+    expect(
+      await json<Session.Info>(
+        await app().request(pathFor(SessionPaths.revert, { sessionID: session.id }), {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ messageID: MessageID.ascending() }),
+        }),
+      ),
+    ).toMatchObject({ id: session.id })
+
+    expect(
+      await json<Session.Info>(
+        await app().request(pathFor(SessionPaths.unrevert, { sessionID: session.id }), {
+          method: "POST",
+          headers,
+        }),
+      ),
+    ).toMatchObject({ id: session.id })
+
+    expect(
+      await json<boolean>(
+        await app().request(
+          pathFor(SessionPaths.permissions, {
+            sessionID: session.id,
+            permissionID: String(PermissionID.ascending()),
+          }),
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ response: "once" }),
+          },
+        ),
       ),
     ).toBe(true)
   })

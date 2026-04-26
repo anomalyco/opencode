@@ -182,7 +182,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `workspace`               | `bridged`         | adaptor/list/status/create/remove/session-restore                          |
 | top-level instance routes | `bridged`         | path, vcs, command, agent, skill, lsp, formatter, dispose                  |
 | experimental JSON routes  | `bridged`         | console, tool, worktree list/mutations, global session list, resource list |
-| `session`                 | `bridged` partial | read routes; lifecycle, message mutations, streaming remain                |
+| `session`                 | `bridged`         | read, lifecycle, prompt, message/part mutations, revert, permission reply  |
 | `sync`                    | `bridged`         | start/replay/history                                                       |
 | `event`                   | `special`         | SSE                                                                        |
 | `pty`                     | `special`         | websocket                                                                  |
@@ -294,25 +294,25 @@ This checklist tracks bridge parity only. Checked routes are available through t
 - [x] `POST /session` - create session.
 - [x] `DELETE /session/:sessionID` - delete session.
 - [x] `PATCH /session/:sessionID` - update session metadata.
-- [ ] `POST /session/:sessionID/init` - run project init command.
+- [x] `POST /session/:sessionID/init` - run project init command.
 - [x] `POST /session/:sessionID/fork` - fork session.
 - [x] `POST /session/:sessionID/abort` - abort session.
 - [x] `POST /session/:sessionID/share` - share session.
 - [x] `GET /session/:sessionID/diff` - session diff.
 - [x] `DELETE /session/:sessionID/share` - unshare session.
-- [ ] `POST /session/:sessionID/summarize` - summarize session.
+- [x] `POST /session/:sessionID/summarize` - summarize session.
 - [x] `GET /session/:sessionID/message` - list session messages.
 - [x] `GET /session/:sessionID/message/:messageID` - get message.
 - [x] `DELETE /session/:sessionID/message/:messageID` - delete message.
 - [x] `DELETE /session/:sessionID/message/:messageID/part/:partID` - delete part.
 - [x] `PATCH /session/:sessionID/message/:messageID/part/:partID` - update part.
-- [ ] `POST /session/:sessionID/message` - prompt with streaming response.
-- [ ] `POST /session/:sessionID/prompt_async` - async prompt.
-- [ ] `POST /session/:sessionID/command` - run command.
-- [ ] `POST /session/:sessionID/shell` - run shell command.
-- [ ] `POST /session/:sessionID/revert` - revert message.
-- [ ] `POST /session/:sessionID/unrevert` - restore reverted messages.
-- [ ] `POST /session/:sessionID/permissions/:permissionID` - deprecated permission response route.
+- [x] `POST /session/:sessionID/message` - prompt with streaming response.
+- [x] `POST /session/:sessionID/prompt_async` - async prompt.
+- [x] `POST /session/:sessionID/command` - run command.
+- [x] `POST /session/:sessionID/shell` - run shell command.
+- [x] `POST /session/:sessionID/revert` - revert message.
+- [x] `POST /session/:sessionID/unrevert` - restore reverted messages.
+- [x] `POST /session/:sessionID/permissions/:permissionID` - deprecated permission response route.
 
 ### Event Routes
 
@@ -356,7 +356,7 @@ Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays rev
 7. [x] Bridge sync start/replay/history routes.
 8. [x] Bridge session read routes: list, status, get, children, todo, diff, messages.
 9. [x] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
-10. [ ] Bridge session share/summary/message/part mutation routes.
+10. [x] Bridge remaining session mutation and prompt routes.
 11. [ ] Replace event SSE with non-Hono Effect HTTP.
 12. [ ] Replace pty websocket/control routes with non-Hono Effect HTTP.
 13. [ ] Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer.
