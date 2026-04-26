@@ -200,16 +200,18 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
         yield* auth.set(input.providerID, {
           type: "api",
           key: result.key,
+          enterpriseUrl: result.provider,
         })
       }
 
       if ("refresh" in result) {
-        const { type: _, provider: __, refresh, access, expires, ...extra } = result
+        const { type: _, provider, refresh, access, expires, enterpriseUrl: directEnterpriseUrl, ...extra } = result
         yield* auth.set(input.providerID, {
           type: "oauth",
           access,
           refresh,
           expires,
+          enterpriseUrl: directEnterpriseUrl ?? provider,
           ...extra,
         })
       }

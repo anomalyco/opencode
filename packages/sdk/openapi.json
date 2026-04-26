@@ -11970,6 +11970,9 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "enterpriseUrl": {
+            "type": "string"
           }
         },
         "required": ["type", "key"]
