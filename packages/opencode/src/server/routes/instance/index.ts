@@ -20,6 +20,7 @@ import { ExperimentalPaths } from "./httpapi/experimental"
 import { FilePaths } from "./httpapi/file"
 import { InstancePaths } from "./httpapi/instance"
 import { McpPaths } from "./httpapi/mcp"
+import { SessionPaths } from "./httpapi/session"
 import { SyncPaths } from "./httpapi/sync"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
@@ -93,6 +94,14 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.get, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.children, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.todo, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.diff, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.messages, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.message, (c) => handler(c.req.raw, context))
   }
 
   return app
