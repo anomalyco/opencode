@@ -775,6 +775,8 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (part.ignored) return true
     if (!options?.stripPlanModeReminders) return false
     if (!part.synthetic) return false
+    if (part.metadata?.["kind"] === "plan_reminder") return true
+    // Fallback for sessions persisted before reminders were tagged with metadata.
     return part.text.includes("Plan mode is active") || part.text.includes("Plan mode ACTIVE")
   }
 

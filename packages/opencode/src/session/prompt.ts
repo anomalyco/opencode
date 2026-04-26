@@ -236,6 +236,7 @@ export const layer = Layer.effect(
             type: "text",
             text: PROMPT_PLAN,
             synthetic: true,
+            metadata: { kind: "plan_reminder" },
           })
         }
         const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
@@ -349,6 +350,7 @@ This is critical - your turn should only end with either asking the user a quest
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
 </system-reminder>`,
         synthetic: true,
+        metadata: { kind: "plan_reminder" },
       })
       userMessage.parts.push(part)
       return input.messages

@@ -197,32 +197,52 @@ describe("session.message-v2.toModelMessage", () => {
 
   test("can strip stale synthetic plan mode reminders", async () => {
     const messageID = "m-user"
-    const input: MessageV2.WithParts[] = [
-      {
-        info: userInfo(messageID),
-        parts: [
-          {
-            ...basePart(messageID, "p1"),
-            type: "text",
-            text: "<system-reminder>\nPlan mode is active. Do not edit files.\n</system-reminder>",
-            synthetic: true,
-          },
-          {
-            ...basePart(messageID, "p2"),
-            type: "text",
-            text: "<system-reminder>\nYour operational mode has changed from plan to build.\n</system-reminder>",
-            synthetic: true,
-          },
-          {
-            ...basePart(messageID, "p3"),
-            type: "text",
-            text: "Please implement the plan.",
-          },
-        ] as MessageV2.Part[],
-      },
-    ]
+    const planTurn: MessageV2.WithParts = {
+      info: userInfo("m-plan"),
+      parts: [
+        {
+          ...basePart("m-plan", "p0"),
+          type: "text",
+          text: "<system-reminder>\nPlan mode ACTIVE - older session without metadata.\n</system-reminder>",
+          synthetic: true,
+        },
+        {
+          ...basePart("m-plan", "p0b"),
+          type: "text",
+          text: "draft a plan",
+        },
+      ] as MessageV2.Part[],
+    }
+    const buildTurn: MessageV2.WithParts = {
+      info: userInfo(messageID),
+      parts: [
+        {
+          ...basePart(messageID, "p1"),
+          type: "text",
+          text: "<system-reminder>\nPlan mode is active. Do not edit files.\n</system-reminder>",
+          synthetic: true,
+          metadata: { kind: "plan_reminder" },
+        },
+        {
+          ...basePart(messageID, "p2"),
+          type: "text",
+          text: "<system-reminder>\nYour operational mode has changed from plan to build.\n</system-reminder>",
+          synthetic: true,
+        },
+        {
+          ...basePart(messageID, "p3"),
+          type: "text",
+          text: "Please implement the plan.",
+        },
+      ] as MessageV2.Part[],
+    }
+    const input: MessageV2.WithParts[] = [planTurn, buildTurn]
 
     expect(await MessageV2.toModelMessages(input, model, { stripPlanModeReminders: true })).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "draft a plan" }],
+      },
       {
         role: "user",
         content: [
@@ -231,6 +251,39 @@ describe("session.message-v2.toModelMessage", () => {
             text: "<system-reminder>\nYour operational mode has changed from plan to build.\n</system-reminder>",
           },
           { type: "text", text: "Please implement the plan." },
+        ],
+      },
+    ])
+  })
+
+  test("keeps plan reminders when not stripping", async () => {
+    const messageID = "m-user"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "text",
+            text: "<system-reminder>\nPlan mode is active.\n</system-reminder>",
+            synthetic: true,
+            metadata: { kind: "plan_reminder" },
+          },
+          {
+            ...basePart(messageID, "p2"),
+            type: "text",
+            text: "draft a plan",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "<system-reminder>\nPlan mode is active.\n</system-reminder>" },
+          { type: "text", text: "draft a plan" },
         ],
       },
     ])
