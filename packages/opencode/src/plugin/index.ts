@@ -80,6 +80,13 @@ type TriggerName = {
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin, PoeAuthPlugin]
   const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
 
+  const pluginFn = (value: unknown): PluginInstance | undefined => {
+    if (typeof value === "function") return value as PluginInstance
+    if (!value || typeof value !== "object") return
+    const item = value as { server?: unknown }
+    if (typeof item.server === "function") return item.server as PluginInstance
+  }
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -148,8 +155,9 @@ type TriggerName = {
               await import(plugin)
                 .then(async (mod) => {
                   const seen = new Set<PluginInstance>()
-                  for (const [name, fn] of Object.entries<PluginInstance>(mod)) {
-                    if (typeof fn !== "function") continue
+                  for (const [name, item] of Object.entries(mod)) {
+                    const fn = pluginFn(item)
+                    if (!fn) continue
                     if (seen.has(fn)) continue
                     seen.add(fn)
                     const init = await fn(input)
