@@ -1577,6 +1577,11 @@ export default function Page() {
   }
 
   const queueFollowup = (draft: FollowupDraft, editID?: string) => {
+    const followupMode = settings.general.followup()
+    if (followupMode === "steer") {
+      draft.isSteer = true
+    }
+    
     setFollowup("items", draft.sessionID, (items) => {
       const nextItems = items ? [...items] : []
       if (editID) {
@@ -1591,13 +1596,12 @@ export default function Page() {
     setFollowup("failed", draft.sessionID, undefined)
     setFollowup("paused", draft.sessionID, undefined)
 
-    const mode = settings.general.followup()
-    if (!editID && mode === "steer") {
+    if (!editID && followupMode === "steer") {
       // In steer mode, we request the agent to halt
       // The actual queued message will be sent automatically when the agent becomes idle
-      void sdk.client.session.interrupt({ sessionID: draft.sessionID, type: mode })
-    } else if (!editID && mode === "wrap") {
-      void sdk.client.session.interrupt({ sessionID: draft.sessionID, type: mode })
+      void sdk.client.session.interrupt({ sessionID: draft.sessionID, type: followupMode })
+    } else if (!editID && followupMode === "wrap") {
+      void sdk.client.session.interrupt({ sessionID: draft.sessionID, type: followupMode })
     }
   }
 

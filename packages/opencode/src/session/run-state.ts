@@ -16,6 +16,7 @@ export interface Interface {
     sessionID: SessionID,
     onInterrupt: Effect.Effect<MessageV2.WithParts>,
     work: Effect.Effect<MessageV2.WithParts>,
+    initialStatus?: SessionStatus.Info
   ) => Effect.Effect<MessageV2.WithParts>
   readonly startShell: (
     sessionID: SessionID,
@@ -53,6 +54,7 @@ export const layer = Layer.effect(
     const runner = Effect.fn("SessionRunState.runner")(function* (
       sessionID: SessionID,
       onInterrupt: Effect.Effect<MessageV2.WithParts>,
+      initialStatus: SessionStatus.Info = { type: "busy" }
     ) {
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
@@ -62,7 +64,7 @@ export const layer = Layer.effect(
           data.runners.delete(sessionID)
           yield* status.set(sessionID, { type: "idle" })
         }),
-        onBusy: status.set(sessionID, { type: "busy" }),
+        onBusy: status.set(sessionID, initialStatus),
         onInterrupt,
         busy: () => {
           throw new Session.BusyError(sessionID)
@@ -115,16 +117,18 @@ export const layer = Layer.effect(
       sessionID: SessionID,
       onInterrupt: Effect.Effect<MessageV2.WithParts>,
       work: Effect.Effect<MessageV2.WithParts>,
+      initialStatus?: SessionStatus.Info
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).ensureRunning(work)
+      return yield* (yield* runner(sessionID, onInterrupt, initialStatus)).ensureRunning(work)
     })
 
     const startShell = Effect.fn("SessionRunState.startShell")(function* (
       sessionID: SessionID,
       onInterrupt: Effect.Effect<MessageV2.WithParts>,
       work: Effect.Effect<MessageV2.WithParts>,
+      initialStatus?: SessionStatus.Info
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).startShell(work)
+      return yield* (yield* runner(sessionID, onInterrupt, initialStatus)).startShell(work)
     })
 
     return Service.of({ assertNotBusy, cancel, requestInterrupt, clearInterrupt, getInterrupt, ensureRunning, startShell })

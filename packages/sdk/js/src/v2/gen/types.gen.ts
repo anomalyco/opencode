@@ -3807,6 +3807,7 @@ export type SessionPromptData = {
     }
     agent?: string
     noReply?: boolean
+    isSteer?: boolean
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
      */
@@ -4007,6 +4008,7 @@ export type SessionPromptAsyncData = {
     }
     agent?: string
     noReply?: boolean
+    isSteer?: boolean
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
      */

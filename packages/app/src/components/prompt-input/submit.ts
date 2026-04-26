@@ -34,6 +34,7 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  isSteer?: boolean
 }
 
 type FollowupSendInput = {
@@ -57,7 +58,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
   const setBusy = () => {
     if (!input.optimisticBusy) return
-    setStore("session_status", input.draft.sessionID, { type: "busy" })
+    setStore("session_status", input.draft.sessionID, { type: input.draft.isSteer ? "steer" : "busy" })
   }
 
   const setIdle = () => {
@@ -159,6 +160,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
       parts: requestParts,
       variant: input.draft.variant,
+      isSteer: input.draft.isSteer,
     })
     return true
   } catch (err) {
