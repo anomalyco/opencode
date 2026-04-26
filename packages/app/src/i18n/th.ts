@@ -227,7 +227,7 @@ export const dict = {
   "common.default": "ค่าเริ่มต้น",
   "common.attachment": "ไฟล์แนบ",
 
-  "prompt.placeholder.shell": "ป้อนคำสั่งเชลล์...",
+  "prompt.placeholder.shell": "ป้อนคำสั่งเชลล์... {{example}}",
   "prompt.placeholder.normal": 'ถามอะไรก็ได้... "{{example}}"',
   "prompt.placeholder.simple": "ถามอะไรก็ได้...",
   "prompt.placeholder.summarizeComments": "สรุปความคิดเห็น…",
