@@ -4,7 +4,9 @@ import path from "node:path"
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import z from "zod"
+import { isRecord } from "@/util/record"
 import { createSimpleContext } from "./helper"
+import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -90,6 +92,8 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       let reconnect: ReturnType<typeof setTimeout> | undefined
       let attempt = 0
       let requestID = 0
+      let zedSelection: Promise<void> | undefined
+      let lastZedSelectionKey: string | undefined
       const pending = new Map<number, string>()
 
       const send = (payload: JsonRpcMessage) => {
@@ -114,7 +118,29 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
         const connection = resolveEditorConnection()
         if (!connection) {
-          setStore("status", "disabled")
+          const dbPath = resolveZedDbPath()
+          if (!dbPath) {
+            setStore("status", "disabled")
+            scheduleReconnect(1000)
+            return
+          }
+          zedSelection ??= resolveZedSelection(dbPath)
+            .then((selection) => {
+              if (closed || socket) return
+              const key = editorSelectionKey(selection)
+              if (key !== lastZedSelectionKey) {
+                lastZedSelectionKey = key
+                setStore("selection", selection)
+                setStore("status", selection ? "connected" : "disabled")
+              }
+            })
+            .catch(() => {
+              if (closed || socket) return
+              setStore("status", "disabled")
+            })
+            .finally(() => {
+              zedSelection = undefined
+            })
           scheduleReconnect(1000)
           return
         }
@@ -196,7 +222,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection())
+        return Boolean(resolveEditorConnection() || resolveZedDbPath())
       },
       connected() {
         return store.status === "connected"
@@ -289,6 +315,18 @@ function scoreEditorLock(lock: EditorLockFile, cwd: string) {
   return workspaceMatch * 1_000_000_000_000 + lock.mtimeMs
 }
 
+function editorSelectionKey(selection: EditorSelection | undefined) {
+  if (!selection) return ""
+  return [
+    selection.filePath,
+    selection.selection.start.line,
+    selection.selection.start.character,
+    selection.selection.end.line,
+    selection.selection.end.character,
+    selection.text,
+  ].join("\0")
+}
+
 function pathContains(parent: string, child: string) {
   const relative = path.relative(path.resolve(parent), path.resolve(child))
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
@@ -312,8 +350,4 @@ function parseMessage(value: unknown) {
   } catch {
     return
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

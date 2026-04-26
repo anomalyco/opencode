@@ -1,9 +1,9 @@
 import path from "path"
 import fs from "fs/promises"
 import { createWriteStream } from "fs"
-import { Global } from "../global"
+import * as Global from "../global"
 import z from "zod"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { Glob } from "./glob"
 
 export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
 export type Level = z.infer<typeof Level>
