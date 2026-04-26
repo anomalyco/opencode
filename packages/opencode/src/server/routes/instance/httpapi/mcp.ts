@@ -139,9 +139,10 @@ export const mcpHandlers = Layer.unwrap(
     })
 
     const add = Effect.fn("McpHttpApi.add")(function* (ctx: { payload: typeof AddPayload.Type }) {
-      const payload = Schema.decodeUnknownSync(AddPayload)(ctx.payload)
-      const result = (yield* mcp.add(payload.name, payload.config)).status
-      return Schema.decodeUnknownSync(StatusMap)("status" in result ? { [payload.name]: result } : result)
+      const result = (yield* mcp.add(ctx.payload.name, ctx.payload.config)).status
+      return yield* Schema.decodeUnknownEffect(StatusMap)("status" in result ? { [ctx.payload.name]: result } : result).pipe(
+        Effect.mapError(() => new HttpApiError.BadRequest({})),
+      )
     })
 
     const authStart = Effect.fn("McpHttpApi.authStart")(function* (ctx: { params: { name: string } }) {

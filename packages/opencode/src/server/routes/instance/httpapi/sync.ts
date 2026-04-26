@@ -96,8 +96,7 @@ export const syncHandlers = Layer.unwrap(
     })
 
     const replay = Effect.fn("SyncHttpApi.replay")(function* (ctx: { payload: typeof ReplayPayload.Type }) {
-      const payload = Schema.decodeUnknownSync(ReplayPayload)(ctx.payload)
-      const events: SyncEvent.SerializedEvent[] = payload.events.map((event) => ({
+      const events: SyncEvent.SerializedEvent[] = ctx.payload.events.map((event) => ({
         id: event.id,
         aggregateID: event.aggregateID,
         seq: event.seq,

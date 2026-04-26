@@ -123,7 +123,7 @@ export const workspaceHandlers = Layer.unwrap(
       return yield* Effect.promise(() =>
         Instance.restore(instance, () =>
           Workspace.create({
-            ...Schema.decodeUnknownSync(CreatePayload)(ctx.payload),
+            ...ctx.payload,
             projectID: instance.project.id,
           }),
         ),
