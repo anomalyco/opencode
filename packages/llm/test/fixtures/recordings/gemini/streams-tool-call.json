@@ -1,1 +1,22 @@
-{"version":1,"interactions":[{"request":{"method":"POST","url":"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse","headers":{"content-type":"application/json"},"body":"{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Call get_weather with city exactly Paris.\"}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"Call tools exactly as requested.\"}]},\"tools\":[{\"functionDeclarations\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}],\"toolConfig\":{\"functionCallingConfig\":{\"mode\":\"ANY\",\"allowedFunctionNames\":[\"get_weather\"]}},\"generationConfig\":{\"maxOutputTokens\":80,\"temperature\":0}}"},"response":{"status":200,"headers":{"content-type":"text/event-stream"},"body":"data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\",\"args\": {\"city\": \"Paris\"}},\"thoughtSignature\": \"CiQBDDnWx1Wa8wdQFKg1mZSiIXMV8OQoLRuNAVBvIEbTnK+JZIYKXwEMOdbHNwv+GOeRqLuxSIVGQHFQm6H+rKKHGHPmy6UaloPEMTQXwVbkxF14kkGw7cMkSil8QtVPYFpn5ifMfU52Jiu2Vwtg2kP3oslPe3S/AhVryZrAq76GW3PwQfANCoUBAQw51sfnPZfKTxeqadxnkqPhYfFkyzsKQkBC9SslWD1P2MqINxvw7umCCNp/rktAZ6tuS+lOQk5TwueD2nWT/saJgGyYheQZ8eZob8wrPF8jWLPeSemdymAujF4EDeuNPRxxz3ToWy2xv66NiTWpgQeJ1Rvy01S2RPHG4W5uYcPXx82nig==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 55,\"candidatesTokenCount\": 15,\"totalTokenCount\": 115,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 55}],\"thoughtsTokenCount\": 45},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"7CPuaa_aIcWb_uMP1Ia0wQ8\"}\r\n\r\n"}}]}
+{
+  "version": 1,
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Call get_weather with city exactly Paris.\"}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"Call tools exactly as requested.\"}]},\"tools\":[{\"functionDeclarations\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}],\"toolConfig\":{\"functionCallingConfig\":{\"mode\":\"ANY\",\"allowedFunctionNames\":[\"get_weather\"]}},\"generationConfig\":{\"maxOutputTokens\":80,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\",\"args\": {\"city\": \"Paris\"}},\"thoughtSignature\": \"CiQBDDnWx1Wa8wdQFKg1mZSiIXMV8OQoLRuNAVBvIEbTnK+JZIYKXwEMOdbHNwv+GOeRqLuxSIVGQHFQm6H+rKKHGHPmy6UaloPEMTQXwVbkxF14kkGw7cMkSil8QtVPYFpn5ifMfU52Jiu2Vwtg2kP3oslPe3S/AhVryZrAq76GW3PwQfANCoUBAQw51sfnPZfKTxeqadxnkqPhYfFkyzsKQkBC9SslWD1P2MqINxvw7umCCNp/rktAZ6tuS+lOQk5TwueD2nWT/saJgGyYheQZ8eZob8wrPF8jWLPeSemdymAujF4EDeuNPRxxz3ToWy2xv66NiTWpgQeJ1Rvy01S2RPHG4W5uYcPXx82nig==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 55,\"candidatesTokenCount\": 15,\"totalTokenCount\": 115,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 55}],\"thoughtsTokenCount\": 45},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"7CPuaa_aIcWb_uMP1Ia0wQ8\"}\r\n\r\n"
+      }
+    }
+  ]
+}

@@ -39,9 +39,8 @@ const Cassette = Schema.Struct({
   interactions: Schema.Array(Interaction),
 })
 
-const CassetteJson = Schema.fromJsonString(Cassette)
-const decodeCassetteJson = Schema.decodeUnknownSync(CassetteJson)
-const encodeCassetteJson = Schema.encodeSync(CassetteJson)
+const decodeCassette = Schema.decodeUnknownSync(Cassette)
+const encodeCassette = Schema.encodeSync(Cassette)
 
 const JsonValue = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownOption(JsonValue)
@@ -84,7 +83,10 @@ export interface RecordReplayOptions {
   /**
    * Custom request matcher. Defaults to `defaultMatcher`, which compares
    * method, url, structurally-canonical JSON body, and the allow-listed
-   * headers.
+   * headers against any recorded interaction. Use `sequentialMatcher` for
+   * multi-interaction cassettes where two requests in a row may be
+   * structurally identical (retry / repeated polling) and should map to
+   * recorded responses by position.
    */
   readonly match?: RequestMatcher
 }
@@ -122,6 +124,15 @@ const canonicalSnapshot = (snapshot: RequestSnapshot): string =>
 export const defaultMatcher: RequestMatcher = (incoming, recorded) =>
   canonicalSnapshot(incoming) === canonicalSnapshot(recorded)
 
+/**
+ * Sentinel matcher that signals position-based dispatch. The replay layer
+ * detects this matcher by reference identity and consumes interactions in
+ * recorded order, regardless of whether two requests produce the same
+ * canonical snapshot. Use for retries or repeated polling that expect
+ * different responses to identical requests.
+ */
+export const sequentialMatcher: RequestMatcher = () => true
+
 const lowerHeaders = (headers: Record<string, string>, allow: ReadonlyArray<string>) => {
   const allowed = new Set(allow.map((name) => name.toLowerCase()))
   return Object.fromEntries(
@@ -149,21 +160,30 @@ const fixtureMissing = (request: HttpClientRequest.HttpClientRequest, name: stri
     }),
   })
 
-const fixtureMismatch = (request: HttpClientRequest.HttpClientRequest, name: string) =>
+const fixtureMismatch = (request: HttpClientRequest.HttpClientRequest, name: string, detail: string) =>
   new HttpClientError.HttpClientError({
     reason: new HttpClientError.TransportError({
       request,
-      description: `Fixture "${name}" does not match the current request. Run with RECORD=true to update it.`,
+      description: `Fixture "${name}" does not match the current request: ${detail}. Run with RECORD=true to update it.`,
     }),
   })
 
+/**
+ * Cassettes are JSON edited by humans. Pretty-print with two-space indent so
+ * multi-interaction cassettes diff cleanly. `Schema.encodeSync` returns a
+ * JSON-compatible value; `JSON.stringify` is used here only to control
+ * formatting, not for schema serialization.
+ */
+const formatCassette = (interactions: ReadonlyArray<Interaction>) =>
+  `${JSON.stringify(encodeCassette({ version: 1, interactions }), null, 2)}\n`
+
+const parseCassette = (raw: string) => decodeCassette(JSON.parse(raw))
+
 export const hasFixtureSync = (name: string) => {
-  try {
-    decodeCassetteJson(fs.readFileSync(fixturePath(name), "utf8"))
-    return true
-  } catch {
-    return false
-  }
+  if (!fs.existsSync(fixturePath(name))) return false
+  return Option.isSome(
+    Option.liftThrowable(parseCassette)(fs.readFileSync(fixturePath(name), "utf8")),
+  )
 }
 
 export const layer = (
@@ -180,7 +200,9 @@ export const layer = (
       const requestHeadersAllow = options.requestHeaders ?? DEFAULT_REQUEST_HEADERS
       const responseHeadersAllow = options.responseHeaders ?? DEFAULT_RESPONSE_HEADERS
       const match = options.match ?? defaultMatcher
+      const sequential = match === sequentialMatcher
       const recorded = yield* Ref.make<ReadonlyArray<Interaction>>([])
+      const cursor = yield* Ref.make(0)
 
       const snapshotRequest = (request: HttpClientRequest.HttpClientRequest) =>
         Effect.gen(function* () {
@@ -201,6 +223,29 @@ export const layer = (
           }
         })
 
+      const selectInteraction = (
+        cassette: Schema.Schema.Type<typeof Cassette>,
+        incoming: RequestSnapshot,
+      ) =>
+        Effect.gen(function* () {
+          if (sequential) {
+            const index = yield* Ref.getAndUpdate(cursor, (n) => n + 1)
+            const interaction = cassette.interactions[index]
+            return {
+              interaction,
+              detail: `interaction ${index + 1} of ${cassette.interactions.length} not recorded`,
+            }
+          }
+          const incomingCanonical = canonicalSnapshot(incoming)
+          const interaction =
+            match === defaultMatcher
+              ? cassette.interactions.find(
+                  (candidate) => canonicalSnapshot(candidate.request) === incomingCanonical,
+                )
+              : cassette.interactions.find((candidate) => match(incoming, candidate.request))
+          return { interaction, detail: "no recorded interaction matched" }
+        })
+
       return HttpClient.make((request) => {
         if (isRecordMode) {
           return Effect.gen(function* () {
@@ -217,24 +262,18 @@ export const layer = (
             }
             const interactions = yield* Ref.updateAndGet(recorded, (prev) => [...prev, interaction])
             yield* fileSystem.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
-            yield* fileSystem
-              .writeFileString(file, encodeCassetteJson({ version: 1, interactions }))
-              .pipe(Effect.orDie)
+            yield* fileSystem.writeFileString(file, formatCassette(interactions)).pipe(Effect.orDie)
             return HttpClientResponse.fromWeb(request, new Response(body, interaction.response))
           })
         }
 
         return Effect.gen(function* () {
-          const cassette = decodeCassetteJson(
+          const cassette = parseCassette(
             yield* fileSystem.readFileString(file).pipe(Effect.mapError(() => fixtureMissing(request, name))),
           )
           const incoming = yield* snapshotRequest(request)
-          const incomingCanonical = canonicalSnapshot(incoming)
-          const interaction =
-            match === defaultMatcher
-              ? cassette.interactions.find((candidate) => canonicalSnapshot(candidate.request) === incomingCanonical)
-              : cassette.interactions.find((candidate) => match(incoming, candidate.request))
-          if (!interaction) return yield* fixtureMismatch(request, name)
+          const { interaction, detail } = yield* selectInteraction(cassette, incoming)
+          if (!interaction) return yield* fixtureMismatch(request, name, detail)
 
           return HttpClientResponse.fromWeb(request, new Response(interaction.response.body, interaction.response))
         })

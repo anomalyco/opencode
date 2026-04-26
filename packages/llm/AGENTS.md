@@ -137,7 +137,7 @@ Provider-defined tools (e.g. OpenAI built-in `web_search`) should go directly in
 
 ### Recording Tests
 
-Recorded tests use one cassette per scenario. Use `recordedTests({ prefix, requires })` and let the helper derive cassette names from test names:
+Recorded tests use one cassette file per scenario. A cassette holds an ordered array of `{ request, response }` interactions, so multi-step flows (tool loops, retries, polling) record into a single file. Use `recordedTests({ prefix, requires })` and let the helper derive cassette names from test names:
 
 ```ts
 const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
@@ -147,7 +147,9 @@ recorded.effect("streams text", () => Effect.gen(function* () {
 }))
 ```
 
-Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars.
+Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars. Cassettes are written as pretty-printed JSON so multi-interaction diffs stay reviewable.
+
+**Matching strategies.** Replay defaults to `defaultMatcher`, which finds an interaction by structurally comparing method, URL, allow-listed headers, and the canonical JSON body. This is the right choice for tool loops because each round's request differs (the message history grows). For scenarios where successive requests are byte-identical and expect different responses (retries, polling), pass `match: sequentialMatcher` in `RecordReplayOptions` — replay then walks the cassette in record order via an internal cursor. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 
 Do not blanket re-record an entire test file when adding one cassette. `RECORD=true` rewrites every recorded case that runs, and provider streams contain volatile IDs, timestamps, fingerprints, and obfuscation fields. Prefer deleting the one cassette you intend to refresh, or run a focused test pattern that only registers the scenario you want to record. Keep stable existing cassettes unchanged unless their request shape or expected behavior changed.
 
@@ -199,6 +201,22 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 - [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.
 - [x] Cover provider-error and HTTP-status sad paths with deterministic fixtures across adapters (Anthropic mid-stream + 4xx; OpenAI Responses mid-stream + 4xx; OpenAI Chat 4xx). Live recordings of provider errors are still TODO when stable cassettes can be captured.
-- [ ] Improve cassette ergonomics if more providers need custom matching, redaction, or multi-interaction flows.
+- [x] Improve cassette ergonomics for multi-interaction flows: pretty-printed JSON for diff-friendly cassettes, `sequentialMatcher` for ordered dispatch, and a recorded tool-loop scaffold (`openai-chat-tool-loop.recorded.test.ts`).
 - [ ] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
 - [x] Add adapter parity fixtures against `../ai` behavior for generic OpenAI-compatible Chat before adding provider-specific wrappers.
+
+### Recorded Cassette Backlog
+
+- [x] DeepSeek OpenAI-compatible Chat basic streaming text.
+- [ ] DeepSeek OpenAI-compatible Chat tool call and tool-result follow-up.
+- [ ] DeepSeek reasoning output, including any interleaved reasoning fields the live API emits.
+- [x] TogetherAI OpenAI-compatible Chat basic streaming text and tool-call flow.
+- [ ] Cerebras OpenAI-compatible Chat basic streaming text and tool-call flow.
+- [ ] Baseten OpenAI-compatible Chat basic streaming text and deployed-model request shape.
+- [ ] Fireworks OpenAI-compatible Chat basic streaming text and tool-call flow.
+- [ ] DeepInfra OpenAI-compatible Chat basic streaming text and tool-call flow.
+- [ ] Provider-error cassettes for stable, non-secret error bodies where the provider returns deterministic 4xx/5xx payloads.
+- [ ] Mistral, Groq, xAI, Perplexity, and Cohere basic/tool cassettes after deciding whether each stays generic OpenAI-compatible or gets a thin wrapper.
+- [ ] Bedrock Converse basic text, tool use/result, and cache-hint cassettes after Bedrock support lands.
+- [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex adapter/patch shape is decided.
+- [ ] Gateway/OpenRouter routing-header cassettes after routing support lands.
