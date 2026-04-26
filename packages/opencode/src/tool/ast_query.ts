@@ -10,6 +10,12 @@ import type { SupportedLanguage } from "../ast/languages"
 import * as Bom from "@/util/bom"
 import DESCRIPTION from "./ast_query.txt"
 
+const LanguageSchema = Schema.Literal(
+  "typescript", "tsx", "javascript", "python", "bash",
+  "go", "rust", "ruby", "java", "c", "cpp",
+  "css", "html", "json", "yaml", "toml",
+)
+
 export const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "Absolute path to the file to query." }),
   pattern: Schema.String.annotate({
@@ -19,26 +25,7 @@ export const Parameters = Schema.Struct({
       '"(import_statement) @imp" "(variable_declarator) @var". ' +
       "Use named capture (@name) to mark the node you want returned.",
   }),
-  language: Schema.optional(
-    Schema.Union(
-      Schema.Literal("typescript"),
-      Schema.Literal("tsx"),
-      Schema.Literal("javascript"),
-      Schema.Literal("python"),
-      Schema.Literal("bash"),
-      Schema.Literal("go"),
-      Schema.Literal("rust"),
-      Schema.Literal("ruby"),
-      Schema.Literal("java"),
-      Schema.Literal("c"),
-      Schema.Literal("cpp"),
-      Schema.Literal("css"),
-      Schema.Literal("html"),
-      Schema.Literal("json"),
-      Schema.Literal("yaml"),
-      Schema.Literal("toml"),
-    ),
-  ).annotate({
+  language: Schema.optional(LanguageSchema).annotate({
     description: "Override language detection. If omitted, language is inferred from file extension.",
   }),
 })
