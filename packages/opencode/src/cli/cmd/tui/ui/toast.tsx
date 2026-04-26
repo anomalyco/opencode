@@ -5,11 +5,12 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import { Schema } from "effect"
-import { type TuiEvent } from "../event"
+import { TuiEvent } from "../event"
 
+type ToastInput = Schema.Codec.Encoded<typeof TuiEvent.ToastShow.properties>
 export type ToastOptions = Schema.Schema.Type<typeof TuiEvent.ToastShow.properties>
 
-const DEFAULT_TOAST_DURATION = 5000
+const decodeToastOptions = Schema.decodeUnknownSync(TuiEvent.ToastShow.properties)
 
 export function Toast() {
   const toast = useToast()
@@ -57,13 +58,13 @@ function init() {
   let timeoutHandle: NodeJS.Timeout | null = null
 
   const toast = {
-    show(options: ToastOptions) {
-      const duration = options.duration ?? DEFAULT_TOAST_DURATION
-      setStore("currentToast", options)
+    show(options: ToastInput) {
+      const toastOptions = decodeToastOptions(options)
+      setStore("currentToast", toastOptions)
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {
         setStore("currentToast", null)
-      }, duration).unref()
+      }, toastOptions.duration).unref()
     },
     error: (err: any) => {
       if (err instanceof Error)

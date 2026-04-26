@@ -1,6 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID } from "@/session/schema"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
+
+const DEFAULT_TOAST_DURATION = 5000
 
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", Schema.Struct({ text: Schema.String })),
@@ -36,7 +38,9 @@ export const TuiEvent = {
       title: Schema.optional(Schema.String),
       message: Schema.String,
       variant: Schema.Literals(["info", "success", "warning", "error"]),
-      duration: Schema.optional(Schema.Number).annotate({ description: "Duration in milliseconds" }),
+      duration: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOAST_DURATION))).annotate({
+        description: "Duration in milliseconds",
+      }),
     }),
   ),
   SessionSelect: BusEvent.define(
