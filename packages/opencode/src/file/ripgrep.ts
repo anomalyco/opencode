@@ -16,7 +16,15 @@ import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "ripgrep" })
 const VERSION = "15.1.0"
-const DOWNLOAD_TIMEOUT_MS = 30_000
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 30_000
+
+function downloadTimeoutMs() {
+  const raw = process.env["OPENCODE_RIPGREP_DOWNLOAD_TIMEOUT_MS"]
+  if (!raw) return DEFAULT_DOWNLOAD_TIMEOUT_MS
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_DOWNLOAD_TIMEOUT_MS
+  return parsed
+}
 const PLATFORM = {
   "arm64-darwin": { platform: "aarch64-apple-darwin", extension: "tar.gz" },
   "arm64-linux": { platform: "aarch64-unknown-linux-gnu", extension: "tar.gz" },
@@ -299,46 +307,52 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
         yield* fs.chmod(target, 0o755)
       }, Effect.scoped)
 
-      const filepath = yield* Effect.cached(
-        Effect.gen(function* () {
-          const system = yield* Effect.sync(() => which(process.platform === "win32" ? "rg.exe" : "rg"))
-          if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
+      const downloadBinary = Effect.gen(function* () {
+        const system = yield* Effect.sync(() => which(process.platform === "win32" ? "rg.exe" : "rg"))
+        if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
 
-          const target = path.join(Global.Path.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
-          if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
+        const target = path.join(Global.Path.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)
+        if (yield* fs.isFile(target).pipe(Effect.orDie)) return target
 
-          const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
-          const config = PLATFORM[platformKey]
-          if (!config) {
-            return yield* Effect.fail(new Error(`unsupported platform for ripgrep: ${platformKey}`))
-          }
+        const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
+        const config = PLATFORM[platformKey]
+        if (!config) {
+          return yield* Effect.fail(new Error(`unsupported platform for ripgrep: ${platformKey}`))
+        }
 
-          const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
-          const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
-          const archive = path.join(Global.Path.bin, filename)
+        const filename = `ripgrep-${VERSION}-${config.platform}.${config.extension}`
+        const url = `https://github.com/BurntSushi/ripgrep/releases/download/${VERSION}/${filename}`
+        const archive = path.join(Global.Path.bin, filename)
 
-          log.info("downloading ripgrep", { url })
-          yield* fs.ensureDir(Global.Path.bin).pipe(Effect.orDie)
+        log.info("downloading ripgrep", { url })
+        yield* fs.ensureDir(Global.Path.bin).pipe(Effect.orDie)
 
-          const bytes = yield* HttpClientRequest.get(url).pipe(
-            http.execute,
-            Effect.flatMap((response) => response.arrayBuffer),
-            Effect.timeoutOrElse({
-              duration: DOWNLOAD_TIMEOUT_MS,
-              orElse: () => Effect.fail(downloadError(url, "Timed out")),
-            }),
-            Effect.mapError((cause) => normalizeDownloadError(url, cause)),
-          )
-          if (bytes.byteLength === 0) {
-            return yield* Effect.fail(downloadError(url, "Failed"))
-          }
+        const bytes = yield* HttpClientRequest.get(url).pipe(
+          http.execute,
+          Effect.flatMap((response) => response.arrayBuffer),
+          Effect.timeoutOrElse({
+            duration: downloadTimeoutMs(),
+            orElse: () => Effect.fail(downloadError(url, "Timed out")),
+          }),
+          Effect.mapError((cause) => normalizeDownloadError(url, cause)),
+        )
+        if (bytes.byteLength === 0) {
+          return yield* Effect.fail(downloadError(url, "Failed"))
+        }
 
-          yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
-          yield* extract(archive, config, target)
-          yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
-          return target
-        }),
-      )
+        yield* fs.writeWithDirs(archive, new Uint8Array(bytes))
+        yield* extract(archive, config, target)
+        yield* fs.remove(archive, { force: true }).pipe(Effect.ignore)
+        return target
+      })
+
+      let cached = yield* Effect.cached(downloadBinary)
+      const filepath = Effect.gen(function* () {
+        const result = yield* Effect.exit(cached)
+        if (result._tag === "Success") return result.value
+        cached = yield* Effect.cached(downloadBinary)
+        return yield* result
+      })
 
       const check = Effect.fnUntraced(function* (cwd: string) {
         if (yield* fs.isDir(cwd).pipe(Effect.orDie)) return
