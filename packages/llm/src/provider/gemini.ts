@@ -141,7 +141,13 @@ interface ParserState {
 
 const GeminiChunkJson = Schema.fromJsonString(GeminiChunk)
 const GeminiTargetJson = Schema.fromJsonString(GeminiTarget)
-const decodeChunk = Schema.decodeUnknownSync(GeminiChunkJson)
+const decodeChunkSync = Schema.decodeUnknownSync(GeminiChunkJson)
+
+const decodeChunk = (data: string) =>
+  Effect.try({
+    try: () => decodeChunkSync(data),
+    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid Gemini stream chunk", data),
+  })
 const encodeTarget = Schema.encodeSync(GeminiTargetJson)
 const decodeTarget = Schema.decodeUnknownEffect(GeminiDraft.pipe(Schema.decodeTo(GeminiTarget)))
 
@@ -289,6 +295,7 @@ const thinkingBudget = (effort: ReasoningEffort | undefined) => {
 }
 
 const prepare = Effect.fn("Gemini.prepare")(function* (request: LLMRequest) {
+  const toolsEnabled = request.tools.length > 0 && request.toolChoice?.type !== "none"
   const generationConfig = {
     maxOutputTokens: request.generation.maxTokens,
     temperature: request.generation.temperature,
@@ -305,8 +312,8 @@ const prepare = Effect.fn("Gemini.prepare")(function* (request: LLMRequest) {
   return {
     contents: yield* lowerMessages(request),
     systemInstruction: request.system.length === 0 ? undefined : { parts: [{ text: text(request.system) }] },
-    tools: request.tools.length === 0 ? undefined : [{ functionDeclarations: request.tools.map(lowerTool) }],
-    toolConfig: request.tools.length === 0 || !request.toolChoice ? undefined : yield* lowerToolConfig(request.toolChoice),
+    tools: toolsEnabled ? [{ functionDeclarations: request.tools.map(lowerTool) }] : undefined,
+    toolConfig: toolsEnabled && request.toolChoice ? yield* lowerToolConfig(request.toolChoice) : undefined,
     generationConfig: Object.values(generationConfig).some((value) => value !== undefined) ? generationConfig : undefined,
   }
 })
@@ -329,7 +336,10 @@ const mapUsage = (usage: GeminiUsage | undefined) => {
     outputTokens: usage.candidatesTokenCount,
     reasoningTokens: usage.thoughtsTokenCount,
     cacheReadInputTokens: usage.cachedContentTokenCount,
-    totalTokens: usage.totalTokenCount ?? (usage.promptTokenCount ?? 0) + (usage.candidatesTokenCount ?? 0),
+    totalTokens: usage.totalTokenCount ??
+      (usage.promptTokenCount !== undefined || usage.candidatesTokenCount !== undefined
+        ? (usage.promptTokenCount ?? 0) + (usage.candidatesTokenCount ?? 0)
+        : undefined),
     native: usage,
   })
 }
@@ -355,14 +365,14 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
     ? [{ type: "request-finish", reason: mapFinishReason(state.finishReason, state.hasToolCalls), usage: state.usage }]
     : []
 
-const processChunk = (state: ParserState, chunk: GeminiChunk): readonly [ParserState, ReadonlyArray<LLMEvent>] => {
+const processChunk = (state: ParserState, chunk: GeminiChunk) => {
   const nextState = {
     ...state,
     usage: chunk.usageMetadata ? mapUsage(chunk.usageMetadata) ?? state.usage : state.usage,
   }
   const candidate = chunk.candidates?.[0]
   if (!candidate?.content) {
-    return [{ ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason }, []]
+    return Effect.succeed([{ ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason }, []] as const)
   }
 
   const events: LLMEvent[] = []
@@ -378,23 +388,17 @@ const processChunk = (state: ParserState, chunk: GeminiChunk): readonly [ParserS
     if ("functionCall" in part) {
       const input = part.functionCall.args
       const id = `tool_${nextToolCallId++}`
-      events.push({
-        type: "tool-input-delta",
-        id,
-        name: part.functionCall.name,
-        text: ProviderShared.encodeJson(input),
-      })
       events.push({ type: "tool-call", id, name: part.functionCall.name, input })
       hasToolCalls = true
     }
   }
 
-  return [{
+  return Effect.succeed([{
     ...nextState,
     hasToolCalls,
     nextToolCallId,
     finishReason: candidate.finishReason ?? nextState.finishReason,
-  }, events]
+  }, events] as const)
 }
 
 const events = (response: HttpClientResponse.HttpClientResponse) =>
@@ -430,7 +434,7 @@ export const model = (input: GeminiModelInput) => {
     capabilities: input.capabilities ?? capabilities({
       input: { image: true, audio: true, video: true, pdf: true },
       output: { reasoning: true },
-      tools: { calls: true, streamingInput: true },
+      tools: { calls: true },
       reasoning: { efforts: ["minimal", "low", "medium", "high", "xhigh", "max"] },
     }),
   })

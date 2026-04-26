@@ -154,7 +154,13 @@ interface ParserState {
 
 const AnthropicChunkJson = Schema.fromJsonString(AnthropicChunk)
 const AnthropicTargetJson = Schema.fromJsonString(AnthropicMessagesTarget)
-const decodeChunk = Schema.decodeUnknownSync(AnthropicChunkJson)
+const decodeChunkSync = Schema.decodeUnknownSync(AnthropicChunkJson)
+
+const decodeChunk = (data: string) =>
+  Effect.try({
+    try: () => decodeChunkSync(data),
+    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid Anthropic Messages stream chunk", data),
+  })
 const encodeTarget = Schema.encodeSync(AnthropicTargetJson)
 const decodeTarget = Schema.decodeUnknownEffect(AnthropicMessagesDraft.pipe(Schema.decodeTo(AnthropicMessagesTarget)))
 
@@ -325,79 +331,83 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
   })
 }
 
-const finishToolCall = (tool: ToolAccumulator | undefined) => {
-  if (!tool) return []
-  return [{
-    type: "tool-call" as const,
-    id: tool.id,
-    name: tool.name,
-    input: ProviderShared.parseJson(ADAPTER, tool.input || "{}", `Invalid JSON input for Anthropic Messages tool call ${tool.name}`),
-  }]
-}
+const finishToolCall = (tool: ToolAccumulator | undefined) =>
+  Effect.gen(function* () {
+    if (!tool) return [] as ReadonlyArray<LLMEvent>
+    const input = yield* ProviderShared.parseJson(
+      ADAPTER,
+      tool.input || "{}",
+      `Invalid JSON input for Anthropic Messages tool call ${tool.name}`,
+    )
+    return [{ type: "tool-call" as const, id: tool.id, name: tool.name, input }]
+  })
 
-const processChunk = (state: ParserState, chunk: AnthropicChunk): readonly [ParserState, ReadonlyArray<LLMEvent>] => {
-  if (chunk.type === "message_start") {
-    const usage = mapUsage(chunk.message?.usage)
-    return usage ? [{ ...state, usage: mergeUsage(state.usage, usage) }, []] : [state, []]
-  }
+const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
+  Effect.gen(function* () {
+    if (chunk.type === "message_start") {
+      const usage = mapUsage(chunk.message?.usage)
+      return [usage ? { ...state, usage: mergeUsage(state.usage, usage) } : state, []] as const
+    }
 
-  if (chunk.type === "content_block_start" && chunk.index !== undefined && chunk.content_block?.type === "tool_use") {
-    return [{
-      ...state,
-      tools: {
-        ...state.tools,
-        [chunk.index]: {
-          id: chunk.content_block.id ?? String(chunk.index),
-          name: chunk.content_block.name ?? "",
-          input: "",
+    if (chunk.type === "content_block_start" && chunk.index !== undefined && chunk.content_block?.type === "tool_use") {
+      return [{
+        ...state,
+        tools: {
+          ...state.tools,
+          [chunk.index]: {
+            id: chunk.content_block.id ?? String(chunk.index),
+            name: chunk.content_block.name ?? "",
+            input: "",
+          },
         },
-      },
-    }, []]
-  }
+      }, []] as const
+    }
 
-  if (chunk.type === "content_block_start" && chunk.content_block?.type === "text" && chunk.content_block.text) {
-    return [state, [{ type: "text-delta", text: chunk.content_block.text }]]
-  }
+    if (chunk.type === "content_block_start" && chunk.content_block?.type === "text" && chunk.content_block.text) {
+      return [state, [{ type: "text-delta", text: chunk.content_block.text }]] as const
+    }
 
-  if (chunk.type === "content_block_start" && chunk.content_block?.type === "thinking" && chunk.content_block.thinking) {
-    return [state, [{ type: "reasoning-delta", text: chunk.content_block.thinking }]]
-  }
+    if (chunk.type === "content_block_start" && chunk.content_block?.type === "thinking" && chunk.content_block.thinking) {
+      return [state, [{ type: "reasoning-delta", text: chunk.content_block.thinking }]] as const
+    }
 
-  if (chunk.type === "content_block_delta" && chunk.delta?.type === "text_delta" && chunk.delta.text) {
-    return [state, [{ type: "text-delta", text: chunk.delta.text }]]
-  }
+    if (chunk.type === "content_block_delta" && chunk.delta?.type === "text_delta" && chunk.delta.text) {
+      return [state, [{ type: "text-delta", text: chunk.delta.text }]] as const
+    }
 
-  if (chunk.type === "content_block_delta" && chunk.delta?.type === "thinking_delta" && chunk.delta.thinking) {
-    return [state, [{ type: "reasoning-delta", text: chunk.delta.thinking }]]
-  }
+    if (chunk.type === "content_block_delta" && chunk.delta?.type === "thinking_delta" && chunk.delta.thinking) {
+      return [state, [{ type: "reasoning-delta", text: chunk.delta.thinking }]] as const
+    }
 
-  if (chunk.type === "content_block_delta" && chunk.delta?.type === "input_json_delta" && chunk.index !== undefined) {
-    if (!chunk.delta.partial_json) return [state, []]
-    const current = state.tools[chunk.index]
-    if (!current) throw ProviderShared.chunkError(ADAPTER, "Anthropic Messages tool argument delta is missing its tool call")
-    const next = { ...current, input: `${current.input}${chunk.delta.partial_json ?? ""}` }
-    return [{ ...state, tools: { ...state.tools, [chunk.index]: next } }, [
-      { type: "tool-input-delta", id: next.id, name: next.name, text: chunk.delta.partial_json ?? "" },
-    ]]
-  }
+    if (chunk.type === "content_block_delta" && chunk.delta?.type === "input_json_delta" && chunk.index !== undefined) {
+      if (!chunk.delta.partial_json) return [state, []] as const
+      const current = state.tools[chunk.index]
+      if (!current) {
+        return yield* ProviderShared.chunkError(ADAPTER, "Anthropic Messages tool argument delta is missing its tool call")
+      }
+      const next = { ...current, input: `${current.input}${chunk.delta.partial_json ?? ""}` }
+      return [{ ...state, tools: { ...state.tools, [chunk.index]: next } }, [
+        { type: "tool-input-delta" as const, id: next.id, name: next.name, text: chunk.delta.partial_json ?? "" },
+      ]] as const
+    }
 
-  if (chunk.type === "content_block_stop" && chunk.index !== undefined) {
-    const events = finishToolCall(state.tools[chunk.index])
-    const { [chunk.index]: _, ...tools } = state.tools
-    return [{ ...state, tools }, events]
-  }
+    if (chunk.type === "content_block_stop" && chunk.index !== undefined) {
+      const events = yield* finishToolCall(state.tools[chunk.index])
+      const { [chunk.index]: _, ...tools } = state.tools
+      return [{ ...state, tools }, events] as const
+    }
 
-  if (chunk.type === "message_delta") {
-    const usage = mergeUsage(state.usage, mapUsage(chunk.usage))
-    return [{ ...state, usage }, [{ type: "request-finish", reason: mapFinishReason(chunk.delta?.stop_reason), usage }]]
-  }
+    if (chunk.type === "message_delta") {
+      const usage = mergeUsage(state.usage, mapUsage(chunk.usage))
+      return [{ ...state, usage }, [{ type: "request-finish" as const, reason: mapFinishReason(chunk.delta?.stop_reason), usage }]] as const
+    }
 
-  if (chunk.type === "error") {
-    return [state, [{ type: "provider-error", message: chunk.error?.message ?? "Anthropic Messages stream error" }]]
-  }
+    if (chunk.type === "error") {
+      return [state, [{ type: "provider-error" as const, message: chunk.error?.message ?? "Anthropic Messages stream error" }]] as const
+    }
 
-  return [state, []]
-}
+    return [state, []] as const
+  })
 
 const events = (response: HttpClientResponse.HttpClientResponse) =>
   ProviderShared.sse({

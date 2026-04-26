@@ -199,10 +199,11 @@ export function client(options: ClientOptions): LLMClient {
       yield* stream(request).pipe(
         Stream.runFold(
           () => ({ events: [] as LLMEvent[], usage: undefined as LLMResponse["usage"] }),
-          (response, event) => ({
-            events: [...response.events, event],
-            usage: "usage" in event && event.usage !== undefined ? event.usage : response.usage,
-          }),
+          (acc, event) => {
+            acc.events.push(event)
+            if ("usage" in event && event.usage !== undefined) acc.usage = event.usage
+            return acc
+          },
         ),
       ),
     )

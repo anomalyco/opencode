@@ -114,7 +114,13 @@ type OpenAIResponsesChunk = Schema.Schema.Type<typeof OpenAIResponsesChunk>
 
 const OpenAIResponsesChunkJson = Schema.fromJsonString(OpenAIResponsesChunk)
 const OpenAIResponsesTargetJson = Schema.fromJsonString(OpenAIResponsesTarget)
-const decodeChunk = Schema.decodeUnknownSync(OpenAIResponsesChunkJson)
+const decodeChunkSync = Schema.decodeUnknownSync(OpenAIResponsesChunkJson)
+
+const decodeChunk = (data: string) =>
+  Effect.try({
+    try: () => decodeChunkSync(data),
+    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid OpenAI Responses stream chunk", data),
+  })
 const encodeTarget = Schema.encodeSync(OpenAIResponsesTargetJson)
 const decodeTarget = Schema.decodeUnknownEffect(OpenAIResponsesDraft.pipe(Schema.decodeTo(OpenAIResponsesTarget)))
 
@@ -250,65 +256,68 @@ const mapFinishReason = (chunk: OpenAIResponsesChunk): FinishReason => {
   return "unknown"
 }
 
-const pushToolDelta = (tools: Record<string, ToolAccumulator>, itemId: string, delta: string) => {
-  const current = tools[itemId]
-  if (!current) throw ProviderShared.chunkError(ADAPTER, "OpenAI Responses tool argument delta is missing its tool call")
-  return {
-    ...current,
-    input: `${current.input}${delta}`,
-  }
-}
+const pushToolDelta = (tools: Record<string, ToolAccumulator>, itemId: string, delta: string) =>
+  Effect.gen(function* () {
+    const current = tools[itemId]
+    if (!current) {
+      return yield* ProviderShared.chunkError(ADAPTER, "OpenAI Responses tool argument delta is missing its tool call")
+    }
+    return { ...current, input: `${current.input}${delta}` }
+  })
 
-const finishToolCall = (tools: Record<string, ToolAccumulator>, item: NonNullable<OpenAIResponsesChunk["item"]>) => {
-  if (item.type !== "function_call" || !item.id || !item.call_id || !item.name) return []
-  const input = item.arguments ?? tools[item.id]?.input ?? "{}"
-  return [{
-    type: "tool-call" as const,
-    id: item.call_id,
-    name: item.name,
-    input: ProviderShared.parseJson(ADAPTER, input || "{}", `Invalid JSON input for OpenAI Responses tool call ${item.name}`),
-  }]
-}
+const finishToolCall = (tools: Record<string, ToolAccumulator>, item: NonNullable<OpenAIResponsesChunk["item"]>) =>
+  Effect.gen(function* () {
+    if (item.type !== "function_call" || !item.id || !item.call_id || !item.name) return [] as ReadonlyArray<LLMEvent>
+    const raw = item.arguments ?? tools[item.id]?.input ?? "{}"
+    const input = yield* ProviderShared.parseJson(
+      ADAPTER,
+      raw || "{}",
+      `Invalid JSON input for OpenAI Responses tool call ${item.name}`,
+    )
+    return [{ type: "tool-call" as const, id: item.call_id, name: item.name, input }]
+  })
 
-const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk): readonly [ParserState, ReadonlyArray<LLMEvent>] => {
-  if (chunk.type === "response.output_text.delta" && chunk.delta) {
-    return [state, [{ type: "text-delta", id: chunk.item_id, text: chunk.delta }]]
-  }
+const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
+  Effect.gen(function* () {
+    if (chunk.type === "response.output_text.delta" && chunk.delta) {
+      return [state, [{ type: "text-delta", id: chunk.item_id, text: chunk.delta }]] as const
+    }
 
-  if (chunk.type === "response.output_item.added" && chunk.item?.type === "function_call" && chunk.item.id) {
-    return [{
-      tools: {
-        ...state.tools,
-        [chunk.item.id]: {
-          id: chunk.item.call_id ?? chunk.item.id,
-          name: chunk.item.name ?? "",
-          input: chunk.item.arguments ?? "",
+    if (chunk.type === "response.output_item.added" && chunk.item?.type === "function_call" && chunk.item.id) {
+      return [{
+        tools: {
+          ...state.tools,
+          [chunk.item.id]: {
+            id: chunk.item.call_id ?? chunk.item.id,
+            name: chunk.item.name ?? "",
+            input: chunk.item.arguments ?? "",
+          },
         },
-      },
-    }, []]
-  }
+      }, []] as const
+    }
 
-  if (chunk.type === "response.function_call_arguments.delta" && chunk.item_id && chunk.delta) {
-    const current = pushToolDelta(state.tools, chunk.item_id, chunk.delta)
-    return [{ tools: { ...state.tools, [chunk.item_id]: current } }, [
-      { type: "tool-input-delta", id: current.id, name: current.name, text: chunk.delta },
-    ]]
-  }
+    if (chunk.type === "response.function_call_arguments.delta" && chunk.item_id && chunk.delta) {
+      const current = yield* pushToolDelta(state.tools, chunk.item_id, chunk.delta)
+      return [{ tools: { ...state.tools, [chunk.item_id]: current } }, [
+        { type: "tool-input-delta" as const, id: current.id, name: current.name, text: chunk.delta },
+      ]] as const
+    }
 
-  if (chunk.type === "response.output_item.done" && chunk.item?.type === "function_call") {
-    return [state, finishToolCall(state.tools, chunk.item)]
-  }
+    if (chunk.type === "response.output_item.done" && chunk.item?.type === "function_call") {
+      const events = yield* finishToolCall(state.tools, chunk.item)
+      return [state, events] as const
+    }
 
-  if (chunk.type === "response.completed" || chunk.type === "response.incomplete") {
-    return [state, [{ type: "request-finish", reason: mapFinishReason(chunk), usage: mapUsage(chunk.response?.usage) }]]
-  }
+    if (chunk.type === "response.completed" || chunk.type === "response.incomplete") {
+      return [state, [{ type: "request-finish" as const, reason: mapFinishReason(chunk), usage: mapUsage(chunk.response?.usage) }]] as const
+    }
 
-  if (chunk.type === "error") {
-    return [state, [{ type: "provider-error", message: chunk.message ?? chunk.code ?? "OpenAI Responses stream error" }]]
-  }
+    if (chunk.type === "error") {
+      return [state, [{ type: "provider-error" as const, message: chunk.message ?? chunk.code ?? "OpenAI Responses stream error" }]] as const
+    }
 
-  return [state, []]
-}
+    return [state, []] as const
+  })
 
 const events = (response: HttpClientResponse.HttpClientResponse) =>
   ProviderShared.sse({

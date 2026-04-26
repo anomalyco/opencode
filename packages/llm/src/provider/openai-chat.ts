@@ -134,8 +134,14 @@ type OpenAIChatChunk = Schema.Schema.Type<typeof OpenAIChatChunk>
 
 const OpenAIChatChunkJson = Schema.fromJsonString(OpenAIChatChunk)
 const OpenAIChatTargetJson = Schema.fromJsonString(OpenAIChatTarget)
-const decodeChunk = Schema.decodeUnknownSync(OpenAIChatChunkJson)
+const decodeChunkSync = Schema.decodeUnknownSync(OpenAIChatChunkJson)
 const encodeTarget = Schema.encodeSync(OpenAIChatTargetJson)
+
+const decodeChunk = (data: string) =>
+  Effect.try({
+    try: () => decodeChunkSync(data),
+    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid OpenAI Chat stream chunk", data),
+  })
 
 interface ToolAccumulator {
   readonly id: string
@@ -143,8 +149,15 @@ interface ToolAccumulator {
   readonly input: string
 }
 
+interface ParsedToolCall {
+  readonly id: string
+  readonly name: string
+  readonly input: unknown
+}
+
 interface ParserState {
   readonly tools: Record<number, ToolAccumulator>
+  readonly toolCalls: ReadonlyArray<ParsedToolCall>
   readonly usage?: Usage
   readonly finishReason?: FinishReason
 }
@@ -284,54 +297,68 @@ const mapUsage = (usage: OpenAIChatChunk["usage"]): Usage | undefined => {
   })
 }
 
-const pushToolDelta = (tools: Record<number, ToolAccumulator>, delta: OpenAIChatToolCallDelta) => {
-  const current = tools[delta.index]
-  const id = delta.id ?? current?.id
-  const name = delta.function?.name ?? current?.name
-  if (!id || !name) throw ProviderShared.chunkError(ADAPTER, "OpenAI Chat tool call delta is missing id or name")
-
-  return {
-    id,
-    name,
-    input: `${current?.input ?? ""}${delta.function?.arguments ?? ""}`,
-  }
-}
-
-const finishToolCalls = (state: ParserState) =>
-  Object.values(state.tools).map((tool) => ({
-    type: "tool-call" as const,
-    id: tool.id,
-    name: tool.name,
-    input: ProviderShared.parseJson(ADAPTER, tool.input || "{}", `Invalid JSON input for OpenAI Chat tool call ${tool.name}`),
-  }))
-
-const processChunk = (state: ParserState, chunk: OpenAIChatChunk): readonly [ParserState, ReadonlyArray<LLMEvent>] => {
-  const events: LLMEvent[] = []
-  const usage = mapUsage(chunk.usage) ?? state.usage
-  const choice = chunk.choices[0]
-  const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
-  const delta = choice?.delta
-  const toolCalls = delta?.tool_calls ?? []
-  const tools = toolCalls.length === 0 ? state.tools : { ...state.tools }
-
-  if (delta?.content) events.push({ type: "text-delta", text: delta.content })
-
-  for (const tool of toolCalls) {
-    const current = pushToolDelta(tools, tool)
-    tools[tool.index] = current
-    if (tool.function?.arguments) {
-      events.push({ type: "tool-input-delta", id: current.id, name: current.name, text: tool.function.arguments })
+const pushToolDelta = (tools: Record<number, ToolAccumulator>, delta: OpenAIChatToolCallDelta) =>
+  Effect.gen(function* () {
+    const current = tools[delta.index]
+    const id = delta.id ?? current?.id
+    const name = delta.function?.name ?? current?.name
+    if (!id || !name) {
+      return yield* ProviderShared.chunkError(ADAPTER, "OpenAI Chat tool call delta is missing id or name")
     }
-  }
+    return {
+      id,
+      name,
+      input: `${current?.input ?? ""}${delta.function?.arguments ?? ""}`,
+    }
+  })
 
-  return [{ tools, usage, finishReason }, events]
-}
+const finalizeToolCalls = (tools: Record<number, ToolAccumulator>) =>
+  Effect.forEach(Object.values(tools), (tool) =>
+    Effect.gen(function* () {
+      const input = yield* ProviderShared.parseJson(
+        ADAPTER,
+        tool.input || "{}",
+        `Invalid JSON input for OpenAI Chat tool call ${tool.name}`,
+      )
+      return { id: tool.id, name: tool.name, input } satisfies ParsedToolCall
+    }),
+  )
+
+const processChunk = (state: ParserState, chunk: OpenAIChatChunk) =>
+  Effect.gen(function* () {
+    const events: LLMEvent[] = []
+    const usage = mapUsage(chunk.usage) ?? state.usage
+    const choice = chunk.choices[0]
+    const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
+    const delta = choice?.delta
+    const toolDeltas = delta?.tool_calls ?? []
+    const tools = toolDeltas.length === 0 ? state.tools : { ...state.tools }
+
+    if (delta?.content) events.push({ type: "text-delta", text: delta.content })
+
+    for (const tool of toolDeltas) {
+      const current = yield* pushToolDelta(tools, tool)
+      tools[tool.index] = current
+      if (tool.function?.arguments) {
+        events.push({ type: "tool-input-delta", id: current.id, name: current.name, text: tool.function.arguments })
+      }
+    }
+
+    // Finalize accumulated tool inputs eagerly when finish_reason arrives so
+    // JSON parse failures fail the stream at the boundary rather than at halt.
+    const toolCalls =
+      finishReason !== undefined && state.finishReason === undefined && Object.keys(tools).length > 0
+        ? yield* finalizeToolCalls(tools)
+        : state.toolCalls
+
+    return [{ tools, toolCalls, usage, finishReason }, events] as const
+  })
 
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
-  const hasToolCalls = Object.keys(state.tools).length > 0
+  const hasToolCalls = state.toolCalls.length > 0
   const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
   return [
-    ...(hasToolCalls ? finishToolCalls(state) : []),
+    ...state.toolCalls.map((call) => ({ type: "tool-call" as const, ...call })),
     ...(reason ? ([{ type: "request-finish", reason, usage: state.usage }] satisfies ReadonlyArray<LLMEvent>) : []),
   ]
 }
@@ -343,7 +370,7 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     readError: "Failed to read OpenAI Chat stream",
     invalidChunk: "Invalid OpenAI Chat stream chunk",
     decodeChunk,
-    initial: (): ParserState => ({ tools: {} }),
+    initial: (): ParserState => ({ tools: {}, toolCalls: [] }),
     process: processChunk,
     onHalt: finishEvents,
   })
