@@ -139,7 +139,7 @@ export const layer = Layer.effect(
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                 (entry) => entry !== "HEAD",
               )
-              yield* subscribe(vcsDir, ignore)
+              yield* subscribe(vcsDir, [...ignore, ...FileIgnore.PATTERNS, ...cfgIgnores])
             }
           }
         },

@@ -7,4 +7,6 @@ test("match nested and non-nested", () => {
   expect(FileIgnore.match("node_modules/")).toBe(true)
   expect(FileIgnore.match("node_modules/bar")).toBe(true)
   expect(FileIgnore.match("node_modules/bar/")).toBe(true)
+  expect(FileIgnore.match(".watchman-cookie-123")).toBe(true)
+  expect(FileIgnore.match("nested/.watchman-cookie-123")).toBe(true)
 })

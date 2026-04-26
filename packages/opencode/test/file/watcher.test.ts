@@ -224,6 +224,31 @@ describeWatcher("FileWatcher", () => {
     )
   })
 
+  test("ignores Watchman cookie files", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const projectCookie = path.join(tmp.path, ".watchman-cookie-project")
+    const gitCookie = path.join(tmp.path, ".git", ".watchman-cookie-git")
+
+    await withWatcher(
+      tmp.path,
+      Effect.all(
+        [
+          noUpdate(
+            tmp.path,
+            (e) => e.file === projectCookie,
+            Effect.promise(() => fs.writeFile(projectCookie, "cookie")),
+          ),
+          noUpdate(
+            tmp.path,
+            (e) => e.file === gitCookie,
+            Effect.promise(() => fs.writeFile(gitCookie, "cookie")),
+          ),
+        ],
+        { concurrency: 1 },
+      ).pipe(Effect.asVoid),
+    )
+  })
+
   test("publishes .git/HEAD events", async () => {
     await using tmp = await tmpdir({ git: true })
     const head = path.join(tmp.path, ".git", "HEAD")

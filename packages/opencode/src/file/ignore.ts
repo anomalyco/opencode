@@ -40,6 +40,7 @@ const FILES = [
   // OS
   "**/.DS_Store",
   "**/Thumbs.db",
+  "**/.watchman-cookie-*",
 
   // Logs & temp
   "**/logs/**",
