@@ -4,6 +4,7 @@ When using the Task tool, you must specify a subagent_type parameter to select w
 
 When to use the Task tool:
 - When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
+- When you need to break down a complex task into parallel subtasks using the `orchestrate` agent. The orchestrate agent analyzes the task, creates a plan, and launches parallel Task calls for maximum efficiency.
 
 When NOT to use the Task tool:
 - If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly
@@ -23,6 +24,7 @@ Usage notes:
 Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 
 <example_agent_descriptions>
+"orchestrate": use this agent to break down complex multi-step tasks into parallel subtasks that can be executed concurrently
 "code-reviewer": use this agent after you are done writing a significant piece of code
 "greeting-responder": use this agent when to respond to user greetings with a friendly joke
 </example_agent_description>
