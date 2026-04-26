@@ -3,21 +3,17 @@ import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdaptorEntry } from "@/control-plane/types"
 import * as InstanceState from "@/effect/instance-state"
 import { Instance } from "@/project/instance"
-import { SessionID } from "@/session/schema"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Struct } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
 const root = "/experimental/workspace"
-const CreatePayload = Schema.Struct({
-  id: Schema.optional(Workspace.Info.fields.id),
-  type: Workspace.Info.fields.type,
-  branch: Workspace.Info.fields.branch,
-  extra: Workspace.Info.fields.extra,
-}).annotate({ identifier: "WorkspaceCreateInput" })
-const SessionRestorePayload = Schema.Struct({
-  sessionID: SessionID,
-}).annotate({ identifier: "WorkspaceSessionRestoreInput" })
+const CreatePayload = Schema.Struct(Struct.omit(Workspace.CreateInput.fields, ["projectID"])).annotate({
+  identifier: "WorkspaceCreateInput",
+})
+const SessionRestorePayload = Schema.Struct(Struct.omit(Workspace.SessionRestoreInput.fields, ["workspaceID"])).annotate({
+  identifier: "WorkspaceSessionRestoreInput",
+})
 const SessionRestoreResponse = Schema.Struct({
   total: Schema.Number,
 }).annotate({ identifier: "WorkspaceSessionRestoreResponse" })
