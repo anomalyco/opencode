@@ -13,7 +13,7 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -92,6 +92,7 @@ import {
   workspaceKey,
 } from "./layout/helpers"
 import {
+  extraAgentActive,
   enabledExtraAgents,
   extraAgentByDirectory,
   extraAgentConfig,
@@ -151,6 +152,7 @@ export default function Layout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const trace = (_event: string, _extra?: Record<string, unknown>) => {}
+  const location = useLocation()
   const navigate = useNavigate()
   setNavigate(navigate)
   const providers = useProviders()
@@ -1523,34 +1525,35 @@ export default function Layout(props: ParentProps) {
   }
 
   function openExtraAgent(id: Parameters<typeof extraAgentDir>[0]) {
+    console.debug("[layout] open extra agent", {
+      id,
+      current: server.current?.integration ?? null,
+      directory: routeDir() || null,
+    })
     const conn = server.list.find((item) => item.integration === id)
     if (!conn) {
       const cfg = extraAgentConfig(id)
       openConfig(cfg?.section, cfg?.pick)
       return
     }
-    if (server.domain !== mainDomain) {
-      const local =
-        server.list.find((item) => item.type === "sidecar" && item.variant === "base") ??
-        server.list.find((item) => item.integration !== id)
-      if (!local) return
-      const key = ServerConnection.key(local)
-      trace("openExtraAgent.return-local", {
-        to: key,
+    if (
+      extraAgentActive(id, {
+        directory: routeDir(),
+        integration: server.current?.integration,
+        pathname: location.pathname,
       })
-      const last = server.projects.lastFor?.(key) ?? globalSync.data.project[0]?.worktree
-      trace("openExtraAgent.return-local.last", {
-        to: key,
-        last,
+    ) {
+      console.debug("[layout] extra agent already active", {
+        id,
+        directory: routeDir() || null,
+        pathname: location.pathname,
       })
-      if (!last) {
-        navigate("/")
-        return
-      }
-      server.projects.openFor?.(key, last)
-      void navigateToProject(last)
       return
     }
+    console.debug("[layout] navigate to extra agent", {
+      id,
+      directory: extraAgentDir(id),
+    })
     void navigateToProject(extraAgentDir(id))
   }
 
