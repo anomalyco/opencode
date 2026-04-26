@@ -66,10 +66,13 @@ flowchart TD
 
         Note[Because of findLast, later rules override earlier ones.<br>If no rule matches, it inherently defaults to 'ask'.]
     end
+```
 
+```mermaid
+flowchart TD
     subgraph tool_interception [Tool Interception]
         Tool[Tool Invoked] --> Eval{evaluate}
-        
+
         Eval -->|allow| Run[Execute Tool]
         Eval -->|deny| Fail[Throw DeniedError]
         Eval -->|ask| Pause[Suspend Fiber & Prompt User]
