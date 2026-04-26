@@ -15,6 +15,7 @@ import {
   Show,
   on,
 } from "solid-js"
+import { homedir } from "os"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import semver from "semver"
@@ -22,7 +23,7 @@ import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { ErrorComponent } from "@tui/component/error-component"
 import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
-import { ProjectProvider } from "@tui/context/project"
+import { ProjectProvider, useProject } from "@tui/context/project"
 import { EditorContextProvider } from "@tui/context/editor"
 import { useEvent } from "@tui/context/event"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -34,6 +35,9 @@ import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
+import { DialogMultiRootWorkspaceList } from "@tui/component/dialog-multiroot-workspace"
+import { DialogPrompt } from "@tui/ui/dialog-prompt"
+import { DialogSelect } from "@tui/ui/dialog-select"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
@@ -215,6 +219,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const themeState = useTheme()
   const { theme, mode, setMode, locked, lock, unlock } = themeState
   const sync = useSync()
+  const project = useProject()
   const exit = useExit()
   const promptRef = usePromptRef()
   const routes: RouteMap = new Map()
@@ -239,6 +244,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     theme: themeState,
     toast,
     renderer,
+    project,
   })
   const [ready, setReady] = createSignal(false)
   TuiPluginRuntime.init({
@@ -732,6 +738,212 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         const current = kv.get("diff_wrap_mode", "word")
         kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
         dialog.clear()
+      },
+    },
+    {
+      title: "Open workspace",
+      value: "workspace.open",
+      category: "Workspace",
+      slash: { name: "workspace", aliases: ["ws"] },
+      onSelect: () => {
+        dialog.replace(() => <DialogMultiRootWorkspaceList />)
+      },
+    },
+    {
+      title: "List workspaces",
+      value: "workspace.list",
+      category: "Workspace",
+      slash: { name: "workspaces", aliases: ["wss"] },
+      hidden: true,
+      onSelect: () => {
+        dialog.replace(() => <DialogMultiRootWorkspaceList />)
+      },
+    },
+    {
+      title: "New workspace",
+      value: "workspace.new",
+      category: "Workspace",
+      slash: { name: "new-workspace", aliases: ["new-ws"] },
+      onSelect: async () => {
+        const folderPath = await DialogPrompt.show(dialog, "New workspace", {
+          placeholder: "~/project or /path/to/project",
+        })
+        if (!folderPath) return
+        const trimmed = folderPath.trim()
+        if (!trimmed) {
+          toast.show({ message: "Folder path is required", variant: "error" })
+          return
+        }
+        const expanded = trimmed.startsWith("~") ? trimmed.replace("~", homedir()) : trimmed
+        const name = expanded.split("/").filter(Boolean).pop() ?? "workspace"
+
+        const res = await sdk.fetch(new URL("/workspace", sdk.url), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, folders: [{ path: expanded }] }),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => res.statusText)
+          toast.show({ message: `Failed to create workspace: ${text}`, variant: "error" })
+          return
+        }
+        const ws = (await res.json()) as { id: string; name: string }
+
+        project.multiRootWorkspace.set(ws.id)
+        await project.multiRootWorkspace.sync().catch(() => {})
+        toast.show({ message: `Created workspace "${ws.name}"`, variant: "success" })
+      },
+    },
+    {
+      title: "Add folder to workspace",
+      value: "workspace.addFolder",
+      category: "Workspace",
+      slash: { name: "add-folder", aliases: ["add-dir"] },
+      onSelect: async () => {
+        let workspaceId = project.multiRootWorkspace.current()
+
+        if (!workspaceId) {
+          const listRes = await sdk.fetch(new URL("/workspace", sdk.url))
+          if (!listRes.ok) {
+            toast.show({ message: "Failed to list workspaces", variant: "error" })
+            return
+          }
+          const workspaces = (await listRes.json()) as Array<{
+            id: string
+            name: string
+            folders: Array<{ path: string }>
+          }>
+          if (workspaces.length === 0) {
+            toast.show({ message: "No workspaces found. Create one first.", variant: "error" })
+            return
+          }
+
+          workspaceId = await new Promise<string | null>((resolve) => {
+            dialog.replace(
+              () => (
+                <DialogSelect
+                  title="Select workspace"
+                  options={workspaces.map((w) => ({
+                    title: w.name,
+                    value: w.id,
+                    description: `${w.folders.length} folder${w.folders.length === 1 ? "" : "s"}`,
+                  }))}
+                  onSelect={(option) => resolve(option.value)}
+                />
+              ),
+              () => resolve(null),
+            )
+          }) ?? undefined
+          if (!workspaceId) return
+        }
+
+        const folderPath = await DialogPrompt.show(dialog, "Add folder", {
+          placeholder: "~/project or /path/to/project",
+        })
+        if (!folderPath) return
+        const trimmed = folderPath.trim()
+        if (!trimmed) {
+          toast.show({ message: "Folder path is required", variant: "error" })
+          return
+        }
+        const expanded = trimmed.startsWith("~") ? trimmed.replace("~", homedir()) : trimmed
+
+        const res = await sdk.fetch(new URL(`/workspace/${workspaceId}`, sdk.url), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "addFolder", folder: { path: expanded } }),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => res.statusText)
+          toast.show({ message: `Failed to add folder: ${text}`, variant: "error" })
+          return
+        }
+        await project.multiRootWorkspace.sync().catch(() => {})
+        toast.show({ message: "Folder added to workspace", variant: "success" })
+      },
+    },
+    {
+      title: "Remove folder from workspace",
+      value: "workspace.removeFolder",
+      category: "Workspace",
+      slash: { name: "remove-folder", aliases: ["rm-dir"] },
+      onSelect: async () => {
+        const wsId = project.multiRootWorkspace.current()
+        const ws = wsId ? project.multiRootWorkspace.get(wsId) : undefined
+        if (!ws || ws.folders.length === 0) {
+          toast.show({ message: "No active workspace with folders", variant: "error" })
+          return
+        }
+
+        const folderPath = await new Promise<string | null>((resolve) => {
+          dialog.replace(
+            () => (
+              <DialogSelect
+                title="Remove folder"
+                options={ws.folders.map((f) => ({
+                  title: f.name ?? f.path,
+                  value: f.path,
+                  description: f.path,
+                }))}
+                onSelect={(option) => resolve(option.value)}
+              />
+            ),
+            () => resolve(null),
+          )
+        })
+        if (!folderPath) return
+        dialog.clear()
+
+        const res = await sdk.fetch(new URL(`/workspace/${ws.id}`, sdk.url), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "removeFolder", path: folderPath }),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => res.statusText)
+          toast.show({ message: `Failed to remove folder: ${text}`, variant: "error" })
+          return
+        }
+        await project.multiRootWorkspace.sync().catch(() => {})
+        toast.show({ message: "Folder removed from workspace", variant: "success" })
+      },
+    },
+    {
+      title: "Rename workspace",
+      value: "workspace.rename",
+      category: "Workspace",
+      slash: { name: "rename-workspace", aliases: ["rn-ws"] },
+      onSelect: async () => {
+        const wsId = project.multiRootWorkspace.current()
+        const ws = wsId ? project.multiRootWorkspace.get(wsId) : undefined
+        if (!ws) {
+          toast.show({ message: "No active workspace", variant: "error" })
+          return
+        }
+
+        const newName = await DialogPrompt.show(dialog, "Rename workspace", {
+          placeholder: ws.name,
+        })
+        if (!newName) return
+        const trimmed = newName.trim()
+        if (!trimmed) {
+          toast.show({ message: "Name is required", variant: "error" })
+          return
+        }
+        dialog.clear()
+
+        const res = await sdk.fetch(new URL(`/workspace/${ws.id}`, sdk.url), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "rename", name: trimmed }),
+        })
+        if (!res.ok) {
+          const text = await res.text().catch(() => res.statusText)
+          toast.show({ message: `Failed to rename workspace: ${text}`, variant: "error" })
+          return
+        }
+        await project.multiRootWorkspace.sync().catch(() => {})
+        toast.show({ message: `Workspace renamed to "${trimmed}"`, variant: "success" })
       },
     },
   ])

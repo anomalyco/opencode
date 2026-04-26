@@ -46,7 +46,7 @@ async function getSessionWorkspace(url: URL) {
   const session = await AppRuntime.runPromise(
     Session.Service.use((svc) => svc.get(id)).pipe(Effect.withSpan("WorkspaceRouter.lookup")),
   ).catch(() => undefined)
-  return session?.workspaceID
+  return session?.workspaceID ?? null
 }
 
 export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): MiddlewareHandler {
@@ -56,8 +56,8 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const url = new URL(c.req.url)
 
     const sessionWorkspaceID = await getSessionWorkspace(url)
-    const workspaceID = sessionWorkspaceID || url.searchParams.get("workspace")
-
+    const headerWorkspace = c.req.header("x-opencode-workspace")
+    const workspaceID = sessionWorkspaceID || headerWorkspace || url.searchParams.get("workspace")
     if (!workspaceID || url.pathname.startsWith("/console") || Flag.OPENCODE_WORKSPACE_ID) {
       return next()
     }

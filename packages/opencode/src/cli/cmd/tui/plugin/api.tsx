@@ -11,6 +11,7 @@ import { Dialog as DialogUI, type useDialog } from "@tui/ui/dialog"
 import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { createPluginKeybind } from "../context/plugin-keybinds"
 import type { useKV } from "../context/kv"
+import type { useProject } from "../context/project"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -42,6 +43,7 @@ type Input = {
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
+  project: ReturnType<typeof useProject>
 }
 
 function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
@@ -125,7 +127,7 @@ function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
   return (item: SelectOption<Value>) => cb(pickOption(item))
 }
 
-function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
+function stateApi(sync: ReturnType<typeof useSync>, project: ReturnType<typeof useProject>): TuiPluginApi["state"] {
   return {
     get ready() {
       return sync.ready
@@ -182,6 +184,40 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
           status: item.status,
           error: item.status === "failed" ? item.error : undefined,
         }))
+    },
+    workspace: {
+      current() {
+        return project.workspace.current()
+      },
+      get(id: string) {
+        const info = project.workspace.get(id)
+        if (!info) return undefined
+        return { type: info.type, name: info.name }
+      },
+      status(id: string) {
+        return project.workspace.status(id) ?? undefined
+      },
+    },
+    multiRootWorkspace: {
+      current() {
+        return project.multiRootWorkspace.current()
+      },
+      get(id: string) {
+        const info = project.multiRootWorkspace.get(id)
+        if (!info) return undefined
+        return {
+          id: info.id,
+          name: info.name,
+          folders: info.folders.map((f) => ({ path: f.path, name: f.name })),
+        }
+      },
+      list() {
+        return project.multiRootWorkspace.list().map((info) => ({
+          id: info.id,
+          name: info.name,
+          folders: info.folders.map((f) => ({ path: f.path, name: f.name })),
+        }))
+      },
     },
   }
 }
@@ -331,7 +367,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
         return input.kv.ready
       },
     },
-    state: stateApi(input.sync),
+    state: stateApi(input.sync, input.project),
     get client() {
       return input.sdk.client
     },

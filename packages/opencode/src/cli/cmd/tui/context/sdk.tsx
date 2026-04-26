@@ -3,7 +3,7 @@ import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createSignal, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
   subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
@@ -21,6 +21,11 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const abort = new AbortController()
     let sse: AbortController | undefined
 
+    // Dynamic multi-root workspace ID. Consumers (typically the Project
+    // context) set this as the active session's workspace changes; the SDK
+    // picks it up on the next request via the header interceptor.
+    const [multiRootWorkspaceID, setMultiRootWorkspaceID] = createSignal<string | undefined>(undefined)
+
     function createSDK() {
       return createOpencodeClient({
         baseUrl: props.url,
@@ -28,6 +33,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         directory: props.directory,
         fetch: props.fetch,
         headers: props.headers,
+        multiRootWorkspaceID: () => multiRootWorkspaceID(),
       })
     }
 
@@ -137,6 +143,8 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,
+      multiRootWorkspaceID,
+      setMultiRootWorkspaceID,
     }
   },
 })

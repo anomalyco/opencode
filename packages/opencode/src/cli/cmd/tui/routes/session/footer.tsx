@@ -5,11 +5,34 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { useProject } from "@tui/context/project"
 
 export function Footer() {
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRoute()
+  const project = useProject()
+  const session = createMemo(() => {
+    if (route.data.type !== "session") return undefined
+    return sync.session.get(route.data.sessionID)
+  })
+  const workspaceStatus = () => {
+    const workspaceID = session()?.workspaceID
+    if (!workspaceID) return "error"
+    return project.workspace.status(workspaceID) ?? "error"
+  }
+  const workspaceLabel = () => {
+    const workspaceID = session()?.workspaceID
+    if (!workspaceID) return "unknown"
+    const info = project.workspace.get(workspaceID)
+    if (!info) return "unknown"
+    return `${info.type}: ${info.name}`
+  }
+  const multiRootWorkspace = createMemo(() => {
+    const id = project.multiRootWorkspace.current()
+    if (!id) return undefined
+    return project.multiRootWorkspace.get(id)
+  })
   const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
@@ -82,6 +105,21 @@ export function Footer() {
                 {mcp()} MCP
               </text>
             </Show>
+            <Switch>
+              <Match when={multiRootWorkspace()}>
+                <text fg={theme.textMuted}>
+                  <span style={{ fg: theme.success }}>◆</span> ws: {multiRootWorkspace()?.name} (
+                  {multiRootWorkspace()?.folders.length} folder
+                  {multiRootWorkspace()?.folders.length === 1 ? "" : "s"})
+                </text>
+              </Match>
+              <Match when={session()?.workspaceID}>
+                <text fg={theme.textMuted}>
+                  <span style={{ fg: workspaceStatus() === "connected" ? theme.success : theme.error }}>●</span>{" "}
+                  {workspaceLabel()}
+                </text>
+              </Match>
+            </Switch>
             <text fg={theme.textMuted}>/status</text>
           </Match>
         </Switch>

@@ -138,9 +138,34 @@ function shouldSeedDiagnosticsOnFirstPush(serverID: string) {
   return serverID === "typescript"
 }
 
-export async function create(input: { serverID: string; server: LSPServer.Handle; root: string; directory: string }) {
+export async function create(input: {
+  serverID: string
+  server: LSPServer.Handle
+  root: string
+  directory: string
+  /**
+   * Additional workspace folders to report to the LSP server. These are
+   * included in both the `initialize` request's `workspaceFolders` array and
+   * the `workspace/workspaceFolders` request response. The detected `root`
+   * remains the primary root (first entry, `rootUri`).
+   */
+  extraRoots?: readonly string[]
+}) {
   const logger = log.clone().tag("serverID", input.serverID)
   logger.info("starting client")
+
+  const folders = (() => {
+    const seen = new Set<string>()
+    const list: { name: string; uri: string }[] = []
+    const push = (p: string, name?: string) => {
+      if (seen.has(p)) return
+      seen.add(p)
+      list.push({ name: name ?? (path.basename(p) || "workspace"), uri: pathToFileURL(p).href })
+    }
+    push(input.root, "workspace")
+    for (const extra of input.extraRoots ?? []) push(extra)
+    return list
+  })()
 
   const connection = createMessageConnection(
     new StreamMessageReader(input.server.process.stdout as any),
@@ -223,28 +248,18 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     }
     if (changed) emitRegistrationChange()
   })
-  connection.onRequest("workspace/workspaceFolders", async () => [
-    {
-      name: "workspace",
-      uri: pathToFileURL(input.root).href,
-    },
-  ])
+  connection.onRequest("workspace/workspaceFolders", async () => folders)
   connection.onRequest("workspace/diagnostic/refresh", async () => null)
   connection.listen()
 
   // --- Initialize handshake ---
 
-  logger.info("sending initialize")
+  logger.info("sending initialize", { folders: folders.map((f) => f.uri) })
   const initialized = await withTimeout(
     connection.sendRequest<{ capabilities?: ServerCapabilities }>("initialize", {
-      rootUri: pathToFileURL(input.root).href,
+      rootUri: folders[0].uri,
       processId: input.server.process.pid,
-      workspaceFolders: [
-        {
-          name: "workspace",
-          uri: pathToFileURL(input.root).href,
-        },
-      ],
+      workspaceFolders: folders,
       initializationOptions: {
         ...input.server.initialization,
       },

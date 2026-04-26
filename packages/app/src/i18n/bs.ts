@@ -494,6 +494,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Došlo je do greške",
 
   "home.recentProjects": "Nedavni projekti",
+  "home.recentWorkspaces": "Nedavni radni prostori",
   "home.empty.title": "Nema nedavnih projekata",
   "home.empty.description": "Kreni tako što ćeš otvoriti lokalni projekat",
 
@@ -818,6 +819,11 @@ export const dict = {
   "session.delete.confirm": 'Izbriši sesiju "{{name}}"?',
   "session.delete.button": "Izbriši sesiju",
 
+  "workspace.open": "Otvori radni prostor",
+  "workspace.create": "Kreiraj radni prostor",
+  "workspace.close": "Zatvori radni prostor",
+  "workspace.addFolder": "Dodaj folder u radni prostor",
+  "workspace.removeFolder": "Ukloni folder iz radnog prostora",
   "workspace.new": "Novi radni prostor",
   "workspace.type.local": "lokalno",
   "workspace.type.sandbox": "sandbox",
@@ -932,4 +938,18 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Nije uspjelo kreiranje trajne ikone projekta",
   "error.childStore.storeCreateFailed": "Nije uspjelo kreiranje skladišta",
   "terminal.connectionLost.abnormalClose": "WebSocket zatvoren nenormalno: {{code}}",
+  "dialog.workspace.open.title": "Open Workspace",
+  "dialog.workspace.search.placeholder": "Search workspaces",
+  "dialog.workspace.empty": "No workspaces yet. Create one first!",
+  "dialog.workspace.open.button": "Open",
+  "dialog.workspace.delete.confirm": "Delete this workspace?",
+  "dialog.workspace.folders": "{{count}} folders",
+  "dialog.workspace.create.title": "Create Workspace",
+  "dialog.workspace.create.name": "Workspace name",
+  "dialog.workspace.create.name.placeholder": "My workspace",
+  "dialog.workspace.create.folders": "Folders",
+  "dialog.workspace.create.folders.empty": "No folders added yet",
+  "dialog.workspace.create.addFolder": "Add Folder",
+  "dialog.workspace.create.removeFolder": "Remove folder",
+  "dialog.workspace.create.button": "Create Workspace",
 }

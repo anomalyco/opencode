@@ -188,6 +188,15 @@ import type {
   TuiSubmitPromptResponses,
   VcsDiffResponses,
   VcsGetResponses,
+  WorkspaceCreateErrors,
+  WorkspaceCreateResponses,
+  WorkspaceDeleteErrors,
+  WorkspaceDeleteResponses,
+  WorkspaceGetErrors,
+  WorkspaceGetResponses,
+  WorkspaceListResponses,
+  WorkspaceUpdateErrors,
+  WorkspaceUpdateResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -1397,6 +1406,198 @@ export class Config2 extends HeyApiClient {
   }
 }
 
+export class Workspace2 extends HeyApiClient {
+  /**
+   * List all workspaces
+   *
+   * Get a list of all multi-root workspaces.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<WorkspaceListResponses, unknown, ThrowOnError>({
+      url: "/workspace",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create workspace
+   *
+   * Create a new multi-root workspace with folders.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      name?: string
+      folders?: Array<{
+        path: string
+        name?: string
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+            { in: "body", key: "folders" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WorkspaceCreateResponses, WorkspaceCreateErrors, ThrowOnError>({
+      url: "/workspace",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete workspace
+   *
+   * Delete a workspace by ID.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<WorkspaceDeleteResponses, WorkspaceDeleteErrors, ThrowOnError>({
+      url: "/workspace/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get workspace
+   *
+   * Get a workspace by ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<WorkspaceGetResponses, WorkspaceGetErrors, ThrowOnError>({
+      url: "/workspace/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update workspace
+   *
+   * Update a workspace by adding or removing folders, or renaming.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      body?:
+        | {
+            action: "addFolder"
+            folder: {
+              path: string
+              name?: string
+            }
+          }
+        | {
+            action: "removeFolder"
+            path: string
+          }
+        | {
+            action: "rename"
+            name: string
+          }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<WorkspaceUpdateResponses, WorkspaceUpdateErrors, ThrowOnError>({
+      url: "/workspace/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Tool extends HeyApiClient {
   /**
    * List tool IDs
@@ -1658,6 +1859,7 @@ export class Session2 extends HeyApiClient {
       title?: string
       permission?: PermissionRuleset
       workspaceID?: string
+      multiRootWorkspaceID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1672,6 +1874,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "title" },
             { in: "body", key: "permission" },
             { in: "body", key: "workspaceID" },
+            { in: "body", key: "multiRootWorkspaceID" },
           ],
         },
       ],
@@ -4363,6 +4566,11 @@ export class OpencodeClient extends HeyApiClient {
   private _config?: Config2
   get config(): Config2 {
     return (this._config ??= new Config2({ client: this.client }))
+  }
+
+  private _workspace?: Workspace2
+  get workspace(): Workspace2 {
+    return (this._workspace ??= new Workspace2({ client: this.client }))
   }
 
   private _tool?: Tool

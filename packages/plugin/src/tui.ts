@@ -283,6 +283,26 @@ export type TuiState = {
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
+  workspace: {
+    current: () => string | undefined
+    get: (id: string) => { type: string; name: string } | undefined
+    status: (id: string) => string | undefined
+  }
+  multiRootWorkspace: {
+    current: () => string | undefined
+    get: (id: string) =>
+      | {
+          id: string
+          name: string
+          folders: ReadonlyArray<{ path: string; name?: string }>
+        }
+      | undefined
+    list: () => ReadonlyArray<{
+      id: string
+      name: string
+      folders: ReadonlyArray<{ path: string; name?: string }>
+    }>
+  }
 }
 
 type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> &

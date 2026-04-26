@@ -603,6 +603,7 @@ export type AssistantMessage = {
   path: {
     cwd: string
     root: string
+    roots?: Array<string>
   }
   summary?: boolean
   cost: number
@@ -935,6 +936,7 @@ export type Session = {
   slug: string
   projectID: string
   workspaceID?: string
+  multiRootWorkspaceID?: string
   directory: string
   parentID?: string
   summary?: {
@@ -1062,6 +1064,7 @@ export type SyncEventSessionUpdated = {
       slug?: string | null
       projectID?: string | null
       workspaceID?: string | null
+      multiRootWorkspaceID?: string | null
       directory?: string | null
       parentID?: string | null
       summary?: {
@@ -1690,6 +1693,10 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * Pass all multi-root workspace folders to language servers via the LSP `workspaceFolders` initialize payload. Defaults to `true`. Set to `false` to restore the single-root behavior when a server misbehaves with extra folders.
+     */
+    lsp_multi_root?: boolean
   }
 }
 
@@ -1877,6 +1884,7 @@ export type GlobalSession = {
   slug: string
   projectID: string
   workspaceID?: string
+  multiRootWorkspaceID?: string
   directory: string
   parentID?: string
   summary?: {
@@ -2946,6 +2954,216 @@ export type ConfigProvidersResponses = {
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
 
+export type WorkspaceListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/workspace"
+}
+
+export type WorkspaceListResponses = {
+  /**
+   * List of workspaces
+   */
+  200: Array<{
+    id: string
+    name: string
+    filePath: string
+    folders: Array<{
+      path: string
+      name?: string
+    }>
+    time: {
+      created: number
+      updated: number
+    }
+  }>
+}
+
+export type WorkspaceListResponse = WorkspaceListResponses[keyof WorkspaceListResponses]
+
+export type WorkspaceCreateData = {
+  body?: {
+    name: string
+    folders: Array<{
+      path: string
+      name?: string
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/workspace"
+}
+
+export type WorkspaceCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type WorkspaceCreateError = WorkspaceCreateErrors[keyof WorkspaceCreateErrors]
+
+export type WorkspaceCreateResponses = {
+  /**
+   * Created workspace
+   */
+  201: {
+    id: string
+    name: string
+    filePath: string
+    folders: Array<{
+      path: string
+      name?: string
+    }>
+    time: {
+      created: number
+      updated: number
+    }
+  }
+}
+
+export type WorkspaceCreateResponse = WorkspaceCreateResponses[keyof WorkspaceCreateResponses]
+
+export type WorkspaceDeleteData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/workspace/{id}"
+}
+
+export type WorkspaceDeleteErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type WorkspaceDeleteError = WorkspaceDeleteErrors[keyof WorkspaceDeleteErrors]
+
+export type WorkspaceDeleteResponses = {
+  /**
+   * Workspace deleted
+   */
+  204: void
+}
+
+export type WorkspaceDeleteResponse = WorkspaceDeleteResponses[keyof WorkspaceDeleteResponses]
+
+export type WorkspaceGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/workspace/{id}"
+}
+
+export type WorkspaceGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type WorkspaceGetError = WorkspaceGetErrors[keyof WorkspaceGetErrors]
+
+export type WorkspaceGetResponses = {
+  /**
+   * Workspace
+   */
+  200: {
+    id: string
+    name: string
+    filePath: string
+    folders: Array<{
+      path: string
+      name?: string
+    }>
+    time: {
+      created: number
+      updated: number
+    }
+  }
+}
+
+export type WorkspaceGetResponse = WorkspaceGetResponses[keyof WorkspaceGetResponses]
+
+export type WorkspaceUpdateData = {
+  body?:
+    | {
+        action: "addFolder"
+        folder: {
+          path: string
+          name?: string
+        }
+      }
+    | {
+        action: "removeFolder"
+        path: string
+      }
+    | {
+        action: "rename"
+        name: string
+      }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/workspace/{id}"
+}
+
+export type WorkspaceUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type WorkspaceUpdateError = WorkspaceUpdateErrors[keyof WorkspaceUpdateErrors]
+
+export type WorkspaceUpdateResponses = {
+  /**
+   * Updated workspace
+   */
+  200: {
+    id: string
+    name: string
+    filePath: string
+    folders: Array<{
+      path: string
+      name?: string
+    }>
+    time: {
+      created: number
+      updated: number
+    }
+  }
+}
+
+export type WorkspaceUpdateResponse = WorkspaceUpdateResponses[keyof WorkspaceUpdateResponses]
+
 export type ExperimentalConsoleGetData = {
   body?: never
   path?: never
@@ -3290,6 +3508,7 @@ export type SessionCreateData = {
     title?: string
     permission?: PermissionRuleset
     workspaceID?: string
+    multiRootWorkspaceID?: string
   }
   path?: never
   query?: {

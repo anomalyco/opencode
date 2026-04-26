@@ -248,6 +248,10 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      lsp_multi_root: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Pass all multi-root workspace folders to language servers via the LSP `workspaceFolders` initialize payload. Defaults to `true`. Set to `false` to restore the single-root behavior when a server misbehaves with extra folders.",
+      }),
     }),
   ),
 })
