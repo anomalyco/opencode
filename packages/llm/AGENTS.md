@@ -92,24 +92,44 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 ## TODO
 
+### Completed Foundation
+
 - [x] Add an adapter registry so `client(...)` can choose an adapter by `request.model.protocol` instead of requiring a single adapter.
 - [x] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
 - [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
 - [x] Add OpenAI Chat recorded tests for tool-result follow-up and usage chunks.
-- [ ] Add OpenAI Chat provider-error/sad-path recordings when live API failures produce useful stable cassettes.
-- [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.
 - [x] Add deterministic fixture tests for unsupported content paths, including media in user messages and unsupported assistant content.
 - [x] Add provider patch examples from real opencode quirks, starting with prompt normalization and target-level provider options.
 - [x] Add an OpenAI Responses adapter once the Chat adapter shape feels stable.
 - [x] Add Anthropic Messages adapter coverage after Responses, especially content block mapping, tool use/result mapping, and cache hints.
 - [x] Add Gemini adapter coverage for text, media input, tool calls, reasoning deltas, finish reasons, usage, and recorded cassettes.
-- [ ] Improve cassette ergonomics if more providers need custom matching, redaction, or multi-interaction flows.
 - [x] Extract or port OpenCode's `ProviderTransform.schema` Gemini sanitizer into a tested `packages/llm` tool-schema patch; do not keep a divergent adapter-local copy long term.
+
+### Provider Coverage
+
 - [ ] Add OpenAI-compatible Chat adapter support for non-OpenAI providers that still use `/chat/completions`.
 - [ ] Add Bedrock Converse support or a clear compatibility layer before moving Amazon Bedrock traffic onto `packages/llm`.
 - [ ] Decide whether Vertex Gemini and Vertex Anthropic are target patches over existing adapters or separate adapters with their own auth/URL handling.
+
+### OpenCode Parity Patches
+
+- [ ] Port Anthropic tool-use ordering into a prompt patch.
+- [ ] Finish Mistral/OpenAI-compatible cleanup patches, including message sequence repair after tool messages.
+- [ ] Port DeepSeek reasoning handling and interleaved reasoning field mapping.
+- [ ] Add unsupported attachment fallback patches keyed by model capabilities.
+- [ ] Add cache hint patches for Anthropic, OpenRouter, Bedrock, OpenAI-compatible, Copilot, and Alibaba-style providers.
+- [ ] Add provider option namespacing patches for Gateway, OpenRouter, Azure, and other provider-specific option bags.
+- [ ] Add model-specific reasoning option patches for providers that need effort, summary, or native reasoning fields.
+
+### OpenCode Bridge
+
 - [ ] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, and native provider metadata.
 - [ ] Build a `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tools, tool choice, generation options, reasoning variants, cache hints, and attachments.
-- [ ] Port OpenCode provider quirks into patches before integration: Anthropic empty content filtering, Claude tool ID scrubbing, Anthropic tool-use ordering, Mistral ID/message cleanup, DeepSeek/interleaved reasoning, unsupported attachment fallbacks, cache hints, provider option namespacing, and model-specific reasoning options.
-- [ ] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
 - [ ] Keep initial OpenCode integration behind a local flag/path until request payload parity and stream event parity are proven against the existing `session/llm.test.ts` cases.
+
+### Test And Recording Gaps
+
+- [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.
+- [x] Cover provider-error and HTTP-status sad paths with deterministic fixtures across adapters (Anthropic mid-stream + 4xx; OpenAI Responses mid-stream + 4xx; OpenAI Chat 4xx). Live recordings of provider errors are still TODO when stable cassettes can be captured.
+- [ ] Improve cassette ergonomics if more providers need custom matching, redaction, or multi-interaction flows.
+- [ ] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.

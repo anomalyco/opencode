@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
-import { LLM } from "../../src"
+import { LLM, ProviderRequestError } from "../../src"
 import { client } from "../../src/adapter"
 import { OpenAIChat } from "../../src/provider/openai-chat"
 import { testEffect } from "../lib/effect"
@@ -251,6 +251,26 @@ describe("OpenAI Chat adapter", () => {
         .pipe(Effect.provide(layer), Effect.flip)
 
       expect(error.message).toContain("Failed to read OpenAI Chat stream")
+    }),
+  )
+
+  it.effect("fails HTTP provider errors before stream parsing", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+        .generate(request)
+        .pipe(
+          Effect.provide(
+            fixedResponse('{"error":{"message":"Bad request","type":"invalid_request_error"}}', {
+              status: 400,
+              headers: { "content-type": "application/json" },
+            }),
+          ),
+          Effect.flip,
+        )
+
+      expect(error).toBeInstanceOf(ProviderRequestError)
+      expect(error).toMatchObject({ status: 400 })
+      expect(error.message).toContain("HTTP 400")
     }),
   )
 

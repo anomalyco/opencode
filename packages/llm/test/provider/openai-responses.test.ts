@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { LLM } from "../../src"
+import { LLM, ProviderRequestError } from "../../src"
 import { client } from "../../src/adapter"
 import { OpenAIResponses } from "../../src/provider/openai-responses"
 import { testEffect } from "../lib/effect"
@@ -171,6 +171,50 @@ describe("OpenAI Responses adapter", () => {
         .pipe(Effect.flip)
 
       expect(error.message).toContain("OpenAI Responses user messages only support text content for now")
+    }),
+  )
+
+  it.effect("emits provider-error events for mid-stream provider errors", () =>
+    Effect.gen(function* () {
+      const response = yield* client({ adapters: [OpenAIResponses.adapter] })
+        .generate(request)
+        .pipe(
+          Effect.provide(
+            fixedResponse(sseEvents({ type: "error", code: "rate_limit_exceeded", message: "Slow down" })),
+          ),
+        )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "Slow down" }])
+    }),
+  )
+
+  it.effect("falls back to error code when no message is present", () =>
+    Effect.gen(function* () {
+      const response = yield* client({ adapters: [OpenAIResponses.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error" }))))
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+    }),
+  )
+
+  it.effect("fails HTTP provider errors before stream parsing", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [OpenAIResponses.adapter] })
+        .generate(request)
+        .pipe(
+          Effect.provide(
+            fixedResponse('{"error":{"type":"invalid_request_error","message":"Bad request"}}', {
+              status: 400,
+              headers: { "content-type": "application/json" },
+            }),
+          ),
+          Effect.flip,
+        )
+
+      expect(error).toBeInstanceOf(ProviderRequestError)
+      expect(error).toMatchObject({ status: 400 })
+      expect(error.message).toContain("HTTP 400")
     }),
   )
 })
