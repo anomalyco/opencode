@@ -200,6 +200,7 @@ export const EditTool = Tool.define(
             },
             title: `${path.relative(Instance.worktree, filePath)}`,
             output,
+            args: params,
           }
         }),
     }
