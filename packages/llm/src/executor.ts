@@ -1,6 +1,6 @@
 import { Cause, Context, Effect, Layer } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { TransportError, type LLMError } from "./schema"
+import { ProviderRequestError, TransportError, type LLMError } from "./schema"
 
 export interface Interface {
   readonly execute: (
@@ -9,6 +9,17 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM/RequestExecutor") {}
+
+const statusError = (response: HttpClientResponse.HttpClientResponse) =>
+  Effect.gen(function* () {
+    if (response.status < 400) return response
+    const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed(undefined)))
+    return yield* new ProviderRequestError({
+      status: response.status,
+      message: `Provider request failed with HTTP ${response.status}`,
+      body,
+    })
+  })
 
 const toHttpError = (error: unknown) => {
   if (Cause.isTimeoutError(error)) return new TransportError({ message: error.message })
@@ -24,7 +35,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
     return Service.of({
-      execute: (request) => http.execute(request).pipe(Effect.mapError(toHttpError)),
+      execute: (request) => http.execute(request).pipe(Effect.mapError(toHttpError), Effect.flatMap(statusError)),
     })
   }),
 )

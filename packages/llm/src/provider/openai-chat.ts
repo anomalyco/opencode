@@ -66,7 +66,7 @@ const OpenAIChatToolChoice = Schema.Union([
   }),
 ])
 
-const OpenAIChatTarget = Schema.Struct({
+const OpenAIChatTargetFields = {
   model: Schema.String,
   messages: Schema.Array(OpenAIChatMessage),
   tools: Schema.optional(Schema.Array(OpenAIChatTool)),
@@ -77,7 +77,10 @@ const OpenAIChatTarget = Schema.Struct({
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
   stop: Schema.optional(Schema.Array(Schema.String)),
-})
+}
+const OpenAIChatDraft = Schema.Struct(OpenAIChatTargetFields)
+type OpenAIChatDraft = Schema.Schema.Type<typeof OpenAIChatDraft>
+const OpenAIChatTarget = Schema.Struct(OpenAIChatTargetFields)
 export type OpenAIChatTarget = Schema.Schema.Type<typeof OpenAIChatTarget>
 
 const OpenAIChatUsage = Schema.Struct({
@@ -148,7 +151,7 @@ interface ParserState {
   readonly finishReason?: FinishReason
 }
 
-const decodeTarget = Schema.decodeUnknownEffect(OpenAIChatTarget)
+const decodeTarget = Schema.decodeUnknownEffect(OpenAIChatDraft.pipe(Schema.decodeTo(OpenAIChatTarget)))
 
 const invalid = (message: string) => new InvalidRequestError({ message })
 
@@ -172,7 +175,7 @@ const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
 
 const lowerToolChoice = (
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-): Effect.Effect<NonNullable<OpenAIChatTarget["tool_choice"]>, InvalidRequestError> => {
+): Effect.Effect<NonNullable<OpenAIChatDraft["tool_choice"]>, InvalidRequestError> => {
   if (toolChoice.type === "tool") {
     if (!toolChoice.name) return Effect.fail(invalid(`OpenAI Chat tool choice requires a tool name`))
     return Effect.succeed({ type: "function", function: { name: toolChoice.name } })
@@ -376,7 +379,7 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     Stream.catchCause((cause) => Stream.fail(streamError(cause))),
   )
 
-export const adapter = Adapter.define<OpenAIChatTarget, OpenAIChatTarget, LLMEvent>({
+export const adapter = Adapter.define<OpenAIChatDraft, OpenAIChatTarget, LLMEvent>({
   id: "openai-chat",
   protocol: "openai-chat",
   redact: (target) => target,

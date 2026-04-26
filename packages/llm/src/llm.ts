@@ -156,3 +156,20 @@ export const outputText = (response: LLMResponse | { readonly events: ReadonlyAr
     .filter(LLMEvent.guards["text-delta"])
     .map((event) => event.text)
     .join("")
+
+export const outputUsage = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) => {
+  if (response instanceof LLMResponse) return response.usage
+  return response.events.reduce<LLMResponse["usage"]>(
+    (usage, event) => ("usage" in event && event.usage !== undefined ? event.usage : usage),
+    undefined,
+  )
+}
+
+export const outputToolCalls = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) =>
+  response.events.filter(LLMEvent.guards["tool-call"])
+
+export const outputReasoning = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) =>
+  response.events
+    .filter(LLMEvent.guards["reasoning-delta"])
+    .map((event) => event.text)
+    .join("")

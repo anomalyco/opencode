@@ -63,7 +63,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.Literal("function"), name: Schema.String }),
 ])
 
-const OpenAIResponsesTarget = Schema.Struct({
+const OpenAIResponsesTargetFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
   tools: Schema.optional(Schema.Array(OpenAIResponsesTool)),
@@ -72,7 +72,10 @@ const OpenAIResponsesTarget = Schema.Struct({
   max_output_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
-})
+}
+const OpenAIResponsesDraft = Schema.Struct(OpenAIResponsesTargetFields)
+type OpenAIResponsesDraft = Schema.Schema.Type<typeof OpenAIResponsesDraft>
+const OpenAIResponsesTarget = Schema.Struct(OpenAIResponsesTargetFields)
 export type OpenAIResponsesTarget = Schema.Schema.Type<typeof OpenAIResponsesTarget>
 
 const OpenAIResponsesUsage = Schema.Struct({
@@ -115,7 +118,7 @@ const OpenAIResponsesChunkJson = Schema.fromJsonString(OpenAIResponsesChunk)
 const OpenAIResponsesTargetJson = Schema.fromJsonString(OpenAIResponsesTarget)
 const decodeChunk = Schema.decodeUnknownSync(OpenAIResponsesChunkJson)
 const encodeTarget = Schema.encodeSync(OpenAIResponsesTargetJson)
-const decodeTarget = Schema.decodeUnknownEffect(OpenAIResponsesTarget)
+const decodeTarget = Schema.decodeUnknownEffect(OpenAIResponsesDraft.pipe(Schema.decodeTo(OpenAIResponsesTarget)))
 
 interface ToolAccumulator {
   readonly id: string
@@ -147,7 +150,7 @@ const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
 
 const lowerToolChoice = (
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
-): Effect.Effect<NonNullable<OpenAIResponsesTarget["tool_choice"]>, InvalidRequestError> => {
+): Effect.Effect<NonNullable<OpenAIResponsesDraft["tool_choice"]>, InvalidRequestError> => {
   if (toolChoice.type === "tool") {
     if (!toolChoice.name) return Effect.fail(invalid(`OpenAI Responses tool choice requires a tool name`))
     return Effect.succeed({ type: "function", name: toolChoice.name })
@@ -350,7 +353,7 @@ const events = (response: HttpClientResponse.HttpClientResponse) =>
     Stream.catchCause((cause) => Stream.fail(streamError(cause))),
   )
 
-export const adapter = Adapter.define<OpenAIResponsesTarget, OpenAIResponsesTarget, LLMEvent>({
+export const adapter = Adapter.define<OpenAIResponsesDraft, OpenAIResponsesTarget, LLMEvent>({
   id: "openai-responses",
   protocol: "openai-responses",
   redact: (target) => target,

@@ -360,6 +360,12 @@ export class ProviderChunkError extends Schema.TaggedErrorClass<ProviderChunkErr
   raw: Schema.optional(Schema.String),
 }) {}
 
+export class ProviderRequestError extends Schema.TaggedErrorClass<ProviderRequestError>()("LLM.ProviderRequestError", {
+  status: Schema.Number,
+  message: Schema.String,
+  body: Schema.optional(Schema.String),
+}) {}
+
 export class TransportError extends Schema.TaggedErrorClass<TransportError>()("LLM.TransportError", {
   message: Schema.String,
 }) {}
@@ -368,4 +374,5 @@ export type LLMError =
   | InvalidRequestError
   | NoAdapterError
   | ProviderChunkError
+  | ProviderRequestError
   | TransportError
