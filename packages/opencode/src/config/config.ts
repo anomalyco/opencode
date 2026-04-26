@@ -121,6 +121,9 @@ export const Info = Schema.Struct({
     description:
       "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
   }),
+  followup: Schema.optional(Schema.Literals(["queue", "steer", "wrap"])).annotate({
+    description: "Follow-up behavior: 'queue' to wait, 'steer' to interrupt immediately, 'wrap' to finish current step",
+  }),
   autoshare: Schema.optional(Schema.Boolean).annotate({
     description: "@deprecated Use 'share' field instead. Share newly created sessions automatically",
   }),

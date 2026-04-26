@@ -591,6 +591,27 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
+      title: "Toggle Queue Mode",
+      keybind: "session_toggle_queue_mode",
+      value: "session.toggle-queue-mode",
+      onSelect: () => {
+        const current = sync.data.config.followup ?? "steer"
+        let next: "steer" | "wrap" | "queue" = "steer"
+        if (current === "steer") next = "wrap"
+        else if (current === "wrap") next = "queue"
+        
+        void sdk.client.config.update({
+          config: { followup: next }
+        })
+        toast.show({
+          message: `Queue mode changed to: ${next}`,
+          variant: "success",
+        })
+        dialog.clear()
+      },
+      category: "Session",
+    },
+    {
       title: "Switch theme",
       value: "theme.switch",
       keybind: "theme_list",

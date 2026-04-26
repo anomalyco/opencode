@@ -62,6 +62,8 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.status.makingEdits": "Making edits",
   "ui.sessionTurn.status.runningCommands": "Running commands",
   "ui.sessionTurn.status.thinking": "Thinking",
+  "ui.sessionTurn.status.steering": "Steering",
+  "ui.sessionTurn.status.wrappingUp": "Wrapping up",
   "ui.sessionTurn.status.thinkingWithTopic": "Thinking - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Gathering thoughts",
   "ui.sessionTurn.status.consideringNextSteps": "Considering next steps",

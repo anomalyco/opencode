@@ -343,6 +343,12 @@ export type SessionStatus =
   | {
       type: "busy"
     }
+  | {
+      type: "steer"
+    }
+  | {
+      type: "wrap"
+    }
 
 export type EventSessionStatus = {
   type: "session.status"
@@ -1517,6 +1523,10 @@ export type Config = {
    * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
    */
   share?: "manual" | "auto" | "disabled"
+  /**
+   * Follow-up behavior: 'queue' to wait, 'steer' to interrupt immediately, 'wrap' to finish current step
+   */
+  followup?: "queue" | "steer" | "wrap"
   /**
    * @deprecated Use 'share' field instead. Share newly created sessions automatically
    */
