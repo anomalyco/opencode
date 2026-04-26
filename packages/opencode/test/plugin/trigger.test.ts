@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Npm } from "@opencode-ai/core/npm"
@@ -18,16 +18,30 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Skill } from "../../src/skill"
+import { SkillTest } from "../fake/skill"
+
+const configContent = process.env.OPENCODE_CONFIG_CONTENT
+delete process.env.OPENCODE_CONFIG_CONTENT
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Plugin.node, CrossSpawnSpawner.node]), [
     [Auth.node, AuthTest.empty],
     [Account.node, AccountTest.empty],
     [Npm.node, NpmTest.noop],
+    [Skill.node, SkillTest.empty],
     [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true })],
   ]),
 )
 const systemHook = "experimental.chat.system.transform"
+
+afterAll(() => {
+  if (configContent === undefined) {
+    delete process.env.OPENCODE_CONFIG_CONTENT
+    return
+  }
+  process.env.OPENCODE_CONFIG_CONTENT = configContent
+})
 
 function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {

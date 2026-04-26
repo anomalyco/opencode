@@ -8,7 +8,9 @@ import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { ProviderAuth } from "@/provider/auth"
 
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Skill } from "@/skill"
 import { TestConfig } from "../fixture/config"
+import { SkillTest } from "../fake/skill"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -33,6 +35,7 @@ function providerAuthLayer(directory: string, plugins: string[]) {
         directories: () => Effect.succeed([directory]),
       }),
     ],
+    [Skill.node, SkillTest.empty],
     [RuntimeFlags.node, RuntimeFlags.layer()],
   ])
 }

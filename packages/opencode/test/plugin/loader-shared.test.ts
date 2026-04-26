@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn } from "bun:test"
+import { afterAll, afterEach, describe, expect, spyOn } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import fs from "fs/promises"
@@ -10,12 +10,32 @@ import { Config } from "@/config/config"
 import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
+const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+const configContent = process.env.OPENCODE_CONFIG_CONTENT
+process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
+delete process.env.OPENCODE_CONFIG_CONTENT
+
 const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
 const { readPackageThemes } = await import("../../src/plugin/shared")
+const { Skill } = await import("../../src/skill")
+const { SkillTest } = await import("../fake/skill")
 const { Npm } = await import("@opencode-ai/core/npm")
 const { TestConfig } = await import("../fixture/config")
 const { RuntimeFlags } = await import("../../src/effect/runtime-flags")
+
+afterAll(() => {
+  if (disableDefault === undefined) {
+    delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+  } else {
+    process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
+  }
+  if (configContent === undefined) {
+    delete process.env.OPENCODE_CONFIG_CONTENT
+    return
+  }
+  process.env.OPENCODE_CONFIG_CONTENT = configContent
+})
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -60,6 +80,7 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
               directories: () => Effect.succeed([dir]),
             }),
           ],
+          [Skill.node, SkillTest.empty],
           [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true, ...flags })],
         ]),
       ),

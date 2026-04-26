@@ -31,6 +31,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { Skill } from "../skill"
 
 type State = {
   hooks: Hooks[]
@@ -126,6 +127,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const flags = yield* RuntimeFlags.Service
+    const skill = yield* Skill.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
@@ -161,6 +163,23 @@ const layer = Layer.effect(
           },
           // @ts-expect-error
           $: typeof Bun === "undefined" ? undefined : Bun.$,
+          skills: {
+            all: () =>
+              bridge.promise(
+                skill.all().pipe(
+                  Effect.orDie,
+                  Effect.map((items) => items.map((item) => ({ ...item, description: item.description ?? "" }))),
+                ),
+              ),
+            get: (name: string) =>
+              bridge.promise(
+                skill.get(name).pipe(
+                  Effect.orDie,
+                  Effect.map((item) => (item ? { ...item, description: item.description ?? "" } : item)),
+                ),
+              ),
+            dirs: () => bridge.promise(skill.dirs().pipe(Effect.orDie)),
+          },
         }
 
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
@@ -184,9 +203,9 @@ const layer = Layer.effect(
             items: plugins,
             kind: "server",
             report: {
-              start(candidate) {},
-              missing(candidate, _retry, message) {},
-              error(candidate, _retry, stage, error, resolved) {
+              start(_candidate) {},
+              missing(_candidate, _retry, _message) {},
+              error(candidate, _retry, stage, error, _resolved) {
                 const spec = candidate.plan.spec
                 const cause = error instanceof Error ? (error.cause ?? error) : error
                 const message = stage === "load" ? errorMessage(error) : errorMessage(cause)
@@ -308,7 +327,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node],
+  deps: [EventV2Bridge.node, Config.node, Skill.node, RuntimeFlags.node],
 })
 
 export * as Plugin from "."

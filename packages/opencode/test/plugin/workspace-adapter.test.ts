@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterAll, afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Npm } from "@opencode-ai/core/npm"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
@@ -19,6 +19,11 @@ import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Skill } from "../../src/skill"
+import { SkillTest } from "../fake/skill"
+
+const configContent = process.env.OPENCODE_CONFIG_CONTENT
+delete process.env.OPENCODE_CONFIG_CONTENT
 
 const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
@@ -26,6 +31,7 @@ const it = testEffect(
     [Auth.node, AuthTest.empty],
     [Account.node, AccountTest.empty],
     [Npm.node, NpmTest.noop],
+    [Skill.node, SkillTest.empty],
     [InstanceStore.bootstrapNode, noopBootstrapLayer],
     [RuntimeFlags.node, RuntimeFlags.layer({ disableDefaultPlugins: true, experimentalWorkspaces: true })],
   ]),
@@ -33,6 +39,14 @@ const it = testEffect(
 
 afterEach(async () => {
   await disposeAllInstances()
+})
+
+afterAll(() => {
+  if (configContent === undefined) {
+    delete process.env.OPENCODE_CONFIG_CONTENT
+    return
+  }
+  process.env.OPENCODE_CONFIG_CONTENT = configContent
 })
 
 describe("plugin.workspace", () => {

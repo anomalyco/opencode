@@ -391,6 +391,11 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
     },
     serverUrl: new URL("https://example.com"),
     $: {} as never,
+    skills: {
+      all: async () => [],
+      get: async () => undefined,
+      dirs: async () => [],
+    },
   })
 
   const models = await hooks.provider!.models!(
