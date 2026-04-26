@@ -1531,8 +1531,15 @@ export default function Page() {
         optimisticBusy: item.sessionDirectory === sdk.directory,
       }).catch((err) => {
         setFollowup("failed", input.sessionID, input.id)
-        fail(err)
-        return false
+        throw err
+      })
+
+      if (!ok) return
+
+      setFollowup("items", input.sessionID, (items) => {
+        const nextItems = (items ?? []).filter((entry) => entry.id !== input.id)
+        // We do NOT send "clear" here, because this message was actually processed and sent!
+        return nextItems
       })
       if (!ok) return
 
