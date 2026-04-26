@@ -183,13 +183,14 @@ export function Session() {
   const sdk = useSDK()
 
   createEffect(() => {
-    const sessionID = route.sessionID
+    const currentSessionID = route.sessionID
     void (async () => {
       const previousWorkspace = project.workspace.current()
-      const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
+      const result = await sdk.client.session.get({ sessionID: currentSessionID }, { throwOnError: true })
+      if (route.sessionID !== currentSessionID) return
       if (!result.data) {
         toast.show({
-          message: `Session not found: ${sessionID}`,
+          message: `Session not found: ${currentSessionID}`,
           variant: "error",
           duration: 5000,
         })
@@ -208,10 +209,10 @@ export function Session() {
           await sync.bootstrap({ fatal: false })
         } catch {}
       }
-      await sync.session.sync(sessionID)
-      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+      await sync.session.sync(currentSessionID)
+      if (route.sessionID === currentSessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
-      if (route.sessionID !== sessionID) return
+      if (route.sessionID !== currentSessionID) return
       toast.show({
         message: errorMessage(error),
         variant: "error",
