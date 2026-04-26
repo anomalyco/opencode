@@ -3,17 +3,17 @@ import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config, ConfigManaged } from "../../src/config"
 import { ConfigParse } from "../../src/config/parse"
-import { EffectFlock } from "@opencode-ai/shared/util/effect-flock"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
 /** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
@@ -23,11 +23,11 @@ const infra = CrossSpawnSpawner.defaultLayer.pipe(
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
-import { Global } from "../../src/global"
+import { Global } from "@opencode-ai/core/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util"
 import { ConfigPlugin } from "@/config/plugin"
-import { Npm } from "@/npm"
+import { Npm } from "@opencode-ai/core/npm"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),
@@ -645,6 +645,33 @@ Test agent prompt`,
   })
 })
 
+test("agent markdown permission config preserves user key order", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".opencode", "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Filesystem.write(
+        path.join(agentDir, "ordered.md"),
+        `---
+permission:
+  bash: allow
+  "*": deny
+  edit: ask
+---
+Ordered permissions`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
+    },
+  })
+})
+
 test("loads agents from .opencode/agents (plural)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -895,7 +922,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 })
 
 // Note: deduplication and serialization of npm installs is now handled by the
-// shared Npm.Service (via EffectFlock). Those behaviors are tested in the shared
+// core Npm.Service (via EffectFlock). Those behaviors are tested in the core
 // package's npm tests, not here.
 
 test("resolves scoped npm plugins in config", async () => {
@@ -1495,16 +1522,9 @@ test("merges legacy tools with existing permission config", async () => {
   })
 })
 
-test("permission config canonicalises known keys first, preserves rest-key insertion order", async () => {
-  // ConfigPermission.Info is a StructWithRest schema — the decoder reorders
-  // keys into declaration-order for known permission names (edit, read,
-  // todowrite, external_directory are declared in `config/permission.ts`),
-  // followed by rest keys in the user's insertion order.
-  //
-  // Rule precedence is NOT affected by this reordering: `Permission.fromConfig`
-  // sorts wildcards before specifics before iterating. See the
-  // "fromConfig - specific key beats wildcard regardless of JSON key order"
-  // test in test/permission/next.test.ts for the behavioural guarantee.
+test("permission config preserves user key order", async () => {
+  // Permission precedence follows the order users write in config, so parsing
+  // must not canonicalise known keys ahead of wildcard or custom keys.
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Filesystem.write(
@@ -1532,15 +1552,12 @@ test("permission config canonicalises known keys first, preserves rest-key inser
     fn: async () => {
       const config = await load()
       expect(Object.keys(config.permission!)).toEqual([
-        // known fields that the user provided, in declaration order from
-        // config/permission.ts (read, edit, ..., external_directory, todowrite)
-        "read",
-        "edit",
-        "external_directory",
-        "todowrite",
-        // rest keys (not in the known list), in user's insertion order
         "*",
+        "edit",
         "write",
+        "external_directory",
+        "read",
+        "todowrite",
         "thoughts_*",
         "reasoning_model_*",
         "tools_*",
@@ -1548,6 +1565,29 @@ test("permission config canonicalises known keys first, preserves rest-key inser
       ])
     },
   })
+})
+
+test("Effect config parser preserves permission order while rejecting unknown top-level keys", () => {
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    {
+      permission: {
+        bash: "allow",
+        "*": "deny",
+        edit: "ask",
+      },
+    },
+    "test",
+  )
+
+  expect(Object.keys(config.permission!)).toEqual(["bash", "*", "edit"])
+  try {
+    ConfigParse.effectSchema(Config.Info, { invalid_field: true }, "test")
+    throw new Error("expected config parse to fail")
+  } catch (err) {
+    const error = err as { data?: { issues?: Array<{ code?: string; keys?: string[]; path?: string[] }> } }
+    expect(error.data?.issues?.[0]).toMatchObject({ code: "unrecognized_keys", keys: ["invalid_field"], path: [] })
+  }
 })
 
 // MCP config merging tests
@@ -2232,8 +2272,8 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 // parseManagedPlist unit tests — pure function, no OS interaction
 
 test("parseManagedPlist strips MDM metadata keys", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2260,8 +2300,8 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
 })
 
 test("parseManagedPlist parses server settings", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2280,8 +2320,8 @@ test("parseManagedPlist parses server settings", async () => {
 })
 
 test("parseManagedPlist parses permission rules", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2310,8 +2350,8 @@ test("parseManagedPlist parses permission rules", async () => {
 })
 
 test("parseManagedPlist parses enabled_providers", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
         JSON.stringify({
@@ -2327,8 +2367,8 @@ test("parseManagedPlist parses enabled_providers", async () => {
 })
 
 test("parseManagedPlist handles empty config", async () => {
-  const config = ConfigParse.schema(
-    Config.Info.zod,
+  const config = ConfigParse.effectSchema(
+    Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(JSON.stringify({ $schema: "https://opencode.ai/config.json" })),
       "test:mobileconfig",
