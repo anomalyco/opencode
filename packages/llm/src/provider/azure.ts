@@ -1,6 +1,7 @@
 import { ProviderRoute } from "../provider-route"
+import { ProviderID } from "../schema"
 
-export const id = "azure"
+export const id = ProviderID.make("azure")
 
 export const provider = ProviderRoute.define({
   id,

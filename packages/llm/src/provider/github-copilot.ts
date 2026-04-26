@@ -1,6 +1,7 @@
 import { ProviderRoute } from "../provider-route"
+import { ProviderID } from "../schema"
 
-export const id = "github-copilot"
+export const id = ProviderID.make("github-copilot")
 
 export const shouldUseResponsesApi = (modelID: string) => {
   const match = /^gpt-(\d+)/.exec(modelID)

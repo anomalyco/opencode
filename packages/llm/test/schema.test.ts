@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { ContentPart, LLMEvent, LLMRequest, ModelCapabilities, ModelLimits, ModelRef } from "../src/schema"
+import { ContentPart, LLMEvent, LLMRequest, ModelCapabilities, ModelID, ModelLimits, ModelRef, ProviderID } from "../src/schema"
 
 const capabilities = new ModelCapabilities({
   input: { text: true, image: false, audio: false, video: false, pdf: false },
@@ -11,8 +11,8 @@ const capabilities = new ModelCapabilities({
 })
 
 const model = new ModelRef({
-  id: "fake-model",
-  provider: "fake-provider",
+  id: ModelID.make("fake-model"),
+  provider: ProviderID.make("fake-provider"),
   protocol: "openai-chat",
   capabilities,
   limits: new ModelLimits({}),

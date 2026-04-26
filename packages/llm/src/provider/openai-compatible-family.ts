@@ -21,7 +21,7 @@ export const byProvider: Record<string, ProviderFamily> = Object.fromEntries(
 export const route = (provider: string) => ProviderRoute.make(provider, "openai-compatible-chat")
 
 export const provider = ProviderRoute.define({
-  id: "openai-compatible",
+  id: ProviderRoute.make("openai-compatible", "openai-compatible-chat").provider,
   route: (input) => route(input.providerID),
 })
 

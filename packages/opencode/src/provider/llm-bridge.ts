@@ -6,7 +6,8 @@ import { Google } from "@opencode-ai/llm/provider/google"
 import { OpenAI } from "@opencode-ai/llm/provider/openai"
 import { OpenAICompatibleFamily } from "@opencode-ai/llm/provider/openai-compatible-family"
 import { XAI } from "@opencode-ai/llm/provider/xai"
-import type { ProviderDefinition, ProviderRoute } from "@opencode-ai/llm/provider-route"
+import { ProviderRoute } from "@opencode-ai/llm/provider-route"
+import type { ProviderDefinition, ProviderRoute as ProviderRouteType } from "@opencode-ai/llm/provider-route"
 import { ReasoningEfforts, type ModelRef, type Protocol, type ReasoningEffort } from "@opencode-ai/llm/schema"
 import { isRecord } from "@/util/record"
 import type * as Provider from "./provider"
@@ -48,12 +49,8 @@ const recordOption = (options: Record<string, unknown>, key: string): Record<str
 export const route = (
   input: Input,
   options: Record<string, unknown> = { ...input.provider.options, ...input.model.options },
-): ProviderRoute | undefined =>
-  PROVIDERS[input.model.api.npm]?.route({
-    modelID: input.model.api.id,
-    providerID: input.model.providerID,
-    options,
-  })
+): ProviderRouteType | undefined =>
+  PROVIDERS[input.model.api.npm]?.route(ProviderRoute.input(input.model.api.id, input.model.providerID, options))
 
 const baseURL = (input: Input, selected: Protocol, options: Record<string, unknown>) => {
   const configured = stringOption(options, "baseURL") ?? input.model.api.url

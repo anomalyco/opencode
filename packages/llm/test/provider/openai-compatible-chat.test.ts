@@ -91,8 +91,8 @@ describe("OpenAI-compatible Chat adapter", () => {
         providerFamilies.map(([provider, makeModel, baseURL]) => {
           const model = makeModel({ id: `${provider}-model`, apiKey: "test-key" })
           return {
-            id: model.id,
-            provider: model.provider,
+            id: String(model.id),
+            provider: String(model.provider),
             protocol: model.protocol,
             baseURL: model.baseURL,
             headers: model.headers,

@@ -5,12 +5,16 @@ import {
   LLMResponse,
   Message,
   ModelCapabilities,
+  ModelID,
   ModelLimits,
   ModelRef,
+  ProviderID,
   ToolChoice,
   ToolDefinition,
   type ContentPart,
   type Protocol,
+  type ModelID as ModelIDType,
+  type ProviderID as ProviderIDType,
   type ReasoningEffort,
   type SystemPart,
   type ToolCallPart,
@@ -28,7 +32,9 @@ export type CapabilitiesInput = {
   }
 }
 
-export type ModelInput = Omit<ConstructorParameters<typeof ModelRef>[0], "capabilities" | "limits"> & {
+export type ModelInput = Omit<ConstructorParameters<typeof ModelRef>[0], "id" | "provider" | "capabilities" | "limits"> & {
+  readonly id: string | ModelIDType
+  readonly provider: string | ProviderIDType
   readonly capabilities?: ModelCapabilities | CapabilitiesInput
   readonly limits?: ModelLimits | ConstructorParameters<typeof ModelLimits>[0]
 }
@@ -98,6 +104,8 @@ export const model = (input: ModelInput) => {
   const { capabilities: modelCapabilities, limits: modelLimits, ...rest } = input
   return new ModelRef({
     ...rest,
+    id: ModelID.make(input.id),
+    provider: ProviderID.make(input.provider),
     protocol: input.protocol as Protocol,
     capabilities: modelCapabilities instanceof ModelCapabilities ? modelCapabilities : capabilities(modelCapabilities),
     limits: modelLimits instanceof ModelLimits ? modelLimits : limits(modelLimits),

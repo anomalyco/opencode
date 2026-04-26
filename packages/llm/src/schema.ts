@@ -10,6 +10,12 @@ export const Protocol = Schema.Literals([
 ])
 export type Protocol = Schema.Schema.Type<typeof Protocol>
 
+export const ModelID = Schema.String.pipe(Schema.brand("LLM.ModelID"))
+export type ModelID = typeof ModelID.Type
+
+export const ProviderID = Schema.String.pipe(Schema.brand("LLM.ProviderID"))
+export type ProviderID = typeof ProviderID.Type
+
 export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
 export const ReasoningEffort = Schema.Literals(ReasoningEfforts)
 export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
@@ -61,8 +67,8 @@ export class ModelLimits extends Schema.Class<ModelLimits>("LLM.ModelLimits")({
 }) {}
 
 export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
-  id: Schema.String,
-  provider: Schema.String,
+  id: ModelID,
+  provider: ProviderID,
   protocol: Protocol,
   baseURL: Schema.optional(Schema.String),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -351,8 +357,8 @@ export class InvalidRequestError extends Schema.TaggedErrorClass<InvalidRequestE
 
 export class NoAdapterError extends Schema.TaggedErrorClass<NoAdapterError>()("LLM.NoAdapterError", {
   protocol: Protocol,
-  provider: Schema.String,
-  model: Schema.String,
+  provider: ProviderID,
+  model: ModelID,
 }) {
   override get message() {
     return `No LLM adapter for ${this.provider}/${this.model} using ${this.protocol}`
