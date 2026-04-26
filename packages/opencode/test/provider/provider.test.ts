@@ -1099,6 +1099,31 @@ it.instance(
 )
 
 it.instance(
+  "config provider model limit overrides individual fields",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("limit-override")].models[ModelV2.ID.make("model")]
+    expect(model.limit.context).toBe(100000)
+    expect(model.limit.input).toBe(80000)
+    expect(model.limit.output).toBe(16000)
+  }),
+  {
+    config: {
+      provider: {
+        "limit-override": {
+          name: "Limit Override Provider",
+          npm: "@ai-sdk/openai-compatible",
+          env: [],
+          models: { model: { name: "Model", tool_call: true, limit: { context: 100000, input: 80000, output: 16000 } } },
+          options: { apiKey: "test" },
+        },
+      },
+    },
+  },
+)
+
+
+it.instance(
   "provider options are deeply merged",
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
