@@ -111,12 +111,13 @@ export type ParsedStreamError =
   | {
       type: "api_error"
       message: string
-      isRetryable: false
+      isRetryable: boolean
       responseBody: string
     }
 
 export function parseStreamError(input: unknown): ParsedStreamError | undefined {
-  const body = json(input)
+  const raw = json(input)
+  const body = typeof raw?.message === "string" ? (json(raw.message) ?? raw) : raw
   if (!body) return
 
   const responseBody = JSON.stringify(body)
@@ -148,6 +149,13 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
         type: "api_error",
         message: typeof body?.error?.message === "string" ? body?.error?.message : "Invalid prompt.",
         isRetryable: false,
+        responseBody,
+      }
+    case "server_error":
+      return {
+        type: "api_error",
+        message: typeof body?.error?.message === "string" ? body?.error?.message : "Server error.",
+        isRetryable: true,
         responseBody,
       }
   }
