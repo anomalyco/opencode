@@ -131,6 +131,8 @@ import type {
   SessionGetResponses,
   SessionInitErrors,
   SessionInitResponses,
+  SessionInterruptErrors,
+  SessionInterruptResponses,
   SessionListResponses,
   SessionMessageErrors,
   SessionMessageResponses,
@@ -2470,6 +2472,45 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionShellResponses, SessionShellErrors, ThrowOnError>({
       url: "/session/{sessionID}/shell",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Interrupt session
+   *
+   * Interrupt a running session with a specific behavior type.
+   */
+  public interrupt<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      type?: "steer" | "wrap"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "type" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionInterruptResponses, SessionInterruptErrors, ThrowOnError>({
+      url: "/session/{sessionID}/interrupt",
       ...options,
       ...params,
       headers: {

@@ -743,6 +743,7 @@ export const dict = {
   "settings.general.row.followup.title": "Follow-up behavior",
   "settings.general.row.followup.description": "Choose whether follow-up prompts steer immediately or wait in a queue",
   "settings.general.row.followup.option.queue": "Queue",
+  "settings.general.row.followup.option.wrap": "Wrap-up",
   "settings.general.row.followup.option.steer": "Steer",
   "settings.general.row.showFileTree.title": "File tree",
   "settings.general.row.showFileTree.description": "Show the file tree toggle and panel in desktop sessions",

@@ -182,7 +182,7 @@ function makeHttp() {
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps))
+  const proc = SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(run), Layer.provideMerge(deps))
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
   return Layer.mergeAll(
     TestLLMServer.layer,
@@ -1904,6 +1904,63 @@ it.live(
           }
         }),
       { git: true },
+    ),
+  30_000,
+)
+
+it.live(
+  "wrap interrupt correctly breaks out of the loop after current step finishes",
+  () =>
+    provideTmpdirServer(
+      ({ llm }) =>
+        Effect.gen(function* () {
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const runState = yield* SessionRunState.Service
+
+          // Queue two assistant responses. First response finishes with a tool call.
+          // If the loop continues, it would pull the second response.
+          // By sending a wrap interrupt, the loop should break after the first response finishes!
+          yield* llm.push(
+            reply().text("First turn!").tool("read", { filePath: "test" }).stop().item(),
+          )
+          yield* llm.push(
+            reply().hang().item()
+          )
+
+          const session = yield* sessions.create({
+            permission: [{ permission: "read", pattern: "*", action: "allow" }],
+          })
+
+          // Signal wrap interrupt immediately so it's registered before the first loop finishes
+          yield* runState.requestInterrupt(session.id, "wrap")
+
+          const run = yield* prompt
+            .prompt({
+              sessionID: session.id,
+              agent: "build",
+              parts: [{ type: "text", text: "wrap test" }],
+            })
+            .pipe(Effect.forkChild)
+
+          // The run should finish successfully on its own because the first LLM call stops,
+          // executes the tool, then the loop checks for "wrap" interrupt and breaks gracefully!
+          const exit = yield* Fiber.await(run)
+          
+          expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) {
+            const assistantMsg = exit.value
+            expect(assistantMsg.info.role).toBe("assistant")
+            
+            const parts = assistantMsg.parts
+            expect(parts.some((p) => p.type === "text" && p.text.includes("First turn!"))).toBe(true)
+            expect(parts.some((p) => p.type === "tool" && p.tool === "read")).toBe(true)
+          }
+
+          // llm should have been called twice: once for the title generation, once for the main stream.
+          expect(yield* llm.calls).toBe(2)
+        }),
+      { git: true, config: (url) => providerCfg(url) },
     ),
   30_000,
 )

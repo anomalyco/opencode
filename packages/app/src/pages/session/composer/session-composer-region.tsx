@@ -35,7 +35,9 @@ export function SessionComposerRegion(props: {
     onAbort: () => void
     onSend: (id: string) => void
     onEdit: (id: string) => void
+    onCancel: (id: string) => void
     onEditLoaded: () => void
+    onEditLastQueued: () => boolean
   }
   revert?: {
     items: { id: string; text: string }[]
@@ -244,6 +246,7 @@ export function SessionComposerRegion(props: {
                   sending={props.followup!.sending}
                   onSend={props.followup!.onSend}
                   onEdit={props.followup!.onEdit}
+                  onCancel={props.followup!.onCancel}
                 />
               </Show>
               <Show
@@ -256,6 +259,7 @@ export function SessionComposerRegion(props: {
                       onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                       edit={props.followup?.edit}
                       onEditLoaded={props.followup?.onEditLoaded}
+                      onEditLastQueued={props.followup?.onEditLastQueued}
                       shouldQueue={props.followup?.queue}
                       onQueue={props.followup?.onQueue}
                       onAbort={props.followup?.onAbort}

@@ -14,6 +14,7 @@ import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider"
 import { Question } from "@/question"
@@ -90,6 +91,7 @@ export const layer: Layer.Layer<
   | Plugin.Service
   | SessionSummary.Service
   | SessionStatus.Service
+  | SessionRunState.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -104,6 +106,7 @@ export const layer: Layer.Layer<
     const summary = yield* SessionSummary.Service
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
+    const runState = yield* SessionRunState.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -556,6 +559,11 @@ export const layer: Layer.Layer<
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
                 aborted = true
+                const interruptType = yield* runState.getInterrupt(ctx.sessionID)
+                if (interruptType === "steer") {
+                  yield* runState.clearInterrupt(ctx.sessionID)
+                  return // Don't halt, just return so we can process the steer
+                }
                 if (!ctx.assistantMessage.error) {
                   yield* halt(new DOMException("Aborted", "AbortError"))
                 }
@@ -611,6 +619,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(SessionStatus.defaultLayer),
+    Layer.provide(SessionRunState.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
   ),

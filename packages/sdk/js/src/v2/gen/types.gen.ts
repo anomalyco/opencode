@@ -4137,6 +4137,42 @@ export type SessionShellResponses = {
 
 export type SessionShellResponse = SessionShellResponses[keyof SessionShellResponses]
 
+export type SessionInterruptData = {
+  body?: {
+    type: "steer" | "wrap"
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/interrupt"
+}
+
+export type SessionInterruptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionInterruptError = SessionInterruptErrors[keyof SessionInterruptErrors]
+
+export type SessionInterruptResponses = {
+  /**
+   * Session interrupted successfully
+   */
+  200: boolean
+}
+
+export type SessionInterruptResponse = SessionInterruptResponses[keyof SessionInterruptResponses]
+
 export type SessionRevertData = {
   body?: {
     messageID: string

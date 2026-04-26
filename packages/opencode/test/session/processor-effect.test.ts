@@ -16,6 +16,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { SessionRunState } from "../../src/session/run-state"
 import { SessionSummary } from "../../src/session/summary"
 import { Snapshot } from "../../src/snapshot"
 import { Log } from "../../src/util"
@@ -164,6 +165,7 @@ const deps = Layer.mergeAll(
   Config.defaultLayer,
   LLM.defaultLayer,
   Provider.defaultLayer,
+  SessionRunState.defaultLayer,
   status,
 ).pipe(Layer.provideMerge(infra))
 const env = Layer.mergeAll(
@@ -836,6 +838,99 @@ it.live("session.processor effect tests mark interruptions aborted without manua
           expect(stored.info.error?.name).toBe("MessageAbortedError")
         }
         expect(state).toMatchObject({ type: "idle" })
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests allow graceful steer interrupt", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const sts = yield* SessionStatus.Service
+        const runState = yield* SessionRunState.Service
+
+        // Provide partial text then hang to wait for interrupt
+        yield* llm.push(
+          raw({
+            head: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { role: "assistant" } }],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { content: "part1 " } }],
+              },
+            ],
+            tail: [],
+            tailDelay: 100,
+            hang: true,
+          }),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "steer")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies MessageV2.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "steer" }],
+            tools: {},
+          })
+          .pipe(Effect.forkChild)
+
+        // Wait a bit to ensure it has received the start of the stream
+        yield* llm.wait(1)
+        yield* Effect.sleep("250 millis")
+        
+        // Signal steer interrupt
+        yield* runState.requestInterrupt(chat.id, "steer")
+        yield* Fiber.interrupt(run) // this happens normally via runState.cancel
+
+        const exit = yield* Fiber.await(run)
+        const stored = MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+        const state = yield* sts.get(chat.id)
+
+        // Should return a success string not a failure, or fail cleanly without an error flag
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+        }
+        
+        // No error should be written because it's a steer interrupt
+        expect(handle.message.error).toBeUndefined()
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role === "assistant") {
+          expect(stored.info.error).toBeUndefined()
+        }
+        
+        // State should be idle
+        expect(state).toMatchObject({ type: "idle" })
+        
+        // Check that the partial text was saved
+        const parts = MessageV2.parts(msg.id)
+        expect(parts.some((part) => part.type === "text" && part.text.includes("part1"))).toBe(true)
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),

@@ -1517,6 +1517,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
 
             if (result === "stop") return "break" as const
+            
+            const interrupt = yield* state.getInterrupt(sessionID)
+            if (interrupt === "wrap") {
+              yield* state.clearInterrupt(sessionID)
+              return "break" as const
+            }
+
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,

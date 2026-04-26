@@ -13,6 +13,7 @@ import {
   ImageAttachmentPart,
   AgentPart,
   FileAttachmentPart,
+  ContextItem,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
@@ -62,10 +63,11 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
-  edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
+  edit?: { id: string; prompt: Prompt; context: ContextItem[] }
   onEditLoaded?: () => void
   shouldQueue?: () => boolean
-  onQueue?: (draft: FollowupDraft) => void
+  onQueue?: (draft: FollowupDraft, editID?: string) => void
+  onEditLastQueued?: () => boolean
   onAbort?: () => void
   onSubmit?: () => void
 }
@@ -257,6 +259,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    editID: string | null
   }>({
     popover: null,
     historyIndex: -1,
@@ -265,6 +268,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    editID: null,
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -1019,6 +1023,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setStore("popover", null)
         setStore("historyIndex", -1)
         setStore("savedPrompt", null)
+        setStore("editID", edit.id)
         prompt.set(edit.prompt, promptLength(edit.prompt))
         requestAnimationFrame(() => {
           editorRef.focus()
@@ -1077,14 +1082,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     queueScroll,
     promptLength,
     addToHistory,
-    resetHistoryNavigation: () => {
-      resetHistoryNavigation(true)
-    },
-    setMode: (mode) => setStore("mode", mode),
-    setPopover: (popover) => setStore("popover", popover),
+    resetHistoryNavigation,
+    setMode,
+    setPopover: closePopover,
+    editID: () => store.editID,
+    clearEditID: () => setStore("editID", null),
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: props.shouldQueue,
+    shouldQueue: () => props.shouldQueue?.() ?? false,
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
@@ -1225,6 +1230,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .map((part) => ("content" in part ? part.content : ""))
         .join("")
       const direction = event.key === "ArrowUp" ? "up" : "down"
+
+      if (direction === "up" && textContent === "" && !store.editID && props.onEditLastQueued?.()) {
+        event.preventDefault()
+        return
+      }
+
       if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition, store.historyIndex >= 0)) return
       if (navigateHistory(direction)) {
         event.preventDefault()

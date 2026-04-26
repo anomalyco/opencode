@@ -184,10 +184,12 @@ type PromptSubmitInput = {
   resetHistoryNavigation: () => void
   setMode: (mode: "normal" | "shell") => void
   setPopover: (popover: "at" | "slash" | null) => void
+  editID?: Accessor<string | null>
+  clearEditID: () => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
-  onQueue?: (draft: FollowupDraft) => void
+  onQueue?: (draft: FollowupDraft, editID?: string) => void
   onAbort?: () => void
   onSubmit?: () => void
 }
@@ -409,6 +411,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       prompt.reset()
       input.setMode("normal")
       input.setPopover(null)
+      input.clearEditID()
     }
 
     const restoreInput = () => {
@@ -425,7 +428,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
-      input.onQueue?.(draft)
+      input.onQueue?.(draft, input.editID?.() ?? undefined)
       clearContext()
       clearInput()
       return

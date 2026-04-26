@@ -1554,7 +1554,9 @@ export default function Page() {
   const queueEnabled = createMemo(() => {
     const id = params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
+    const mode = settings.general.followup()
+    if ((mode === "steer" || mode === "wrap") && queuedFollowups().length >= 1) return false
+    return busy(id) && !composer.blocked() && !isChildSession()
   })
 
   const followupText = (item: FollowupDraft) => {
@@ -1574,13 +1576,29 @@ export default function Page() {
     return `[${language.t("common.attachment")}]`
   }
 
-  const queueFollowup = (draft: FollowupDraft) => {
-    setFollowup("items", draft.sessionID, (items) => [
-      ...(items ?? []),
-      { id: Identifier.ascending("message"), ...draft },
-    ])
+  const queueFollowup = (draft: FollowupDraft, editID?: string) => {
+    setFollowup("items", draft.sessionID, (items) => {
+      const nextItems = items ? [...items] : []
+      if (editID) {
+        const index = nextItems.findIndex((i) => i.id === editID)
+        if (index !== -1) {
+          nextItems[index] = { ...nextItems[index], ...draft }
+          return nextItems
+        }
+      }
+      return [...nextItems, { id: Identifier.ascending("message"), ...draft }]
+    })
     setFollowup("failed", draft.sessionID, undefined)
     setFollowup("paused", draft.sessionID, undefined)
+
+    const mode = settings.general.followup()
+    if (!editID && mode === "steer") {
+      // In steer mode, we request the agent to halt
+      // The actual queued message will be sent automatically when the agent becomes idle
+      void sdk.client.session.interrupt({ sessionID: draft.sessionID, type: mode })
+    } else if (!editID && mode === "wrap") {
+      void sdk.client.session.interrupt({ sessionID: draft.sessionID, type: mode })
+    }
   }
 
   const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
@@ -1602,13 +1620,21 @@ export default function Page() {
     const item = queuedFollowups().find((entry) => entry.id === id)
     if (!item) return
 
-    setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
     setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
     setFollowup("edit", sessionID, {
       id: item.id,
       prompt: item.prompt,
       context: item.context,
     })
+  }
+
+  const cancelFollowup = (id: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    if (followupBusy(sessionID)) return
+
+    setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
+    setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
   }
 
   const clearFollowupEdit = () => {
@@ -1916,7 +1942,14 @@ export default function Page() {
                       void sendFollowup(params.id!, id, { manual: true })
                     },
                     onEdit: editFollowup,
+                    onCancel: cancelFollowup,
                     onEditLoaded: clearFollowupEdit,
+                    onEditLastQueued: () => {
+                      const items = queuedFollowups()
+                      if (items.length === 0) return false
+                      editFollowup(items[items.length - 1].id)
+                      return true
+                    },
                   }
                 : undefined
             }

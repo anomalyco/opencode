@@ -18,6 +18,7 @@ import { Session as SessionNs } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { SessionRunState } from "../../src/session/run-state"
 import { SessionSummary } from "../../src/session/summary"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Provider } from "../../src/provider"
@@ -285,6 +286,7 @@ function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fa
       Layer.provide(Permission.defaultLayer),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
+      Layer.provide(SessionRunState.defaultLayer),
       Layer.provide(status),
       Layer.provide(bus),
       Layer.provide(config),
