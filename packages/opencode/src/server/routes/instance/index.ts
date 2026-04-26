@@ -56,6 +56,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
     app.delete(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
     app.post(ExperimentalPaths.worktreeReset, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.session, (c) => handler(c.req.raw, context))
     app.get(ExperimentalPaths.resource, (c) => handler(c.req.raw, context))
     app.get("/provider", (c) => handler(c.req.raw, context))
     app.get("/provider/auth", (c) => handler(c.req.raw, context))

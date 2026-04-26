@@ -181,7 +181,7 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 | `mcp`                     | `bridged`         | status, add, OAuth, connect/disconnect                                                   |
 | `workspace`               | `bridged` partial | adaptor/list/status; create/remove/session-restore remain                                |
 | top-level instance routes | `bridged`         | path, vcs, command, agent, skill, lsp, formatter, dispose                                |
-| experimental JSON routes  | `bridged` partial | console, tool, worktree list/mutations, resource list; global session list remains later |
+| experimental JSON routes  | `bridged`         | console, tool, worktree list/mutations, global session list, resource list              |
 | `session`                 | `later/special`   | large stateful surface plus streaming                                                    |
 | `sync`                    | `later`           | process/control side effects                                                             |
 | `event`                   | `special`         | SSE                                                                                      |
@@ -266,7 +266,7 @@ This checklist tracks bridge parity only. Checked routes are available through t
 - [x] `POST /experimental/worktree` - create worktree.
 - [x] `DELETE /experimental/worktree` - remove worktree.
 - [x] `POST /experimental/worktree/reset` - reset worktree.
-- [ ] `GET /experimental/session` - global session list.
+- [x] `GET /experimental/session` - global session list.
 - [x] `GET /experimental/resource` - MCP resources.
 
 ### Workspace Routes
@@ -351,7 +351,7 @@ Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays rev
 2. [x] Bridge MCP add/connect/disconnect routes.
 3. [x] Bridge MCP OAuth routes: start, callback, authenticate, remove.
 4. [x] Bridge experimental console switch and tool list routes.
-5. [ ] Bridge experimental global session list.
+5. [x] Bridge experimental global session list.
 6. [ ] Bridge workspace create/remove/session-restore routes.
 7. [ ] Bridge sync start/replay/history routes.
 8. [ ] Bridge session read routes: list, status, get, children, todo, diff, messages.
