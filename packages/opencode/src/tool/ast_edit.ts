@@ -1,99 +1,111 @@
-// ast_edit tool — replace an AST node by line range (byte-offset precise)
-// Companion to ast_query: takes start_line/end_line from a query result.
+// ast_edit tool — replace an AST node identified by symbol name
 
 import * as path from "path"
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
-import { LSP } from "../lsp"
-import { createTwoFilesPatch, diffLines } from "diff"
-import DESCRIPTION from "./ast_edit.txt"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Instance } from "../project/instance"
+import { Service as AstParserService } from "../ast/parser"
+import type { SupportedLanguage } from "../ast/languages"
+import * as Bom from "@/util/bom"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { Format } from "../format"
-import { Instance } from "../project/instance"
-import { Snapshot } from "@/snapshot"
-import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import * as Bom from "@/util/bom"
+import { LSP } from "../lsp"
+import { createTwoFilesPatch } from "diff"
 import { trimDiff } from "./edit"
-import { AstParser } from "../ast/parser"
+import { Snapshot } from "@/snapshot"
+
+const LanguageSchema = Schema.Literal(
+  "typescript", "tsx", "javascript", "python", "bash",
+  "go", "rust", "ruby", "java", "c", "cpp",
+  "css", "html", "json", "yaml", "toml",
+)
 
 export const Parameters = Schema.Struct({
-  filePath: Schema.String.annotate({ description: "Absolute path to the file to edit." }),
-  start_line: Schema.Number.annotate({
-    description: "0-indexed start line of the AST node to replace (from ast_query result).",
+  filePath: Schema.String.annotate({
+    description: "Absolute path to the file to edit.",
   }),
-  end_line: Schema.Number.annotate({
-    description: "0-indexed end line of the AST node to replace (inclusive).",
-  }),
-  replacement: Schema.String.annotate({
-    description: "The new source text to replace the matched AST node with. Must be syntactically valid.",
-  }),
-  verify_node_type: Schema.optional(Schema.String).annotate({
+  pattern: Schema.String.annotate({
     description:
-      "Optional: the expected node_type at this range (e.g. 'function_declaration'). " +
-      "If provided and the actual node type differs, the edit is aborted as a safety check.",
+      "A tree-sitter S-expression query that captures exactly ONE node to replace. " +
+      'Example: "(function_declaration name: (identifier) @name (#eq? @name \"myFunc\")) @fn" — ' +
+      "the LAST capture in the pattern is the node whose full source will be replaced.",
+  }),
+  newContent: Schema.String.annotate({
+    description: "The complete new source text to substitute for the matched node.",
+  }),
+  language: Schema.optional(LanguageSchema).annotate({
+    description: "Override language detection. Inferred from file extension when omitted.",
   }),
 })
 
 export const AstEditTool = Tool.define(
   "ast_edit",
   Effect.gen(function* () {
-    const lsp = yield* LSP.Service
-    const afs = yield* AppFileSystem.Service
-    const format = yield* Format.Service
-    const bus = yield* Bus.Service
-    const astParser = yield* AstParser.Service
+    const afs       = yield* AppFileSystem.Service
+    const astParser = yield* AstParserService
+    const format    = yield* Format.Service
+    const bus       = yield* Bus.Service
+    const lsp       = yield* LSP.Service
 
     return {
-      description: DESCRIPTION,
+      description:
+        "Edit a source file by replacing the AST node matched by a tree-sitter query. " +
+        "Use ast_query first to identify the exact pattern, then call ast_edit to apply the replacement. " +
+        "Fails if the query matches zero or more than one node.",
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const filePath = path.isAbsolute(params.filePath)
             ? params.filePath
             : path.join(Instance.directory, params.filePath)
-          yield* assertExternalDirectoryEffect(ctx, filePath)
 
-          const source = yield* Bom.readFile(afs, filePath)
+          const source  = yield* Bom.readFile(afs, filePath)
           const content = source.text
 
-          // Parse the file to locate the exact byte range of the target node
-          const parsed = yield* astParser.parse(filePath, content)
-          const nodeInfo = yield* astParser.nodeAtRange(parsed, params.start_line, params.end_line)
+          const matches = yield* astParser.queryFile(
+            filePath,
+            content,
+            params.pattern,
+            params.language as SupportedLanguage | undefined,
+          )
 
-          if (!nodeInfo) {
-            throw new Error(
-              `ast_edit: no AST node found spanning lines ${params.start_line}-${params.end_line} in ` +
-                path.relative(Instance.worktree, filePath) +
-                ". Re-run ast_query to verify the line range.",
-            )
-          }
+          if (matches.length === 0)
+            return {
+              title:  `ast_edit: no match in ${path.relative(Instance.worktree, filePath)}`,
+              output: `No node matched pattern: ${params.pattern}`,
+              metadata: {},
+            }
 
-          // Optional node type safety check
-          if (params.verify_node_type && nodeInfo.node_type !== params.verify_node_type) {
-            throw new Error(
-              `ast_edit: expected node type "${params.verify_node_type}" but found "${nodeInfo.node_type}" ` +
-                `at lines ${params.start_line}-${params.end_line}. ` +
-                "Re-run ast_query to get the correct range and node type.",
-            )
-          }
+          if (matches.length > 1)
+            return {
+              title:  `ast_edit: ambiguous match in ${path.relative(Instance.worktree, filePath)}`,
+              output:
+                `Pattern matched ${matches.length} nodes. Refine the query so it captures exactly one node.\n` +
+                matches
+                  .map((m) => `  L${m.start_line + 1}-${m.end_line + 1} [${m.node_type}]${
+                    m.name ? ` "${m.name}"` : ""
+                  }: ${m.text_preview}`)
+                  .join("\n"),
+              metadata: {},
+            }
 
-          // Apply replacement using byte offsets — immune to indentation/whitespace drift
-          const encoder = new TextEncoder()
-          const decoder = new TextDecoder()
-          const bytes = encoder.encode(content)
-          const before = bytes.slice(0, nodeInfo.start_byte)
-          const after = bytes.slice(nodeInfo.end_byte)
-          const replacementBytes = encoder.encode(params.replacement)
-          const newBytes = new Uint8Array(before.length + replacementBytes.length + after.length)
-          newBytes.set(before, 0)
-          newBytes.set(replacementBytes, before.length)
-          newBytes.set(after, before.length + replacementBytes.length)
-          const contentNew = decoder.decode(newBytes)
+          const match = matches[0]!
 
-          const diff = trimDiff(createTwoFilesPatch(filePath, filePath, content, contentNew))
+          // Convert 0-based line numbers to byte offsets
+          const lines  = content.split("\n")
+          let startOff = 0
+          for (let i = 0; i < match.start_line; i++) startOff += lines[i]!.length + 1
+          startOff += match.start_col
+
+          let endOff = 0
+          for (let i = 0; i < match.end_line; i++) endOff += lines[i]!.length + 1
+          endOff += match.end_col
+
+          const newContent = content.slice(0, startOff) + params.newContent + content.slice(endOff)
+          const diff = trimDiff(createTwoFilesPatch(filePath, filePath, content, newContent))
 
           yield* ctx.ask({
             permission: "edit",
@@ -102,41 +114,32 @@ export const AstEditTool = Tool.define(
             metadata: { filepath: filePath, diff },
           })
 
-          const next = Bom.split(contentNew)
-          const desiredBom = source.bom || next.bom
-          yield* afs.writeWithDirs(filePath, Bom.join(next.text, desiredBom))
+          yield* afs.writeWithDirs(filePath, Bom.join(newContent, source.bom))
+          if (yield* format.file(filePath)) yield* Bom.syncFile(afs, filePath, source.bom)
 
-          if (yield* format.file(filePath)) {
-            yield* Bom.syncFile(afs, filePath, desiredBom)
-          }
           yield* bus.publish(File.Event.Edited, { file: filePath })
           yield* bus.publish(FileWatcher.Event.Updated, { file: filePath, event: "change" })
 
-          let additions = 0
-          let deletions = 0
-          for (const change of diffLines(content, contentNew)) {
-            if (change.added) additions += change.count || 0
-            if (change.removed) deletions += change.count || 0
+          const filediff: Snapshot.FileDiff = {
+            file:      filePath,
+            patch:     diff,
+            additions: (diff.match(/^\+/mg) ?? []).length,
+            deletions: (diff.match(/^-/mg) ?? []).length,
           }
-          const filediff: Snapshot.FileDiff = { file: filePath, patch: diff, additions, deletions }
 
           yield* ctx.metadata({ metadata: { diff, filediff, diagnostics: {} } })
 
-          let output =
-            `Replaced ${nodeInfo.node_type}` +
-            (nodeInfo.name ? ` "${nodeInfo.name}"` : "") +
-            ` at lines ${params.start_line + 1}-${params.end_line + 1}.`
-
           yield* lsp.touchFile(filePath, "document")
           const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = AppFileSystem.normalizePath(filePath)
-          const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
-          if (block) output += `\n\nLSP errors detected, please fix:\n${block}`
+          const block = LSP.Diagnostic.report(
+            filePath,
+            diagnostics[AppFileSystem.normalizePath(filePath)] ?? [],
+          )
 
           return {
-            metadata: { diagnostics, diff, filediff },
-            title: `${path.relative(Instance.worktree, filePath)} — ${nodeInfo.node_type}${nodeInfo.name ? ` "${nodeInfo.name}"` : ""} L${params.start_line + 1}-${params.end_line + 1}`,
-            output,
+            title:  `ast_edit: ${path.relative(Instance.worktree, filePath)} L${match.start_line + 1}-${match.end_line + 1}`,
+            output: block ? `Edit applied.\n\nLSP errors detected, please fix:\n${block}` : "Edit applied.",
+            metadata: { diff, filediff, diagnostics },
           }
         }),
     }
