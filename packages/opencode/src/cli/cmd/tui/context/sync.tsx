@@ -421,8 +421,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         })
         .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
-          // non-blocking
-          void Promise.all([
+          return Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
             consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
             sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
@@ -438,9 +437,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
             project.workspace.sync(),
-          ]).then(() => {
-            setStore("status", "complete")
-          })
+          ])
+            .then(() => {
+              setStore("status", "complete")
+            })
+            .catch((e) => {
+              Log.Default.error("tui background sync failed", {
+                error: e instanceof Error ? e.message : String(e),
+                name: e instanceof Error ? e.name : undefined,
+                stack: e instanceof Error ? e.stack : undefined,
+              })
+              setStore("status", "complete")
+            })
         })
         .catch(async (e) => {
           Log.Default.error("tui bootstrap failed", {
