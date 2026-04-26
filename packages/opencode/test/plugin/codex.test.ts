@@ -218,6 +218,11 @@ describe("plugin.codex", () => {
         },
         serverUrl: new URL("https://example.com"),
         $: {} as never,
+        skills: {
+          all: async () => [],
+          get: async () => undefined,
+          dirs: async () => [],
+        },
       },
       {
         issuer: server.url.origin,

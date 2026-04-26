@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -19,6 +19,10 @@ import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Skill } from "../../src/skill"
+
+const configContent = process.env.OPENCODE_CONFIG_CONTENT
+delete process.env.OPENCODE_CONFIG_CONTENT
 
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
@@ -34,12 +38,21 @@ const it = testEffect(
     Plugin.layer.pipe(
       Layer.provide(EventV2Bridge.defaultLayer),
       Layer.provide(configLayer),
+      Layer.provide(Skill.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
     ),
     CrossSpawnSpawner.defaultLayer,
   ),
 )
 const systemHook = "experimental.chat.system.transform"
+
+afterAll(() => {
+  if (configContent === undefined) {
+    delete process.env.OPENCODE_CONFIG_CONTENT
+    return
+  }
+  process.env.OPENCODE_CONFIG_CONTENT = configContent
+})
 
 function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {

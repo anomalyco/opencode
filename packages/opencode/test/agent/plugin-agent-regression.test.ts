@@ -36,6 +36,7 @@ const configLayer = Config.layer.pipe(
 const pluginLayer = Plugin.layer.pipe(
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(configLayer),
+  Layer.provide(SkillTest.empty),
   Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
 )
 const agentLayer = Agent.layer.pipe(

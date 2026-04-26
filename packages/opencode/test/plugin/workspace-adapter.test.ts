@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterAll, afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -27,6 +27,10 @@ import { testEffect } from "../lib/effect"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
+import { Skill } from "../../src/skill"
+
+const configContent = process.env.OPENCODE_CONFIG_CONTENT
+delete process.env.OPENCODE_CONFIG_CONTENT
 
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
@@ -40,6 +44,7 @@ const configLayer = Config.layer.pipe(
 const pluginLayer = Plugin.layer.pipe(
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(configLayer),
+  Layer.provide(Skill.defaultLayer),
   Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
 )
 const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
@@ -62,6 +67,14 @@ const it = testEffect(
 
 afterEach(async () => {
   await disposeAllInstances()
+})
+
+afterAll(() => {
+  if (configContent === undefined) {
+    delete process.env.OPENCODE_CONFIG_CONTENT
+    return
+  }
+  process.env.OPENCODE_CONFIG_CONTENT = configContent
 })
 
 describe("plugin.workspace", () => {
