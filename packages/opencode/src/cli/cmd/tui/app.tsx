@@ -728,6 +728,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
+      title: kv.get("project_context_enabled", true) ? "Disable project context" : "Enable project context",
+      value: "app.toggle.project_context",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("project_context_enabled", !kv.get("project_context_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
       title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
       value: "app.toggle.diffwrap",
       category: "System",
