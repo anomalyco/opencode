@@ -7,9 +7,11 @@ import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import {
   Usage,
+  type CacheHint,
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
+  type MediaPart,
   type ProviderChunkError,
   type ToolCallPart,
   type ToolDefinition,
@@ -49,6 +51,7 @@ export type BedrockConverseModelInput = Omit<ModelInput, "provider" | "protocol"
 const BedrockTextBlock = Schema.Struct({
   text: Schema.String,
 })
+type BedrockTextBlock = Schema.Schema.Type<typeof BedrockTextBlock>
 
 const BedrockToolUseBlock = Schema.Struct({
   toolUse: Schema.Struct({
@@ -84,8 +87,66 @@ const BedrockReasoningBlock = Schema.Struct({
   }),
 })
 
-const BedrockUserBlock = Schema.Union([BedrockTextBlock, BedrockToolResultBlock])
-const BedrockAssistantBlock = Schema.Union([BedrockTextBlock, BedrockReasoningBlock, BedrockToolUseBlock])
+// Image block. Bedrock Converse accepts `format` as the file extension and
+// `source.bytes` as a base64 string (binary upload via base64 in the JSON
+// wire format). Supported formats per the Converse docs: png, jpeg, gif, webp.
+const BedrockImageFormat = Schema.Literals(["png", "jpeg", "gif", "webp"])
+type BedrockImageFormat = Schema.Schema.Type<typeof BedrockImageFormat>
+const BedrockImageBlock = Schema.Struct({
+  image: Schema.Struct({
+    format: BedrockImageFormat,
+    source: Schema.Struct({ bytes: Schema.String }),
+  }),
+})
+type BedrockImageBlock = Schema.Schema.Type<typeof BedrockImageBlock>
+
+// Document block. Required `name` is the user-facing filename so the model
+// can reference it. Supported formats per the Converse docs: pdf, csv, doc,
+// docx, xls, xlsx, html, txt, md.
+const BedrockDocumentFormat = Schema.Literals([
+  "pdf",
+  "csv",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "html",
+  "txt",
+  "md",
+])
+type BedrockDocumentFormat = Schema.Schema.Type<typeof BedrockDocumentFormat>
+const BedrockDocumentBlock = Schema.Struct({
+  document: Schema.Struct({
+    format: BedrockDocumentFormat,
+    name: Schema.String,
+    source: Schema.Struct({ bytes: Schema.String }),
+  }),
+})
+type BedrockDocumentBlock = Schema.Schema.Type<typeof BedrockDocumentBlock>
+
+// Cache breakpoint marker. Inserted positionally between content blocks (or
+// after a system text / tool spec) to mark the prefix as cacheable. Bedrock
+// Converse currently exposes `default` as the only cache-point type.
+const BedrockCachePointBlock = Schema.Struct({
+  cachePoint: Schema.Struct({ type: Schema.Literal("default") }),
+})
+type BedrockCachePointBlock = Schema.Schema.Type<typeof BedrockCachePointBlock>
+
+const BedrockUserBlock = Schema.Union([
+  BedrockTextBlock,
+  BedrockImageBlock,
+  BedrockDocumentBlock,
+  BedrockToolResultBlock,
+  BedrockCachePointBlock,
+])
+type BedrockUserBlock = Schema.Schema.Type<typeof BedrockUserBlock>
+
+const BedrockAssistantBlock = Schema.Union([
+  BedrockTextBlock,
+  BedrockReasoningBlock,
+  BedrockToolUseBlock,
+  BedrockCachePointBlock,
+])
 type BedrockAssistantBlock = Schema.Schema.Type<typeof BedrockAssistantBlock>
 
 const BedrockMessage = Schema.Union([
@@ -94,7 +155,8 @@ const BedrockMessage = Schema.Union([
 ])
 type BedrockMessage = Schema.Schema.Type<typeof BedrockMessage>
 
-const BedrockSystem = Schema.Struct({ text: Schema.String })
+const BedrockSystemBlock = Schema.Union([BedrockTextBlock, BedrockCachePointBlock])
+type BedrockSystemBlock = Schema.Schema.Type<typeof BedrockSystemBlock>
 
 const BedrockTool = Schema.Struct({
   toolSpec: Schema.Struct({
@@ -116,7 +178,7 @@ const BedrockToolChoice = Schema.Union([
 const BedrockTargetFields = {
   modelId: Schema.String,
   messages: Schema.Array(BedrockMessage),
-  system: Schema.optional(Schema.Array(BedrockSystem)),
+  system: Schema.optional(Schema.Array(BedrockSystemBlock)),
   inferenceConfig: Schema.optional(
     Schema.Struct({
       maxTokens: Schema.optional(Schema.Number),
@@ -246,6 +308,87 @@ const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   },
 })
 
+// Bedrock cache markers are positional — emit a `cachePoint` block right after
+// the content the caller wants treated as a cacheable prefix. Bedrock currently
+// exposes one cache-point type (`default`); both `ephemeral` and `persistent`
+// hints from the common `CacheHint` shape map onto it. Other cache-hint types
+// (none today) would need explicit handling.
+//
+// TODO: Bedrock recently added optional `ttl: "5m" | "1h"` on cachePoint —
+// once we have a recorded cassette to validate the wire shape, map
+// `CacheHint.ttlSeconds` here.
+const CACHE_POINT_DEFAULT: BedrockCachePointBlock = { cachePoint: { type: "default" } }
+
+const cachePointBlock = (cache: CacheHint | undefined): BedrockCachePointBlock | undefined => {
+  if (cache?.type !== "ephemeral" && cache?.type !== "persistent") return undefined
+  return CACHE_POINT_DEFAULT
+}
+
+// Emit a text block followed by an optional positional cache marker. Used by
+// system, user-text, and assistant-text lowering — all three share the same
+// "push text, push cachePoint if cache hint is present" shape. The return type
+// is the lowest common denominator (text | cachePoint) so callers can spread
+// it into any of the three block-union arrays.
+const textWithCache = (
+  text: string,
+  cache: CacheHint | undefined,
+): Array<BedrockTextBlock | BedrockCachePointBlock> => {
+  const cachePoint = cachePointBlock(cache)
+  return cachePoint ? [{ text }, cachePoint] : [{ text }]
+}
+
+// MIME type → Bedrock format mapping. Bedrock distinguishes image vs document
+// by the top-level block type, not the mediaType, so `lowerMedia` routes by
+// the `image/` prefix and the leaf functions look up the format. `image/jpg`
+// is included as a non-standard alias commonly seen in user-supplied data.
+const IMAGE_FORMATS = {
+  "image/png": "png",
+  "image/jpeg": "jpeg",
+  "image/jpg": "jpeg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+} as const satisfies Record<string, BedrockImageFormat>
+
+const DOCUMENT_FORMATS = {
+  "application/pdf": "pdf",
+  "text/csv": "csv",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "text/html": "html",
+  "text/plain": "txt",
+  "text/markdown": "md",
+} as const satisfies Record<string, BedrockDocumentFormat>
+
+// Bedrock document blocks require a name; default to the filename if the
+// caller supplied one, otherwise generate a stable placeholder so the model
+// still sees a valid block.
+const lowerImage = (part: MediaPart, mime: string) => {
+  const format = IMAGE_FORMATS[mime as keyof typeof IMAGE_FORMATS]
+  if (!format) return invalid(`Bedrock Converse does not support image media type ${part.mediaType}`)
+  return Effect.succeed<BedrockImageBlock>({
+    image: { format, source: { bytes: ProviderShared.mediaBytes(part) } },
+  })
+}
+
+const lowerDocument = (part: MediaPart, mime: string) => {
+  const format = DOCUMENT_FORMATS[mime as keyof typeof DOCUMENT_FORMATS]
+  if (!format) return invalid(`Bedrock Converse does not support document media type ${part.mediaType}`)
+  return Effect.succeed<BedrockDocumentBlock>({
+    document: {
+      format,
+      name: part.filename ?? `document.${format}`,
+      source: { bytes: ProviderShared.mediaBytes(part) },
+    },
+  })
+}
+
+const lowerMedia = (part: MediaPart) => {
+  const mime = part.mediaType.toLowerCase()
+  return mime.startsWith("image/") ? lowerImage(part, mime) : lowerDocument(part, mime)
+}
+
 const lowerToolChoice = Effect.fn("BedrockConverse.lowerToolChoice")(function* (
   toolChoice: NonNullable<LLMRequest["toolChoice"]>,
 ) {
@@ -280,13 +423,17 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
 
   for (const message of request.messages) {
     if (message.role === "user") {
-      const content: Array<Schema.Schema.Type<typeof BedrockUserBlock>> = []
+      const content: BedrockUserBlock[] = []
       for (const part of message.content) {
         if (part.type === "text") {
-          content.push({ text: part.text })
+          content.push(...textWithCache(part.text, part.cache))
           continue
         }
-        return yield* invalid("Bedrock Converse user messages only support text content for now")
+        if (part.type === "media") {
+          content.push(yield* lowerMedia(part))
+          continue
+        }
+        return yield* invalid("Bedrock Converse user messages only support text and media content for now")
       }
       messages.push({ role: "user", content })
       continue
@@ -296,7 +443,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
       const content: BedrockAssistantBlock[] = []
       for (const part of message.content) {
         if (part.type === "text") {
-          content.push({ text: part.text })
+          content.push(...textWithCache(part.text, part.cache))
           continue
         }
         if (part.type === "reasoning") {
@@ -329,12 +476,17 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (requ
   return messages
 })
 
+// System prompts share the cache-point convention: emit the text block, then
+// optionally a positional `cachePoint` marker.
+const lowerSystem = (system: ReadonlyArray<LLMRequest["system"][number]>): BedrockSystemBlock[] =>
+  system.flatMap((part) => textWithCache(part.text, part.cache))
+
 const prepare = Effect.fn("BedrockConverse.prepare")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   return {
     modelId: request.model.id,
     messages: yield* lowerMessages(request),
-    system: request.system.length === 0 ? undefined : request.system.map((part) => ({ text: part.text })),
+    system: request.system.length === 0 ? undefined : lowerSystem(request.system),
     inferenceConfig:
       request.generation.maxTokens === undefined &&
       request.generation.temperature === undefined &&

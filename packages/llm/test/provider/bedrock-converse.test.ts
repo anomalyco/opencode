@@ -2,7 +2,7 @@ import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { LLM } from "../../src"
+import { CacheHint, LLM } from "../../src"
 import { client } from "../../src/adapter"
 import { BedrockConverse } from "../../src/provider/bedrock-converse"
 import { testEffect } from "../lib/effect"
@@ -286,6 +286,176 @@ describe("Bedrock Converse adapter", () => {
         aws_credentials: { region: "us-east-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" },
         aws_region: "us-east-1",
       })
+    }),
+  )
+
+  it.effect("emits cachePoint markers after system, user-text, and assistant-text with cache hints", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* client({ adapters: [BedrockConverse.adapter] }).prepare(
+        LLM.request({
+          id: "req_cache",
+          model,
+          system: [{ type: "text", text: "System prefix.", cache }],
+          messages: [
+            LLM.user([{ type: "text", text: "User prefix.", cache }]),
+            LLM.assistant([{ type: "text", text: "Assistant prefix.", cache }]),
+          ],
+          generation: { maxTokens: 16, temperature: 0 },
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        // System: text block followed by cachePoint marker.
+        system: [{ text: "System prefix." }, { cachePoint: { type: "default" } }],
+        messages: [
+          {
+            role: "user",
+            content: [{ text: "User prefix." }, { cachePoint: { type: "default" } }],
+          },
+          {
+            role: "assistant",
+            content: [{ text: "Assistant prefix." }, { cachePoint: { type: "default" } }],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("does not emit cachePoint when no cache hint is set", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [BedrockConverse.adapter] }).prepare(baseRequest)
+      expect(prepared.target).toMatchObject({
+        system: [{ text: "You are concise." }],
+        messages: [{ role: "user", content: [{ text: "Say hello." }] }],
+      })
+    }),
+  )
+
+  it.effect("lowers image media into Bedrock image blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [BedrockConverse.adapter] }).prepare(
+        LLM.request({
+          id: "req_image",
+          model,
+          messages: [
+            LLM.user([
+              { type: "text", text: "What is in this image?" },
+              { type: "media", mediaType: "image/png", data: "AAAA" },
+              { type: "media", mediaType: "image/jpeg", data: "BBBB" },
+              { type: "media", mediaType: "image/jpg", data: "CCCC" },
+              { type: "media", mediaType: "image/webp", data: "DDDD" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        messages: [
+          {
+            role: "user",
+            content: [
+              { text: "What is in this image?" },
+              { image: { format: "png", source: { bytes: "AAAA" } } },
+              { image: { format: "jpeg", source: { bytes: "BBBB" } } },
+              // image/jpg is a non-standard alias; we map it to jpeg.
+              { image: { format: "jpeg", source: { bytes: "CCCC" } } },
+              { image: { format: "webp", source: { bytes: "DDDD" } } },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("base64-encodes Uint8Array image bytes", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [BedrockConverse.adapter] }).prepare(
+        LLM.request({
+          id: "req_image_bytes",
+          model,
+          messages: [
+            LLM.user([
+              { type: "media", mediaType: "image/png", data: new Uint8Array([1, 2, 3, 4, 5]) },
+            ]),
+          ],
+        }),
+      )
+
+      // Buffer.from([1,2,3,4,5]).toString("base64") === "AQIDBAU="
+      expect(prepared.target).toMatchObject({
+        messages: [
+          {
+            role: "user",
+            content: [{ image: { format: "png", source: { bytes: "AQIDBAU=" } } }],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("lowers document media into Bedrock document blocks with format and name", () =>
+    Effect.gen(function* () {
+      const prepared = yield* client({ adapters: [BedrockConverse.adapter] }).prepare(
+        LLM.request({
+          id: "req_doc",
+          model,
+          messages: [
+            LLM.user([
+              { type: "media", mediaType: "application/pdf", data: "PDFDATA", filename: "report.pdf" },
+              { type: "media", mediaType: "text/csv", data: "CSVDATA" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        messages: [
+          {
+            role: "user",
+            content: [
+              // Filename round-trips when supplied.
+              { document: { format: "pdf", name: "report.pdf", source: { bytes: "PDFDATA" } } },
+              // Falls back to a stable placeholder when filename is missing.
+              { document: { format: "csv", name: "document.csv", source: { bytes: "CSVDATA" } } },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("rejects unsupported image media types", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [BedrockConverse.adapter] })
+        .prepare(
+          LLM.request({
+            id: "req_bad_image",
+            model,
+            messages: [LLM.user([{ type: "media", mediaType: "image/svg+xml", data: "x" }])],
+          }),
+        )
+        .pipe(Effect.flip)
+
+      expect(error.message).toContain("Bedrock Converse does not support image media type image/svg+xml")
+    }),
+  )
+
+  it.effect("rejects unsupported document media types", () =>
+    Effect.gen(function* () {
+      const error = yield* client({ adapters: [BedrockConverse.adapter] })
+        .prepare(
+          LLM.request({
+            id: "req_bad_doc",
+            model,
+            messages: [
+              LLM.user([{ type: "media", mediaType: "application/x-tar", data: "x", filename: "a.tar" }]),
+            ],
+          }),
+        )
+        .pipe(Effect.flip)
+
+      expect(error.message).toContain("Bedrock Converse does not support document media type application/x-tar")
     }),
   )
 })
