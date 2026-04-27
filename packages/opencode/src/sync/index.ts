@@ -1,5 +1,6 @@
 import z from "zod"
-import { Database, eq } from "@/storage"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"

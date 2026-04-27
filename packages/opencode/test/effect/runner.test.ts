@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Exit, Fiber, Ref, Scope } from "effect"
-import { Runner } from "../../src/effect"
+import { Runner } from "@/effect/runner"
 import { it } from "../lib/effect"
 
 describe("Runner", () => {

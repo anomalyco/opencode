@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { Keybind } from "../src/util"
+import { Keybind } from "@/util/keybind"
 
 describe("Keybind.toString", () => {
   test("should convert simple key to string", () => {

@@ -4,7 +4,7 @@ import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
-import { Locale } from "@/util"
+import { Locale } from "@/util/locale"
 
 export type DialogConfirmProps = {
   title: string

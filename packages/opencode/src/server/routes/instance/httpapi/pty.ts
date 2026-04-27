@@ -1,4 +1,4 @@
-import { EffectBridge } from "@/effect"
+import { EffectBridge } from "@/effect/bridge"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { Effect, Layer, Schema } from "effect"

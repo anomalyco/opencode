@@ -1,9 +1,11 @@
-import { NotFoundError, eq, and } from "../storage"
+import { NotFoundError } from "@/storage/storage"
+import { eq } from "drizzle-orm"
+import { and } from "drizzle-orm"
 import { SyncEvent } from "@/sync"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "session.projector" })
 

@@ -5,7 +5,7 @@ import { PtyID } from "../../src/pty/schema"
 import { Instance } from "../../src/project/instance"
 import { InstanceRoutes } from "../../src/server/routes/instance"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/pty"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
