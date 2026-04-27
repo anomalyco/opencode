@@ -1285,7 +1285,7 @@ export default function Layout(props: ParentProps) {
       if (!value) return false
       return dirs.some((item) => workspaceKey(item) === workspaceKey(value))
     }
-    const refreshDirs = async (target?: string) => {
+    const ensureDirOpenable = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
       const listed = await globalSDK.client.worktree
         .list({ directory: root })
@@ -1295,7 +1295,7 @@ export default function Layout(props: ParentProps) {
       return canOpen(target)
     }
     const openSession = async (target: { directory: string; id: string }) => {
-      if (!(await refreshDirs(target.directory))) return false
+      if (!(await ensureDirOpenable(target.directory))) return false
       const [data] = globalSync.child(target.directory, { bootstrap: false })
       if (data.session.some((item) => item.id === target.id)) {
         setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
@@ -1307,7 +1307,7 @@ export default function Layout(props: ParentProps) {
         .then((x) => x.data)
         .catch(() => undefined)
       if (!resolved?.directory) return false
-      if (!(await refreshDirs(resolved.directory))) return false
+      if (!(await ensureDirOpenable(resolved.directory))) return false
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
