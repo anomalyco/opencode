@@ -1,15 +1,19 @@
-import * as LLM from "@opencode-ai/llm/llm"
-import { AmazonBedrock } from "@opencode-ai/llm/provider/amazon-bedrock"
-import { Anthropic } from "@opencode-ai/llm/provider/anthropic"
-import { Azure } from "@opencode-ai/llm/provider/azure"
-import { GitHubCopilot } from "@opencode-ai/llm/provider/github-copilot"
-import { Google } from "@opencode-ai/llm/provider/google"
-import { OpenAI } from "@opencode-ai/llm/provider/openai"
-import { OpenAICompatibleFamily } from "@opencode-ai/llm/provider/openai-compatible-family"
-import { XAI } from "@opencode-ai/llm/provider/xai"
-import { ProviderRoute } from "@opencode-ai/llm/provider-route"
-import type { ProviderDefinition, ProviderRoute as ProviderRouteType } from "@opencode-ai/llm/provider-route"
-import { ReasoningEfforts, type ModelRef, type Protocol, type ReasoningEffort } from "@opencode-ai/llm/schema"
+import {
+  Anthropic,
+  GitHubCopilot,
+  Google,
+  LLM,
+  OpenAI,
+  OpenAICompatibleFamily,
+  ProviderRoute,
+  ReasoningEfforts,
+  XAI,
+  type ModelRef,
+  type Protocol,
+  type ProviderDefinition,
+  type ProviderRouteShape,
+  type ReasoningEffort,
+} from "@opencode-ai/llm"
 import { isRecord } from "@/util/record"
 import type * as Provider from "./provider"
 
@@ -19,9 +23,7 @@ type Input = {
 }
 
 const PROVIDERS: Record<string, ProviderDefinition> = {
-  "@ai-sdk/amazon-bedrock": AmazonBedrock.provider,
   "@ai-sdk/anthropic": Anthropic.provider,
-  "@ai-sdk/azure": Azure.provider,
   "@ai-sdk/baseten": OpenAICompatibleFamily.provider,
   "@ai-sdk/cerebras": OpenAICompatibleFamily.provider,
   "@ai-sdk/deepinfra": OpenAICompatibleFamily.provider,
@@ -51,7 +53,7 @@ const recordOption = (options: Record<string, unknown>, key: string): Record<str
 export const route = (
   input: Input,
   options: Record<string, unknown> = { ...input.provider.options, ...input.model.options },
-): ProviderRouteType | undefined =>
+): ProviderRouteShape | undefined =>
   PROVIDERS[input.model.api.npm]?.route(ProviderRoute.input(input.model.api.id, input.model.providerID, options))
 
 const baseURL = (input: Input, selected: Protocol, options: Record<string, unknown>) => {
@@ -126,7 +128,6 @@ export const toModelRef = (input: Input): ModelRef | undefined => {
       opencodeProviderID: input.provider.id,
       opencodeModelID: input.model.id,
       npm: input.model.api.npm,
-      options,
     },
   })
 }

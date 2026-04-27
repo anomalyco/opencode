@@ -29,6 +29,15 @@ const textPart = (messageID: MessageID, text: string, input: Partial<MessageV2.T
   ...input,
 })
 
+const filePart = (messageID: MessageID): MessageV2.FilePart => ({
+  id: PartID.ascending(),
+  sessionID,
+  messageID,
+  type: "file",
+  mime: "image/png",
+  url: "data:image/png;base64,abc",
+})
+
 const reasoningPart = (messageID: MessageID, text: string): MessageV2.ReasoningPart => ({
   id: PartID.ascending(),
   sessionID,
@@ -225,6 +234,76 @@ describe("LLMNative.request", () => {
         ],
       },
     ])
+  })
+
+  test("keeps provider-executed tool results on assistant messages", async () => {
+    const mdl = model()
+    const userID = MessageID.ascending()
+    const assistantID = MessageID.ascending()
+    const request = await Effect.runPromise(
+      LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+        model: mdl,
+        messages: [
+          userMessage(mdl, userID, [textPart(userID, "Search docs")]),
+          assistantMessage(mdl, assistantID, userID, [
+            toolPart(assistantID, {
+              callID: "ws_1",
+              tool: "web_search",
+              metadata: { providerExecuted: true, provider: "openai" },
+              state: {
+                status: "completed",
+                input: { query: "effect" },
+                output: "found",
+                title: "Search",
+                metadata: {},
+                time: { start: 1, end: 2 },
+              },
+            }),
+          ]),
+        ],
+      }),
+    )
+
+    expect(request.messages.map((message) => ({ role: message.role, content: message.content }))).toEqual([
+      { role: "user", content: [{ type: "text", text: "Search docs" }] },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            id: "ws_1",
+            name: "web_search",
+            input: { query: "effect" },
+            providerExecuted: true,
+            metadata: { provider: "openai" },
+          },
+          {
+            type: "tool-result",
+            id: "ws_1",
+            name: "web_search",
+            result: { type: "text", value: "found" },
+            providerExecuted: true,
+            metadata: { provider: "openai" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("fails instead of dropping unsupported native parts", async () => {
+    const mdl = model()
+    const userID = MessageID.ascending()
+
+    await expect(
+      Effect.runPromise(
+        LLMNative.request({
+          provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+          model: mdl,
+          messages: [userMessage(mdl, userID, [filePart(userID)])],
+        }),
+      ),
+    ).rejects.toThrow(`Native LLM request conversion does not support file parts in message ${userID}`)
   })
 
   test("prepares OpenAI Responses text and tool request body", async () => {

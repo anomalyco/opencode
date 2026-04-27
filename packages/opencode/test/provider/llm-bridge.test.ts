@@ -119,19 +119,6 @@ describe("ProviderLLMBridge", () => {
     })
   })
 
-  test("maps Azure through its provider route", () => {
-    const ref = ProviderLLMBridge.toModelRef({
-      provider: provider({ id: ProviderID.make("azure"), key: "azure-key", options: { useCompletionUrls: true } }),
-      model: model({ id: "gpt-4.1", providerID: "azure", npm: "@ai-sdk/azure" }),
-    })
-
-    expect(ref).toMatchObject({
-      provider: "azure",
-      protocol: "openai-chat",
-      headers: { authorization: "Bearer azure-key" },
-    })
-  })
-
   test("keeps provider and model overrides ahead of defaults", () => {
     const ref = ProviderLLMBridge.toModelRef({
       provider: provider({
@@ -162,11 +149,19 @@ describe("ProviderLLMBridge", () => {
   })
 
   test("leaves undecided provider packages unmapped", () => {
+    const unsupported = [
+      ["mistral", "mistral-large", "@ai-sdk/mistral"],
+      ["azure", "gpt-4.1", "@ai-sdk/azure"],
+      ["amazon-bedrock", "anthropic.claude-3-5-sonnet-20240620-v1:0", "@ai-sdk/amazon-bedrock"],
+    ] as const
+
     expect(
-      ProviderLLMBridge.toModelRef({
-        provider: provider({ id: ProviderID.make("mistral"), key: "mistral-key" }),
-        model: model({ id: "mistral-large", providerID: "mistral", npm: "@ai-sdk/mistral" }),
-      }),
-    ).toBeUndefined()
+      unsupported.map(([providerID, modelID, npm]) =>
+        ProviderLLMBridge.toModelRef({
+          provider: provider({ id: ProviderID.make(providerID), key: `${providerID}-key` }),
+          model: model({ id: modelID, providerID, npm }),
+        }),
+      ),
+    ).toEqual([undefined, undefined, undefined])
   })
 })

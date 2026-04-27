@@ -129,6 +129,7 @@ export const toolResult = (input: ToolResultInput): ToolResultPart => ({
   id: input.id,
   name: input.name,
   result: toolResultValue(input.result, input.resultType),
+  providerExecuted: input.providerExecuted,
   metadata: input.metadata,
 })
 
