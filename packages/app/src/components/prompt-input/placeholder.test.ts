@@ -12,7 +12,7 @@ describe("promptPlaceholder", () => {
       suggest: true,
       t,
     })
-    expect(value).toBe("prompt.placeholder.shell")
+    expect(value).toBe("prompt.placeholder.shell:example")
   })
 
   test("returns summarize placeholders for comment context", () => {

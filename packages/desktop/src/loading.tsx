@@ -48,7 +48,7 @@ render(() => {
     })
 
     onCleanup(() => {
-      listener.then((cb) => cb())
+      void listener.then((cb) => cb())
       timers.forEach(clearTimeout)
     })
   })

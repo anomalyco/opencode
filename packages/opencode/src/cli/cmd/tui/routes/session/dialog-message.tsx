@@ -3,7 +3,7 @@ import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
-import { Clipboard } from "@tui/util/clipboard"
+import * as Clipboard from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
 import { strip } from "@tui/component/prompt/part"
 
@@ -29,7 +29,7 @@ export function DialogMessage(props: {
             const msg = message()
             if (!msg) return
 
-            sdk.client.session.revert({
+            void sdk.client.session.revert({
               sessionID: props.sessionID,
               messageID: msg.id,
             })
@@ -81,25 +81,23 @@ export function DialogMessage(props: {
               sessionID: props.sessionID,
               messageID: props.messageID,
             })
-            const initialPrompt = (() => {
-              const msg = message()
-              if (!msg) return undefined
-              const parts = sync.data.part[msg.id]
-              return parts.reduce(
-                (agg, part) => {
-                  if (part.type === "text") {
-                    if (!part.synthetic) agg.input += part.text
-                  }
-                  if (part.type === "file") agg.parts.push(part)
-                  return agg
-                },
-                { input: "", parts: [] as PromptInfo["parts"] },
-              )
-            })()
+            const msg = message()
+            const prompt = msg
+              ? sync.data.part[msg.id].reduce(
+                  (agg, part) => {
+                    if (part.type === "text") {
+                      if (!part.synthetic) agg.input += part.text
+                    }
+                    if (part.type === "file") agg.parts.push(part)
+                    return agg
+                  },
+                  { input: "", parts: [] as PromptInfo["parts"] },
+                )
+              : undefined
             route.navigate({
               sessionID: result.data!.id,
               type: "session",
-              initialPrompt,
+              prompt,
             })
             dialog.clear()
           },

@@ -1,11 +1,11 @@
 import { afterEach, expect, test } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, ManagedRuntime, Context } from "effect"
-import { InstanceState } from "../../src/effect/instance-state"
+import { Deferred, Duration, Effect, Exit, Fiber, Layer, ManagedRuntime, Context } from "effect"
+import { InstanceState } from "../../src/effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
-async function access<A, E>(state: InstanceState<A, E>, dir: string) {
+async function access<A, E>(state: InstanceState.InstanceState<A, E>, dir: string) {
   return Instance.provide({
     directory: dir,
     fn: () => Effect.runPromise(InstanceState.get(state)),

@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test"
 import { Effect } from "effect"
 import { Discovery } from "../../src/skill/discovery"
-import { Global } from "../../src/global"
-import { Filesystem } from "../../src/util/filesystem"
+import { Global } from "@opencode-ai/core/global"
+import { Filesystem } from "../../src/util"
 import { rm } from "fs/promises"
 import path from "path"
 
@@ -42,7 +42,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  server?.stop()
+  void server?.stop()
   await rm(cacheDir, { recursive: true, force: true })
 })
 

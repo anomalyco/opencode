@@ -121,7 +121,7 @@ jobs:
       - name: Read Playwright version
         id: playwright-version
         run: |
-          version=$(node -e 'console.log(require("./packages/app/package.json").devDependencies["@playwright/test"])')
+          version=$(node -e 'console.log(require("./package.json").workspaces.catalog["@playwright/test"])')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers

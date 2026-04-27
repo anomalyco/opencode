@@ -3,12 +3,12 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "../../installation"
-import { Global } from "../../global"
+import { Global } from "@opencode-ai/core/global"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
-import { Filesystem } from "../../util/filesystem"
-import { Process } from "../../util/process"
+import { Filesystem } from "../../util"
+import { Process } from "../../util"
 
 interface UninstallArgs {
   keepConfig: boolean

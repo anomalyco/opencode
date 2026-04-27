@@ -11,7 +11,7 @@ export function DockShell(props: ComponentProps<"div">) {
       {...rest}
       data-dock-surface="shell"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -27,7 +27,7 @@ export function DockShellForm(props: ComponentProps<"form">) {
       {...rest}
       data-dock-surface="shell"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -44,7 +44,7 @@ export function DockTray(props: DockTrayProps) {
       data-dock-surface="tray"
       data-dock-attach={split.attach || "none"}
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >

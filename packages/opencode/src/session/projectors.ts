@@ -1,10 +1,9 @@
-import { NotFoundError, eq, and } from "../storage/db"
+import { NotFoundError, eq, and } from "../storage"
 import { SyncEvent } from "@/sync"
-import { Session } from "./index"
+import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { ProjectTable } from "../project/project.sql"
-import { Log } from "../util/log"
+import { Log } from "../util"
 
 const log = Log.create({ service: "session.projector" })
 
@@ -63,14 +62,16 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
 
 export default [
   SyncEvent.project(Session.Event.Created, (db, data) => {
-    db.insert(SessionTable).values(Session.toRow(data.info)).run()
+    db.insert(SessionTable)
+      .values(Session.toRow(data.info as Session.Info))
+      .run()
   }),
 
   SyncEvent.project(Session.Event.Updated, (db, data) => {
     const info = data.info
     const row = db
       .update(SessionTable)
-      .set(toPartialRow(info))
+      .set(toPartialRow(info as Session.Patch))
       .where(eq(SessionTable.id, data.sessionID))
       .returning()
       .get()

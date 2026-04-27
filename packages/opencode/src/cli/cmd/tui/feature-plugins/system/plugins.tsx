@@ -1,4 +1,4 @@
-import { Keybind } from "@/util/keybind"
+import { Keybind } from "@/util"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"
@@ -78,7 +78,7 @@ function Install(props: { api: TuiPluginApi }) {
         }
 
         setBusy(true)
-        props.api.plugins
+        void props.api.plugins
           .install(mod, { global: global() })
           .then((out) => {
             if (!out.ok) {
@@ -188,7 +188,7 @@ function View(props: { api: TuiPluginApi }) {
     if (!item) return
     setLock(true)
     const task = item.active ? props.api.plugins.deactivate(x) : props.api.plugins.activate(x)
-    task
+    void task
       .then((ok) => {
         if (!ok) {
           props.api.ui.toast({
