@@ -313,14 +313,22 @@ export const layer = Layer.effect(
             overflow: false,
           }
 
+      // Convert in-context messages to the ModelMessage[] form that
+      // streamText actually receives. We size the categorized rows below
+      // against this wire form so they match what the provider tokenizes
+      // (raw stored {info, parts} JSON over-counts by 10-20x because it
+      // carries IDs, timestamps, parentID, model metadata, etc. that never
+      // leave the local DB).
+      const wireMsgs = yield* MessageV2.toModelMessagesEffect(msgs, model)
+      const wireUserMsgs = wireMsgs.filter((m) => m.role === "user")
+      const wireAsstMsgs = wireMsgs.filter((m) => m.role === "assistant" || m.role === "tool")
+
       const messagesItems: ContextItem[] = (() => {
         if (msgs.length === 0) return []
         const userMsgs = msgs.filter((m) => m.info.role === "user")
         const asstMsgs = msgs.filter((m) => m.info.role === "assistant")
-        const sizeOf = (list: typeof msgs) =>
-          JSON.stringify(list.map((m) => ({ info: m.info, parts: m.parts })))
-        const userText = sizeOf(userMsgs)
-        const asstText = sizeOf(asstMsgs)
+        const userText = JSON.stringify(wireUserMsgs)
+        const asstText = JSON.stringify(wireAsstMsgs)
         const compactedOut = allMsgs.length - msgs.length
         const items: ContextItem[] = []
         // Each role row is sized independently so the section subtotal in the
@@ -330,7 +338,7 @@ export const layer = Layer.effect(
             label: `User (${userMsgs.length})`,
             tokens: Token.estimate(userText),
             chars: userText.length,
-            detail: "prompts + attached parts",
+            detail: "prompts + attached parts (wire form)",
           })
         }
         if (asstMsgs.length > 0) {
@@ -338,7 +346,7 @@ export const layer = Layer.effect(
             label: `Assistant (${asstMsgs.length}) — ${agent.name}`,
             tokens: Token.estimate(asstText),
             chars: asstText.length,
-            detail: "responses + tool calls + tool results",
+            detail: "responses + tool calls + tool results (wire form)",
           })
         }
         // Zero-token info row that explains scope + how many were rolled up
@@ -417,11 +425,46 @@ export const layer = Layer.effect(
           : []),
       ]
 
+      // Self-calibration: when the last assistant turn produced authoritative
+      // token usage, derive the actual tokens-per-char ratio the provider's
+      // tokenizer applied to the prompt and propagate it to every categorized
+      // row. Providers' tokenizers often run denser than chars/4 on JSON-heavy
+      // payloads (Anthropic's BPE breaks tool schemas into many small tokens),
+      // so an uncalibrated sum can understate the bar by ~50% on tool-heavy
+      // turns. Falls back to chars/4 (already in `tokens`) when there's no
+      // authoritative usage yet.
+      //
+      // The calibration excludes:
+      //   - `full_session` — sized off raw stored JSON (carries IDs/timestamps
+      //     never sent on the wire), 10-20× wire size; would skew the ratio.
+      //   - the `agent` section — metadata row with `tokens: 0` by design (not
+      //     part of the prompt), should stay at zero.
+      const calibrated = (() => {
+        if (!usage.authoritative) return sections
+        const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite
+        const includeInDenominator = (s: ContextSection) => s.key !== "full_session" && s.key !== "agent"
+        const sumChars = sections.filter(includeInDenominator).reduce((acc, s) => acc + s.chars, 0)
+        if (promptTokens <= 0 || sumChars <= 0) return sections
+        const ratio = promptTokens / sumChars
+        return sections.map((section) => {
+          if (!includeInDenominator(section)) return section
+          const items = section.items.map((it) => ({
+            ...it,
+            tokens: it.chars > 0 ? Math.max(0, Math.round(it.chars * ratio)) : it.tokens,
+          }))
+          return {
+            ...section,
+            items,
+            tokens: items.reduce((acc, it) => acc + it.tokens, 0),
+          }
+        })
+      })()
+
       return {
         model: { providerID: model.providerID, modelID: model.api.id },
         agent: agent.name,
         usage,
-        sections,
+        sections: calibrated,
       } satisfies ContextInfo
     })
 

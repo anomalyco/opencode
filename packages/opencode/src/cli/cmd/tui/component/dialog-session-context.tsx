@@ -137,7 +137,7 @@ export function DialogSessionContext(props: DialogSessionContextProps) {
               </box>
 
               <box flexDirection="row" justifyContent="space-between">
-                <text fg={theme.textMuted}>Breakdown (estimated · chars/4)</text>
+                <text fg={theme.textMuted}>Breakdown (calibrated to last turn · chars/4 fallback if no usage yet)</text>
                 <text fg={theme.textMuted}>↑↓ pgup pgdn scroll</text>
               </box>
 
