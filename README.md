@@ -10,7 +10,7 @@
   <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
-![Grafo Terminal UI](packages/console/app/src/asset/lander/grafo-screenshot.png)
+![Grafo Terminal UI](packages/console/app/src/asset/lander/grafo-screenshot2.png)
 
 ---
 
