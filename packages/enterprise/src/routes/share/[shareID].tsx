@@ -18,7 +18,7 @@ import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
+
 import { FileSSR } from "@opencode-ai/ui/file-ssr"
 import { clientOnly } from "@solidjs/start"
 import { Meta, Title } from "@solidjs/meta"
@@ -282,68 +282,9 @@ export default function () {
                             </div>
                           </header>
                           <div class="select-text flex flex-col flex-1 min-h-0">
-                            <div
-                              classList={{
-                                "hidden w-full flex-1 min-h-0": true,
-                                "md:flex": wide(),
-                                "lg:flex": !wide(),
-                              }}
-                            >
-                              <div
-                                classList={{
-                                  "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full": true,
-                                }}
-                              >
-                                <div
-                                  classList={{
-                                    "w-full flex justify-start items-start min-w-0 px-6": true,
-                                  }}
-                                >
-                                  {title()}
-                                </div>
-                                <div class="flex items-start justify-start h-full min-h-0">
-                                  <Show when={messages().length > 1}>
-                                    <MessageNav
-                                      class="sticky top-0 shrink-0 py-2 pl-4"
-                                      messages={messages()}
-                                      current={activeMessage()}
-                                      size="compact"
-                                      onMessageSelect={setActiveMessage}
-                                    />
-                                  </Show>
-                                  <SessionTurn
-                                    sessionID={data().sessionID}
-                                    messageID={store.messageId ?? firstUserMessage()!.id!}
-                                    classes={{
-                                      root: "grow",
-                                      content: "flex flex-col justify-between",
-                                      container: "w-full pb-20 px-6",
-                                    }}
-                                  >
-                                    <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
-                                      <Logo class="w-58.5 opacity-12" />
-                                    </div>
-                                  </SessionTurn>
-                                </div>
-                              </div>
-                              <Show when={diffs().length > 0}>
-                                <div class="@container relative grow pt-14 flex-1 min-h-0 border-l border-border-weak-base">
-                                  <SessionReview
-                                    diffs={diffs()}
-                                    diffStyle={diffStyle()}
-                                    onDiffStyleChange={setDiffStyle}
-                                    classes={{
-                                      root: "pb-20",
-                                      header: "px-6",
-                                      container: "px-6",
-                                    }}
-                                  />
-                                </div>
-                              </Show>
-                            </div>
                             <Switch>
                               <Match when={diffs().length > 0}>
-                                <Tabs classList={{ "md:hidden": wide(), "lg:hidden": !wide() }}>
+                                <Tabs>
                                   <Tabs.List>
                                     <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
                                       Session
@@ -374,9 +315,7 @@ export default function () {
                                 </Tabs>
                               </Match>
                               <Match when={true}>
-                                <div
-                                  classList={{ "!overflow-hidden": true, "md:hidden": wide(), "lg:hidden": !wide() }}
-                                >
+                                <div class="!overflow-hidden">
                                   {turns()}
                                 </div>
                               </Match>
