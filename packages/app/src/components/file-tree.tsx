@@ -182,6 +182,12 @@ const FileTreeNode = (
       marks?: Set<string>
       as?: "div" | "button"
       contextOpen?: boolean
+      // FORK: 多选 — 是否处于 selection 集合(用于视觉)2026-04-27
+      selected?: boolean
+      // FORK: 多选 — 处理修饰键(Shift/Ctrl/Cmd),返回 true = 已处理(应阻止默认 click 行为)
+      onSelectMaybe?: (event: MouseEvent) => boolean
+      // FORK: 整组源用于拖动(可能是单个或整个 selection)— onDragStart 内部用,绕过 selection 信号读取
+      computeDragSources?: () => readonly string[]
     },
 ) => {
   const [local, rest] = splitProps(p, [
@@ -194,9 +200,14 @@ const FileTreeNode = (
     "marks",
     "as",
     "contextOpen",
+    "selected",
+    "onSelectMaybe",
+    "computeDragSources",
     "children",
     "class",
     "classList",
+    // FORK: 把 onClick 拽进 local,与 handleClick 组合后再传给 Dynamic,避免 {...rest} 覆盖 2026-04-27
+    "onClick",
   ])
   const kind = () => visibleKind(local.node, local.kinds, local.marks)
   const active = () => !!kind() && !local.node.ignored
@@ -204,6 +215,23 @@ const FileTreeNode = (
     const value = kind()
     if (!value) return
     return kindTextColor(value)
+  }
+
+  // FORK: 多选行 click 拦截器 — 修饰键时阻止默认行为(展开/打开),仅做选择;否则透传给原 onClick 2026-04-27
+  const handleClick = (event: MouseEvent) => {
+    const handled = local.onSelectMaybe?.(event) ?? false
+    if (handled) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    // 普通 click → 让原 onClick(open file / toggle expand 经 Collapsible)正常工作
+    const passed = local.onClick
+    if (typeof passed === "function") {
+      // Solid 的 onClick 类型可以是 EventHandlerUnion(union 包括 [handler, data])。
+      // 这里仅处理函数形式;若是 [handler, data] 则忽略(实际上 file-tree 调用方都用函数形式)
+      ;(passed as (event: MouseEvent) => void)(event)
+    }
   }
 
   return (
@@ -214,6 +242,8 @@ const FileTreeNode = (
         "bg-surface-base-active": local.node.path === local.active || !!local.contextOpen,
         // FORK: 拖动中的源行半透明 2026-04-27
         "opacity-50": isPathDragging(local.node.absolute),
+        // FORK: 多选选中行 — 用 ring 区分于 active(filled)2026-04-27
+        "ring-1 ring-interactive-base ring-inset": !!local.selected && local.node.path !== local.active,
         ...local.classList,
         [local.class ?? ""]: !!local.class,
         [local.nodeClass ?? ""]: !!local.nodeClass,
@@ -222,16 +252,22 @@ const FileTreeNode = (
       draggable={local.draggable}
       onDragStart={(event: DragEvent) => {
         if (!local.draggable) return
-        event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-        event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
-        // FORK: copyMove 让目标按住 Ctrl 也能切到 copy(默认 move)2026-04-27
+        // FORK: 多选拖动 — 优先用 computeDragSources(单个 / 整个 selection)2026-04-27
+        const sources = local.computeDragSources?.() ?? [local.node.absolute]
+        // 单源 → 走原 text/plain "file:<rel>" 协议(兼容 attachments.ts 的 @-mention)
+        // 多源 → 写自定义 MIME,attachments 收不到 file: 前缀就退回外部文件 drop 路径
+        if (sources.length === 1) {
+          event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
+          event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
+        } else {
+          event.dataTransfer?.setData("application/x-deskfox-paths", JSON.stringify(sources))
+        }
         if (event.dataTransfer) event.dataTransfer.effectAllowed = "copyMove"
         withFileDragImage(event)
-        // FORK: 写模块信号,FileTree drop handler 用它判断 in-tree 拖动 + 取源路径
-        setDraggingPaths([local.node.absolute])
+        setDraggingPaths(sources)
       }}
-      // FORK: 拖动结束(成功/取消都会触发)清状态 2026-04-27
       onDragEnd={() => resetDragState()}
+      onClick={handleClick}
       {...rest}
     >
       {local.children}
@@ -284,6 +320,37 @@ export default function FileTree(props: {
   const dialog = useDialog()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
+
+  // FORK-BEGIN: 多选 — selection store 取自 useFile,handleRowSelect 处理普通/Shift/Ctrl 点击 2026-04-27
+  const selection = file.selection
+
+  /** 给文件夹/文件行用的 click 处理。返回 true = 阻止默认行为(展开/打开),仅做选择 */
+  const handleRowSelect = (node: FileNode, event: MouseEvent): boolean => {
+    const isShift = event.shiftKey
+    const isMeta = event.ctrlKey || event.metaKey
+    if (isShift) {
+      // 范围选 — 用当前 FileTree 可见 nodes 作扁平化 fallback(跨多层 FileTree 时只在同层范围内,可接受)
+      const flat = nodes().map((n) => n.absolute)
+      selection.rangeSelect(node.absolute, flat)
+      return true // 阻止默认
+    }
+    if (isMeta) {
+      selection.toggle(node.absolute)
+      selection.setAnchor(node.absolute)
+      return true
+    }
+    // 普通 click:replace selection,但**不**阻止默认(让 expand / open 正常发生)
+    selection.replace(node.absolute)
+    return false
+  }
+
+  /** 拖动时算源列表 — source 在 selection 中 → 拖整个 selection,否则只拖 source */
+  const computeDragSources = (node: FileNode) => (): readonly string[] => {
+    const sel = selection.paths()
+    if (sel.includes(node.absolute)) return sel
+    return [node.absolute]
+  }
+  // FORK-END
 
   const promptNewFileAt = (targetAbs: string, targetRel: string, onAfter?: () => void) => {
     dialog.show(() => (
@@ -699,6 +766,9 @@ export default function FileTree(props: {
                           kinds={kinds()}
                           marks={marks()}
                           contextOpen={contextOpen()}
+                          selected={selection.isSelected(node.absolute)}
+                          onSelectMaybe={(e) => handleRowSelect(node, e)}
+                          computeDragSources={computeDragSources(node)}
                         >
                           <div class="size-4 flex items-center justify-center text-icon-weak">
                             <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
@@ -752,6 +822,9 @@ export default function FileTree(props: {
                       kinds={kinds()}
                       marks={marks()}
                       contextOpen={contextOpen()}
+                      selected={selection.isSelected(node.absolute)}
+                      onSelectMaybe={(e) => handleRowSelect(node, e)}
+                      computeDragSources={computeDragSources(node)}
                       as="button"
                       type="button"
                       onClick={() => props.onFileClick?.(node)}

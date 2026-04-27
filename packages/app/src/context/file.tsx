@@ -22,6 +22,8 @@ import {
 } from "./file/content-cache"
 import { createFileViewCache } from "./file/view-cache"
 import { createFileTreeStore } from "./file/tree-store"
+// FORK: 文件树多选 (commit #2 of file-tree-dnd) 2026-04-27
+import { createSelectionStore } from "./file/selection-store"
 import { invalidateFromWatcher } from "./file/watcher"
 import {
   selectionFromLines,
@@ -82,6 +84,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         })
       },
     })
+
+    // FORK: 文件树多选 store(commit #2 of file-tree-dnd)2026-04-27
+    const selection = createSelectionStore()
 
     const evictContent = (keep?: Set<string>) => {
       evictContentLru(keep, (target) => {
@@ -265,6 +270,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           tree.expandDir(input)
         },
       },
+      // FORK: 文件树多选 store(commit #2 of file-tree-dnd)2026-04-27
+      selection,
       get,
       load,
       scrollTop,

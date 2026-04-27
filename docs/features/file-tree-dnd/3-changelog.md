@@ -8,7 +8,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ## Commit #1 — 拖放核心
 
-**关联 commit**: `<待填>`
+**关联 commit**: `4b73b1229`
 **所在分支**: `feat/editable-file-viewer`
 **baseline tag**: 沿用线
 **实际改动**: 见 2-plan.md "Commit #1" 段
@@ -35,8 +35,27 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ## Commit #2 — 多选系统
 
 **关联 commit**: `<待填>`
-**实际改动**: 见 2-plan.md "Commit #2" 段
-**行数**: 待填
+**实际改动**:
+- 新文件 `packages/app/src/context/file/selection-store.ts` (~85 行):`createSelectionStore()`,提供 `paths()` / `add` / `remove` / `toggle` / `replace` / `clear` / `isSelected` / `setAnchor` / `rangeSelect(target, flatVisible)`
+- `packages/app/src/context/file.tsx`(+5 行):`createSelectionStore()` + 挂到 `useFile().selection`
+- `packages/app/src/components/file-tree.tsx`(~80 行):
+  - FileTreeNode 加 `selected` / `onSelectMaybe` / `computeDragSources` props,把 `onClick` 拽进 `local` 与 `handleClick` 组合(避免 {...rest} 覆盖)
+  - selected 视觉:`ring-1 ring-interactive-base ring-inset`(区分于 active 的 filled bg)
+  - dragstart:多源走 `application/x-deskfox-paths` MIME(JSON 数组),单源沿用原 `text/plain "file:<rel>"` 协议(兼容 attachments)
+  - FileTree component 加 `handleRowSelect`(普通/Shift/Ctrl 三态)+ `computeDragSources`(单/多源切换)
+  - 普通 click 不阻止默认 → expand/open file 仍正常
+  - Shift+click 范围选用 `nodes()` 的 absolute 列表(同层 FileTree 内 ok,跨层降级为单选,可接受 v1)
+
+**行数**: 87 行(< 500 阈值,无 large-diff 标记)
+
+**验收(user 已手测通过 2026-04-27)**:
+- T6a Ctrl+click 选 3 个 → 拖第一个 → 三个都移动 ✅
+- T6b Shift+click 范围选 ✅
+- T6c 修饰键时不打开/不展开 ✅
+- T6d 拖动期间所有源行 opacity-50 ✅
+- T6e selected ring vs active fill 视觉区分 ✅
+- T6f 普通单 click 重置 selection,正常 open/expand ✅
+- T6g 拖未选中的文件,selection 不被覆盖 ✅
 
 ## Commit #3 — 剪切/粘贴/复制 + Tauri copy_path
 
