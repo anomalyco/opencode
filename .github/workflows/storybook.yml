@@ -2,7 +2,7 @@ name: storybook
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
     paths:
       - ".github/workflows/storybook.yml"
       - "package.json"
@@ -10,7 +10,7 @@ on:
       - "packages/storybook/**"
       - "packages/ui/**"
   pull_request:
-    branches: [dev]
+    branches: [main]
     paths:
       - ".github/workflows/storybook.yml"
       - "package.json"
