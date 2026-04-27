@@ -427,6 +427,8 @@ export const dict = {
   "toast.file.loadFailed.title": "載入檔案失敗",
 
   "toast.file.listFailed.title": "列出檔案失敗",
+  "toast.file.listFailed.openclaw": "OpenClaw 目前不提供專案檔案樹。你可以繼續對話，但瀏覽檔案請切回普通專案。",
+  "toast.file.listFailed.generalagent": "GeneralAgent 目前不提供專案檔案樹。你可以繼續對話，但瀏覽檔案請切回普通專案。",
   "toast.context.noLineSelection.title": "未選取行",
   "toast.context.noLineSelection.description": "請先在檔案分頁中選取行範圍。",
   "toast.session.share.copyFailed.title": "無法複製連結到剪貼簿",
@@ -441,6 +443,8 @@ export const dict = {
   "toast.session.unshare.failed.description": "取消分享工作階段時發生錯誤",
 
   "toast.session.listFailed.title": "無法載入 {{project}} 的工作階段",
+  "toast.session.listFailed.openclaw.title": "無法載入 OpenClaw 工作階段",
+  "toast.session.listFailed.generalagent.title": "無法載入 GeneralAgent 工作階段",
 
   "toast.update.title": "有可用更新",
   "toast.update.description": "OpenCode 有新版本 ({{version}}) 可安裝。",
@@ -539,6 +543,8 @@ export const dict = {
   "session.revertDock.restore": "還原訊息",
 
   "session.new.title": "建構任何東西",
+  "session.new.openclaw.title": "我是你的私人助理",
+  "session.new.generalagent.title": "我是你的 AI 助理",
   "session.new.worktree.main": "主分支",
   "session.new.worktree.mainWithBranch": "主分支 ({{branch}})",
   "session.new.worktree.create": "建立新的 worktree",
@@ -600,6 +606,8 @@ export const dict = {
   "sidebar.menu.toggle": "切換選單",
   "sidebar.nav.projectsAndSessions": "專案與工作階段",
   "sidebar.settings": "設定",
+  "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
   "sidebar.help": "說明",
   "sidebar.workspaces.enable": "啟用工作區",
   "sidebar.workspaces.disable": "停用工作區",

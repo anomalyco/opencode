@@ -68,4 +68,6 @@ export const dict = {
   "desktop.startup.failed.checkUpdates": "检查更新",
   "desktop.server.local": "本地服务器",
   "desktop.server.openclaw": "OpenClaw",
+  "desktop.server.hermes": "Hermes",
+  "desktop.server.genericagent": "GenericAgent",
 }

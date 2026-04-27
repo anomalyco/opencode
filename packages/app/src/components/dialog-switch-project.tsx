@@ -8,8 +8,9 @@ import { useLayout, getAvatarColors, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { Avatar } from "@opencode-ai/ui/avatar"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon, type IconName } from "@opencode-ai/ui/icon"
 import { decode64 } from "@/utils/base64"
+import { enabledExtraAgents, extraAgentProject } from "@/pages/layout/extra-agents"
 
 type ProjectEntry = {
   id: string
@@ -17,7 +18,8 @@ type ProjectEntry = {
   path: string
   isCurrent: boolean
   project: LocalProject
-  isOpenclaw?: boolean
+  isExtraAgent?: boolean
+  icon?: IconName
 }
 
 export function DialogSwitchProject(props: { onSelect: (directory: string) => void }) {
@@ -35,7 +37,7 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
     }
   })
 
-  const hasOpenclaw = createMemo(() => server.list.some((item) => item.integration === "openclaw"))
+  const enabledAgents = createMemo(() => enabledExtraAgents(server.list))
 
   const entries = createMemo((): ProjectEntry[] => {
     const projects = layout.projects.visible()
@@ -49,19 +51,15 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
       project,
     }))
 
-    if (hasOpenclaw()) {
+    for (const agent of enabledAgents().toReversed()) {
       result.unshift({
-        id: "/openclaw",
-        name: "OpenClaw",
-        path: "/openclaw",
-        isCurrent: current === "/openclaw",
-        isOpenclaw: true,
-        project: {
-          worktree: "/openclaw",
-          name: "OpenClaw",
-          expanded: true,
-          sandboxes: [],
-        } as LocalProject,
+        id: agent.directory,
+        name: agent.label,
+        path: agent.directory,
+        isCurrent: current === agent.directory,
+        isExtraAgent: true,
+        icon: agent.icon,
+        project: extraAgentProject(agent.id),
       })
     }
 
@@ -88,10 +86,10 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
           <div class="w-full flex items-center justify-between rounded-md pl-1">
             <div class="flex items-center grow min-w-0">
               <Show
-                when={!item.isOpenclaw}
+                when={!item.isExtraAgent}
                 fallback={
                   <div class="size-6 rounded shrink-0 flex items-center justify-center bg-surface-base">
-                    <Icon name="openclaw" class="text-icon-base size-4" />
+                    <Icon name={item.icon ?? "robot"} class="text-icon-base size-4" />
                   </div>
                 }
               >
@@ -103,13 +101,11 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
                 />
               </Show>
               <span class="text-14-medium text-text-base truncate w-[200px] shrink-0 pl-2">{item.name}</span>
-              <Show when={!item.isOpenclaw}>
+              <Show when={!item.isExtraAgent}>
                 <span class="text-12-regular text-text-weak truncate grow min-w-0 text-left pl-3">{item.path}</span>
               </Show>
               <Show when={item.isCurrent}>
-                <span class="text-12-regular text-text-weak shrink-0 ml-2">
-                  {language.t("project.switch.current")}
-                </span>
+                <span class="text-12-regular text-text-weak shrink-0 ml-2">{language.t("project.switch.current")}</span>
               </Show>
             </div>
             <Show when={item.isCurrent}>

@@ -472,6 +472,12 @@ export const dict = {
   "toast.file.listFailed.title": "Failed to list files",
   "toast.file.listFailed.openclaw":
     "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.generalagent":
+    "GeneralAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.hermes":
+    "Hermes does not expose the project file tree through this bridge yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.genericagent":
+    "GenericAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
 
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
@@ -492,6 +498,9 @@ export const dict = {
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
+  "toast.session.listFailed.generalagent.title": "Failed to load GeneralAgent sessions",
+  "toast.session.listFailed.hermes.title": "Failed to load Hermes sessions",
+  "toast.session.listFailed.genericagent.title": "Failed to load GenericAgent sessions",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
   "error.permission.fileProtected": "This directory is protected by the system and cannot be read.",
   "error.permission.sessionProtected": "This directory is protected by the system and its sessions cannot be loaded.",
@@ -631,6 +640,15 @@ export const dict = {
   "session.new.greeting.3": "Make the next thing",
   "session.new.greeting.4": "Ship the idea",
   "session.new.openclaw.title": "I'm your personal assistant",
+  "session.new.generalagent.title": "Your AI agent assistant",
+  "session.new.hermes.title": "Your Hermes agent assistant",
+  "session.new.hermes.runtime": "Hermes runtime",
+  "session.new.hermes.availableTools": "Available tools",
+  "session.new.hermes.totalTools": "{{count}} tools in the local CLI default set",
+  "session.new.hermes.upstream": "upstream {{sha}}",
+  "session.new.hermes.showingToolsets": "Showing {{shown}} of {{total}} toolsets",
+  "session.new.hermes.trimmed": "{{rows}} more toolsets and {{tools}} more tools are hidden for this window",
+  "session.new.genericagent.title": "Your AI agent assistant",
   "session.new.meta.project": "Project",
   "session.new.meta.branch": "Branch",
   "session.new.meta.workspace": "Workspace",
@@ -673,6 +691,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
+  "status.popover.tab.skills": "Skills",
   "status.popover.action.manageServers": "Manage servers",
 
   "session.share.popover.title": "Publish on web",
@@ -743,6 +762,9 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "Projects and sessions",
   "sidebar.settings": "Settings",
   "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
+  "sidebar.hermes": "Hermes",
+  "sidebar.genericagent": "GenericAgent",
   "sidebar.help": "Help",
   "sidebar.workspaces.enable": "Enable workspaces",
   "sidebar.workspaces.disable": "Disable workspaces",
@@ -1129,6 +1151,29 @@ export const dict = {
   "config.claws.debug.logs": "Related logs",
   "config.claws.logs.testing":
     "Starting OpenClaw connection test\nGateway URL detected: {url}\nPreparing temporary adapter...\nHealth check in progress...",
+  "config.claws.note.hermes": "Hermes Agent API bridge.",
+  "config.claws.note.genericagent": "Python GenericAgent runtime.",
+  "config.claws.field.pythonExecutable": "Python executable",
+  "config.claws.field.pythonExecutableDescription": "Override the Python interpreter. Defaults to `python3`.",
+  "config.claws.field.pythonExecutablePlaceholder": "python3",
+  "config.claws.field.hermesDir": "Hermes Agent project directory",
+  "config.claws.field.hermesDirDescription":
+    "Absolute path to the Hermes Agent checkout (must contain `gateway/platforms/api_server.py`).",
+  "config.claws.field.hermesDirPlaceholder": "/Users/you/apps/hermes-agent",
+  "config.claws.field.hermesHome": "Hermes home",
+  "config.claws.field.hermesHomeDescription":
+    "Optional `HERMES_HOME` override. Leave empty to use the default `~/.hermes` profile and credentials.",
+  "config.claws.field.hermesHomePlaceholder": "~/.hermes",
+  "config.claws.field.genericAgentDir": "GenericAgent project directory",
+  "config.claws.field.genericAgentDirDescription":
+    "Absolute path to the GenericAgent project root (must contain `agentmain.py` and `mykey.py`).",
+  "config.claws.field.genericAgentDirPlaceholder": "/Users/you/apps/GenericAgent",
+  "config.claws.error.hermesDirRequired": "Hermes directory is required when enabled.",
+  "config.claws.error.gaDirRequired": "GenericAgent directory is required when enabled.",
+  "config.claws.logs.testingHermes":
+    "Starting Hermes connection test\nHermes directory: {dir}\nHermes home: {home}\nStarting local API adapter...\nHealth check in progress...",
+  "config.claws.logs.testingGa":
+    "Starting GenericAgent connection test\nGenericAgent directory: {dir}\nSpawning Python subprocess...\nHealth check in progress...",
   "config.skills.title": "Skills",
   "config.skills.header": "Each skill opens its `SKILL.md` and companion folder structure.",
   "config.skills.empty": "Choose a skill to load its `SKILL.md` and inspect the package structure.",

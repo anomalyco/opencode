@@ -13,6 +13,8 @@ import {
   isDirectoryAutoAccepting,
   autoRespondsPermission,
 } from "./permission-auto-respond"
+import { useServer } from "./server"
+import { domainFromDirectory, mainDomain, type DomainId } from "@/pages/layout/extra-agents"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -50,6 +52,9 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     const params = useParams()
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
+    const server = useServer()
+
+    const currentDomain = createMemo(() => server.domain)
 
     const permissionsEnabled = createMemo(() => {
       const directory = decode64(params.dir)
@@ -60,40 +65,54 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     const [store, setStore, _, ready] = persisted(
       {
-        ...Persist.global("permission", ["permission.v3"]),
+        ...Persist.global("permission", ["permission.v3", "permission.v4"]),
         migrate(value) {
-          if (!value || typeof value !== "object" || Array.isArray(value)) return value
+          if (!value || typeof value !== "object" || Array.isArray(value)) {
+            return { byDomain: { [mainDomain]: {} as Record<string, boolean> } }
+          }
 
           const data = value as Record<string, unknown>
-          if (data.autoAccept) return value
+          if ("byDomain" in data) return value
 
-          return {
-            ...data,
-            autoAccept:
-              typeof data.autoAcceptEdits === "object" && data.autoAcceptEdits && !Array.isArray(data.autoAcceptEdits)
-                ? data.autoAcceptEdits
-                : {},
-          }
+          const autoAccept =
+            "autoAccept" in data && typeof data.autoAccept === "object" && !Array.isArray(data.autoAccept)
+              ? (data.autoAccept as Record<string, boolean>)
+              : "autoAcceptEdits" in data &&
+                  typeof data.autoAcceptEdits === "object" &&
+                  !Array.isArray(data.autoAcceptEdits)
+                ? (data.autoAcceptEdits as Record<string, boolean>)
+                : {}
+
+          return { byDomain: { [mainDomain]: autoAccept } }
         },
       },
       createStore({
-        autoAccept: {} as Record<string, boolean>,
+        byDomain: { [mainDomain]: {} as Record<string, boolean> } as Partial<
+          Record<DomainId, Record<string, boolean>>
+        >,
       }),
     )
+
+    const domainAutoAccept = () => store.byDomain[currentDomain()] ?? {}
 
     // When config has permission: "allow", auto-enable directory-level auto-accept
     createEffect(() => {
       if (!ready()) return
       const directory = decode64(params.dir)
       if (!directory) return
+      const domain = currentDomain()
       const [childStore] = globalSync.child(directory)
       const perm = childStore.config.permission
       if (typeof perm === "string" && perm === "allow") {
         const key = directoryAcceptKey(directory)
-        if (store.autoAccept[key] === undefined) {
+        const autoAccept = store.byDomain[domain] ?? {}
+        if (autoAccept[key] === undefined) {
           setStore(
             produce((draft) => {
-              draft.autoAccept[key] = true
+              if (!draft.byDomain[domain]) {
+                draft.byDomain[domain] = {}
+              }
+              draft.byDomain[domain]![key] = true
             }),
           )
         }
@@ -118,7 +137,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     const respond: PermissionRespondFn = (input) => {
-      globalSDK.client.permission.respond(input).catch(() => {
+      const domain = input.directory ? domainFromDirectory(input.directory) : currentDomain()
+      globalSDK.forDomain(domain).client.permission.respond(input).catch(() => {
         responded.delete(input.permissionID)
       })
     }
@@ -140,16 +160,16 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     function isAutoAccepting(sessionID: string, directory?: string) {
       const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
-      return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory)
+      return autoRespondsPermission(domainAutoAccept(), session, { sessionID }, directory)
     }
 
     function isAutoAcceptingDirectory(directory: string) {
-      return isDirectoryAutoAccepting(store.autoAccept, directory)
+      return isDirectoryAutoAccepting(domainAutoAccept(), directory)
     }
 
     function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
       const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
-      return autoRespondsPermission(store.autoAccept, session, permission, directory)
+      return autoRespondsPermission(domainAutoAccept(), session, permission, directory)
     }
 
     function bumpEnableVersion(sessionID: string, directory?: string) {
@@ -159,7 +179,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       return next
     }
 
-    const unsubscribe = globalSDK.event.listen((e) => {
+    const unsubscribe = globalSDK.listenAll((e) => {
       const event = e.details
       if (event?.type !== "permission.asked") return
 
@@ -171,14 +191,18 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     onCleanup(unsubscribe)
 
     function enableDirectory(directory: string) {
+      const domain = domainFromDirectory(directory)
       const key = directoryAcceptKey(directory)
       setStore(
         produce((draft) => {
-          draft.autoAccept[key] = true
+          if (!draft.byDomain[domain]) {
+            draft.byDomain[domain] = {}
+          }
+          draft.byDomain[domain]![key] = true
         }),
       )
 
-      globalSDK.client.permission
+      globalSDK.forDomain(domain).client.permission
         .list({ directory })
         .then((x) => {
           if (!isAutoAcceptingDirectory(directory)) return
@@ -192,25 +216,33 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function disableDirectory(directory: string) {
+      const domain = domainFromDirectory(directory)
       const key = directoryAcceptKey(directory)
       setStore(
         produce((draft) => {
-          draft.autoAccept[key] = false
+          if (!draft.byDomain[domain]) {
+            draft.byDomain[domain] = {}
+          }
+          draft.byDomain[domain]![key] = false
         }),
       )
     }
 
     function enable(sessionID: string, directory: string) {
+      const domain = domainFromDirectory(directory)
       const key = acceptKey(sessionID, directory)
       const version = bumpEnableVersion(sessionID, directory)
       setStore(
         produce((draft) => {
-          draft.autoAccept[key] = true
-          delete draft.autoAccept[sessionID]
+          if (!draft.byDomain[domain]) {
+            draft.byDomain[domain] = {}
+          }
+          draft.byDomain[domain]![key] = true
+          delete draft.byDomain[domain]![sessionID]
         }),
       )
 
-      globalSDK.client.permission
+      globalSDK.forDomain(domain).client.permission
         .list({ directory })
         .then((x) => {
           if (enableVersion.get(key) !== version) return
@@ -225,13 +257,17 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function disable(sessionID: string, directory?: string) {
+      const domain = directory ? domainFromDirectory(directory) : currentDomain()
       bumpEnableVersion(sessionID, directory)
       const key = directory ? acceptKey(sessionID, directory) : sessionID
       setStore(
         produce((draft) => {
-          draft.autoAccept[key] = false
+          if (!draft.byDomain[domain]) {
+            draft.byDomain[domain] = {}
+          }
+          draft.byDomain[domain]![key] = false
           if (!directory) return
-          delete draft.autoAccept[sessionID]
+          delete draft.byDomain[domain]![sessionID]
         }),
       )
     }

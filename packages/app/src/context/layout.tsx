@@ -9,6 +9,7 @@ import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
+import { isExtraAgentDirectory, mainDomain } from "@/pages/layout/extra-agents"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 
@@ -505,10 +506,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return m.size > 0 ? m : undefined
       })
       return projects
-        .filter((project) => project.worktree !== "/openclaw")
+        .filter((project) => !isExtraAgentDirectory(project.worktree))
         .map((project) => {
-          const color =
-            project.icon?.color ?? colors[project.worktree] ?? cachedColors?.get(project.worktree)
+          const color = project.icon?.color ?? colors[project.worktree] ?? cachedColors?.get(project.worktree)
           if (!color) return project
           const icon = project.icon ? { ...project.icon, color } : { color }
           return { ...project, icon }
@@ -518,7 +518,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const current = server.current
       const projects = list()
-      if (!current || current.integration === "openclaw") return
+      if (!current || server.domain !== mainDomain) return
       // Keep the rail cache in sync with list() so that visible() can stabilise
       // project order across server switches and so the rail cache is available as
       // a colour fallback inside list() and the colour-assignment effect below.
@@ -538,7 +538,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     createEffect(() => {
-      if (server.current?.integration === "openclaw") return
+      if (server.domain !== mainDomain) return
       const projects = enriched()
       if (projects.length === 0) return
 
@@ -626,7 +626,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const current = server.current
           const next = list()
           const cached = rail.projects
-          if (!current || current.integration !== "openclaw") {
+          if (!current || server.domain === mainDomain) {
             // Reuse the cached order when returning from OpenClaw so icons do not
             // jitter while fresh project metadata streams back in from the server.
             const live = new Map(next.map((project) => [project.worktree, project] as const))

@@ -2,6 +2,7 @@ import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, createEffect, createMemo, onCleanup } from "solid-js"
+import { domainFromDirectory } from "@/pages/layout/extra-agents"
 import { useGlobalSDK } from "./global-sdk"
 
 type SDKEventMap = {
@@ -14,8 +15,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const globalSDK = useGlobalSDK()
 
     const directory = createMemo(props.directory)
+    const domain = createMemo(() => domainFromDirectory(directory()))
     const client = createMemo(() =>
-      globalSDK.createClient({
+      globalSDK.forDomain(domain()).createClient({
         directory: directory(),
         throwOnError: true,
       }),
@@ -24,7 +26,8 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const emitter = createGlobalEmitter<SDKEventMap>()
 
     createEffect(() => {
-      const unsub = globalSDK.event.on(directory(), (event) => {
+      const dir = directory()
+      const unsub = globalSDK.eventFor(domainFromDirectory(dir)).on(dir, (event) => {
         emitter.emit(event.type, event)
       })
       onCleanup(unsub)
@@ -39,10 +42,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       },
       event: emitter,
       get url() {
-        return globalSDK.url
+        return globalSDK.forDomain(domain()).url
       },
       createClient(opts: Parameters<typeof globalSDK.createClient>[0]) {
-        return globalSDK.createClient(opts)
+        return globalSDK.forDomain(domain()).createClient(opts)
       },
     }
   },

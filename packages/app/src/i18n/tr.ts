@@ -428,6 +428,8 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Dosya yüklenemedi",
   "toast.file.listFailed.title": "Dosyalar listelenemedi",
+  "toast.file.listFailed.openclaw": "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.generalagent": "GeneralAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
 
   "toast.context.noLineSelection.title": "Satır seçimi yok",
   "toast.context.noLineSelection.description": "Önce bir dosya sekmesinde satır aralığı seçin.",
@@ -444,6 +446,8 @@ export const dict = {
   "toast.session.unshare.failed.description": "Oturum paylaşımı kaldırılırken bir hata oluştu",
 
   "toast.session.listFailed.title": "{{project}} için oturumlar yüklenemedi",
+  "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
+  "toast.session.listFailed.generalagent.title": "Failed to load GeneralAgent sessions",
 
   "toast.update.title": "Güncelleme mevcut",
   "toast.update.description": "OpenCode'un yeni bir sürümü ({{version}}) yüklemeye hazır.",
@@ -549,6 +553,8 @@ export const dict = {
   "session.revertDock.restore": "Mesajı geri yükle",
 
   "session.new.title": "İstediğini yap",
+  "session.new.openclaw.title": "Your personal assistant",
+  "session.new.generalagent.title": "Your AI agent assistant",
   "session.new.worktree.main": "Ana dal",
   "session.new.worktree.mainWithBranch": "Ana dal ({{branch}})",
   "session.new.worktree.create": "Yeni çalışma ağacı oluştur",
@@ -612,6 +618,8 @@ export const dict = {
   "sidebar.menu.toggle": "Menüyü aç/kapat",
   "sidebar.nav.projectsAndSessions": "Projeler ve oturumlar",
   "sidebar.settings": "Ayarlar",
+  "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
   "sidebar.help": "Yardım",
   "sidebar.workspaces.enable": "Çalışma alanlarını etkinleştir",
   "sidebar.workspaces.disable": "Çalışma alanlarını devre dışı bırak",

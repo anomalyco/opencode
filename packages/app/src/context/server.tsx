@@ -1,11 +1,24 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { useCheckServerHealth } from "@/utils/server-health"
+import {
+  domainFromIntegration,
+  isExtraAgentIntegration,
+  mainDomain,
+  type DomainId,
+  type ExtraAgentId,
+} from "@/pages/layout/extra-agents"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
+type StoredState = {
+  list: StoredServer[]
+  projects: Record<string, StoredProject[]>
+  lastProject: Record<string, string>
+  currentSidecarUrl?: string
+}
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
 export function normalizeServerUrl(input: string) {
@@ -34,7 +47,7 @@ function isLocalHost(url: string) {
 }
 
 export namespace ServerConnection {
-  type Base = { displayName?: string; integration?: "openclaw" }
+  type Base = { displayName?: string; integration?: ExtraAgentId }
 
   export type HttpBase = {
     url: string
@@ -103,28 +116,38 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
-      }),
+        currentSidecarUrl: undefined as string | undefined,
+      } satisfies StoredState),
     )
 
     const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
+      const sidecar = (props.servers ?? []).find((item) => item.type === "sidecar" && item.variant === "base")
+      const legacy = store.currentSidecarUrl
       const servers = [
         ...(props.servers ?? []),
-        ...store.list.map((value) =>
-          typeof value === "string"
-            ? {
-                type: "http" as const,
-                http: { url: value },
-              }
-            : value,
-        ),
+        ...store.list.flatMap((value) => {
+          const conn =
+            typeof value === "string"
+              ? ({
+                  type: "http" as const,
+                  http: { url: value },
+                } satisfies ServerConnection.Http)
+              : "type" in value
+                ? value
+                : ({
+                    type: "http" as const,
+                    http: value,
+                  } satisfies ServerConnection.Http)
+          if (legacy && sidecar && conn.type === "http" && conn.http.url === legacy) return []
+          return [conn]
+        }),
       ]
 
       const deduped = new Map(
         servers.map((value) => {
-          const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
-          return [ServerConnection.key(conn), conn]
+          return [ServerConnection.key(value), value]
         }),
       )
 
@@ -133,14 +156,15 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const [state, setState] = createStore({
       active: props.defaultServer,
-      lastNonOpenclaw: props.defaultServer,
-      healthy: undefined as boolean | undefined,
+      lastNonExtraAgent: props.defaultServer,
+      healthyByDomain: {} as Partial<Record<DomainId, boolean | undefined>>,
     })
     const trace = (_event: string, _extra?: Record<string, unknown>) => {}
 
-    const healthy = () => state.healthy
+    const healthyFor = (input: DomainId) => state.healthyByDomain[input]
+    const healthy = () => healthyFor(domain())
 
-    function startHealthPolling(conn: ServerConnection.Any) {
+    function startHealthPolling(conn: ServerConnection.Any, targetDomain: DomainId) {
       let alive = true
       let busy = false
 
@@ -150,7 +174,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         void check(conn)
           .then((next) => {
             if (!alive) return
-            setState("healthy", next)
+            setState("healthyByDomain", targetDomain, next)
           })
           .finally(() => {
             busy = false
@@ -175,9 +199,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     function originFor(key: ServerConnection.Key) {
       const conn = allServers().find((item) => ServerConnection.key(item) === key)
-      // Keep OpenClaw's synthetic project state isolated from local sidecar projects,
-      // even though both connections run on localhost in desktop development.
-      if (conn?.integration === "openclaw") return "openclaw"
+      if (isExtraAgentIntegration(conn?.integration)) return conn.integration
       return projectsKey(key)
     }
 
@@ -215,23 +237,76 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
+    const domain = createMemo(() => domainFromIntegration(current()?.integration))
+
+    const polls = new Map<ServerConnection.Key, { url: string; domain: DomainId; stop: () => void }>()
+
+    createEffect(() => {
+      const legacy = store.currentSidecarUrl
+      if (!legacy) return
+      console.debug("[server] removing legacy sidecar url from persisted server list", { legacy })
+      setStore("list", (list) =>
+        list.filter((value) => {
+          const next = typeof value === "string" ? value : "type" in value ? value.http.url : value.url
+          return next !== legacy
+        }),
+      )
+      setStore("currentSidecarUrl", undefined)
+    })
+
+    createEffect(() => {
+      const servers = allServers()
+      const byKey = new Map<ServerConnection.Key, { conn: ServerConnection.Any; domain: DomainId }>()
+      for (const conn of servers) {
+        const key = ServerConnection.key(conn)
+        byKey.set(key, { conn, domain: domainFromIntegration(conn.integration) })
+      }
+
+      for (const [key, { conn, domain: d }] of byKey) {
+        const existing = polls.get(key)
+        if (existing?.url === conn.http.url && existing.domain === d) continue
+        existing?.stop()
+        setState("healthyByDomain", d, undefined)
+        const stop = startHealthPolling(conn, d)
+        polls.set(key, { url: conn.http.url, domain: d, stop })
+      }
+
+      for (const [key, poll] of Array.from(polls.entries())) {
+        if (byKey.has(key)) continue
+        poll.stop()
+        polls.delete(key)
+      }
+
+      const domainsAlive = new Set<DomainId>()
+      for (const [, { domain: d }] of byKey) domainsAlive.add(d)
+      const known = Object.keys(state.healthyByDomain) as DomainId[]
+      const stale = known.filter((d) => !domainsAlive.has(d))
+      if (stale.length > 0) {
+        setState(
+          "healthyByDomain",
+          produce((draft) => {
+            for (const d of stale) delete draft[d]
+          }),
+        )
+      }
+    })
+
     createEffect(() => {
       const current_ = current()
       if (!current_) return
-
-      if (current_.integration !== "openclaw") {
-        setState("lastNonOpenclaw", ServerConnection.key(current_))
+      if (!isExtraAgentIntegration(current_.integration)) {
+        setState("lastNonExtraAgent", ServerConnection.key(current_))
       }
+    })
 
-      setState("healthy", undefined)
-      onCleanup(startHealthPolling(current_))
+    onCleanup(() => {
+      for (const poll of polls.values()) poll.stop()
+      polls.clear()
     })
 
     const origin = createMemo(() => {
       const conn = current()
-      // OpenClaw reuses the normal project/session UI with a synthetic `/openclaw`
-      // worktree, so it needs its own persisted sidebar/project bucket.
-      if (conn?.integration === "openclaw") return "openclaw"
+      if (isExtraAgentIntegration(conn?.integration)) return conn.integration
       return projectsKey(state.active)
     })
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
@@ -248,6 +323,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     return {
       ready: isReady,
       healthy,
+      healthyFor,
       isLocal,
       get key() {
         return state.active
@@ -261,13 +337,33 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       get current() {
         return current()
       },
-      get lastNonOpenclaw() {
-        const key = state.lastNonOpenclaw
+      get domain() {
+        return domain()
+      },
+      domainFor(input?: ServerConnection.Key) {
+        const conn = input ? allServers().find((item) => ServerConnection.key(item) === input) : current()
+        return domainFromIntegration(conn?.integration)
+      },
+      currentFor(input: DomainId) {
+        if (input === domain()) return current()
+        if (input === mainDomain) return allServers().find((item) => !isExtraAgentIntegration(item.integration))
+        const id = input.slice("extra-agent/".length)
+        return allServers().find((item) => item.integration === id)
+      },
+      get lastNonExtraAgent() {
+        const key = state.lastNonExtraAgent
         const conn = allServers().find((item) => ServerConnection.key(item) === key)
-        if (conn?.integration !== "openclaw") return key
-        const fallback = allServers().find((item) => item.integration !== "openclaw")
+        if (!isExtraAgentIntegration(conn?.integration)) return key
+        const fallback = allServers().find((item) => !isExtraAgentIntegration(item.integration))
         if (!fallback) return
         return ServerConnection.key(fallback)
+      },
+      lastFor(input: DomainId) {
+        if (input === mainDomain) return this.lastNonExtraAgent
+        const id = input.slice("extra-agent/".length)
+        const conn = allServers().find((item) => item.integration === id)
+        if (!conn) return
+        return ServerConnection.key(conn)
       },
       setActive,
       add,

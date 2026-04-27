@@ -425,6 +425,8 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Neuspjelo učitavanje datoteke",
   "toast.file.listFailed.title": "Neuspješno listanje datoteka",
+  "toast.file.listFailed.openclaw": "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
+  "toast.file.listFailed.generalagent": "GeneralAgent does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
 
   "toast.context.noLineSelection.title": "Nema odabranih linija",
   "toast.context.noLineSelection.description": "Prvo odaberi raspon linija u kartici datoteke.",
@@ -441,6 +443,8 @@ export const dict = {
   "toast.session.unshare.failed.description": "Došlo je do greške prilikom ukidanja dijeljenja",
 
   "toast.session.listFailed.title": "Neuspjelo učitavanje sesija za {{project}}",
+  "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
+  "toast.session.listFailed.generalagent.title": "Failed to load GeneralAgent sessions",
 
   "toast.update.title": "Dostupno ažuriranje",
   "toast.update.description": "Nova verzija OpenCode-a ({{version}}) je dostupna za instalaciju.",
@@ -544,6 +548,8 @@ export const dict = {
   "session.revertDock.restore": "Vrati poruku",
 
   "session.new.title": "Napravi bilo šta",
+  "session.new.openclaw.title": "Your personal assistant",
+  "session.new.generalagent.title": "Your AI agent assistant",
   "session.new.worktree.main": "Glavna grana",
   "session.new.worktree.mainWithBranch": "Glavna grana ({{branch}})",
   "session.new.worktree.create": "Kreiraj novi worktree",
@@ -606,6 +612,8 @@ export const dict = {
   "sidebar.menu.toggle": "Prikaži/sakrij meni",
   "sidebar.nav.projectsAndSessions": "Projekti i sesije",
   "sidebar.settings": "Postavke",
+  "sidebar.openclaw": "OpenClaw",
+  "sidebar.generalagent": "GeneralAgent",
   "sidebar.help": "Pomoć",
   "sidebar.workspaces.enable": "Omogući radne prostore",
   "sidebar.workspaces.disable": "Onemogući radne prostore",

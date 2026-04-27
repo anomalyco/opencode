@@ -37,6 +37,7 @@ import { dict as enDict } from "@/i18n/en"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { extraAgentCapabilities } from "@/pages/layout/extra-agents"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
@@ -115,56 +116,6 @@ const EXAMPLES = [
 ] as const
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
-
-const OPENCLAW_SLASH = [
-  ["help", "Show help"],
-  ["commands", "List commands"],
-  ["tools", "Show available tools"],
-  ["skill", "Run a skill by name"],
-  ["status", "Show current status"],
-  ["allowlist", "Manage allowlist entries"],
-  ["approve", "Resolve exec approval prompts"],
-  ["context", "Explain current context"],
-  ["btw", "Ask a side question"],
-  ["export-session", "Export current session"],
-  ["whoami", "Show sender id"],
-  ["session", "Manage session settings"],
-  ["subagents", "Inspect or control subagents"],
-  ["acp", "Control ACP runtime sessions"],
-  ["agents", "List session agents"],
-  ["focus", "Bind thread to a target"],
-  ["unfocus", "Remove current thread binding"],
-  ["kill", "Abort subagents"],
-  ["steer", "Steer a running subagent"],
-  ["tell", "Alias for steer"],
-  ["config", "Read or write config"],
-  ["mcp", "Manage MCP config"],
-  ["plugins", "Inspect or toggle plugins"],
-  ["plugin", "Alias for plugins"],
-  ["debug", "Set runtime debug overrides"],
-  ["usage", "Control usage footer"],
-  ["tts", "Control text to speech"],
-  ["stop", "Stop current run"],
-  ["restart", "Restart gateway"],
-  ["dock-telegram", "Switch replies to Telegram"],
-  ["dock-discord", "Switch replies to Discord"],
-  ["dock-slack", "Switch replies to Slack"],
-  ["activation", "Set group activation mode"],
-  ["send", "Control sending behavior"],
-  ["reset", "Start a new session"],
-  ["new", "Start a new session"],
-  ["think", "Set thinking level"],
-  ["fast", "Toggle fast mode"],
-  ["verbose", "Set verbosity"],
-  ["reasoning", "Control reasoning output"],
-  ["elevated", "Control elevated mode"],
-  ["exec", "Show or set exec policy"],
-  ["model", "Select model"],
-  ["models", "Alias for model"],
-  ["queue", "Manage queue mode"],
-  ["bash", "Run a host command"],
-  ["compact", "Compact current context"],
-] as const satisfies ReadonlyArray<readonly [string, string]>
 
 const GitContext = () => {
   const sdk = useSDK()
@@ -411,7 +362,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const server = useServer()
   const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const { params, tabs, view } = useSessionLayout()
-  const openclaw = createMemo(() => server.current?.integration === "openclaw")
+  const extraAgentIntegration = createMemo(() => server.current?.integration)
+  const extraAgentCaps = createMemo(() => extraAgentCapabilities(extraAgentIntegration()))
+  const hasAgentChoose = createMemo(() => !!extraAgentCaps()?.agentChoose)
+  const hideAgentSelector = createMemo(() => !!extraAgentCaps()?.hideAgent)
+  const hideVariantSelector = createMemo(() => !!extraAgentCaps()?.hideVariant)
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
@@ -960,13 +915,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
-    if (openclaw()) {
-      return OPENCLAW_SLASH.map(([trigger, description]) => ({
-        id: `openclaw.${trigger}`,
+    const integration = extraAgentIntegration()
+    const caps = extraAgentCaps()
+    if (integration && caps?.slashCommands) {
+      return caps.slashCommands.map(([trigger, description]) => ({
+        id: `${integration}.${trigger}`,
         trigger,
         title: trigger,
         description,
-        type: "openclaw" as const,
+        type: "extra-agent" as const,
+        agentId: integration,
       }))
     }
 
@@ -998,7 +956,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     promptProbe.select(cmd.id)
     closePopover()
 
-    if (cmd.type === "custom" || cmd.type === "openclaw") {
+    if (cmd.type === "custom" || cmd.type === "extra-agent") {
       const text = `/${cmd.trigger} `
       setEditorText(text)
       resetInputUndo([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -1955,26 +1913,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </div>
               <div class="flex items-center gap-1.5 min-w-0 flex-1">
                 <Show
-                  when={openclaw()}
+                  when={hasAgentChoose()}
                   fallback={
                     <>
-                      <TooltipKeybind
-                        placement="top"
-                        gutter={4}
-                        title={language.t("command.agent.cycle")}
-                        keybind={command.keybind("agent.cycle")}
-                      >
-                        <Select
-                          size="normal"
-                          options={agentNames()}
-                          current={local.agent.current()?.name ?? ""}
-                          onSelect={local.agent.set}
-                          class="prompt-pick prompt-agent capitalize"
-                          valueClass="truncate"
-                          triggerStyle={control()}
-                          variant="ghost"
-                        />
-                      </TooltipKeybind>
+                      <Show when={!hideAgentSelector()}>
+                        <TooltipKeybind
+                          placement="top"
+                          gutter={4}
+                          title={language.t("command.agent.cycle")}
+                          keybind={command.keybind("agent.cycle")}
+                        >
+                          <Select
+                            size="normal"
+                            options={agentNames()}
+                            current={local.agent.current()?.name ?? ""}
+                            onSelect={local.agent.set}
+                            class="prompt-pick prompt-agent capitalize"
+                            valueClass="truncate"
+                            triggerStyle={control()}
+                            variant="ghost"
+                          />
+                        </TooltipKeybind>
+                      </Show>
                       <Show
                         when={providers.paid().length > 0}
                         fallback={
@@ -2034,24 +1994,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </ModelSelectorPopover>
                         </TooltipKeybind>
                       </Show>
-                      <TooltipKeybind
-                        placement="top"
-                        gutter={4}
-                        title={language.t("command.model.variant.cycle")}
-                        keybind={command.keybind("model.variant.cycle")}
-                      >
-                        <Select
-                          size="normal"
-                          options={variants()}
-                          current={local.model.variant.current() ?? "default"}
-                          label={variantLabel()}
-                          onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
-                          class="prompt-pick prompt-variant capitalize max-w-[160px]"
-                          valueClass="truncate"
-                          triggerStyle={control()}
-                          variant="ghost"
-                        />
-                      </TooltipKeybind>
+                      <Show when={!hideVariantSelector()}>
+                        <TooltipKeybind
+                          placement="top"
+                          gutter={4}
+                          title={language.t("command.model.variant.cycle")}
+                          keybind={command.keybind("model.variant.cycle")}
+                        >
+                          <Select
+                            size="normal"
+                            options={variants()}
+                            current={local.model.variant.current() ?? "default"}
+                            label={variantLabel()}
+                            onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
+                            class="prompt-pick prompt-variant capitalize max-w-[160px]"
+                            valueClass="truncate"
+                            triggerStyle={control()}
+                            variant="ghost"
+                          />
+                        </TooltipKeybind>
+                      </Show>
                     </>
                   }
                 >

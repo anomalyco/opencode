@@ -16,8 +16,10 @@ import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
 import { formatServerError } from "@/utils/server-errors"
 import { markCurrentNotifications, type Notification } from "./notification-state"
+import { useServer } from "./server"
+import { domainFromDirectory, mainDomain, type DomainId } from "@/pages/layout/extra-agents"
 
-type NotificationIndex = {
+type NotificationIndexPerDomain = {
   session: {
     all: Record<string, Notification[]>
     unseen: Record<string, Notification[]>
@@ -30,6 +32,10 @@ type NotificationIndex = {
     unseenCount: Record<string, number>
     unseenHasError: Record<string, boolean>
   }
+}
+
+type NotificationIndex = {
+  byDomain: Partial<Record<DomainId, NotificationIndexPerDomain>>
 }
 
 const MAX_NOTIFICATIONS = 500
@@ -102,7 +108,7 @@ async function logErrorSound(
   await Promise.resolve(storage.setItem(ERROR_SOUND_KEY, JSON.stringify(next))).catch(() => undefined)
 }
 
-function createNotificationIndex(): NotificationIndex {
+function createNotificationIndexPerDomain(): NotificationIndexPerDomain {
   return {
     session: {
       all: {},
@@ -119,32 +125,45 @@ function createNotificationIndex(): NotificationIndex {
   }
 }
 
-function buildNotificationIndex(list: Notification[]) {
+function createNotificationIndex(): NotificationIndex {
+  return {
+    byDomain: {},
+  }
+}
+
+function buildNotificationIndex(listByDomain: Partial<Record<DomainId, Notification[]>>) {
   const index = createNotificationIndex()
 
-  list.forEach((notification) => {
-    if (notification.session) {
-      const all = index.session.all[notification.session] ?? []
-      index.session.all[notification.session] = [...all, notification]
-      if (!notification.viewed) {
-        const unseen = index.session.unseen[notification.session] ?? []
-        index.session.unseen[notification.session] = [...unseen, notification]
-        index.session.unseenCount[notification.session] = unseen.length + 1
-        if (notification.type === "error") index.session.unseenHasError[notification.session] = true
-      }
-    }
+  for (const [domain, list] of Object.entries(listByDomain)) {
+    if (!list) continue
+    const domainIndex = createNotificationIndexPerDomain()
 
-    if (notification.directory) {
-      const all = index.project.all[notification.directory] ?? []
-      index.project.all[notification.directory] = [...all, notification]
-      if (!notification.viewed) {
-        const unseen = index.project.unseen[notification.directory] ?? []
-        index.project.unseen[notification.directory] = [...unseen, notification]
-        index.project.unseenCount[notification.directory] = unseen.length + 1
-        if (notification.type === "error") index.project.unseenHasError[notification.directory] = true
+    list.forEach((notification) => {
+      if (notification.session) {
+        const all = domainIndex.session.all[notification.session] ?? []
+        domainIndex.session.all[notification.session] = [...all, notification]
+        if (!notification.viewed) {
+          const unseen = domainIndex.session.unseen[notification.session] ?? []
+          domainIndex.session.unseen[notification.session] = [...unseen, notification]
+          domainIndex.session.unseenCount[notification.session] = unseen.length + 1
+          if (notification.type === "error") domainIndex.session.unseenHasError[notification.session] = true
+        }
       }
-    }
-  })
+
+      if (notification.directory) {
+        const all = domainIndex.project.all[notification.directory] ?? []
+        domainIndex.project.all[notification.directory] = [...all, notification]
+        if (!notification.viewed) {
+          const unseen = domainIndex.project.unseen[notification.directory] ?? []
+          domainIndex.project.unseen[notification.directory] = [...unseen, notification]
+          domainIndex.project.unseenCount[notification.directory] = unseen.length + 1
+          if (notification.type === "error") domainIndex.project.unseenHasError[notification.directory] = true
+        }
+      }
+    })
+
+    index.byDomain[domain as DomainId] = domainIndex
+  }
 
   return index
 }
@@ -158,6 +177,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const platform = usePlatform()
     const settings = useSettings()
     const language = useLanguage()
+    const server = useServer()
 
     const empty: Notification[] = []
 
@@ -166,21 +186,37 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     })
 
     const currentSession = createMemo(() => params.id)
+    const currentDomain = createMemo(() => server.domain)
 
     const [store, setStore, _, ready] = persisted(
-      Persist.global("notification", ["notification.v1"]),
+      {
+        ...Persist.global("notification", ["notification.v1", "notification.v2"]),
+        migrate(value) {
+          if (!value || typeof value !== "object" || Array.isArray(value)) {
+            return { byDomain: { [mainDomain]: [] as Notification[] } }
+          }
+          const data = value as Record<string, unknown>
+          if ("byDomain" in data) return value
+          const list = Array.isArray(data.list) ? (data.list as Notification[]) : []
+          return { byDomain: { [mainDomain]: list } }
+        },
+      },
       createStore({
-        list: [] as Notification[],
+        byDomain: { [mainDomain]: [] as Notification[] } as Partial<Record<DomainId, Notification[]>>,
       }),
     )
-    const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
+    const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.byDomain))
 
     const meta = { pruned: false, disposed: false }
 
-    const updateUnseen = (scope: "session" | "project", key: string, unseen: Notification[]) => {
-      setIndex(scope, "unseen", key, unseen)
-      setIndex(scope, "unseenCount", key, unseen.length)
+    const domainIndex = () => index.byDomain[currentDomain()] ?? createNotificationIndexPerDomain()
+
+    const updateUnseen = (domain: DomainId, scope: "session" | "project", key: string, unseen: Notification[]) => {
+      setIndex("byDomain", domain, scope, "unseen", key, unseen)
+      setIndex("byDomain", domain, scope, "unseenCount", key, unseen.length)
       setIndex(
+        "byDomain",
+        domain,
         scope,
         "unseenHasError",
         key,
@@ -188,40 +224,59 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       )
     }
 
-    const appendToIndex = (notification: Notification) => {
+    const appendToIndex = (notification: Notification, domain: DomainId) => {
+      if (!index.byDomain[domain]) {
+        setIndex("byDomain", domain, createNotificationIndexPerDomain())
+      }
+
       if (notification.session) {
-        setIndex("session", "all", notification.session, (all = []) => [...all, notification])
+        setIndex("byDomain", domain, "session", "all", notification.session, (all = []) => [...all, notification])
         if (!notification.viewed) {
-          setIndex("session", "unseen", notification.session, (unseen = []) => [...unseen, notification])
-          setIndex("session", "unseenCount", notification.session, (count = 0) => count + 1)
-          if (notification.type === "error") setIndex("session", "unseenHasError", notification.session, true)
+          setIndex("byDomain", domain, "session", "unseen", notification.session, (unseen = []) => [
+            ...unseen,
+            notification,
+          ])
+          setIndex("byDomain", domain, "session", "unseenCount", notification.session, (count = 0) => count + 1)
+          if (notification.type === "error")
+            setIndex("byDomain", domain, "session", "unseenHasError", notification.session, true)
         }
       }
 
       if (notification.directory) {
-        setIndex("project", "all", notification.directory, (all = []) => [...all, notification])
+        setIndex("byDomain", domain, "project", "all", notification.directory, (all = []) => [...all, notification])
         if (!notification.viewed) {
-          setIndex("project", "unseen", notification.directory, (unseen = []) => [...unseen, notification])
-          setIndex("project", "unseenCount", notification.directory, (count = 0) => count + 1)
-          if (notification.type === "error") setIndex("project", "unseenHasError", notification.directory, true)
+          setIndex("byDomain", domain, "project", "unseen", notification.directory, (unseen = []) => [
+            ...unseen,
+            notification,
+          ])
+          setIndex("byDomain", domain, "project", "unseenCount", notification.directory, (count = 0) => count + 1)
+          if (notification.type === "error")
+            setIndex("byDomain", domain, "project", "unseenHasError", notification.directory, true)
         }
       }
     }
 
-    const removeFromIndex = (notification: Notification) => {
+    const removeFromIndex = (notification: Notification, domain: DomainId) => {
+      const domainIdx = index.byDomain[domain]
+      if (!domainIdx) return
+
       if (notification.session) {
-        setIndex("session", "all", notification.session, (all = []) => all.filter((n) => n !== notification))
+        setIndex("byDomain", domain, "session", "all", notification.session, (all = []) =>
+          all.filter((n) => n !== notification),
+        )
         if (!notification.viewed) {
-          const unseen = (index.session.unseen[notification.session] ?? empty).filter((n) => n !== notification)
-          updateUnseen("session", notification.session, unseen)
+          const unseen = (domainIdx.session.unseen[notification.session] ?? empty).filter((n) => n !== notification)
+          updateUnseen(domain, "session", notification.session, unseen)
         }
       }
 
       if (notification.directory) {
-        setIndex("project", "all", notification.directory, (all = []) => all.filter((n) => n !== notification))
+        setIndex("byDomain", domain, "project", "all", notification.directory, (all = []) =>
+          all.filter((n) => n !== notification),
+        )
         if (!notification.viewed) {
-          const unseen = (index.project.unseen[notification.directory] ?? empty).filter((n) => n !== notification)
-          updateUnseen("project", notification.directory, unseen)
+          const unseen = (domainIdx.project.unseen[notification.directory] ?? empty).filter((n) => n !== notification)
+          updateUnseen(domain, "project", notification.directory, unseen)
         }
       }
     }
@@ -230,22 +285,27 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       if (!ready()) return
       if (meta.pruned) return
       meta.pruned = true
-      const list = pruneNotifications(store.list)
+      const prunedByDomain: Partial<Record<DomainId, Notification[]>> = {}
+      for (const [domain, list] of Object.entries(store.byDomain)) {
+        if (!list) continue
+        prunedByDomain[domain as DomainId] = pruneNotifications(list)
+      }
       batch(() => {
-        setStore("list", list)
-        setIndex(reconcile(buildNotificationIndex(list), { merge: false }))
+        setStore("byDomain", reconcile(prunedByDomain, { merge: false }))
+        setIndex(reconcile(buildNotificationIndex(prunedByDomain), { merge: false }))
       })
     })
 
-    const append = (notification: Notification) => {
-      const list = pruneNotifications([...store.list, notification])
+    const append = (notification: Notification, domain: DomainId) => {
+      const domainList = store.byDomain[domain] ?? []
+      const list = pruneNotifications([...domainList, notification])
       const keep = new Set(list)
-      const removed = store.list.filter((n) => !keep.has(n))
+      const removed = domainList.filter((n) => !keep.has(n))
 
       batch(() => {
-        if (keep.has(notification)) appendToIndex(notification)
-        removed.forEach((n) => removeFromIndex(n))
-        setStore("list", list)
+        if (keep.has(notification)) appendToIndex(notification, domain)
+        removed.forEach((n) => removeFromIndex(n, domain))
+        setStore("byDomain", domain, list)
       })
     }
 
@@ -254,7 +314,8 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       const [syncStore] = globalSync.child(directory, { bootstrap: false })
       const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
       if (match.found) return syncStore.session[match.index]
-      return globalSDK.client.session
+      const domain = domainFromDirectory(directory)
+      return globalSDK.forDomain(domain).client.session
         .get({ directory, sessionID })
         .then((x) => x.data)
         .catch(() => undefined)
@@ -270,7 +331,12 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       return sessionID === activeSession
     }
 
-    const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
+    const handleSessionIdle = (
+      directory: string,
+      event: { properties: { sessionID?: string } },
+      time: number,
+      domain: DomainId,
+    ) => {
       const sessionID = event.properties.sessionID
       void lookup(directory, sessionID).then((session) => {
         if (meta.disposed) return
@@ -281,13 +347,16 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           void playSoundById(settings.sounds.agent())
         }
 
-        append({
-          directory,
-          time,
-          viewed: viewedInCurrentSession(directory, sessionID),
-          type: "turn-complete",
-          session: sessionID,
-        })
+        append(
+          {
+            directory,
+            time,
+            viewed: viewedInCurrentSession(directory, sessionID),
+            type: "turn-complete",
+            session: sessionID,
+          },
+          domain,
+        )
 
         const href = `/${base64Encode(directory)}/session/${sessionID}`
         if (settings.notifications.agent()) {
@@ -300,6 +369,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       directory: string,
       event: { properties: { sessionID?: string; error?: EventSessionError["properties"]["error"] } },
       time: number,
+      domain: DomainId,
     ) => {
       const sessionID = event.properties.sessionID
       void lookup(directory, sessionID).then((session) => {
@@ -318,14 +388,17 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         }
 
         const error = "error" in event.properties ? event.properties.error : undefined
-        append({
-          directory,
-          time,
-          viewed: viewedInCurrentSession(directory, sessionID),
-          type: "error",
-          session: sessionID ?? "global",
-          error,
-        })
+        append(
+          {
+            directory,
+            time,
+            viewed: viewedInCurrentSession(directory, sessionID),
+            type: "error",
+            session: sessionID ?? "global",
+            error,
+          },
+          domain,
+        )
         const description =
           session?.title ??
           (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
@@ -342,36 +415,41 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       })
     }
 
-    const unsub = globalSDK.event.listen((e) => {
+    const unsub = globalSDK.listenAll((e) => {
       const event = e.details
       if (event.type !== "session.idle" && event.type !== "session.error") return
 
       const directory = e.name
+      const domain = e.domain
       const time = Date.now()
       if (event.type === "session.idle") {
-        handleSessionIdle(directory, event, time)
+        handleSessionIdle(directory, event, time, domain)
         return
       }
-      handleSessionError(directory, event, time)
+      handleSessionError(directory, event, time, domain)
     })
 
     const markCurrent = () => {
       const directory = currentDirectory()
       const session = currentSession()
+      const domain = currentDomain()
       if (!directory) return
       if (!session) return
-      const unseen = index.session.unseen[session] ?? empty
+      const domainIdx = index.byDomain[domain]
+      if (!domainIdx) return
+      const unseen = domainIdx.session.unseen[session] ?? empty
       if (unseen.length === 0) return
       if (!unseen.some((item) => item.directory === directory)) return
 
-      const nextList = markCurrentNotifications(store.list, session, directory)
-      if (nextList === store.list) return
+      const domainList = store.byDomain[domain] ?? []
+      const nextList = markCurrentNotifications(domainList, session, directory)
+      if (nextList === domainList) return
       batch(() => {
-        setStore("list", nextList)
+        setStore("byDomain", domain, nextList)
         const nextSession = unseen.filter((item) => item.directory !== directory)
-        updateUnseen("session", session, nextSession)
-        const nextProject = (index.project.unseen[directory] ?? empty).filter((item) => item.session !== session)
-        updateUnseen("project", directory, nextProject)
+        updateUnseen(domain, "session", session, nextSession)
+        const nextProject = (domainIdx.project.unseen[directory] ?? empty).filter((item) => item.session !== session)
+        updateUnseen(domain, "project", directory, nextProject)
       })
     }
 
@@ -400,64 +478,78 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       ready,
       session: {
         all(session: string) {
-          return index.session.all[session] ?? empty
+          return domainIndex().session.all[session] ?? empty
         },
         unseen(session: string) {
-          return index.session.unseen[session] ?? empty
+          return domainIndex().session.unseen[session] ?? empty
         },
         unseenCount(session: string) {
-          return index.session.unseenCount[session] ?? 0
+          return domainIndex().session.unseenCount[session] ?? 0
         },
         unseenHasError(session: string) {
-          return index.session.unseenHasError[session] ?? false
+          return domainIndex().session.unseenHasError[session] ?? false
         },
         markViewed(session: string) {
-          const unseen = index.session.unseen[session] ?? empty
+          const domain = currentDomain()
+          const domainIdx = index.byDomain[domain]
+          if (!domainIdx) return
+          const unseen = domainIdx.session.unseen[session] ?? empty
           if (!unseen.length) return
 
           const projects = [
             ...new Set(unseen.flatMap((notification) => (notification.directory ? [notification.directory] : []))),
           ]
           batch(() => {
-            setStore("list", (n) => n.session === session && !n.viewed, "viewed", true)
-            updateUnseen("session", session, [])
+            setStore("byDomain", domain, (n) => n.session === session && !n.viewed, "viewed", true)
+            updateUnseen(domain, "session", session, [])
             projects.forEach((directory) => {
-              const next = (index.project.unseen[directory] ?? empty).filter(
+              const next = (domainIdx.project.unseen[directory] ?? empty).filter(
                 (notification) => notification.session !== session,
               )
-              updateUnseen("project", directory, next)
+              updateUnseen(domain, "project", directory, next)
             })
           })
         },
       },
       project: {
         all(directory: string) {
-          return index.project.all[directory] ?? empty
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain] ?? createNotificationIndexPerDomain()
+          return domainIdx.project.all[directory] ?? empty
         },
         unseen(directory: string) {
-          return index.project.unseen[directory] ?? empty
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain] ?? createNotificationIndexPerDomain()
+          return domainIdx.project.unseen[directory] ?? empty
         },
         unseenCount(directory: string) {
-          return index.project.unseenCount[directory] ?? 0
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain] ?? createNotificationIndexPerDomain()
+          return domainIdx.project.unseenCount[directory] ?? 0
         },
         unseenHasError(directory: string) {
-          return index.project.unseenHasError[directory] ?? false
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain] ?? createNotificationIndexPerDomain()
+          return domainIdx.project.unseenHasError[directory] ?? false
         },
         markViewed(directory: string) {
-          const unseen = index.project.unseen[directory] ?? empty
+          const domain = domainFromDirectory(directory)
+          const domainIdx = index.byDomain[domain]
+          if (!domainIdx) return
+          const unseen = domainIdx.project.unseen[directory] ?? empty
           if (!unseen.length) return
 
           const sessions = [
             ...new Set(unseen.flatMap((notification) => (notification.session ? [notification.session] : []))),
           ]
           batch(() => {
-            setStore("list", (n) => n.directory === directory && !n.viewed, "viewed", true)
-            updateUnseen("project", directory, [])
+            setStore("byDomain", domain, (n) => n.directory === directory && !n.viewed, "viewed", true)
+            updateUnseen(domain, "project", directory, [])
             sessions.forEach((session) => {
-              const next = (index.session.unseen[session] ?? empty).filter(
+              const next = (domainIdx.session.unseen[session] ?? empty).filter(
                 (notification) => notification.directory !== directory,
               )
-              updateUnseen("session", session, next)
+              updateUnseen(domain, "session", session, next)
             })
           })
         },

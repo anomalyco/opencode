@@ -13,8 +13,8 @@ import {
   untrack,
   type Accessor,
 } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
-import { useLayout, LocalProject } from "@/context/layout"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -89,6 +89,16 @@ import {
   workspaceKey,
 } from "./layout/helpers"
 import {
+  extraAgentActive,
+  enabledExtraAgents,
+  extraAgentByDirectory,
+  extraAgentConfig,
+  extraAgentDir,
+  extraAgentProject,
+  isExtraAgentDirectory,
+  mainDomain,
+} from "./layout/extra-agents"
+import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
   deepLinkEvent,
@@ -137,6 +147,7 @@ export default function Layout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const trace = (_event: string, _extra?: Record<string, unknown>) => {}
+  const location = useLocation()
   const navigate = useNavigate()
   setNavigate(navigate)
   const providers = useProviders()
@@ -144,6 +155,11 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  createEffect(() => {
+    if (!import.meta.env.DEV) return
+    if (platform.platform !== "desktop") return
+    console.debug("[layout] debug bar disabled on desktop dev")
+  })
   type DictKey = keyof typeof enDict
   const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
   // Keep the route slug, resolved directory, and comparison key separate.
@@ -169,26 +185,11 @@ export default function Layout(props: ParentProps) {
     dark: "theme.scheme.dark",
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
-  const openclawDir = "/openclaw"
-  const openclawSlug = base64Encode(openclawDir)
-  const isOpenclawDir = (directory?: string) => directory === openclawDir
   const waitServer = (key: ServerConnection.Key) =>
     waitForMatch(
       () => server.key,
       (value) => value === key,
     )
-  const openclawProject = createMemo(
-    () =>
-      ({
-        id: "openclaw",
-        worktree: openclawDir,
-        name: "OpenClaw",
-        expanded: true,
-        vcs: undefined,
-        sandboxes: [],
-      }) satisfies LocalProject,
-  )
-
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
     busyWorkspaces: {} as Record<string, boolean>,
@@ -445,7 +446,7 @@ export default function Layout(props: ParentProps) {
         alertedAtBySession.delete(sessionKey)
       }
 
-      const unsub = globalSDK.event.listen((e) => {
+      const unsub = globalSDK.listenAll((e) => {
         if (e.details?.type === "worktree.ready") {
           setBusy(e.name, false)
           WorktreeState.ready(e.name)
@@ -571,7 +572,8 @@ export default function Layout(props: ParentProps) {
   const currentProject = createMemo(() => {
     const directory = routeDir()
     if (!directory) return
-    if (isOpenclawDir(directory)) return openclawProject()
+    const extra = extraAgentByDirectory(directory)
+    if (extra) return extraAgentProject(extra.id)
     const key = workspaceKey(directory)
 
     const projects = layout.projects.list()
@@ -1086,7 +1088,7 @@ export default function Layout(props: ParentProps) {
         keywords: kw("command.project.switch"),
         category: language.t("command.category.project"),
         keybind: "mod+t",
-        disabled: layout.projects.list().length === 0 && !server.list.some((item) => item.integration === "openclaw"),
+        disabled: layout.projects.list().length === 0 && enabledExtraAgents(server.list).length === 0,
         onSelect: () => {
           dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />, undefined, {
             modal: false,
@@ -1419,42 +1421,41 @@ export default function Layout(props: ParentProps) {
     navigate(next)
   }
 
-  function openOpenclaw() {
-    const conn = server.list.find((item) => item.integration === "openclaw")
+  function openExtraAgent(id: Parameters<typeof extraAgentDir>[0]) {
+    console.debug("[layout] open extra agent", {
+      id,
+      current: server.current?.integration ?? null,
+      directory: routeDir() || null,
+    })
+    const conn = server.list.find((item) => item.integration === id)
     if (!conn) {
-      openConfig("claws", "claw:openclaw")
+      const cfg = extraAgentConfig(id)
+      openConfig(cfg?.section, cfg?.pick)
       return
     }
-    // The rail button toggles between the synthetic OpenClaw workspace and the
-    // most recent non-OpenClaw project so users can get back without using the
-    // server switcher UI.
-    if (server.current?.integration === "openclaw") {
-      const local =
-        server.list.find((item) => item.type === "sidecar" && item.variant === "base") ??
-        server.list.find((item) => item.integration !== "openclaw")
-      if (!local) return
-      const key = ServerConnection.key(local)
-      trace("openOpenclaw.return-local", {
-        to: key,
+    if (
+      extraAgentActive(id, {
+        directory: routeDir(),
+        integration: server.current?.integration,
+        pathname: location.pathname,
       })
-      const last = server.projects.lastFor?.(key) ?? globalSync.data.project[0]?.worktree
-      trace("openOpenclaw.return-local.last", {
-        to: key,
-        last,
+    ) {
+      console.debug("[layout] extra agent already active", {
+        id,
+        directory: routeDir() || null,
+        pathname: location.pathname,
       })
-      if (!last) {
-        navigate("/")
-        return
-      }
-      server.projects.openFor?.(key, last)
-      void navigateToProject(last)
       return
     }
-    void navigateToProject(openclawDir)
+    console.debug("[layout] navigate to extra agent", {
+      id,
+      directory: extraAgentDir(id),
+    })
+    void navigateToProject(extraAgentDir(id))
   }
 
   function projectRoot(directory: string) {
-    if (isOpenclawDir(directory)) return openclawDir
+    if (isExtraAgentDirectory(directory)) return directory
     const key = workspaceKey(directory)
     const project = layout.projects
       .list()
@@ -1509,19 +1510,20 @@ export default function Layout(props: ParentProps) {
 
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
-    if (isOpenclawDir(directory)) {
-      const conn = server.list.find((item) => item.integration === "openclaw")
+    const extra = extraAgentByDirectory(directory)
+    if (extra) {
+      const conn = server.list.find((item) => item.integration === extra.id)
       if (conn) {
         const key = ServerConnection.key(conn)
         server.setActive(key)
         await waitServer(key)
       }
-      navigateWithSidebarReset(`/${openclawSlug}/session`)
+      navigateWithSidebarReset(`/${base64Encode(extra.directory)}/session`)
       return
     }
 
-    if (server.current?.integration === "openclaw") {
-      const key = server.lastNonOpenclaw
+    if (server.domain !== mainDomain) {
+      const key = server.lastNonExtraAgent
       if (key) {
         server.setActive(key)
         await waitServer(key)
@@ -2863,9 +2865,16 @@ export default function Layout(props: ParentProps) {
       openProjectKeybind={() => command.keybind("project.open")}
       onOpenProject={chooseProject}
       renderProjectOverlay={projectOverlay}
-      openclawLabel={() => language.t("sidebar.openclaw")}
-      openclawActive={() => isOpenclawDir(routeDir())}
-      onOpenOpenclaw={openOpenclaw}
+      extraAgents={() =>
+        enabledExtraAgents(server.list).map((agent) => ({
+          id: agent.id,
+          label: () => language.t(agent.labelKey),
+          active: () => routeDir() === agent.directory,
+          healthy: () => server.healthyFor(`extra-agent/${agent.id}`),
+          icon: agent.icon,
+          onOpen: () => openExtraAgent(agent.id),
+        }))
+      }
       configLabel={() => "Config"}
       onOpenConfig={openConfig}
       settingsLabel={() => language.t("sidebar.settings")}
@@ -3043,7 +3052,7 @@ export default function Layout(props: ParentProps) {
             </div>
           </div>
         </div>
-        {import.meta.env.DEV && <DebugBar />}
+        {import.meta.env.DEV && platform.platform !== "desktop" && <DebugBar />}
       </div>
       <QuickAssistant />
       <Toast.Region />
