@@ -26,37 +26,39 @@ export type Info = Schema.Schema.Type<typeof Info>
 
 export async function load(dir: string) {
   const result: Record<string, Info> = {}
-  for (const item of await Glob.scan("{command,commands}/**/*.md", {
-    cwd: dir,
-    absolute: true,
-    dot: true,
-    symlink: true,
-  })) {
-    const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse command ${item}`
-      const { Session } = await import("@/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-      log.error("failed to load command", { command: item, err })
-      return undefined
-    })
-    if (!md) continue
+  for (const subdir of ["command", "commands"]) {
+    for (const item of await Glob.scan(`${subdir}/**/*.md`, {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse command ${item}`
+        const { Session } = await import("@/session")
+        void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load command", { command: item, err })
+        return undefined
+      })
+      if (!md) continue
 
-    const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-    const name = configEntryNameFromPath(item, patterns)
+      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+      const name = configEntryNameFromPath(item, patterns)
 
-    const config = {
-      name,
-      ...md.data,
-      template: md.content.trim(),
+      const config = {
+        name,
+        ...md.data,
+        template: md.content.trim(),
+      }
+      const parsed = Info.zod.safeParse(config)
+      if (parsed.success) {
+        result[config.name] = parsed.data
+        continue
+      }
+      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
     }
-    const parsed = Info.zod.safeParse(config)
-    if (parsed.success) {
-      result[config.name] = parsed.data
-      continue
-    }
-    throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
   }
   return result
 }

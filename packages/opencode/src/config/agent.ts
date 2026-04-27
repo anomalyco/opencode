@@ -109,65 +109,69 @@ export type Info = Schema.Schema.Type<typeof Info>
 
 export async function load(dir: string) {
   const result: Record<string, Info> = {}
-  for (const item of await Glob.scan("{agent,agents}/**/*.md", {
-    cwd: dir,
-    absolute: true,
-    dot: true,
-    symlink: true,
-  })) {
-    const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse agent ${item}`
-      const { Session } = await import("@/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-      log.error("failed to load agent", { agent: item, err })
-      return undefined
-    })
-    if (!md) continue
+  for (const subdir of ["agent", "agents"]) {
+    for (const item of await Glob.scan(`${subdir}/**/*.md`, {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse agent ${item}`
+        const { Session } = await import("@/session")
+        void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load agent", { agent: item, err })
+        return undefined
+      })
+      if (!md) continue
 
-    const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-    const name = configEntryNameFromPath(item, patterns)
+      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+      const name = configEntryNameFromPath(item, patterns)
 
-    const config = {
-      name,
-      ...md.data,
-      prompt: md.content.trim(),
+      const config = {
+        name,
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      result[config.name] = ConfigParse.effectSchema(Info, config, item)
     }
-    result[config.name] = ConfigParse.effectSchema(Info, config, item)
   }
   return result
 }
 
 export async function loadMode(dir: string) {
   const result: Record<string, Info> = {}
-  for (const item of await Glob.scan("{mode,modes}/*.md", {
-    cwd: dir,
-    absolute: true,
-    dot: true,
-    symlink: true,
-  })) {
-    const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse mode ${item}`
-      const { Session } = await import("@/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-      log.error("failed to load mode", { mode: item, err })
-      return undefined
-    })
-    if (!md) continue
+  for (const subdir of ["mode", "modes"]) {
+    for (const item of await Glob.scan(`${subdir}/*.md`, {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+          ? err.data.message
+          : `Failed to parse mode ${item}`
+        const { Session } = await import("@/session")
+        void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        log.error("failed to load mode", { mode: item, err })
+        return undefined
+      })
+      if (!md) continue
 
-    const config = {
-      name: configEntryNameFromPath(item, []),
-      ...md.data,
-      prompt: md.content.trim(),
-    }
-    const parsed = Schema.decodeUnknownExit(Info)(config, { errors: "all", propertyOrder: "original" })
-    if (Exit.isSuccess(parsed)) {
-      result[config.name] = {
-        ...parsed.value,
-        mode: "primary" as const,
+      const config = {
+        name: configEntryNameFromPath(item, []),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Schema.decodeUnknownExit(Info)(config, { errors: "all", propertyOrder: "original" })
+      if (Exit.isSuccess(parsed)) {
+        result[config.name] = {
+          ...parsed.value,
+          mode: "primary" as const,
+        }
       }
     }
   }

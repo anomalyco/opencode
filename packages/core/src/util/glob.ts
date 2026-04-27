@@ -21,11 +21,13 @@ export namespace Glob {
   }
 
   export async function scan(pattern: string, options: Options = {}): Promise<string[]> {
-    return glob(pattern, toGlobOptions(options)) as Promise<string[]>
+    const results = (await glob(pattern, toGlobOptions(options))) as string[]
+    return results.sort()
   }
 
   export function scanSync(pattern: string, options: Options = {}): string[] {
-    return globSync(pattern, toGlobOptions(options)) as string[]
+    const results = globSync(pattern, toGlobOptions(options)) as string[]
+    return results.sort()
   }
 
   export function match(pattern: string, filepath: string): boolean {

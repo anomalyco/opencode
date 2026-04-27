@@ -14,7 +14,7 @@ describe("Glob", () => {
 
       const results = await Glob.scan("*.txt", { cwd: tmp.path })
 
-      expect(results.sort()).toEqual(["a.txt", "b.txt"])
+      expect(results).toEqual(["a.txt", "b.txt"])
     })
 
     test("returns absolute paths when absolute option is true", async () => {
@@ -53,7 +53,7 @@ describe("Glob", () => {
 
       const results = await Glob.scan("*", { cwd: tmp.path, include: "all" })
 
-      expect(results.sort()).toEqual(["file.txt", "subdir"])
+      expect(results).toEqual(["file.txt", "subdir"])
     })
 
     test("handles nested patterns", async () => {
@@ -93,7 +93,7 @@ describe("Glob", () => {
 
       const results = await Glob.scan("**/*.txt", { cwd: tmp.path, symlink: true })
 
-      expect(results.sort()).toEqual([path.join("linkdir", "file.txt"), path.join("realdir", "file.txt")])
+      expect(results).toEqual([path.join("linkdir", "file.txt"), path.join("realdir", "file.txt")])
     })
 
     test("includes dotfiles when dot option is true", async () => {
@@ -103,7 +103,7 @@ describe("Glob", () => {
 
       const results = await Glob.scan("*", { cwd: tmp.path, dot: true })
 
-      expect(results.sort()).toEqual([".hidden", "visible"])
+      expect(results).toEqual([".hidden", "visible"])
     })
 
     test("excludes dotfiles when dot option is false", async () => {
@@ -125,7 +125,7 @@ describe("Glob", () => {
 
       const results = Glob.scanSync("*.txt", { cwd: tmp.path })
 
-      expect(results.sort()).toEqual(["a.txt", "b.txt"])
+      expect(results).toEqual(["a.txt", "b.txt"])
     })
 
     test("respects options", async () => {
@@ -135,7 +135,7 @@ describe("Glob", () => {
 
       const results = Glob.scanSync("*", { cwd: tmp.path, include: "all" })
 
-      expect(results.sort()).toEqual(["file.txt", "subdir"])
+      expect(results).toEqual(["file.txt", "subdir"])
     })
   })
 
