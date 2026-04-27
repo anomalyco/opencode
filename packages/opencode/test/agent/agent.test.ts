@@ -391,7 +391,7 @@ test("multiple custom agents can be defined", async () => {
   })
 })
 
-test("Agent.list keeps the default agent first and sorts the rest by name", async () => {
+test("Agent.list keeps the default agent first and sorts the rest by name when no order is set", async () => {
   await using tmp = await tmpdir({
     config: {
       default_agent: "plan",
@@ -413,6 +413,80 @@ test("Agent.list keeps the default agent first and sorts the rest by name", asyn
       const names = (await load(tmp.path, (svc) => svc.list())).map((a) => a.name)
       expect(names[0]).toBe("plan")
       expect(names.slice(1)).toEqual(names.slice(1).toSorted((a, b) => a.localeCompare(b)))
+    },
+  })
+})
+
+test("Agent.list respects order field for sorting", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      default_agent: "build",
+      agent: {
+        build: {
+          description: "Build agent",
+          mode: "primary",
+          order: 2,
+        },
+        alpha: {
+          description: "Alpha",
+          mode: "primary",
+          order: 1,
+        },
+        zebra: {
+          description: "Zebra",
+          mode: "primary",
+          order: 3,
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const names = (await load(tmp.path, (svc) => svc.list())).map((a) => a.name)
+      // Default agent ("build") always first regardless of order
+      expect(names[0]).toBe("build")
+      // Remaining sorted by order ascending: alpha (1) → zebra (3)
+      expect(names[1]).toBe("alpha")
+      expect(names[2]).toBe("zebra")
+    },
+  })
+})
+
+test("Agent.list sorts agents without order after ordered agents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        zebra: {
+          description: "Zebra",
+          mode: "primary",
+        },
+        alpha: {
+          description: "Alpha",
+          mode: "primary",
+          order: 1,
+        },
+        beta: {
+          description: "Beta",
+          mode: "primary",
+          order: 2,
+        },
+        gamma: {
+          description: "Gamma",
+          mode: "primary",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const names = (await load(tmp.path, (svc) => svc.list())).map((a) => a.name)
+      // Sorted: by order (alpha:1, beta:2), then alphabetical (gamma, zebra)
+      expect(names[0]).toBe("alpha")
+      expect(names[1]).toBe("beta")
+      expect(names[2]).toBe("gamma")
+      expect(names[3]).toBe("zebra")
     },
   })
 })

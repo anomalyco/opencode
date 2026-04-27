@@ -33,6 +33,7 @@ export const Info = Schema.Struct({
   hidden: Schema.optional(Schema.Boolean),
   topP: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
+  order: Schema.optional(Schema.Number),
   color: Schema.optional(Schema.String),
   permission: Permission.Ruleset,
   model: Schema.optional(
@@ -256,6 +257,7 @@ export const layer = Layer.effect(
           item.color = value.color ?? item.color
           item.hidden = value.hidden ?? item.hidden
           item.name = value.name ?? item.name
+          item.order = value.order ?? item.order
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
@@ -288,6 +290,7 @@ export const layer = Layer.effect(
             values(),
             sortBy(
               [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => x.order ?? Infinity, "asc"],
               [(x) => x.name, "asc"],
             ),
           )
