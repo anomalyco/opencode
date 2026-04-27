@@ -27,6 +27,7 @@ import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "@/util/locale"
 import { AppRuntime } from "@/effect/app-runtime"
+import { matchAgentName } from "./agent-match"
 
 type ToolProps<T> = {
   input: Tool.InferParameters<T>
@@ -582,8 +583,9 @@ export const RunCommand = cmd({
             return undefined
           }
 
-          const agent = modes.find((a) => a.name === name)
-          if (!agent) {
+          const matched = matchAgentName(name, modes)
+          const agent = matched ? modes.find((a) => a.name === matched) : undefined
+          if (!agent || !matched) {
             UI.println(
               UI.Style.TEXT_WARNING_BOLD + "!",
               UI.Style.TEXT_NORMAL,
@@ -601,11 +603,13 @@ export const RunCommand = cmd({
             return undefined
           }
 
-          return name
+          return matched
         }
 
-        const entry = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(name)))
-        if (!entry) {
+        const list = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))
+        const matched = matchAgentName(name, list)
+        const entry = matched ? list.find((item) => item.name === matched) : undefined
+        if (!entry || !matched) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
             UI.Style.TEXT_NORMAL,
@@ -621,7 +625,7 @@ export const RunCommand = cmd({
           )
           return undefined
         }
-        return name
+        return matched
       })()
 
       const sessionID = await session(sdk)
