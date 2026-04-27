@@ -1295,6 +1295,7 @@ export default function Layout(props: ParentProps) {
       return canOpen(target)
     }
     const openSession = async (target: { directory: string; id: string }) => {
+      await refreshDirs(target.directory)
       if (!canOpen(target.directory)) return false
       const [data] = globalSync.child(target.directory, { bootstrap: false })
       if (data.session.some((item) => item.id === target.id)) {
@@ -1307,6 +1308,7 @@ export default function Layout(props: ParentProps) {
         .then((x) => x.data)
         .catch(() => undefined)
       if (!resolved?.directory) return false
+      await refreshDirs(resolved.directory)
       if (!canOpen(resolved.directory)) return false
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
