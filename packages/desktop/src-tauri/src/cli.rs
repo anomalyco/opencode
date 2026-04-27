@@ -739,6 +739,85 @@ pub fn serve_genericagent(
     (child, exit_rx)
 }
 
+pub fn serve_hermes(
+    app: &AppHandle,
+    hostname: &str,
+    port: u32,
+    password: &str,
+    python_executable: Option<&str>,
+    hermes_dir: &str,
+    hermes_home: Option<&str>,
+) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
+    let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
+
+    tracing::info!(port, hermes_dir, hermes_home, "Spawning Hermes adapter");
+
+    let mut envs = vec![
+        ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
+        ("OPENCODE_SERVER_PASSWORD", password.to_string()),
+        ("OPENCODE_HERMES_DIR", hermes_dir.to_string()),
+    ];
+
+    if let Some(python) = python_executable {
+        envs.push(("OPENCODE_HERMES_PYTHON", python.to_string()));
+    }
+    if let Some(home) = hermes_home {
+        envs.push(("OPENCODE_HERMES_HOME", home.to_string()));
+    }
+
+    let level = std::env::var("OPENCODE_HERMES_LOG_LEVEL")
+        .ok()
+        .filter(|x| !x.trim().is_empty())
+        .unwrap_or_else(|| "WARN".to_string());
+
+    let cmd = format!(
+        "--log-level {level} extra-agent-serve --id hermes --hostname {hostname} --port {port}"
+    );
+
+    let (events, child) =
+        spawn_command(app, &cmd, &envs).expect("Failed to spawn hermes adapter");
+
+    let mut exit_tx = Some(exit_tx);
+    tokio::spawn(
+        events
+            .for_each(move |event| {
+                match event {
+                    CommandEvent::Stdout(text) => {
+                        let trimmed = text.trim_end();
+                        if !trimmed.is_empty() {
+                            tracing::info!(stream = "stdout", "{}", trimmed);
+                        }
+                    }
+                    CommandEvent::Stderr(text) => {
+                        let trimmed = text.trim_end();
+                        if !trimmed.is_empty() {
+                            tracing::warn!(stream = "stderr", "{}", trimmed);
+                        }
+                    }
+                    CommandEvent::Error(err) => {
+                        tracing::error!("{err}");
+                    }
+                    CommandEvent::Terminated(payload) => {
+                        tracing::info!(
+                            code = ?payload.code,
+                            signal = ?payload.signal,
+                            "Hermes adapter terminated"
+                        );
+
+                        if let Some(tx) = exit_tx.take() {
+                            let _ = tx.send(payload);
+                        }
+                    }
+                }
+
+                future::ready(())
+            })
+            .instrument(tracing::info_span!("hermes-adapter")),
+    );
+
+    (child, exit_rx)
+}
+
 pub mod sqlite_migration {
     use super::*;
 

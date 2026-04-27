@@ -95,6 +95,13 @@ struct GenericagentTestResult {
 }
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct HermesTestResult {
+    ok: bool,
+    logs: Vec<String>,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
 #[serde(tag = "phase", rename_all = "snake_case")]
 enum InitStep {
     ServerWaiting,
@@ -160,6 +167,13 @@ struct GenericagentState {
     child: Arc<Mutex<Option<CommandChild>>>,
     data: Arc<Mutex<Option<ServerReadyData>>>,
     config: Arc<Mutex<Option<server::GenericagentConfig>>>,
+    test: Arc<Mutex<Option<CommandChild>>>,
+}
+
+struct HermesState {
+    child: Arc<Mutex<Option<CommandChild>>>,
+    data: Arc<Mutex<Option<ServerReadyData>>>,
+    config: Arc<Mutex<Option<server::HermesConfig>>>,
     test: Arc<Mutex<Option<CommandChild>>>,
 }
 
@@ -644,10 +658,50 @@ fn kill_genericagent_test(app: &AppHandle) -> bool {
     false
 }
 
+fn kill_hermes(app: &AppHandle) {
+    let Some(state) = app.try_state::<HermesState>() else {
+        tracing::info!("Hermes adapter not running");
+        return;
+    };
+
+    if let Ok(mut child) = state.child.lock()
+        && let Some(child) = child.take()
+    {
+        let _ = child.kill();
+        tracing::info!("Killed Hermes adapter");
+    }
+
+    if let Ok(mut data) = state.data.lock() {
+        *data = None;
+    }
+
+    if let Ok(mut cfg) = state.config.lock() {
+        *cfg = None;
+    }
+}
+
+fn kill_hermes_test(app: &AppHandle) -> bool {
+    let Some(state) = app.try_state::<HermesState>() else {
+        tracing::info!("Hermes test adapter not running");
+        return false;
+    };
+
+    if let Ok(mut child) = state.test.lock()
+        && let Some(child) = child.take()
+    {
+        let _ = child.kill();
+        tracing::info!("Killed Hermes test adapter");
+        return true;
+    }
+
+    false
+}
+
 #[tauri::command]
 #[specta::specta]
 fn kill_sidecar(app: AppHandle) {
     kill_openclaw(&app);
+    kill_hermes(&app);
     kill_genericagent(&app);
 
     let Some(server_state) = app.try_state::<ServerState>() else {
@@ -1220,6 +1274,281 @@ async fn test_genericagent_server(
 #[specta::specta]
 fn abort_genericagent_test(app: AppHandle) -> bool {
     kill_genericagent_test(&app)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn sync_hermes_server(app: AppHandle) -> Result<Option<ServerReadyData>, String> {
+    let cfg = server::get_hermes_config(app.clone())?;
+    let Some(state) = app.try_state::<HermesState>() else {
+        return Ok(None);
+    };
+
+    let dir_present = cfg
+        .hermes_dir
+        .as_deref()
+        .is_some_and(|x| !x.trim().is_empty());
+
+    if !cfg.enabled || !dir_present {
+        tracing::info!(
+            enabled = cfg.enabled,
+            has_dir = dir_present,
+            "stopping Hermes adapter"
+        );
+        kill_hermes(&app);
+        return Ok(None);
+    }
+
+    let current_cfg = state
+        .config
+        .lock()
+        .map_err(|_| "Failed to acquire hermes config state".to_string())?
+        .clone();
+    let current = state
+        .data
+        .lock()
+        .map_err(|_| "Failed to acquire hermes state".to_string())?
+        .clone();
+    let running = state
+        .child
+        .lock()
+        .map_err(|_| "Failed to acquire hermes child state".to_string())?
+        .is_some();
+
+    if current_cfg.as_ref() == Some(&cfg) && running {
+        tracing::info!(
+            url = ?current.as_ref().map(|x| x.url.clone()),
+            "reusing Hermes adapter"
+        );
+        return Ok(current);
+    }
+
+    tracing::info!(cfg = ?cfg, "syncing Hermes adapter");
+    kill_hermes(&app);
+
+    let hermes_dir = cfg
+        .hermes_dir
+        .clone()
+        .filter(|x| !x.trim().is_empty())
+        .ok_or_else(|| "Hermes directory is required".to_string())?;
+    let python = cfg
+        .python_executable
+        .clone()
+        .filter(|x| !x.trim().is_empty());
+    let home = cfg.hermes_home.clone().filter(|x| !x.trim().is_empty());
+    let port = get_hermes_port();
+    let hostname = "127.0.0.1".to_string();
+    let password = uuid::Uuid::new_v4().to_string();
+    let http = format!("http://{hostname}:{port}");
+
+    let (child, health_check) = crate::cli::serve_hermes(
+        &app,
+        &hostname,
+        port,
+        &password,
+        python.as_deref(),
+        &hermes_dir,
+        home.as_deref(),
+    );
+
+    let data = ServerReadyData {
+        url: http,
+        username: Some("opencode".to_string()),
+        password: Some(password),
+    };
+
+    {
+        let mut handle = state
+            .child
+            .lock()
+            .map_err(|_| "Failed to acquire hermes child state".to_string())?;
+        *handle = Some(child);
+    }
+
+    {
+        let mut current = state
+            .data
+            .lock()
+            .map_err(|_| "Failed to acquire hermes state".to_string())?;
+        *current = Some(data.clone());
+    }
+
+    {
+        let mut current = state
+            .config
+            .lock()
+            .map_err(|_| "Failed to acquire hermes config state".to_string())?;
+        *current = Some(cfg);
+    }
+
+    let handle = app.clone();
+    let url = data.url.clone();
+    tauri::async_runtime::spawn(async move {
+        match health_check.await {
+            Ok(payload) => {
+                tracing::warn!(payload = ?payload, url, "Hermes adapter exited");
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, url, "Hermes adapter exit watch failed");
+            }
+        }
+
+        let Some(state) = handle.try_state::<HermesState>() else {
+            return;
+        };
+        let same = state
+            .data
+            .lock()
+            .ok()
+            .and_then(|current| current.clone())
+            .is_some_and(|current| current.url == url);
+        if !same {
+            return;
+        }
+
+        if let Ok(mut child) = state.child.lock() {
+            *child = None;
+        }
+        if let Ok(mut data) = state.data.lock() {
+            *data = None;
+        }
+        if let Ok(mut cfg) = state.config.lock() {
+            *cfg = None;
+        }
+    });
+
+    Ok(Some(data))
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn get_hermes_server(app: AppHandle) -> Result<Option<ServerReadyData>, String> {
+    sync_hermes_server(app).await
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn test_hermes_server(
+    app: AppHandle,
+    config: server::HermesConfig,
+) -> Result<HermesTestResult, String> {
+    let _ = kill_hermes_test(&app);
+    let mut logs = vec!["Starting Hermes connection test".to_string()];
+    if !config.enabled {
+        return Ok(HermesTestResult {
+            ok: false,
+            logs: vec![
+                "Starting Hermes connection test".to_string(),
+                "Config check failed: Hermes is disabled".to_string(),
+            ],
+        });
+    }
+
+    let Some(dir) = config
+        .hermes_dir
+        .clone()
+        .filter(|x| !x.trim().is_empty())
+    else {
+        return Ok(HermesTestResult {
+            ok: false,
+            logs: vec![
+                "Starting Hermes connection test".to_string(),
+                "Config check failed: Hermes directory is required".to_string(),
+            ],
+        });
+    };
+    logs.push(format!("Hermes directory: {dir}"));
+    let python = config
+        .python_executable
+        .clone()
+        .filter(|x| !x.trim().is_empty());
+    logs.push(format!(
+        "Python executable: {}",
+        python.clone().unwrap_or_else(|| "repo venv or python3".to_string())
+    ));
+    let home = config
+        .hermes_home
+        .clone()
+        .filter(|x| !x.trim().is_empty());
+    logs.push(format!(
+        "Hermes home: {}",
+        home.clone().unwrap_or_else(|| "~/.hermes (default)".to_string())
+    ));
+    let port = get_hermes_port();
+    let hostname = "127.0.0.1".to_string();
+    let password = uuid::Uuid::new_v4().to_string();
+    let http = format!("http://{hostname}:{port}");
+    logs.push(format!("Allocating temporary adapter on {http}"));
+    let (child, health_check) = crate::cli::serve_hermes(
+        &app,
+        &hostname,
+        port,
+        &password,
+        python.as_deref(),
+        &dir,
+        home.as_deref(),
+    );
+    logs.push("Temporary adapter spawned".to_string());
+
+    if let Some(state) = app.try_state::<HermesState>()
+        && let Ok(mut test) = state.test.lock()
+    {
+        *test = Some(child.clone());
+    }
+
+    let ready = async {
+        let started = Instant::now();
+        loop {
+            sleep(Duration::from_millis(100)).await;
+            if server::check_health(&http, Some(&password)).await {
+                tracing::info!(elapsed = ?started.elapsed(), url = %http, "Hermes test adapter ready");
+                return Ok(started.elapsed());
+            }
+        }
+    };
+
+    let terminated = async {
+        match health_check.await {
+            Ok(payload) => Err(format!(
+                "Hermes adapter terminated before becoming healthy (code={:?} signal={:?})",
+                payload.code, payload.signal
+            )),
+            Err(err) => Err(format!("Hermes adapter exit watch failed: {err}")),
+        }
+    };
+
+    let result = timeout(Duration::from_secs(20), async {
+        tokio::select! {
+            res = ready => res,
+            res = terminated => res,
+        }
+    })
+    .await;
+
+    let _ = child.kill();
+    let _ = kill_hermes_test(&app);
+    logs.push("Temporary adapter stopped".to_string());
+
+    match result {
+        Ok(Ok(elapsed)) => {
+            logs.push(format!("Health check passed in {} ms", elapsed.as_millis()));
+            Ok(HermesTestResult { ok: true, logs })
+        }
+        Ok(Err(err)) => {
+            logs.push(format!("Health check failed: {err}"));
+            Ok(HermesTestResult { ok: false, logs })
+        }
+        Err(_) => {
+            logs.push("Health check timed out after 20000 ms".to_string());
+            Ok(HermesTestResult { ok: false, logs })
+        }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+fn abort_hermes_test(app: AppHandle) -> bool {
+    kill_hermes_test(&app)
 }
 
 #[tauri::command]
@@ -1816,6 +2145,12 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_openclaw_server,
             test_openclaw_server,
             abort_openclaw_test,
+            sync_hermes_server,
+            server::get_hermes_config,
+            server::set_hermes_config,
+            get_hermes_server,
+            test_hermes_server,
+            abort_hermes_test,
             sync_genericagent_server,
             server::get_genericagent_config,
             server::set_genericagent_config,
@@ -2074,6 +2409,12 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
         config: Arc::new(Mutex::new(None)),
         test: Arc::new(Mutex::new(None)),
     });
+    app.manage(HermesState {
+        child: Arc::new(Mutex::new(None)),
+        data: Arc::new(Mutex::new(None)),
+        config: Arc::new(Mutex::new(None)),
+        test: Arc::new(Mutex::new(None)),
+    });
     app.manage(GenericagentState {
         child: Arc::new(Mutex::new(None)),
         data: Arc::new(Mutex::new(None)),
@@ -2123,6 +2464,20 @@ fn get_openclaw_port() -> u32 {
                 .expect("Failed to bind to find free OpenClaw port")
                 .local_addr()
                 .expect("Failed to get local OpenClaw address")
+                .port()
+        }) as u32
+}
+
+fn get_hermes_port() -> u32 {
+    option_env!("OPENCODE_HERMES_PORT")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("OPENCODE_HERMES_PORT").ok())
+        .and_then(|port_str| port_str.parse().ok())
+        .unwrap_or_else(|| {
+            TcpListener::bind("127.0.0.1:0")
+                .expect("Failed to bind to find free Hermes port")
+                .local_addr()
+                .expect("Failed to get local Hermes address")
                 .port()
         }) as u32
 }

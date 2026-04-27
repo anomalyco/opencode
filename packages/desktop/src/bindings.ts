@@ -35,6 +35,20 @@ export const commands = {
 } | null>("get_openclaw_server"),
 	testOpenclawServer: (config: OpenclawConfig) => __TAURI_INVOKE<OpenclawTestResult>("test_openclaw_server", { config }),
 	abortOpenclawTest: () => __TAURI_INVOKE<boolean>("abort_openclaw_test"),
+	syncHermesServer: () => __TAURI_INVOKE<{
+	url: string,
+	username: string | null,
+	password: string | null,
+} | null>("sync_hermes_server"),
+	getHermesConfig: () => __TAURI_INVOKE<HermesConfig>("get_hermes_config"),
+	setHermesConfig: (config: HermesConfig) => __TAURI_INVOKE<null>("set_hermes_config", { config }),
+	getHermesServer: () => __TAURI_INVOKE<{
+	url: string,
+	username: string | null,
+	password: string | null,
+} | null>("get_hermes_server"),
+	testHermesServer: (config: HermesConfig) => __TAURI_INVOKE<HermesTestResult>("test_hermes_server", { config }),
+	abortHermesTest: () => __TAURI_INVOKE<boolean>("abort_hermes_test"),
 	syncGenericagentServer: () => __TAURI_INVOKE<{
 	url: string,
 	username: string | null,
@@ -113,6 +127,18 @@ export type GenericagentConfig = {
 	};
 
 export type GenericagentTestResult = {
+		ok: boolean,
+		logs: string[],
+	};
+
+export type HermesConfig = {
+		enabled: boolean,
+		pythonExecutable: string | null,
+		hermesDir: string | null,
+		hermesHome: string | null,
+	};
+
+export type HermesTestResult = {
 		ok: boolean,
 		logs: string[],
 	};

@@ -9,7 +9,8 @@ use crate::{
     cli::CommandChild,
     constants::{
         DEFAULT_SERVER_URL_KEY, GENERICAGENT_DIR_KEY, GENERICAGENT_ENABLED_KEY,
-        GENERICAGENT_PYTHON_KEY, OPENCLAW_ENABLED_KEY, OPENCLAW_TOKEN_KEY, OPENCLAW_URL_KEY,
+        GENERICAGENT_PYTHON_KEY, HERMES_DIR_KEY, HERMES_ENABLED_KEY, HERMES_HOME_KEY,
+        HERMES_PYTHON_KEY, OPENCLAW_ENABLED_KEY, OPENCLAW_TOKEN_KEY, OPENCLAW_URL_KEY,
         SETTINGS_STORE, WSL_ENABLED_KEY,
     },
 };
@@ -36,6 +37,17 @@ pub struct GenericagentConfig {
     pub enabled: bool,
     pub python_executable: Option<String>,
     pub generic_agent_dir: Option<String>,
+}
+
+#[derive(
+    Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default, PartialEq, Eq,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct HermesConfig {
+    pub enabled: bool,
+    pub python_executable: Option<String>,
+    pub hermes_dir: Option<String>,
+    pub hermes_home: Option<String>,
 }
 
 #[tauri::command]
@@ -215,6 +227,73 @@ pub fn set_genericagent_config(
         }
         None => {
             store.delete(GENERICAGENT_DIR_KEY);
+        }
+    }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_hermes_config(app: AppHandle) -> Result<HermesConfig, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    Ok(HermesConfig {
+        enabled: store
+            .get(HERMES_ENABLED_KEY)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        python_executable: store
+            .get(HERMES_PYTHON_KEY)
+            .and_then(|v| v.as_str().map(String::from)),
+        hermes_dir: store
+            .get(HERMES_DIR_KEY)
+            .and_then(|v| v.as_str().map(String::from)),
+        hermes_home: store
+            .get(HERMES_HOME_KEY)
+            .and_then(|v| v.as_str().map(String::from)),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_hermes_config(app: AppHandle, config: HermesConfig) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    store.set(HERMES_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
+
+    match config.python_executable {
+        Some(v) => {
+            store.set(HERMES_PYTHON_KEY, serde_json::Value::String(v));
+        }
+        None => {
+            store.delete(HERMES_PYTHON_KEY);
+        }
+    }
+
+    match config.hermes_dir {
+        Some(v) => {
+            store.set(HERMES_DIR_KEY, serde_json::Value::String(v));
+        }
+        None => {
+            store.delete(HERMES_DIR_KEY);
+        }
+    }
+
+    match config.hermes_home {
+        Some(v) => {
+            store.set(HERMES_HOME_KEY, serde_json::Value::String(v));
+        }
+        None => {
+            store.delete(HERMES_HOME_KEY);
         }
     }
 

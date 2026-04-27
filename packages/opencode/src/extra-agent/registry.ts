@@ -1,5 +1,6 @@
 import { OpenClawBridge } from "@/openclaw/bridge"
 import { GenericAgentBridge } from "@/genericagent/bridge"
+import { HermesBridge } from "@/hermes/bridge"
 import type { ExtraAgentBridge } from "./types"
 
 const openclawBridge: ExtraAgentBridge = {
@@ -35,9 +36,31 @@ const genericagentBridge: ExtraAgentBridge = {
   },
 }
 
+const hermesBridge: ExtraAgentBridge = {
+  id: "hermes",
+  listen(opts) {
+    const config = opts.config ?? {}
+    return HermesBridge.listen({
+      hostname: opts.hostname,
+      port: opts.port,
+      cors: opts.cors,
+      pythonExecutable:
+        readString(config, "pythonExecutable") ??
+        readEnv("OPENCODE_HERMES_PYTHON"),
+      hermesDir:
+        readString(config, "hermesDir") ??
+        readEnv("OPENCODE_HERMES_DIR"),
+      hermesHome:
+        readString(config, "hermesHome") ??
+        readEnv("OPENCODE_HERMES_HOME"),
+    })
+  },
+}
+
 const registry: Record<string, ExtraAgentBridge> = {
   [openclawBridge.id]: openclawBridge,
   [genericagentBridge.id]: genericagentBridge,
+  [hermesBridge.id]: hermesBridge,
 }
 
 export function registerBridge(bridge: ExtraAgentBridge) {
