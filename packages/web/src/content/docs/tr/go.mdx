@@ -98,17 +98,18 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 | MiniMax M2.5       | 6,300              | 15,900         | 31,800      |
 | Qwen3.6 Plus       | 3,300              | 8,200          | 16,300      |
 | Qwen3.5 Plus       | 10,200             | 25,200         | 50,500      |
-| DeepSeek V4 Pro    | 1,300              | 3,250          | 6,500       |
-| DeepSeek V4 Flash  | 7,450              | 18,600         | 37,300      |
+| DeepSeek V4 Pro    | 3,450              | 8,550          | 17,150      |
+| DeepSeek V4 Flash  | 5,750              | 14,350         | 28,650      |
 
 Tahminler, gözlemlenen ortalama istek modellerine dayanmaktadır:
 
 - GLM-5/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
 - Kimi K2.5/K2.6 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
-- DeepSeek V4 Pro/Flash — 700 input, 52,000 cached, 150 output tokens per request
+- DeepSeek V4 Pro — İstek başına 750 girdi, 82.000 önbelleğe alınmış, 290 çıktı token'ı
+- DeepSeek V4 Flash — İstek başına 790 girdi, 68.000 önbelleğe alınmış, 280 çıktı token'ı
 - MiniMax M2.7/M2.5 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
-- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
-- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- Qwen3.5 Plus — İstek başına 410 girdi, 47.000 önbelleğe alınmış, 140 çıktı token'ı
+- Qwen3.6 Plus — İstek başına 500 girdi, 57.000 önbelleğe alınmış, 190 çıktı token'ı
 - MiMo-V2-Pro — İstek başına 350 girdi, 41.000 önbelleğe alınmış, 250 çıktı token'ı
 - MiMo-V2-Omni — İstek başına 1000 girdi, 60.000 önbelleğe alınmış, 140 çıktı token'ı
 - MiMo-V2.5-Pro — İstek başına 350 girdi, 41.000 önbelleğe alınmış, 250 çıktı token'ı
