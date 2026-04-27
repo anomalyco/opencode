@@ -185,7 +185,7 @@ const AgentCreateCommand = cmd({
           mode,
         }
         if (Object.keys(permissions).length > 0) {
-          frontmatter.permissions = permissions
+          frontmatter.permission = permissions
         }
 
         // Write file
