@@ -148,11 +148,29 @@ describe("ProviderLLMBridge", () => {
     })
   })
 
+  test("maps Amazon Bedrock to Converse with bearer auth and content-block cache", () => {
+    const ref = ProviderLLMBridge.toModelRef({
+      provider: provider({ id: ProviderID.make("amazon-bedrock"), key: "bedrock-bearer-key" }),
+      model: model({
+        id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        providerID: "amazon-bedrock",
+        npm: "@ai-sdk/amazon-bedrock",
+      }),
+    })
+
+    expect(ref).toMatchObject({
+      protocol: "bedrock-converse",
+      headers: { authorization: "Bearer bedrock-bearer-key" },
+    })
+    // Bedrock Converse supports both prompt-level and positional content-block
+    // cache markers (cachePoint blocks landed in 9d7d518ac).
+    expect(ref?.capabilities.cache).toMatchObject({ prompt: true, contentBlocks: true })
+  })
+
   test("leaves undecided provider packages unmapped", () => {
     const unsupported = [
       ["mistral", "mistral-large", "@ai-sdk/mistral"],
       ["azure", "gpt-4.1", "@ai-sdk/azure"],
-      ["amazon-bedrock", "anthropic.claude-3-5-sonnet-20240620-v1:0", "@ai-sdk/amazon-bedrock"],
     ] as const
 
     expect(
@@ -162,6 +180,6 @@ describe("ProviderLLMBridge", () => {
           model: model({ id: modelID, providerID, npm }),
         }),
       ),
-    ).toEqual([undefined, undefined, undefined])
+    ).toEqual([undefined, undefined])
   })
 })

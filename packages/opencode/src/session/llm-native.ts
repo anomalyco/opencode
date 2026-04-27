@@ -163,7 +163,7 @@ export const toolDefinition = (input: { readonly model: Provider.Model; readonly
   LLM.tool({
     name: input.tool.id,
     description: input.tool.description,
-    inputSchema: Object.fromEntries(Object.entries(EffectZod.toJsonSchema(input.tool.parameters))),
+    inputSchema: EffectZod.toJsonSchema(input.tool.parameters),
     native: {
       opencodeToolID: input.tool.id,
     },

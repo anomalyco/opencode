@@ -1,4 +1,5 @@
 import {
+  AmazonBedrock,
   Anthropic,
   GitHubCopilot,
   Google,
@@ -23,6 +24,7 @@ type Input = {
 }
 
 const PROVIDERS: Record<string, ProviderDefinition> = {
+  "@ai-sdk/amazon-bedrock": AmazonBedrock.provider,
   "@ai-sdk/anthropic": Anthropic.provider,
   "@ai-sdk/baseten": OpenAICompatibleFamily.provider,
   "@ai-sdk/cerebras": OpenAICompatibleFamily.provider,
@@ -102,8 +104,11 @@ const capabilities = (input: Input, selected: Protocol) =>
       streamingInput: selected !== "gemini" && input.model.capabilities.toolcall,
     },
     cache: {
+      // Both Anthropic Messages and Bedrock Converse honour positional cache
+      // markers — Anthropic via `cache_control` on content blocks, Bedrock via
+      // its `cachePoint` marker block (added to BedrockConverse in 9d7d518ac).
       prompt: ["anthropic-messages", "bedrock-converse"].includes(selected),
-      contentBlocks: selected === "anthropic-messages",
+      contentBlocks: ["anthropic-messages", "bedrock-converse"].includes(selected),
     },
     reasoning: {
       efforts: reasoningEfforts(input),

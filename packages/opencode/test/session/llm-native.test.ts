@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AnthropicMessages, OpenAICompatibleChat } from "@opencode-ai/llm"
+import { AnthropicMessages, Gemini, OpenAICompatibleChat } from "@opencode-ai/llm"
 import { client } from "@opencode-ai/llm/adapter"
 import { OpenAIResponses } from "@opencode-ai/llm/provider/openai-responses"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
@@ -504,6 +504,77 @@ describe("LLMNative.request", () => {
       stream: true,
       max_tokens: 64,
       temperature: 0,
+    })
+  }))
+
+  it.effect("prepares Gemini text and tool request body", () => Effect.gen(function* () {
+    const mdl = model({
+      id: ModelID.make("gemini-2.5-flash"),
+      providerID: ProviderID.make("google"),
+      api: { id: "gemini-2.5-flash", url: "https://generativelanguage.googleapis.com/v1beta", npm: "@ai-sdk/google" },
+    })
+    const userID = MessageID.ascending()
+    const assistantID = MessageID.ascending()
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.make("google"), key: "google-key" }, mdl),
+      model: mdl,
+      system: ["You are concise."],
+      generation: { maxTokens: 32, temperature: 0 },
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "What is the weather?")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "call_1",
+            tool: "lookup",
+            state: {
+              status: "completed",
+              input: { query: "weather" },
+              output: '{"forecast":"sunny"}',
+              title: "Weather",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          }),
+        ]),
+      ],
+      tools: [lookupTool],
+      toolChoice: "lookup",
+    })
+    const prepared = yield* client({ adapters: [Gemini.adapter] }).prepare(request)
+
+    expect(request.model).toMatchObject({
+      provider: "google",
+      protocol: "gemini",
+      baseURL: "https://generativelanguage.googleapis.com/v1beta",
+      headers: { "x-goog-api-key": "google-key" },
+    })
+    expect(prepared.target).toMatchObject({
+      systemInstruction: { parts: [{ text: "You are concise." }] },
+      contents: [
+        { role: "user", parts: [{ text: "What is the weather?" }] },
+        { role: "model", parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }] },
+        {
+          role: "user",
+          parts: [{ functionResponse: { name: "lookup", response: { name: "lookup", content: '{"forecast":"sunny"}' } } }],
+        },
+      ],
+      tools: [
+        {
+          functionDeclarations: [
+            {
+              name: "lookup",
+              description: "Lookup project data",
+              parameters: {
+                type: "object",
+                properties: { query: { type: "string", description: "Search query" } },
+                required: ["query"],
+              },
+            },
+          ],
+        },
+      ],
+      toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["lookup"] } },
+      generationConfig: { maxOutputTokens: 32, temperature: 0 },
     })
   }))
 })
