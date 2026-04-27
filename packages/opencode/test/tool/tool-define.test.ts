@@ -1,16 +1,21 @@
 import { describe, test, expect } from "bun:test"
-import z from "zod"
-import { Tool } from "../../src/tool/tool"
+import { Effect, Layer, ManagedRuntime, Schema } from "effect"
+import { Agent } from "../../src/agent/agent"
+import { MessageID, SessionID } from "../../src/session/schema"
+import { Tool } from "../../src/tool"
+import { Truncate } from "../../src/tool"
 
-const params = z.object({ input: z.string() })
+const runtime = ManagedRuntime.make(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
+
+const params = Schema.Struct({ input: Schema.String })
 
 function makeTool(id: string, executeFn?: () => void) {
   return {
     description: "test tool",
     parameters: params,
-    async execute() {
+    execute() {
       executeFn?.()
-      return { title: "test", output: "ok", metadata: {} }
+      return Effect.succeed({ title: "test", output: "ok", metadata: {} })
     },
   }
 }
@@ -20,30 +25,75 @@ describe("Tool.define", () => {
     const original = makeTool("test")
     const originalExecute = original.execute
 
-    const tool = Tool.define("test-tool", original)
+    const info = await runtime.runPromise(Tool.define("test-tool", Effect.succeed(original)))
 
-    await tool.init()
-    await tool.init()
-    await tool.init()
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
+    await Effect.runPromise(info.init())
 
     expect(original.execute).toBe(originalExecute)
   })
 
-  test("function-defined tool returns fresh objects and is unaffected", async () => {
-    const tool = Tool.define("test-fn-tool", () => Promise.resolve(makeTool("test")))
+  test("effect-defined tool returns fresh objects and is unaffected", async () => {
+    const info = await runtime.runPromise(
+      Tool.define(
+        "test-fn-tool",
+        Effect.succeed(() => Effect.succeed(makeTool("test"))),
+      ),
+    )
 
-    const first = await tool.init()
-    const second = await tool.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
   })
 
   test("object-defined tool returns distinct objects per init() call", async () => {
-    const tool = Tool.define("test-copy", makeTool("test"))
+    const info = await runtime.runPromise(Tool.define("test-copy", Effect.succeed(makeTool("test"))))
 
-    const first = await tool.init()
-    const second = await tool.init()
+    const first = await Effect.runPromise(info.init())
+    const second = await Effect.runPromise(info.init())
 
     expect(first).not.toBe(second)
+  })
+
+  test("execute receives decoded parameters", async () => {
+    const parameters = Schema.Struct({
+      count: Schema.NumberFromString.pipe(Schema.optional, Schema.withDecodingDefaultType(Effect.succeed(5))),
+    })
+    const calls: Array<Schema.Schema.Type<typeof parameters>> = []
+    const info = await runtime.runPromise(
+      Tool.define(
+        "test-decoded",
+        Effect.succeed({
+          description: "test tool",
+          parameters,
+          execute(args: Schema.Schema.Type<typeof parameters>) {
+            calls.push(args)
+            return Effect.succeed({ title: "test", output: "ok", metadata: { truncated: false } })
+          },
+        }),
+      ),
+    )
+    const ctx: Tool.Context = {
+      sessionID: SessionID.descending(),
+      messageID: MessageID.ascending(),
+      agent: "build",
+      abort: new AbortController().signal,
+      messages: [],
+      metadata() {
+        return Effect.void
+      },
+      ask() {
+        return Effect.void
+      },
+    }
+    const tool = await Effect.runPromise(info.init())
+    const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
+
+    await Effect.runPromise(execute({}, ctx))
+    await Effect.runPromise(execute({ count: "7" }, ctx))
+
+    expect(calls).toEqual([{ count: 5 }, { count: 7 }])
   })
 })

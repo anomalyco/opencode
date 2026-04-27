@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../fixture/fixture"
@@ -56,20 +57,22 @@ describe("plugin.trigger", () => {
 
     const out = await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const out = { system: [] as string[] }
-        await Plugin.trigger(
-          "experimental.chat.system.transform",
-          {
-            model: {
-              providerID: "anthropic",
-              modelID: "claude-sonnet-4-6",
-            } as any,
-          },
-          out,
-        )
-        return out
-      },
+      fn: async () =>
+        Effect.gen(function* () {
+          const plugin = yield* Plugin.Service
+          const out = { system: [] as string[] }
+          yield* plugin.trigger(
+            "experimental.chat.system.transform",
+            {
+              model: {
+                providerID: "anthropic",
+                modelID: "claude-sonnet-4-6",
+              } as any,
+            },
+            out,
+          )
+          return out
+        }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
     })
 
     expect(out.system).toEqual(["sync"])
@@ -90,20 +93,22 @@ describe("plugin.trigger", () => {
 
     const out = await Instance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const out = { system: [] as string[] }
-        await Plugin.trigger(
-          "experimental.chat.system.transform",
-          {
-            model: {
-              providerID: "anthropic",
-              modelID: "claude-sonnet-4-6",
-            } as any,
-          },
-          out,
-        )
-        return out
-      },
+      fn: async () =>
+        Effect.gen(function* () {
+          const plugin = yield* Plugin.Service
+          const out = { system: [] as string[] }
+          yield* plugin.trigger(
+            "experimental.chat.system.transform",
+            {
+              model: {
+                providerID: "anthropic",
+                modelID: "claude-sonnet-4-6",
+              } as any,
+            },
+            out,
+          )
+          return out
+        }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
     })
 
     expect(out.system).toEqual(["async"])

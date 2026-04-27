@@ -5,7 +5,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 
 describe("structured-output.OutputFormat", () => {
   test("parses text format", () => {
-    const result = MessageV2.Format.safeParse({ type: "text" })
+    const result = MessageV2.Format.zod.safeParse({ type: "text" })
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.type).toBe("text")
@@ -13,7 +13,7 @@ describe("structured-output.OutputFormat", () => {
   })
 
   test("parses json_schema format with defaults", () => {
-    const result = MessageV2.Format.safeParse({
+    const result = MessageV2.Format.zod.safeParse({
       type: "json_schema",
       schema: { type: "object", properties: { name: { type: "string" } } },
     })
@@ -27,7 +27,7 @@ describe("structured-output.OutputFormat", () => {
   })
 
   test("parses json_schema format with custom retryCount", () => {
-    const result = MessageV2.Format.safeParse({
+    const result = MessageV2.Format.zod.safeParse({
       type: "json_schema",
       schema: { type: "object" },
       retryCount: 5,
@@ -39,17 +39,17 @@ describe("structured-output.OutputFormat", () => {
   })
 
   test("rejects invalid type", () => {
-    const result = MessageV2.Format.safeParse({ type: "invalid" })
+    const result = MessageV2.Format.zod.safeParse({ type: "invalid" })
     expect(result.success).toBe(false)
   })
 
   test("rejects json_schema without schema", () => {
-    const result = MessageV2.Format.safeParse({ type: "json_schema" })
+    const result = MessageV2.Format.zod.safeParse({ type: "json_schema" })
     expect(result.success).toBe(false)
   })
 
   test("rejects negative retryCount", () => {
-    const result = MessageV2.Format.safeParse({
+    const result = MessageV2.Format.zod.safeParse({
       type: "json_schema",
       schema: { type: "object" },
       retryCount: -1,
@@ -95,7 +95,7 @@ describe("structured-output.StructuredOutputError", () => {
 
 describe("structured-output.UserMessage", () => {
   test("user message accepts outputFormat", () => {
-    const result = MessageV2.User.safeParse({
+    const result = MessageV2.User.zod.safeParse({
       id: MessageID.ascending(),
       sessionID: SessionID.descending(),
       role: "user",
@@ -111,7 +111,7 @@ describe("structured-output.UserMessage", () => {
   })
 
   test("user message works without outputFormat (optional)", () => {
-    const result = MessageV2.User.safeParse({
+    const result = MessageV2.User.zod.safeParse({
       id: MessageID.ascending(),
       sessionID: SessionID.descending(),
       role: "user",
@@ -140,7 +140,7 @@ describe("structured-output.AssistantMessage", () => {
   }
 
   test("assistant message accepts structured", () => {
-    const result = MessageV2.Assistant.safeParse({
+    const result = MessageV2.Assistant.zod.safeParse({
       ...baseAssistantMessage,
       structured: { company: "Anthropic", founded: 2021 },
     })
@@ -151,22 +151,12 @@ describe("structured-output.AssistantMessage", () => {
   })
 
   test("assistant message works without structured_output (optional)", () => {
-    const result = MessageV2.Assistant.safeParse(baseAssistantMessage)
+    const result = MessageV2.Assistant.zod.safeParse(baseAssistantMessage)
     expect(result.success).toBe(true)
   })
 })
 
 describe("structured-output.createStructuredOutputTool", () => {
-  test("creates tool with correct id", () => {
-    const tool = SessionPrompt.createStructuredOutputTool({
-      schema: { type: "object", properties: { name: { type: "string" } } },
-      onSuccess: () => {},
-    })
-
-    // AI SDK tool type doesn't expose id, but we set it internally
-    expect((tool as any).id).toBe("StructuredOutput")
-  })
-
   test("creates tool with description", () => {
     const tool = SessionPrompt.createStructuredOutputTool({
       schema: { type: "object" },

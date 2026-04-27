@@ -1,10 +1,3 @@
-type Msg = {
-  file: string
-  spec: string
-  target: string
-  id: string
-}
-
 const raw = process.argv[2]
 if (!raw) throw new Error("Missing worker payload")
 

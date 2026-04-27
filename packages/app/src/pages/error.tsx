@@ -1,12 +1,11 @@
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
-import { Component, Show, onMount } from "solid-js"
+import { Component, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
-import type { E2EWindow } from "@/testing/terminal"
 
 export type InitError = {
   name: string
@@ -227,13 +226,6 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
     actionError: undefined as string | undefined,
   })
 
-  onMount(() => {
-    const win = window as E2EWindow
-    if (!win.__opencode_e2e) return
-    const detail = formatError(props.error, language.t)
-    console.error(`[e2e:error-boundary] ${window.location.pathname}\n${detail}`)
-  })
-
   async function checkForUpdates() {
     if (!platform.checkUpdate) return
     setStore("checking", true)
@@ -252,10 +244,9 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   }
 
   async function installUpdate() {
-    if (!platform.update || !platform.restart) return
+    if (!platform.updateAndRestart) return
     await platform
-      .update()
-      .then(() => platform.restart!())
+      .updateAndRestart()
       .then(() => setStore("actionError", undefined))
       .catch((err) => {
         setStore("actionError", formatError(err, language.t))

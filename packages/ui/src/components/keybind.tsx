@@ -10,7 +10,7 @@ export function Keybind(props: KeybindProps) {
     <span
       data-component="keybind"
       classList={{
-        ...(props.classList ?? {}),
+        ...props.classList,
         [props.class ?? ""]: !!props.class,
       }}
     >

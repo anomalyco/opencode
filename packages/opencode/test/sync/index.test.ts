@@ -1,13 +1,13 @@
 import { describe, test, expect, beforeEach, afterEach, afterAll } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
-import z from "zod"
+import { Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
 import { SyncEvent } from "../../src/sync"
-import { Database } from "../../src/storage/db"
+import { Database } from "../../src/storage"
 import { EventTable } from "../../src/sync/event.sql"
 import { Identifier } from "../../src/id/id"
-import { Flag } from "../../src/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { initProjectors } from "../../src/server/projectors"
 
 const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
@@ -15,12 +15,10 @@ const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 beforeEach(() => {
   Database.close()
 
-  // @ts-expect-error don't do this normally, but it works
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
 })
 
 afterEach(() => {
-  // @ts-expect-error don't do this normally, but it works
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
 })
 
@@ -45,13 +43,13 @@ describe("SyncEvent", () => {
       type: "item.created",
       version: 1,
       aggregate: "id",
-      schema: z.object({ id: z.string(), name: z.string() }),
+      schema: Schema.Struct({ id: Schema.String, name: Schema.String }),
     })
     const Sent = SyncEvent.define({
       type: "item.sent",
       version: 1,
       aggregate: "item_id",
-      schema: z.object({ item_id: z.string(), to: z.string() }),
+      schema: Schema.Struct({ item_id: Schema.String, to: Schema.String }),
     })
 
     SyncEvent.init({
@@ -185,6 +183,54 @@ describe("SyncEvent", () => {
             data: {},
           }),
         ).toThrow(/Unknown event type/)
+      }),
+    )
+
+    test(
+      "replayAll accepts later chunks after the first batch",
+      withInstance(() => {
+        const { Created } = setup()
+        const id = Identifier.descending("message")
+
+        const one = SyncEvent.replayAll([
+          {
+            id: "evt_1",
+            type: SyncEvent.versionedType(Created.type, Created.version),
+            seq: 0,
+            aggregateID: id,
+            data: { id, name: "first" },
+          },
+          {
+            id: "evt_2",
+            type: SyncEvent.versionedType(Created.type, Created.version),
+            seq: 1,
+            aggregateID: id,
+            data: { id, name: "second" },
+          },
+        ])
+
+        const two = SyncEvent.replayAll([
+          {
+            id: "evt_3",
+            type: SyncEvent.versionedType(Created.type, Created.version),
+            seq: 2,
+            aggregateID: id,
+            data: { id, name: "third" },
+          },
+          {
+            id: "evt_4",
+            type: SyncEvent.versionedType(Created.type, Created.version),
+            seq: 3,
+            aggregateID: id,
+            data: { id, name: "fourth" },
+          },
+        ])
+
+        expect(one).toBe(id)
+        expect(two).toBe(id)
+
+        const rows = Database.use((db) => db.select().from(EventTable).all())
+        expect(rows.map((row) => row.seq)).toEqual([0, 1, 2, 3])
       }),
     )
   })

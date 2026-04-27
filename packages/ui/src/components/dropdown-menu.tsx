@@ -33,7 +33,7 @@ function DropdownMenuTrigger(props: ParentProps<DropdownMenuTriggerProps>) {
       {...rest}
       data-slot="dropdown-menu-trigger"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -49,7 +49,7 @@ function DropdownMenuIcon(props: ParentProps<DropdownMenuIconProps>) {
       {...rest}
       data-slot="dropdown-menu-icon"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -69,7 +69,7 @@ function DropdownMenuContent(props: ParentProps<DropdownMenuContentProps>) {
       {...rest}
       data-component="dropdown-menu-content"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -85,7 +85,7 @@ function DropdownMenuArrow(props: DropdownMenuArrowProps) {
       {...rest}
       data-slot="dropdown-menu-arrow"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     />
@@ -99,7 +99,7 @@ function DropdownMenuSeparator(props: DropdownMenuSeparatorProps) {
       {...rest}
       data-slot="dropdown-menu-separator"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     />
@@ -113,7 +113,7 @@ function DropdownMenuGroup(props: ParentProps<DropdownMenuGroupProps>) {
       {...rest}
       data-slot="dropdown-menu-group"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -129,7 +129,7 @@ function DropdownMenuGroupLabel(props: ParentProps<DropdownMenuGroupLabelProps>)
       {...rest}
       data-slot="dropdown-menu-group-label"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -145,7 +145,7 @@ function DropdownMenuItem(props: ParentProps<DropdownMenuItemProps>) {
       {...rest}
       data-slot="dropdown-menu-item"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -161,7 +161,7 @@ function DropdownMenuItemLabel(props: ParentProps<DropdownMenuItemLabelProps>) {
       {...rest}
       data-slot="dropdown-menu-item-label"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -177,7 +177,7 @@ function DropdownMenuItemDescription(props: ParentProps<DropdownMenuItemDescript
       {...rest}
       data-slot="dropdown-menu-item-description"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -193,7 +193,7 @@ function DropdownMenuItemIndicator(props: ParentProps<DropdownMenuItemIndicatorP
       {...rest}
       data-slot="dropdown-menu-item-indicator"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -209,7 +209,7 @@ function DropdownMenuRadioGroup(props: ParentProps<DropdownMenuRadioGroupProps>)
       {...rest}
       data-slot="dropdown-menu-radio-group"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -225,7 +225,7 @@ function DropdownMenuRadioItem(props: ParentProps<DropdownMenuRadioItemProps>) {
       {...rest}
       data-slot="dropdown-menu-radio-item"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -241,7 +241,7 @@ function DropdownMenuCheckboxItem(props: ParentProps<DropdownMenuCheckboxItemPro
       {...rest}
       data-slot="dropdown-menu-checkbox-item"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -261,7 +261,7 @@ function DropdownMenuSubTrigger(props: ParentProps<DropdownMenuSubTriggerProps>)
       {...rest}
       data-slot="dropdown-menu-sub-trigger"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -277,7 +277,7 @@ function DropdownMenuSubContent(props: ParentProps<DropdownMenuSubContentProps>)
       {...rest}
       data-component="dropdown-menu-sub-content"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >

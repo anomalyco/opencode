@@ -1,5 +1,5 @@
 import "./index.css"
-import { createAsync, query, redirect } from "@solidjs/router"
+import { createAsync, query } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
 //import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
