@@ -7,6 +7,7 @@
   "private": true,
   "scripts": {
     "test": "bun test",
+    "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
     "typecheck": "tsgo --noEmit"
   },
   "bin": {

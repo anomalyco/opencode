@@ -2,7 +2,7 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
-import { tmpdir } from "./fixture/fixture"
+import { tmpdir } from "./fixture/tmpdir"
 
 describe("NpmConfig.load", () => {
   test("reads registry from project .npmrc", async () => {

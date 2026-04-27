@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Npm } from "@opencode-ai/core/npm"
-import { tmpdir } from "./fixture/fixture"
+import { tmpdir } from "./fixture/tmpdir"
 
 const win = process.platform === "win32"
 
