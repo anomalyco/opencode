@@ -7,7 +7,7 @@ on:
 jobs:
   check-duplicates:
     if: github.event.action == 'opened'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
@@ -119,7 +119,7 @@ jobs:
 
   recheck-compliance:
     if: github.event.action == 'edited' && contains(github.event.issue.labels.*.name, 'needs:compliance')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write

@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   nix-eval:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout repository

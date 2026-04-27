@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   version:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
@@ -69,7 +69,7 @@ jobs:
 
   build-cli:
     needs: version
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
@@ -113,7 +113,7 @@ jobs:
     needs:
       - build-cli
       - version
-    runs-on: blacksmith-4vcpu-windows-2025
+    runs-on: windows-latest
     if: github.repository == 'anomalyco/opencode'
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -229,14 +229,14 @@ jobs:
             target: x86_64-apple-darwin
           - host: macos-latest
             target: aarch64-apple-darwin
-          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
+          # GitHub-hosted Windows runner is required for ARM64 MSVC cross-compilation.
           - host: windows-2025
             target: aarch64-pc-windows-msvc
-          - host: blacksmith-4vcpu-windows-2025
+          - host: windows-latest
             target: x86_64-pc-windows-msvc
-          - host: blacksmith-4vcpu-ubuntu-2404
+          - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          - host: blacksmith-8vcpu-ubuntu-2404-arm
+          - host: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
     runs-on: ${{ matrix.settings.host }}
     steps:
@@ -410,17 +410,17 @@ jobs:
             target: aarch64-apple-darwin
             platform_flag: --mac --arm64
             bun_install_flags: --os=darwin --cpu=arm64
-          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
+          # GitHub-hosted Windows runner is required for ARM64 MSVC cross-compilation.
           - host: "windows-2025"
             target: aarch64-pc-windows-msvc
             platform_flag: --win --arm64
-          - host: "blacksmith-4vcpu-windows-2025"
+          - host: "windows-latest"
             target: x86_64-pc-windows-msvc
             platform_flag: --win
-          - host: "blacksmith-4vcpu-ubuntu-2404"
+          - host: "ubuntu-latest"
             target: x86_64-unknown-linux-gnu
             platform_flag: --linux
-          - host: "blacksmith-4vcpu-ubuntu-2404"
+          - host: "ubuntu-latest"
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux
     runs-on: ${{ matrix.settings.host }}
@@ -552,7 +552,7 @@ jobs:
       - build-tauri
       - build-electron
     if: always() && !failure() && !cancelled()
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
