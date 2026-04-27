@@ -74,6 +74,22 @@ function clip(text: string, size = 40) {
   return JSON.stringify(text.slice(-size))
 }
 
+function view(node: HTMLElement) {
+  return node.closest(".scroll-view__viewport,[data-slot='session-turn-content']") as HTMLElement | null
+}
+
+function snap(node: HTMLElement | null) {
+  if (!node) return
+  const max = Math.max(0, node.scrollHeight - node.clientHeight)
+  return {
+    top: Math.round(node.scrollTop),
+    height: Math.round(node.scrollHeight),
+    client: Math.round(node.clientHeight),
+    max: Math.round(max),
+    gap: Math.round(max - node.scrollTop),
+  }
+}
+
 type CopyLabels = {
   copy: string
   copied: string
@@ -125,8 +141,7 @@ export function fileLink(text: string) {
   const parts = next.split("/").filter(Boolean)
   if (parts.length < 2) return
 
-  const rooted =
-    next.startsWith("./") || next.startsWith("../") || next.startsWith("~/") || next.startsWith("/") || win
+  const rooted = next.startsWith("./") || next.startsWith("../") || next.startsWith("~/") || next.startsWith("/") || win
   const named = parts.some((part) => /[._-]/.test(part))
   if (!rooted && !named) return
 
@@ -429,11 +444,7 @@ function touch(key: string, value: Entry) {
   cache.delete(first)
 }
 
-function cacheMode(input: {
-  highlight?: "full" | "defer"
-  chunked?: boolean
-  math?: "full" | "defer"
-}) {
+function cacheMode(input: { highlight?: "full" | "defer"; chunked?: boolean; math?: "full" | "defer" }) {
   return [input.highlight ?? "full", input.math ?? "full", input.chunked ? "chunked" : "plain"].join(":")
 }
 
@@ -597,6 +608,7 @@ export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
     cacheKey?: string
+    plain?: boolean
     eager?: boolean
     viewport?: HTMLElement
     class?: string
@@ -611,6 +623,7 @@ export function Markdown(
   const [local, others] = splitProps(props, [
     "text",
     "cacheKey",
+    "plain",
     "eager",
     "viewport",
     "class",
@@ -634,7 +647,8 @@ export function Markdown(
 
   const visible = createMemo(() => local.eager || seen())
   const mathReady = createMemo(() => local.math !== "defer" || local.eager || mathSeen())
-  const mode = createMemo<"full" | "fast" | "lite">(() => {
+  const mode = createMemo<"full" | "fast" | "lite" | "plain">(() => {
+    if (local.plain) return "plain"
     if (local.streaming) return "fast"
     if (!visible()) return "lite"
     return "full"
@@ -677,21 +691,23 @@ export function Markdown(
         }
       }
 
-      const parse =
-        input.mode === "lite"
-          ? marked.parseLite
-          : input.mode === "fast"
-            ? marked.parseFast
-            : input.math === "defer" && marked.parseNoMath
-              ? marked.parseNoMath
-              : marked.parse
+      const rendered =
+        input.mode === "plain"
+          ? fallback(input.normalized)
+          : await (
+              input.mode === "lite"
+                ? marked.parseLite
+                : input.mode === "fast"
+                  ? marked.parseFast
+                  : input.math === "defer" && marked.parseNoMath
+                    ? marked.parseNoMath
+                    : marked.parse
+            )(input.normalized).catch((err) => {
+              console.error("markdown render failed", err)
+              return fallback(input.normalized)
+            })
 
-      const rendered = await parse(input.normalized).catch((err) => {
-        console.error("markdown render failed", err)
-        return fallback(input.normalized)
-      })
-
-      const safe = sanitize(rendered)
+      const safe = input.mode === "plain" ? rendered : sanitize(rendered)
       if (!input.streaming && key && input.hash) {
         touch(key, { hash: input.hash, html: safe })
       }
@@ -704,7 +720,22 @@ export function Markdown(
   let copyCleanup: (() => void) | undefined
 
   onMount(() => {
+    if (local.streaming) {
+      console.debug("[markdown] mount", {
+        key: local.cacheKey ?? "",
+        text: local.text.length,
+      })
+    }
     setReady(true)
+  })
+
+  onCleanup(() => {
+    if (local.streaming) {
+      console.debug("[markdown] cleanup", {
+        key: local.cacheKey ?? "",
+        text: local.text.length,
+      })
+    }
   })
 
   createEffect(
@@ -773,11 +804,49 @@ export function Markdown(
     const prevHtml = container.dataset.html ?? ""
     const isStreaming = local.streaming
     const chunked = local.chunked
+    const pane = isStreaming ? view(container) : null
+    const before = isStreaming ? snap(pane) : undefined
 
-    if (isStreaming) {
-      console.debug(
-        `[markdown] patch key=${local.cacheKey ?? ""} prev=${prevHtml.length} next=${content.length} text=${local.text.length} tail=${clip(local.text)}`,
-      )
+    if (isStreaming && prevHtml && content.length < prevHtml.length) {
+      console.warn("[markdown] html rollback", {
+        key: local.cacheKey ?? "",
+        prev: prevHtml.length,
+        next: content.length,
+        text: local.text.length,
+        tail: clip(local.text),
+      })
+    }
+
+    const done = (mode: string) => {
+      container.dataset.html = content
+
+      if (isStreaming && before) {
+        const after = snap(pane)
+        if (after) {
+          const jump = after.top - before.top
+          const shrink = after.height - before.height
+          if (jump < -24) {
+            console.warn("[markdown] scroll jump", {
+              key: local.cacheKey ?? "",
+              mode,
+              jump,
+              grow: shrink,
+              htmlPrev: prevHtml.length,
+              htmlNext: content.length,
+              text: local.text.length,
+              before,
+              after,
+            })
+          }
+        }
+      }
+
+      if (copySetupTimer) clearTimeout(copySetupTimer)
+      copySetupTimer = setTimeout(() => {
+        if (copyCleanup) copyCleanup()
+        copyCleanup = setupCodeCopy(container, next)
+        setLabels(container, next)
+      }, 150)
     }
 
     // Fast-append path: during streaming, if new HTML starts with the previous HTML,
@@ -805,9 +874,6 @@ export function Markdown(
         }
 
         if (stableCount > 0 && stableCount >= existingCount - 1) {
-          console.debug(
-            `[markdown] append key=${local.cacheKey ?? ""} stable=${stableCount} old=${existingCount} new=${newCount} next=${content.length}`,
-          )
           // Remove unstable trailing nodes from container
           while (container.childNodes.length > stableCount) {
             container.removeChild(container.lastChild!)
@@ -817,15 +883,7 @@ export function Markdown(
             const node = temp.childNodes[stableCount]
             container.appendChild(node)
           }
-
-          container.dataset.html = content
-
-          if (copySetupTimer) clearTimeout(copySetupTimer)
-          copySetupTimer = setTimeout(() => {
-            if (copyCleanup) copyCleanup()
-            copyCleanup = setupCodeCopy(container, next)
-            setLabels(container, next)
-          }, 150)
+          done("append")
           return
         }
       }
@@ -838,20 +896,23 @@ export function Markdown(
 
     if (chunked && !prevHtml) {
       container.replaceChildren(...Array.from(temp.childNodes))
-      container.dataset.html = content
-      if (copySetupTimer) clearTimeout(copySetupTimer)
-      copySetupTimer = setTimeout(() => {
-        if (copyCleanup) copyCleanup()
-        copyCleanup = setupCodeCopy(container, next)
-        setLabels(container, next)
-      }, 150)
+      done("replace")
       return
     }
 
-    if (isStreaming) {
-      console.debug(
-        `[markdown] morph key=${local.cacheKey ?? ""} prev=${prevHtml.length} next=${content.length} old=${container.childNodes.length} new=${temp.childNodes.length}`,
-      )
+    if (isStreaming && prevHtml) {
+      const prefix = prevHtml.slice(0, Math.max(0, prevHtml.lastIndexOf("<")))
+      if (prefix && !content.startsWith(prefix)) {
+        console.warn("[markdown] non-prefix morph", {
+          key: local.cacheKey ?? "",
+          prev: prevHtml.length,
+          next: content.length,
+          old: container.childNodes.length,
+          fresh: temp.childNodes.length,
+          text: local.text.length,
+          tail: clip(local.text),
+        })
+      }
     }
 
     morphdom(container, temp, {
@@ -862,15 +923,7 @@ export function Markdown(
         return true
       },
     })
-
-    container.dataset.html = content
-
-    if (copySetupTimer) clearTimeout(copySetupTimer)
-    copySetupTimer = setTimeout(() => {
-      if (copyCleanup) copyCleanup()
-      copyCleanup = setupCodeCopy(container, next)
-      setLabels(container, next)
-    }, 150)
+    done("morph")
   })
 
   createEffect(() => {
