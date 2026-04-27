@@ -22,13 +22,14 @@ export const Action = Schema.Literals(["allow", "deny", "ask"])
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Action = Schema.Schema.Type<typeof Action>
 
-export class Rule extends Schema.Class<Rule>("PermissionRule")({
+export const Rule = Schema.Struct({
   permission: Schema.String,
   pattern: Schema.String,
   action: Action,
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "PermissionRule" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Rule = Schema.Schema.Type<typeof Rule>
 
 export const Ruleset = Schema.mutable(Schema.Array(Rule))
   .annotate({ identifier: "PermissionRuleset" })
@@ -73,16 +74,14 @@ export class Approval extends Schema.Class<Approval>("PermissionApproval")({
 }
 
 export const Event = {
-  Asked: BusEvent.define("permission.asked", Request.zod),
+  Asked: BusEvent.define("permission.asked", Request),
   Replied: BusEvent.define(
     "permission.replied",
-    zod(
-      Schema.Struct({
-        sessionID: SessionID,
-        requestID: PermissionID,
-        reply: Reply,
-      }),
-    ),
+    Schema.Struct({
+      sessionID: SessionID,
+      requestID: PermissionID,
+      reply: Reply,
+    }),
   ),
 }
 
@@ -307,7 +306,7 @@ export function merge(...rulesets: Ruleset[]): Ruleset {
   return rulesets.flat()
 }
 
-const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
+const EDIT_TOOLS = ["edit", "write", "apply_patch"]
 
 export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
   const result = new Set<string>()

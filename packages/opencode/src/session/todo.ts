@@ -1,26 +1,30 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { SessionID } from "./schema"
-import { Effect, Layer, Context } from "effect"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
+import { Effect, Layer, Context, Schema } from "effect"
 import z from "zod"
 import { Database, eq, asc } from "../storage"
 import { TodoTable } from "./session.sql"
 
-export const Info = z
-  .object({
-    content: z.string().describe("Brief description of the task"),
-    status: z.string().describe("Current status of the task: pending, in_progress, completed, cancelled"),
-    priority: z.string().describe("Priority level of the task: high, medium, low"),
-  })
-  .meta({ ref: "Todo" })
-export type Info = z.infer<typeof Info>
+export const Info = Schema.Struct({
+  content: Schema.String.annotate({ description: "Brief description of the task" }),
+  status: Schema.String.annotate({
+    description: "Current status of the task: pending, in_progress, completed, cancelled",
+  }),
+  priority: Schema.String.annotate({ description: "Priority level of the task: high, medium, low" }),
+})
+  .annotate({ identifier: "Todo" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
 export const Event = {
   Updated: BusEvent.define(
     "todo.updated",
-    z.object({
-      sessionID: SessionID.zod,
-      todos: z.array(Info),
+    Schema.Struct({
+      sessionID: SessionID,
+      todos: Schema.Array(Info),
     }),
   ),
 }

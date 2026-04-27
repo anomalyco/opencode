@@ -1,4 +1,4 @@
-import z from "zod"
+import { Schema } from "effect"
 import * as path from "path"
 import { Effect } from "effect"
 import * as Tool from "./tool"
@@ -9,12 +9,20 @@ import { Bus } from "../bus"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import * as Bom from "@/util/bom"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
+
+export const Parameters = Schema.Struct({
+  content: Schema.String.annotate({ description: "The content to write to the file" }),
+  filePath: Schema.String.annotate({
+    description: "The absolute path to the file to write (must be absolute, not relative)",
+  }),
+})
 
 export const WriteTool = Tool.define(
   "write",
@@ -26,10 +34,7 @@ export const WriteTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters: z.object({
-        content: z.string().describe("The content to write to the file"),
-        filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
-      }),
+      parameters: Parameters,
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const filepath = path.isAbsolute(params.filePath)
@@ -38,9 +43,13 @@ export const WriteTool = Tool.define(
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)
-          const contentOld = exists ? yield* fs.readFileString(filepath) : ""
+          const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
+          const next = Bom.split(params.content)
+          const desiredBom = source.bom || next.bom
+          const contentOld = source.text
+          const contentNew = next.text
 
-          const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+          const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
           yield* ctx.ask({
             permission: "edit",
             patterns: [path.relative(Instance.worktree, filepath)],
@@ -51,8 +60,10 @@ export const WriteTool = Tool.define(
             },
           })
 
-          yield* fs.writeWithDirs(filepath, params.content)
-          yield* format.file(filepath)
+          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
+          if (yield* format.file(filepath)) {
+            yield* Bom.syncFile(fs, filepath, desiredBom)
+          }
           yield* bus.publish(File.Event.Edited, { file: filepath })
           yield* bus.publish(FileWatcher.Event.Updated, {
             file: filepath,
@@ -60,7 +71,7 @@ export const WriteTool = Tool.define(
           })
 
           let output = "Wrote file successfully."
-          yield* lsp.touchFile(filepath, true)
+          yield* lsp.touchFile(filepath, "document")
           const diagnostics = yield* lsp.diagnostics()
           const normalizedFilepath = AppFileSystem.normalizePath(filepath)
           let projectDiagnosticsCount = 0

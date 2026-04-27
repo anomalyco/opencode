@@ -215,7 +215,7 @@ export const dict = {
   "common.saving": "Speichert...",
   "common.default": "Standard",
   "common.attachment": "Anhang",
-  "prompt.placeholder.shell": "Shell-Befehl eingeben...",
+  "prompt.placeholder.shell": "Shell-Befehl eingeben... {{example}}",
   "prompt.placeholder.normal": 'Fragen Sie alles... "{{example}}"',
   "prompt.placeholder.simple": "Fragen Sie alles...",
   "prompt.placeholder.summarizeComments": "Kommentare zusammenfassen…",
@@ -601,6 +601,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Edit-Tool-Abschnitte ausklappen",
   "settings.general.row.editToolPartsExpanded.description":
     "Edit-, Write- und Patch-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",
+  "settings.general.row.showSessionProgressBar.title": "Sitzungsfortschrittsleiste anzeigen",
+  "settings.general.row.showSessionProgressBar.description":
+    "Die animierte Fortschrittsleiste oben in der Sitzung anzeigen, wenn der Agent arbeitet",
   "settings.general.row.wayland.title": "Natives Wayland verwenden",
   "settings.general.row.wayland.description": "X11-Fallback unter Wayland deaktivieren. Erfordert Neustart.",
   "settings.general.row.wayland.tooltip":

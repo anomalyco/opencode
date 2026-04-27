@@ -232,7 +232,7 @@ export const dict = {
   "common.default": "Varsayılan",
   "common.attachment": "ek",
 
-  "prompt.placeholder.shell": "Kabuk komutu girin...",
+  "prompt.placeholder.shell": "Kabuk komutu girin... {{example}}",
   "prompt.placeholder.normal": 'Bir şeyler sorun... "{{example}}"',
   "prompt.placeholder.simple": "Bir şeyler sorun...",
   "prompt.placeholder.summarizeComments": "Yorumları özetle…",
@@ -662,6 +662,10 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Düzenleme araç bileşenlerini genişlet",
   "settings.general.row.editToolPartsExpanded.description":
     "Zaman çizelgesinde düzenleme, yazma ve yama araç bileşenlerini varsayılan olarak genişletilmiş göster",
+
+  "settings.general.row.showSessionProgressBar.title": "Oturum ilerleme çubuğunu göster",
+  "settings.general.row.showSessionProgressBar.description":
+    "Ajan çalışırken oturumun üst kısmında animasyonlu ilerleme çubuğunu göster",
 
   "settings.general.row.wayland.title": "Yerel Wayland kullan",
   "settings.general.row.wayland.description":

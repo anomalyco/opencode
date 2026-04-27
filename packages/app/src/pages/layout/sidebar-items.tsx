@@ -4,7 +4,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/shared/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
@@ -18,6 +18,12 @@ import { sessionPermissionRequest } from "../session/composer/session-request-tr
 import { childSessionOnPath, hasProjectPermissions } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+
+export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
+  return id === OPENCODE_PROJECT_ID
+    ? "https://opencode.ai/favicon.svg"
+    : (icon?.override ?? (icon?.color ? undefined : icon?.url))
+}
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const globalSync = useGlobalSync()
@@ -42,11 +48,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
       <div class="size-full rounded overflow-clip">
         <Avatar
           fallback={name()}
-          src={
-            props.project.id === OPENCODE_PROJECT_ID
-              ? "https://opencode.ai/favicon.svg"
-              : props.project.icon?.override || props.project.icon?.url
-          }
+          src={getProjectAvatarSource(props.project.id, props.project.icon)}
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"
           classList={{ "badge-mask": notify() }}
@@ -265,10 +267,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </Show>
         </div>
       </div>
-      <Show when={currentChild()}>
+      <Show when={currentChild()} keyed>
         {(child) => (
           <div class="w-full">
-            <SessionItem {...props} session={child()} level={(props.level ?? 0) + 1} />
+            <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
           </div>
         )}
       </Show>
