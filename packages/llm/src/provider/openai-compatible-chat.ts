@@ -70,7 +70,11 @@ export const model = (input: OpenAICompatibleChatModelInput) => {
   return llmModel({
     ...rest,
     protocol: "openai-compatible-chat",
-    headers: apiKey ? { authorization: `Bearer ${apiKey}`, ...headers } : headers,
+    // Match the precedence used by every other adapter: when an `apiKey` is
+    // supplied, its `Authorization: Bearer ...` wins over caller-provided
+    // headers. Callers who want to override auth should omit `apiKey` and set
+    // the header themselves.
+    headers: apiKey ? { ...headers, authorization: `Bearer ${apiKey}` } : headers,
     native: queryParams ? { ...native, queryParams } : native,
     capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
   })

@@ -136,17 +136,13 @@ interface ParserState {
   readonly usage?: Usage
 }
 
-const GeminiChunkJson = Schema.fromJsonString(GeminiChunk)
-const GeminiTargetJson = Schema.fromJsonString(GeminiTarget)
-const decodeChunkSync = Schema.decodeUnknownSync(GeminiChunkJson)
-
-const decodeChunk = (data: string) =>
-  Effect.try({
-    try: () => decodeChunkSync(data),
-    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid Gemini stream chunk", data),
-  })
-const encodeTarget = Schema.encodeSync(GeminiTargetJson)
-const decodeTarget = Schema.decodeUnknownEffect(GeminiDraft.pipe(Schema.decodeTo(GeminiTarget)))
+const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
+  adapter: ADAPTER,
+  draft: GeminiDraft,
+  target: GeminiTarget,
+  chunk: GeminiChunk,
+  chunkErrorMessage: "Invalid Gemini stream chunk",
+})
 
 const invalid = ProviderShared.invalidRequest
 
@@ -158,11 +154,89 @@ const mediaData = ProviderShared.mediaBytes
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
+// Tool-schema conversion has two distinct concerns:
+//
+// 1. Sanitize — fix common authoring mistakes Gemini rejects: integer/number
+//    enums (must be strings), `required` entries that don't match a property,
+//    untyped arrays (`items` must be present), and `properties`/`required`
+//    keys on non-object scalars. Mirrors OpenCode's historical
+//    `ProviderTransform.schema` Gemini rules.
+//
+// 2. Project — lossy mapping from JSON Schema to Gemini's schema dialect:
+//    drop empty objects, derive `nullable: true` from `type: [..., "null"]`,
+//    coerce `const` to `[const]` enum, recurse properties/items, propagate
+//    only an allowlisted set of keys (description, required, format, type,
+//    properties, items, allOf, anyOf, oneOf, minLength). Anything outside the
+//    allowlist (e.g. `additionalProperties`, `$ref`) is silently dropped.
+//
+// Sanitize runs first, then project. Both passes live here so the adapter
+// owns the full transformation; consumers don't need to register a patch.
+
+const SCHEMA_INTENT_KEYS = [
+  "type",
+  "properties",
+  "items",
+  "prefixItems",
+  "enum",
+  "const",
+  "$ref",
+  "additionalProperties",
+  "patternProperties",
+  "required",
+  "not",
+  "if",
+  "then",
+  "else",
+]
+
+const hasCombiner = (schema: unknown) =>
+  isRecord(schema) && (Array.isArray(schema.anyOf) || Array.isArray(schema.oneOf) || Array.isArray(schema.allOf))
+
+const hasSchemaIntent = (schema: unknown) =>
+  isRecord(schema) && (hasCombiner(schema) || SCHEMA_INTENT_KEYS.some((key) => key in schema))
+
+const sanitizeToolSchemaNode = (schema: unknown): unknown => {
+  if (!isRecord(schema)) return Array.isArray(schema) ? schema.map(sanitizeToolSchemaNode) : schema
+
+  const result: Record<string, unknown> = Object.fromEntries(
+    Object.entries(schema).map(([key, value]) =>
+      [key, key === "enum" && Array.isArray(value) ? value.map(String) : sanitizeToolSchemaNode(value)],
+    ),
+  )
+
+  // Integer/number enums become string enums on the wire — Gemini rejects
+  // numeric enum values. The `enum` map above already coerced the values;
+  // this rewrites the type to match.
+  if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) result.type = "string"
+
+  // Filter `required` entries that don't appear in `properties` — Gemini
+  // rejects dangling required field references.
+  const properties = result.properties
+  if (result.type === "object" && isRecord(properties) && Array.isArray(result.required)) {
+    result.required = result.required.filter((field) => typeof field === "string" && field in properties)
+  }
+
+  // Default untyped arrays to string-typed items so Gemini has a concrete
+  // schema to validate against.
+  if (result.type === "array" && !hasCombiner(result)) {
+    result.items = result.items ?? {}
+    if (isRecord(result.items) && !hasSchemaIntent(result.items)) result.items = { ...result.items, type: "string" }
+  }
+
+  // Scalar schemas can't carry object-shaped keys.
+  if (typeof result.type === "string" && result.type !== "object" && !hasCombiner(result)) {
+    delete result.properties
+    delete result.required
+  }
+
+  return result
+}
+
 const emptyObjectSchema = (schema: Record<string, unknown>) =>
   schema.type === "object" && (!isRecord(schema.properties) || Object.keys(schema.properties).length === 0) &&
   !schema.additionalProperties
 
-const convertJsonSchema = (schema: unknown): Record<string, unknown> | undefined => {
+const projectToolSchemaNode = (schema: unknown): Record<string, unknown> | undefined => {
   if (!isRecord(schema)) return undefined
   if (emptyObjectSchema(schema)) return undefined
   return Object.fromEntries(
@@ -175,26 +249,28 @@ const convertJsonSchema = (schema: unknown): Record<string, unknown> | undefined
       ["enum", schema.const !== undefined ? [schema.const] : schema.enum],
       ["properties", isRecord(schema.properties)
         ? Object.fromEntries(
-            Object.entries(schema.properties).map(([key, value]) => [key, convertJsonSchema(value)]),
+            Object.entries(schema.properties).map(([key, value]) => [key, projectToolSchemaNode(value)]),
           )
         : undefined],
       ["items", Array.isArray(schema.items)
-        ? schema.items.map(convertJsonSchema)
+        ? schema.items.map(projectToolSchemaNode)
         : schema.items === undefined
         ? undefined
-        : convertJsonSchema(schema.items)],
-      ["allOf", Array.isArray(schema.allOf) ? schema.allOf.map(convertJsonSchema) : undefined],
-      ["anyOf", Array.isArray(schema.anyOf) ? schema.anyOf.map(convertJsonSchema) : undefined],
-      ["oneOf", Array.isArray(schema.oneOf) ? schema.oneOf.map(convertJsonSchema) : undefined],
+        : projectToolSchemaNode(schema.items)],
+      ["allOf", Array.isArray(schema.allOf) ? schema.allOf.map(projectToolSchemaNode) : undefined],
+      ["anyOf", Array.isArray(schema.anyOf) ? schema.anyOf.map(projectToolSchemaNode) : undefined],
+      ["oneOf", Array.isArray(schema.oneOf) ? schema.oneOf.map(projectToolSchemaNode) : undefined],
       ["minLength", schema.minLength],
     ].filter((entry) => entry[1] !== undefined),
   )
 }
 
+const convertToolSchema = (schema: unknown) => projectToolSchemaNode(sanitizeToolSchemaNode(schema))
+
 const lowerTool = (tool: ToolDefinition) => ({
   name: tool.name,
   description: tool.description,
-  parameters: convertJsonSchema(tool.inputSchema),
+  parameters: convertToolSchema(tool.inputSchema),
 })
 
 const lowerToolConfig = Effect.fn("Gemini.lowerToolConfig")(function* (
@@ -321,10 +397,7 @@ const mapUsage = (usage: GeminiUsage | undefined) => {
     outputTokens: usage.candidatesTokenCount,
     reasoningTokens: usage.thoughtsTokenCount,
     cacheReadInputTokens: usage.cachedContentTokenCount,
-    totalTokens: usage.totalTokenCount ??
-      (usage.promptTokenCount !== undefined || usage.candidatesTokenCount !== undefined
-        ? (usage.promptTokenCount ?? 0) + (usage.candidatesTokenCount ?? 0)
-        : undefined),
+    totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, usage.candidatesTokenCount, usage.totalTokenCount),
     native: usage,
   })
 }

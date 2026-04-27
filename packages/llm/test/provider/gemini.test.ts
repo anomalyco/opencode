@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { LLM, ProviderChunkError, ProviderPatch } from "../../src"
+import { LLM, ProviderChunkError } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { Gemini } from "../../src/provider/gemini"
 import { testEffect } from "../lib/effect"
@@ -107,12 +107,9 @@ describe("Gemini adapter", () => {
     }),
   )
 
-  it.effect("applies Gemini tool-schema patches before preparing the target", () =>
+  it.effect("sanitizes integer enums, dangling required, untyped arrays, and scalar object keys", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({
-        adapters: [Gemini.adapter],
-        patches: [ProviderPatch.sanitizeGeminiToolSchema],
-      }).prepare(
+      const prepared = yield* LLMClient.make({ adapters: [Gemini.adapter] }).prepare(
         LLM.request({
           id: "req_schema_patch",
           model,
@@ -148,7 +145,6 @@ describe("Gemini adapter", () => {
           }],
         }],
       })
-      expect(prepared.patchTrace.map((item) => item.id)).toContain("schema.gemini.sanitize-tool-schema")
     }),
   )
 
