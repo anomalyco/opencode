@@ -10,7 +10,6 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultPart,
 } from "../schema"
 import { ProviderShared } from "./shared"
 
@@ -150,12 +149,7 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.openai.com/v1").replace(/\/+$/, "")
-
-const resultText = (part: ToolResultPart) => {
-  if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
-  return ProviderShared.encodeJson(part.result.value)
-}
+const baseUrl = (request: LLMRequest) => ProviderShared.trimBaseUrl(request.model.baseURL ?? "https://api.openai.com/v1")
 
 const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   type: "function",
@@ -216,7 +210,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     for (const part of message.content) {
       if (part.type !== "tool-result")
         return yield* invalid(`OpenAI Responses tool messages only support tool-result content`)
-      input.push({ type: "function_call_output", call_id: part.id, output: resultText(part) })
+      input.push({ type: "function_call_output", call_id: part.id, output: ProviderShared.toolResultText(part) })
     }
   }
 
@@ -280,6 +274,9 @@ const finishToolCall = (tools: Record<string, ToolAccumulator>, item: NonNullabl
     const input = yield* ProviderShared.parseToolInput(ADAPTER, item.name, raw)
     return [{ type: "tool-call" as const, id: item.call_id, name: item.name, input }]
   })
+
+const withoutTool = (tools: Record<string, ToolAccumulator>, id: string | undefined) =>
+  id === undefined ? tools : Object.fromEntries(Object.entries(tools).filter(([key]) => key !== id))
 
 // Hosted tool items (provider-executed) ship their typed input + status + result
 // fields all in one item. We expose them as a `tool-call` + `tool-result` pair
@@ -360,7 +357,7 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
 
     if (chunk.type === "response.output_item.done" && chunk.item?.type === "function_call") {
       const events = yield* finishToolCall(state.tools, chunk.item)
-      return [state, events] as const
+      return [{ tools: withoutTool(state.tools, chunk.item.id) }, events] as const
     }
 
     if (chunk.type === "response.output_item.done" && chunk.item && isHostedToolItem(chunk.item)) {

@@ -1,11 +1,13 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
+import { AnthropicMessages } from "@opencode-ai/llm"
 import { client } from "@opencode-ai/llm/adapter"
 import { OpenAIResponses } from "@opencode-ai/llm/provider/openai-responses"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { LLMNative } from "../../src/session/llm-native"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ProviderTest } from "../fake/provider"
+import { testEffect } from "../lib/effect"
 import type { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider"
 import type { Tool } from "../../src/tool"
@@ -111,26 +113,26 @@ const lookupTool = {
   execute: () => Effect.succeed({ title: "", metadata: {}, output: "" }),
 } satisfies Tool.Def<typeof lookupParameters>
 
+const it = testEffect(Layer.empty)
+
 describe("LLMNative.request", () => {
-  test("builds a text-only native LLM request", async () => {
+  it.effect("builds a text-only native LLM request", () => Effect.gen(function* () {
     const mdl = model()
     const provider = ProviderTest.info({ id: ProviderID.openai, key: "openai-key" }, mdl)
     const userID = MessageID.ascending()
     const assistantID = MessageID.ascending()
 
-    const request = await Effect.runPromise(
-      LLMNative.request({
-        id: "request-1",
-        provider,
-        model: mdl,
-        system: ["You are concise.", ""],
-        generation: { maxTokens: 123, temperature: 0.2, topP: 0.9 },
-        messages: [
-          userMessage(mdl, userID, [textPart(userID, "ignored", { ignored: true }), textPart(userID, "Hello")]),
-          assistantMessage(mdl, assistantID, userID, [textPart(assistantID, "Hi")]),
-        ],
-      }),
-    )
+    const request = yield* LLMNative.request({
+      id: "request-1",
+      provider,
+      model: mdl,
+      system: ["You are concise.", ""],
+      generation: { maxTokens: 123, temperature: 0.2, topP: 0.9 },
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "ignored", { ignored: true }), textPart(userID, "Hello")]),
+        assistantMessage(mdl, assistantID, userID, [textPart(assistantID, "Hi")]),
+      ],
+    })
 
     expect(request).toMatchObject({
       id: "request-1",
@@ -148,18 +150,16 @@ describe("LLMNative.request", () => {
       { id: userID, role: "user", content: [{ type: "text", text: "Hello" }] },
       { id: assistantID, role: "assistant", content: [{ type: "text", text: "Hi" }] },
     ])
-  })
+  }))
 
-  test("converts native tool definitions", async () => {
+  it.effect("converts native tool definitions", () => Effect.gen(function* () {
     const mdl = model()
-    const request = await Effect.runPromise(
-      LLMNative.request({
-        provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
-        model: mdl,
-        messages: [],
-        tools: [lookupTool],
-      }),
-    )
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [],
+      tools: [lookupTool],
+    })
 
     expect(request.tools).toHaveLength(1)
     expect(request.tools[0]).toMatchObject({
@@ -179,38 +179,36 @@ describe("LLMNative.request", () => {
         opencodeToolID: "lookup",
       },
     })
-  })
+  }))
 
-  test("converts assistant reasoning and tool history", async () => {
+  it.effect("converts assistant reasoning and tool history", () => Effect.gen(function* () {
     const mdl = model()
     const provider = ProviderTest.info({ id: ProviderID.openai }, mdl)
     const userID = MessageID.ascending()
     const assistantID = MessageID.ascending()
 
-    const request = await Effect.runPromise(
-      LLMNative.request({
-        provider,
-        model: mdl,
-        messages: [
-          userMessage(mdl, userID, [textPart(userID, "Check weather")]),
-          assistantMessage(mdl, assistantID, userID, [
-            reasoningPart(assistantID, "Need a lookup."),
-            toolPart(assistantID, {
-              callID: "call_1",
-              tool: "lookup",
-              state: {
-                status: "completed",
-                input: { query: "weather" },
-                output: "sunny",
-                title: "Weather",
-                metadata: {},
-                time: { start: 1, end: 2 },
-              },
-            }),
-          ]),
-        ],
-      }),
-    )
+    const request = yield* LLMNative.request({
+      provider,
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "Check weather")]),
+        assistantMessage(mdl, assistantID, userID, [
+          reasoningPart(assistantID, "Need a lookup."),
+          toolPart(assistantID, {
+            callID: "call_1",
+            tool: "lookup",
+            state: {
+              status: "completed",
+              input: { query: "weather" },
+              output: "sunny",
+              title: "Weather",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          }),
+        ]),
+      ],
+    })
 
     expect(request.messages.map((message) => ({ role: message.role, content: message.content }))).toEqual([
       { role: "user", content: [{ type: "text", text: "Check weather" }] },
@@ -234,36 +232,34 @@ describe("LLMNative.request", () => {
         ],
       },
     ])
-  })
+  }))
 
-  test("keeps provider-executed tool results on assistant messages", async () => {
+  it.effect("keeps provider-executed tool results on assistant messages", () => Effect.gen(function* () {
     const mdl = model()
     const userID = MessageID.ascending()
     const assistantID = MessageID.ascending()
-    const request = await Effect.runPromise(
-      LLMNative.request({
-        provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
-        model: mdl,
-        messages: [
-          userMessage(mdl, userID, [textPart(userID, "Search docs")]),
-          assistantMessage(mdl, assistantID, userID, [
-            toolPart(assistantID, {
-              callID: "ws_1",
-              tool: "web_search",
-              metadata: { providerExecuted: true, provider: "openai" },
-              state: {
-                status: "completed",
-                input: { query: "effect" },
-                output: "found",
-                title: "Search",
-                metadata: {},
-                time: { start: 1, end: 2 },
-              },
-            }),
-          ]),
-        ],
-      }),
-    )
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "Search docs")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "ws_1",
+            tool: "web_search",
+            metadata: { providerExecuted: true, provider: "openai" },
+            state: {
+              status: "completed",
+              input: { query: "effect" },
+              output: "found",
+              title: "Search",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          }),
+        ]),
+      ],
+    })
 
     expect(request.messages.map((message) => ({ role: message.role, content: message.content }))).toEqual([
       { role: "user", content: [{ type: "text", text: "Search docs" }] },
@@ -289,53 +285,55 @@ describe("LLMNative.request", () => {
         ],
       },
     ])
-  })
+  }))
 
-  test("fails instead of dropping unsupported native parts", async () => {
+  it.effect("fails instead of dropping unsupported native parts", () => Effect.gen(function* () {
     const mdl = model()
     const userID = MessageID.ascending()
+    const exit = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [userMessage(mdl, userID, [filePart(userID)])],
+    }).pipe(Effect.exit)
 
-    await expect(
-      Effect.runPromise(
-        LLMNative.request({
-          provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
-          model: mdl,
-          messages: [userMessage(mdl, userID, [filePart(userID)])],
-        }),
-      ),
-    ).rejects.toThrow(`Native LLM request conversion does not support file parts in message ${userID}`)
-  })
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) {
+      const err = Cause.squash(exit.cause)
+      expect(err).toBeInstanceOf(Error)
+      if (err instanceof Error) {
+        expect(err.message).toBe(`Native LLM request conversion does not support file parts in message ${userID}`)
+      }
+    }
+  }))
 
-  test("prepares OpenAI Responses text and tool request body", async () => {
+  it.effect("prepares OpenAI Responses text and tool request body", () => Effect.gen(function* () {
     const mdl = model()
     const userID = MessageID.ascending()
     const assistantID = MessageID.ascending()
-    const request = await Effect.runPromise(
-      LLMNative.request({
-        provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
-        model: mdl,
-        messages: [
-          userMessage(mdl, userID, [textPart(userID, "What is the weather?")]),
-          assistantMessage(mdl, assistantID, userID, [
-            toolPart(assistantID, {
-              callID: "call_1",
-              tool: "lookup",
-              state: {
-                status: "completed",
-                input: { query: "weather" },
-                output: '{"forecast":"sunny"}',
-                title: "Weather",
-                metadata: {},
-                time: { start: 1, end: 2 },
-              },
-            }),
-          ]),
-        ],
-        tools: [lookupTool],
-        toolChoice: "lookup",
-      }),
-    )
-    const prepared = await Effect.runPromise(client({ adapters: [OpenAIResponses.adapter] }).prepare(request))
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "What is the weather?")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "call_1",
+            tool: "lookup",
+            state: {
+              status: "completed",
+              input: { query: "weather" },
+              output: '{"forecast":"sunny"}',
+              title: "Weather",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          }),
+        ]),
+      ],
+      tools: [lookupTool],
+      toolChoice: "lookup",
+    })
+    const prepared = yield* client({ adapters: [OpenAIResponses.adapter] }).prepare(request)
 
     expect(prepared.target).toMatchObject({
       model: "gpt-5",
@@ -359,5 +357,71 @@ describe("LLMNative.request", () => {
       tool_choice: { type: "function", name: "lookup" },
       stream: true,
     })
-  })
+  }))
+
+  it.effect("prepares Anthropic Messages text and tool request body", () => Effect.gen(function* () {
+    const mdl = model({
+      id: ModelID.make("claude-sonnet-4-5"),
+      providerID: ProviderID.make("anthropic"),
+      api: { id: "claude-sonnet-4-5", url: "https://api.anthropic.com/v1", npm: "@ai-sdk/anthropic" },
+    })
+    const userID = MessageID.ascending()
+    const assistantID = MessageID.ascending()
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+      model: mdl,
+      system: ["You are concise."],
+      generation: { maxTokens: 20, temperature: 0 },
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "What is the weather?")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "call_1",
+            tool: "lookup",
+            state: {
+              status: "completed",
+              input: { query: "weather" },
+              output: '{"forecast":"sunny"}',
+              title: "Weather",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          }),
+        ]),
+      ],
+      tools: [lookupTool],
+      toolChoice: "lookup",
+    })
+    const prepared = yield* client({ adapters: [AnthropicMessages.adapter] }).prepare(request)
+
+    expect(request.model).toMatchObject({
+      provider: "anthropic",
+      protocol: "anthropic-messages",
+      headers: { "x-api-key": "anthropic-key" },
+    })
+    expect(prepared.target).toMatchObject({
+      model: "claude-sonnet-4-5",
+      system: [{ type: "text", text: "You are concise." }],
+      messages: [
+        { role: "user", content: [{ type: "text", text: "What is the weather?" }] },
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: { query: "weather" } }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '{"forecast":"sunny"}' }] },
+      ],
+      tools: [
+        {
+          name: "lookup",
+          description: "Lookup project data",
+          input_schema: {
+            type: "object",
+            properties: { query: { type: "string", description: "Search query" } },
+            required: ["query"],
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "lookup" },
+      stream: true,
+      max_tokens: 20,
+      temperature: 0,
+    })
+  }))
 })

@@ -32,7 +32,7 @@ const queryParams = (request: LLMRequest) => {
 
 const completionUrl = (request: LLMRequest) => {
   if (!request.model.baseURL) return undefined
-  const url = new URL(`${request.model.baseURL.replace(/\/+$/, "")}/chat/completions`)
+  const url = new URL(`${ProviderShared.trimBaseUrl(request.model.baseURL)}/chat/completions`)
   for (const [key, value] of Object.entries(queryParams(request) ?? {})) url.searchParams.set(key, value)
   return url.toString()
 }

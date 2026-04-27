@@ -10,7 +10,6 @@ import {
   type LLMEvent,
   LLMRequest,
   type ToolCallPart,
-  type ToolResultPart,
   type ToolResultValue,
 } from "./schema"
 import { ToolFailure } from "./schema"
@@ -63,9 +62,13 @@ export const run = <T extends Tools>(
   const maxSteps = options.maxSteps ?? 10
   const concurrency = options.concurrency ?? 10
   const tools = options.tools as Tools
+  const runtimeTools = toDefinitions(tools)
   const initialRequest = new LLMRequest({
     ...options.request,
-    tools: [...options.request.tools, ...toDefinitions(tools)],
+    tools: [
+      ...options.request.tools.filter((tool) => !runtimeTools.some((runtimeTool) => runtimeTool.name === tool.name)),
+      ...runtimeTools,
+    ],
   })
 
   const loop = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> =>
@@ -128,13 +131,12 @@ const accumulate = (state: StepState, event: LLMEvent) => {
     return
   }
   if (event.type === "tool-call") {
-    const part: ToolCallPart = {
-      type: "tool-call",
+    const part = LLM.toolCall({
       id: event.id,
       name: event.name,
       input: event.input,
       providerExecuted: event.providerExecuted,
-    }
+    })
     state.assistantContent.push(part)
     // Provider-executed tools are dispatched by the provider; the runtime must
     // not invoke a client handler. The matching `tool-result` event arrives
@@ -144,14 +146,12 @@ const accumulate = (state: StepState, event: LLMEvent) => {
     return
   }
   if (event.type === "tool-result" && event.providerExecuted) {
-    const part: ToolResultPart = {
-      type: "tool-result",
+    state.assistantContent.push(LLM.toolResult({
       id: event.id,
       name: event.name,
       result: event.result,
       providerExecuted: true,
-    }
-    state.assistantContent.push(part)
+    }))
     return
   }
   if (event.type === "request-finish") {
@@ -198,7 +198,10 @@ const decodeAndExecute = (tool: AnyTool, input: unknown): Effect.Effect<ToolResu
 
 const emitEvents = (call: ToolCallPart, result: ToolResultValue): ReadonlyArray<LLMEvent> =>
   result.type === "error"
-    ? [{ type: "tool-error", id: call.id, name: call.name, message: String(result.value) }]
+    ? [
+        { type: "tool-error", id: call.id, name: call.name, message: String(result.value) },
+        { type: "tool-result", id: call.id, name: call.name, result },
+      ]
     : [{ type: "tool-result", id: call.id, name: call.name, result }]
 
 export * as ToolRuntime from "./tool-runtime"

@@ -11,7 +11,6 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultPart,
 } from "../schema"
 import { ProviderShared } from "./shared"
 
@@ -165,12 +164,7 @@ const decodeTarget = Schema.decodeUnknownEffect(OpenAIChatDraft.pipe(Schema.deco
 
 const invalid = ProviderShared.invalidRequest
 
-const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.openai.com/v1").replace(/\/+$/, "")
-
-const resultText = (part: ToolResultPart) => {
-  if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
-  return ProviderShared.encodeJson(part.result.value)
-}
+const baseUrl = (request: LLMRequest) => ProviderShared.trimBaseUrl(request.model.baseURL ?? "https://api.openai.com/v1")
 
 const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
   type: "function",
@@ -239,7 +233,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     for (const part of message.content) {
       if (part.type !== "tool-result")
         return yield* invalid(`OpenAI Chat tool messages only support tool-result content`)
-      messages.push({ role: "tool", tool_call_id: part.id, content: resultText(part) })
+      messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
     }
   }
 

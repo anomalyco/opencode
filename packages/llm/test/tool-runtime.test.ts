@@ -82,6 +82,12 @@ describe("ToolRuntime", () => {
       const toolError = events.find(LLMEvent.guards["tool-error"])
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "missing_tool" })
       expect(toolError?.message).toContain("Unknown tool")
+      expect(events.find(LLMEvent.guards["tool-result"])).toMatchObject({
+        type: "tool-result",
+        id: "call_1",
+        name: "missing_tool",
+        result: { type: "error", value: "Unknown tool: missing_tool" },
+      })
     }),
   )
 

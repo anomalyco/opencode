@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer"
 import { Effect, Schema, Stream } from "effect"
 import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
@@ -13,7 +12,6 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
-  type ToolResultPart,
 } from "../schema"
 import { ProviderShared } from "./shared"
 
@@ -153,14 +151,9 @@ const decodeTarget = Schema.decodeUnknownEffect(GeminiDraft.pipe(Schema.decodeTo
 const invalid = ProviderShared.invalidRequest
 
 const baseUrl = (request: LLMRequest) =>
-  (request.model.baseURL ?? "https://generativelanguage.googleapis.com/v1beta").replace(/\/+$/, "")
+  ProviderShared.trimBaseUrl(request.model.baseURL ?? "https://generativelanguage.googleapis.com/v1beta")
 
-const mediaData = (part: MediaPart) => typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
-
-const resultText = (part: ToolResultPart) => {
-  if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
-  return ProviderShared.encodeJson(part.result.value)
-}
+const mediaData = ProviderShared.mediaBytes
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -269,7 +262,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           name: part.name,
           response: {
             name: part.name,
-            content: resultText(part),
+            content: ProviderShared.toolResultText(part),
           },
         },
       })

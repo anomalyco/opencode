@@ -206,14 +206,9 @@ const decodeTarget = Schema.decodeUnknownEffect(AnthropicMessagesDraft.pipe(Sche
 
 const invalid = ProviderShared.invalidRequest
 
-const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.anthropic.com/v1").replace(/\/+$/, "")
+const baseUrl = (request: LLMRequest) => ProviderShared.trimBaseUrl(request.model.baseURL ?? "https://api.anthropic.com/v1")
 
 const cacheControl = (cache: CacheHint | undefined) => cache?.type === "ephemeral" ? { type: "ephemeral" as const } : undefined
-
-const resultText = (part: ToolResultPart) => {
-  if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
-  return ProviderShared.encodeJson(part.result.value)
-}
 
 const lowerTool = (tool: ToolDefinition): AnthropicTool => ({
   name: tool.name,
@@ -306,7 +301,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (re
       content.push({
         type: "tool_result",
         tool_use_id: part.id,
-        content: resultText(part),
+        content: ProviderShared.toolResultText(part),
         is_error: part.result.type === "error" ? true : undefined,
       })
     }

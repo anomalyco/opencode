@@ -1,7 +1,8 @@
+import { Buffer } from "node:buffer"
 import { Cause, Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
-import { InvalidRequestError, ProviderChunkError } from "../schema"
+import { InvalidRequestError, ProviderChunkError, type MediaPart, type ToolResultPart } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -33,6 +34,22 @@ export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) =>
  */
 export const parseToolInput = (adapter: string, name: string, raw: string) =>
   parseJson(adapter, raw || "{}", `Invalid JSON input for ${adapter} tool call ${name}`)
+
+/**
+ * Encode a `MediaPart`'s raw bytes for inclusion in a JSON request body.
+ * `data: string` is assumed to already be base64 (matches caller convention
+ * across Gemini / Bedrock); `data: Uint8Array` is base64-encoded here. Used
+ * by every adapter that supports image / document inputs.
+ */
+export const mediaBytes = (part: MediaPart) =>
+  typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
+
+export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
+
+export const toolResultText = (part: ToolResultPart) => {
+  if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
+  return encodeJson(part.result.value)
+}
 
 const streamError = (adapter: string, message: string, cause: Cause.Cause<unknown>) => {
   const failed = cause.reasons.find(Cause.isFailReason)?.error
