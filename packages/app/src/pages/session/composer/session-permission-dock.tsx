@@ -19,6 +19,12 @@ export function SessionPermissionDock(props: {
     return value
   }
 
+  const toolArgs = () => {
+    const meta = props.request.metadata as Record<string, unknown> | undefined
+    if (!meta?.args) return ""
+    return JSON.stringify(meta.args, null, 2)
+  }
+
   return (
     <DockPrompt
       kind="permission"
@@ -56,6 +62,16 @@ export function SessionPermissionDock(props: {
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
           <div data-slot="permission-hint">{toolDescription()}</div>
+        </div>
+      </Show>
+
+      <Show when={toolArgs()}>
+        <div data-slot="permission-row">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <div data-slot="permission-hint" class="text-xs text-gray-500">Arguments:</div>
+          <pre class="text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto">
+            <code class="text-12-regular text-text-base break-all">{toolArgs()}</code>
+          </pre>
         </div>
       </Show>
 
