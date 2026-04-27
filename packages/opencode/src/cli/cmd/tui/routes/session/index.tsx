@@ -133,14 +133,35 @@ export function Session() {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
+  const descendants = createMemo(() => {
+    const rootID = session()?.parentID ?? session()?.id
+    if (!rootID) return []
+    const all = sync.data.session
+    const childrenByParent = new Map<string, string[]>()
+    for (const s of all) {
+      if (!s.parentID) continue
+      const arr = childrenByParent.get(s.parentID)
+      if (arr) arr.push(s.id)
+      else childrenByParent.set(s.parentID, [s.id])
+    }
+    const result: string[] = [rootID]
+    const stack = [rootID]
+    while (stack.length > 0) {
+      for (const childID of childrenByParent.get(stack.pop()!) ?? []) {
+        result.push(childID)
+        stack.push(childID)
+      }
+    }
+    return result
+  })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return descendants().flatMap((id) => sync.data.permission[id] ?? [])
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return descendants().flatMap((id) => sync.data.question[id] ?? [])
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
@@ -1966,6 +1987,64 @@ function WebSearch(props: ToolProps<typeof WebSearchTool>) {
   )
 }
 
+function sessionStats(sessionID: string, sync: ReturnType<typeof useSync>) {
+  const msgs = sync.data.message[sessionID] ?? []
+  let tokens = 0
+  let cost = 0
+  for (const msg of msgs) {
+    if (msg.role !== "assistant") continue
+    tokens += msg.tokens.input + msg.tokens.output + msg.tokens.reasoning
+    cost += msg.cost
+  }
+  return { tokens, cost }
+}
+
+function formatStats(stats: { tokens: number; cost: number; toolCount: number; duration: number }) {
+  const parts: string[] = []
+  if (stats.duration > 0) parts.push(Locale.duration(stats.duration))
+  if (stats.toolCount > 0) parts.push(`${stats.toolCount} tools`)
+  if (stats.tokens > 0) parts.push(`${Locale.number(stats.tokens)} tk`)
+  if (stats.cost > 0) parts.push(`$${stats.cost.toFixed(4)}`)
+  return parts.join(" · ")
+}
+
+function taskSubtree(sessionID: string, sync: ReturnType<typeof useSync>, depth: number): string[] {
+  const msgs = sync.data.message[sessionID] ?? []
+  const taskParts = msgs.flatMap((msg) =>
+    (sync.data.part[msg.id] ?? []).filter((part): part is ToolPart => part.type === "tool" && part.tool === "task"),
+  )
+  const lines: string[] = []
+  const indent = "  ".repeat(depth)
+  for (const part of taskParts) {
+    const state = part.state as {
+      status?: string
+      input?: { description?: string; subagent_type?: string }
+      metadata?: { sessionId?: string }
+      title?: string
+      time?: { start?: number; end?: number }
+    }
+    const desc = state.title ?? state.input?.description ?? "subtask"
+    const status =
+      state.status === "completed" ? "✓" : state.status === "error" ? "✗" : state.status === "running" ? "●" : "○"
+    const childSessionID = state.metadata?.sessionId
+    let statsStr = ""
+    if (childSessionID) {
+      if (!sync.data.message[childSessionID]?.length) void sync.session.sync(childSessionID)
+      const childMsgs = sync.data.message[childSessionID] ?? []
+      const toolCount = childMsgs.flatMap((m) => (sync.data.part[m.id] ?? []).filter((p) => p.type === "tool")).length
+      const first = childMsgs.find((m) => m.role === "user")?.time.created
+      const last = childMsgs.findLast((m) => m.role === "assistant")?.time.completed
+      const stats = sessionStats(childSessionID, sync)
+      const duration = first && last ? last - first : 0
+      const formatted = formatStats({ ...stats, toolCount, duration })
+      if (formatted) statsStr = ` (${formatted})`
+    }
+    lines.push(`${indent}${status} ${desc}${statsStr}`)
+    if (childSessionID) lines.push(...taskSubtree(childSessionID, sync, depth + 1))
+  }
+  return lines
+}
+
 function Task(props: ToolProps<typeof TaskTool>) {
   const { navigate } = useRoute()
   const sync = useSync()
@@ -2000,10 +2079,9 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   const content = createMemo(() => {
     if (!props.input.description) return ""
-    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
+    const content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
 
     if (isRunning() && tools().length > 0) {
-      // content[0] += ` · ${tools().length} toolcalls`
       if (current()) {
         const state = current()!.state
         const title = state.status === "running" || state.status === "completed" ? state.title : undefined
@@ -2012,7 +2090,16 @@ function Task(props: ToolProps<typeof TaskTool>) {
     }
 
     if (props.part.state.status === "completed") {
-      content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
+      const childSessionID = props.metadata.sessionId
+      const stats = childSessionID ? sessionStats(childSessionID, sync) : { tokens: 0, cost: 0 }
+      const formatted = formatStats({ ...stats, toolCount: tools().length, duration: duration() })
+      content.push(`└ ${formatted}`)
+    }
+
+    const childSessionID = props.metadata.sessionId
+    if (childSessionID) {
+      const subtree = taskSubtree(childSessionID, sync, 1)
+      if (subtree.length > 0) content.push(...subtree)
     }
 
     return content.join("\n")

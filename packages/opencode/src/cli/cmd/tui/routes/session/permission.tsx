@@ -405,12 +405,20 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
+            const params = Object.entries(data)
+              .filter(([, v]) => v !== undefined && v !== null && v !== "")
+              .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
             return {
               icon: "⚙",
               title: `Call tool ${permission}`,
               body: (
-                <box paddingLeft={1}>
-                  <text fg={theme.textMuted}>{"Tool: " + permission}</text>
+                <box paddingLeft={1} flexDirection="column">
+                  <Show when={params.length > 0}>
+                    <For each={params}>{(param) => <text fg={theme.textMuted}>{param}</text>}</For>
+                  </Show>
+                  <Show when={params.length === 0}>
+                    <text fg={theme.textMuted}>{"Tool: " + permission}</text>
+                  </Show>
                 </box>
               ),
             }
@@ -418,11 +426,23 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
           const current = info()
 
+          const subagentLabel = () => {
+            const s = session()
+            if (!s || !s.parentID) return undefined
+            return s.title.replace(/\s*\(@\w+\s+subagent\)\s*$/, "")
+          }
+
           const header = () => (
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.warning}>{"△"}</text>
                 <text fg={theme.text}>Permission required</text>
+                <Show when={subagentLabel()}>
+                  <text fg={theme.textMuted}>
+                    {"in "}
+                    {subagentLabel()}
+                  </text>
+                </Show>
               </box>
               <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
                 <text fg={theme.textMuted} flexShrink={0}>
