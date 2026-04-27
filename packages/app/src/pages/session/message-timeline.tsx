@@ -81,6 +81,17 @@ const sameMessages = (a: MessageType[], b: MessageType[]) => {
   return a.every((item, index) => item === b[index])
 }
 
+function snap(node: HTMLDivElement) {
+  const max = Math.max(0, node.scrollHeight - node.clientHeight)
+  return {
+    top: Math.round(node.scrollTop),
+    height: Math.round(node.scrollHeight),
+    client: Math.round(node.clientHeight),
+    max: Math.round(max),
+    gap: Math.round(max - node.scrollTop),
+  }
+}
+
 const turnMessages = (messages: MessageType[], id: string) => {
   const result = Binary.search(messages, id, (message) => message.id)
   const start = result.found ? result.index : messages.findIndex((message) => message.id === id)
@@ -305,13 +316,16 @@ export function MessageTimeline(props: {
       if (prevID !== undefined && newID !== prevID) {
         setSessionSwitching(true)
         // Re-enable windowing after a delay to allow messages to render and collect height data
-        makeTimer(() => {
-          setSessionSwitching(false)
-        }, 500, setTimeout)
+        makeTimer(
+          () => {
+            setSessionSwitching(false)
+          },
+          500,
+          setTimeout,
+        )
       }
     }),
   )
-
 
   const canWindow = createMemo(() => !isWorking() && !sessionSwitching())
 
@@ -459,7 +473,9 @@ export function MessageTimeline(props: {
     if (index === undefined) {
       index = props.renderedUserMessages.findIndex((m) => m.id === id)
       if (index === -1) {
-        console.warn(`[syncWindow] Anchor not found: id=${id} renderedLength=${ids.length} propsLength=${props.renderedUserMessages.length}`)
+        console.warn(
+          `[syncWindow] Anchor not found: id=${id} renderedLength=${ids.length} propsLength=${props.renderedUserMessages.length}`,
+        )
         return next
       }
     }
@@ -484,10 +500,14 @@ export function MessageTimeline(props: {
     const viewportAnchor = captureWindowAnchor()
     const targetId = activeMessageID() ?? viewportAnchor?.id
     const targetAnchor = captureMessageAnchor(targetId)
-    const scrollAnchor = props.currentMessageId ? targetAnchor ?? viewportAnchor : viewportAnchor
+    const scrollAnchor = props.currentMessageId ? (targetAnchor ?? viewportAnchor) : viewportAnchor
     const next = syncWindow(buildWindow(), targetId)
     const same = sameWindow(next)
     if (same) return
+
+    const root = viewport
+    const before = root ? snap(root) : undefined
+    const prev = { start: windowed.start, end: windowed.end, top: windowed.top, bottom: windowed.bottom }
 
     setWindowed(next)
     const adjustVersion = ++windowAdjustVersion
@@ -496,7 +516,23 @@ export function MessageTimeline(props: {
         if (adjustVersion !== windowAdjustVersion) return
         const root = viewport
         if (!root) return
+        const prevTop = root.scrollTop
         root.scrollTop = root.scrollHeight
+        const after = snap(root)
+        const jump = Math.round(root.scrollTop - prevTop)
+        if (Math.abs(jump) > 24 || after.top < prevTop - 24) {
+          console.warn("[timeline] live window scroll write", {
+            jump,
+            before,
+            after,
+            prev,
+            next,
+            live: props.live,
+            bottom: props.scroll.bottom,
+            current: props.currentMessageId,
+            target: targetId,
+          })
+        }
         props.onScheduleScrollState(root)
       })
       return
@@ -510,14 +546,30 @@ export function MessageTimeline(props: {
       const key = typeof CSS === "undefined" ? scrollAnchor.id : CSS.escape(scrollAnchor.id)
       const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
       if (!node) {
-        console.warn(`[applyWindow] anchor node not found in DOM: id=${scrollAnchor.id} windowStart=${windowed.start} windowEnd=${windowed.end}`)
+        console.warn(
+          `[applyWindow] anchor node not found in DOM: id=${scrollAnchor.id} windowStart=${windowed.start} windowEnd=${windowed.end}`,
+        )
         return
       }
       const box = root.getBoundingClientRect()
       const top = node.getBoundingClientRect().top - box.top
       const delta = top - scrollAnchor.top
       if (Math.abs(delta) <= 1) return
+      const prevTop = root.scrollTop
       root.scrollTop += delta
+      const after = snap(root)
+      if (Math.abs(delta) > 24 || after.top < prevTop - 24) {
+        console.warn("[timeline] anchor scroll write", {
+          delta: Math.round(delta),
+          before,
+          after,
+          prev,
+          next,
+          anchor: scrollAnchor,
+          target: targetId,
+          current: props.currentMessageId,
+        })
+      }
       props.onScheduleScrollState(root)
     })
   }
@@ -547,6 +599,51 @@ export function MessageTimeline(props: {
     if (!canWindow() || ids.length <= windowThreshold) return ids
     return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
   })
+
+  createEffect(
+    on(
+      () =>
+        [
+          visibleRendered().at(0),
+          visibleRendered().at(-1),
+          visibleRendered().length,
+          windowed.top,
+          windowed.bottom,
+          activeMessageID(),
+          isWorking(),
+        ] as const,
+      ([first, last, size, top, bottom, activeID, busy], prev) => {
+        if (!prev) return
+        if (
+          prev[0] === first &&
+          prev[1] === last &&
+          prev[2] === size &&
+          prev[3] === top &&
+          prev[4] === bottom &&
+          prev[5] === activeID &&
+          prev[6] === busy
+        ) {
+          return
+        }
+        console.debug("[timeline] rendered slice", {
+          first,
+          last,
+          size,
+          top: Math.round(top),
+          bottom: Math.round(bottom),
+          active: activeID,
+          working: busy,
+          activeVisible: !!activeID && visibleRendered().includes(activeID),
+          prevFirst: prev[0],
+          prevLast: prev[1],
+          prevSize: prev[2],
+          prevTop: Math.round(prev[3]),
+          prevBottom: Math.round(prev[4]),
+        })
+      },
+      { defer: true },
+    ),
+  )
   createEffect(
     on(rendered, () => {
       const ids = new Set(rendered())
@@ -638,6 +735,13 @@ export function MessageTimeline(props: {
   createEffect(
     on(activeMessageID, (id, prev) => {
       if (id === prev) return
+      console.debug("[timeline] active message", {
+        prev,
+        next: id,
+        rendered: props.renderedUserMessages.length,
+        live: props.live,
+        bottom: props.scroll.bottom,
+      })
       windowAdjustVersion += 1
       scheduleWindow()
     }),
@@ -667,6 +771,27 @@ export function MessageTimeline(props: {
     const messages = props.renderedUserMessages
     return messages.find((item) => item.id === id)
   })
+
+  createEffect(
+    on(
+      () => [canWindow(), windowed.start, windowed.end, props.renderedUserMessages.length] as const,
+      ([can, start, end, size], prev) => {
+        if (prev && prev[0] === can && prev[1] === start && prev[2] === end && prev[3] === size) return
+        if (!prev) return
+        console.debug("[timeline] window state", {
+          can,
+          start,
+          end,
+          size,
+          prevCan: prev[0],
+          prevStart: prev[1],
+          prevEnd: prev[2],
+          prevSize: prev[3],
+        })
+      },
+      { defer: true },
+    ),
+  )
 
   // UI-specific memo: reuses the sync computation for the message list
   const currentMessage = _virtualizationSync
@@ -2006,14 +2131,11 @@ export function MessageTimeline(props: {
       if (mathMode() !== "turn") return "full"
       return eager() ? "full" : "defer"
     })
-    const messages = createMemo<MessageType[]>(
-      (prev?: MessageType[]) => {
-        if (active()) return turnMessages(sessionMessages(), item.messageID)
-        const next = turnMessages(sessionMessages(), item.messageID)
-        return prev && sameMessages(prev, next) ? prev : next
-      },
-      emptyMessages,
-    )
+    const messages = createMemo<MessageType[]>((prev?: MessageType[]) => {
+      if (active()) return turnMessages(sessionMessages(), item.messageID)
+      const next = turnMessages(sessionMessages(), item.messageID)
+      return prev && sameMessages(prev, next) ? prev : next
+    }, emptyMessages)
     const comments = createMemo(() => messageComments(sync.data.part[item.messageID] ?? []), [], {
       equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
     })
@@ -2053,7 +2175,30 @@ export function MessageTimeline(props: {
       })
     })
 
+    createEffect(() => {
+      if (!active()) return
+      if (!isWorking()) return
+      console.debug("[timeline] active item mounted", {
+        msg: item.messageID,
+        index: item.index,
+        visible: visibleRendered().includes(item.messageID),
+      })
+    })
+
     onCleanup(() => stop?.())
+    onCleanup(() => {
+      if (!active()) return
+      console.warn("[timeline] active item unmounted", {
+        msg: item.messageID,
+        index: item.index,
+        working: isWorking(),
+        visibleSize: visibleRendered().length,
+        first: visibleRendered().at(0),
+        last: visibleRendered().at(-1),
+        top: Math.round(windowed.top),
+        bottom: Math.round(windowed.bottom),
+      })
+    })
 
     return (
       <div

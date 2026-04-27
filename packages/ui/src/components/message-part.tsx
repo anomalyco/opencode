@@ -59,7 +59,6 @@ import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 import { skillText } from "./message-skill"
-import { hold } from "./message-part-stream"
 import { hookName, isCustomHookTool, normalizeTool } from "./tool-meta"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
@@ -1501,14 +1500,56 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
       .at(-1)
     return last?.id === part().id
   })
-  const renderText = createLiveText(displayText, () => streaming() && isLastTextPart())
-
-  const block = createMemo(() => {
-    const text = renderText()
-    if (!text) return { head: "", tail: "" }
-    if (!streaming() || !isLastTextPart()) return { head: text, tail: "" }
-    return hold(text)
+  const end = createMemo(() => {
+    const parts = data.store.part?.[props.message.id] ?? []
+    const index = parts.findIndex((item) => item.id === part.id)
+    if (index < 0) return true
+    for (let i = index + 1; i < parts.length; i++) {
+      const next = parts[i]
+      if (!next) continue
+      if (!renderable(next)) continue
+      return false
+    }
+    return true
   })
+  const renderText = createLiveText(displayText, () => streaming() && isLastTextPart())
+  let prev = displayText().length
+  let last = isLastTextPart()
+  let live = streaming()
+
+  createEffect(() => {
+    const len = displayText().length
+    const tail = clip(displayText())
+    if (len < prev) {
+      console.warn("[text-part] text rollback", {
+        msg: props.message.id,
+        part: part.id,
+        prev,
+        next: len,
+        tail,
+      })
+    }
+
+    const nextLast = isLastTextPart()
+    const nextLive = streaming()
+    if (nextLast !== last || nextLive !== live) {
+      console.debug("[text-part] stream mode", {
+        msg: props.message.id,
+        part: part.id,
+        len,
+        last: nextLast,
+        streaming: nextLive,
+        tail,
+      })
+    }
+
+    prev = len
+    last = nextLast
+    live = nextLive
+  })
+
+  const body = createMemo(() => renderText())
+  const plain = createMemo(() => streaming() && isLastTextPart() && end())
   const showCopy = createMemo(() => {
     if (props.message.role !== "assistant") return isLastTextPart()
     if (props.showAssistantCopyPartID === null) return false
@@ -1527,32 +1568,20 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   }
 
   return (
-    <Show when={block().head || block().tail}>
+    <Show when={body()}>
       <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Show when={block().head}>
-            <Markdown
-              text={block().head}
-              cacheKey={`${part.id}:head`}
-              instant={streaming()}
-              eager={props.markdownEager}
-              viewport={props.markdownViewport}
-              highlight={props.markdownHighlight}
-              math={props.markdownMath}
-            />
-          </Show>
-          <Show when={block().tail}>
-            <Markdown
-              text={block().tail}
-              cacheKey={`${part.id}:tail`}
-              streaming
-              instant
-              eager={props.markdownEager}
-              viewport={props.markdownViewport}
-              highlight={props.markdownHighlight}
-              math={props.markdownMath}
-            />
-          </Show>
+          <Markdown
+            text={body()}
+            cacheKey={plain() ? `${part.id}:stream` : part.id}
+            plain={plain()}
+            streaming={plain()}
+            instant={streaming()}
+            eager={props.markdownEager}
+            viewport={props.markdownViewport}
+            highlight={props.markdownHighlight}
+            math={props.markdownMath}
+          />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1774,11 +1803,7 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown
-                text={output()}
-                eager={props.markdownEager}
-                viewport={props.markdownViewport}
-              />
+              <Markdown text={output()} eager={props.markdownEager} viewport={props.markdownViewport} />
             </div>
           )}
         </Show>
@@ -1805,11 +1830,7 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown
-                text={output()}
-                eager={props.markdownEager}
-                viewport={props.markdownViewport}
-              />
+              <Markdown text={output()} eager={props.markdownEager} viewport={props.markdownViewport} />
             </div>
           )}
         </Show>
@@ -1839,11 +1860,7 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown
-                text={output()}
-                eager={props.markdownEager}
-                viewport={props.markdownViewport}
-              />
+              <Markdown text={output()} eager={props.markdownEager} viewport={props.markdownViewport} />
             </div>
           )}
         </Show>
@@ -2027,11 +2044,7 @@ ToolRegistry.register({
         <Show when={props.output && !pending()}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown
-                text={String(output())}
-                eager={props.markdownEager}
-                viewport={props.markdownViewport}
-              />
+              <Markdown text={String(output())} eager={props.markdownEager} viewport={props.markdownViewport} />
             </div>
           )}
         </Show>
@@ -2075,11 +2088,7 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown
-                text={String(output())}
-                eager={props.markdownEager}
-                viewport={props.markdownViewport}
-              />
+              <Markdown text={String(output())} eager={props.markdownEager} viewport={props.markdownViewport} />
             </div>
           )}
         </Show>

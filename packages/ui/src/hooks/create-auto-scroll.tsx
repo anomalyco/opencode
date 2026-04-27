@@ -39,9 +39,9 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let auto: { top: number; time: number } | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
-
   const log = (event: string, extra?: Record<string, unknown>) => {
     if (!event || !extra) return
+    console.debug(`[auto-scroll] ${event}`, extra)
   }
 
   const atBottom = (el: HTMLElement) => {
@@ -58,6 +58,17 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   const distanceFromBottom = (el: HTMLElement) => {
     return el.scrollHeight - el.clientHeight - el.scrollTop
+  }
+
+  const snap = (el: HTMLElement) => {
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    return {
+      top: Math.round(el.scrollTop),
+      height: Math.round(el.scrollHeight),
+      client: Math.round(el.clientHeight),
+      max: Math.round(max),
+      gap: Math.round(max - el.scrollTop),
+    }
   }
 
   const canScroll = (el: HTMLElement) => {
@@ -96,6 +107,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const scrollToBottomNow = (behavior: ScrollBehavior) => {
     const el = store.scrollRef
     if (!el) return
+    const before = snap(el)
     markAuto(el)
     log("scroll:write", { source: "scrollToBottomNow", behavior, nextTop: el.scrollHeight })
     if (behavior === "smooth") {
@@ -105,6 +117,16 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     // `scrollTop` assignment bypasses any CSS `scroll-behavior: smooth`.
     el.scrollTop = el.scrollHeight
+    const after = snap(el)
+    const jump = after.top - before.top
+    if (jump < -24) {
+      console.warn("[auto-scroll] upward write", {
+        behavior,
+        jump,
+        before,
+        after,
+      })
+    }
   }
 
   const scrollToBottom = (force: boolean) => {
