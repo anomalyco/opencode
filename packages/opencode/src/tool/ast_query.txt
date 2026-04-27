@@ -4,12 +4,24 @@ Unlike `grep` (text search) or `codesearch` (repo-wide text), `ast_query` unders
 code structure. It finds functions, classes, imports, variables, and any other named
 construct — by type, not by coincidental string match.
 
-## When to use
+## When to use ast_query
 
 - You need to find all functions/methods in a file before deciding which one to edit
 - You want the exact line range of a class or function without reading the full file
 - You need to verify an import exists, or find where a symbol is declared
-- You are about to call `ast_edit` or `patch_file` and need the precise line range
+- You are about to call `ast_edit` and need the precise line range of a node
+
+## When to use read instead
+
+- You need to see the actual body, comments, or formatting of the code
+- The file is small enough to read entirely
+- You are unfamiliar with the file and need general context
+
+## When to use grep instead
+
+- You are searching for a string literal, comment, or non-syntactic text
+- You need repo-wide search across multiple files
+- You are looking for a variable name that may appear in many contexts
 
 ## Pattern syntax (tree-sitter S-expressions)
 
