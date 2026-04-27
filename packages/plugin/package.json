@@ -22,8 +22,8 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.1.104",
-    "@opentui/solid": ">=0.1.104"
+    "@opentui/core": ">=0.1.105",
+    "@opentui/solid": ">=0.1.105"
   },
   "peerDependenciesMeta": {
     "@opentui/core": {
