@@ -592,23 +592,15 @@ const mapUsage = (usage: BedrockUsageSchema | undefined): Usage | undefined => {
   return new Usage({
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
-    totalTokens:
-      usage.totalTokens ??
-      ((usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) || undefined),
+    totalTokens: ProviderShared.totalTokens(usage.inputTokens, usage.outputTokens, usage.totalTokens),
     cacheReadInputTokens: usage.cacheReadInputTokens,
     cacheWriteInputTokens: usage.cacheWriteInputTokens,
     native: usage,
   })
 }
 
-interface ToolAccumulator {
-  readonly id: string
-  readonly name: string
-  readonly input: string
-}
-
 interface ParserState {
-  readonly tools: Record<number, ToolAccumulator>
+  readonly tools: Record<number, ProviderShared.ToolAccumulator>
   // Bedrock splits the finish into `messageStop` (carries `stopReason`) and
   // `metadata` (carries usage). The raw stop reason is held here until
   // `metadata` arrives, then mapped + emitted together as a single terminal
@@ -616,7 +608,7 @@ interface ParserState {
   readonly pendingStopReason: string | undefined
 }
 
-const finishToolCall = (tool: ToolAccumulator | undefined) =>
+const finishToolCall = (tool: ProviderShared.ToolAccumulator | undefined) =>
   Effect.gen(function* () {
     if (!tool) return [] as ReadonlyArray<LLMEvent>
     const input = yield* ProviderShared.parseToolInput(ADAPTER, tool.name, tool.input)

@@ -129,22 +129,13 @@ const OpenAIChatChunk = Schema.Struct({
 })
 type OpenAIChatChunk = Schema.Schema.Type<typeof OpenAIChatChunk>
 
-const OpenAIChatChunkJson = Schema.fromJsonString(OpenAIChatChunk)
-const OpenAIChatTargetJson = Schema.fromJsonString(OpenAIChatTarget)
-const decodeChunkSync = Schema.decodeUnknownSync(OpenAIChatChunkJson)
-const encodeTarget = Schema.encodeSync(OpenAIChatTargetJson)
-
-const decodeChunk = (data: string) =>
-  Effect.try({
-    try: () => decodeChunkSync(data),
-    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid OpenAI Chat stream chunk", data),
-  })
-
-interface ToolAccumulator {
-  readonly id: string
-  readonly name: string
-  readonly input: string
-}
+const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
+  adapter: ADAPTER,
+  draft: OpenAIChatDraft,
+  target: OpenAIChatTarget,
+  chunk: OpenAIChatChunk,
+  chunkErrorMessage: "Invalid OpenAI Chat stream chunk",
+})
 
 interface ParsedToolCall {
   readonly id: string
@@ -153,13 +144,11 @@ interface ParsedToolCall {
 }
 
 interface ParserState {
-  readonly tools: Record<number, ToolAccumulator>
+  readonly tools: Record<number, ProviderShared.ToolAccumulator>
   readonly toolCalls: ReadonlyArray<ParsedToolCall>
   readonly usage?: Usage
   readonly finishReason?: FinishReason
 }
-
-const decodeTarget = Schema.decodeUnknownEffect(OpenAIChatDraft.pipe(Schema.decodeTo(OpenAIChatTarget)))
 
 const invalid = ProviderShared.invalidRequest
 
@@ -278,12 +267,12 @@ const mapUsage = (usage: OpenAIChatChunk["usage"]): Usage | undefined => {
     outputTokens: usage.completion_tokens,
     reasoningTokens: usage.completion_tokens_details?.reasoning_tokens,
     cacheReadInputTokens: usage.prompt_tokens_details?.cached_tokens,
-    totalTokens: usage.total_tokens,
+    totalTokens: ProviderShared.totalTokens(usage.prompt_tokens, usage.completion_tokens, usage.total_tokens),
     native: usage,
   })
 }
 
-const pushToolDelta = (tools: Record<number, ToolAccumulator>, delta: OpenAIChatToolCallDelta) =>
+const pushToolDelta = (tools: Record<number, ProviderShared.ToolAccumulator>, delta: OpenAIChatToolCallDelta) =>
   Effect.gen(function* () {
     const current = tools[delta.index]
     const id = delta.id ?? current?.id
@@ -298,7 +287,7 @@ const pushToolDelta = (tools: Record<number, ToolAccumulator>, delta: OpenAIChat
     }
   })
 
-const finalizeToolCalls = (tools: Record<number, ToolAccumulator>) =>
+const finalizeToolCalls = (tools: Record<number, ProviderShared.ToolAccumulator>) =>
   Effect.forEach(Object.values(tools), (tool) =>
     Effect.gen(function* () {
       const input = yield* ProviderShared.parseToolInput(ADAPTER, tool.name, tool.input)

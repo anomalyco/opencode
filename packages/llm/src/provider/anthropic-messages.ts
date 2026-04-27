@@ -179,10 +179,7 @@ const AnthropicChunk = Schema.Struct({
 })
 type AnthropicChunk = Schema.Schema.Type<typeof AnthropicChunk>
 
-interface ToolAccumulator {
-  readonly id: string
-  readonly name: string
-  readonly input: string
+interface ToolAccumulator extends ProviderShared.ToolAccumulator {
   readonly providerExecuted: boolean
 }
 
@@ -191,17 +188,13 @@ interface ParserState {
   readonly usage?: Usage
 }
 
-const AnthropicChunkJson = Schema.fromJsonString(AnthropicChunk)
-const AnthropicTargetJson = Schema.fromJsonString(AnthropicMessagesTarget)
-const decodeChunkSync = Schema.decodeUnknownSync(AnthropicChunkJson)
-
-const decodeChunk = (data: string) =>
-  Effect.try({
-    try: () => decodeChunkSync(data),
-    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid Anthropic Messages stream chunk", data),
-  })
-const encodeTarget = Schema.encodeSync(AnthropicTargetJson)
-const decodeTarget = Schema.decodeUnknownEffect(AnthropicMessagesDraft.pipe(Schema.decodeTo(AnthropicMessagesTarget)))
+const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
+  adapter: ADAPTER,
+  draft: AnthropicMessagesDraft,
+  target: AnthropicMessagesTarget,
+  chunk: AnthropicChunk,
+  chunkErrorMessage: "Invalid Anthropic Messages stream chunk",
+})
 
 const invalid = ProviderShared.invalidRequest
 
@@ -363,24 +356,26 @@ const mapUsage = (usage: AnthropicUsage | undefined): Usage | undefined => {
     outputTokens: usage.output_tokens,
     cacheReadInputTokens: usage.cache_read_input_tokens ?? undefined,
     cacheWriteInputTokens: usage.cache_creation_input_tokens ?? undefined,
-    totalTokens: usage.input_tokens !== undefined || usage.output_tokens !== undefined
-      ? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
-      : undefined,
+    totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, undefined),
     native: usage,
   })
 }
 
+// Anthropic emits usage on `message_start` and again on `message_delta` — the
+// final delta carries the authoritative totals. Right-biased merge: each
+// field prefers `right` when defined, falls back to `left`. `totalTokens` is
+// recomputed from the merged input/output to stay consistent.
 const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
   if (!left) return right
   if (!right) return left
+  const inputTokens = right.inputTokens ?? left.inputTokens
+  const outputTokens = right.outputTokens ?? left.outputTokens
   return new Usage({
-    inputTokens: right.inputTokens ?? left.inputTokens,
-    outputTokens: right.outputTokens ?? left.outputTokens,
+    inputTokens,
+    outputTokens,
     cacheReadInputTokens: right.cacheReadInputTokens ?? left.cacheReadInputTokens,
     cacheWriteInputTokens: right.cacheWriteInputTokens ?? left.cacheWriteInputTokens,
-    totalTokens: (right.inputTokens ?? left.inputTokens) !== undefined || (right.outputTokens ?? left.outputTokens) !== undefined
-      ? (right.inputTokens ?? left.inputTokens ?? 0) + (right.outputTokens ?? left.outputTokens ?? 0)
-      : undefined,
+    totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     native: { ...left.native, ...right.native },
   })
 }

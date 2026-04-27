@@ -125,26 +125,16 @@ const OpenAIResponsesChunk = Schema.Struct({
 })
 type OpenAIResponsesChunk = Schema.Schema.Type<typeof OpenAIResponsesChunk>
 
-const OpenAIResponsesChunkJson = Schema.fromJsonString(OpenAIResponsesChunk)
-const OpenAIResponsesTargetJson = Schema.fromJsonString(OpenAIResponsesTarget)
-const decodeChunkSync = Schema.decodeUnknownSync(OpenAIResponsesChunkJson)
-
-const decodeChunk = (data: string) =>
-  Effect.try({
-    try: () => decodeChunkSync(data),
-    catch: () => ProviderShared.chunkError(ADAPTER, "Invalid OpenAI Responses stream chunk", data),
-  })
-const encodeTarget = Schema.encodeSync(OpenAIResponsesTargetJson)
-const decodeTarget = Schema.decodeUnknownEffect(OpenAIResponsesDraft.pipe(Schema.decodeTo(OpenAIResponsesTarget)))
-
-interface ToolAccumulator {
-  readonly id: string
-  readonly name: string
-  readonly input: string
-}
+const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
+  adapter: ADAPTER,
+  draft: OpenAIResponsesDraft,
+  target: OpenAIResponsesTarget,
+  chunk: OpenAIResponsesChunk,
+  chunkErrorMessage: "Invalid OpenAI Responses stream chunk",
+})
 
 interface ParserState {
-  readonly tools: Record<string, ToolAccumulator>
+  readonly tools: Record<string, ProviderShared.ToolAccumulator>
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -246,7 +236,7 @@ const mapUsage = (usage: OpenAIResponsesUsage | undefined) => {
     outputTokens: usage.output_tokens,
     reasoningTokens: usage.output_tokens_details?.reasoning_tokens,
     cacheReadInputTokens: usage.input_tokens_details?.cached_tokens,
-    totalTokens: usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+    totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
     native: usage,
   })
 }
@@ -258,7 +248,7 @@ const mapFinishReason = (chunk: OpenAIResponsesChunk): FinishReason => {
   return "unknown"
 }
 
-const pushToolDelta = (tools: Record<string, ToolAccumulator>, itemId: string, delta: string) =>
+const pushToolDelta = (tools: Record<string, ProviderShared.ToolAccumulator>, itemId: string, delta: string) =>
   Effect.gen(function* () {
     const current = tools[itemId]
     if (!current) {
@@ -267,7 +257,7 @@ const pushToolDelta = (tools: Record<string, ToolAccumulator>, itemId: string, d
     return { ...current, input: `${current.input}${delta}` }
   })
 
-const finishToolCall = (tools: Record<string, ToolAccumulator>, item: NonNullable<OpenAIResponsesChunk["item"]>) =>
+const finishToolCall = (tools: Record<string, ProviderShared.ToolAccumulator>, item: NonNullable<OpenAIResponsesChunk["item"]>) =>
   Effect.gen(function* () {
     if (item.type !== "function_call" || !item.id || !item.call_id || !item.name) return [] as ReadonlyArray<LLMEvent>
     const raw = item.arguments ?? tools[item.id]?.input ?? ""
@@ -275,7 +265,7 @@ const finishToolCall = (tools: Record<string, ToolAccumulator>, item: NonNullabl
     return [{ type: "tool-call" as const, id: item.call_id, name: item.name, input }]
   })
 
-const withoutTool = (tools: Record<string, ToolAccumulator>, id: string | undefined) =>
+const withoutTool = (tools: Record<string, ProviderShared.ToolAccumulator>, id: string | undefined) =>
   id === undefined ? tools : Object.fromEntries(Object.entries(tools).filter(([key]) => key !== id))
 
 // Hosted tool items (provider-executed) ship their typed input + status + result

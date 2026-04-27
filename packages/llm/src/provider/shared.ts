@@ -8,6 +8,72 @@ export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
 export const encodeJson = Schema.encodeSync(Json)
 
+/**
+ * Streaming tool-call accumulator. Adapters that build a tool call across
+ * multiple `tool-input-delta` chunks store the partial JSON input string here
+ * and finalize it with `parseToolInput` once the call completes. Anthropic
+ * extends this with a `providerExecuted` flag for hosted (server-side) tools;
+ * it should be the only adapter to do so.
+ */
+export interface ToolAccumulator {
+  readonly id: string
+  readonly name: string
+  readonly input: string
+}
+
+/**
+ * Codec bundle for a streaming JSON adapter:
+ *
+ * - `encodeTarget(target)` produces the JSON string body for `jsonPost`.
+ * - `decodeTarget(draft)` runs the Schema-driven `Draft → Target` decode
+ *   inside an Effect, mapping parse errors to `InvalidRequestError` via
+ *   `validateWith` so the result drops directly into `Adapter.define`'s
+ *   `validate` field.
+ * - `decodeChunk(input)` decodes one streaming JSON chunk against the chunk
+ *   schema. The default expects a `string` (the SSE data field); pass a
+ *   custom decoder shape via `decodeChunkInput` for adapters whose framing
+ *   already produces a parsed object (e.g. Bedrock's event-stream payloads).
+ *
+ * Adapters that need a totally different decode shape should still hand-roll
+ * those pieces — the helper covers the common SSE-JSON case used by 4 of 6
+ * adapters today.
+ */
+export const codecs = <Draft, Target, Chunk>(input: {
+  readonly adapter: string
+  readonly draft: Schema.Codec<Draft, unknown>
+  readonly target: Schema.Codec<Target, unknown>
+  readonly chunk: Schema.Codec<Chunk, unknown>
+  readonly chunkErrorMessage: string
+}) => {
+  const encodeTarget = Schema.encodeSync(Schema.fromJsonString(input.target))
+  const decodeTarget = validateWith(
+    Schema.decodeUnknownEffect(input.draft.pipe(Schema.decodeTo(input.target))),
+  )
+  const decodeChunkSync = Schema.decodeUnknownSync(Schema.fromJsonString(input.chunk))
+  const decodeChunk = (data: string) =>
+    Effect.try({
+      try: () => decodeChunkSync(data),
+      catch: () => chunkError(input.adapter, input.chunkErrorMessage, data),
+    })
+  return { encodeTarget, decodeTarget, decodeChunk }
+}
+
+/**
+ * `Usage.totalTokens` policy shared by every adapter. Honors a provider-
+ * supplied total; otherwise falls back to `inputTokens + outputTokens` only
+ * when at least one is defined. Returns `undefined` when neither input nor
+ * output is known so adapters don't publish a misleading `0`.
+ */
+export const totalTokens = (
+  inputTokens: number | undefined,
+  outputTokens: number | undefined,
+  total: number | undefined,
+) => {
+  if (total !== undefined) return total
+  if (inputTokens === undefined && outputTokens === undefined) return undefined
+  return (inputTokens ?? 0) + (outputTokens ?? 0)
+}
+
 export const chunkError = (adapter: string, message: string, raw?: string) =>
   new ProviderChunkError({ adapter, message, raw })
 
