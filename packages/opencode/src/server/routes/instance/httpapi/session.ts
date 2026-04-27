@@ -203,7 +203,7 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.post("create", SessionPaths.create, {
-          payload: Session.CreateInput,
+          payload: [HttpApiSchema.NoContent, Session.CreateInput],
           success: Session.Info,
         }).annotateMerge(
           OpenApi.annotations({
@@ -513,7 +513,7 @@ export const sessionHandlers = Layer.unwrap(
       )
     })
 
-    const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload: Session.CreateInput }) {
+    const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload?: Session.CreateInput }) {
       const instance = yield* InstanceState.context
       return yield* Effect.promise(() =>
         Instance.restore(instance, () =>
@@ -522,6 +522,22 @@ export const sessionHandlers = Layer.unwrap(
           ),
         ),
       )
+    })
+
+    const createRaw = Effect.fn("SessionHttpApi.createRaw")(function* (ctx: {
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      if (body.trim().length === 0) return yield* create({})
+
+      const json = yield* Effect.try({
+        try: () => JSON.parse(body) as unknown,
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+      const payload = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
+        Effect.mapError(() => new HttpApiError.BadRequest({})),
+      )
+      return yield* create({ payload })
     })
 
     const remove = Effect.fn("SessionHttpApi.remove")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -894,7 +910,7 @@ export const sessionHandlers = Layer.unwrap(
         .handle("diff", diff)
         .handle("messages", messages)
         .handle("message", message)
-        .handle("create", create)
+        .handleRaw("create", createRaw)
         .handle("remove", remove)
         .handle("update", update)
         .handle("fork", fork)
