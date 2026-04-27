@@ -488,13 +488,36 @@ const live: Layer.Layer<
     const runNative = Effect.fn("LLM.runNative")(function* (input: StreamRequest) {
       if (!Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE) return undefined
       if (!input.nativeMessages || input.nativeMessages.length === 0) return undefined
-      // Tools without dispatch wiring would mean the model issues tool-call
-      // events that never get a tool-result. The gate fall-through keeps
-      // tool-using sessions on the AI SDK path until step 2b lands the
-      // dispatch loop. Sessions with zero tools, OR sessions that explicitly
-      // opt in by populating `nativeTools`, can route here.
-      const hasAITools = Object.keys(input.tools).length > 0
-      if (hasAITools && (input.nativeTools === undefined || input.nativeTools.length === 0)) return undefined
+      // The native dispatcher needs a `Tool.Def` for every AI SDK tool key
+      // the model might call. Two failure modes the gate has to catch:
+      //
+      //   1. AI SDK tools present but `nativeTools` undefined / empty —
+      //      caller didn't (or couldn't) supply native shapes.
+      //   2. AI SDK tools include a key that's missing from `nativeTools` —
+      //      coverage gap. Today this happens with MCP tools (only AI SDK
+      //      shape) and the synthesized `StructuredOutput` tool. The
+      //      `prompt.ts:resolveTools` call sets `nativeTools: undefined` in
+      //      both cases, but check defensively in case a future caller
+      //      passes a partial set.
+      //
+      // Either way fall through so the session takes the AI SDK path
+      // unchanged.
+      const aiToolKeys = Object.keys(input.tools)
+      if (aiToolKeys.length > 0) {
+        if (input.nativeTools === undefined || input.nativeTools.length === 0) return undefined
+        const nativeIDs = new Set(input.nativeTools.map((tool) => tool.id))
+        for (const key of aiToolKeys) {
+          if (!nativeIDs.has(key)) return undefined
+        }
+      }
+
+      // Mirror the AI SDK path's permission/user-disabled filter for both
+      // the AI SDK record (used as the dispatch table) and the native tool
+      // definitions (sent to the model). Without this, the model would see
+      // tools that the session has actively disabled.
+      const filteredAITools = resolveTools(input)
+      const allowedIds = new Set(Object.keys(filteredAITools))
+      const filteredNativeTools = input.nativeTools?.filter((tool) => allowedIds.has(tool.id))
 
       const item = yield* provider.getProvider(input.model.providerID)
       const llmRequest = yield* LLMNative.request({
@@ -503,7 +526,7 @@ const live: Layer.Layer<
         model: input.model,
         system: input.system,
         messages: input.nativeMessages,
-        tools: input.nativeTools,
+        tools: filteredNativeTools,
       })
       if (!NATIVE_PROTOCOLS.has(llmRequest.model.protocol)) return undefined
 
@@ -533,11 +556,11 @@ const live: Layer.Layer<
       //     synthetic `tool-result` event. Long-running tools don't block
       //     subsequent tool-call streaming.
       const map = LLMNativeEvents.mapper()
-      const upstream = input.nativeTools && input.nativeTools.length > 0
+      const upstream = filteredNativeTools && filteredNativeTools.length > 0
         ? LLMNativeTools.runWithTools({
             client: nativeClient,
             request: llmRequest,
-            tools: input.tools,
+            tools: filteredAITools,
             abort: input.abort,
           })
         : nativeClient.stream(llmRequest)

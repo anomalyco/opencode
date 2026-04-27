@@ -368,6 +368,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }) {
       using _ = log.time("resolveTools")
       const tools: Record<string, AITool> = {}
+      // Opencode-native `Tool.Def[]` collected alongside the AI SDK record so
+      // the LLM-native path can advertise the same tools to the model. We
+      // populate this from the registry loop only; if any other tool source
+      // contributes (MCP, structured-output), we surface `nativeTools:
+      // undefined` so callers fall through to the AI SDK path. Keeps the
+      // definitions and dispatch tables strictly in sync.
+      const nativeTools: Tool.Def[] = []
+      let nativeFeasible = true
       const run = yield* runner()
       const promptOps = yield* ops()
 
@@ -409,6 +417,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         providerID: input.model.providerID,
         agent: input.agent,
       })) {
+        nativeTools.push(item)
         const schema = ProviderTransform.schema(input.model, EffectZod.toJsonSchema(item.parameters))
         tools[item.id] = tool({
           description: item.description,
@@ -450,6 +459,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       for (const [key, item] of Object.entries(yield* mcp.tools())) {
         const execute = item.execute
         if (!execute) continue
+        // MCP tools have AI SDK shape only — no opencode `Tool.Def` to feed
+        // the LLM-native path's dispatcher. Disqualify the whole batch so
+        // sessions with MCP servers stay on the AI SDK path until MCP
+        // tooling lands native support.
+        nativeFeasible = false
 
         const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
         const transformed = ProviderTransform.schema(input.model, schema)
@@ -525,7 +539,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         tools[key] = item
       }
 
-      return tools
+      return { tools, nativeTools: nativeFeasible ? nativeTools : undefined }
     })
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
@@ -1398,7 +1412,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-            const tools = yield* resolveTools({
+            const { tools, nativeTools: resolvedNativeTools } = yield* resolveTools({
               agent,
               session,
               model,
@@ -1408,6 +1422,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               messages: msgs,
             })
 
+            // Mutable so the structured-output branch can drop it without
+            // reaching into `resolveTools`. `nativeTools` is undefined when
+            // any tool source can't feed the LLM-native dispatcher (today:
+            // MCP). The structured-output branch joins that list because the
+            // synthesized `StructuredOutput` tool has no opencode `Tool.Def`.
+            let nativeTools = resolvedNativeTools
+
             if (lastUser.format?.type === "json_schema") {
               tools["StructuredOutput"] = createStructuredOutputTool({
                 schema: lastUser.format.schema,
@@ -1415,6 +1436,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   structured = output
                 },
               })
+              nativeTools = undefined
             }
 
             if (step === 1)
@@ -1459,6 +1481,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
               nativeMessages: msgs,
               tools,
+              nativeTools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
