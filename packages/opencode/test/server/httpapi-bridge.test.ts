@@ -4,8 +4,23 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { InstanceRoutes } from "../../src/server/routes/instance"
 import { WorkspaceRoutes } from "../../src/server/routes/control/workspace"
-import { FilePaths } from "../../src/server/routes/instance/httpapi/file"
+import { ConfigApi } from "../../src/server/routes/instance/httpapi/config"
+import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
+import { ExperimentalApi } from "../../src/server/routes/instance/httpapi/experimental"
+import { FileApi, FilePaths } from "../../src/server/routes/instance/httpapi/file"
+import { InstanceApi } from "../../src/server/routes/instance/httpapi/instance"
+import { McpApi } from "../../src/server/routes/instance/httpapi/mcp"
+import { PermissionApi } from "../../src/server/routes/instance/httpapi/permission"
+import { ProjectApi } from "../../src/server/routes/instance/httpapi/project"
+import { ProviderApi } from "../../src/server/routes/instance/httpapi/provider"
+import { PtyApi, PtyPaths } from "../../src/server/routes/instance/httpapi/pty"
+import { QuestionApi } from "../../src/server/routes/instance/httpapi/question"
+import { SessionApi } from "../../src/server/routes/instance/httpapi/session"
+import { SyncApi } from "../../src/server/routes/instance/httpapi/sync"
+import { TuiApi } from "../../src/server/routes/instance/httpapi/tui"
+import { WorkspaceApi } from "../../src/server/routes/instance/httpapi/workspace"
 import * as Log from "@opencode-ai/core/util/log"
+import { HttpApi, HttpApiGroup } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
@@ -28,6 +43,39 @@ function app(input?: { password?: string; username?: string }) {
 
 function routeKey(route: ReturnType<typeof InstanceRoutes>["routes"][number]) {
   return `${route.method} ${route.path}`
+}
+
+function reflectedHttpApiRoutes() {
+  const routes = [
+    `GET ${EventPaths.event}`,
+    `GET ${PtyPaths.connect}`,
+  ]
+
+  function addRoutes<Id extends string, Groups extends HttpApiGroup.Any>(api: HttpApi.HttpApi<Id, Groups>) {
+    HttpApi.reflect(api, {
+      onGroup() {},
+      onEndpoint({ endpoint }) {
+        routes.push(`${endpoint.method} ${endpoint.path}`)
+      },
+    })
+  }
+
+  addRoutes(ConfigApi)
+  addRoutes(ExperimentalApi)
+  addRoutes(FileApi)
+  addRoutes(InstanceApi)
+  addRoutes(McpApi)
+  addRoutes(PermissionApi)
+  addRoutes(ProjectApi)
+  addRoutes(ProviderApi)
+  addRoutes(PtyApi)
+  addRoutes(QuestionApi)
+  addRoutes(SessionApi)
+  addRoutes(SyncApi)
+  addRoutes(TuiApi)
+  addRoutes(WorkspaceApi)
+
+  return [...new Set(routes)]
 }
 
 function authorization(username: string, password: string) {
@@ -67,6 +115,21 @@ describe("HttpApi Hono bridge", () => {
 
     expect(legacyRoutes.filter((route) => !bridgeRoutes.has(route))).toEqual([])
     expect([...bridgeRoutes].filter((route) => !legacyRoutes.includes(route)).sort()).toEqual([])
+  })
+
+  test("mounts every Effect HttpApi route through the Hono bridge", () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = false
+    const legacy = InstanceRoutes(websocket)
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    const experimental = InstanceRoutes(websocket)
+
+    const bridgeRoutes = new Set(
+      experimental.routes.slice(0, experimental.routes.length - legacy.routes.length).map(routeKey),
+    )
+    const httpApiRoutes = reflectedHttpApiRoutes()
+
+    expect(httpApiRoutes.filter((route) => !bridgeRoutes.has(route))).toEqual([])
+    expect([...bridgeRoutes].filter((route) => !httpApiRoutes.includes(route)).sort()).toEqual([])
   })
 
   test("allows requests when auth is disabled", async () => {
