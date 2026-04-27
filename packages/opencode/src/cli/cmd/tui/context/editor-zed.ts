@@ -21,24 +21,37 @@ const ZedEditorContentsSchema = z.object({
 
 type ZedEditorRow = z.infer<typeof ZedEditorRowSchema>
 
-export async function resolveZedSelection(dbPath: string): Promise<EditorSelection | undefined> {
-  const row = queryZedActiveEditor(dbPath, process.cwd())
-  if (!row?.buffer_path || row.selection_start == null || row.selection_end == null) return
+export type ZedSelectionResult =
+  | { type: "selection"; selection: EditorSelection }
+  | { type: "empty" }
+  | { type: "unavailable" }
 
+export async function resolveZedSelection(dbPath: string, cwd = process.cwd()): Promise<ZedSelectionResult> {
+  const active = queryZedActiveEditor(dbPath, cwd)
+  if (active.type !== "row") return active
+
+  const row = active.row
+  if (!row.buffer_path) return { type: "empty" }
+  if (row.selection_start == null || row.selection_end == null) return { type: "unavailable" }
+
+  const contents = queryZedEditorContents(dbPath, row)
   const text =
-    queryZedEditorContents(dbPath, row) ??
-    (await Bun.file(row.buffer_path)
-      .text()
-      .catch(() => undefined))
-  if (text == null) return
+    contents.type === "contents" && contents.contents != null
+      ? contents.contents
+      : await Bun.file(row.buffer_path).text().catch(() => undefined)
+  if (text == null) return { type: "unavailable" }
 
   const startOffset = Math.min(row.selection_start, row.selection_end)
   const endOffset = Math.max(row.selection_start, row.selection_end)
 
   return {
-    text: text.slice(startOffset, endOffset),
-    filePath: row.buffer_path,
-    selection: offsetsToSelection(text, startOffset, endOffset),
+    type: "selection",
+    selection: {
+      text: text.slice(startOffset, endOffset),
+      filePath: row.buffer_path,
+      source: "zed",
+      selection: offsetsToSelection(text, startOffset, endOffset),
+    },
   }
 }
 
@@ -46,7 +59,7 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
   let db: Database | undefined
   try {
     db = new Database(dbPath, { readonly: true })
-    return db
+    const raw = db
       .query(
         `select
           e.item_id as editor_id,
@@ -65,15 +78,23 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
         order by w.timestamp desc`,
       )
       .all()
+
+    const rows = raw
       .flatMap((row) => {
         const parsed = ZedEditorRowSchema.safeParse(row)
         return parsed.success ? [parsed.data] : []
       })
+
+    if (raw.length > 0 && rows.length === 0) return { type: "unavailable" as const }
+
+    const row = rows
       .map((row) => ({ row, score: scoreZedWorkspace(row.workspace_paths, cwd) }))
       .filter((entry) => entry.score > 0)
       .sort((left, right) => right.score - left.score || right.row.timestamp.localeCompare(left.row.timestamp))[0]?.row
+    if (!row) return { type: "empty" as const }
+    return { type: "row" as const, row }
   } catch {
-    return
+    return { type: "unavailable" as const }
   } finally {
     db?.close()
   }
@@ -83,7 +104,7 @@ function queryZedEditorContents(dbPath: string, row: ZedEditorRow) {
   let db: Database | undefined
   try {
     db = new Database(dbPath, { readonly: true })
-    return ZedEditorContentsSchema.safeParse(
+    const parsed = ZedEditorContentsSchema.safeParse(
       db
         .query(
           `select contents
@@ -91,9 +112,11 @@ function queryZedEditorContents(dbPath: string, row: ZedEditorRow) {
         where item_id = $editorID and workspace_id = $workspaceID`,
         )
         .get({ $editorID: row.editor_id, $workspaceID: row.workspace_id }),
-    ).data?.contents
+    )
+    if (!parsed.success) return { type: "unavailable" as const }
+    return { type: "contents" as const, contents: parsed.data.contents }
   } catch {
-    return
+    return { type: "unavailable" as const }
   } finally {
     db?.close()
   }

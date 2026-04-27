@@ -31,6 +31,7 @@ const PositionSchema = z.object({
 const EditorSelectionSchema = z.object({
   text: z.string(),
   filePath: z.string(),
+  source: z.enum(["websocket", "zed"]).optional(),
   selection: z.object({
     start: PositionSchema,
     end: PositionSchema,
@@ -125,8 +126,10 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
             return
           }
           zedSelection ??= resolveZedSelection(dbPath)
-            .then((selection) => {
+            .then((result) => {
               if (closed || socket) return
+              if (result.type === "unavailable") return
+              const selection = result.type === "selection" ? result.selection : undefined
               const key = editorSelectionKey(selection)
               if (key !== lastZedSelectionKey) {
                 lastZedSelectionKey = key
@@ -135,8 +138,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
               }
             })
             .catch(() => {
-              if (closed || socket) return
-              setStore("status", "disabled")
+              // Keep the last known Zed selection for transient polling failures.
             })
             .finally(() => {
               zedSelection = undefined
@@ -171,7 +173,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
           const selection =
             message.method === "selection_changed" ? EditorSelectionSchema.safeParse(message.params) : undefined
           if (selection?.success) {
-            setStore("selection", selection.data)
+            setStore("selection", { ...selection.data, source: "websocket" })
             return
           }
 
