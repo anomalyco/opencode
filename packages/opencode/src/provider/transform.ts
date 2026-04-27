@@ -52,7 +52,7 @@ function normalizeMessages(
 ): ModelMessage[] {
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
+  if (model.api.npm === "@ai-sdk/anthropic") {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -72,6 +72,7 @@ function normalizeMessages(
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
+  // Bedrock specific transforms
   if (model.api.npm === "@ai-sdk/amazon-bedrock") {
     msgs = msgs
       .map((msg) => {
