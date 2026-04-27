@@ -4,7 +4,7 @@ import { EffectLogger } from "@/effect"
 import { InstanceState } from "@/effect"
 import type * as Tool from "./tool"
 import { Instance } from "../project/instance"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 type Kind = "file" | "directory"
 

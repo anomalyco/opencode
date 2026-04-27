@@ -5,7 +5,7 @@ import type { JSONSchema } from "zod/v4/core"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "./models"
 import { iife } from "@/util/iife"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -52,7 +52,28 @@ function normalizeMessages(
 ): ModelMessage[] {
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
+  if (model.api.npm === "@ai-sdk/anthropic") {
+    msgs = msgs
+      .map((msg) => {
+        if (typeof msg.content === "string") {
+          if (msg.content === "") return undefined
+          return msg
+        }
+        if (!Array.isArray(msg.content)) return msg
+        const filtered = msg.content.filter((part) => {
+          if (part.type === "text" || part.type === "reasoning") {
+            return part.text !== ""
+          }
+          return true
+        })
+        if (filtered.length === 0) return undefined
+        return { ...msg, content: filtered }
+      })
+      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+  }
+
+  // Bedrock specific transforms
+  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -175,7 +196,29 @@ function normalizeMessages(
     return result
   }
 
-  if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
+  // Deepseek requires all assistant messages to have reasoning on them
+  if (model.api.id.includes("deepseek")) {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant") return msg
+      if (Array.isArray(msg.content)) {
+        if (msg.content.some((part) => part.type === "reasoning")) return msg
+        return { ...msg, content: [...msg.content, { type: "reasoning", text: "" }] }
+      }
+      return {
+        ...msg,
+        content: [
+          ...(msg.content ? [{ type: "text" as const, text: msg.content }] : []),
+          { type: "reasoning" as const, text: "" },
+        ],
+      }
+    })
+  }
+
+  if (
+    typeof model.capabilities.interleaved === "object" &&
+    model.capabilities.interleaved.field &&
+    model.api.npm !== "@openrouter/ai-sdk-provider"
+  ) {
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -185,24 +228,19 @@ function normalizeMessages(
         // Filter out reasoning parts from content
         const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-        // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-        if (reasoningText) {
-          return {
-            ...msg,
-            content: filteredContent,
-            providerOptions: {
-              ...msg.providerOptions,
-              openaiCompatible: {
-                ...msg.providerOptions?.openaiCompatible,
-                [field]: reasoningText,
-              },
-            },
-          }
-        }
-
+        // Include reasoning_content | reasoning_details directly on the message for all assistant messages.
+        // Always set the field even when empty — some providers (e.g. DeepSeek) may return empty
+        // reasoning_content which still needs to be sent back in subsequent requests.
         return {
           ...msg,
           content: filteredContent,
+          providerOptions: {
+            ...msg.providerOptions,
+            openaiCompatible: {
+              ...msg.providerOptions?.openaiCompatible,
+              [field]: reasoningText,
+            },
+          },
         }
       }
 
@@ -405,12 +443,14 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   const id = model.id.toLowerCase()
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   if (
-    id.includes("deepseek") ||
+    id.includes("deepseek-chat") ||
+    id.includes("deepseek-reasoner") ||
+    id.includes("deepseek-r1") ||
+    id.includes("deepseek-v3") ||
     id.includes("minimax") ||
     id.includes("glm") ||
-    id.includes("mistral") ||
     id.includes("kimi") ||
-    id.includes("k2p5") ||
+    id.includes("k2p") ||
     id.includes("qwen") ||
     id.includes("big-pickle")
   )
@@ -532,7 +572,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
-      return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+      const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+      if (model.api.id.includes("deepseek-v4")) {
+        efforts.push("max")
+      }
+      return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
 
     case "@ai-sdk/azure":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
@@ -713,7 +757,14 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
     case "@ai-sdk/mistral":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
-      return {}
+      // https://docs.mistral.ai/capabilities/reasoning/adjustable
+      if (!model.capabilities.reasoning) return {}
+      // Only Mistral Small 4 supports reasoning (mistral-small-2603, mistral-small-latest)
+      const mistralId = model.api.id.toLowerCase()
+      if (!mistralId.includes("mistral-small-2603") && !mistralId.includes("mistral-small-latest")) return {}
+      return {
+        high: { reasoningEffort: "high" },
+      }
 
     case "@ai-sdk/cohere":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere
@@ -796,6 +847,10 @@ export function options(input: {
 }): Record<string, any> {
   const result: Record<string, any> = {}
 
+  if (input.model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+    result["toolStreaming"] = false
+  }
+
   // openai and providers using openai package should set store to false by default.
   if (
     input.model.providerID === "openai" ||
@@ -851,11 +906,11 @@ export function options(input: {
     }
   }
 
-  // Enable thinking by default for kimi-k2.5/k2p5 models using anthropic SDK
+  // Enable thinking by default for kimi models using anthropic SDK
   const modelId = input.model.api.id.toLowerCase()
   if (
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
-    (modelId.includes("k2p5") || modelId.includes("kimi-k2.5") || modelId.includes("kimi-k2p5"))
+    (modelId.includes("k2p") || modelId.includes("kimi-k2.") || modelId.includes("kimi-k2p"))
   ) {
     result["thinking"] = {
       type: "enabled",

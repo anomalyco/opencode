@@ -15,24 +15,26 @@ import { SkillTool } from "./skill"
 import * as Tool from "./tool"
 import { Config } from "../config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
+import { Schema } from "effect"
 import z from "zod"
+import { ZodOverride } from "@/util/effect-zod"
 import { Plugin } from "../plugin"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Log } from "@/util"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
 import { InstanceState } from "@/effect"
@@ -40,7 +42,7 @@ import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "../lsp"
 import { Instruction } from "../session/instruction"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
@@ -120,9 +122,17 @@ export const layer: Layer.Layer<
         const custom: Tool.Def[] = []
 
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
+          // Plugin tools define their args as a raw Zod shape. Wrap the
+          // derived Zod object in a `Schema.declare` so it slots into the
+          // Schema-typed framework, and annotate with `ZodOverride` so the
+          // walker emits the original Zod object for LLM JSON Schema.
+          const zodParams = z.object(def.args)
+          const parameters = Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success).annotate({
+            [ZodOverride]: zodParams,
+          })
           return {
             id,
-            parameters: z.object(def.args),
+            parameters,
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {

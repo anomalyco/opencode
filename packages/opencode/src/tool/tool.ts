@@ -1,5 +1,4 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import type { MessageV2 } from "../session/message-v2"
 import type { Permission } from "../permission"
 import type { SessionID, MessageID } from "../session/schema"
@@ -32,29 +31,39 @@ export interface ExecuteResult<M extends Metadata = Metadata> {
   attachments?: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[]
 }
 
-export interface Def<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
+export interface Def<
+  Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
+  M extends Metadata = Metadata,
+> {
   id: string
   description: string
   parameters: Parameters
-  execute(args: z.infer<Parameters>, ctx: Context): Effect.Effect<ExecuteResult<M>>
-  formatValidationError?(error: z.ZodError): string
+  execute(args: Schema.Schema.Type<Parameters>, ctx: Context): Effect.Effect<ExecuteResult<M>>
+  formatValidationError?(error: unknown): string
 }
-export type DefWithoutID<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> = Omit<
-  Def<Parameters, M>,
-  "id"
->
+export type DefWithoutID<
+  Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
+  M extends Metadata = Metadata,
+> = Omit<Def<Parameters, M>, "id">
 
-export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
+export interface Info<
+  Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
+  M extends Metadata = Metadata,
+> {
   id: string
   init: () => Effect.Effect<DefWithoutID<Parameters, M>>
 }
 
-type Init<Parameters extends z.ZodType, M extends Metadata> =
+type Init<Parameters extends Schema.Decoder<unknown>, M extends Metadata> =
   | DefWithoutID<Parameters, M>
   | (() => Effect.Effect<DefWithoutID<Parameters, M>>)
 
 export type InferParameters<T> =
-  T extends Info<infer P, any> ? z.infer<P> : T extends Effect.Effect<Info<infer P, any>, any, any> ? z.infer<P> : never
+  T extends Info<infer P, any>
+    ? Schema.Schema.Type<P>
+    : T extends Effect.Effect<Info<infer P, any>, any, any>
+      ? Schema.Schema.Type<P>
+      : never
 export type InferMetadata<T> =
   T extends Info<any, infer M> ? M : T extends Effect.Effect<Info<any, infer M>, any, any> ? M : never
 
@@ -65,7 +74,7 @@ export type InferDef<T> =
       ? Def<P, M>
       : never
 
-function wrap<Parameters extends z.ZodType, Result extends Metadata>(
+function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadata>(
   id: string,
   init: Init<Parameters, Result>,
   truncate: Truncate.Interface,
@@ -74,6 +83,10 @@ function wrap<Parameters extends z.ZodType, Result extends Metadata>(
   return () =>
     Effect.gen(function* () {
       const toolInfo = typeof init === "function" ? { ...(yield* init()) } : { ...init }
+      // Compile the parser closure once per tool init; `decodeUnknownEffect`
+      // allocates a new closure per call, so hoisting avoids re-closing it for
+      // every LLM tool invocation.
+      const decode = Schema.decodeUnknownEffect(toolInfo.parameters)
       const execute = toolInfo.execute
       toolInfo.execute = (args, ctx) => {
         const attrs = {
@@ -83,19 +96,17 @@ function wrap<Parameters extends z.ZodType, Result extends Metadata>(
           ...(ctx.callID ? { "tool.call_id": ctx.callID } : {}),
         }
         return Effect.gen(function* () {
-          yield* Effect.try({
-            try: () => toolInfo.parameters.parse(args),
-            catch: (error) => {
-              if (error instanceof z.ZodError && toolInfo.formatValidationError) {
-                return new Error(toolInfo.formatValidationError(error), { cause: error })
-              }
-              return new Error(
-                `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
-                { cause: error },
-              )
-            },
-          })
-          const result = yield* execute(args, ctx)
+          const decoded = yield* decode(args).pipe(
+            Effect.mapError((error) =>
+              toolInfo.formatValidationError
+                ? new Error(toolInfo.formatValidationError(error), { cause: error })
+                : new Error(
+                    `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+                    { cause: error },
+                  ),
+            ),
+          )
+          const result = yield* execute(decoded as Schema.Schema.Type<Parameters>, ctx)
           if (result.metadata.truncated !== undefined) {
             return result
           }
@@ -116,7 +127,12 @@ function wrap<Parameters extends z.ZodType, Result extends Metadata>(
     })
 }
 
-export function define<Parameters extends z.ZodType, Result extends Metadata, R, ID extends string = string>(
+export function define<
+  Parameters extends Schema.Decoder<unknown>,
+  Result extends Metadata,
+  R,
+  ID extends string = string,
+>(
   id: ID,
   init: Effect.Effect<Init<Parameters, Result>, never, R>,
 ): Effect.Effect<Info<Parameters, Result>, never, R | Truncate.Service | Agent.Service> & { id: ID } {
@@ -131,7 +147,9 @@ export function define<Parameters extends z.ZodType, Result extends Metadata, R,
   )
 }
 
-export function init<P extends z.ZodType, M extends Metadata>(info: Info<P, M>): Effect.Effect<Def<P, M>> {
+export function init<P extends Schema.Decoder<unknown>, M extends Metadata>(
+  info: Info<P, M>,
+): Effect.Effect<Def<P, M>> {
   return Effect.gen(function* () {
     const init = yield* info.init()
     return {

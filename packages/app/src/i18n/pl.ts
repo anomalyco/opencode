@@ -211,7 +211,7 @@ export const dict = {
   "common.saving": "Zapisywanie...",
   "common.default": "Domyślny",
   "common.attachment": "załącznik",
-  "prompt.placeholder.shell": "Wpisz polecenie terminala...",
+  "prompt.placeholder.shell": "Wpisz polecenie terminala... {{example}}",
   "prompt.placeholder.normal": 'Zapytaj o cokolwiek... "{{example}}"',
   "prompt.placeholder.simple": "Zapytaj o cokolwiek...",
   "prompt.placeholder.summarizeComments": "Podsumuj komentarze…",

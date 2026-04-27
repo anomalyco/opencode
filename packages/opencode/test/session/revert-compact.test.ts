@@ -9,7 +9,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { Snapshot } from "../../src/snapshot"
 import { Log } from "../../src/util"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 

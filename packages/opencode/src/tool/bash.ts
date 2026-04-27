@@ -1,4 +1,4 @@
-import z from "zod"
+import { Schema } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -9,9 +9,10 @@ import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { fileURLToPath } from "url"
-import { Flag } from "@/flag/flag"
+import { Config } from "@/config"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
@@ -20,10 +21,10 @@ import { Plugin } from "@/plugin"
 import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { InstanceState } from "@/effect"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
-const PS = new Set(["powershell", "pwsh"])
 const CWD = new Set(["cd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -50,20 +51,16 @@ const FILES = new Set([
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
 
-const Parameters = z.object({
-  command: z.string().describe("The command to execute"),
-  timeout: z.number().describe("Optional timeout in milliseconds").optional(),
-  workdir: z
-    .string()
-    .describe(
-      `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
-    )
-    .optional(),
-  description: z
-    .string()
-    .describe(
+export const Parameters = Schema.Struct({
+  command: Schema.String.annotate({ description: "The command to execute" }),
+  timeout: Schema.optional(Schema.Number).annotate({ description: "Optional timeout in milliseconds" }),
+  workdir: Schema.optional(Schema.String).annotate({
+    description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
+  }),
+  description: Schema.String.annotate({
+    description:
       "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-    ),
+  }),
 })
 
 type Part = {
@@ -281,8 +278,8 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
   })
 })
 
-function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
-  if (process.platform === "win32" && PS.has(name)) {
+function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+  if (process.platform === "win32" && Shell.ps(shell)) {
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
       env,
@@ -299,7 +296,6 @@ function cmd(shell: string, name: string, command: string, cwd: string, env: Nod
     detached: process.platform !== "win32",
   })
 }
-
 const parser = lazy(async () => {
   const { Parser } = await import("web-tree-sitter")
   const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
@@ -331,6 +327,7 @@ const parser = lazy(async () => {
 export const BashTool = Tool.define(
   "bash",
   Effect.gen(function* () {
+    const config = yield* Config.Service
     const spawner = yield* ChildProcessSpawner
     const fs = yield* AppFileSystem.Service
     const trunc = yield* Truncate.Service
@@ -411,7 +408,6 @@ export const BashTool = Tool.define(
     const run = Effect.fn("BashTool.run")(function* (
       input: {
         shell: string
-        name: string
         command: string
         cwd: string
         env: NodeJS.ProcessEnv
@@ -420,9 +416,8 @@ export const BashTool = Tool.define(
       },
       ctx: Tool.Context,
     ) {
-      const bytes = Truncate.MAX_BYTES
-      const lines = Truncate.MAX_LINES
-      const keep = bytes * 2
+      const limits = yield* trunc.limits()
+      const keep = limits.maxBytes * 2
       let full = ""
       let last = ""
       const list: Chunk[] = []
@@ -442,7 +437,7 @@ export const BashTool = Tool.define(
 
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
-          const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
+          const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
@@ -462,7 +457,7 @@ export const BashTool = Tool.define(
                 sink?.write(chunk)
               } else {
                 full += chunk
-                if (Buffer.byteLength(full, "utf-8") > bytes) {
+                if (Buffer.byteLength(full, "utf-8") > limits.maxBytes) {
                   return trunc.write(full).pipe(
                     Effect.andThen((next) =>
                       Effect.sync(() => {
@@ -529,7 +524,7 @@ export const BashTool = Tool.define(
       }
       if (aborted) meta.push("User aborted the command")
       const raw = list.map((item) => item.text).join("")
-      const end = tail(raw, lines, bytes)
+      const end = tail(raw, limits.maxLines, limits.maxBytes)
       if (end.cut) cut = true
       if (!file && end.cut) {
         file = yield* trunc.write(raw)
@@ -570,8 +565,9 @@ export const BashTool = Tool.define(
     })
 
     return () =>
-      Effect.sync(() => {
-        const shell = Shell.acceptable()
+      Effect.gen(function* () {
+        const cfg = yield* config.get()
+        const shell = Shell.acceptable(cfg.shell)
         const name = Shell.name(shell)
         const chain =
           name === "powershell"
@@ -579,15 +575,18 @@ export const BashTool = Tool.define(
             : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
         log.info("bash tool using shell", { shell })
 
+        const limits = yield* trunc.limits()
+        const instance = yield* InstanceState.context
+
         return {
-          description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
+          description: DESCRIPTION.replaceAll("${directory}", instance.directory)
             .replaceAll("${os}", process.platform)
             .replaceAll("${shell}", name)
             .replaceAll("${chaining}", chain)
-            .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
-            .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+            .replaceAll("${maxLines}", String(limits.maxLines))
+            .replaceAll("${maxBytes}", String(limits.maxBytes)),
           parameters: Parameters,
-          execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
+          execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
             Effect.gen(function* () {
               const cwd = params.workdir
                 ? yield* resolvePath(params.workdir, Instance.directory, shell)
@@ -596,7 +595,7 @@ export const BashTool = Tool.define(
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
               const timeout = params.timeout ?? DEFAULT_TIMEOUT
-              const ps = PS.has(name)
+              const ps = Shell.ps(shell)
               const root = yield* parse(params.command, ps)
               const scan = yield* collect(root, cwd, ps, shell)
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
@@ -605,7 +604,6 @@ export const BashTool = Tool.define(
               return yield* run(
                 {
                   shell,
-                  name,
                   command: params.command,
                   cwd,
                   env: yield* shellEnv(ctx, cwd),

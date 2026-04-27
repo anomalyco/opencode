@@ -1,7 +1,7 @@
 import path from "path"
 import { writeHeapSnapshot } from "node:v8"
-import { Flag } from "@/flag/flag"
-import { Global } from "@/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { Global } from "@opencode-ai/core/global"
 import { Log } from "@/util"
 
 const log = Log.create({ service: "heap" })

@@ -1,9 +1,22 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import * as Tool from "./tool"
 import * as McpExa from "./mcp-exa"
 import DESCRIPTION from "./codesearch.txt"
+
+export const Parameters = Schema.Struct({
+  query: Schema.String.annotate({
+    description:
+      "Search query to find relevant context for APIs, Libraries, and SDKs. For example, 'React useState hook examples', 'Python pandas dataframe filtering', 'Express.js middleware', 'Next js partial prerendering configuration'",
+  }),
+  tokensNum: Schema.Number.check(Schema.isGreaterThanOrEqualTo(1000))
+    .check(Schema.isLessThanOrEqualTo(50000))
+    .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(5000)))
+    .annotate({
+      description:
+        "Number of tokens to return (1000-50000). Default is 5000 tokens. Adjust this value based on how much context you need - use lower values for focused queries and higher values for comprehensive documentation.",
+    }),
+})
 
 export const CodeSearchTool = Tool.define(
   "codesearch",
@@ -12,21 +25,7 @@ export const CodeSearchTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters: z.object({
-        query: z
-          .string()
-          .describe(
-            "Search query to find relevant context for APIs, Libraries, and SDKs. For example, 'React useState hook examples', 'Python pandas dataframe filtering', 'Express.js middleware', 'Next js partial prerendering configuration'",
-          ),
-        tokensNum: z
-          .number()
-          .min(1000)
-          .max(50000)
-          .default(5000)
-          .describe(
-            "Number of tokens to return (1000-50000). Default is 5000 tokens. Adjust this value based on how much context you need - use lower values for focused queries and higher values for comprehensive documentation.",
-          ),
-      }),
+      parameters: Parameters,
       execute: (params: { query: string; tokensNum: number }, ctx: Tool.Context) =>
         Effect.gen(function* () {
           yield* ctx.ask({
@@ -45,7 +44,7 @@ export const CodeSearchTool = Tool.define(
             McpExa.CodeArgs,
             {
               query: params.query,
-              tokensNum: params.tokensNum || 5000,
+              tokensNum: params.tokensNum,
             },
             "30 seconds",
           )
