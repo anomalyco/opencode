@@ -19,7 +19,6 @@ import { Bus } from "@/bus"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
-import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
 import * as Option from "effect/Option"
@@ -46,6 +45,7 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  nativeMessages?: ReadonlyArray<MessageV2.WithParts>
 }
 
 export type StreamRequest = StreamInput & {
@@ -230,11 +230,11 @@ const live: Layer.Layer<
       // from the workflow service are executed via opencode's tool system
       // and results sent back over the WebSocket.
       if (language instanceof GitLabWorkflowLanguageModel) {
-        const workflowModel = language as GitLabWorkflowLanguageModel & {
+        const workflowModel: GitLabWorkflowLanguageModel & {
           sessionID?: string
           sessionPreapprovedTools?: string[]
-          approvalHandler?: (approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean }>
-        }
+          approvalHandler?: ((approvalTools: { name: string; args: string }[]) => Promise<{ approved: boolean; message?: string }>) | null
+        } = language
         workflowModel.sessionID = input.sessionID
         workflowModel.systemPrompt = system.join("\n")
         workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
@@ -243,7 +243,7 @@ const live: Layer.Layer<
             return { result: "", error: `Unknown tool: ${toolName}` }
           }
           try {
-            const result = await t.execute!(JSON.parse(argsJson), {
+            const result = await t.execute(JSON.parse(argsJson), {
               toolCallId: _requestID,
               messages: input.messages,
               abortSignal: input.abort,
@@ -283,8 +283,13 @@ const live: Layer.Layer<
             })
             const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
               try {
-                const parsed = JSON.parse(t.args) as Record<string, unknown>
-                const title = (parsed?.title ?? parsed?.name ?? "") as string
+                const parsed = JSON.parse(t.args) as unknown
+                const value = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : {}
+                const title = "title" in value && typeof value.title === "string"
+                  ? value.title
+                  : "name" in value && typeof value.name === "string"
+                    ? value.name
+                    : ""
                 return title ? `${t.name}: ${title}` : t.name
               } catch {
                 return t.name
