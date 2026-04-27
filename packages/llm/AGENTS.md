@@ -169,16 +169,18 @@ Recorded tests use one cassette file per scenario. A cassette holds an ordered a
 ```ts
 const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
 
-recorded.effect("streams text", () => Effect.gen(function* () {
-  // test body
-}))
+recorded.effect("streams text", () =>
+  Effect.gen(function* () {
+    // test body
+  }),
+)
 ```
 
 Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars. Cassettes are written as pretty-printed JSON so multi-interaction diffs stay reviewable.
 
-**Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON adapters omit the field and decode as text. To support a new binary content type, extend `BINARY_CONTENT_TYPES` in `test/record-replay.ts`.
+**Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` in `@opencode-ai/http-recorder` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON adapters omit the field and decode as text.
 
-**Matching strategies.** Replay defaults to `defaultMatcher`, which finds an interaction by structurally comparing method, URL, allow-listed headers, and the canonical JSON body. This is the right choice for tool loops because each round's request differs (the message history grows). For scenarios where successive requests are byte-identical and expect different responses (retries, polling), pass `match: sequentialMatcher` in `RecordReplayOptions` — replay then walks the cassette in record order via an internal cursor. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
+**Matching strategies.** Replay defaults to structural matching, which finds an interaction by comparing method, URL, allow-listed headers, and the canonical JSON body. This is the right choice for tool loops because each round's request differs (the message history grows). For scenarios where successive requests are byte-identical and expect different responses (retries, polling), pass `dispatch: "sequential"` in `RecordReplayOptions` — replay then walks the cassette in record order via an internal cursor. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 
 Do not blanket re-record an entire test file when adding one cassette. `RECORD=true` rewrites every recorded case that runs, and provider streams contain volatile IDs, timestamps, fingerprints, and obfuscation fields. Prefer deleting the one cassette you intend to refresh, or run a focused test pattern that only registers the scenario you want to record. Keep stable existing cassettes unchanged unless their request shape or expected behavior changed.
 
@@ -186,7 +188,7 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 ### Completed Foundation
 
-- [x] Add an adapter registry so `client(...)` can choose an adapter by `request.model.protocol` instead of requiring a single adapter.
+- [x] Add an adapter registry so `LLMClient.make(...)` can choose an adapter by provider/protocol instead of requiring a single adapter.
 - [x] Add request/response convenience helpers where callsites still expose schema internals, but keep constructors returning canonical Schema class instances.
 - [x] Expand OpenAI Chat support for assistant tool-call messages followed by tool-result messages.
 - [x] Add OpenAI Chat recorded tests for tool-result follow-up and usage chunks.
@@ -199,11 +201,11 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 ### Provider Coverage
 
-- [x] Add a generic OpenAI-compatible Chat adapter for non-OpenAI providers that expose `/chat/completions`; use `../ai/packages/openai-compatible` as the behavior reference.
-- [ ] Keep OpenAI Responses as a separate first-class protocol for providers that actually implement `/responses`; do not treat generic OpenAI-compatible providers as Responses-capable by default.
+- [x] Add a generic OpenAI-compatible Chat adapter for non-OpenAI providers that expose `/chat/completions`.
+- [x] Keep OpenAI Responses as a separate first-class protocol for providers that actually implement `/responses`; do not treat generic OpenAI-compatible providers as Responses-capable by default.
 - [x] Cover OpenAI-compatible provider families that can share the generic adapter first: DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, DeepInfra, and similar providers.
 - [ ] Decide which providers need thin dedicated wrappers over OpenAI-compatible Chat because they have custom parsing/options: Mistral, Groq, xAI, Perplexity, and Cohere.
-- [x] Add Bedrock Converse support: wire format (messages / system / inferenceConfig / toolConfig), AWS event stream binary framing via `@smithy/eventstream-codec`, SigV4 signing via `aws4fetch` (or Bearer API key path), text/reasoning/tool/usage/finish decoding, deterministic + recorded integration tests. Cache hints, image/document content, and additional model-specific fields are still TODO.
+- [x] Add Bedrock Converse support: wire format (messages / system / inferenceConfig / toolConfig), AWS event stream binary framing via `@smithy/eventstream-codec`, SigV4 signing via `aws4fetch` (or Bearer API key path), text/reasoning/tool/usage/finish decoding, cache hints, image/document content, deterministic tests, and recorded basic text/tool cassettes. Additional model-specific fields are still TODO.
 - [ ] Decide Vertex shape after Bedrock/OpenAI-compatible are stable: Vertex Gemini as Gemini target/http patch vs adapter, and Vertex Anthropic as Anthropic target/http patch vs adapter.
 - [ ] Add Gateway/OpenRouter-style routing support only after the generic OpenAI-compatible adapter and provider option patch model are stable.
 
@@ -220,20 +222,38 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 
 ### OpenCode Bridge
 
-- [ ] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, native provider metadata, and OpenAI-compatible provider family detection.
-- [ ] Build a `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tools, tool choice, generation options, reasoning variants, cache hints, and attachments.
+- [x] Build a `Provider.Model` -> `LLM.ModelRef` bridge for OpenCode, including protocol selection, base URLs, headers, limits, capabilities, native provider metadata, and OpenAI-compatible provider family detection.
+- [x] Build a pure `session.llm` -> `LLM.request(...)` bridge for system prompts, message history, tool definitions, tool choice, generation options, reasoning variants, cache hints, and attachments.
 - [x] Add a typed `ToolRuntime` that drives the tool loop with Schema-typed parameters/success per tool, single-`ToolFailure` error channel, and `maxSteps`/`stopWhen` controls.
 - [x] Provider-defined tool pass-through: `providerExecuted` flag on `tool-call`/`tool-result` events; Anthropic `server_tool_use` / `web_search_tool_result` / `code_execution_tool_result` / `web_fetch_tool_result` round-trip; OpenAI Responses hosted-tool items decoded as `tool-call` + `tool-result` pairs; runtime skips client dispatch when `providerExecuted: true`.
 - [ ] Keep auth and deployment concerns in the OpenCode bridge where possible: Bedrock credentials/region/profile, Vertex project/location/token, Azure deployment/API version, and Gateway/OpenRouter routing headers.
 - [ ] Keep initial OpenCode integration behind a local flag/path until request payload parity and stream event parity are proven against the existing `session/llm.test.ts` cases.
 
+### Native OpenCode Rollout
+
+- [x] Add a native event bridge that maps `LLMEvent` streams into the existing `SessionProcessor` event contract without creating a second processor.
+- [ ] Extract runtime-neutral OpenCode tool resolution from `SessionPrompt.resolveTools`, then build both existing-stream and native `@opencode-ai/llm` tool adapters from the same resolved shape.
+- [ ] Map `Permission.RejectedError`, `Permission.CorrectedError`, validation failures, thrown tool failures, and aborts into model-visible native tool error/results.
+- [ ] Wire a native stream producer behind an explicit local flag and provider allowlist; the producer should consume `nativeMessages`, call `LLMNative.request(...)`, stream through `LLMClient.make(...)`, and feed `LLMNativeEvents.mapper()` into `SessionProcessor`.
+- [ ] Add end-to-end native stream tests through the actual session loop for text, reasoning, tool-call streaming, tool success, rejected permission, corrected permission, thrown tool error, abort, and provider-executed tool history.
+- [ ] Dogfood native streaming with the flag enabled for OpenAI first, then Anthropic, Gemini, OpenAI-compatible providers, Bedrock, and Copilot provider-by-provider.
+- [ ] Flip native streaming to default only after request parity, stream parity, tool execution, typecheck, focused provider tests, recorded cassettes, and manual dogfood pass for the enabled provider set.
+- [ ] Keep the existing stream path as an opt-out fallback during soak; remove it only after native default has proven stable.
+
 ### Test And Recording Gaps
 
+- [x] Harden the generic HTTP recorder before adding more live cassettes: secret scanning before writes, sensitive header/query redaction, response/body secret scanning, and clear failure messages that identify the unsafe field without printing the secret.
+- [x] Refactor the recorder toward extractable library boundaries: core HTTP cassette schema/matching/redaction/diffing should stay LLM-agnostic; LLM tests should supply metadata and semantic assertions from a thin wrapper.
+- [x] Add cassette metadata support: recorder schema version, recorded timestamp, scenario name, tags, and caller-provided subject metadata such as provider/protocol/model/capabilities without making the core recorder depend on LLM concepts.
+- [x] Improve replay mismatch diagnostics: show method/URL/header/body diffs and closest recorded interaction while keeping secrets redacted. Unused-interaction reporting is still TODO if a test needs it.
+- [ ] Add a cassette doctor command/test helper that validates schema versions, detects secrets, checks duplicate or unused interactions where possible, and reports cassette coverage by provider/protocol/scenario.
+- [ ] Add semantic replay assertions for LLM cassettes: replay raw HTTP, parse provider streams, and compare normalized `LLMEvent[]` or `LLMResponse` snapshots in addition to request matching.
+- [ ] Add stream chunk-boundary fuzzing for text/SSE cassettes so parser tests prove correctness independent of provider chunk boundaries.
 - [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.
 - [x] Cover provider-error and HTTP-status sad paths with deterministic fixtures across adapters (Anthropic mid-stream + 4xx; OpenAI Responses mid-stream + 4xx; OpenAI Chat 4xx). Live recordings of provider errors are still TODO when stable cassettes can be captured.
-- [x] Improve cassette ergonomics for multi-interaction flows: pretty-printed JSON for diff-friendly cassettes, `sequentialMatcher` for ordered dispatch, and a recorded tool-loop scaffold (`openai-chat-tool-loop.recorded.test.ts`).
-- [ ] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
-- [x] Add adapter parity fixtures against `../ai` behavior for generic OpenAI-compatible Chat before adding provider-specific wrappers.
+- [x] Improve cassette ergonomics for multi-interaction flows: pretty-printed JSON for diff-friendly cassettes, explicit sequential dispatch, and a recorded tool-loop scaffold (`openai-chat-tool-loop.recorded.test.ts`).
+- [x] Mirror OpenCode request-body parity tests through the new LLM path for OpenAI Responses, Anthropic Messages, Gemini, OpenAI-compatible Chat, and Bedrock once supported.
+- [x] Add adapter parity fixtures for generic OpenAI-compatible Chat before adding provider-specific wrappers.
 
 ### Recorded Cassette Backlog
 

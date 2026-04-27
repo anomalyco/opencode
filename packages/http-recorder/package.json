@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.14.25",
-  "name": "@opencode-ai/llm",
+  "version": "0.0.0",
+  "name": "@opencode-ai/http-recorder",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -15,15 +15,11 @@
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/http-recorder": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
-    "@smithy/eventstream-codec": "4.2.14",
-    "@smithy/util-utf8": "4.2.2",
-    "aws4fetch": "1.0.20",
     "effect": "catalog:"
   }
 }
