@@ -10,13 +10,13 @@ import { Provider } from "../../provider/provider"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
-const ProjectSummary = z
-  .object({
-    title: z.string(),
-    description: z.string(),
-    usage: z.string(),
-  })
-  .meta({ ref: "ProjectSummary" })
+const ProjectSummaryShape = z.object({
+  title: z.string(),
+  description: z.string(),
+  usage: z.string(),
+})
+
+const ProjectSummary = ProjectSummaryShape.meta({ ref: "ProjectSummary" })
 
 export const ProjectSummaryRoutes = lazy(() =>
   new Hono().post(
@@ -84,7 +84,7 @@ export const ProjectSummaryRoutes = lazy(() =>
 
       const { object } = await generateObject({
         model: language,
-        schema: ProjectSummary,
+        schema: ProjectSummaryShape,
         system:
           "You generate concise project summaries from coding session transcripts. Respond in the language used by the user in the transcript.",
         prompt: `Generate a short project summary based on this transcript. Fields:
