@@ -16,6 +16,7 @@ import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { PtyPaths } from "./httpapi/pty"
 import { EventPaths } from "./httpapi/event"
 import { ExperimentalPaths } from "./httpapi/experimental"
 import { FilePaths } from "./httpapi/file"
@@ -23,6 +24,7 @@ import { InstancePaths } from "./httpapi/instance"
 import { McpPaths } from "./httpapi/mcp"
 import { SessionPaths } from "./httpapi/session"
 import { SyncPaths } from "./httpapi/sync"
+import { TuiPaths } from "./httpapi/tui"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -96,6 +98,12 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.list, (c) => handler(c.req.raw, context))
+    app.post(PtyPaths.create, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.get, (c) => handler(c.req.raw, context))
+    app.put(PtyPaths.update, (c) => handler(c.req.raw, context))
+    app.delete(PtyPaths.remove, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.connect, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.get, (c) => handler(c.req.raw, context))
@@ -123,6 +131,19 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.delete(SessionPaths.deleteMessage, (c) => handler(c.req.raw, context))
     app.delete(SessionPaths.deletePart, (c) => handler(c.req.raw, context))
     app.patch(SessionPaths.updatePart, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.appendPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openHelp, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openSessions, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openThemes, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openModels, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.submitPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.clearPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.executeCommand, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.showToast, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.publish, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.selectSession, (c) => handler(c.req.raw, context))
+    app.get(TuiPaths.controlNext, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.controlResponse, (c) => handler(c.req.raw, context))
   }
 
   return app

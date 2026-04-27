@@ -1,18 +1,19 @@
 import type { APIEvent } from "@solidjs/start/server"
+import { ZenData } from "@opencode-ai/console-core/model.js"
 import { and, Database, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
-import { optionsHandler, getHandler } from "~/routes/zen/util/modelsHandler"
+import { buildOptionsResponse, buildModelsResponse } from "~/routes/zen/util/modelsHandler"
 
 export async function OPTIONS(_input: APIEvent) {
-  return optionsHandler()
+  return buildOptionsResponse()
 }
 
 export async function GET(input: APIEvent) {
   const disabledModels = await (() => {
     const apiKey = input.request.headers.get("authorization")?.split(" ")[1]
-    if (!apiKey) return []
+    if (!apiKey) return [] as string[]
 
     return Database.use((tx) =>
       tx
@@ -27,5 +28,7 @@ export async function GET(input: APIEvent) {
     )
   })()
 
-  return getHandler({ modelList: "full", disabledModels })
+  const models = Object.keys(ZenData.list("full").models).filter((id) => !disabledModels.includes(id))
+
+  return buildModelsResponse(models)
 }
