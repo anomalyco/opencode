@@ -83,6 +83,32 @@ const live: Layer.Layer<
         providerID: input.model.providerID,
       })
 
+      // Allow plugins to rewrite the selected model before it's committed
+      // for this request. The output is pre-filled with the original model's
+      // IDs; plugins that do not override them produce a no-op. Use cases
+      // include hybrid local/cloud routing, cascade fallbacks, A/B testing.
+      const rewrite = yield* plugin.trigger(
+        "model.before",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent.name,
+          model: input.model,
+          message: input.user,
+        },
+        {
+          providerID: input.model.providerID,
+          modelID: input.model.id,
+        },
+      )
+      if (rewrite.providerID !== input.model.providerID || rewrite.modelID !== input.model.id) {
+        const replaced = yield* provider.getModel(rewrite.providerID as any, rewrite.modelID as any)
+        l.info("model.before rewrite", {
+          from: `${input.model.providerID}/${input.model.id}`,
+          to: `${replaced.providerID}/${replaced.id}`,
+        })
+        input.model = replaced
+      }
+
       const [language, cfg, item, info] = yield* Effect.all(
         [
           provider.getLanguage(input.model),
