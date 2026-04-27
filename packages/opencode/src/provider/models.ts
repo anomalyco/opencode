@@ -8,6 +8,7 @@ import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Hash } from "@opencode-ai/core/util/hash"
+import { ModelCache } from "./model-cache"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -145,7 +146,55 @@ export const Data = lazy(async () => {
 
 export async function get() {
   const result = await Data()
-  return result as Record<string, Provider>
+  const providers = result as Record<string, Provider>
+
+  const config = await Filesystem.readJson(path.join(Global.Path.config, "config.json")).catch(() => undefined) as {
+    disabled_providers?: string[]
+    enabled_providers?: string[]
+    provider?: Record<string, { options?: Record<string, unknown> }>
+  } | undefined
+
+  const disabled = new Set(config?.disabled_providers ?? [])
+  const enabled = config?.enabled_providers ? new Set(config.enabled_providers) : null
+  const lmstudioDisabled = disabled.has("lmstudio")
+  const lmstudioEnabled = enabled ? enabled.has("lmstudio") : true
+  const lmstudioAllowed = lmstudioEnabled && !lmstudioDisabled
+
+  if (lmstudioAllowed) {
+    const lmstudioConfig = config?.provider?.lmstudio?.options
+    const lmstudioBaseURL = (lmstudioConfig?.baseURL as string) ?? "http://127.0.0.1:1234/v1"
+    const lmstudioFetchOptions = {
+      ...(lmstudioConfig?.baseURL ? { baseURL: lmstudioConfig.baseURL as string } : {}),
+      ...(lmstudioConfig?.apiKey ? { apiKey: lmstudioConfig.apiKey as string } : {}),
+    }
+
+    try {
+      const lmstudioModels = await ModelCache.fetch("lmstudio", lmstudioFetchOptions).catch(() => ({}))
+      if (Object.keys(lmstudioModels).length > 0) {
+        if (!providers["lmstudio"]) {
+          providers["lmstudio"] = {
+            id: "lmstudio",
+            name: "LMStudio",
+            env: ["LMSTUDIO_API_KEY"],
+            api: lmstudioBaseURL,
+            npm: "@ai-sdk/openai-compatible",
+            models: lmstudioModels,
+          }
+        } else {
+          const existing = providers["lmstudio"]
+          providers["lmstudio"] = {
+            ...existing,
+            models: lmstudioModels,
+            api: lmstudioConfig?.baseURL ? lmstudioBaseURL : existing.api,
+          }
+        }
+      }
+    } catch (err) {
+      log.debug("lmstudio model fetch failed, using snapshot fallback", { error: err })
+    }
+  }
+
+  return providers
 }
 
 export async function refresh(force = false) {
