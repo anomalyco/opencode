@@ -113,6 +113,25 @@ export const PtyApi = HttpApi.make("pty")
     }),
   )
 
+export const PtyConnectApi = HttpApi.make("pty-connect")
+  .add(
+    HttpApiGroup.make("pty-connect")
+      .add(
+        HttpApiEndpoint.get("connect", PtyPaths.connect, {
+          params: Params,
+          query: CursorQuery,
+          success: Schema.Boolean,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "pty.connect",
+            summary: "Connect to PTY session",
+            description: "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.",
+          }),
+        ),
+      )
+      .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." })),
+  )
+
 export const ptyHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const pty = yield* Pty.Service

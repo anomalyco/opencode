@@ -19,8 +19,10 @@ import { SessionApi } from "../../src/server/routes/instance/httpapi/session"
 import { SyncApi } from "../../src/server/routes/instance/httpapi/sync"
 import { TuiApi } from "../../src/server/routes/instance/httpapi/tui"
 import { WorkspaceApi } from "../../src/server/routes/instance/httpapi/workspace"
+import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
+import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
-import { HttpApi, HttpApiGroup } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
@@ -33,6 +35,7 @@ const original = {
 }
 
 const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
+const methods = ["get", "post", "put", "delete", "patch"] as const
 
 function app(input?: { password?: string; username?: string }) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
@@ -73,6 +76,12 @@ function reflectedHttpApiRoutes() {
   addRoutes(WorkspaceApi)
 
   return [...new Set(routes)]
+}
+
+function openApiRouteKeys(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], unknown>>> }) {
+  return Object.entries(spec.paths)
+    .flatMap(([path, item]) => methods.filter((method) => item[method]).map((method) => `${method.toUpperCase()} ${path}`))
+    .sort()
 }
 
 function authorization(username: string, password: string) {
@@ -127,6 +136,14 @@ describe("HttpApi Hono bridge", () => {
 
     expect(httpApiRoutes.filter((route) => !bridgeRoutes.has(route))).toEqual([])
     expect([...bridgeRoutes].filter((route) => !httpApiRoutes.includes(route)).sort()).toEqual([])
+  })
+
+  test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
+    const honoRoutes = openApiRouteKeys(await Server.openapi())
+    const effectRoutes = openApiRouteKeys(OpenApi.fromApi(PublicApi))
+
+    expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
+    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
   })
 
   test("allows requests when auth is disabled", async () => {
