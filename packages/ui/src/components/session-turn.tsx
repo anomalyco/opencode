@@ -24,6 +24,7 @@ import { TextReveal } from "./text-reveal"
 import { createAutoScroll, suppressAutoScrollResize } from "../hooks"
 import { useI18n } from "../context/i18n"
 import { hiddenReasoning } from "./session-turn-state"
+import { isCustomHookTool, normalizeTool } from "./tool-meta"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -97,30 +98,6 @@ function summaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
 
 const hidden = new Set(["todowrite"])
 
-const builtin = new Set([
-  "apply_patch",
-  "bash",
-  "batch",
-  "codesearch",
-  "edit",
-  "exec",
-  "glob",
-  "grep",
-  "invalid",
-  "list",
-  "lsp",
-  "plan_exit",
-  "question",
-  "read",
-  "skill",
-  "task",
-  "todoread",
-  "todowrite",
-  "webfetch",
-  "websearch",
-  "write",
-])
-
 function text(value: unknown) {
   if (typeof value !== "string") return
   const next = value.trim()
@@ -128,47 +105,20 @@ function text(value: unknown) {
   return next
 }
 
-function hook(input: Record<string, unknown>, metadata: Record<string, unknown>) {
-  const keys = ["hook", "hook_name", "hookName", "event", "name"]
-  for (const src of [metadata, input]) {
-    for (const key of keys) {
-      const value = text(src?.[key])
-      if (!value) continue
-      if (value.includes("-")) return value
-      if (value === "session-start") return value
-    }
-  }
-
-  const desc = text(input.description) ?? text(metadata.description)
-  if (!desc) return
-  const match = desc.match(/([a-z0-9]+(?:-[a-z0-9]+){1,})/i)
-  if (!match?.[1]) return
-  return match[1]
-}
-
-function hookMeta(input: Record<string, unknown>, metadata: Record<string, unknown>) {
-  const keys = ["hook", "hook_name", "hookName", "hook_type", "hookType", "event", "stage", "phase"]
-  for (const src of [metadata, input]) {
-    for (const key of keys) {
-      if (text(src?.[key])) return true
-    }
-  }
-  return false
+function toolName(part: Extract<PartType, { type: "tool" }>) {
+  return normalizeTool(part.tool)
 }
 
 function custom(part: PartType) {
   if (part.type !== "tool") return false
-  const tool = part.tool.toLowerCase()
-  if (!builtin.has(tool)) return true
-  if (tool !== "bash") return false
   const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
   const input = part.state.input ?? {}
-  return hookMeta(input, metadata) || !!hook(input, metadata)
+  return isCustomHookTool(part.tool, input, metadata)
 }
 
 function partState(part: PartType, showReasoningSummaries: boolean, showCustomHookParts: boolean) {
   if (part.type === "tool") {
-    const tool = part.tool.toLowerCase()
+    const tool = toolName(part)
     if (hidden.has(tool)) return
     if (!showCustomHookParts && custom(part)) return
     if (tool === "question" && part.state.status === "pending") return

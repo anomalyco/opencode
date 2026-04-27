@@ -167,6 +167,23 @@ export const extraAgents: readonly ExtraAgentDescriptor[] = [
     },
   },
   {
+    id: "hermes",
+    label: "Hermes",
+    labelKey: "sidebar.hermes",
+    icon: "hermes" as IconName,
+    emptyIcon: "hermes" as IconName,
+    emptySessionTitleKey: "session.new.hermes.title",
+    sessionListFailedTitleKey: "toast.session.listFailed.hermes.title",
+    fileListEmptyKey: "toast.file.listFailed.hermes",
+    directory: "/hermes",
+    configSection: "claws",
+    configPick: "claw:hermes",
+    capabilities: {
+      hideAgent: true,
+      hideVariant: true,
+    },
+  },
+  {
     id: "genericagent",
     label: "GenericAgent",
     labelKey: "sidebar.genericagent",

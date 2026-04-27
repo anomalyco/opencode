@@ -57,7 +57,7 @@ export const SidebarContent = (props: {
   // GeneralAgent is the framework shell entry. The rail always shows a stable
   // framework icon; which backend is active is a domain-internal detail revealed
   // by the popover selector below.
-  const entryIcon = createMemo<IconName>(() => (props.extraAgents().length > 0 ? "brain" : "dot-grid"))
+  const entryIcon = createMemo<IconName>(() => (props.extraAgents().length > 0 ? "robot" : "dot-grid"))
 
   const handleMenuMouseEnter = () => {
     if (closeTimer) {

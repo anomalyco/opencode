@@ -16,6 +16,21 @@ const file = (value: string) => {
 }
 
 const base = (value: string) => file(value).split(/[\\/]/).at(-1) ?? value
+const norm = (value: string) => file(value).replace(/\\/g, "/").replace(/\/+$/, "")
+
+const inside = (value: string, root?: string) => {
+  const a = norm(value)
+  const b = norm(root ?? "")
+  if (!b) return false
+  return a === b || a.startsWith(b + "/")
+}
+
+const owner = (value: string, list: Project[]) =>
+  list
+    .flatMap((item) =>
+      [item.worktree, ...(item.sandboxes ?? [])].filter((root) => inside(value, root)).map((root) => ({ item, root })),
+    )
+    .sort((a, b) => b.root.length - a.root.length)[0]
 
 export const project = (value: string) => {
   const list = file(value).split(/[\\/]/).filter(Boolean)
@@ -53,6 +68,23 @@ export const item = (value: string) => {
     name,
     project: group && group !== name ? group : undefined,
     value,
+  }
+}
+
+const skillSource = (value: string) => {
+  const next = norm(value)
+  if (next.includes("/.claude/skills/")) return ".claude"
+  if (next.includes("/.agents/skills/")) return ".agents"
+}
+
+export const skill = (value: { name: string; location: string }, list: Project[]) => {
+  const hit = owner(value.location, list)
+  const scope = hit?.item.name || (hit ? getFilename(hit.item.worktree) : "global")
+  return {
+    name: value.name,
+    scope,
+    source: skillSource(value.location),
+    value: value.location,
   }
 }
 

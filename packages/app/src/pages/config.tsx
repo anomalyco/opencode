@@ -22,7 +22,14 @@ import {
   validateCustomProvider,
 } from "@/components/dialog-custom-provider-form"
 import { useLanguage } from "@/context/language"
-import { type ConfigTreeItem, type ConfigWorkspace, type GenericagentConfig, type OpenclawConfig, usePlatform } from "@/context/platform"
+import {
+  type ConfigTreeItem,
+  type ConfigWorkspace,
+  type GenericagentConfig,
+  type HermesConfig,
+  type OpenclawConfig,
+  usePlatform,
+} from "@/context/platform"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -524,6 +531,22 @@ function gaCfg(input?: GenericagentConfig) {
     testing: false,
     err: {
       genericAgentDir: "",
+    },
+    test: undefined as undefined | { ok: boolean; logs: string[] },
+    run: 0,
+  }
+}
+
+function hmCfg(input?: HermesConfig) {
+  return {
+    enabled: input?.enabled ?? false,
+    pythonExecutable: input?.pythonExecutable ?? "",
+    hermesDir: input?.hermesDir ?? "",
+    hermesHome: input?.hermesHome ?? "",
+    saving: false,
+    testing: false,
+    err: {
+      hermesDir: "",
     },
     test: undefined as undefined | { ok: boolean; logs: string[] },
     run: 0,
@@ -1391,6 +1414,171 @@ function GenericAgentEditor(props: {
   )
 }
 
+function HermesEditor(props: {
+  item?: ClawItem
+  form: ReturnType<typeof hmCfg>
+  dirty: boolean
+  busy: boolean
+  canTest: boolean
+  onChange: (key: "enabled" | "pythonExecutable" | "hermesDir" | "hermesHome", value: string | boolean) => void
+  onSave: () => void
+  onTest: () => void
+  onAbort?: () => void
+}) {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  return (
+    <div class="flex h-full min-h-0 flex-col">
+      <Show
+        when={props.item}
+        fallback={<div class="px-4 py-10 text-13-regular text-text-weak">{language.t("config.claws.empty")}</div>}
+      >
+        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <div class="text-15-medium text-text-strong">{props.item?.label}</div>
+              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                {props.form.enabled
+                  ? language.t("config.claws.badge.enabled")
+                  : language.t("config.claws.badge.disabled")}
+              </span>
+            </div>
+            <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              size="small"
+              variant="ghost"
+              icon="reset"
+              onClick={props.onTest}
+              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            >
+              {language.t("config.claws.action.test")}
+            </Button>
+            <Show when={props.form.testing && props.onAbort}>
+              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
+                {language.t("config.claws.action.abort")}
+              </Button>
+            </Show>
+            <SaveButton
+              label={language.t("config.claws.action.save")}
+              onClick={props.onSave}
+              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
+            />
+          </div>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
+            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
+              <div class="flex flex-col gap-5">
+                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
+                  <div class="min-w-0">
+                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
+                    <div class="mt-1 text-12-regular text-text-weak">
+                      {language.t("config.claws.field.enabledDescription")}
+                    </div>
+                  </div>
+                  <Toggle
+                    checked={props.form.enabled}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("enabled", value)}
+                  >
+                    {language.t("config.claws.field.enabled")}
+                  </Toggle>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-2">
+                  <TextField
+                    type="text"
+                    label={language.t("config.claws.field.hermesDir")}
+                    description={language.t("config.claws.field.hermesDirDescription")}
+                    placeholder={language.t("config.claws.field.hermesDirPlaceholder")}
+                    value={props.form.hermesDir}
+                    validationState={props.form.err.hermesDir ? "invalid" : undefined}
+                    error={props.form.err.hermesDir}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("hermesDir", value)}
+                  />
+                  <TextField
+                    type="text"
+                    label={language.t("config.claws.field.pythonExecutable")}
+                    description={language.t("config.claws.field.pythonExecutableDescription")}
+                    placeholder={language.t("config.claws.field.pythonExecutablePlaceholder")}
+                    value={props.form.pythonExecutable}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("pythonExecutable", value)}
+                  />
+                </div>
+
+                <TextField
+                  type="text"
+                  label={language.t("config.claws.field.hermesHome")}
+                  description={language.t("config.claws.field.hermesHomeDescription")}
+                  placeholder={language.t("config.claws.field.hermesHomePlaceholder")}
+                  value={props.form.hermesHome}
+                  disabled={props.busy || props.form.saving || props.form.testing}
+                  onChange={(value) => props.onChange("hermesHome", value)}
+                />
+              </div>
+            </div>
+
+            <Show when={props.form.testing || !!props.form.test}>
+              <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
+                <div class="text-13-medium text-text-strong">{language.t("config.claws.debug.title")}</div>
+                <div class="mt-1 text-12-regular text-text-weak">{language.t("config.claws.debug.description")}</div>
+                <div class="mt-4 rounded-xl border border-border-weak-base bg-background-base px-4 py-3">
+                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                    {language.t("config.claws.debug.status")}
+                  </div>
+                  <Show
+                    when={props.form.testing}
+                    fallback={
+                      <div
+                        class="mt-2 text-13-medium"
+                        classList={{
+                          "text-text-success": !!props.form.test?.ok,
+                          "text-text-danger-base": !props.form.test?.ok,
+                        }}
+                      >
+                        {props.form.test?.ok
+                          ? language.t("config.claws.status.success")
+                          : language.t("config.claws.status.failed")}
+                      </div>
+                    }
+                  >
+                    <div class="mt-2 inline-flex items-center gap-2 text-13-medium text-text-base">
+                      <Spinner class="size-4" />
+                      <span>{language.t("config.claws.status.testing")}</span>
+                    </div>
+                  </Show>
+                </div>
+                <div class="mt-4 rounded-xl border border-border-weak-base bg-background-base px-4 py-3">
+                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                    {language.t("config.claws.debug.logs")}
+                  </div>
+                  <pre
+                    class="mt-2 overflow-x-auto whitespace-pre-wrap break-all text-12-regular text-text-weak"
+                    style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
+                  >
+                    {props.form.testing
+                      ? language.t("config.claws.logs.testingHermes", {
+                          dir: props.form.hermesDir.trim() || "-",
+                          home: props.form.hermesHome.trim() || "~/.hermes",
+                        })
+                      : props.form.test?.logs.join("\n") || ""}
+                  </pre>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
 function CustomEditor(props: {
   item?: ProviderItem
   form: CustomState
@@ -1664,6 +1852,7 @@ export default function ConfigPage() {
     custom: providerCfg(undefined),
     claw: clawCfg(),
     ga: gaCfg(),
+    hm: hmCfg(),
     skillTitle: "",
     skillErr: "",
     skillPath: "",
@@ -1677,9 +1866,10 @@ export default function ConfigPage() {
     agentRev: 0,
     clawRev: 0,
     gaRev: 0,
+    hmRev: 0,
   })
 
-  function bump(...list: Array<"workspaceRev" | "skillRev" | "agentRev" | "clawRev" | "gaRev">) {
+  function bump(...list: Array<"workspaceRev" | "skillRev" | "agentRev" | "clawRev" | "gaRev" | "hmRev">) {
     list.forEach((key) => setState(key, (value) => value + 1))
   }
 
@@ -1725,6 +1915,15 @@ export default function ConfigPage() {
     },
   )
 
+  const [hermes] = createResource(
+    () => (state.section === "claws" ? state.hmRev : -1),
+    async (rev) => {
+      if (rev === -1) return undefined
+      if (!platform.getHermesConfig) return undefined
+      return platform.getHermesConfig()
+    },
+  )
+
   const space = createMemo<ConfigWorkspace | undefined>(() => {
     const data = workspace() as ConfigWorkspace | undefined
     const root = globalSync.data.path.config
@@ -1757,7 +1956,10 @@ export default function ConfigPage() {
   const gaPlatformEnabled = createMemo(
     () => !!platform.getGenericagentConfig && !!platform.setGenericagentConfig && !!platform.testGenericagentConfig,
   )
-  const clawsSectionEnabled = createMemo(() => clawsEnabled() || gaPlatformEnabled())
+  const hmPlatformEnabled = createMemo(
+    () => !!platform.getHermesConfig && !!platform.setHermesConfig && !!platform.testHermesConfig,
+  )
+  const clawsSectionEnabled = createMemo(() => clawsEnabled() || gaPlatformEnabled() || hmPlatformEnabled())
   const querySection = createMemo<Section | undefined>(() => {
     const value = query.section
     if (typeof value === "string" && isKnownSection(value)) {
@@ -2036,6 +2238,16 @@ export default function ConfigPage() {
         enabled: cfg?.enabled ?? false,
       })
     }
+    if (hmPlatformEnabled()) {
+      const cfg = hermes()
+      list.push({
+        id: "claw:hermes",
+        label: "Hermes",
+        note: t("config.claws.note.hermes"),
+        meta: cfg?.hermesDir?.trim() || "/path/to/hermes-agent",
+        enabled: cfg?.enabled ?? false,
+      })
+    }
     if (gaPlatformEnabled()) {
       const cfg = genericagent()
       list.push({
@@ -2172,6 +2384,17 @@ export default function ConfigPage() {
     )
   })
 
+  const hmDirty = createMemo(() => {
+    const cfg = hermes()
+    if (!cfg || state.section !== "claws") return false
+    return (
+      state.hm.enabled !== (cfg.enabled ?? false) ||
+      state.hm.pythonExecutable.trim() !== (cfg.pythonExecutable?.trim() ?? "") ||
+      state.hm.hermesDir.trim() !== (cfg.hermesDir?.trim() ?? "") ||
+      state.hm.hermesHome.trim() !== (cfg.hermesHome?.trim() ?? "")
+    )
+  })
+
   const currentSkillRoot = createMemo(() => {
     const item = currentSkill()
     if (!item) return undefined
@@ -2266,6 +2489,16 @@ export default function ConfigPage() {
       (item) => {
         if (!item) return
         setState("ga", gaCfg(item))
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => hermes(),
+      (item) => {
+        if (!item) return
+        setState("hm", hmCfg(item))
       },
     ),
   )
@@ -2450,7 +2683,7 @@ export default function ConfigPage() {
           title: language.t("toast.server.reloadBackend.success.title"),
           description: language.t("toast.server.reloadBackend.success.description"),
         })
-        bump("workspaceRev", "skillRev", "agentRev", "clawRev")
+        bump("workspaceRev", "skillRev", "agentRev", "clawRev", "gaRev", "hmRev")
       })
       .catch((err: unknown) => {
         showToast({
@@ -2636,6 +2869,115 @@ export default function ConfigPage() {
     setState("ga", key, value)
     if (key === "genericAgentDir") setState("ga", "err", "genericAgentDir", "")
     setState("ga", "test", undefined)
+  }
+
+  function validateHm(required = state.hm.enabled) {
+    const dir = state.hm.hermesDir.trim()
+    const err = required && !dir ? t("config.claws.error.hermesDirRequired") : ""
+    setState("hm", "err", "hermesDir", err)
+    return !err
+  }
+
+  function hmInput(): HermesConfig {
+    return {
+      enabled: state.hm.enabled,
+      pythonExecutable: state.hm.pythonExecutable.trim() || undefined,
+      hermesDir: state.hm.hermesDir.trim() || undefined,
+      hermesHome: state.hm.hermesHome.trim() || undefined,
+    }
+  }
+
+  async function saveHm() {
+    if (!platform.setHermesConfig) return
+    if (!validateHm()) return
+    const cfg = hmInput()
+    console.debug("[config] save hermes", {
+      enabled: cfg.enabled,
+      python: cfg.pythonExecutable ?? null,
+      dir: cfg.hermesDir ?? null,
+      home: cfg.hermesHome ?? null,
+    })
+    setState("hm", "saving", true)
+    setState("hm", "test", undefined)
+    if (server.current?.integration === "hermes" && !state.hm.enabled) {
+      const key = server.lastNonExtraAgent
+      if (key) {
+        server.setActive(key)
+      }
+    }
+    await Promise.resolve(platform.setHermesConfig(cfg))
+      .then(async () => {
+        console.debug("[config] save hermes ok")
+        bump("hmRev")
+        showToast({ variant: "success", title: t("common.save"), description: "Hermes" })
+      })
+      .catch((err: unknown) => {
+        console.debug("[config] save hermes failed", { err })
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => setState("hm", "saving", false))
+  }
+
+  async function testHm() {
+    if (!platform.testHermesConfig) return
+    if (!validateHm(true)) return
+    const cfg = hmInput()
+    console.debug("[config] test hermes", {
+      enabled: cfg.enabled,
+      python: cfg.pythonExecutable ?? null,
+      dir: cfg.hermesDir ?? null,
+      home: cfg.hermesHome ?? null,
+    })
+    const run = state.hm.run + 1
+    setState("hm", "run", run)
+    setState("hm", "testing", true)
+    setState("hm", "test", undefined)
+    await platform
+      .testHermesConfig(cfg)
+      .then((item) => {
+        if (state.hm.run !== run) return
+        console.debug("[config] test hermes done", { ok: item.ok, logs: item.logs.length })
+        setState("hm", "test", { ok: item.ok, logs: item.logs })
+        showToast({
+          variant: item.ok ? "success" : "error",
+          icon: item.ok ? "circle-check" : undefined,
+          title: t("config.claws.action.test"),
+          description: item.ok
+            ? t("config.claws.test.success")
+            : (item.logs[item.logs.length - 1] ?? t("common.requestFailed")),
+        })
+      })
+      .catch((err: unknown) => {
+        if (state.hm.run !== run) return
+        console.debug("[config] test hermes failed", { err })
+        const message = err instanceof Error ? err.message : String(err)
+        setState("hm", "test", { ok: false, logs: [message] })
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+      .finally(() => {
+        if (state.hm.run !== run) return
+        setState("hm", "testing", false)
+      })
+  }
+
+  async function abortHm() {
+    console.debug("[config] abort hermes test")
+    setState("hm", "run", (value) => value + 1)
+    setState("hm", "testing", false)
+    setState("hm", "test", {
+      ok: false,
+      logs: ["Starting Hermes connection test", "Test aborted by user"],
+    })
+    await platform.abortHermesTest?.().catch(() => false)
+  }
+
+  function setHm(key: "enabled" | "pythonExecutable" | "hermesDir" | "hermesHome", value: string | boolean) {
+    setState("hm", key, value)
+    if (key === "hermesDir") setState("hm", "err", "hermesDir", "")
+    setState("hm", "test", undefined)
   }
 
   function openFolder() {
@@ -3514,8 +3856,7 @@ export default function ConfigPage() {
               </Match>
 
               <Match when={state.section === "claws" && clawsSectionEnabled()}>
-                <Show
-                  when={selectedClaw()?.id === "claw:genericagent"}
+                <Switch
                   fallback={
                     <ClawEditor
                       item={selectedClaw()}
@@ -3530,18 +3871,33 @@ export default function ConfigPage() {
                     />
                   }
                 >
-                  <GenericAgentEditor
-                    item={selectedClaw()}
-                    form={state.ga}
-                    dirty={gaDirty()}
-                    busy={genericagent.loading}
-                    canTest={!!platform.testGenericagentConfig}
-                    onChange={setGa}
-                    onSave={() => void saveGa()}
-                    onTest={() => void testGa()}
-                    onAbort={platform.abortGenericagentTest ? () => void abortGa() : undefined}
-                  />
-                </Show>
+                  <Match when={selectedClaw()?.id === "claw:hermes"}>
+                    <HermesEditor
+                      item={selectedClaw()}
+                      form={state.hm}
+                      dirty={hmDirty()}
+                      busy={hermes.loading}
+                      canTest={!!platform.testHermesConfig}
+                      onChange={setHm}
+                      onSave={() => void saveHm()}
+                      onTest={() => void testHm()}
+                      onAbort={platform.abortHermesTest ? () => void abortHm() : undefined}
+                    />
+                  </Match>
+                  <Match when={selectedClaw()?.id === "claw:genericagent"}>
+                    <GenericAgentEditor
+                      item={selectedClaw()}
+                      form={state.ga}
+                      dirty={gaDirty()}
+                      busy={genericagent.loading}
+                      canTest={!!platform.testGenericagentConfig}
+                      onChange={setGa}
+                      onSave={() => void saveGa()}
+                      onTest={() => void testGa()}
+                      onAbort={platform.abortGenericagentTest ? () => void abortGa() : undefined}
+                    />
+                  </Match>
+                </Switch>
               </Match>
 
               <Match when={state.section === "plugins"}>

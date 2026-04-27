@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Config, Project } from "@opencode-ai/sdk/v2/client"
-import { claude, item, label, mcp } from "./status-popover-data"
+import { claude, item, label, mcp, skill } from "./status-popover-data"
 
 describe("status popover data", () => {
   test("reads plugin source from project paths", () => {
@@ -16,6 +16,32 @@ describe("status popover data", () => {
       name: "foo",
       project: "global",
       value: "file:///Users/me/.config/opencode/plugins/foo.ts",
+    })
+  })
+
+  test("marks claude skills as project scoped", () => {
+    const list = [
+      {
+        id: "p1",
+        name: "workspace-a",
+        worktree: "/Users/me/repo",
+      },
+    ] as Project[]
+
+    expect(skill({ name: "review", location: "file:///Users/me/repo/.claude/skills/review/SKILL.md" }, list)).toEqual({
+      name: "review",
+      scope: "workspace-a",
+      source: ".claude",
+      value: "file:///Users/me/repo/.claude/skills/review/SKILL.md",
+    })
+  })
+
+  test("marks non-project skills as global", () => {
+    expect(skill({ name: "lint", location: "file:///Users/me/.config/opencode/skills/lint/SKILL.md" }, [])).toEqual({
+      name: "lint",
+      scope: "global",
+      source: undefined,
+      value: "file:///Users/me/.config/opencode/skills/lint/SKILL.md",
     })
   })
 

@@ -60,6 +60,7 @@ import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 import { skillText } from "./message-skill"
 import { hold } from "./message-part-stream"
+import { hookName, isCustomHookTool, normalizeTool } from "./tool-meta"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -309,34 +310,6 @@ function cmd(input: Record<string, unknown>, metadata?: Record<string, unknown>)
   return text(input.command) ?? text(input.cmd) ?? text(metadata?.command) ?? text(metadata?.cmd)
 }
 
-function hookName(input: Record<string, any>, metadata: Record<string, any>) {
-  const keys = ["hook", "hook_name", "hookName", "event", "name"]
-  for (const src of [metadata, input]) {
-    for (const key of keys) {
-      const value = text(src?.[key])
-      if (!value) continue
-      if (value.includes("-")) return value
-      if (value === "session-start") return value
-    }
-  }
-
-  const desc = text(input.description) ?? text(metadata.description)
-  if (!desc) return
-  const match = desc.match(/([a-z0-9]+(?:-[a-z0-9]+){1,})/i)
-  if (!match?.[1]) return
-  return match[1]
-}
-
-function hookMeta(input: Record<string, any>, metadata: Record<string, any>) {
-  const keys = ["hook", "hook_name", "hookName", "hook_type", "hookType", "event", "stage", "phase"]
-  for (const src of [metadata, input]) {
-    for (const key of keys) {
-      if (text(src?.[key])) return true
-    }
-  }
-  return false
-}
-
 function hookType(input: Record<string, any>, metadata: Record<string, any>) {
   const keys = ["hook_type", "hookType", "stage", "phase", "event_type", "eventType"]
   for (const src of [metadata, input]) {
@@ -504,45 +477,14 @@ function taskSession(
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
-const BUILTIN_TOOLS = new Set([
-  "apply_patch",
-  "bash",
-  "batch",
-  "codesearch",
-  "edit",
-  "exec",
-  "glob",
-  "grep",
-  "invalid",
-  "list",
-  "lsp",
-  "plan_exit",
-  "question",
-  "read",
-  "skill",
-  "task",
-  "todoread",
-  "todowrite",
-  "webfetch",
-  "websearch",
-  "write",
-])
-
 function toolName(part: { tool: string }) {
-  return part.tool.toLowerCase()
-}
-
-function customTool(tool: string) {
-  return !BUILTIN_TOOLS.has(tool.toLowerCase())
+  return normalizeTool(part.tool)
 }
 
 function customPart(part: ToolPart) {
-  const tool = toolName(part)
-  if (customTool(tool)) return true
-  if (tool !== "bash") return false
   const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
   const input = part.state.input ?? {}
-  return hookMeta(input, metadata) || !!hookName(input, metadata)
+  return isCustomHookTool(part.tool, input, metadata)
 }
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {

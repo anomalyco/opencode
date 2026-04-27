@@ -7,34 +7,7 @@ import { Icon, type IconProps } from "./icon"
 import { Spinner } from "./spinner"
 import { TextShimmer } from "./text-shimmer"
 import { suppressAutoScrollResize } from "../hooks/create-auto-scroll"
-
-const BUILTIN_TOOLS = new Set([
-  "apply_patch",
-  "bash",
-  "batch",
-  "codesearch",
-  "edit",
-  "exec",
-  "glob",
-  "grep",
-  "invalid",
-  "list",
-  "lsp",
-  "plan_exit",
-  "question",
-  "read",
-  "skill",
-  "task",
-  "todoread",
-  "todowrite",
-  "webfetch",
-  "websearch",
-  "write",
-])
-
-function customTool(tool: string) {
-  return !BUILTIN_TOOLS.has(tool.toLowerCase())
-}
+import { normalizeTool } from "./tool-meta"
 
 export type TriggerTitle = {
   title: string
@@ -281,18 +254,71 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-function label(input: Record<string, unknown> | undefined) {
-  const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
-  return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
+export function glyph(tool: string): IconProps["name"] {
+  const name = normalizeTool(tool)
+  if (name.includes("read")) return "glasses"
+  if (name.includes("search") || name.includes("grep") || name.includes("glob") || name.includes("find"))
+    return "magnifying-glass-menu"
+  if (name.includes("write") || name.includes("patch") || name.includes("edit")) return "code-lines"
+  if (
+    name === "bash" ||
+    name.includes("terminal") ||
+    name.includes("shell") ||
+    name.includes("command") ||
+    name.includes("exec") ||
+    name === "process"
+  )
+    return "console"
+  if (name.includes("web") || name.includes("browser") || name.includes("navigate") || name.includes("crawl"))
+    return "window-cursor"
+  if (name.includes("task") || name.includes("agent") || name.includes("delegate")) return "task"
+  if (name.includes("todo")) return "checklist"
+  if (name.includes("question")) return "bubble-5"
+  return "mcp"
 }
 
-function args(input: Record<string, unknown> | undefined) {
+export function label(input: Record<string, unknown> | undefined) {
+  const keys = ["description", "query", "url", "command", "cmd", "pattern", "filePath", "path", "name", "goal"]
+  const hit = keys
+    .map((key) => input?.[key])
+    .find((value): value is string => typeof value === "string" && value.length > 0)
+  if (hit) return hit
+  const urls = input?.urls
+  if (!Array.isArray(urls)) return
+  return urls.find((value): value is string => typeof value === "string" && value.length > 0)
+}
+
+function clip(value: string, size = 48) {
+  if (value.length <= size) return value
+  return `${value.slice(0, size - 3)}...`
+}
+
+export function args(input: Record<string, unknown> | undefined) {
   if (!input) return []
-  const skip = new Set(["description", "query", "url", "filePath", "path", "pattern", "name"])
+  const skip = new Set([
+    "description",
+    "query",
+    "url",
+    "urls",
+    "filePath",
+    "path",
+    "pattern",
+    "name",
+    "command",
+    "cmd",
+    "goal",
+    "content",
+    "patch",
+    "diff",
+    "oldString",
+    "newString",
+    "old_string",
+    "new_string",
+  ])
   return Object.entries(input)
     .filter(([key]) => !skip.has(key))
     .flatMap(([key, value]) => {
-      if (typeof value === "string") return [`${key}=${value}`]
+      if (typeof value === "string") return [`${key}=${clip(value)}`]
       if (typeof value === "number") return [`${key}=${value}`]
       if (typeof value === "boolean") return [`${key}=${value}`]
       return []
@@ -310,7 +336,8 @@ export function GenericTool(props: {
 
   return (
     <BasicTool
-      icon="mcp"
+      icon={glyph(props.tool)}
+      showPendingMeta
       status={props.status}
       trigger={{
         title: `Called \`${props.tool}\``,

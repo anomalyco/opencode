@@ -75,6 +75,34 @@ type TextPart = {
   text: string
 }
 
+type ToolPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "tool"
+  tool: string
+  state:
+    | {
+        status: "running"
+        input: Record<string, unknown>
+      }
+    | {
+        status: "completed"
+        input: Record<string, unknown>
+        output: string
+        metadata?: Record<string, unknown>
+      }
+    | {
+        status: "error"
+        input: Record<string, unknown>
+        output: string
+        error: string
+        metadata?: Record<string, unknown>
+      }
+}
+
+type Part = TextPart | ToolPart
+
 type MessageInfo = {
   id: string
   sessionID: string
@@ -92,7 +120,7 @@ type MessageInfo = {
 
 type Message = {
   info: MessageInfo
-  parts: TextPart[]
+  parts: Part[]
 }
 
 type Event = { directory: string; payload: { type: string; properties: Record<string, unknown> } }
@@ -584,14 +612,7 @@ function assistantMessage(sessionID: string, parentID: string, currentModelID: s
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   }
-  const part: TextPart = {
-    id: Identifier.ascending("part"),
-    messageID: info.id,
-    sessionID,
-    type: "text",
-    text: "",
-  }
-  return { info, parts: [part] }
+  return { info, parts: [] }
 }
 
 export namespace GenericAgentBridge {
@@ -858,11 +879,28 @@ export namespace GenericAgentBridge {
 
         emitStatus(sessionID, "busy")
         emit({ type: "message.updated", properties: { info: assistant.info } })
-        emit({ type: "message.part.updated", properties: { part: assistant.parts[0] } })
 
         void serialize(sessionID, async () => {
           let accumulated = ""
           const toolParts = new Map<string, any>()
+          let reply: TextPart | undefined
+          const makeText = (value = "") => {
+            if (reply) return reply
+            reply = {
+              id: Identifier.ascending("part"),
+              messageID: assistant.info.id,
+              sessionID,
+              type: "text",
+              text: value,
+            }
+            assistant.parts.push(reply)
+            log.info("Created text part", { sessionID, partID: reply.id, len: value.length })
+            emit({
+              type: "message.part.updated",
+              properties: { part: reply },
+            })
+            return reply
+          }
           try {
             await shim.prompt(query, (event) => {
               if (event.type === "tool_use") {
@@ -881,7 +919,7 @@ export namespace GenericAgentBridge {
                     },
                   }
                   toolParts.set(toolData.id, toolPart)
-                  bucket.push(toolPart)
+                  assistant.parts.push(toolPart)
                   log.info("Created tool part", { toolPart })
                   emit({
                     type: "message.part.updated",
@@ -913,24 +951,28 @@ export namespace GenericAgentBridge {
                 }
               } else if (event.type === "delta") {
                 accumulated += event.text
+                const part = makeText()
                 emit({
                   type: "message.part.delta",
                   properties: {
                     sessionID,
                     messageID: assistant.info.id,
-                    partID: assistant.parts[0].id,
+                    partID: part.id,
                     field: "text",
                     delta: event.text,
                   },
                 })
               } else if (event.type === "done") {
                 const finalText = event.text || accumulated
-                assistant.parts[0].text = finalText
+                if (finalText) {
+                  const part = makeText(finalText)
+                  part.text = finalText
+                  emit({
+                    type: "message.part.updated",
+                    properties: { part: { ...part, text: finalText } },
+                  })
+                }
                 assistant.info.time.completed = Date.now()
-                emit({
-                  type: "message.part.updated",
-                  properties: { part: { ...assistant.parts[0], text: finalText } },
-                })
                 emit({ type: "message.updated", properties: { info: assistant.info } })
                 const existing = sessions.get(sessionID)
                 if (existing && existing.title === "New Conversation") {

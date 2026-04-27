@@ -52,10 +52,15 @@ export function ServerRow(props: ServerRowProps) {
   })
 
   const tooltipValue = () => (
-    <span class="flex items-center gap-2">
-      <span>{serverName(props.conn, true)}</span>
-      <Show when={props.status?.version}>
-        <span class="text-text-invert-weak">v{props.status?.version}</span>
+    <span class="flex flex-col items-start gap-1">
+      <span class="flex items-center gap-2">
+        <span>{serverName(props.conn, true)}</span>
+        <Show when={props.status?.version}>
+          <span class="text-text-invert-weak">v{props.status?.version}</span>
+        </Show>
+      </span>
+      <Show when={props.status?.healthy === false && props.status.message}>
+        <span class="text-text-invert-weak">{props.status?.message}</span>
       </Show>
     </span>
   )
@@ -68,7 +73,7 @@ export function ServerRow(props: ServerRowProps) {
       value={tooltipValue()}
       contentStyle={{ "max-width": "none", "white-space": "nowrap" }}
       placement="top-start"
-      inactive={!truncated() && !props.conn.displayName}
+      inactive={!truncated() && !props.conn.displayName && !(props.status?.healthy === false && props.status.message)}
     >
       <div class={props.class} classList={{ "opacity-50": props.dimmed }}>
         <div class="flex flex-col items-start min-w-0 w-full">
@@ -105,6 +110,9 @@ export function ServerRow(props: ServerRowProps) {
                 {conn().http.password && <span class="text-text-weak">••••••••</span>}
               </div>
             )}
+          </Show>
+          <Show when={props.status?.healthy === false && props.status.message}>
+            <div class="text-12-regular text-text-danger-base truncate max-w-full">{props.status?.message}</div>
           </Show>
         </div>
         {props.children}

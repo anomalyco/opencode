@@ -8,14 +8,16 @@ import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, createResource, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
-import { claude, item, label, mcp, parse } from "@/components/status-popover-data"
+import { claude, item, label, mcp, parse, skill } from "@/components/status-popover-data"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
+import { cachedSkills, loadSkills } from "@/utils/skills"
+import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
 
@@ -159,6 +161,7 @@ const useMcpToggleMutation = () => {
 export function StatusPopover() {
   const sync = useSync()
   const global = useGlobalSync()
+  const sdk = useSDK()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -196,6 +199,15 @@ export function StatusPopover() {
   const projectDirCfg = createMemo(() => parse(cfg.projectDir))
   const claudeCfg = createMemo(() => claude(cfg.claude, sync.data.path.directory))
   const omo = createMemo(() => !!parse(cfg.omo))
+  const [rawSkills] = createResource(
+    () => (shown() ? sdk.directory : null),
+    async (dir) => {
+      if (!dir) return []
+      const list = await loadSkills(sdk)
+      console.debug("[status-popover] skills.ready", { dir, count: list.length })
+      return list
+    },
+  )
 
   createEffect(() => {
     const read = platform.readConfigFile
@@ -261,6 +273,31 @@ export function StatusPopover() {
   const plugins = createMemo(() => (sync.data.config.plugin ?? []).map(item))
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
+  const skills = createMemo(() => rawSkills() ?? cachedSkills(sdk.directory) ?? [])
+  const skillItems = createMemo(() =>
+    skills()
+      .map((entry) => skill(entry, global.data.project))
+      .toSorted((a, b) => {
+        const ar = a.scope === "global" ? 1 : 0
+        const br = b.scope === "global" ? 1 : 0
+        const rank = ar - br
+        if (rank !== 0) return rank
+        const scope = a.scope.localeCompare(b.scope)
+        if (scope !== 0) return scope
+        return a.name.localeCompare(b.name)
+      }),
+  )
+  const skillCount = createMemo(() => skillItems().length)
+  const skillTab = createMemo(() => {
+    const text = language.t("status.popover.tab.skills")
+    if (text !== "status.popover.tab.skills") return text
+    return "Skills"
+  })
+  const skillEmpty = createMemo(() => {
+    const text = language.t("dialog.skill.empty")
+    if (text !== "dialog.skill.empty") return text
+    return "No skills loaded"
+  })
   const overallHealthy = createMemo(() => {
     const serverHealthy = server.healthy() === true
     const anyMcpIssue = mcpNames().some((name) => {
@@ -348,6 +385,10 @@ export function StatusPopover() {
             <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
               {pluginCount() > 0 ? `${pluginCount()} ` : ""}
               {language.t("status.popover.tab.plugins")}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="skills" data-slot="tab" class="text-12-regular">
+              {skillCount() > 0 ? `${skillCount()} ` : ""}
+              {skillTab()}
             </Tabs.Trigger>
           </Tabs.List>
 
@@ -597,6 +638,49 @@ export function StatusPopover() {
                             onClick={(event: MouseEvent) => {
                               event.stopPropagation()
                               copy(plugin.value)
+                            }}
+                          />
+                        </div>
+                      </Tooltip>
+                    )}
+                  </For>
+                </Show>
+              </div>
+            </div>
+          </Tabs.Content>
+
+          <Tabs.Content value="skills">
+            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                <Show
+                  when={skillItems().length > 0}
+                  fallback={<div class="text-14-regular text-text-base text-center my-auto">{skillEmpty()}</div>}
+                >
+                  <For each={skillItems()}>
+                    {(entry) => (
+                      <Tooltip
+                        class="w-full"
+                        value={<span class="font-mono text-12-regular whitespace-nowrap">{entry.value}</span>}
+                        contentStyle={{ "max-width": "none" }}
+                      >
+                        <div class="status-list-item flex items-center gap-2 w-full px-2 py-1 rounded-md">
+                          <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                          <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
+                            {entry.name}
+                            <span class="text-text-weak"> {" | "}{entry.scope}</span>
+                            <Show when={entry.source}>
+                              <span class="text-text-weak"> {" | "}{entry.source}</span>
+                            </Show>
+                          </div>
+                          <Button
+                            size="small"
+                            variant="ghost"
+                            icon="copy"
+                            class="shrink-0"
+                            aria-label={language.t("session.header.open.copyPath")}
+                            onClick={(event: MouseEvent) => {
+                              event.stopPropagation()
+                              copy(entry.value)
                             }}
                           />
                         </div>

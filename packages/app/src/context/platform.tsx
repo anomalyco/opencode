@@ -84,6 +84,24 @@ export type GenericagentTest = {
   logs: string[]
 }
 
+export type HermesConfig = {
+  enabled: boolean
+  pythonExecutable?: string
+  hermesDir?: string
+  hermesHome?: string
+}
+
+export type HermesServer = {
+  url: string
+  username?: string
+  password?: string
+}
+
+export type HermesTest = {
+  ok: boolean
+  logs: string[]
+}
+
 export type Platform = {
   /** Platform discriminator */
   platform: PlatformName
@@ -177,6 +195,18 @@ export type Platform = {
 
   /** Abort a running OpenClaw connection test (desktop only) */
   abortOpenclawTest?(): Promise<boolean>
+
+  /** Get the configured Hermes integration (desktop only) */
+  getHermesConfig?(): Promise<HermesConfig>
+
+  /** Set the configured Hermes integration (desktop only) */
+  setHermesConfig?(config: HermesConfig): Promise<void> | void
+
+  /** Save and test the configured Hermes integration (desktop only) */
+  testHermesConfig?(config: HermesConfig): Promise<HermesTest>
+
+  /** Abort a running Hermes connection test (desktop only) */
+  abortHermesTest?(): Promise<boolean>
 
   /** Get the configured GenericAgent integration (desktop only) */
   getGenericagentConfig?(): Promise<GenericagentConfig>

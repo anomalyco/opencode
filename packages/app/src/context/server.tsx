@@ -13,6 +13,12 @@ import {
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
+type StoredState = {
+  list: StoredServer[]
+  projects: Record<string, StoredProject[]>
+  lastProject: Record<string, string>
+  currentSidecarUrl?: string
+}
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
 export function normalizeServerUrl(input: string) {
@@ -142,13 +148,42 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
-      }),
+        currentSidecarUrl: undefined as string | undefined,
+      } satisfies StoredState),
     )
 
     const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
-      return resolveServerList({ stored: store.list, props: props.servers })
+      const sidecar = (props.servers ?? []).find((item) => item.type === "sidecar" && item.variant === "base")
+      const legacy = store.currentSidecarUrl
+      const servers = [
+        ...(props.servers ?? []),
+        ...store.list.flatMap((value) => {
+          const conn =
+            typeof value === "string"
+              ? ({
+                  type: "http" as const,
+                  http: { url: value },
+                } satisfies ServerConnection.Http)
+              : "type" in value
+                ? value
+                : ({
+                    type: "http" as const,
+                    http: value,
+                  } satisfies ServerConnection.Http)
+          if (legacy && sidecar && conn.type === "http" && conn.http.url === legacy) return []
+          return [conn]
+        }),
+      ]
+
+      const deduped = new Map(
+        servers.map((value) => {
+          return [ServerConnection.key(value), value]
+        }),
+      )
+
+      return [...deduped.values()]
     })
 
     const [state, setState] = createStore({
@@ -237,6 +272,19 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const domain = createMemo(() => domainFromIntegration(current()?.integration))
 
     const polls = new Map<ServerConnection.Key, { url: string; domain: DomainId; stop: () => void }>()
+
+    createEffect(() => {
+      const legacy = store.currentSidecarUrl
+      if (!legacy) return
+      console.debug("[server] removing legacy sidecar url from persisted server list", { legacy })
+      setStore("list", (list) =>
+        list.filter((value) => {
+          const next = typeof value === "string" ? value : "type" in value ? value.http.url : value.url
+          return next !== legacy
+        }),
+      )
+      setStore("currentSidecarUrl", undefined)
+    })
 
     createEffect(() => {
       const servers = allServers()
