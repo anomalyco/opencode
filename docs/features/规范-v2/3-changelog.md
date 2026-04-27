@@ -6,7 +6,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 # 规范 v2 — changelog
 
-**关联 commit**: `<待填,本笔 commit 后回填>`
+**关联 commit**: `1b669abd2`
 **所在分支**: `feat/editable-file-viewer`
 **baseline tag**: 沿用线
 **触发原因**: GetBot 接入过程暴露 v1 规范痛点(详见 1-spec.md "触发原因"段)
