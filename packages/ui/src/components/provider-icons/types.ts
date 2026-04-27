@@ -35,6 +35,7 @@ export const iconNames = [
   "llmgateway",
   "opencode",
   "opencode-go",
+  "getbot", // FORK: 内置 getbot icon 2026-04-26
   "openai",
   "ollama-cloud",
   "nvidia",

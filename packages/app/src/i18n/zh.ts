@@ -128,6 +128,7 @@ export const dict = {
   "dialog.provider.opencode.note": "使用 OpenCode Zen 或 API 密钥连接",
   "dialog.provider.opencode.tagline": "可靠的优化模型",
   "dialog.provider.opencodeGo.tagline": "适合所有人的低成本订阅",
+  "dialog.provider.getbot.tagline": "聚合多家大模型，国内直连按量付费", // FORK: getbot 2026-04-26
   "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 密钥连接",
   "dialog.provider.copilot.note": "使用 Copilot 或 API 密钥连接",
   "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 密钥连接",
@@ -163,6 +164,16 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "访问 ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " 获取你的 API 密钥。",
+  // FORK-BEGIN: getbot 连接对话框文案 2026-04-26
+  "provider.connect.getbot.line1": "GetBot 是模型聚合网关，一把 API Key 就能用 Qwen / DeepSeek / Kimi / Minimax / GLM 等模型，按量计费。",
+  "provider.connect.getbot.line2": "保存 API Key 后会自动拉取可用 chat 模型列表。",
+  "provider.connect.getbot.visit.prefix": "访问 ",
+  "provider.connect.getbot.visit.link": "getbot.me",
+  "provider.connect.getbot.visit.suffix": " 获取你的 API Key。",
+  "provider.connect.getbot.fetchModels.failed": "API Key 已保存，但拉取模型列表失败：{{error}}。可稍后到设置里手动刷新。",
+  "provider.connect.getbot.apiKey.invalid": "API 密钥验证不通过，请检查后重试。",
+  "provider.connect.getbot.timeout": "连接 api.getbot.me 超时（15 秒未响应）。请检查网络后重试。",
+  // FORK-END
   "provider.connect.oauth.code.visit.prefix": "访问 ",
   "provider.connect.oauth.code.visit.link": "此链接",
   "provider.connect.oauth.code.visit.suffix": " 获取授权码，以连接你的帐户并在 OpenCode 中使用 {{provider}} 模型。",
