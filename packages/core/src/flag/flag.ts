@@ -98,6 +98,9 @@ export const Flag = {
   get OPENCODE_PURE() {
     return truthy("OPENCODE_PURE")
   },
+  get OPENCODE_DANGEROUSLY_SKIP_PERMISSIONS() {
+    return truthy("OPENCODE_DANGEROUSLY_SKIP_PERMISSIONS")
+  },
   get OPENCODE_PLUGIN_META_FILE() {
     return process.env["OPENCODE_PLUGIN_META_FILE"]
   },

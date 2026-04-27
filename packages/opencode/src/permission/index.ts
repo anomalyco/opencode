@@ -1,6 +1,7 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { ConfigPermission } from "@/config/permission"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstanceState } from "@/effect/instance-state"
 import { ProjectID } from "@/project/schema"
 import { MessageID, SessionID } from "@/session/schema"
@@ -195,6 +196,8 @@ export const layer = Layer.effect(
       }
 
       if (!needsAsk) return
+
+      if (Flag.OPENCODE_DANGEROUSLY_SKIP_PERMISSIONS) return
 
       const id = request.id ?? PermissionID.ascending()
       const info = Schema.decodeUnknownSync(Request)({

@@ -87,9 +87,16 @@ const cli = yargs(args)
     describe: "run without external plugins",
     type: "boolean",
   })
+  .option("dangerously-skip-permissions", {
+    describe: "skip permission prompts (deny rules in config are still respected)",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
     if (opts.pure) {
       process.env.OPENCODE_PURE = "1"
+    }
+    if (opts.dangerouslySkipPermissions) {
+      process.env.OPENCODE_DANGEROUSLY_SKIP_PERMISSIONS = "1"
     }
 
     await Log.init({
