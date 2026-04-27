@@ -203,7 +203,7 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.post("create", SessionPaths.create, {
-          payload: Schema.optional(Session.CreateInput),
+          payload: [HttpApiSchema.NoContent, Session.CreateInput],
           success: Session.Info,
         }).annotateMerge(
           OpenApi.annotations({
