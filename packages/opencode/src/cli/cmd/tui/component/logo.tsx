@@ -7,6 +7,7 @@ import { go, logo } from "@/cli/logo"
 export type LogoShape = {
   left: string[]
   right: string[]
+  accent?: string[]
 }
 
 type ShimmerConfig = {
@@ -288,6 +289,7 @@ function mapGlyphs(full: string[]) {
 }
 
 type LogoContext = {
+  ACCENT: string[]
   LEFT: number
   FULL: string[]
   SPAN: number
@@ -297,9 +299,14 @@ type LogoContext = {
 
 function build(shape: LogoShape): LogoContext {
   const LEFT = shape.left[0]?.length ?? 0
-  const FULL = shape.left.map((line, i) => line + " ".repeat(GAP) + shape.right[i])
+  const full = shape.left.map((line, i) => line + " ".repeat(GAP) + shape.right[i])
+  const width = full[0]?.length ?? 0
+  const ACCENT = (shape.accent ?? []).map(
+    (line) => " ".repeat(Math.max(0, Math.floor((width - line.length) / 2))) + line,
+  )
+  const FULL = [...full, ...ACCENT]
   const SPAN = Math.hypot(FULL[0]?.length ?? 0, FULL.length * 2) * 0.94
-  return { LEFT, FULL, SPAN, MAP: mapGlyphs(FULL), shape }
+  return { ACCENT, LEFT, FULL, SPAN, MAP: mapGlyphs(FULL), shape }
 }
 
 const DEFAULT = build(logo)
@@ -551,7 +558,7 @@ function buildIdleState(t: number, ctx: LogoContext): IdleState {
   return { cfg, reach, rings, active }
 }
 
-export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = {}) {
+export function Logo(props: { shape?: LogoShape; ink?: RGBA; highlightInk?: RGBA; idle?: boolean } = {}) {
   const ctx = props.shape ? build(props.shape) : DEFAULT
   const { theme } = useTheme()
   const [rings, setRings] = createSignal<Ring[]>([])
@@ -871,7 +878,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
               {renderLine(
                 ctx.shape.right[index()],
                 index(),
-                props.ink ?? theme.text,
+                props.highlightInk ?? props.ink ?? theme.text,
                 true,
                 ctx.LEFT + GAP,
                 frame(),
@@ -879,6 +886,22 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
                 idleState(),
               )}
             </box>
+          </box>
+        )}
+      </For>
+      <For each={ctx.ACCENT}>
+        {(line, index) => (
+          <box flexDirection="row">
+            {renderLine(
+              line,
+              ctx.shape.left.length + index(),
+              props.ink ?? theme.textMuted,
+              !!props.ink,
+              0,
+              frame(),
+              dusk(),
+              idleState(),
+            )}
           </box>
         )}
       </For>

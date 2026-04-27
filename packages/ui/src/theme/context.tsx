@@ -57,7 +57,6 @@ const names: Record<string, string> = {
   github: "GitHub",
   gruvbox: "Gruvbox",
   kanagawa: "Kanagawa",
-  "lucent-orng": "Lucent Orng",
   material: "Material",
   matrix: "Matrix",
   mercury: "Mercury",

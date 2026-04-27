@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grafo CLI - UX Design Directions</title>
+    <style>
+      :root {
+        --bg: #050607;
+        --panel: #0b0d10;
+        --panel-2: #111418;
+        --line: #343941;
+        --text: #d7d9dc;
+        --muted: #8b9098;
+        --faint: #5f6570;
+        --cyan: #61d6d6;
+        --green: #3ca636;
+        --accent-green: #16c60c;
+        --magenta: #bc44a7;
+        --yellow: #d9c75f;
+        --red: #ff5f6d;
+        --shadow: rgba(0, 0, 0, 0.45);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+        line-height: 1.45;
+      }
+
+      header {
+        border-bottom: 1px solid var(--line);
+        padding: 8px 20px 12px;
+        background:
+          radial-gradient(circle at top center, rgba(56, 219, 227, 0.08), transparent 32%),
+          #07080a;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(10px);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .brand {
+        color: var(--magenta);
+      }
+
+      .hero-shell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--magenta);
+        border-radius: 8px;
+        padding: 14px 16px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.01), transparent 42%),
+          rgba(3, 4, 5, 0.9);
+      }
+
+      .hero-center {
+        display: grid;
+        place-items: center;
+        text-align: center;
+        gap: 6px;
+        padding: 4px 0;
+      }
+
+      .grafo-wordmark {
+        width: min(236px, 100%);
+      }
+
+      .grafo-wordmark svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .wordmark-shadow {
+        fill: var(--magenta);
+        opacity: 0.38;
+      }
+
+      .wordmark-main {
+        fill: var(--cyan);
+      }
+
+      .wordmark-accent {
+        fill: var(--accent-green);
+      }
+
+      .hero-title {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .hero-version {
+        color: var(--muted);
+        font-weight: 400;
+        text-transform: none;
+      }
+
+      .hero-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+        color: var(--text);
+        font-size: 12px;
+      }
+
+      .hero-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: var(--cyan);
+        box-shadow: 0 0 12px rgba(56, 219, 227, 0.22);
+      }
+
+      .hero-tip {
+        color: var(--yellow);
+      }
+
+      .subtitle {
+        color: var(--muted);
+        margin-top: 6px;
+        font-size: 13px;
+        max-width: 980px;
+      }
+
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .tab {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--muted);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .tab[aria-selected="true"],
+      .tab:hover {
+        color: var(--cyan);
+        border-color: var(--cyan);
+      }
+
+      main {
+        padding: 24px;
+        display: grid;
+        gap: 24px;
+      }
+
+      .direction {
+        display: none;
+        grid-template-columns: minmax(320px, 1fr) minmax(320px, 440px);
+        gap: 24px;
+        align-items: start;
+      }
+
+      .direction.active {
+        display: grid;
+      }
+
+      .terminal {
+        background: #030405;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 18px 40px var(--shadow);
+        min-height: 620px;
+        overflow: hidden;
+      }
+
+      .terminal.compact {
+        min-height: 560px;
+      }
+
+      .terminal-header,
+      .terminal-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        background: #080a0d;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .terminal-footer {
+        border-top: 1px solid var(--line);
+        border-bottom: 0;
+      }
+
+      .terminal-body {
+        padding: 16px 18px;
+      }
+
+      .line {
+        margin: 8px 0;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .faint {
+        color: var(--faint);
+      }
+
+      .cyan {
+        color: var(--cyan);
+      }
+
+      .green {
+        color: var(--green);
+      }
+
+      .magenta {
+        color: var(--magenta);
+      }
+
+      .yellow {
+        color: var(--yellow);
+      }
+
+      .red {
+        color: var(--red);
+      }
+
+      .block {
+        border-left: 2px solid var(--line);
+        margin: 14px 0;
+        padding: 4px 0 4px 12px;
+      }
+
+      .block.cyan {
+        border-color: var(--cyan);
+      }
+
+      .block.green {
+        border-color: var(--green);
+      }
+
+      .block.magenta {
+        border-color: var(--magenta);
+      }
+
+      .command-row {
+        display: grid;
+        grid-template-columns: 170px 1fr;
+        gap: 16px;
+        padding: 4px 0;
+      }
+
+      .prompt {
+        border-top: 1px solid var(--line);
+        margin-top: 18px;
+        padding-top: 12px;
+        display: flex;
+        gap: 8px;
+      }
+
+      .input {
+        color: var(--text);
+        flex: 1;
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .side {
+        display: grid;
+        gap: 16px;
+      }
+
+      .notes {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+        background: var(--panel);
+      }
+
+      .notes h2 {
+        font-size: 15px;
+        margin-bottom: 8px;
+      }
+
+      .notes ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+
+      .notes li {
+        margin: 6px 0;
+      }
+
+      .mini-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        border-radius: 6px;
+        padding: 10px;
+      }
+
+      .metric strong {
+        display: block;
+        color: var(--text);
+        font-size: 12px;
+      }
+
+      .metric span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .split-body {
+        display: grid;
+        grid-template-columns: 1fr 240px;
+        min-height: 510px;
+      }
+
+      .sidebar {
+        border-left: 1px solid var(--line);
+        background: #07090b;
+        padding: 14px;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 26px 1fr;
+        gap: 8px;
+        margin: 10px 0;
+        color: var(--muted);
+      }
+
+      .step.active {
+        color: var(--cyan);
+      }
+
+      .step.done {
+        color: var(--green);
+      }
+
+      .token-bar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 10px 0 16px;
+      }
+
+      @media (max-width: 980px) {
+        .hero-status {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .direction.active {
+          grid-template-columns: 1fr;
+        }
+
+        .split-body {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="hero-shell">
+        <div class="hero-center">
+          <div class="grafo-wordmark" aria-label="Grafo">
+            <svg viewBox="0 0 286 86" role="img" aria-label="GRAFO">
+              <g class="wordmark-shadow" transform="translate(4 4)">
+                <rect x="8" y="0" width="8" height="8" />
+                <rect x="16" y="0" width="8" height="8" />
+                <rect x="24" y="0" width="8" height="8" />
+                <rect x="0" y="8" width="8" height="8" />
+                <rect x="0" y="16" width="8" height="8" />
+                <rect x="0" y="24" width="8" height="8" />
+                <rect x="16" y="24" width="8" height="8" />
+                <rect x="24" y="24" width="8" height="8" />
+                <rect x="32" y="24" width="8" height="8" />
+                <rect x="0" y="32" width="8" height="8" />
+                <rect x="32" y="32" width="8" height="8" />
+                <rect x="0" y="40" width="8" height="8" />
+                <rect x="32" y="40" width="8" height="8" />
+                <rect x="8" y="48" width="8" height="8" />
+                <rect x="16" y="48" width="8" height="8" />
+                <rect x="24" y="48" width="8" height="8" />
+
+                <rect x="52" y="0" width="8" height="8" />
+                <rect x="60" y="0" width="8" height="8" />
+                <rect x="68" y="0" width="8" height="8" />
+                <rect x="76" y="0" width="8" height="8" />
+                <rect x="52" y="8" width="8" height="8" />
+                <rect x="84" y="8" width="8" height="8" />
+                <rect x="52" y="16" width="8" height="8" />
+                <rect x="84" y="16" width="8" height="8" />
+                <rect x="52" y="24" width="8" height="8" />
+                <rect x="60" y="24" width="8" height="8" />
+                <rect x="68" y="24" width="8" height="8" />
+                <rect x="76" y="24" width="8" height="8" />
+                <rect x="52" y="32" width="8" height="8" />
+                <rect x="68" y="32" width="8" height="8" />
+                <rect x="52" y="40" width="8" height="8" />
+                <rect x="76" y="40" width="8" height="8" />
+                <rect x="52" y="48" width="8" height="8" />
+                <rect x="84" y="48" width="8" height="8" />
+
+                <rect x="112" y="0" width="8" height="8" />
+                <rect x="120" y="0" width="8" height="8" />
+                <rect x="128" y="0" width="8" height="8" />
+                <rect x="104" y="8" width="8" height="8" />
+                <rect x="136" y="8" width="8" height="8" />
+                <rect x="104" y="16" width="8" height="8" />
+                <rect x="136" y="16" width="8" height="8" />
+                <rect x="104" y="24" width="8" height="8" />
+                <rect x="112" y="24" width="8" height="8" />
+                <rect x="120" y="24" width="8" height="8" />
+                <rect x="128" y="24" width="8" height="8" />
+                <rect x="136" y="24" width="8" height="8" />
+                <rect x="104" y="32" width="8" height="8" />
+                <rect x="136" y="32" width="8" height="8" />
+                <rect x="104" y="40" width="8" height="8" />
+                <rect x="136" y="40" width="8" height="8" />
+                <rect x="104" y="48" width="8" height="8" />
+                <rect x="136" y="48" width="8" height="8" />
+
+                <rect x="156" y="0" width="8" height="8" />
+                <rect x="164" y="0" width="8" height="8" />
+                <rect x="172" y="0" width="8" height="8" />
+                <rect x="180" y="0" width="8" height="8" />
+                <rect x="188" y="0" width="8" height="8" />
+                <rect x="156" y="8" width="8" height="8" />
+                <rect x="156" y="16" width="8" height="8" />
+                <rect x="156" y="24" width="8" height="8" />
+                <rect x="164" y="24" width="8" height="8" />
+                <rect x="172" y="24" width="8" height="8" />
+                <rect x="180" y="24" width="8" height="8" />
+                <rect x="156" y="32" width="8" height="8" />
+                <rect x="156" y="40" width="8" height="8" />
+                <rect x="156" y="48" width="8" height="8" />
+
+                <rect x="216" y="0" width="8" height="8" />
+                <rect x="224" y="0" width="8" height="8" />
+                <rect x="232" y="0" width="8" height="8" />
+                <rect x="208" y="8" width="8" height="8" />
+                <rect x="240" y="8" width="8" height="8" />
+                <rect x="208" y="16" width="8" height="8" />
+                <rect x="240" y="16" width="8" height="8" />
+                <rect x="208" y="24" width="8" height="8" />
+                <rect x="240" y="24" width="8" height="8" />
+                <rect x="208" y="32" width="8" height="8" />
+                <rect x="240" y="32" width="8" height="8" />
+                <rect x="216" y="48" width="8" height="8" />
+                <rect x="224" y="48" width="8" height="8" />
+                <rect x="232" y="48" width="8" height="8" />
+
+                <rect class="wordmark-accent" x="116" y="70" width="10" height="4" />
+                <rect class="wordmark-accent" x="134" y="70" width="10" height="4" />
+                <rect class="wordmark-accent" x="152" y="70" width="10" height="4" />
+              </g>
+              <g class="wordmark-main">
+                <rect x="8" y="0" width="8" height="8" />
+                <rect x="16" y="0" width="8" height="8" />
+                <rect x="24" y="0" width="8" height="8" />
+                <rect x="0" y="8" width="8" height="8" />
+                <rect x="0" y="16" width="8" height="8" />
+                <rect x="0" y="24" width="8" height="8" />
+                <rect x="16" y="24" width="8" height="8" />
+                <rect x="24" y="24" width="8" height="8" />
+                <rect x="32" y="24" width="8" height="8" />
+                <rect x="0" y="32" width="8" height="8" />
+                <rect x="32" y="32" width="8" height="8" />
+                <rect x="0" y="40" width="8" height="8" />
+                <rect x="32" y="40" width="8" height="8" />
+                <rect x="8" y="48" width="8" height="8" />
+                <rect x="16" y="48" width="8" height="8" />
+                <rect x="24" y="48" width="8" height="8" />
+
+                <rect x="52" y="0" width="8" height="8" />
+                <rect x="60" y="0" width="8" height="8" />
+                <rect x="68" y="0" width="8" height="8" />
+                <rect x="76" y="0" width="8" height="8" />
+                <rect x="52" y="8" width="8" height="8" />
+                <rect x="84" y="8" width="8" height="8" />
+                <rect x="52" y="16" width="8" height="8" />
+                <rect x="84" y="16" width="8" height="8" />
+                <rect x="52" y="24" width="8" height="8" />
+                <rect x="60" y="24" width="8" height="8" />
+                <rect x="68" y="24" width="8" height="8" />
+                <rect x="76" y="24" width="8" height="8" />
+                <rect x="52" y="32" width="8" height="8" />
+                <rect x="68" y="32" width="8" height="8" />
+                <rect x="52" y="40" width="8" height="8" />
+                <rect x="76" y="40" width="8" height="8" />
+                <rect x="52" y="48" width="8" height="8" />
+                <rect x="84" y="48" width="8" height="8" />
+
+                <rect x="112" y="0" width="8" height="8" />
+                <rect x="120" y="0" width="8" height="8" />
+                <rect x="128" y="0" width="8" height="8" />
+                <rect x="104" y="8" width="8" height="8" />
+                <rect x="136" y="8" width="8" height="8" />
+                <rect x="104" y="16" width="8" height="8" />
+                <rect x="136" y="16" width="8" height="8" />
+                <rect x="104" y="24" width="8" height="8" />
+                <rect x="112" y="24" width="8" height="8" />
+                <rect x="120" y="24" width="8" height="8" />
+                <rect x="128" y="24" width="8" height="8" />
+                <rect x="136" y="24" width="8" height="8" />
+                <rect x="104" y="32" width="8" height="8" />
+                <rect x="136" y="32" width="8" height="8" />
+                <rect x="104" y="40" width="8" height="8" />
+                <rect x="136" y="40" width="8" height="8" />
+                <rect x="104" y="48" width="8" height="8" />
+                <rect x="136" y="48" width="8" height="8" />
+
+                <rect x="156" y="0" width="8" height="8" />
+                <rect x="164" y="0" width="8" height="8" />
+                <rect x="172" y="0" width="8" height="8" />
+                <rect x="180" y="0" width="8" height="8" />
+                <rect x="188" y="0" width="8" height="8" />
+                <rect x="156" y="8" width="8" height="8" />
+                <rect x="156" y="16" width="8" height="8" />
+                <rect x="156" y="24" width="8" height="8" />
+                <rect x="164" y="24" width="8" height="8" />
+                <rect x="172" y="24" width="8" height="8" />
+                <rect x="180" y="24" width="8" height="8" />
+                <rect x="156" y="32" width="8" height="8" />
+                <rect x="156" y="40" width="8" height="8" />
+                <rect x="156" y="48" width="8" height="8" />
+
+                <rect x="216" y="0" width="8" height="8" />
+                <rect x="224" y="0" width="8" height="8" />
+                <rect x="232" y="0" width="8" height="8" />
+                <rect x="208" y="8" width="8" height="8" />
+                <rect x="240" y="8" width="8" height="8" />
+                <rect x="208" y="16" width="8" height="8" />
+                <rect x="240" y="16" width="8" height="8" />
+                <rect x="208" y="24" width="8" height="8" />
+                <rect x="240" y="24" width="8" height="8" />
+                <rect x="208" y="32" width="8" height="8" />
+                <rect x="240" y="32" width="8" height="8" />
+                <rect x="216" y="48" width="8" height="8" />
+                <rect x="224" y="48" width="8" height="8" />
+                <rect x="232" y="48" width="8" height="8" />
+
+                <rect class="wordmark-accent" x="116" y="70" width="10" height="4" />
+                <rect class="wordmark-accent" x="134" y="70" width="10" height="4" />
+                <rect class="wordmark-accent" x="152" y="70" width="10" height="4" />
+              </g>
+            </svg>
+          </div>
+          <h1 class="hero-title">
+            <span class="brand">CLI Agentic</span> <span class="hero-version">v0.0.0</span>
+          </h1>
+        </div>
+      </div>
+      <div class="hero-status">
+        <span class="hero-dot" aria-hidden="true"></span>
+        <span><span class="hero-tip">Tip:</span> use as direções abaixo para calibrar densidade, status operacional e presença da marca Grafo na experiência agentic.</span>
+      </div>
+      <nav class="tabs" aria-label="Direções visuais">
+        <button class="tab" aria-selected="true" data-target="d1">01 Fluxo Linear</button>
+        <button class="tab" aria-selected="false" data-target="d2">02 Status Rail</button>
+        <button class="tab" aria-selected="false" data-target="d3">03 Command Surface</button>
+        <button class="tab" aria-selected="false" data-target="d4">04 Provider Trace</button>
+        <button class="tab" aria-selected="false" data-target="d5">05 Recovery First</button>
+        <button class="tab" aria-selected="false" data-target="d6">06 Dense Minimal</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="d1" class="direction active">
+        <div class="terminal">
+          <div class="terminal-header">
+            <span><span class="magenta">grafo</span> session</span>
+            <span>repo: grafo-cli</span>
+          </div>
+          <div class="terminal-body">
+            <div class="line muted">Environment loaded: 2 hooks, FFF ready, lean-ctx ready</div>
+            <div class="prompt">
+              <span class="cyan">&gt;</span>
+              <span class="input">Corrija o fluxo quando o alvo do arquivo é desconhecido</span>
+            </div>
+            <div class="block cyan">
+              <div class="line"><span class="cyan">discover</span> FFF: buscando candidatos por intenção</div>
+              <div class="line muted">query: target unknown flow</div>
+              <div class="line">packages/coding-agent/src/core/tools/read.ts</div>
+              <div class="line">packages/coding-agent/src/core/context.ts</div>
+              <div class="line">packages/coding-agent/src/core/tools/search.ts</div>
+            </div>
+            <div class="block green">
+              <div class="line"><span class="green">context</span> lean-ctx: lendo candidatos selecionados</div>
+              <div class="line muted">mode: signatures + focused lines</div>
+            </div>
+            <div class="block">
+              <div class="line">Diagnóstico: o fallback usa leitura ampla antes da descoberta.</div>
+              <div class="line">Próxima ação: isolar decisão de provider no fluxo de contexto.</div>
+            </div>
+          </div>
+          <div class="terminal-footer">
+            <span>/ commands · ? help</span>
+            <span>GPT-5.3-Codex · medium · fff:on · lean:on</span>
+          </div>
+        </div>
+        <aside class="side">
+          <div class="notes">
+            <h2>01 Fluxo Linear</h2>
+            <p class="muted">Direção mais próxima do Codex CLI: leitura sequencial, estados no corpo, footer compacto.</p>
+            <ul>
+              <li>Melhor para foco e continuidade.</li>
+              <li>Baixa complexidade de implementação no MVP.</li>
+              <li>Risco: provider/status pode ficar discreto demais.</li>
+            </ul>
+          </div>
+          <div class="mini-grid">
+            <div class="metric"><strong>Densidade</strong><span>media-alta</span></div>
+            <div class="metric"><strong>Clareza</strong><span>alta</span></div>
+            <div class="metric"><strong>Risco MVP</strong><span>baixo</span></div>
+            <div class="metric"><strong>Marca</strong><span>moderada</span></div>
+          </div>
+        </aside>
+      </section>
+
+      <section id="d2" class="direction">
+        <div class="terminal">
+          <div class="terminal-header">
+            <span><span class="magenta">grafo</span> working</span>
+            <span class="green">ready</span>
+          </div>
+          <div class="split-body">
+            <div class="terminal-body">
+              <div class="prompt">
+                <span class="cyan">&gt;</span>
+                <span class="input">Encontre onde a permissão de ferramenta é resolvida</span>
+              </div>
+              <div class="block cyan">
+                <div class="line">FFF encontrou 6 candidatos; 3 fortes.</div>
+                <div class="line muted">score alto: permissions.ts, approval-flow.ts, tool-runner.ts</div>
+              </div>
+              <div class="block green">
+                <div class="line">lean-ctx carregou assinaturas e callers relevantes.</div>
+                <div class="line muted">economia estimada: 78% de contexto bruto</div>
+              </div>
+            </div>
+            <aside class="sidebar">
+              <div class="step done"><span>01</span><span>intent parsed</span></div>
+              <div class="step done"><span>02</span><span>FFF candidates</span></div>
+              <div class="step active"><span>03</span><span>lean-ctx read</span></div>
+              <div class="step"><span>04</span><span>agent action</span></div>
+              <div class="step"><span>05</span><span>verify</span></div>
+            </aside>
+          </div>
+          <div class="terminal-footer">
+            <span>mode: refactor</span>
+            <span>context: focused · permissions: ask</span>
+          </div>
+        </div>
+        <aside class="side">
+          <div class="notes">
+            <h2>02 Status Rail</h2>
+            <p class="muted">Adiciona trilha lateral para fases do fluxo FFF -> lean-ctx -> ação.</p>
+            <ul>
+              <li>Ótimo para confiança operacional.</li>
+              <li>Mostra automação sem explicar demais.</li>
+              <li>Risco: ocupa largura e pode exigir TUI mais profunda.</li>
+            </ul>
+          </div>
+          <div class="mini-grid">
+            <div class="metric"><strong>Densidade</strong><span>alta</span></div>
+            <div class="metric"><strong>Clareza</strong><span>alta</span></div>
+            <div class="metric"><strong>Risco MVP</strong><span>medio</span></div>
+            <div class="metric"><strong>Marca</strong><span>baixa</span></div>
+          </div>
+        </aside>
+      </section>
+
+      <section id="d3" class="direction">
+        <div class="terminal compact">
+          <div class="terminal-header">
+            <span><span class="magenta">grafo</span> commands</span>
+            <span>/ctx</span>
+          </div>
+          <div class="terminal-body">
+            <div class="line muted">Environment loaded: FFF, lean-ctx, hooks</div>
+            <div class="block cyan">
+              <div class="command-row"><span class="cyan">/find</span><span>Descobrir arquivos/candidatos com FFF</span></div>
+              <div class="command-row"><span class="cyan">/ctx</span><span>Ler/analisar contexto com lean-ctx</span></div>
+              <div class="command-row"><span class="cyan">/doctor</span><span>Verificar dependências e readiness</span></div>
+              <div class="command-row"><span class="cyan">/permissions</span><span>Revisar approval flow da sessão</span></div>
+              <div class="command-row"><span class="cyan">/trace</span><span>Mostrar decisões de provider no fluxo atual</span></div>
+            </div>
+            <div class="prompt">
+              <span class="cyan">&gt;</span>
+              <span class="input">/ctx status</span>
+            </div>
+          </div>
+          <div class="terminal-footer">
+            <span>slash commands · focused</span>
+            <span>FFF ready · lean-ctx ready</span>
+          </div>
+        </div>
+        <aside class="side">
+          <div class="notes">
+            <h2>03 Command Surface</h2>
+            <p class="muted">Centraliza a identidade em slash commands e superfícies operacionais.</p>
+            <ul>
+              <li>Boa para power users e descoberta de capacidades.</li>
+              <li>Ajuda a padronizar naming Grafo.</li>
+              <li>Risco: parece menos agentic se virar menu de comandos.</li>
+            </ul>
+          </div>
+          <div class="mini-grid">
+            <div class="metric"><strong>Densidade</strong><span>media</span></div>
+            <div class="metric"><strong>Clareza</strong><span>media-alta</span></div>
+            <div class="metric"><strong>Risco MVP</strong><span>baixo</span></div>
+            <div class="metric"><strong>Marca</strong><span>alta</span></div>
+          </div>
+        </aside>
+      </section>
+
+      <section id="d4" class="direction">
+        <div class="terminal">
+          <div class="terminal-header">
+            <span><span class="magenta">grafo</span> provider trace</span>
+            <span>trace:on</span>
+          </div>
+          <div class="terminal-body">
+            <div class="token-bar">
+              <span class="pill">intent: unknown target</span>
+              <span class="pill">provider: FFF</span>
+              <span class="pill">context: lean-ctx</span>
+              <span class="pill">risk: low</span>
+            </div>
+            <div class="block cyan">
+              <div class="line"><span class="cyan">decision</span> caminho desconhecido, usando FFF antes de leitura.</div>
+              <div class="line muted">reason: evitar leitura ampla antes de candidatos.</div>
+            </div>
+            <div class="block green">
+              <div class="line"><span class="green">decision</span> candidatos encontrados, mudando para lean-ctx.</div>
+              <div class="line muted">reason: aprofundar contexto com orçamento controlado.</div>
+            </div>
+            <div class="block">
+              <div class="line">Resultado: 4 arquivos relevantes, 2 símbolos centrais, 1 teste provável.</div>
+            </div>
+          </div>
+          <div class="terminal-footer">
+            <span>trace compact</span>
+            <span>discover -> context -> act</span>
+          </div>
+        </div>
+        <aside class="side">
+          <div class="notes">
+            <h2>04 Provider Trace</h2>
+            <p class="muted">Mostra as decisões da Grafo como rastros compactos, aumentando confiança.</p>
+            <ul>
+              <li>Excelente para controle sem microgerenciamento.</li>
+              <li>Bom para depurar comportamento agentic.</li>
+              <li>Risco: pode virar ruído se sempre ligado.</li>
+            </ul>
+          </div>
+          <div class="mini-grid">
+            <div class="metric"><strong>Densidade</strong><span>media-alta</span></div>
+            <div class="metric"><strong>Clareza</strong><span>alta</span></div>
+            <div class="metric"><strong>Risco MVP</strong><span>baixo-medio</span></div>
+            <div class="metric"><strong>Marca</strong><span>media</span></div>
+          </div>
+        </aside>
+      </section>
+
+      <section id="d5" class="direction">
+        <div class="terminal compact">
+          <div class="terminal-header">
+            <span><span class="magenta">grafo</span> recovery</span>
+            <span class="yellow">fallback</span>
+          </div>
+          <div class="terminal-body">
+            <div class="block magenta">
+              <div class="line"><span class="yellow">warning</span> FFF indisponível nesta sessão.</div>
+              <div class="line muted">impacto: descoberta rápida de candidatos não será usada.</div>
+            </div>
+            <div class="block">
+              <div class="line">Próxima ação: execute <span class="cyan">grafo doctor</span> para validar FFF e PATH.</div>
+              <div class="line">Retomada: posso continuar com busca textual via lean-ctx se você aprovar.</div>
+            </div>
+            <div class="prompt">
+              <span class="cyan">&gt;</span>
+              <span class="input">Continuar com fallback? [y/n]</span>
+            </div>
+          </div>
+          <div class="terminal-footer">
+            <span>recovery mode</span>
+            <span>context preserved · fallback available</span>
+          </div>
+        </div>
+        <aside class="side">
+          <div class="notes">
+            <h2>05 Recovery First</h2>
+            <p class="muted">Direção centrada em erro recuperável: causa, impacto, próxima ação e retomada.</p>
+            <ul>
+              <li>Alinha perfeitamente com confiança operacional.</li>
+              <li>Boa para doctor, fallback e permissões.</li>
+              <li>Risco: não deve dominar a experiência feliz.</li>
+            </ul>
+          </div>
+          <div class="mini-grid">
+            <div class="metric"><strong>Densidade</strong><span>media</span></div>
+            <div class="metric"><strong>Clareza</strong><span>alta</span></div>
+            <div class="metric"><strong>Risco MVP</strong><span>baixo</span></div>
+            <div class="metric"><strong>Marca</strong><span>media</span></div>
+          </div>
+        </aside>
+      </section>
+
+      <section id="d6" class="direction">
+        <div class="terminal compact">
+          <div class="terminal-header">
+            <span><span class="magenta">grafo</span></span>
+            <span>repo · model · mode</span>
+          </div>
+          <div class="terminal-body">
+            <div class="line"><span class="cyan">&gt;</span> Ajuste o comportamento quando o arquivo alvo não é explícito</div>
+            <div class="line muted">discover FFF · 5 candidates · 2 strong</div>
+            <div class="line">packages/coding-agent/src/core/context.ts</div>
+            <div class="line">packages/coding-agent/src/core/tools/search.ts</div>
+            <div class="line muted">context lean-ctx · signatures · related symbols</div>
+            <div class="line">Achado: a decisão de provider está acoplada ao tipo de prompt.</div>
+            <div class="line green">Próxima ação: mover seleção FFF -> lean-ctx para policy de contexto.</div>
+            <div class="prompt">
+              <span class="cyan">&gt;</span>
+              <span class="input"></span>
+            </div>
+          </div>
+          <div class="terminal-footer">
+            <span>/ commands</span>
+            <span>fff:on · lean:on · ask</span>
+          </div>
+        </div>
+        <aside class="side">
+          <div class="notes">
+            <h2>06 Dense Minimal</h2>
+            <p class="muted">Versão mais seca: menos molduras, mais texto operacional, máxima leveza visual.</p>
+            <ul>
+              <li>Menor risco de poluição.</li>
+              <li>Muito próxima de terminal puro.</li>
+              <li>Risco: pode parecer pouco diferenciada como produto.</li>
+            </ul>
+          </div>
+          <div class="mini-grid">
+            <div class="metric"><strong>Densidade</strong><span>alta</span></div>
+            <div class="metric"><strong>Clareza</strong><span>media</span></div>
+            <div class="metric"><strong>Risco MVP</strong><span>baixo</span></div>
+            <div class="metric"><strong>Marca</strong><span>baixa</span></div>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script>
+      const tabs = Array.from(document.querySelectorAll(".tab"));
+      const sections = Array.from(document.querySelectorAll(".direction"));
+
+      function selectDirection(id) {
+        for (const tab of tabs) {
+          tab.setAttribute("aria-selected", String(tab.dataset.target === id));
+        }
+        for (const section of sections) {
+          section.classList.toggle("active", section.id === id);
+        }
+      }
+
+      for (const tab of tabs) {
+        tab.addEventListener("click", () => selectDirection(tab.dataset.target));
+      }
+    </script>
+  </body>
+</html>

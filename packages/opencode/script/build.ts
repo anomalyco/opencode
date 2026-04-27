@@ -17,6 +17,10 @@ await import("./generate.ts")
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 
+const npmPackageName = "@vinirabli/grafo"
+const commandName = "grafo"
+const legacyCommandName = pkg.name
+
 // Load migrations from migration directories
 const migrationDirs = (
   await fs.promises.readdir(path.join(dir, "migration"), {
@@ -165,23 +169,39 @@ const targets = singleFlag
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
+const releaseDistNames: string[] = []
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
 for (const item of targets) {
-  const name = [
-    pkg.name,
+  const platform = item.os === "win32" ? "windows" : item.os
+  const packageName = [
+    npmPackageName,
     // changing to win32 flags npm for some reason
-    item.os === "win32" ? "windows" : item.os,
+    platform,
     item.arch,
     item.avx2 === false ? "baseline" : undefined,
     item.abi === undefined ? undefined : item.abi,
   ]
     .filter(Boolean)
     .join("-")
-  console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  const distName = [
+    legacyCommandName,
+    platform,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+  const binaryName = item.os === "win32" ? `${commandName}.exe` : commandName
+  const legacyBinaryName = item.os === "win32" ? `${legacyCommandName}.exe` : legacyCommandName
+  const target = ["bun", platform, item.arch, item.avx2 === false ? "baseline" : undefined, item.abi]
+    .filter(Boolean)
+    .join("-")
+  console.log(`building ${packageName}`)
+  await $`mkdir -p dist/${distName}/bin`
 
   const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
   const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
@@ -205,8 +225,8 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
+      target: target as any,
+      outfile: `dist/${distName}/bin/${binaryName}`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -222,24 +242,28 @@ for (const item of targets) {
     },
   })
 
+  if (legacyBinaryName !== binaryName) {
+    await $`cp dist/${distName}/bin/${binaryName} dist/${distName}/bin/${legacyBinaryName}`
+  }
+
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
-    const binaryPath = `dist/${name}/bin/opencode`
+    const binaryPath = `dist/${distName}/bin/${binaryName}`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
       const versionOutput = await $`${binaryPath} --version`.text()
       console.log(`Smoke test passed: ${versionOutput.trim()}`)
     } catch (e) {
-      console.error(`Smoke test failed for ${name}:`, e)
+      console.error(`Smoke test failed for ${packageName}:`, e)
       process.exit(1)
     }
   }
 
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
+  await $`rm -rf ./dist/${distName}/bin/tui`
+  await Bun.file(`dist/${distName}/package.json`).write(
     JSON.stringify(
       {
-        name,
+        name: packageName,
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
@@ -248,11 +272,12 @@ for (const item of targets) {
       2,
     ),
   )
-  binaries[name] = Script.version
+  binaries[packageName] = Script.version
+  releaseDistNames.push(distName)
 }
 
 if (Script.release) {
-  for (const key of Object.keys(binaries)) {
+  for (const key of releaseDistNames) {
     if (key.includes("linux")) {
       await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
     } else {

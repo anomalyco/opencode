@@ -74,7 +74,7 @@ function EditBody(props: { request: PermissionRequest }) {
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
             trackOptions: {
-              backgroundColor: theme.background,
+              backgroundColor: "transparent",
               foregroundColor: theme.borderActive,
             },
           }}
@@ -90,11 +90,12 @@ function EditBody(props: { request: PermissionRequest }) {
             fg={theme.text}
             addedBg={theme.diffAddedBg}
             removedBg={theme.diffRemovedBg}
-            contextBg={theme.diffContextBg}
+            removedFg={theme.textMuted}
+            contextBg="transparent"
             addedSignColor={theme.diffHighlightAdded}
             removedSignColor={theme.diffHighlightRemoved}
             lineNumberFg={theme.diffLineNumber}
-            lineNumberBg={theme.diffContextBg}
+            lineNumberBg="transparent"
             addedLineNumberBg={theme.diffAddedLineNumberBg}
             removedLineNumberBg={theme.diffRemovedLineNumberBg}
           />

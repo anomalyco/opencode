@@ -5,8 +5,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
-import { tint, useTheme } from "@tui/context/theme"
-import { EmptyBorder, SplitBorder } from "@tui/component/border"
+import { useTheme } from "@tui/context/theme"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
@@ -31,7 +30,6 @@ import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { formatDuration } from "@/util/format"
-import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
@@ -50,6 +48,7 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onInterruptCountChange?: (count: number) => void
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
@@ -68,6 +67,11 @@ export type PromptRef = {
   blur(): void
   focus(): void
   submit(): void
+}
+
+export const PROMPT_PLACEHOLDERS = {
+  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
+  shell: ["ls -la", "git status", "pwd"],
 }
 
 const money = new Intl.NumberFormat("en-US", {
@@ -136,8 +140,6 @@ export function Prompt(props: PromptProps) {
     return Locale.truncateMiddle(file, Math.max(12, Math.min(48, Math.floor(dimensions().width / 3))))
   })
   const [auto, setAuto] = createSignal<AutocompleteRef>()
-  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
-  const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
     toast.show({
@@ -227,6 +229,14 @@ export function Prompt(props: PromptProps) {
       { defer: true },
     ),
   )
+
+  createEffect(() => {
+    props.onInterruptCountChange?.(store.interrupt)
+  })
+
+  onCleanup(() => {
+    props.onInterruptCountChange?.(0)
+  })
 
   // Initialize agent/model/variant from last user message when session changes
   let syncedSessionID: string | undefined
@@ -970,8 +980,6 @@ export function Prompt(props: PromptProps) {
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
     animationsEnabled,
   )
-  const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
-
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
     if (store.mode === "shell") {
@@ -983,26 +991,37 @@ export function Prompt(props: PromptProps) {
     return `Ask anything... "${list()[store.placeholder % list().length]}"`
   })
 
-  const spinnerDef = createMemo(() => {
-    const agent = local.agent.current()
-    const color = agent ? local.agent.color(agent.name) : theme.border
-    return {
-      frames: createFrames({
-        color,
-        style: "blocks",
-        inactiveFactor: 0.6,
-        // enableFading: false,
-        minAlpha: 0.3,
-      }),
-      color: createColors({
-        color,
-        style: "blocks",
-        inactiveFactor: 0.6,
-        // enableFading: false,
-        minAlpha: 0.3,
-      }),
-    }
-  })
+  const footerMetadata = () => (
+    <Show when={local.agent.current()} fallback={props.hint ?? <text />}>
+      {(agent) => (
+        <box flexDirection="row" gap={1} flexShrink={0}>
+          <text fg={fadeColor(highlight(), agentMetaAlpha())}>
+            {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+          </text>
+          <Show when={store.mode === "normal"}>
+            <box flexDirection="row" gap={1} flexShrink={0}>
+              <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+              <text flexShrink={0} fg={fadeColor(keybind.leader ? theme.textMuted : theme.text, modelMetaAlpha())}>
+                {local.model.parsed().model}
+              </text>
+              {/* <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{local.model.parsed().provider}</text> */}
+              <Show when={showVariant()}>
+                <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
+                <text>
+                  <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
+                    {local.model.variant.current()}
+                  </span>
+                </text>
+              </Show>
+            </box>
+          </Show>
+          <Show when={props.hint}>
+            <box marginLeft={1}>{props.hint}</box>
+          </Show>
+        </box>
+      )}
+    </Show>
+  )
 
   return (
     <>
@@ -1030,27 +1049,26 @@ export function Prompt(props: PromptProps) {
         promptPartTypeId={() => promptPartTypeId}
       />
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
-        <box
-          border={["left"]}
-          borderColor={borderHighlight()}
-          customBorderChars={{
-            ...SplitBorder.customBorderChars,
-            bottomLeft: "╹",
-          }}
-        >
+        <box border borderColor={theme.backgroundElement}>
           <box
+            flexDirection="row"
+            gap={1}
+            alignItems="flex-start"
             paddingLeft={2}
             paddingRight={2}
-            paddingTop={1}
+            paddingTop={0}
+            minHeight={1}
             flexShrink={0}
-            backgroundColor={theme.backgroundElement}
             flexGrow={1}
           >
+            <text fg={highlight()}>›</text>
             <textarea
+              flexGrow={1}
               placeholder={placeholderText()}
               placeholderColor={theme.textMuted}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
+              wrapMode="char"
               minHeight={1}
               maxHeight={6}
               onContentChange={() => {
@@ -1238,159 +1256,83 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
-              focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
-              <box flexDirection="row" gap={1}>
-                <Show when={local.agent.current()} fallback={<box height={1} />}>
-                  {(agent) => (
-                    <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
-                      </text>
-                      <Show when={store.mode === "normal"}>
-                        <box flexDirection="row" gap={1}>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
-                          <text
-                            flexShrink={0}
-                            fg={fadeColor(keybind.leader ? theme.textMuted : theme.text, modelMetaAlpha())}
-                          >
-                            {local.model.parsed().model}
-                          </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
-                          <Show when={showVariant()}>
-                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
-                            <text>
-                              <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                                {local.model.variant.current()}
-                              </span>
-                            </text>
-                          </Show>
-                        </box>
-                      </Show>
-                    </>
-                  )}
-                </Show>
-              </box>
-              <Show when={hasRightContent()}>
-                <box flexDirection="row" gap={1} alignItems="center">
-                  {props.right}
-                </box>
-              </Show>
-            </box>
           </box>
         </box>
         <box
-          height={1}
-          border={["left"]}
-          borderColor={borderHighlight()}
-          customBorderChars={{
-            ...EmptyBorder,
-            vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
-          }}
+          width="100%"
+          flexDirection="row"
+          justifyContent="space-between"
+          marginTop={1}
+          paddingLeft={1}
+          paddingRight={1}
         >
-          <box
-            height={1}
-            border={["bottom"]}
-            borderColor={theme.backgroundElement}
-            customBorderChars={
-              theme.backgroundElement.a !== 0
-                ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
-                : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
-            }
-          />
-        </box>
-        <box width="100%" flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
-            <box
-              flexDirection="row"
-              gap={1}
-              flexGrow={1}
-              justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
-            >
-              <box flexShrink={0} flexDirection="row" gap={1}>
-                <box marginLeft={1}>
-                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
-                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
-                  </Show>
-                </box>
-                <box flexDirection="row" gap={1} flexShrink={0}>
-                  {(() => {
-                    const retry = createMemo(() => {
-                      const s = status()
-                      if (s.type !== "retry") return
-                      return s
-                    })
-                    const message = createMemo(() => {
-                      const r = retry()
-                      if (!r) return
-                      if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                        return "gemini is way too hot right now"
-                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
-                      return r.message
-                    })
-                    const isTruncated = createMemo(() => {
-                      const r = retry()
-                      if (!r) return false
-                      return r.message.length > 120
-                    })
-                    const [seconds, setSeconds] = createSignal(0)
-                    onMount(() => {
-                      const timer = setInterval(() => {
-                        const next = retry()?.next
-                        if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-                      }, 1000)
+          <Show when={status().type === "retry"} fallback={footerMetadata()}>
+            <box flexDirection="row" gap={1} flexGrow={1}>
+              <box flexDirection="row" gap={1} flexShrink={0}>
+                {(() => {
+                  const retry = createMemo(() => {
+                    const s = status()
+                    if (s.type !== "retry") return
+                    return s
+                  })
+                  const message = createMemo(() => {
+                    const r = retry()
+                    if (!r) return
+                    if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
+                      return "gemini is way too hot right now"
+                    if (r.message.length > 80) return r.message.slice(0, 80) + "..."
+                    return r.message
+                  })
+                  const isTruncated = createMemo(() => {
+                    const r = retry()
+                    if (!r) return false
+                    return r.message.length > 120
+                  })
+                  const [seconds, setSeconds] = createSignal(0)
+                  onMount(() => {
+                    const timer = setInterval(() => {
+                      const next = retry()?.next
+                      if (next) setSeconds(Math.round((next - Date.now()) / 1000))
+                    }, 1000)
 
-                      onCleanup(() => {
-                        clearInterval(timer)
-                      })
+                    onCleanup(() => {
+                      clearInterval(timer)
                     })
-                    const handleMessageClick = () => {
-                      const r = retry()
-                      if (!r) return
-                      if (isTruncated()) {
-                        void DialogAlert.show(dialog, "Retry Error", r.message)
-                      }
+                  })
+                  const handleMessageClick = () => {
+                    const r = retry()
+                    if (!r) return
+                    if (isTruncated()) {
+                      void DialogAlert.show(dialog, "Retry Error", r.message)
                     }
+                  }
 
-                    const retryText = () => {
-                      const r = retry()
-                      if (!r) return ""
-                      const baseMessage = message()
-                      const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                      const duration = formatDuration(seconds())
-                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
-                      return baseMessage + truncatedHint + retryInfo
-                    }
+                  const retryText = () => {
+                    const r = retry()
+                    if (!r) return ""
+                    const baseMessage = message()
+                    const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                    const duration = formatDuration(seconds())
+                    const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
+                    return baseMessage + truncatedHint + retryInfo
+                  }
 
-                    return (
-                      <Show when={retry()}>
-                        <box onMouseUp={handleMessageClick}>
-                          <text fg={theme.error}>{retryText()}</text>
-                        </box>
-                      </Show>
-                    )
-                  })()}
-                </box>
+                  return (
+                    <Show when={retry()}>
+                      <box onMouseUp={handleMessageClick}>
+                        <text fg={theme.error}>{retryText()}</text>
+                      </box>
+                    </Show>
+                  )
+                })()}
               </box>
-              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                esc{" "}
-                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                </span>
-              </text>
             </box>
           </Show>
-          <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row">
+          <box gap={2} flexDirection="row">
+            <Show when={status().type !== "retry"}>
               <Show when={editorFileLabelDisplay()}>{(file) => <text fg={theme.secondary}>{file()}</text>}</Show>
               <Switch>
                 <Match when={store.mode === "normal"}>
@@ -1418,8 +1360,9 @@ export function Prompt(props: PromptProps) {
                   </text>
                 </Match>
               </Switch>
-            </box>
-          </Show>
+            </Show>
+            {props.right}
+          </box>
         </box>
       </box>
     </>

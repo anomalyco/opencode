@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "2f1b45abc8a680a9d58a2a3a387087fb05b093aa",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "@vinirabli/grafo",
+      "include-component-in-tag": false,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "packages/opencode/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

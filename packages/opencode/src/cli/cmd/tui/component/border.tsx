@@ -19,3 +19,20 @@ export const SplitBorder = {
     vertical: "┃",
   },
 }
+
+export const FrameBorder = {
+  border: ["top" as const, "right" as const, "bottom" as const, "left" as const],
+  customBorderChars: {
+    topLeft: "┌",
+    topRight: "┐",
+    bottomLeft: "└",
+    bottomRight: "┘",
+    horizontal: "─",
+    vertical: "│",
+    topT: "┬",
+    bottomT: "┴",
+    leftT: "├",
+    rightT: "┤",
+    cross: "┼",
+  },
+}

@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -22,7 +23,7 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
-import { Prompt, type PromptRef } from "@tui/component/prompt"
+import { Prompt, PROMPT_PLACEHOLDERS, type PromptRef } from "@tui/component/prompt"
 import type {
   AssistantMessage,
   Part,
@@ -157,6 +158,7 @@ export function Session() {
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
+  const [interruptCount, setInterruptCount] = createSignal(0)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
@@ -1161,6 +1163,7 @@ export function Session() {
                     </Match>
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
+                        interrupt={lastAssistant()?.id === message.id ? interruptCount() : 0}
                         last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}
                         parts={sync.data.part[message.id] ?? []}
@@ -1197,8 +1200,10 @@ export function Session() {
                     onSubmit={() => {
                       toBottom()
                     }}
+                    onInterruptCountChange={setInterruptCount}
                     sessionID={route.sessionID}
                     right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                    placeholders={PROMPT_PLACEHOLDERS}
                   />
                 </TuiPluginRuntime.Slot>
               </Show>
@@ -1267,21 +1272,18 @@ function UserMessage(props: {
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const bubbleMaxWidth = createMemo(() =>
+    Math.min(Math.max(1, ctx.width), Math.max(12, Math.min(ctx.width - 4, Math.floor(ctx.width * 0.78)))),
+  )
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
   return (
     <>
       <Show when={text()}>
-        <box
-          id={props.message.id}
-          border={["left"]}
-          borderColor={color()}
-          customBorderChars={SplitBorder.customBorderChars}
-          marginTop={props.index === 0 ? 0 : 1}
-        >
+        <box width="100%" alignItems="flex-start" marginTop={props.index === 0 ? 0 : 1}>
           <box
+            id={props.message.id}
             onMouseOver={() => {
               setHover(true)
             }}
@@ -1289,48 +1291,45 @@ function UserMessage(props: {
               setHover(false)
             }}
             onMouseUp={props.onMouseUp}
-            paddingTop={1}
-            paddingBottom={1}
-            paddingLeft={2}
-            backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+            flexDirection="row"
+            alignItems="flex-start"
+            gap={1}
+            paddingTop={0}
+            paddingBottom={0}
+            paddingLeft={1}
+            paddingRight={2}
+            backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundElement}
             flexShrink={0}
+            maxWidth={bubbleMaxWidth()}
           >
-            <text fg={theme.text}>{text()}</text>
-            <Show when={files().length}>
-              <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
-                <For each={files()}>
-                  {(file) => {
-                    const bg = createMemo(() => {
-                      if (file.mime.startsWith("image/")) return theme.accent
-                      if (file.mime === "application/pdf") return theme.primary
-                      return theme.secondary
-                    })
-                    return (
-                      <text fg={theme.text}>
-                        <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                      </text>
-                    )
-                  }}
-                </For>
-              </box>
-            </Show>
-            <Show
-              when={queued()}
-              fallback={
-                <Show when={ctx.showTimestamps()}>
-                  <text fg={theme.textMuted}>
-                    <span style={{ fg: theme.textMuted }}>
-                      {Locale.todayTimeOrDateTime(props.message.time.created)}
-                    </span>
-                  </text>
-                </Show>
-              }
-            >
-              <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
-              </text>
-            </Show>
+            <text fg={hover() ? color() : theme.textMuted}>›</text>
+            <box flexDirection="column" flexShrink={1} paddingRight={1}>
+              <text fg={theme.text}>{text()}</text>
+              <Show when={files().length}>
+                <box flexDirection="row" paddingBottom={queued() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
+                  <For each={files()}>
+                    {(file) => {
+                      const bg = createMemo(() => {
+                        if (file.mime.startsWith("image/")) return theme.accent
+                        if (file.mime === "application/pdf") return theme.primary
+                        return theme.secondary
+                      })
+                      return (
+                        <text fg={theme.text}>
+                          <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                          <span style={{ bg: theme.backgroundPanel, fg: theme.textMuted }}> {file.filename} </span>
+                        </text>
+                      )
+                    }}
+                  </For>
+                </box>
+              </Show>
+              <Show when={queued()}>
+                <text fg={theme.textMuted}>
+                  <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                </text>
+              </Show>
+            </box>
           </box>
         </box>
       </Show>
@@ -1347,25 +1346,67 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
-  const ctx = use()
+function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean; interrupt: number }) {
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const kv = useKV()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const status = createMemo(() => sync.data.session_status?.[props.message.sessionID] ?? { type: "idle" as const })
+  const color = createMemo(() => local.agent.color(props.message.agent))
+  const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
+  const [now, setNow] = createSignal(Date.now())
+  const user = createMemo(() => messages().find((x) => x.role === "user" && x.id === props.message.parentID))
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
   })
 
-  const duration = createMemo(() => {
+  const working = createMemo(() => {
+    return props.last && status().type === "busy" && props.message.error?.name !== "MessageAbortedError"
+  })
+
+  createEffect(() => {
+    if (!working()) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 100)
+    onCleanup(() => {
+      clearInterval(timer)
+    })
+  })
+
+  const completedDuration = createMemo(() => {
     if (!final()) return 0
     if (!props.message.time.completed) return 0
-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
+    if (!user()?.time) return 0
+    return props.message.time.completed - user()!.time.created
   })
+
+  const liveDuration = createMemo(() => {
+    if (!working()) return 0
+    if (!user()?.time) return 0
+    return Math.max(0, now() - user()!.time.created)
+  })
+
+  const duration = createMemo(() => {
+    const live = liveDuration()
+    if (live) return live
+    return completedDuration()
+  })
+  const durationLabel = createMemo(() => {
+    const ms = duration()
+    if (!ms) return ""
+    const seconds = Math.floor(ms / 1000)
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    const remaining = seconds % 60
+    if (minutes < 60) return remaining ? `${minutes}m ${remaining}s` : `${minutes}m`
+    const hours = Math.floor(minutes / 60)
+    const remainingMinutes = minutes % 60
+    return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+  })
+  const activityFrame = createMemo(() => (animationsEnabled() ? Math.floor(liveDuration() / 220) % 3 : 1))
+  const label = createMemo(() => (working() ? "Working" : Locale.titlecase(props.message.mode)))
 
   const keybind = useKeybind()
 
@@ -1412,20 +1453,36 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
           <box paddingLeft={3}>
             <text marginTop={1}>
-              <span
-                style={{
-                  fg:
-                    props.message.error?.name === "MessageAbortedError"
-                      ? theme.textMuted
-                      : local.agent.color(props.message.agent),
-                }}
+              <Show
+                when={working()}
+                fallback={
+                  <span style={{ fg: props.message.error?.name === "MessageAbortedError" ? theme.textMuted : color() }}>
+                    •{" "}
+                  </span>
+                }
               >
-                ▣{" "}
-              </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+                <For each={[0, 1, 2]}>
+                  {(index) => (
+                    <>
+                      <span style={{ fg: activityFrame() === index ? color() : theme.textMuted }}>•</span>
+                      <Show when={index < 2}>
+                        <span style={{ fg: theme.textMuted }}> </span>
+                      </Show>
+                    </>
+                  )}
+                </For>
+                <span> </span>
+              </Show>
+              <span style={{ fg: theme.text }}>{label()}</span>
+              <Show when={durationLabel()}>
+                <span style={{ fg: theme.textMuted }}> · {durationLabel()}</span>
+              </Show>
+              <Show when={working()}>
+                <span style={{ fg: props.interrupt > 0 ? theme.primary : theme.textMuted }}> · </span>
+                <span style={{ fg: props.interrupt > 0 ? theme.primary : theme.text }}>esc</span>
+                <span style={{ fg: props.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                  {" " + (props.interrupt > 0 ? "again to interrupt" : "interrupt")}
+                </span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
@@ -1491,7 +1548,6 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
               fg={theme.markdownText}
-              bg={theme.background}
             />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
@@ -1634,6 +1690,7 @@ function GenericTool(props: ToolProps<any>) {
         title={`# ${props.tool} ${input(props.input)}`}
         part={props.part}
         onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+        plain
       >
         <box gap={1}>
           <text fg={theme.text}>{limited()}</text>
@@ -1744,6 +1801,8 @@ function BlockTool(props: {
   onClick?: () => void
   part?: ToolPart
   spinner?: boolean
+  plain?: boolean
+  borderless?: boolean
 }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
@@ -1751,15 +1810,15 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
-      border={["left"]}
+      border={props.borderless ? false : ["left"]}
       paddingTop={1}
       paddingBottom={1}
       paddingLeft={2}
       marginTop={1}
       gap={1}
-      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
-      customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background}
+      backgroundColor={props.plain ? "transparent" : hover() ? theme.backgroundMenu : theme.backgroundPanel}
+      customBorderChars={props.borderless ? undefined : SplitBorder.customBorderChars}
+      borderColor={props.borderless ? undefined : theme.background}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -1787,68 +1846,40 @@ function BlockTool(props: {
 
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
-  const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
+  const isError = createMemo(() => props.part.state.status === "error")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
+  const hasOutput = createMemo(() => output().length > 0)
+  const showOutput = createMemo(() => hasOutput() && (isError() || expanded()))
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
   const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output()
+    if (expanded() || !overflow() || isError()) return output()
     return [...lines().slice(0, 10), "…"].join("\n")
   })
 
-  const workdirDisplay = createMemo(() => {
-    const workdir = props.input.workdir
-    if (!workdir || workdir === ".") return undefined
-
-    const base = sync.path.directory
-    if (!base) return undefined
-
-    const absolute = path.resolve(base, workdir)
-    if (absolute === base) return undefined
-
-    const home = Global.Path.home
-    if (!home) return absolute
-
-    const match = absolute === home || absolute.startsWith(home + path.sep)
-    return match ? absolute.replace(home, "~") : absolute
-  })
-
-  const title = createMemo(() => {
-    const desc = props.input.description ?? "Shell"
-    const wd = workdirDisplay()
-    if (!wd) return `# ${desc}`
-    if (desc.includes(wd)) return `# ${desc}`
-    return `# ${desc} in ${wd}`
-  })
-
   return (
-    <Switch>
-      <Match when={props.metadata.output !== undefined}>
-        <BlockTool
-          title={title()}
-          part={props.part}
-          spinner={isRunning()}
-          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
-        >
-          <box gap={1}>
-            <text fg={theme.text}>$ {props.input.command}</text>
-            <Show when={output()}>
-              <text fg={theme.text}>{limited()}</text>
-            </Show>
-            <Show when={overflow()}>
-              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
-            </Show>
-          </box>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
-          {props.input.command}
-        </InlineTool>
-      </Match>
-    </Switch>
+    <>
+      <InlineTool
+        icon="$"
+        pending="Writing command..."
+        complete={props.input.command}
+        part={props.part}
+        spinner={isRunning()}
+        onClick={hasOutput() ? () => setExpanded((prev) => !prev) : undefined}
+      >
+        {props.input.command}
+        <Show when={hasOutput()}>
+          <span style={{ fg: theme.textMuted }}> ...</span>
+        </Show>
+      </InlineTool>
+      <Show when={showOutput()}>
+        <box paddingLeft={6} gap={1}>
+          <text fg={theme.text}>{limited()}</text>
+        </box>
+      </Show>
+    </>
   )
 }
 
@@ -2054,8 +2085,8 @@ function Edit(props: ToolProps<typeof EditTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
-          <box paddingLeft={1}>
+        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part} plain borderless>
+          <box width="100%">
             <diff
               diff={diffContent()}
               view={view()}
@@ -2067,11 +2098,12 @@ function Edit(props: ToolProps<typeof EditTool>) {
               fg={theme.text}
               addedBg={theme.diffAddedBg}
               removedBg={theme.diffRemovedBg}
-              contextBg={theme.diffContextBg}
+              removedFg={theme.textMuted}
+              contextBg="transparent"
               addedSignColor={theme.diffHighlightAdded}
               removedSignColor={theme.diffHighlightRemoved}
               lineNumberFg={theme.diffLineNumber}
-              lineNumberBg={theme.diffContextBg}
+              lineNumberBg="transparent"
               addedLineNumberBg={theme.diffAddedLineNumberBg}
               removedLineNumberBg={theme.diffRemovedLineNumberBg}
             />
@@ -2102,7 +2134,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
 
   function Diff(p: { diff: string; filePath: string }) {
     return (
-      <box paddingLeft={1}>
+      <box width="100%">
         <diff
           diff={p.diff}
           view={view()}
@@ -2114,11 +2146,12 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
           fg={theme.text}
           addedBg={theme.diffAddedBg}
           removedBg={theme.diffRemovedBg}
-          contextBg={theme.diffContextBg}
+          removedFg={theme.textMuted}
+          contextBg="transparent"
           addedSignColor={theme.diffHighlightAdded}
           removedSignColor={theme.diffHighlightRemoved}
           lineNumberFg={theme.diffLineNumber}
-          lineNumberBg={theme.diffContextBg}
+          lineNumberBg="transparent"
           addedLineNumberBg={theme.diffAddedLineNumberBg}
           removedLineNumberBg={theme.diffRemovedLineNumberBg}
         />
@@ -2138,7 +2171,7 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
       <Match when={files().length > 0}>
         <For each={files()}>
           {(file) => (
-            <BlockTool title={title(file)} part={props.part}>
+            <BlockTool title={title(file)} part={props.part} plain borderless>
               <Show
                 when={file.type !== "delete"}
                 fallback={
@@ -2196,18 +2229,21 @@ function Question(props: ToolProps<typeof QuestionTool>) {
   return (
     <Switch>
       <Match when={props.metadata.answers}>
-        <BlockTool title="# Questions" part={props.part}>
-          <box gap={1}>
-            <For each={props.input.questions ?? []}>
-              {(q, i) => (
-                <box flexDirection="column">
-                  <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{format(props.metadata.answers?.[i()])}</text>
-                </box>
-              )}
-            </For>
-          </box>
-        </BlockTool>
+        <box paddingLeft={3} marginTop={1} gap={1}>
+          <For each={props.input.questions ?? []}>
+            {(q, i) => (
+              <box flexDirection="column">
+                <text fg={theme.text}>
+                  <span style={{ bold: true }}>Asked user</span>
+                  <span style={{ fg: theme.textMuted }}> {q.question}</span>
+                </text>
+                <text fg={theme.textMuted}>
+                  ↳ User selected: <span style={{ fg: theme.text }}>{format(props.metadata.answers?.[i()])}</span>
+                </text>
+              </box>
+            )}
+          </For>
+        </box>
       </Match>
       <Match when={true}>
         <InlineTool icon="→" pending="Asking questions..." complete={count()} part={props.part}>

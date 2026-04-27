@@ -3,9 +3,18 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 import { fileURLToPath } from "url"
+import path from "path"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
+const npmPackageName = "@vinirabli/grafo"
+const npmPackageDir = `./dist/${npmPackageName}`
+const commandName = "grafo"
+const legacyCommandName = pkg.name
+const releaseArtifactBaseName = pkg.name
+const npmOnly = process.env.GRAFO_NPM_ONLY === "true"
+const releaseArtifact = (platform: string, arch: string, extension: "tar.gz" | "zip") =>
+  `${releaseArtifactBaseName}-${platform}-${arch}.${extension}`
 
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
@@ -24,24 +33,28 @@ async function publish(dir: string, name: string, version: string) {
 }
 
 const binaries: Record<string, string> = {}
-for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
-  const pkg = await Bun.file(`./dist/${filepath}`).json()
-  binaries[pkg.name] = pkg.version
+const packageDirs: Record<string, string> = {}
+for (const filepath of new Bun.Glob("**/package.json").scanSync({ cwd: "./dist" })) {
+  const distPkg = await Bun.file(`./dist/${filepath}`).json()
+  if (distPkg.name === npmPackageName) continue
+  binaries[distPkg.name] = distPkg.version
+  packageDirs[distPkg.name] = `./dist/${path.dirname(filepath)}`
 }
 console.log("binaries", binaries)
 const version = Object.values(binaries)[0]
 
-await $`mkdir -p ./dist/${pkg.name}`
-await $`cp -r ./bin ./dist/${pkg.name}/bin`
-await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
-await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
+await $`mkdir -p ${npmPackageDir}`
+await $`cp -r ./bin ${npmPackageDir}/bin`
+await $`cp ./script/postinstall.mjs ${npmPackageDir}/postinstall.mjs`
+await Bun.file(`${npmPackageDir}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 
-await Bun.file(`./dist/${pkg.name}/package.json`).write(
+await Bun.file(`${npmPackageDir}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name: npmPackageName,
       bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
+        [commandName]: `./bin/${legacyCommandName}`,
+        [legacyCommandName]: `./bin/${legacyCommandName}`,
       },
       scripts: {
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
@@ -56,10 +69,10 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
-  await publish(`./dist/${name}`, name, binaries[name])
+  await publish(packageDirs[name], name, binaries[name])
 })
 await Promise.all(tasks)
-await publish(`./dist/${pkg.name}`, `${pkg.name}-ai`, version)
+await publish(npmPackageDir, npmPackageName, version)
 
 const image = "ghcr.io/anomalyco/opencode"
 const platforms = "linux/amd64,linux/arm64"
@@ -67,13 +80,19 @@ const tags = [`${image}:${version}`, `${image}:${Script.channel}`]
 const tagFlags = tags.flatMap((t) => ["-t", t])
 
 // registries
-if (!Script.preview) {
+if (npmOnly) {
+  console.log("GRAFO_NPM_ONLY=true; skipping Docker, AUR, and Homebrew publishing")
+} else if (!Script.preview) {
   await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
   // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const linuxArm64Artifact = releaseArtifact("linux", "arm64", "tar.gz")
+  const linuxX64Artifact = releaseArtifact("linux", "x64", "tar.gz")
+  const macX64Artifact = releaseArtifact("darwin", "x64", "zip")
+  const macArm64Artifact = releaseArtifact("darwin", "arm64", "zip")
+  const arm64Sha = await $`sha256sum ./dist/${linuxArm64Artifact} | cut -d' ' -f1`.text().then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/${linuxX64Artifact} | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/${macX64Artifact} | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/${macArm64Artifact} | cut -d' ' -f1`.text().then((x) => x.trim())
 
   const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
 
@@ -95,10 +114,10 @@ if (!Script.preview) {
     "conflicts=('opencode')",
     "depends=('ripgrep')",
     "",
-    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.tar.gz::https://github.com/anomalyco/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-arm64.tar.gz")`,
+    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.tar.gz::https://github.com/anomalyco/opencode/releases/download/v\${pkgver}\${_subver}/${linuxArm64Artifact}")`,
     `sha256sums_aarch64=('${arm64Sha}')`,
 
-    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.tar.gz::https://github.com/anomalyco/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-x64.tar.gz")`,
+    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.tar.gz::https://github.com/anomalyco/opencode/releases/download/v\${pkgver}\${_subver}/${linuxX64Artifact}")`,
     `sha256sums_x86_64=('${x64Sha}')`,
     "",
     "package() {",
@@ -141,7 +160,7 @@ if (!Script.preview) {
     "",
     "  on_macos do",
     "    if Hardware::CPU.intel?",
-    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-darwin-x64.zip"`,
+    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/${macX64Artifact}"`,
     `      sha256 "${macX64Sha}"`,
     "",
     "      def install",
@@ -149,7 +168,7 @@ if (!Script.preview) {
     "      end",
     "    end",
     "    if Hardware::CPU.arm?",
-    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-darwin-arm64.zip"`,
+    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/${macArm64Artifact}"`,
     `      sha256 "${macArm64Sha}"`,
     "",
     "      def install",
@@ -160,14 +179,14 @@ if (!Script.preview) {
     "",
     "  on_linux do",
     "    if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-x64.tar.gz"`,
+    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/${linuxX64Artifact}"`,
     `      sha256 "${x64Sha}"`,
     "      def install",
     '        bin.install "opencode"',
     "      end",
     "    end",
     "    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-arm64.tar.gz"`,
+    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/${linuxArm64Artifact}"`,
     `      sha256 "${arm64Sha}"`,
     "      def install",
     '        bin.install "opencode"',

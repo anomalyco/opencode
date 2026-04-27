@@ -1,5 +1,5 @@
-import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createSignal } from "solid-js"
+import { Prompt, PROMPT_PLACEHOLDERS, type PromptRef } from "@tui/component/prompt"
+import { createEffect, createMemo, createSignal } from "solid-js"
 import { Logo } from "../component/logo"
 import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
@@ -11,10 +11,6 @@ import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
 let once = false
-const placeholder = {
-  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
-  shell: ["ls -la", "git status", "pwd"],
-}
 
 export function Home() {
   const sync = useSync()
@@ -24,6 +20,11 @@ export function Home() {
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
+  const logoHighlight = createMemo(() => {
+    const agent = local.agent.current()
+    if (!agent) return
+    return local.agent.color(agent.name)
+  })
   let sent = false
 
   const bind = (r: PromptRef | undefined) => {
@@ -56,29 +57,29 @@ export function Home() {
     <>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
         <box flexGrow={1} minHeight={0} />
-        <box height={4} minHeight={0} flexShrink={1} />
-        <box flexShrink={0}>
-          <TuiPluginRuntime.Slot name="home_logo" mode="replace">
-            <Logo />
-          </TuiPluginRuntime.Slot>
-        </box>
-        <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-          <TuiPluginRuntime.Slot
-            name="home_prompt"
-            mode="replace"
-            workspace_id={project.workspace.current()}
-            ref={bind}
-          >
-            <Prompt
+        <box width="100%" maxWidth={75} alignItems="center" flexShrink={0}>
+          <box flexShrink={0}>
+            <TuiPluginRuntime.Slot name="home_logo" mode="replace">
+              <Logo highlightInk={logoHighlight()} />
+            </TuiPluginRuntime.Slot>
+          </box>
+          <box width="100%" zIndex={1000} paddingTop={1} flexShrink={0}>
+            <TuiPluginRuntime.Slot
+              name="home_prompt"
+              mode="replace"
+              workspace_id={project.workspace.current()}
               ref={bind}
-              workspaceID={project.workspace.current()}
-              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
-              placeholders={placeholder}
-            />
-          </TuiPluginRuntime.Slot>
+            >
+              <Prompt
+                ref={bind}
+                workspaceID={project.workspace.current()}
+                right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
+                placeholders={PROMPT_PLACEHOLDERS}
+              />
+            </TuiPluginRuntime.Slot>
+          </box>
+          <TuiPluginRuntime.Slot name="home_bottom" />
         </box>
-        <TuiPluginRuntime.Slot name="home_bottom" />
         <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>

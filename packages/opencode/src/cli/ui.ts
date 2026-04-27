@@ -4,10 +4,12 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { logo as glyphs } from "./logo"
 
 const wordmark = [
-  `⠀                                ▄     `,
-  `█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
-  `█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀`,
-  `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
+  `▄▀▀▀  █▀▀▀▄ ▄▀▀▀▄ █▀▀▀▀ ▄▀▀▀▄`,
+  `█ ▄▄▄ █▄▄▄▀ █▄▄▄█ █▄▄▄  █   █`,
+  `█   █ █ ▀▄  █   █ █     █   █`,
+  ` ▀▀▀  ▀   ▀ ▀   ▀ ▀      ▀▀▀`,
+  ``,
+  `             ▀▄ ▀▄ ▀▄`,
 ]
 
 export const CancelledError = NamedError.create("UICancelledError", z.void())
@@ -85,6 +87,10 @@ export function logo(pad?: string) {
         parts.push(shadow, "▀", reset)
         continue
       }
+      if (char === ",") {
+        parts.push(shadow, "▄", reset)
+        continue
+      }
       if (char === " ") {
         parts.push(" ")
         continue
@@ -101,6 +107,19 @@ export function logo(pad?: string) {
     result.push(draw(other, right.fg, right.shadow, right.bg))
     result.push(EOL)
   })
+  for (const row of glyphs.accent ?? []) {
+    if (pad) result.push(pad)
+    result.push(
+      " ".repeat(
+        Math.max(
+          0,
+          Math.floor(((glyphs.left[0]?.length ?? 0) + gap.length + (glyphs.right[0]?.length ?? 0) - row.length) / 2),
+        ),
+      ),
+    )
+    result.push(draw(row, left.fg, left.shadow, left.bg))
+    result.push(EOL)
+  }
   return result.join("").trimEnd()
 }
 
