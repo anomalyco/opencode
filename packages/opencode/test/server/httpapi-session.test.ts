@@ -151,6 +151,14 @@ describe("session HttpApi", () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false, share: "disabled" } })
     const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
 
+    const createdEmpty = await json<Session.Info>(
+      await app().request(SessionPaths.create, {
+        method: "POST",
+        headers,
+      }),
+    )
+    expect(createdEmpty.id).toBeTruthy()
+
     const created = await json<Session.Info>(
       await app().request(SessionPaths.create, {
         method: "POST",
