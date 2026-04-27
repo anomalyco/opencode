@@ -18,6 +18,8 @@ import path from "path"
 import { which } from "../../util/which"
 import { AppRuntime } from "@/effect/app-runtime"
 
+const log = Log.create({ service: "command-session" })
+
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
   if (process.platform !== "win32") {
@@ -99,44 +101,38 @@ export const SessionMoveCommand = cmd({
       .option("to-project", {
         describe: "new project ID for the sessions (default: current project ID)",
         type: "string",
+      })
+      .option("dry-run", {
+        describe: "print what would be done without making changes",
+        type: "boolean",
+        default: false,
+      })
+      .option("format", {
+        describe: "output format",
+        type: "string",
+        choices: ["table", "json"],
+        default: "table",
       }),
   handler: async (args) => {
-    if (!args.id?.length && !args.fromDir) {
-      UI.error("At least one of --id or --from-dir is required")
+    if (!args.fromId?.length && !args.fromDir) {
+      UI.error("At least one of --from-id or --from-dir is required")
       process.exit(1)
     }
     await bootstrap(process.cwd(), async () => {
       const conditions: SQL[] = []
-      if (args.id?.length) {
-        const ids = args.id.map((id) => SessionID.make(id))
-        conditions.push(inArray(SessionTable.id, ids))
+      if (args.fromId?.length) conditions.push(inArray(SessionTable.id, args.fromId.map((id) => SessionID.make(id))))
+      if (args.fromDir)
+        conditions.push(eq(SessionTable.directory, args.fromDir === "cwd" ? process.cwd() : Filesystem.resolve(args.fromDir)))
+      const where = conditions.length === 1 ? conditions[0] : and(...conditions)
+      const set: Record<string, string> = {
+        directory: args.toDirectory ? Filesystem.resolve(args.toDirectory) : Instance.worktree,
+        project_id: args.toProject ?? Instance.project.id,
       }
-      if (args.fromDir) {
-        const dir = args.fromDir === "cwd" ? process.cwd() : Filesystem.resolve(args.fromDir)
-        conditions.push(eq(SessionTable.directory, dir))
-      }
-      const set: Record<string, string> = {}
-      set.directory = args.toDirectory ? Filesystem.resolve(args.toDirectory) : Instance.worktree
-      set.project_id = args.toProject ?? Instance.project.id
-      const result = Database.use((db) =>
-        db
-          .update(SessionTable)
-          .set(set)
-          .where(conditions.length === 1 ? conditions[0] : and(...conditions))
-          .returning()
-          .all(),
-      )
-      if (result.length === 0) {
-        UI.error("No sessions found matching the given criteria")
-        process.exit(1)
-      }
-      for (const row of result) {
-        UI.println(
-          UI.Style.TEXT_SUCCESS_BOLD +
-            `moved ${row.id} directory=${row.directory} project=${row.project_id}` +
-            UI.Style.TEXT_NORMAL,
-        )
-      }
+      const before = Database.use((db) => db.select().from(SessionTable).where(where).all()).map(Session.fromRow)
+      if (before.length === 0) return
+      log.debug("session move parameters", { set })
+      if (!args.dryRun) Database.use((db) => db.update(SessionTable).set(set).where(where).run())
+      console.log(args.format === "json" ? formatSessionJSON(before) : formatSessionTable(before))
     })
   },
 })
