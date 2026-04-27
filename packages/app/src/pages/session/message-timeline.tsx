@@ -250,6 +250,7 @@ export function MessageTimeline(props: {
   setRevealMessage?: (fn: (id: string) => void) => void
 }) {
   let touchGesture: number | undefined
+  let contentRef: HTMLDivElement | undefined
 
   const navigate = useNavigate()
   const globalSDK = useGlobalSDK()
@@ -266,6 +267,7 @@ export function MessageTimeline(props: {
   let viewport: HTMLDivElement | undefined
   let windowFrame: number | undefined
   let bottomFrame: number | undefined
+  let mutationFrame: number | undefined
   let windowAdjustVersion = 0
   const turnHeights = new Map<string, number>()
 
@@ -697,6 +699,46 @@ export function MessageTimeline(props: {
   onCleanup(() => {
     if (windowFrame !== undefined) cancelAnimationFrame(windowFrame)
     if (bottomFrame !== undefined) cancelAnimationFrame(bottomFrame)
+    if (mutationFrame !== undefined) cancelAnimationFrame(mutationFrame)
+  })
+
+  createEffect(() => {
+    const body = contentRef
+    if (!body) return
+    if (!isWorking()) return
+    if (!props.live && !props.scroll.bottom) return
+
+    let queued = false
+    const flush = () => {
+      queued = false
+      mutationFrame = undefined
+      const root = viewport
+      if (!root) return
+      if (!isWorking()) return
+      if (!props.live && !props.scroll.bottom) return
+      root.scrollTop = root.scrollHeight
+      props.onScheduleScrollState(root)
+    }
+    const schedule = () => {
+      if (queued) return
+      queued = true
+      mutationFrame = requestAnimationFrame(flush)
+    }
+
+    const observer = new MutationObserver(schedule)
+    observer.observe(body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+
+    onCleanup(() => {
+      observer.disconnect()
+      if (mutationFrame === undefined) return
+      cancelAnimationFrame(mutationFrame)
+      mutationFrame = undefined
+      queued = false
+    })
   })
 
   const activeMessageID = createMemo(() => {
@@ -1673,6 +1715,7 @@ export function MessageTimeline(props: {
         >
           <div
             ref={(el) => {
+              contentRef = el
               props.setContentRef(el)
             }}
             class="min-w-0 w-full"
