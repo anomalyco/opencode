@@ -29,7 +29,7 @@ import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
-import { useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
@@ -83,6 +83,51 @@ type SessionHistoryWindowInput = {
   loadMore: (sessionID: string) => Promise<void>
   userScrolled: () => boolean
   scroller: () => HTMLDivElement | undefined
+}
+
+/**
+ * Returns true when the server reports that the current route points to a
+ * session that does not exist on the connected backend.
+ *
+ * This can happen when the desktop/web app keeps a stale `/session/:id` route
+ * after switching projects or connecting to a different opencode server. The
+ * SDK may wrap the original NotFoundError in `cause`, so walk the error chain
+ * instead of checking only the top-level error.
+ */
+function isSessionNotFoundError(error: unknown, sessionID: string) {
+  let current: unknown = error
+
+  while (current) {
+    if (typeof current === "string") {
+      return current.includes("Session not found") || current.includes(`Session not found: ${sessionID}`)
+    }
+
+    if (current instanceof Error) {
+      if (current.name === "NotFoundError") return true
+      if (current.message.includes("Session not found")) return true
+      if (current.message.includes(sessionID) && current.message.toLowerCase().includes("not found")) return true
+
+      current = current.cause
+      continue
+    }
+
+    if (typeof current === "object") {
+      const value = current as Record<string, unknown>
+      const name = typeof value.name === "string" ? value.name : ""
+      const message = typeof value.message === "string" ? value.message : ""
+
+      if (name === "NotFoundError") return true
+      if (message.includes("Session not found")) return true
+      if (message.includes(sessionID) && message.toLowerCase().includes("not found")) return true
+
+      current = value.cause
+      continue
+    }
+
+    return false
+  }
+
+  return false
 }
 
 /**
@@ -333,6 +378,7 @@ export default function Page() {
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const navigate = useNavigate()
   const { params, sessionKey, tabs, view } = useSessionLayout()
 
   createEffect(() => {
@@ -755,17 +801,21 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
-  const [sessionSync] = createResource(
+  type SessionSyncKey = readonly [string, string | undefined]
+
+  const [sessionSync] = createResource<string | undefined, SessionSyncKey>(
     () => [sdk.directory, params.id] as const,
-    ([directory, id]) => {
+    async ([directory, id]: SessionSyncKey) => {
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+
       refreshFrame = undefined
       refreshTimer = undefined
+
       if (!id) return
 
-      const cached = untrack(() => sync.data.message[id] !== undefined)
-      const stale = !cached
+      const cached: boolean = untrack(() => sync.data.message[id] !== undefined)
+      const stale: boolean = !cached
         ? false
         : (() => {
             const info = getSessionPrefetch(directory, id)
@@ -777,14 +827,36 @@ export default function Page() {
         refreshFrame = undefined
         refreshTimer = window.setTimeout(() => {
           refreshTimer = undefined
+
           if (params.id !== id) return
+
           untrack(() => {
-            if (stale) void sync.session.sync(id, { force: true })
+            if (!stale) return
+
+            void sync.session.sync(id, { force: true }).catch((error) => {
+              if (isSessionNotFoundError(error, id)) return
+              console.debug("[session] failed to refresh session", { id, error })
+            })
           })
         }, 0)
       })
 
-      return sync.session.sync(id)
+      try {
+        await sync.session.sync(id)
+        return ""
+      } catch (error) {
+        if (!isSessionNotFoundError(error, id)) throw error
+        if (params.id !== id) return ""
+
+        showToast({
+          variant: "error",
+          title: "Session not found",
+          description: "This session does not exist on the connected server.",
+        })
+
+        navigate("../", { replace: true })
+        return ""
+      }
     },
   )
 
