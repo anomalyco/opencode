@@ -55,6 +55,8 @@ OpenCode Zen은 OpenCode의 다른 provider와 똑같이 작동합니다.
 
 | 모델                  | 모델 ID               | 엔드포인트                                         | AI SDK 패키지               |
 | --------------------- | --------------------- | -------------------------------------------------- | --------------------------- |
+| GPT 5.5               | gpt-5.5               | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.5 Pro           | gpt-5.5-pro           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.4               | gpt-5.4               | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.4 Pro           | gpt-5.4-pro           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.4 Mini          | gpt-5.4-mini          | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -95,7 +97,7 @@ OpenCode Zen은 OpenCode의 다른 provider와 똑같이 작동합니다.
 | Hy3 Preview Free      | hy3-preview-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-OpenCode config에서 사용하는 [모델 ID](/docs/config/#models)는 `opencode/<model-id>` 형식입니다. 예를 들어 GPT 5.4를 사용하려면 config에서 `opencode/gpt-5.4`를 사용하면 됩니다.
+OpenCode config에서 사용하는 [모델 ID](/docs/config/#models)는 `opencode/<model-id>` 형식입니다. 예를 들어 GPT 5.5를 사용하려면 config에서 `opencode/gpt-5.5`를 사용하면 됩니다.
 
 ---
 
@@ -138,11 +140,14 @@ https://opencode.ai/zen/v1/models
 | Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00  | $0.30       | $3.75        |
 | Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50  | $0.60       | $7.50        |
 | Claude Haiku 4.5                  | $1.00  | $5.00   | $0.10       | $1.25        |
-| Claude Haiku 3.5                  | $0.80  | $4.00   | $0.08       | $1.00        |
 | Gemini 3.1 Pro (≤ 200K tokens)    | $2.00  | $12.00  | $0.20       | -            |
 | Gemini 3.1 Pro (> 200K tokens)    | $4.00  | $18.00  | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50  | $3.00   | $0.05       | -            |
-| GPT 5.4                           | $2.50  | $15.00  | $0.25       | -            |
+| GPT 5.5 (≤ 272K tokens)           | $5.00  | $30.00  | $0.50       | -            |
+| GPT 5.5 (> 272K tokens)           | $10.00 | $45.00  | $1.00       | -            |
+| GPT 5.5 Pro                       | $30.00 | $180.00 | $30.00      | -            |
+| GPT 5.4 (≤ 272K tokens)           | $2.50  | $15.00  | $0.25       | -            |
+| GPT 5.4 (> 272K tokens)           | $5.00  | $22.50  | $0.50       | -            |
 | GPT 5.4 Pro                       | $30.00 | $180.00 | $30.00      | -            |
 | GPT 5.4 Mini                      | $0.75  | $4.50   | $0.075      | -            |
 | GPT 5.4 Nano                      | $0.20  | $1.25   | $0.02       | -            |
@@ -194,15 +199,23 @@ https://opencode.ai/zen/v1/models
 
 ### 지원 중단 모델
 
-| 모델             | 지원 중단 날짜 |
-| ---------------- | -------------- |
-| MiniMax M2.1     | March 15, 2026 |
-| GLM 4.7          | March 15, 2026 |
-| GLM 4.6          | March 15, 2026 |
-| Gemini 3 Pro     | March 9, 2026  |
-| Kimi K2 Thinking | March 6, 2026  |
-| Kimi K2          | March 6, 2026  |
-| Qwen3 Coder 480B | Feb 6, 2026    |
+| 모델               | 지원 중단 날짜 |
+| ------------------ | -------------- |
+| GPT 5.2 Codex      | July 23, 2026  |
+| GPT 5.1 Codex      | July 23, 2026  |
+| GPT 5.1 Codex Max  | July 23, 2026  |
+| GPT 5.1 Codex Mini | July 23, 2026  |
+| GPT 5 Codex        | July 23, 2026  |
+| Claude Sonnet 4    | June 15, 2026  |
+| GLM 5              | May 14, 2026   |
+| MiniMax M2.1       | March 15, 2026 |
+| GLM 4.7            | March 15, 2026 |
+| GLM 4.6            | March 15, 2026 |
+| Gemini 3 Pro       | March 9, 2026  |
+| Kimi K2 Thinking   | March 6, 2026  |
+| Kimi K2            | March 6, 2026  |
+| Claude Haiku 3.5   | Feb 16, 2026   |
+| Qwen3 Coder 480B   | Feb 6, 2026    |
 
 ---
 
