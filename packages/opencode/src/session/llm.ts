@@ -39,6 +39,7 @@ import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMNative } from "./llm-native"
 import { LLMNativeEvents } from "./llm-native-events"
+import { LLMNativeTools } from "./llm-native-tools"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -517,10 +518,30 @@ const live: Layer.Layer<
       // per-element, `map.flush()` emits the remaining `*-end` events for any
       // text/reasoning/tool-input parts left open at stream close. The flush
       // stream is built lazily (`Stream.unwrap(Effect.sync(...))`) so it
-      // observes the mapper's final state after `mapConcat` has consumed every
+      // observes the mapper's final state after `flatMap` has consumed every
       // upstream event.
+      //
+      // The upstream source is one of two paths:
+      //
+      //   - When `nativeTools` is unset (zero-tool sessions), call the LLM
+      //     client directly. One model round, single stream, no dispatch.
+      //   - When `nativeTools` is set, hand both the request and the matching
+      //     AI SDK `tools` record to `LLMNativeTools.runWithTools`, which
+      //     drives the multi-round loop with streaming dispatch: each
+      //     `tool-call` event forks a tool handler fiber, and the
+      //     handler's result is injected back into the same stream as a
+      //     synthetic `tool-result` event. Long-running tools don't block
+      //     subsequent tool-call streaming.
       const map = LLMNativeEvents.mapper()
-      return nativeClient.stream(llmRequest).pipe(
+      const upstream = input.nativeTools && input.nativeTools.length > 0
+        ? LLMNativeTools.runWithTools({
+            client: nativeClient,
+            request: llmRequest,
+            tools: input.tools,
+            abort: input.abort,
+          })
+        : nativeClient.stream(llmRequest)
+      return upstream.pipe(
         Stream.flatMap((event) => Stream.fromIterable(map.map(event))),
         Stream.concat(Stream.unwrap(Effect.sync(() => Stream.fromIterable(map.flush())))),
         Stream.provideService(RequestExecutor.Service, executor),

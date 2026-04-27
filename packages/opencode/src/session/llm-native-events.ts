@@ -35,6 +35,37 @@ const stringifyResult = (result: ToolResultValue) => {
   return JSON.stringify(result.value)
 }
 
+// Recognize the opencode `Tool.ExecuteResult` shape inside a `tool-result`
+// event's `result.value`. Native-path tool dispatchers wrap their handler
+// output in this shape so the AI-SDK-shaped session event carries the
+// real `title`, `metadata`, and `output` fields rather than the JSON
+// encoding of the whole record. Provider-executed tools (Anthropic
+// `web_search` etc.) and synthetic results that don't follow the shape
+// still go through `stringifyResult` below.
+type ExecuteShape = {
+  readonly title?: unknown
+  readonly metadata?: unknown
+  readonly output?: unknown
+}
+
+const isExecuteResult = (value: unknown): value is ExecuteShape => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const v = value as ExecuteShape
+  return typeof v.output === "string"
+}
+
+const toolResultOutput = (result: ToolResultValue) => {
+  if (result.type !== "json" || !isExecuteResult(result.value)) {
+    return { title: "", metadata: {}, output: stringifyResult(result) }
+  }
+  const value = result.value
+  return {
+    title: typeof value.title === "string" ? value.title : "",
+    metadata: typeof value.metadata === "object" && value.metadata !== null ? (value.metadata as Record<string, unknown>) : {},
+    output: typeof value.output === "string" ? value.output : "",
+  }
+}
+
 const response = () => ({ id: "", timestamp: new Date(0), modelId: "" })
 
 const finishReason = (reason: Extract<LLMEvent, { type: "request-finish" | "step-finish" }>["reason"]) =>
@@ -147,7 +178,7 @@ export const mapper = () => {
             toolCallId: event.id,
             toolName: event.name,
             input: state.toolInputs.get(event.id) ?? {},
-            output: { title: "", metadata: {}, output: stringifyResult(event.result) },
+            output: toolResultOutput(event.result),
           },
         ]
       case "tool-error":
