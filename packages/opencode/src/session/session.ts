@@ -37,7 +37,7 @@ import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { optionalOmitUndefined, withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "session" })
 
@@ -128,7 +128,7 @@ const Summary = Schema.Struct({
   additions: Schema.Number,
   deletions: Schema.Number,
   files: Schema.Number,
-  diffs: Schema.optional(Schema.Array(Snapshot.FileDiff)),
+  diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
 })
 
 const Share = Schema.Struct({
@@ -138,31 +138,31 @@ const Share = Schema.Struct({
 const Time = Schema.Struct({
   created: Schema.Number,
   updated: Schema.Number,
-  compacting: Schema.optional(Schema.Number),
-  archived: Schema.optional(Schema.Number),
+  compacting: optionalOmitUndefined(Schema.Number),
+  archived: optionalOmitUndefined(Schema.Number),
 })
 
 const Revert = Schema.Struct({
   messageID: MessageID,
-  partID: Schema.optional(PartID),
-  snapshot: Schema.optional(Schema.String),
-  diff: Schema.optional(Schema.String),
+  partID: optionalOmitUndefined(PartID),
+  snapshot: optionalOmitUndefined(Schema.String),
+  diff: optionalOmitUndefined(Schema.String),
 })
 
 export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
   projectID: ProjectID,
-  workspaceID: Schema.optional(WorkspaceID),
+  workspaceID: optionalOmitUndefined(WorkspaceID),
   directory: Schema.String,
-  parentID: Schema.optional(SessionID),
-  summary: Schema.optional(Summary),
-  share: Schema.optional(Share),
+  parentID: optionalOmitUndefined(SessionID),
+  summary: optionalOmitUndefined(Summary),
+  share: optionalOmitUndefined(Share),
   title: Schema.String,
   version: Schema.String,
   time: Time,
-  permission: Schema.optional(Permission.Ruleset),
-  revert: Schema.optional(Revert),
+  permission: optionalOmitUndefined(Permission.Ruleset),
+  revert: optionalOmitUndefined(Revert),
 })
   .annotate({ identifier: "Session" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -170,7 +170,7 @@ export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const ProjectInfo = Schema.Struct({
   id: ProjectID,
-  name: Schema.optional(Schema.String),
+  name: optionalOmitUndefined(Schema.String),
   worktree: Schema.String,
 })
   .annotate({ identifier: "ProjectSummary" })
