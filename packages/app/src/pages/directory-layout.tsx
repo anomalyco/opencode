@@ -2,7 +2,7 @@ import { DataProvider } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, createResource, type ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, createResource, type ParentProps, Show, untrack } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
@@ -58,8 +58,10 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     const dir = resolved()
     if (!dir) return
-    layout.projects.open(dir)
-    server.projects.touch(dir)
+    untrack(() => {
+      layout.projects.open(dir)
+      server.projects.touch(dir)
+    })
   })
 
   createEffect(() => {
