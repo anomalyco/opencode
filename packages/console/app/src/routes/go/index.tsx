@@ -12,7 +12,7 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconMiniMax, IconMiMo, IconZai, IconAlibaba } from "~/component/icon"
+import { IconMiniMax, IconMiMo, IconZai, IconAlibaba, IconDeepSeek } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -339,6 +339,9 @@ export default function Home() {
                 </div>
                 <div>
                   <IconAlibaba width="24" height="24" />
+                </div>
+                <div>
+                  <IconDeepSeek width="24" height="24" />
                 </div>
                 <div>
                   <IconMiMo width="24" height="24" />
