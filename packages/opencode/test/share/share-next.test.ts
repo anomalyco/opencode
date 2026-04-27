@@ -6,7 +6,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
 import { Account } from "../../src/account/account"
 import { AccountRepo } from "../../src/account/repo"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config"
 import { Provider } from "../../src/provider"
