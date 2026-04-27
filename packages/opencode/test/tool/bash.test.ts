@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import os from "os"
 import path from "path"
+import { Config } from "../../src/config"
 import { Shell } from "../../src/shell/shell"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
@@ -21,6 +22,7 @@ const runtime = ManagedRuntime.make(
     AppFileSystem.defaultLayer,
     Plugin.defaultLayer,
     Truncate.defaultLayer,
+    Config.defaultLayer,
     Agent.defaultLayer,
   ),
 )
@@ -150,6 +152,33 @@ describe("tool.bash", () => {
         )
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("test")
+      },
+    })
+  })
+
+  test("falls back from terminal-only configured shell", async () => {
+    await using tmp = await tmpdir({
+      config: { shell: "fish" },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await initBash()
+        const fallback = Shell.name(Shell.acceptable("fish"))
+        expect(fallback).not.toBe("fish")
+        expect(bash.description).toContain(fallback)
+
+        const result = await Effect.runPromise(
+          bash.execute(
+            {
+              command: "echo fallback",
+              description: "Echo fallback text",
+            },
+            ctx,
+          ),
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain("fallback")
       },
     })
   })
