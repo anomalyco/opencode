@@ -764,6 +764,12 @@ export function Prompt(props: PromptProps) {
               return `Note: The user selected lines ${start.line} to ${end.line} from "${editorSelection.filePath}": ${editorSelection.text}`
             })(),
             synthetic: true,
+            metadata: {
+              kind: "editor_context",
+              source: editorSelection.source ?? "editor",
+              filePath: editorSelection.filePath,
+              selection: editorSelection.selection,
+            },
           },
         ]
       : []
