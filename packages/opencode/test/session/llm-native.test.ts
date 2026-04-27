@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AnthropicMessages, BedrockConverse, Gemini, LLMClient, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm"
+import { AnthropicMessages, BedrockConverse, Gemini, LLMClient, OpenAICompatibleChat, OpenAIResponses, ProviderPatch } from "@opencode-ai/llm"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { LLMNative } from "../../src/session/llm-native"
@@ -576,12 +576,13 @@ describe("LLMNative.request", () => {
     })
   }))
 
-  // Cache hint policy. The LLM-native path mirrors the AI-SDK applyCaching
-  // policy from packages/opencode/src/provider/transform.ts: mark the first 2
-  // system parts and the last 2 messages as cacheable, gated on the resolved
-  // model's `capabilities.cache.prompt`. Adapters lower CacheHint to the
-  // provider-specific marker (cache_control on Anthropic, cachePoint on
-  // Bedrock); non-cache-capable adapters never see a hint.
+  // Cache hint policy. The bridge produces a hint-free `LLMRequest`; the
+  // `ProviderPatch.cachePromptHints` patch (loaded in `ProviderPatch.defaults`)
+  // marks first-2 system parts and last-2 messages with ephemeral cache
+  // hints when the model advertises `capabilities.cache.prompt`. Adapters
+  // then lower the hints to the provider-specific marker — `cache_control`
+  // on Anthropic, `cachePoint` on Bedrock. Non-cache adapters never see a
+  // hint thanks to the predicate gate.
 
   const anthropicModel = () =>
     model({
@@ -601,7 +602,7 @@ describe("LLMNative.request", () => {
       },
     })
 
-  it.effect("applies cache hints to the first 2 system parts on cache-capable models", () =>
+  it.effect("lowers cache hints to Anthropic cache_control on the first 2 system blocks", () =>
     Effect.gen(function* () {
       const mdl = anthropicModel()
       const userID = MessageID.ascending()
@@ -611,15 +612,23 @@ describe("LLMNative.request", () => {
         system: ["First", "Second", "Third"],
         messages: [userMessage(mdl, userID, [textPart(userID, "hello")])],
       })
+      const prepared = yield* LLMClient.make({
+        adapters: [AnthropicMessages.adapter],
+        patches: ProviderPatch.defaults,
+      }).prepare(request)
 
-      expect(request.system).toHaveLength(3)
-      expect(request.system[0]).toMatchObject({ text: "First", cache: { type: "ephemeral" } })
-      expect(request.system[1]).toMatchObject({ text: "Second", cache: { type: "ephemeral" } })
-      expect(request.system[2]).toMatchObject({ text: "Third" })
-      expect(request.system[2].cache).toBeUndefined()
+      expect(prepared.target).toMatchObject({
+        system: [
+          { type: "text", text: "First", cache_control: { type: "ephemeral" } },
+          { type: "text", text: "Second", cache_control: { type: "ephemeral" } },
+          { type: "text", text: "Third" },
+        ],
+      })
+      // The third system block must not carry a cache_control marker.
+      expect((prepared.target as { system: ReadonlyArray<{ cache_control?: unknown }> }).system[2].cache_control).toBeUndefined()
     }))
 
-  it.effect("applies cache hints to the final text part of the last 2 messages on cache-capable models", () =>
+  it.effect("lowers cache hints to Anthropic cache_control on the last text block of the last 2 messages", () =>
     Effect.gen(function* () {
       const mdl = anthropicModel()
       const messageIds = [MessageID.ascending(), MessageID.ascending(), MessageID.ascending()]
@@ -628,14 +637,21 @@ describe("LLMNative.request", () => {
         model: mdl,
         messages: messageIds.map((id, index) => userMessage(mdl, id, [textPart(id, `m${index}`)])),
       })
+      const prepared = yield* LLMClient.make({
+        adapters: [AnthropicMessages.adapter],
+        patches: ProviderPatch.defaults,
+      }).prepare(request)
 
-      expect(request.messages).toHaveLength(3)
-      // First message: no cache hint.
-      const first = request.messages[0].content[0]
-      if (first.type === "text") expect(first.cache).toBeUndefined()
-      // Last two messages: cache on the (only) text part.
-      expect(request.messages[1].content[0]).toMatchObject({ type: "text", text: "m1", cache: { type: "ephemeral" } })
-      expect(request.messages[2].content[0]).toMatchObject({ type: "text", text: "m2", cache: { type: "ephemeral" } })
+      expect(prepared.target).toMatchObject({
+        messages: [
+          { role: "user", content: [{ type: "text", text: "m0" }] },
+          { role: "user", content: [{ type: "text", text: "m1", cache_control: { type: "ephemeral" } }] },
+          { role: "user", content: [{ type: "text", text: "m2", cache_control: { type: "ephemeral" } }] },
+        ],
+      })
+      // The first message's text must not carry cache_control.
+      const target = prepared.target as { messages: ReadonlyArray<{ content: ReadonlyArray<{ cache_control?: unknown }> }> }
+      expect(target.messages[0].content[0].cache_control).toBeUndefined()
     }))
 
   it.effect("lowers cache hints to Bedrock Converse cachePoint marker blocks end-to-end", () =>
@@ -648,7 +664,10 @@ describe("LLMNative.request", () => {
         system: ["You are concise."],
         messages: [userMessage(mdl, userID, [textPart(userID, "hello")])],
       })
-      const prepared = yield* LLMClient.make({ adapters: [BedrockConverse.adapter] }).prepare(request)
+      const prepared = yield* LLMClient.make({
+        adapters: [BedrockConverse.adapter],
+        patches: ProviderPatch.defaults,
+      }).prepare(request)
 
       expect(prepared.target).toMatchObject({
         system: [{ text: "You are concise." }, { cachePoint: { type: "default" } }],
@@ -663,8 +682,8 @@ describe("LLMNative.request", () => {
 
   it.effect("does not apply cache hints when the model does not support prompt caching", () =>
     Effect.gen(function* () {
-      // gpt-5 / openai resolves to openai-responses, which advertises
-      // capabilities.cache.prompt: false. The bridge must skip the policy.
+      // gpt-5 / openai resolves to openai-responses with cache.prompt: false.
+      // The patch's `when` predicate must skip, leaving the target hint-free.
       const mdl = model()
       const ids = [MessageID.ascending(), MessageID.ascending()]
       const request = yield* LLMNative.request({
@@ -673,12 +692,16 @@ describe("LLMNative.request", () => {
         system: ["A", "B", "C"],
         messages: ids.map((id, index) => userMessage(mdl, id, [textPart(id, `m${index}`)])),
       })
+      const prepared = yield* LLMClient.make({
+        adapters: [OpenAIResponses.adapter],
+        patches: ProviderPatch.defaults,
+      }).prepare(request)
 
-      for (const part of request.system) expect(part.cache).toBeUndefined()
-      for (const message of request.messages) {
-        for (const part of message.content) {
-          if (part.type === "text") expect(part.cache).toBeUndefined()
-        }
-      }
+      // The serialized OpenAI Responses payload has no cache concept; the
+      // assertion is that nothing in the target carries a cache marker.
+      const json = JSON.stringify(prepared.target)
+      expect(json).not.toContain("cache_control")
+      expect(json).not.toContain("cachePoint")
+      expect(json).not.toContain("ephemeral")
     }))
 })

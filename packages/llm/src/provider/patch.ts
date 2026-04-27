@@ -1,4 +1,5 @@
-import { Model, Patch } from "../patch"
+import { Model, Patch, predicate } from "../patch"
+import { CacheHint } from "../schema"
 import type { ContentPart, LLMRequest } from "../schema"
 
 const schemaIntentKeys = [
@@ -103,6 +104,50 @@ export const sanitizeGeminiToolSchema = Patch.toolSchema("gemini.sanitize-tool-s
   }),
 })
 
-export const defaults = [removeEmptyAnthropicContent, scrubClaudeToolIds, scrubMistralToolIds, sanitizeGeminiToolSchema]
+// Single shared CacheHint instance — the cache patch reuses this one object
+// across every marked part. Adapters lower CacheHint structurally
+// (`cache?.type === "ephemeral"`) so reference equality is incidental, but
+// keeping a class instance preserves any consumer that checks
+// `instanceof CacheHint`.
+const EPHEMERAL_CACHE = new CacheHint({ type: "ephemeral" })
+
+const withCacheOnLastText = (content: ReadonlyArray<ContentPart>): ReadonlyArray<ContentPart> => {
+  const last = content.findLastIndex((part) => part.type === "text")
+  if (last === -1) return content
+  return content.map((part, index) =>
+    index === last && part.type === "text" ? { ...part, cache: EPHEMERAL_CACHE } : part,
+  )
+}
+
+// Anthropic and Bedrock both honor up to four positional cache breakpoints.
+// We mark the first 2 system parts and the last 2 messages — the same policy
+// OpenCode uses on the AI-SDK path (`session.applyCaching` in
+// packages/opencode/src/provider/transform.ts). The capability gate makes
+// this a no-op for adapters that don't advertise prompt-level caching, so
+// non-cache providers (OpenAI Responses, Gemini, OpenAI-compatible Chat)
+// are unaffected.
+export const cachePromptHints = Patch.prompt("cache.prompt-hints", {
+  reason: "mark first 2 system parts and last 2 messages with ephemeral cache hints on cache-capable adapters",
+  when: predicate((context) => context.model.capabilities.cache?.prompt === true),
+  apply: (request) => ({
+    ...request,
+    system: request.system.map((part, index) =>
+      index < 2 ? { ...part, cache: EPHEMERAL_CACHE } : part,
+    ),
+    messages: request.messages.map((message, index) =>
+      index < request.messages.length - 2
+        ? message
+        : { ...message, content: withCacheOnLastText(message.content) },
+    ),
+  }),
+})
+
+export const defaults = [
+  removeEmptyAnthropicContent,
+  scrubClaudeToolIds,
+  scrubMistralToolIds,
+  sanitizeGeminiToolSchema,
+  cachePromptHints,
+]
 
 export * as ProviderPatch from "./patch"

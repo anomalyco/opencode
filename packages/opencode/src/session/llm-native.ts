@@ -1,4 +1,4 @@
-import { CacheHint, LLM, type ContentPart, type LLMRequest, type Message as CoreMessage } from "@opencode-ai/llm"
+import { LLM, type ContentPart, type Message as CoreMessage } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { ProviderLLMBridge } from "@/provider/llm-bridge"
 import * as EffectZod from "@/util/effect-zod"
@@ -169,42 +169,6 @@ export const toolDefinition = (input: { readonly model: Provider.Model; readonly
     },
   })
 
-// Mirrors the AI SDK path's prompt-cache policy, gated by model capability.
-const EPHEMERAL_CACHE = new CacheHint({ type: "ephemeral" })
-
-const withCacheOnLastText = (content: ReadonlyArray<ContentPart>): ReadonlyArray<ContentPart> => {
-  const index = content.findLastIndex((part) => part.type === "text")
-  if (index === -1) return content
-  return content.map((part, position) =>
-    position === index && part.type === "text" ? { ...part, cache: EPHEMERAL_CACHE } : part,
-  )
-}
-
-const updateMessageContent = (message: CoreMessage, content: ReadonlyArray<ContentPart>) => {
-  if (content === message.content) return message
-  return LLM.message({
-    id: message.id,
-    role: message.role,
-    content,
-    metadata: message.metadata,
-    native: message.native,
-  })
-}
-
-const applyCachePolicy = (request: LLMRequest): LLMRequest => {
-  if (!request.model.capabilities.cache?.prompt) return request
-  const system = request.system.map((part, index) =>
-    index < 2 ? { ...part, cache: EPHEMERAL_CACHE } : part,
-  )
-  const lastTwoStart = Math.max(0, request.messages.length - 2)
-  const messages = request.messages.map((message, index) =>
-    index < lastTwoStart
-      ? message
-      : updateMessageContent(message, withCacheOnLastText(message.content)),
-  )
-  return LLM.updateRequest(request, { system, messages })
-}
-
 export const request = Effect.fn("LLMNative.request")(function* (input: RequestInput) {
   const unsupported = unsupportedPart(input)
   if (unsupported) {
@@ -222,23 +186,25 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
     })
   }
 
-  return applyCachePolicy(
-    LLM.request({
-      id: input.id,
-      model,
-      system: input.system?.filter((part) => part.trim() !== "").map(LLM.system) ?? [],
-      messages: input.messages.flatMap(messages),
-      tools: input.tools?.map((tool) => toolDefinition({ model: input.model, tool })) ?? [],
-      toolChoice: input.toolChoice,
-      generation: input.generation,
-      metadata: input.metadata,
-      native: {
-        opencodeProviderID: input.provider.id,
-        opencodeModelID: input.model.id,
-        ...input.native,
-      },
-    }),
-  )
+  // Cache hints, tool-id scrubbing, and other adapter-aware patches live in
+  // `@opencode-ai/llm`'s `ProviderPatch` registry. Callers wire them in at
+  // `client({ adapters, patches: ProviderPatch.defaults })` time so the
+  // bridge stays focused on shape conversion.
+  return LLM.request({
+    id: input.id,
+    model,
+    system: input.system?.filter((part) => part.trim() !== "").map(LLM.system) ?? [],
+    messages: input.messages.flatMap(messages),
+    tools: input.tools?.map((tool) => toolDefinition({ model: input.model, tool })) ?? [],
+    toolChoice: input.toolChoice,
+    generation: input.generation,
+    metadata: input.metadata,
+    native: {
+      opencodeProviderID: input.provider.id,
+      opencodeModelID: input.model.id,
+      ...input.native,
+    },
+  })
 })
 
 export * as LLMNative from "./llm-native"
