@@ -2,6 +2,7 @@ import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "./auth"
 
 const root = "/question"
 
@@ -45,7 +46,8 @@ export const QuestionApi = HttpApi.make("question")
           title: "question",
           description: "Question routes.",
         }),
-      ),
+      )
+      .middleware(Authorization),
   )
   .annotateMerge(
     OpenApi.annotations({

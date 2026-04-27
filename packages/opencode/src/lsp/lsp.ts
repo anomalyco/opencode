@@ -7,73 +7,68 @@ import { pathToFileURL, fileURLToPath } from "url"
 import * as LSPServer from "./server"
 import z from "zod"
 import { Config } from "../config"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Process } from "../util"
 import { spawn as lspspawn } from "./launch"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { withStatics } from "@/util/schema"
+import { zod, ZodOverride } from "@/util/effect-zod"
 
 const log = Log.create({ service: "lsp" })
 
 export const Event = {
-  Updated: BusEvent.define("lsp.updated", z.object({})),
+  Updated: BusEvent.define("lsp.updated", Schema.Struct({})),
 }
 
-export const Range = z
-  .object({
-    start: z.object({
-      line: z.number(),
-      character: z.number(),
-    }),
-    end: z.object({
-      line: z.number(),
-      character: z.number(),
-    }),
-  })
-  .meta({
-    ref: "Range",
-  })
-export type Range = z.infer<typeof Range>
+const Position = Schema.Struct({
+  line: Schema.Number,
+  character: Schema.Number,
+})
 
-export const Symbol = z
-  .object({
-    name: z.string(),
-    kind: z.number(),
-    location: z.object({
-      uri: z.string(),
-      range: Range,
-    }),
-  })
-  .meta({
-    ref: "Symbol",
-  })
-export type Symbol = z.infer<typeof Symbol>
+export const Range = Schema.Struct({
+  start: Position,
+  end: Position,
+})
+  .annotate({ identifier: "Range" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Range = typeof Range.Type
 
-export const DocumentSymbol = z
-  .object({
-    name: z.string(),
-    detail: z.string().optional(),
-    kind: z.number(),
+export const Symbol = Schema.Struct({
+  name: Schema.String,
+  kind: Schema.Number,
+  location: Schema.Struct({
+    uri: Schema.String,
     range: Range,
-    selectionRange: Range,
-  })
-  .meta({
-    ref: "DocumentSymbol",
-  })
-export type DocumentSymbol = z.infer<typeof DocumentSymbol>
+  }),
+})
+  .annotate({ identifier: "Symbol" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Symbol = typeof Symbol.Type
 
-export const Status = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    root: z.string(),
-    status: z.union([z.literal("connected"), z.literal("error")]),
-  })
-  .meta({
-    ref: "LSPStatus",
-  })
-export type Status = z.infer<typeof Status>
+export const DocumentSymbol = Schema.Struct({
+  name: Schema.String,
+  detail: Schema.optional(Schema.String),
+  kind: Schema.Number,
+  range: Range,
+  selectionRange: Range,
+})
+  .annotate({ identifier: "DocumentSymbol" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type DocumentSymbol = typeof DocumentSymbol.Type
+
+export const Status = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  root: Schema.String,
+  status: Schema.Literals(["connected", "error"]).annotate({
+    [ZodOverride]: z.union([z.literal("connected"), z.literal("error")]),
+  }),
+})
+  .annotate({ identifier: "LSPStatus" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Status = typeof Status.Type
 
 enum SymbolKind {
   File = 1,
@@ -141,7 +136,7 @@ export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly status: () => Effect.Effect<Status[]>
   readonly hasClients: (file: string) => Effect.Effect<boolean>
-  readonly touchFile: (input: string, waitForDiagnostics?: boolean) => Effect.Effect<void>
+  readonly touchFile: (input: string, diagnostics?: "document" | "full") => Effect.Effect<void>
   readonly diagnostics: () => Effect.Effect<Record<string, LSPClient.Diagnostic[]>>
   readonly hover: (input: LocInput) => Effect.Effect<any>
   readonly definition: (input: LocInput) => Effect.Effect<any[]>
@@ -363,15 +358,21 @@ export const layer = Layer.effect(
       })
     })
 
-    const touchFile = Effect.fn("LSP.touchFile")(function* (input: string, waitForDiagnostics?: boolean) {
+    const touchFile = Effect.fn("LSP.touchFile")(function* (input: string, diagnostics?: "document" | "full") {
       log.info("touching file", { file: input })
       const clients = yield* getClients(input)
       yield* Effect.promise(() =>
         Promise.all(
           clients.map(async (client) => {
-            const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
-            await client.notify.open({ path: input })
-            return wait
+            const after = Date.now()
+            const version = await client.notify.open({ path: input })
+            if (!diagnostics) return
+            return client.waitForDiagnostics({
+              path: input,
+              version,
+              mode: diagnostics,
+              after,
+            })
           }),
         ).catch((err) => {
           log.error("failed to touch file", { err, file: input })

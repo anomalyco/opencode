@@ -1,4 +1,3 @@
-import z from "zod"
 import sessionProjectors from "../session/projectors"
 import { SyncEvent } from "@/sync"
 import { Session } from "@/session"
@@ -10,7 +9,7 @@ export function initProjectors() {
     projectors: sessionProjectors,
     convertEvent: (type, data) => {
       if (type === "session.updated") {
-        const id = (data as z.infer<typeof Session.Event.Updated.schema>).sessionID
+        const id = (data as SyncEvent.Event<typeof Session.Event.Updated>["data"]).sessionID
         const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
 
         if (!row) return data

@@ -111,9 +111,12 @@ describe("step-finish token propagation via Bus event", () => {
             mode: "",
           } as unknown as MessageV2.Info)
 
+          // Bus subscribers receive readonly Schema.Type payloads; `MessageV2.Part`
+          // is the mutable domain type. Cast bridges the two — safe because the
+          // test only reads the value afterwards.
           let received: MessageV2.Part | undefined
           const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, (event) => {
-            received = event.properties.part
+            received = event.properties.part as MessageV2.Part
           })
 
           const tokens = {
