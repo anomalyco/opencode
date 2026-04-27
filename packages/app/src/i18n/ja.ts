@@ -209,7 +209,7 @@ export const dict = {
   "common.saving": "保存中...",
   "common.default": "デフォルト",
   "common.attachment": "添付ファイル",
-  "prompt.placeholder.shell": "シェルコマンドを入力...",
+  "prompt.placeholder.shell": "シェルコマンドを入力... {{example}}",
   "prompt.placeholder.normal": '何でも聞いてください... "{{example}}"',
   "prompt.placeholder.simple": "何でも聞いてください...",
   "prompt.placeholder.summarizeComments": "コメントを要約…",
