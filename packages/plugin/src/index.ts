@@ -241,6 +241,23 @@ export interface Hooks {
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>
   /**
+   * Called before the model is locked in for a chat-completion request.
+   * Plugins may rewrite `output.providerID` and `output.modelID` to route
+   * the request to a different model — useful for hybrid local/cloud
+   * routing, cascade fallbacks, A/B testing, and similar dispatch
+   * decisions. The output is pre-filled with the IDs of the originally
+   * selected model, so plugins that do not need to rewrite anything can
+   * leave it untouched (no-op).
+   *
+   * If `providerID` or `modelID` is changed, the new pair is resolved via
+   * `Provider.getModel()`; an unresolvable pair surfaces as an error from
+   * the LLM stream.
+   */
+  "model.before"?: (
+    input: { sessionID: string; agent: string; model: Model; message: UserMessage },
+    output: { providerID: string; modelID: string },
+  ) => Promise<void>
+  /**
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
