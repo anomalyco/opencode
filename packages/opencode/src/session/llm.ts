@@ -378,7 +378,6 @@ const live: Layer.Layer<
             : {
                 "x-session-affinity": input.sessionID,
                 ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-                "User-Agent": `opencode/${InstallationVersion}`,
               }),
           ...input.model.headers,
           ...headers,
