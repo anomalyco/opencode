@@ -1,5 +1,5 @@
 import { BoxRenderable, RGBA, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes } from "@opentui/core"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -17,7 +17,7 @@ import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
-import { assign } from "./part"
+import { assign, strip } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -43,6 +43,7 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import { Log } from "@/util"
 
 export type PromptProps = {
   sessionID?: string
@@ -206,6 +207,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    queuedDrafts: any[]
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -215,6 +217,18 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    queuedDrafts: [],
+  })
+
+  createEffect(() => {
+    if (status().type === "idle" && store.queuedDrafts.length > 0) {
+      const draft = store.queuedDrafts[0]
+      setStore("queuedDrafts", store.queuedDrafts.slice(1))
+      const { followupMode, ...payload } = draft
+      sdk.client.session.prompt(payload).catch((err) => {
+        Log.Default.error(`[Queue Debug] prompt failed: ${err}`)
+      })
+    }
   })
 
   createEffect(
@@ -810,36 +824,62 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      const followupMode = sync.data.config?.followup ?? "steer"
+      const followupMode = kv.get("followup", "steer")
       const isBusy = status().type !== "idle"
+      
       const isSteer = isBusy && followupMode === "steer"
       
+      if (isBusy && followupMode !== "queue" && store.queuedDrafts.length >= 1) {
+        toast.show({
+          message: `Only one message can be queued in ${followupMode} mode`,
+          variant: "warning",
+          duration: 2000,
+        })
+        return false
+      }
+
       if (isBusy && followupMode === "steer") {
         void sdk.client.session.interrupt({ sessionID, type: "steer" })
       } else if (isBusy && followupMode === "wrap") {
         void sdk.client.session.interrupt({ sessionID, type: "wrap" })
       }
 
-      sdk.client.session
-        .prompt({
-          sessionID,
-          ...selectedModel,
-          messageID,
-          agent: agent.name,
-          model: selectedModel,
-          variant,
-          isSteer,
-          parts: [
-            ...editorParts,
-            {
-              id: PartID.ascending(),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map(assign),
-          ],
+      const payload = {
+        sessionID,
+        ...selectedModel,
+        messageID,
+        agent: agent.name,
+        model: selectedModel,
+        variant,
+        isSteer,
+        parts: [
+          ...editorParts,
+          {
+            id: PartID.ascending(),
+            type: "text" as const,
+            text: inputText,
+          },
+          ...nonTextParts.map(assign),
+        ],
+      }
+
+      if (isBusy && followupMode === "queue") {
+        setStore("queuedDrafts", [...store.queuedDrafts, { ...payload, followupMode }])
+        toast.show({
+          message: "Queued",
+          variant: "info",
+          duration: 2000,
         })
-        .catch(() => {})
+      } else if (isBusy) {
+        sdk.client.session.promptAsync(payload).catch(() => {})
+        toast.show({
+          message: followupMode === "steer" ? "Steering..." : "Wrapping up...",
+          variant: "info",
+          duration: 2000,
+        })
+      } else {
+        sdk.client.session.prompt(payload).catch(() => {})
+      }
     }
     history.append({
       ...store.prompt,
@@ -1045,6 +1085,24 @@ export function Prompt(props: PromptProps) {
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
           >
+            <Show when={store.queuedDrafts.length > 0}>
+              <box flexDirection="column" paddingBottom={1} gap={1}>
+                <For each={store.queuedDrafts}>
+                  {(draft, i) => {
+                    const text = draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n")
+                    const preview = text.length > 60 ? text.slice(0, 60).replace(/\n/g, " ") + "..." : text.replace(/\n/g, " ")
+                    const mode = draft.followupMode ?? "queue"
+                    const prefix = mode === "steer" ? "Steering:" : mode === "wrap" ? "Wrapping:" : `[${i() + 1}] Queued:`
+                    return (
+                      <box flexDirection="row" gap={1}>
+                        <text fg={theme.textMuted}>{prefix}</text>
+                        <text fg={theme.text}>{preview}</text>
+                      </box>
+                    )
+                  }}
+                </For>
+              </box>
+            </Show>
             <textarea
               placeholder={placeholderText()}
               placeholderColor={theme.textMuted}
@@ -1118,6 +1176,64 @@ export function Prompt(props: PromptProps) {
                     (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
                   ) {
                     const direction = keybind.match("history_previous", e) ? -1 : 1
+                    
+                    if (direction === -1 && input.plainText === "") {
+                      if (store.queuedDrafts.length > 0) {
+                        e.preventDefault()
+                        const draft = store.queuedDrafts[store.queuedDrafts.length - 1]
+                        setStore("queuedDrafts", store.queuedDrafts.slice(0, -1))
+                        
+                        const promptInfo = {
+                          input: draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n"),
+                          parts: draft.parts.filter((p: any) => p.type !== "text")
+                        }
+                        input.setText(promptInfo.input)
+                        setStore("prompt", promptInfo)
+                        restoreExtmarksFromParts(promptInfo.parts)
+                        input.cursorOffset = promptInfo.input.length
+                        return
+                      }
+
+                      const messages = sync.data.message[props.sessionID ?? ""] ?? []
+                      const lastMsg = messages[messages.length - 1]
+                      
+                      Log.Default.info(`[UpArrow Debug] direction=-1, empty text. status=${status().type}, lastMsg=${lastMsg?.role} id=${lastMsg?.id}`)
+                      
+                      if (status().type !== "idle" && lastMsg?.role === "user") {
+                        const hasStarted = messages.some((m) => m.role === "assistant" && m.parentID >= lastMsg.id)
+                        Log.Default.info(`[UpArrow Debug] hasStarted=${hasStarted}`)
+                        if (!hasStarted) {
+                          e.preventDefault()
+                          Log.Default.info(`[UpArrow Debug] reverting message ${lastMsg.id}`)
+                          sdk.client.session
+                            .revert({
+                              sessionID: props.sessionID!,
+                              messageID: lastMsg.id,
+                            })
+                            .then(() => {
+                              Log.Default.info(`[UpArrow Debug] reverted successfully`)
+                              const parts = sync.data.part[lastMsg.id] ?? []
+                              const promptInfo = parts.reduce(
+                                (agg, part) => {
+                                  if (part.type === "text" && !part.synthetic) agg.input += part.text
+                                  if (part.type === "file") agg.parts.push(strip(part))
+                                  return agg
+                                },
+                                { input: "", parts: [] as PromptInfo["parts"] },
+                              )
+                              input.setText(promptInfo.input)
+                              setStore("prompt", promptInfo)
+                              restoreExtmarksFromParts(promptInfo.parts)
+                              input.cursorOffset = promptInfo.input.length
+                            })
+                            .catch((err) => {
+                              Log.Default.error(`[UpArrow Debug] revert failed: ${err}`)
+                            })
+                          return
+                        }
+                      }
+                    }
+
                     const item = history.move(direction, input.plainText)
 
                     if (item) {
@@ -1267,6 +1383,16 @@ export function Prompt(props: PromptProps) {
                               </span>
                             </text>
                           </Show>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>
+                            {(() => {
+                              const mode = kv.get("followup", "steer")
+                              if (mode === "steer") return "Steer"
+                              if (mode === "wrap") return "Wrap"
+                              if (mode === "queue") return "Queue"
+                              return "Steer"
+                            })()}
+                          </text>
                         </box>
                       </Show>
                     </>
@@ -1328,6 +1454,12 @@ export function Prompt(props: PromptProps) {
                       if (s.type !== "retry") return
                       return s
                     })
+                    const steerMsg = createMemo(() => {
+                      const s = status()
+                      if (s.type === "steer") return "Steering"
+                      if (s.type === "wrap") return "Wrapping up"
+                      return null
+                    })
                     const message = createMemo(() => {
                       const r = retry()
                       if (!r) return
@@ -1371,11 +1503,16 @@ export function Prompt(props: PromptProps) {
                     }
 
                     return (
-                      <Show when={retry()}>
-                        <box onMouseUp={handleMessageClick}>
-                          <text fg={theme.error}>{retryText()}</text>
-                        </box>
-                      </Show>
+                      <Switch>
+                        <Match when={retry()}>
+                          <box onMouseUp={handleMessageClick}>
+                            <text fg={theme.error}>{retryText()}</text>
+                          </box>
+                        </Match>
+                        <Match when={steerMsg()}>
+                          <text fg={theme.textMuted}>{steerMsg()}</text>
+                        </Match>
+                      </Switch>
                     )
                   })()}
                 </box>

@@ -1759,12 +1759,7 @@ export default function Page() {
     const item = queuedFollowups()[0]
     if (!item) return
     
-    // In steer mode, the backend no longer goes idle to accept the message.
-    // It gracefully breaks the current loop and reads the next message on the next iteration.
-    // Therefore, we must send the message immediately without waiting for idle.
-    if (!item.isSteer) {
-      if (busy(sessionID)) return
-    }
+    if (busy(sessionID)) return
 
     if (followupBusy(sessionID)) return
     if (followup.failed[sessionID] === item.id) return

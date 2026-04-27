@@ -256,19 +256,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "y") {
-      const current = sync.data.config?.followup ?? "steer"
+      if (evt.eventType === "release" || evt.eventType === "repeat") return
+      
+      const current = kv.get("followup", "steer")
       let next: "steer" | "wrap" | "queue" = "steer"
       if (current === "steer") next = "wrap"
       else if (current === "wrap") next = "queue"
       
-      sync.set("config", { ...sync.data.config, followup: next })
-      
-      void sdk.client.config.update({
-        config: { followup: next }
-      })
+      kv.set("followup", next)
       
       toast.show({
-        message: "Queue mode changed to: " + next,
+        message: `Follow-Up mode: ${next.charAt(0).toUpperCase() + next.slice(1)}`,
         variant: "info",
         duration: 2000,
       })
@@ -615,23 +613,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: "Toggle Queue Mode",
+      title: `Toggle follow-up mode (${kv.get("followup", "steer").charAt(0).toUpperCase() + kv.get("followup", "steer").slice(1)})`,
       keybind: "session_toggle_queue_mode",
       value: "session.toggle-queue-mode",
       onSelect: (dialog) => {
-        const current = sync.data.config?.followup ?? "steer"
+        const current = kv.get("followup", "steer")
         let next: "steer" | "wrap" | "queue" = "steer"
         if (current === "steer") next = "wrap"
         else if (current === "wrap") next = "queue"
         
-        sync.set("config", { ...sync.data.config, followup: next })
-        
-        void sdk.client.config.update({
-          config: { followup: next }
-        })
+        kv.set("followup", next)
         
         toast.show({
-          message: "Queue mode changed to: " + next,
+          message: `Follow-Up mode: ${next.charAt(0).toUpperCase() + next.slice(1)}`,
           variant: "info",
           duration: 2000,
         })
