@@ -98,21 +98,22 @@ OpenCode Go 包含以下限制：
 | MiniMax M2.7       | 3,400           | 8,500      | 17,000     |
 | MiniMax M2.5       | 6,300           | 15,900     | 31,800     |
 | Qwen3.5 Plus       | 10,200          | 25,200     | 50,500     |
-| DeepSeek V4 Pro    | 1,300           | 3,250      | 6,500      |
-| DeepSeek V4 Flash  | 7,450           | 18,600     | 37,300     |
+| DeepSeek V4 Pro    | 3,450           | 8,550      | 17,150     |
+| DeepSeek V4 Flash  | 31,650          | 79,050     | 158,150    |
 
 预估值基于观察到的平均请求模式：
 
 - GLM-5/5.1 — 每次请求 700 个输入 token，52,000 个缓存 token，150 个输出 token
 - Kimi K2.5/K2.6 — 每次请求 870 个输入 token，55,000 个缓存 token，200 个输出 token
-- DeepSeek V4 Pro/Flash — 700 input, 52,000 cached, 150 output tokens per request
+- DeepSeek V4 Pro — 每次请求 750 个输入 token，82,000 个缓存 token，290 个输出 token
+- DeepSeek V4 Flash — 每次请求 790 个输入 token，68,000 个缓存 token，280 个输出 token
 - MiMo-V2-Pro — 每次请求 350 个输入 token，41,000 个缓存 token，250 个输出 token
 - MiMo-V2-Omni — 每次请求 1000 个输入 token，60,000 个缓存 token，140 个输出 token
 - MiMo-V2.5-Pro — 每次请求 350 个输入 token，41,000 个缓存 token，250 个输出 token
 - MiMo-V2.5 — 每次请求 1000 个输入 token，60,000 个缓存 token，140 个输出 token
 - MiniMax M2.7/M2.5 — 每次请求 300 个输入 token，55,000 个缓存 token，125 个输出 token
-- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
-- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- Qwen3.5 Plus — 每次请求 410 个输入 token，47,000 个缓存 token，140 个输出 token
+- Qwen3.6 Plus — 每次请求 500 个输入 token，57,000 个缓存 token，190 个输出 token
 
 你可以在 **<a href={console}>控制台</a>** 中跟踪你当前的使用情况。
 
