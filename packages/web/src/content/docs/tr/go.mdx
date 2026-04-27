@@ -65,6 +65,8 @@ Mevcut model listesi şunları içerir:
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
 - **MiniMax M2.7**
+- **DeepSeek V4 Pro**
+- **DeepSeek V4 Flash**
 
 Test edip yenilerini ekledikçe model listesi değişebilir.
 
@@ -82,28 +84,32 @@ Limitler dolar değeri üzerinden belirlenmiştir. Bu, gerçek istek sayınızı
 
 Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek sayısı sunmaktadır:
 
-| Model         | 5 saatte bir istek | haftalık istek | aylık istek |
-| ------------- | ------------------ | -------------- | ----------- |
-| GLM-5.1       | 880                | 2,150          | 4,300       |
-| GLM-5         | 1,150              | 2,880          | 5,750       |
-| Kimi K2.5     | 1,850              | 4,630          | 9,250       |
-| Kimi K2.6     | 1,150              | 2,880          | 5,750       |
-| MiMo-V2-Pro   | 1,290              | 3,225          | 6,450       |
-| MiMo-V2-Omni  | 2,150              | 5,450          | 10,900      |
-| MiMo-V2.5-Pro | 1,290              | 3,225          | 6,450       |
-| MiMo-V2.5     | 2,150              | 5,450          | 10,900      |
-| Qwen3.6 Plus  | 3,300              | 8,200          | 16,300      |
-| MiniMax M2.7  | 3,400              | 8,500          | 17,000      |
-| MiniMax M2.5  | 6,300              | 15,900         | 31,800      |
-| Qwen3.5 Plus  | 10,200             | 25,200         | 50,500      |
+| Model              | 5 saatte bir istek | haftalık istek | aylık istek |
+| ------------------ | ------------------ | -------------- | ----------- |
+| GLM-5.1            | 880                | 2,150          | 4,300       |
+| GLM-5              | 1,150              | 2,880          | 5,750       |
+| Kimi K2.5          | 1,850              | 4,630          | 9,250       |
+| Kimi K2.6          | 1,150              | 2,880          | 5,750       |
+| MiMo-V2-Pro        | 1,290              | 3,225          | 6,450       |
+| MiMo-V2-Omni       | 2,150              | 5,450          | 10,900      |
+| MiMo-V2.5-Pro      | 1,290              | 3,225          | 6,450       |
+| MiMo-V2.5 (≤ 256K) | 2,150              | 5,450          | 10,900      |
+| MiniMax M2.7       | 3,400              | 8,500          | 17,000      |
+| MiniMax M2.5       | 6,300              | 15,900         | 31,800      |
+| Qwen3.6 Plus       | 3,300              | 8,200          | 16,300      |
+| Qwen3.5 Plus       | 10,200             | 25,200         | 50,500      |
+| DeepSeek V4 Pro    | 3,450              | 8,550          | 17,150      |
+| DeepSeek V4 Flash  | 31,650             | 79,050         | 158,150     |
 
 Tahminler, gözlemlenen ortalama istek modellerine dayanmaktadır:
 
 - GLM-5/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
 - Kimi K2.5/K2.6 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
+- DeepSeek V4 Pro — İstek başına 750 girdi, 82.000 önbelleğe alınmış, 290 çıktı token'ı
+- DeepSeek V4 Flash — İstek başına 790 girdi, 68.000 önbelleğe alınmış, 280 çıktı token'ı
 - MiniMax M2.7/M2.5 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
-- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
-- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- Qwen3.5 Plus — İstek başına 410 girdi, 47.000 önbelleğe alınmış, 140 çıktı token'ı
+- Qwen3.6 Plus — İstek başına 500 girdi, 57.000 önbelleğe alınmış, 190 çıktı token'ı
 - MiMo-V2-Pro — İstek başına 350 girdi, 41.000 önbelleğe alınmış, 250 çıktı token'ı
 - MiMo-V2-Omni — İstek başına 1000 girdi, 60.000 önbelleğe alınmış, 140 çıktı token'ı
 - MiMo-V2.5-Pro — İstek başına 350 girdi, 41.000 önbelleğe alınmış, 250 çıktı token'ı
@@ -129,22 +135,34 @@ Eğer Zen bakiyenizde kredileriniz varsa, konsoldan **Bakiye kullan (Use balance
 
 Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsiniz.
 
-| Model         | Model ID      | Uç Nokta                                         | AI SDK Paketi               |
-| ------------- | ------------- | ------------------------------------------------ | --------------------------- |
-| GLM-5.1       | glm-5.1       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5         | glm-5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5     | kimi-k2.5     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.6     | kimi-k2.6     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Pro   | mimo-v2-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Omni  | mimo-v2-omni  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5-Pro | mimo-v2.5-pro | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5     | mimo-v2.5     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiniMax M2.7  | minimax-m2.7  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.5  | minimax-m2.5  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus  | qwen3.6-plus  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus  | qwen3.5-plus  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Model             | Model ID          | Uç Nokta                                         | AI SDK Paketi               |
+| ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro       | mimo-v2-pro       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni      | mimo-v2-omni      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 
 OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K2.6 için yapılandırmanızda `opencode-go/kimi-k2.6` kullanmalısınız.
+
+---
+
+### Modeller
+
+Mevcut modellerin tam listesini ve metadata'larını şuradan alabilirsiniz:
+
+```
+https://opencode.ai/zen/go/v1/models
+```
 
 ---
 
