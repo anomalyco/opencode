@@ -64,7 +64,12 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
-        run: bun turbo test:ci
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            bun --cwd packages/app run test:ci
+          else
+            bun turbo test:ci
+          fi
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
