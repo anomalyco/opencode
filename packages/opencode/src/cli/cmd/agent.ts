@@ -179,7 +179,7 @@ const AgentCreateCommand = cmd({
         const frontmatter: {
           description: string
           mode: AgentMode
-          permissions?: Record<string, "deny">
+          permission?: Record<string, "deny">
         } = {
           description: generated.whenToUse,
           mode,
