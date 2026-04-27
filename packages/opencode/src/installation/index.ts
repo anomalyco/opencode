@@ -8,9 +8,10 @@ import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Log } from "../util"
-
+import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { NpmConfig } from "@opencode-ai/core/npm-config"
 
 const log = Log.create({ service: "installation" })
 
@@ -132,18 +133,6 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
         Effect.catch(() => Effect.succeed({ code: ChildProcessSpawner.ExitCode(1), stdout: "", stderr: "" })),
       )
 
-      // Use the package manager's resolver so registries, mirrors, auth, proxies, and dist-tags match upgrade behavior.
-      const viewVersion = Effect.fnUntraced(function* (method: "npm" | "pnpm" | "bun", spec: string) {
-        const args = method === "bun" ? ["pm", "view", spec, "version", "--json"] : ["view", spec, "version", "--json"]
-        const result = yield* run([method, ...args])
-        if (result.code !== 0 || !result.stdout.trim()) {
-          return yield* new UpgradeFailedError({
-            stderr: result.stderr || result.stdout || `Failed to resolve ${spec}`,
-          })
-        }
-        return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.String))(result.stdout)
-      })
-
       const getBrewFormula = Effect.fnUntraced(function* () {
         const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
         if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
@@ -235,7 +224,13 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | ChildPro
           }
 
           if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
-            return yield* viewVersion(detectedMethod, `opencode-ai@${InstallationChannel}`)
+            const response = yield* httpOk.execute(
+              HttpClientRequest.get(
+                `${yield* NpmConfig.registry(process.cwd())}/opencode-ai/${InstallationChannel}`,
+              ).pipe(HttpClientRequest.acceptJson),
+            )
+            const data = yield* HttpClientResponse.schemaBodyJson(NpmPackage)(response)
+            return data.version
           }
 
           if (detectedMethod === "choco") {
@@ -334,5 +329,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
 )
+
+const { runPromise } = makeRuntime(Service, defaultLayer)
+
+export const latest = (...args: Parameters<Interface["latest"]>) => runPromise((s) => s.latest(...args))
+export const method = () => runPromise((s) => s.method())
+export const upgrade = (...args: Parameters<Interface["upgrade"]>) => runPromise((s) => s.upgrade(...args))
 
 export * as Installation from "."

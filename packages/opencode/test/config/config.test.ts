@@ -988,7 +988,6 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   const noopNpm = Layer.mock(Npm.Service)({
     install: () => Effect.void,
     add: () => Effect.die("not implemented"),
-    outdated: () => Effect.succeed(false),
     which: () => Effect.succeed(Option.none()),
   })
   const testLayer = Config.layer.pipe(
