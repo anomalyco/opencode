@@ -18,6 +18,7 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Bom from "@/util/bom"
+import * as EditDiagnostics from "./edit-diagnostics"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -84,6 +85,7 @@ export const EditTool = Tool.define(
           let diff = ""
           let contentOld = ""
           let contentNew = ""
+          const editMeta = { diagBlock: undefined as string | undefined, stale: undefined as string | undefined, postDiagnostics: undefined as Record<string, unknown> | undefined }
           yield* lock(filePath).withPermits(1)(
             Effect.gen(function* () {
               if (params.oldString === "") {
@@ -103,6 +105,10 @@ export const EditTool = Tool.define(
                     diff,
                   },
                 })
+
+                const preDiagnostics = yield* lsp.diagnostics()
+                const stale = yield* EditDiagnostics.checkGitStaleness()
+
                 yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
                 if (yield* format.file(filePath)) {
                   contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
@@ -112,6 +118,15 @@ export const EditTool = Tool.define(
                   file: filePath,
                   event: existed ? "change" : "add",
                 })
+
+                yield* lsp.touchFile(filePath, "document")
+                const postDiagnostics = yield* lsp.diagnostics()
+                const diagBlock = EditDiagnostics.reportDiagnostics(filePath, preDiagnostics, postDiagnostics)
+                if (diagBlock || stale) {
+                  editMeta.diagBlock = diagBlock
+                  editMeta.stale = stale
+                }
+                editMeta.postDiagnostics = postDiagnostics as Record<string, unknown>
                 return
               }
 
@@ -147,6 +162,9 @@ export const EditTool = Tool.define(
                 },
               })
 
+              const preDiagnostics = yield* lsp.diagnostics()
+              const stale = yield* EditDiagnostics.checkGitStaleness()
+
               yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
               if (yield* format.file(filePath)) {
                 contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
@@ -164,6 +182,15 @@ export const EditTool = Tool.define(
                   normalizeLineEndings(contentNew),
                 ),
               )
+
+              yield* lsp.touchFile(filePath, "document")
+              const postDiagnostics = yield* lsp.diagnostics()
+              const diagBlock = EditDiagnostics.reportDiagnostics(filePath, preDiagnostics, postDiagnostics)
+              if (diagBlock || stale) {
+                editMeta.diagBlock = diagBlock
+                editMeta.stale = stale
+              }
+              editMeta.postDiagnostics = postDiagnostics as Record<string, unknown>
             }).pipe(Effect.orDie),
           )
 
@@ -184,20 +211,17 @@ export const EditTool = Tool.define(
             metadata: {
               diff,
               filediff,
-              diagnostics: {},
+              diagnostics: editMeta.postDiagnostics ?? {},
             },
           })
 
           let output = "Edit applied successfully."
-          yield* lsp.touchFile(filePath, "document")
-          const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = AppFileSystem.normalizePath(filePath)
-          const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
-          if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+          if (editMeta.stale) output += `\n\n${editMeta.stale}`
+          if (editMeta.diagBlock) output += `\n\nNew LSP errors detected, please fix:\n${editMeta.diagBlock}`
 
           return {
             metadata: {
-              diagnostics,
+              diagnostics: {},
               diff,
               filediff,
             },

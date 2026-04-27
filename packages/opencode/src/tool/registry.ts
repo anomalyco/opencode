@@ -32,6 +32,8 @@ import { PatchFileTool } from "./patch_file"
 import { AstQueryTool } from "./ast_query"
 import { AstEditTool } from "./ast_edit"
 import { AstParser } from "../ast/parser"
+import { SymbolIndexTool } from "./symbol_index"
+import { DependencyGraphTool } from "./dependency_graph"
 import { withTrace } from "./trace"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
@@ -123,6 +125,8 @@ export const layer: Layer.Layer<
     const patchfiletool = yield* PatchFileTool
     const astquerytool = yield* AstQueryTool
     const astedittool = yield* AstEditTool
+    const symbolindextool = yield* SymbolIndexTool
+    const dependencygraphtool = yield* DependencyGraphTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
@@ -212,6 +216,8 @@ export const layer: Layer.Layer<
           patchfile: Tool.init(patchfiletool),
           astquery: Tool.init(astquerytool),
           astedit: Tool.init(astedittool),
+          symbolindex: Tool.init(symbolindextool),
+          dependencygraph: Tool.init(dependencygraphtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
@@ -244,7 +250,7 @@ export const layer: Layer.Layer<
             tool.skill,
             tool.patch,
             tool.patchfile,
-            ...(disableAst ? [] : [tool.astquery, tool.astedit]),
+            ...(disableAst ? [] : [tool.astquery, tool.astedit, tool.symbolindex, tool.dependencygraph]),
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
           ],

@@ -1,7 +1,7 @@
 // ast_edit tool — replace an AST node matched by a tree-sitter query
 
 import * as path from "path"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Semaphore } from "effect"
 import * as Tool from "./tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Instance } from "../project/instance"
@@ -17,6 +17,18 @@ import { createTwoFilesPatch, diffLines } from "diff"
 import { trimDiff } from "./edit"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import * as EditDiagnostics from "./edit-diagnostics"
+
+const locks = new Map<string, Semaphore.Semaphore>()
+
+function lock(filePath: string) {
+  const resolvedFilePath = AppFileSystem.resolve(filePath)
+  const hit = locks.get(resolvedFilePath)
+  if (hit) return hit
+  const next = Semaphore.makeUnsafe(1)
+  locks.set(resolvedFilePath, next)
+  return next
+}
 
 const LanguageSchema = Schema.Union([
   Schema.Literal("typescript"),
@@ -115,11 +127,24 @@ export const AstEditTool = Tool.define(
           metadata: { filepath: filePath, diff },
         })
 
-        yield* afs.writeWithDirs(filePath, Bom.join(newContent, source.bom))
-        if (yield* format.file(filePath)) yield* Bom.syncFile(afs, filePath, source.bom)
+        const editMeta = { stale: undefined as string | undefined, diagBlock: undefined as string | undefined }
+        const postDiagnostics = yield* lock(filePath).withPermits(1)(
+          Effect.gen(function* () {
+            const preDiagnostics = yield* lsp.diagnostics()
+            editMeta.stale = yield* EditDiagnostics.checkGitStaleness()
 
-        yield* bus.publish(File.Event.Edited, { file: filePath })
-        yield* bus.publish(FileWatcher.Event.Updated, { file: filePath, event: "change" })
+            yield* afs.writeWithDirs(filePath, Bom.join(newContent, source.bom))
+            if (yield* format.file(filePath)) yield* Bom.syncFile(afs, filePath, source.bom)
+
+            yield* bus.publish(File.Event.Edited, { file: filePath })
+            yield* bus.publish(FileWatcher.Event.Updated, { file: filePath, event: "change" })
+
+            yield* lsp.touchFile(filePath, "document")
+            const postDiagnostics = yield* lsp.diagnostics()
+            editMeta.diagBlock = EditDiagnostics.reportDiagnostics(filePath, preDiagnostics, postDiagnostics)
+            return postDiagnostics
+          }).pipe(Effect.orDie),
+        )
 
         const { additions, deletions } = diffLines(content, newContent).reduce(
           (acc, c) => ({
@@ -130,19 +155,16 @@ export const AstEditTool = Tool.define(
         )
         const filediff: Snapshot.FileDiff = { file: filePath, patch: diff, additions, deletions }
 
-        yield* ctx.metadata({ metadata: { diff, filediff, diagnostics: {} } })
+        yield* ctx.metadata({ metadata: { diff, filediff, diagnostics: postDiagnostics as Record<string, unknown> } })
 
-        yield* lsp.touchFile(filePath, "document")
-        const diagnostics = yield* lsp.diagnostics()
-        const block = LSP.Diagnostic.report(
-          filePath,
-          diagnostics[AppFileSystem.normalizePath(filePath)] ?? [],
-        )
+        let output = "Edit applied."
+        if (editMeta.stale) output += `\n\n${editMeta.stale}`
+        if (editMeta.diagBlock) output += `\n\nNew LSP errors detected, please fix:\n${editMeta.diagBlock}`
 
         return {
           title:  `ast_edit: ${path.relative(Instance.worktree, filePath)} L${match.start_line + 1}-${match.end_line + 1}`,
-          output: block ? `Edit applied.\n\nLSP errors detected, please fix:\n${block}` : "Edit applied.",
-          metadata: { diff, filediff, diagnostics },
+          output,
+          metadata: { diff, filediff, diagnostics: postDiagnostics as Record<string, unknown> },
         }
       }).pipe(Effect.orDie)
 

@@ -2,6 +2,7 @@
 // web-tree-sitter is a pure-WASM dependency (no native compilation).
 
 import * as path from "path"
+import * as crypto from "crypto"
 import { Effect, Layer, Context } from "effect"
 import { LANGUAGE_MAP, type SupportedLanguage } from "./languages"
 
@@ -49,6 +50,30 @@ async function ensureInit(): Promise<void> {
 
 const _grammarCache = new Map<string, TreeSitterLanguage>()
 const _parserCache = new Map<SupportedLanguage, TreeSitterParser>()
+
+class LRUCache<K, V> {
+  private cache = new Map<K, V>()
+  constructor(private maxSize: number) {}
+  get(key: K): V | undefined {
+    const value = this.cache.get(key)
+    if (value !== undefined) {
+      this.cache.delete(key)
+      this.cache.set(key, value)
+    }
+    return value
+  }
+  set(key: K, value: V): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key)
+    } else if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value
+      if (firstKey !== undefined) this.cache.delete(firstKey)
+    }
+    this.cache.set(key, value)
+  }
+}
+
+const _treeCache = new LRUCache<string, ParseResult>(50)
 
 async function loadGrammar(language: SupportedLanguage): Promise<TreeSitterLanguage> {
   if (_grammarCache.has(language)) return _grammarCache.get(language)!
@@ -140,6 +165,11 @@ function nodeToMatch(node: TreeSitterNode): QueryMatch {
 }
 
 async function buildParseResult(content: string, language: SupportedLanguage): Promise<ParseResult> {
+  const hash = crypto.createHash("sha256").update(content).digest("hex")
+  const key = `${language}:${hash}`
+  const cached = _treeCache.get(key)
+  if (cached) return cached
+
   await ensureInit()
   const { Parser } = await import("web-tree-sitter")
   const grammar = await loadGrammar(language)
@@ -150,7 +180,9 @@ async function buildParseResult(content: string, language: SupportedLanguage): P
     return p
   })()
   const tree = parser.parse(content)
-  return { tree, language, rootNode: tree.rootNode, language_obj: grammar }
+  const result: ParseResult = { tree, language, rootNode: tree.rootNode, language_obj: grammar }
+  _treeCache.set(key, result)
+  return result
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AstParser") {}

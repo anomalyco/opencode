@@ -4,7 +4,7 @@
 
 import * as path from "path"
 import * as crypto from "crypto"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Semaphore } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -18,7 +18,19 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Bom from "@/util/bom"
+import * as EditDiagnostics from "./edit-diagnostics"
 import { trimDiff } from "./edit"
+
+const locks = new Map<string, Semaphore.Semaphore>()
+
+function lock(filePath: string) {
+  const resolvedFilePath = AppFileSystem.resolve(filePath)
+  const hit = locks.get(resolvedFilePath)
+  if (hit) return hit
+  const next = Semaphore.makeUnsafe(1)
+  locks.set(resolvedFilePath, next)
+  return next
+}
 
 export const PatchSchema = Schema.Struct({
   anchor_hash: Schema.String.annotate({
@@ -53,10 +65,15 @@ export const Parameters = Schema.Struct({
   }),
 })
 
+function normalizeLines(text: string): string {
+  return text.replace(/\r\n/g, "\n")
+}
+
 export function computeAnchor(lines: string[], centerLine: number, contextLines: number): string {
   const from = Math.max(0, centerLine - contextLines)
   const to = Math.min(lines.length - 1, centerLine + contextLines)
-  return crypto.createHash("sha256").update(lines.slice(from, to + 1).join("\n")).digest("hex")
+  const window = normalizeLines(lines.slice(from, to + 1).join("\n"))
+  return crypto.createHash("sha256").update(window).digest("hex")
 }
 
 interface AnchorInfo {
@@ -96,8 +113,9 @@ export function resolvePatch(
   }
   const from = Math.max(0, i - ctxLines)
   const to = Math.min(lines.length - 1, i + ctxLines)
-  const windowText = lines.slice(from, to + 1).join("\n")
-  if (!windowText.includes(patch.search)) {
+  const windowText = normalizeLines(lines.slice(from, to + 1).join("\n"))
+  const searchNorm = normalizeLines(patch.search)
+  if (!windowText.includes(searchNorm)) {
     throw new Error(`[patch_file] anchor found but search text not present in window (line ${i}).`)
   }
   return { startLine: from, endLine: to, search: patch.search, replace: patch.replace }
@@ -107,14 +125,15 @@ export function applyPatches(lines: string[], resolved: ResolvedPatch[]): string
   // Apply in reverse line order to prevent offset drift.
   const sorted = [...resolved].sort((a, b) => b.startLine - a.startLine)
   return sorted.reduce((acc, p) => {
-    const windowText = acc.slice(p.startLine, p.endLine + 1).join("\n")
-    if (!windowText.includes(p.search)) {
+    const windowText = normalizeLines(acc.slice(p.startLine, p.endLine + 1).join("\n"))
+    const searchNorm = normalizeLines(p.search)
+    if (!windowText.includes(searchNorm)) {
       throw new Error(
         `[patch_file] search text not found in anchor window (lines ${p.startLine}–${p.endLine}). ` +
           "Re-run with compute_anchors=true to refresh anchors.",
       )
     }
-    const newLines = windowText.replace(p.search, p.replace).split("\n")
+    const newLines = windowText.replace(searchNorm, normalizeLines(p.replace)).split("\n")
     acc.splice(p.startLine, p.endLine - p.startLine + 1, ...newLines)
     return acc
   }, [...lines])
@@ -181,14 +200,27 @@ export const PatchFileTool = Tool.define(
           metadata:   { filepath: filePath, diff },
         })
 
-        const next       = Bom.split(contentNew)
-        const desiredBom = source.bom || next.bom
-        yield* afs.writeWithDirs(filePath, Bom.join(next.text, desiredBom))
+        const editMeta = { stale: undefined as string | undefined, diagBlock: undefined as string | undefined }
+        const postDiagnostics = yield* lock(filePath).withPermits(1)(
+          Effect.gen(function* () {
+            const preDiagnostics = yield* lsp.diagnostics()
+            editMeta.stale = yield* EditDiagnostics.checkGitStaleness()
 
-        if (yield* format.file(filePath)) yield* Bom.syncFile(afs, filePath, desiredBom)
+            const next       = Bom.split(contentNew)
+            const desiredBom = source.bom || next.bom
+            yield* afs.writeWithDirs(filePath, Bom.join(next.text, desiredBom))
 
-        yield* bus.publish(File.Event.Edited,         { file: filePath })
-        yield* bus.publish(FileWatcher.Event.Updated,  { file: filePath, event: "change" })
+            if (yield* format.file(filePath)) yield* Bom.syncFile(afs, filePath, desiredBom)
+
+            yield* bus.publish(File.Event.Edited,         { file: filePath })
+            yield* bus.publish(FileWatcher.Event.Updated,  { file: filePath, event: "change" })
+
+            yield* lsp.touchFile(filePath, "document")
+            const postDiagnostics = yield* lsp.diagnostics()
+            editMeta.diagBlock = EditDiagnostics.reportDiagnostics(filePath, preDiagnostics, postDiagnostics)
+            return postDiagnostics
+          }).pipe(Effect.orDie),
+        )
 
         const { additions, deletions } = diffLines(source.text, contentNew).reduce(
           (acc, c) => ({
@@ -199,16 +231,14 @@ export const PatchFileTool = Tool.define(
         )
         const filediff: Snapshot.FileDiff = { file: filePath, patch: diff, additions, deletions }
 
-        yield* ctx.metadata({ metadata: { diff, filediff, diagnostics: {} } })
+        yield* ctx.metadata({ metadata: { diff, filediff, diagnostics: postDiagnostics as Record<string, unknown> } })
 
-        yield* lsp.touchFile(filePath, "document")
-        const diagnostics = yield* lsp.diagnostics()
-        const block = LSP.Diagnostic.report(filePath, diagnostics[AppFileSystem.normalizePath(filePath)] ?? [])
-        const output = `Applied ${patches.length} patch${patches.length > 1 ? "es" : ""} successfully.` +
-          (block ? `\n\nLSP errors detected, please fix:\n${block}` : "")
+        let output = `Applied ${patches.length} patch${patches.length > 1 ? "es" : ""} successfully.`
+        if (editMeta.stale) output += `\n\n${editMeta.stale}`
+        if (editMeta.diagBlock) output += `\n\nNew LSP errors detected, please fix:\n${editMeta.diagBlock}`
 
         return {
-          metadata: { anchors: undefined, diagnostics, diff, filediff },
+          metadata: { anchors: undefined, diagnostics: postDiagnostics as Record<string, unknown>, diff, filediff },
           title:    `${path.relative(Instance.worktree, filePath)} (${patches.length} patch${patches.length > 1 ? "es" : ""})`,
           output,
         }

@@ -10,6 +10,7 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { buildAnchorMap } from "./patch_file"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -30,6 +31,11 @@ export const Parameters = Schema.Struct({
   }),
   limit: Schema.optional(Schema.Number).annotate({
     description: "The maximum number of lines to read (defaults to 2000)",
+  }),
+  anchors: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "When true, prefixes every line with its SHA-256 anchor hash. " +
+      "Use this to obtain anchor_hash values for patch_file without a separate compute_anchors call.",
   }),
 })
 
@@ -253,7 +259,16 @@ export const ReadTool = Tool.define(
       }
 
       let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
-      output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
+      if (params.anchors) {
+        const fullText = yield* Effect.promise(() => Bun.file(filepath).text())
+        const anchorMap = buildAnchorMap(fullText.replace(/\r\n/g, "\n"), 5)
+        output += file.raw.map((line, i) => {
+          const anchor = anchorMap[file.offset - 1 + i]
+          return `${anchor.anchor_hash}|${line}`
+        }).join("\n")
+      } else {
+        output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
+      }
 
       const last = file.offset + file.raw.length - 1
       const next = last + 1
