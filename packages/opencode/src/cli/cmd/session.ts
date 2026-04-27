@@ -8,6 +8,9 @@ import { Locale } from "@/util/locale"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
+import { Database } from "@/storage/db"
+import { SessionTable } from "@/session/session.sql"
+import { eq, and, inArray } from "drizzle-orm"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
@@ -43,7 +46,8 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs.command(SessionListCommand).command(SessionDeleteCommand).command(SessionMoveCommand).demandCommand(),
   async handler() {},
 })
 
@@ -68,6 +72,52 @@ export const SessionDeleteCommand = cmd({
       }
       await AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(sessionID)))
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
+    })
+  },
+})
+
+export const SessionMoveCommand = cmd({
+  command: "move",
+  describe: "move sessions to a different project/directory",
+  builder: (yargs: Argv) =>
+    yargs
+      .option("from-id", {
+        describe: "session ID to move (can be specified multiple times)",
+        type: "string",
+        array: true,
+        demandOption: true,
+      })
+      .option("directory", {
+        describe: "new directory for the sessions",
+        type: "string",
+      })
+      .option("project", {
+        describe: "new project ID for the sessions",
+        type: "string",
+      }),
+  handler: async (args) => {
+    if (!args.directory && !args.project) {
+      UI.error("At least one of --directory or --project is required")
+      process.exit(1)
+    }
+    await bootstrap(process.cwd(), async () => {
+      const ids = args.id.map((id) => SessionID.make(id))
+      const set: Record<string, string> = {}
+      if (args.directory) set.directory = Filesystem.resolve(args.directory)
+      if (args.project) set.project_id = args.project
+      const result = Database.use((db) =>
+        db.update(SessionTable).set(set).where(inArray(SessionTable.id, ids)).returning().all(),
+      )
+      if (result.length === 0) {
+        UI.error("No sessions found matching the given IDs")
+        process.exit(1)
+      }
+      for (const row of result) {
+        const parts: string[] = [`moved ${row.id}`]
+        if (args.directory) parts.push(`directory=${row.directory}`)
+        if (args.project) parts.push(`project=${row.project_id}`)
+        UI.println(UI.Style.TEXT_SUCCESS_BOLD + parts.join(" ") + UI.Style.TEXT_NORMAL)
+      }
     })
   },
 })
