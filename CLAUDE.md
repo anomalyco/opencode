@@ -45,14 +45,49 @@
 - **P4 可逆**:一笔 commit 干一件事,可单独 git revert
 - **P5 显性化**:改上游必加 FORK marker(R2 是它的具体执行)
 
-## 完整文档链路
+## 完整文档链路(规范 v2,2026-04-27 起)
+
+### 三文档结构(每个 feature 一份目录)
+
+```
+docs/features/<feat-id>/
+├── 1-spec.md       # 需求 + 验收标准 + 架构选型(签名后锁版,只补不改)
+├── 2-plan.md       # 实施计划 + 决策轨迹(开发中实时追加 note,记录踩坑/方案推翻)
+└── 3-changelog.md  # 实际改动 + commit hash 列表 + 行数 + 影响范围 + 回归测试 + 回退方法(commit 后填)
+```
+
+`<feat-id>` 命名:`getbot-接入` / `editable-file-viewer` 等(中英混合 OK,语义清晰即可)。
+三个文档头三行**必须**统一标:`feat-id: <id>` / `status: spec | in-progress | done` / `related: ./1-spec.md ./2-plan.md ./3-changelog.md`。
+
+总索引 `docs/features/INDEX.md` 列出所有 feat-id + status,一眼看完整 feature 池。
+
+### commit message 格式
+
+`<type>(<scope>): <一句话> [feat: <feat-id>]`
+
+例:`feat(provider): GetBot 接入 — 热门首位 + 推荐标 [feat: getbot-接入]`。
+grep `[feat: <id>]` 能反查到对应文档。
+
+### 改动规模分级(决定三文档要写多少)
+
+| 规模 | 触发条件 | 三文档要求 |
+|---|---|---|
+| **Tiny** | <50 行 / 1 文件 / bug fix 或文案 | 只写 3-changelog.md(简版 1-2 段),1-spec / 2-plan 可省 |
+| **Medium** | 50-500 行 / 单一主题 | 三文档全要,1-spec / 2-plan 各 1 页够 |
+| **Large** | >500 行 **或** 触动 ≥5 个上游文件 | 三文档详细,**1-spec 改前 user 审签** |
+
+### 老的"改动日志"角色调整
+
+`本仓 改动日志.md` 不再存详细条目,改为**索引表**:每个 feature 一行,指向 `docs/features/<feat-id>/3-changelog.md`。历史条目 #1-#12 保留不动。
+
+### 规划/治理仍走 opencode-plan
 
 | 文档 | 路径 | 作用 |
 |---|---|---|
 | 治理总纲 | `D:/project/opencode-plan/规划/12-fork-跟随升级与协作规范.md` | 完整原则 / 规范 / SOP |
 | 改动规则细则 | `D:/project/opencode-plan/规划/09-改动规则.md` | 白黑名单 / baseline tag / diff 阈值 / hook 体系 |
-| 改动日志 | `本仓 改动日志.md` | 每笔 commit 必填 |
-| DeskFox 品牌替换计划 | `D:/project/opencode-plan/规划/13-DeskFox-品牌替换-最小可见档.md` | 当前进行中的品牌落地 |
+| 改动索引 | `本仓 改动日志.md` | feature 索引(规范 v2 起,详细内容在 docs/features/) |
+| DeskFox 品牌替换计划 | `D:/project/opencode-plan/规划/13-DeskFox-品牌替换-最小可见档.md` | 已落地 |
 
 ## 默认仓库约定
 
@@ -61,11 +96,28 @@
 - baseline tag:`upstream-baseline`(同步起点),`pre-rebase-<日期>`(rebase 前)
 - 远端:`origin` 双 push gitee + github;`upstream` 只读指 sst/opencode
 
+## 产品名
+
+**软件叫 DeskFox**(2026-04-27 起定名)。任何用户可见文案 / 文档 / commit message / build 产物都用 "DeskFox"。
+**不是** "OpenCode"(那是上游) / "OpenCode Desktop" / "OpenCode Dev"。
+源码内部 package 名 / binary 标识仍可保留 `opencode-*`(那是上游 contract,改了上游会冲突,品牌通过 tauri-overrides 注入)。
+
 ## 验证约定
 
 - **typecheck**:`bun run typecheck`(monorepo 全量,turbo 缓存)
-- **release exe**:`bun run --cwd packages/desktop tauri build` → `packages/desktop/src-tauri/target/release/OpenCode.exe`
+- **release exe**:**必须**走 DeskFox 品牌 wrapper,产物是 `DeskFox.exe`:
+  ```powershell
+  D:\project\opencode-fork\packages\branding\scripts\build-deskfox.ps1 -Env dev -NoBundle
+  ```
+  - 产物路径:`packages/desktop/src-tauri/target/release/DeskFox.exe`
+  - `-Env dev|beta|prod` 三档(平时用 dev);`-NoBundle` 跳过 NSIS bundler(SignTool 没装时用,不影响 exe)
+  - **禁止**直接跑 `bun run --cwd packages/desktop tauri build`,那会出 `OpenCode.exe`,违反品牌规范
 - **改完不起 dev,直接 build release exe 验证**(WebView2 + Tauri 在 dev 模式下行为可能与 release 不一致)
+- **build 前必须先杀进程**:tauri build 会被运行中的 `DeskFox.exe` / `opencode-cli.exe` 锁文件导致 PermissionDenied。任何 release build 前**无条件**先执行,不询问 user:
+  ```powershell
+  Get-Process -Name DeskFox,OpenCode,opencode-cli -ErrorAction SilentlyContinue | Stop-Process -Force
+  ```
+  (兼容历史残留的 `OpenCode.exe`)。user 会自己重开新版 exe 验证。
 
 ## 健康指标(季度自查)
 
@@ -78,3 +130,8 @@
 > 上游侵入率:纯新增 fork-only 文件不算侵入(P1 鼓励),只算改上游文件占比。新文件多反而稀释比例,是健康信号。
 
 当前快照(2026-04-26):上游侵入率 ~3% / 漂移 3 / override 1 笔 — **健康**。
+
+## 规范修订记录
+
+- **v2(2026-04-27)**:三文档分离(spec/plan/changelog 各自独立) + diff 阈值 200→500 + sprite/types 出黑名单 + commit message 加 `[feat: <feat-id>]` tag。理由见 `docs/features/规范-v2/1-spec.md`(略,首笔 v2 commit 同时落地)。
+- **v1(2026-04-15)**:R1-R4 / P1-P5 / 健康指标基线建立(见 09-改动规则.md)。
