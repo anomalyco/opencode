@@ -6,6 +6,7 @@ import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Observability } from "@/effect"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
+import { Pty } from "@/pty"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util"
 import { authorizationLayer } from "./auth"
@@ -17,6 +18,7 @@ import { InstanceApi, instanceHandlers } from "./instance"
 import { McpApi, mcpHandlers } from "./mcp"
 import { PermissionApi, permissionHandlers } from "./permission"
 import { ProjectApi, projectHandlers } from "./project"
+import { PtyApi, ptyConnectRoute, ptyHandlers } from "./pty"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
 import { SessionApi, sessionHandlers } from "./session"
@@ -68,12 +70,14 @@ const instance = HttpRouter.middleware()(
 
 export const routes = Layer.mergeAll(
   eventRoute,
+  ptyConnectRoute,
   HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
   HttpApiBuilder.layer(ExperimentalApi).pipe(Layer.provide(experimentalHandlers)),
   HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),
   HttpApiBuilder.layer(InstanceApi).pipe(Layer.provide(instanceHandlers)),
   HttpApiBuilder.layer(McpApi).pipe(Layer.provide(mcpHandlers)),
   HttpApiBuilder.layer(ProjectApi).pipe(Layer.provide(projectHandlers)),
+  HttpApiBuilder.layer(PtyApi).pipe(Layer.provide(ptyHandlers), Layer.provide(Pty.defaultLayer)),
   HttpApiBuilder.layer(QuestionApi).pipe(Layer.provide(questionHandlers)),
   HttpApiBuilder.layer(PermissionApi).pipe(Layer.provide(permissionHandlers)),
   HttpApiBuilder.layer(ProviderApi).pipe(Layer.provide(providerHandlers)),

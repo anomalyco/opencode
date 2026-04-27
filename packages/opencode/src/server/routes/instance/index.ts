@@ -16,6 +16,7 @@ import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { PtyPaths } from "./httpapi/pty"
 import { EventPaths } from "./httpapi/event"
 import { ExperimentalPaths } from "./httpapi/experimental"
 import { FilePaths } from "./httpapi/file"
@@ -96,6 +97,12 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.list, (c) => handler(c.req.raw, context))
+    app.post(PtyPaths.create, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.get, (c) => handler(c.req.raw, context))
+    app.put(PtyPaths.update, (c) => handler(c.req.raw, context))
+    app.delete(PtyPaths.remove, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.connect, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.get, (c) => handler(c.req.raw, context))

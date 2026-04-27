@@ -320,12 +320,12 @@ This checklist tracks bridge parity only. Checked routes are available through t
 
 ### PTY Routes
 
-- [ ] `GET /pty` - list PTY sessions.
-- [ ] `POST /pty` - create PTY session.
-- [ ] `GET /pty/:ptyID` - get PTY session.
-- [ ] `PUT /pty/:ptyID` - update PTY session.
-- [ ] `DELETE /pty/:ptyID` - remove PTY session.
-- [ ] `GET /pty/:ptyID/connect` - PTY websocket; replace with raw Effect HTTP/websocket support.
+- [x] `GET /pty` - list PTY sessions.
+- [x] `POST /pty` - create PTY session.
+- [x] `GET /pty/:ptyID` - get PTY session.
+- [x] `PUT /pty/:ptyID` - update PTY session.
+- [x] `DELETE /pty/:ptyID` - remove PTY session.
+- [x] `GET /pty/:ptyID/connect` - PTY websocket; replace with raw Effect HTTP/websocket support.
 
 ### TUI Routes
 
