@@ -312,6 +312,21 @@ Available options:
 
 ---
 
+### Shell
+
+You can configure the shell used for the interactive terminal using the `shell` option. Compatible shells are also used for agent tool calls.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "shell": "pwsh"
+}
+```
+
+If not specified, OpenCode will automatically discover and use a sensible default based on your operating system (e.g. `pwsh` or `cmd.exe` on Windows, `/bin/zsh` or `/bin/bash` on macOS/Linux). You can provide an absolute path or a short name.
+
+---
+
 ### Tools
 
 You can manage the tools an LLM can use through the `tools` option.

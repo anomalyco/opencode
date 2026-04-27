@@ -1,9 +1,9 @@
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
-import { Global } from "../global"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { Global } from "@opencode-ai/core/global"
+import { NamedError } from "@opencode-ai/core/util/error"
 import z from "zod"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { Git } from "@/git"
 
@@ -329,3 +329,5 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
+
+export * as Storage from "./storage"

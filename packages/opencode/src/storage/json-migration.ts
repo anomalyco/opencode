@@ -1,14 +1,14 @@
 import type { SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite"
-import { Global } from "../global"
-import { Log } from "../util"
+import { Global } from "@opencode-ai/core/global"
+import * as Log from "@opencode-ai/core/util/log"
 import { ProjectTable } from "../project/project.sql"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../session/session.sql"
 import { SessionShareTable } from "../share/share.sql"
 import path from "path"
 import { existsSync } from "fs"
-import { Filesystem } from "../util"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { Filesystem } from "@/util/filesystem"
+import { Glob } from "@opencode-ai/core/util/glob"
 
 const log = Log.create({ service: "json-migration" })
 
@@ -426,3 +426,5 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
 
   return stats
 }
+
+export * as JsonMigration from "./json-migration"

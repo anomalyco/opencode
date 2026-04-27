@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Git } from "@/git"
 import { Effect, Layer, Context, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
@@ -9,69 +9,63 @@ import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
 import path from "path"
-import z from "zod"
-import { Global } from "../global"
+import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../project/instance"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
+import { zod } from "@/util/effect-zod"
+import { type DeepMutable, withStatics } from "@/util/schema"
 
-export const Info = z
-  .object({
-    path: z.string(),
-    added: z.number().int(),
-    removed: z.number().int(),
-    status: z.enum(["added", "deleted", "modified"]),
-  })
-  .meta({
-    ref: "File",
-  })
+export const Info = Schema.Struct({
+  path: Schema.String,
+  added: Schema.Int,
+  removed: Schema.Int,
+  status: Schema.Literals(["added", "deleted", "modified"]),
+})
+  .annotate({ identifier: "File" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
 
-export type Info = z.infer<typeof Info>
+export const Node = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  absolute: Schema.String,
+  type: Schema.Literals(["file", "directory"]),
+  ignored: Schema.Boolean,
+})
+  .annotate({ identifier: "FileNode" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Node = DeepMutable<Schema.Schema.Type<typeof Node>>
 
-export const Node = z
-  .object({
-    name: z.string(),
-    path: z.string(),
-    absolute: z.string(),
-    type: z.enum(["file", "directory"]),
-    ignored: z.boolean(),
-  })
-  .meta({
-    ref: "FileNode",
-  })
-export type Node = z.infer<typeof Node>
+const Hunk = Schema.Struct({
+  oldStart: Schema.Number,
+  oldLines: Schema.Number,
+  newStart: Schema.Number,
+  newLines: Schema.Number,
+  lines: Schema.Array(Schema.String),
+})
 
-export const Content = z
-  .object({
-    type: z.enum(["text", "binary"]),
-    content: z.string(),
-    diff: z.string().optional(),
-    patch: z
-      .object({
-        oldFileName: z.string(),
-        newFileName: z.string(),
-        oldHeader: z.string().optional(),
-        newHeader: z.string().optional(),
-        hunks: z.array(
-          z.object({
-            oldStart: z.number(),
-            oldLines: z.number(),
-            newStart: z.number(),
-            newLines: z.number(),
-            lines: z.array(z.string()),
-          }),
-        ),
-        index: z.string().optional(),
-      })
-      .optional(),
-    encoding: z.literal("base64").optional(),
-    mimeType: z.string().optional(),
-  })
-  .meta({
-    ref: "FileContent",
-  })
-export type Content = z.infer<typeof Content>
+const Patch = Schema.Struct({
+  oldFileName: Schema.String,
+  newFileName: Schema.String,
+  oldHeader: Schema.optional(Schema.String),
+  newHeader: Schema.optional(Schema.String),
+  hunks: Schema.Array(Hunk),
+  index: Schema.optional(Schema.String),
+})
+
+export const Content = Schema.Struct({
+  type: Schema.Literals(["text", "binary"]),
+  content: Schema.String,
+  diff: Schema.optional(Schema.String),
+  patch: Schema.optional(Patch),
+  encoding: Schema.optional(Schema.Literal("base64")),
+  mimeType: Schema.optional(Schema.String),
+})
+  .annotate({ identifier: "FileContent" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Content = DeepMutable<Schema.Schema.Type<typeof Content>>
 
 export const Event = {
   Edited: BusEvent.define(
