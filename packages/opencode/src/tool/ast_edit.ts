@@ -49,9 +49,9 @@ export const Parameters = Schema.Struct({
   }),
   pattern: Schema.String.annotate({
     description:
-      "A tree-sitter S-expression query that captures exactly ONE node to replace. " +
-      'Example: "(function_declaration name: (identifier) @name (#eq? @name \"myFunc\")) @fn" — ' +
-      "the LAST capture in the pattern is the node whose full source will be replaced.",
+      "A tree-sitter S-expression query that captures the node to replace. " +
+      'Example: "(function_declaration name: (identifier) @name (#eq? @name \"myFunc\")) @fn". ' +
+      "When multiple nodes match, the one with the largest source span is replaced.",
   }),
   newContent: Schema.String.annotate({
     description: "The complete new source text to substitute for the matched node.",
@@ -150,7 +150,7 @@ export const AstEditTool = Tool.define(
       description:
         "Edit a source file by replacing the AST node matched by a tree-sitter query. " +
         "Use ast_query first to identify the exact pattern, then call ast_edit to apply the replacement. " +
-        "Fails if the query matches zero or more than one node.",
+        "When multiple nodes match, the largest-span node is replaced.",
       parameters: Parameters,
       execute,
     }

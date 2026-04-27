@@ -6,7 +6,6 @@ import * as Tool from "./tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Instance } from "../project/instance"
 import { Service as AstParserService } from "../ast/parser"
-import { LANGUAGE_MAP } from "../ast/languages"
 import * as Bom from "@/util/bom"
 import DESCRIPTION from "./ast_query.txt"
 

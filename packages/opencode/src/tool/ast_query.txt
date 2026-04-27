@@ -59,8 +59,7 @@ For specific names, use field predicates:
 One line per match:
 `L{start}-{end} [{node_type}] "{name}": {text_preview}`
 
-The `start_line` / `end_line` in metadata are 0-indexed and can be passed directly
-to `ast_edit` for targeted replacement.
+Use the same `pattern` (or refine it) with `ast_edit` to replace the matched node.
 
 ## Supported languages
 

@@ -1,33 +1,25 @@
-Replace an AST node in a source file using its exact line range.
+Replace an AST node in a source file using a tree-sitter query pattern.
 
-Companion to `ast_query`. After finding a node with `ast_query`, pass its
-`start_line` and `end_line` here along with the replacement source text.
+Companion to `ast_query`. After finding a node with `ast_query`, use the same
+pattern (or a more specific one) to replace the matched node.
 
 Unlike `edit` (which matches `oldString` as a raw string and can fail on
-indentation/whitespace drift), `ast_edit` works by **byte offset** derived from
-the parsed AST. It is precise, drift-immune, and does not require the model
+indentation/whitespace drift), `ast_edit` works by **character offset** derived
+from the parsed AST. It is precise, drift-immune, and does not require the model
 to include the original source text in context.
 
 ## Workflow
 
 1. Call `ast_query` on the file with an appropriate pattern to locate the target node
-2. Note the `start_line`, `end_line`, and `node_type` from the result
-3. Call `ast_edit` with those values plus your `replacement` text
+2. Refine the pattern if needed (e.g. add a name predicate to match exactly one function)
+3. Call `ast_edit` with the same `filePath`, the `pattern`, and `newContent`
 
 ## Parameters
 
 - `filePath` — absolute path to the file
-- `start_line` — 0-indexed start line from ast_query result
-- `end_line` — 0-indexed end line from ast_query result (inclusive)
-- `replacement` — the new source text (must be syntactically valid)
-- `verify_node_type` — optional safety check: if the node type at the range
-doesn't match this value, the edit is aborted with an error
-
-## Safety
-
-- If no node is found at the given range, the edit is aborted (no write occurs)
-- `verify_node_type` provides an extra guard against stale line numbers
-- The full permission → write → format → LSP → snapshot pipeline runs after edit
+- `pattern` — tree-sitter S-expression query that captures the node to replace
+- `newContent` — the complete new source text to substitute for the matched node
+- `language` — optional override for language detection
 
 ## When to use ast_edit
 
@@ -48,9 +40,7 @@ doesn't match this value, the edit is aborted with an error
 ```json
 {
   "filePath": "/abs/path/src/server.ts",
-  "start_line": 42,
-  "end_line": 58,
-  "verify_node_type": "function_declaration",
-  "replacement": "function handleRequest(req: Request): Response {\n  return new Response('ok')\n}"
+  "pattern": "(function_declaration name: (identifier) @name (#eq? @name \"handleRequest\")) @fn",
+  "newContent": "function handleRequest(req: Request): Response {\n  return new Response('ok')\n}"
 }
 ```
