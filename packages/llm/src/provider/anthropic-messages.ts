@@ -1,4 +1,4 @@
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -8,7 +8,6 @@ import {
   type FinishReason,
   type LLMEvent,
   type LLMRequest,
-  type TextPart,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,

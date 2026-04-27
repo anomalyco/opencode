@@ -12,7 +12,6 @@ import {
   ToolChoice,
   ToolDefinition,
   type ContentPart,
-  type Protocol,
   type ModelID as ModelIDType,
   type ProviderID as ProviderIDType,
   type ReasoningEffort,
@@ -50,7 +49,7 @@ export type ToolChoiceInput =
   | string
 
 export type ToolResultInput = Omit<ToolResultPart, "type" | "result"> & {
-  readonly result: ToolResultValue | unknown
+  readonly result: unknown
   readonly resultType?: ToolResultValue["type"]
 }
 
@@ -106,7 +105,7 @@ export const model = (input: ModelInput) => {
     ...rest,
     id: ModelID.make(input.id),
     provider: ProviderID.make(input.provider),
-    protocol: input.protocol as Protocol,
+    protocol: input.protocol,
     capabilities: modelCapabilities instanceof ModelCapabilities ? modelCapabilities : capabilities(modelCapabilities),
     limits: modelLimits instanceof ModelLimits ? modelLimits : limits(modelLimits),
   })
@@ -119,8 +118,14 @@ export const tool = (input: ToolDefinition | ConstructorParameters<typeof ToolDe
 
 export const toolCall = (input: Omit<ToolCallPart, "type">): ToolCallPart => ({ type: "tool-call", ...input })
 
-const toolResultValue = (value: ToolResultValue | unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
-  if (typeof value === "object" && value !== null && "type" in value && "value" in value) return value as ToolResultValue
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const isToolResultValue = (value: unknown): value is ToolResultValue =>
+  isRecord(value) && (value.type === "text" || value.type === "json" || value.type === "error") && "value" in value
+
+const toolResultValue = (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
+  if (isToolResultValue(value)) return value
   return { type, value }
 }
 

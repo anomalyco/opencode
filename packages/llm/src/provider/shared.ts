@@ -51,6 +51,15 @@ export const toolResultText = (part: ToolResultPart) => {
   return encodeJson(part.result.value)
 }
 
+const errorText = (error: unknown) => {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") return String(error)
+  if (error === null) return "null"
+  if (error === undefined) return "undefined"
+  return "Unknown stream error"
+}
+
 const streamError = (adapter: string, message: string, cause: Cause.Cause<unknown>) => {
   const failed = cause.reasons.find(Cause.isFailReason)?.error
   if (failed instanceof ProviderChunkError) return failed
@@ -85,7 +94,7 @@ export const framed = <Frame, Chunk, State, Event>(input: {
   readonly onHalt?: (state: State) => ReadonlyArray<Event>
 }): Stream.Stream<Event, ProviderChunkError> => {
   const bytes = input.response.stream.pipe(
-    Stream.mapError((error) => chunkError(input.adapter, input.readError, String(error))),
+    Stream.mapError((error) => chunkError(input.adapter, input.readError, errorText(error))),
   )
   return input.framing(bytes).pipe(
     Stream.mapEffect(input.decodeChunk),

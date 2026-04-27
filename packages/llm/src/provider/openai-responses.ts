@@ -1,4 +1,4 @@
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -322,7 +322,7 @@ const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
 }
 
 const hostedToolEvents = (item: OpenAIResponsesStreamItem & { id: string }): ReadonlyArray<LLMEvent> => {
-  const name = HOSTED_TOOL_NAMES[item.type]!
+  const name = HOSTED_TOOL_NAMES[item.type]
   return [
     { type: "tool-call", id: item.id, name, input: hostedToolInput(item), providerExecuted: true },
     { type: "tool-result", id: item.id, name, result: hostedToolResult(item), providerExecuted: true },

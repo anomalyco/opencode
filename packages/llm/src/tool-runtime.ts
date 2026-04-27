@@ -43,6 +43,21 @@ export interface RunOptions<T extends Tools> {
   readonly stopWhen?: (state: RuntimeState) => boolean
 }
 
+const requestInput = (request: LLMRequest): ConstructorParameters<typeof LLMRequest>[0] => ({
+  id: request.id,
+  model: request.model,
+  system: request.system,
+  messages: request.messages,
+  tools: request.tools,
+  toolChoice: request.toolChoice,
+  generation: request.generation,
+  reasoning: request.reasoning,
+  cache: request.cache,
+  responseFormat: request.responseFormat,
+  metadata: request.metadata,
+  native: request.native,
+})
+
 /**
  * Run a model with a typed tool record. The runtime streams the model, on
  * each `tool-call` event decodes the input against the tool's `parameters`
@@ -64,7 +79,7 @@ export const run = <T extends Tools>(
   const tools = options.tools as Tools
   const runtimeTools = toDefinitions(tools)
   const initialRequest = new LLMRequest({
-    ...options.request,
+    ...requestInput(options.request),
     tools: [
       ...options.request.tools.filter((tool) => !runtimeTools.some((runtimeTool) => runtimeTool.name === tool.name)),
       ...runtimeTools,
@@ -92,7 +107,7 @@ export const run = <T extends Tools>(
               { concurrency },
             )
             const followUp = new LLMRequest({
-              ...request,
+              ...requestInput(request),
               messages: [
                 ...request.messages,
                 LLM.assistant(state.assistantContent),
