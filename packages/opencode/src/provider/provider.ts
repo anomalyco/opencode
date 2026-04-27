@@ -884,6 +884,7 @@ export const Model = Schema.Struct({
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
+  theme: Schema.optional(Schema.String),
   variants: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
 })
   .annotate({ identifier: "Model" })
@@ -897,6 +898,7 @@ export const Info = Schema.Struct({
   env: Schema.Array(Schema.String),
   key: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
+  theme: Schema.optional(Schema.String),
   models: Schema.Record(Schema.String, Model),
 })
   .annotate({ identifier: "Provider" })
@@ -1047,6 +1049,7 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     source: "custom",
     name: provider.name,
     env: [...(provider.env ?? [])],
+    theme: undefined,
     options: {},
     models,
   }
@@ -1130,6 +1133,7 @@ const layer: Layer.Layer<
             env: provider.env ?? existing?.env ?? [],
             options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
             source: "config",
+            theme: provider.theme ?? existing?.theme,
             models: existing?.models ?? {},
           }
 
@@ -1197,12 +1201,13 @@ const layer: Layer.Layer<
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
               limit: {
                 context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
-                input: model.limit?.input ?? existingModel?.limit?.input,
+                input: model.limit?.input ?? existingModel?.limit?.input ?? 0,
                 output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
               },
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
+              theme: model.theme ?? existingModel?.theme,
               variants: {},
             }
             const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})

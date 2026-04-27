@@ -1297,6 +1297,10 @@ export type AgentConfig = {
 export type ProviderConfig = {
   api?: string
   name?: string
+  /**
+   * Theme to use for this provider
+   */
+  theme?: string
   env?: Array<string>
   id?: string
   npm?: string
@@ -1329,6 +1333,10 @@ export type ProviderConfig = {
       name?: string
       family?: string
       release_date?: string
+      /**
+       * Theme to use for this model
+       */
+      theme?: string
       attachment?: boolean
       reasoning?: boolean
       temperature?: boolean
@@ -1811,6 +1819,7 @@ export type Model = {
     [key: string]: string
   }
   release_date: string
+  theme?: string
   variants?: {
     [key: string]: {
       [key: string]: unknown
@@ -1827,6 +1836,7 @@ export type Provider = {
   options: {
     [key: string]: unknown
   }
+  theme?: string
   models: {
     [key: string]: Model
   }

@@ -3,6 +3,7 @@ import { createSimpleContext } from "./helper"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
+import { useTuiConfig } from "@tui/context/tui-config"
 import { uniqueBy } from "remeda"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
@@ -27,6 +28,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const sdk = useSDK()
     const toast = useToast()
+    const tuiConfig = useTuiConfig()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
@@ -413,6 +415,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
             duration: 3000,
           })
+      }
+    })
+
+    const themeApi = useTheme()
+
+    // Automatically update theme when model changes
+    createEffect(() => {
+      const current = model.current()
+      if (!current) return
+
+      const provider = sync.data.provider.find((x) => x.id === current.providerID)
+      if (!provider) return
+
+      const modelInfo = provider.models[current.modelID]
+      
+      const targetTheme = modelInfo?.theme ?? provider.theme ?? tuiConfig.theme ?? "opencode"
+      
+      if (targetTheme && themeApi.has(targetTheme)) {
+        themeApi.set(targetTheme)
       }
     })
 

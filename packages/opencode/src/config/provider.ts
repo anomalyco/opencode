@@ -7,6 +7,7 @@ export const Model = Schema.Struct({
   name: Schema.optional(Schema.String),
   family: Schema.optional(Schema.String),
   release_date: Schema.optional(Schema.String),
+  theme: Schema.optional(Schema.String).annotate({ description: "Theme to use for this model" }),
   attachment: Schema.optional(Schema.Boolean),
   reasoning: Schema.optional(Schema.Boolean),
   temperature: Schema.optional(Schema.Boolean),
@@ -71,6 +72,7 @@ export const Model = Schema.Struct({
 export const Info = Schema.Struct({
   api: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
+  theme: Schema.optional(Schema.String).annotate({ description: "Theme to use for this provider" }),
   env: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   id: Schema.optional(Schema.String),
   npm: Schema.optional(Schema.String),
