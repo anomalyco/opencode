@@ -84,20 +84,6 @@ export type EventLspUpdated = {
   }
 }
 
-export type EventInstallationUpdated = {
-  type: "installation.updated"
-  properties: {
-    version: string
-  }
-}
-
-export type EventInstallationUpdateAvailable = {
-  type: "installation.update-available"
-  properties: {
-    version: string
-  }
-}
-
 export type EventMessagePartDelta = {
   type: "message.part.delta"
   properties: {
@@ -227,6 +213,20 @@ export type EventSessionError = {
       | StructuredOutputError
       | ContextOverflowError
       | ApiError
+  }
+}
+
+export type EventInstallationUpdated = {
+  type: "installation.updated"
+  properties: {
+    version: string
+  }
+}
+
+export type EventInstallationUpdateAvailable = {
+  type: "installation.update-available"
+  properties: {
+    version: string
   }
 }
 
@@ -1117,13 +1117,13 @@ export type GlobalEvent = {
     | EventFileWatcherUpdated
     | EventLspClientDiagnostics
     | EventLspUpdated
-    | EventInstallationUpdated
-    | EventInstallationUpdateAvailable
     | EventMessagePartDelta
     | EventPermissionAsked
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
+    | EventInstallationUpdated
+    | EventInstallationUpdateAvailable
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
@@ -2060,13 +2060,13 @@ export type Event =
   | EventFileWatcherUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
   | EventMessagePartDelta
   | EventPermissionAsked
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
+  | EventInstallationUpdated
+  | EventInstallationUpdateAvailable
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected

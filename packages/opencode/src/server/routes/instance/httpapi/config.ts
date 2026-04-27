@@ -1,5 +1,5 @@
-import { Config } from "@/config"
-import { Provider } from "@/provider"
+import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
 import * as InstanceState from "@/effect/instance-state"
 import { Effect, Layer } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"

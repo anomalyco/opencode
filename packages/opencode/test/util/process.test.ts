@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Process } from "../../src/util"
+import { Process } from "@/util/process"
 import { tmpdir } from "../fixture/fixture"
 
 function node(script: string) {

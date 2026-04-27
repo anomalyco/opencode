@@ -35,6 +35,8 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
       props.onConfirm?.({
         filename: textarea.plainText,
         thinking: store.thinking,

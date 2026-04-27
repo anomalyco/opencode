@@ -847,7 +847,10 @@ export function options(input: {
 }): Record<string, any> {
   const result: Record<string, any> = {}
 
-  if (input.model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+  if (
+    input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+    (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic")
+  ) {
     result["toolStreaming"] = false
   }
 
@@ -1167,3 +1170,5 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
 
   return schema as JSONSchema7
 }
+
+export * as ProviderTransform from "./transform"

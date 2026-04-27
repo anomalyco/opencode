@@ -1,6 +1,6 @@
 import * as InstanceState from "@/effect/instance-state"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Project } from "@/project"
+import { Project } from "@/project/project"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { ProjectID } from "@/project/schema"
 import { Effect, Layer, Schema } from "effect"
