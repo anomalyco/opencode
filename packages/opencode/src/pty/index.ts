@@ -1,17 +1,17 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { InstanceState } from "@/effect"
+import { Config } from "@/config"
+import { InstanceState, EffectBridge } from "@/effect"
+import { lazy } from "@opencode-ai/core/util/lazy"
+import { Plugin } from "@/plugin"
 import { Instance } from "@/project/instance"
+import { Shell } from "@/shell/shell"
 import type { Proc } from "#pty"
 import { Log } from "../util"
-import { lazy } from "@opencode-ai/core/util/lazy"
-import { Shell } from "@/shell/shell"
-import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
-import { EffectBridge } from "@/effect"
 
 const log = Log.create({ service: "pty" })
 
@@ -117,8 +117,10 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pt
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const config = yield* Config.Service
     const bus = yield* Bus.Service
     const plugin = yield* Plugin.Service
+
     function teardown(session: Active) {
       try {
         session.process.kill()
@@ -174,8 +176,9 @@ export const layer = Layer.effect(
     const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
       const s = yield* InstanceState.get(state)
       const bridge = yield* EffectBridge.make()
+      const cfg = yield* config.get()
       const id = PtyID.ascending()
-      const command = input.command || Shell.preferred()
+      const command = input.command || Shell.preferred(cfg.shell)
       const args = input.args || []
       if (Shell.login(command)) {
         args.push("-l")
@@ -360,6 +363,10 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Bus.layer),
+  Layer.provide(Plugin.defaultLayer),
+  Layer.provide(Config.defaultLayer),
+)
 
 export * as Pty from "."

@@ -98,6 +98,9 @@ export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
   }),
+  shell: Schema.optional(Schema.String).annotate({
+    description: "Default shell to use for terminal and bash tool",
+  }),
   logLevel: Schema.optional(LogLevelRef).annotate({ description: "Log level" }),
   server: Schema.optional(ConfigServer.Server).annotate({
     description: "Server configuration for opencode serve and web commands",
@@ -310,14 +313,18 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
     return applyEdits(input, edits)
   }
 
-  return Object.entries(patch).reduce((result, [key, value]) => {
-    if (value === undefined) return result
-    return patchJsonc(result, value, [...path, key])
-  }, input)
+  return Object.entries(patch).reduce((result, [key, value]) => patchJsonc(result, value, [...path, key]), input)
 }
 
 function writable(info: Info) {
   const { plugin_origins: _plugin_origins, ...next } = info
+  return next
+}
+
+function writableGlobal(info: Info) {
+  const next = writable(info)
+  // When a user changes config from a value back to default in the Desktop app, we don't want to leave a blank `"shell": "",` key
+  if ("shell" in next && next.shell === "") return { ...next, shell: undefined }
   return next
 }
 
@@ -749,15 +756,16 @@ export const layer = Layer.effect(
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
+      const patch = writableGlobal(config)
 
       let next: Info
       if (!file.endsWith(".jsonc")) {
         const existing = ConfigParse.effectSchema(Info, ConfigParse.jsonc(before, file), file)
-        const merged = mergeDeep(writable(existing), writable(config))
+        const merged = mergeDeep(writable(existing), patch)
         yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
         next = merged
       } else {
-        const updated = patchJsonc(before, writable(config))
+        const updated = patchJsonc(before, patch)
         next = ConfigParse.effectSchema(Info, ConfigParse.jsonc(updated, file), file)
         yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }

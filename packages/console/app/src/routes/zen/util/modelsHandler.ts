@@ -1,6 +1,4 @@
-import { ZenData } from "@opencode-ai/console-core/model.js"
-
-export async function optionsHandler() {
+export async function buildOptionsResponse() {
   return new Response(null, {
     status: 200,
     headers: {
@@ -11,16 +9,13 @@ export async function optionsHandler() {
   })
 }
 
-export async function getHandler(opts: { modelList: "lite" | "full"; disabledModels?: string[] }) {
-  const zenData = ZenData.list(opts.modelList)
-
+export async function buildModelsResponse(models: string[]) {
   return new Response(
     JSON.stringify({
       object: "list",
-      data: Object.entries(zenData.models)
-        .filter(([id]) => !opts.disabledModels?.includes(id))
-        .filter(([id]) => !id.startsWith("alpha-"))
-        .map(([id, _model]) => ({
+      data: models
+        .filter((id) => !id.startsWith("alpha-"))
+        .map((id) => ({
           id,
           object: "model",
           created: Math.floor(Date.now() / 1000),

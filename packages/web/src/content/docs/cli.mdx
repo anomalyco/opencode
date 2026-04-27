@@ -93,7 +93,19 @@ Create a new agent with custom configuration.
 opencode agent create
 ```
 
-This command will guide you through creating a new agent with a custom system prompt and tool configuration.
+This command will guide you through creating a new agent with a custom system prompt and permission configuration. Anything you don't allow is denied in the generated agent's frontmatter.
+
+#### Flags
+
+| Flag            | Description                                                                                                                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--path`        | Directory to write the agent file to (defaults to global or `.opencode/agent` based on the prompt)                                                                                                                                       |
+| `--description` | What the agent should do                                                                                                                                                                                                                 |
+| `--mode`        | Agent mode: `all`, `primary`, or `subagent`                                                                                                                                                                                              |
+| `--permissions` | Comma-separated list of permissions to allow (default: all). Available: `bash`, `read`, `edit`, `glob`, `grep`, `webfetch`, `task`, `todowrite`, `websearch`, `codesearch`, `lsp`, `skill`. Anything omitted is denied. Alias: `--tools` |
+| `--model`, `-m` | Model to use, in `provider/model` format                                                                                                                                                                                                 |
+
+Passing all of `--path`, `--description`, `--mode`, and `--permissions` runs the command non-interactively.
 
 ---
 
