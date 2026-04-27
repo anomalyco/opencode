@@ -10,7 +10,7 @@ import {
   ProviderPatch,
   RequestExecutor,
 } from "@opencode-ai/llm"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -20,6 +20,7 @@ import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import type { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider"
+import type { Tool } from "../../src/tool"
 
 // Inline HTTP layer that returns a single fixed body. Mirrors the
 // `fixedResponse` helper in `packages/llm/test/lib/http.ts` — duplicated here
@@ -146,6 +147,53 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
       // No tool events on a text-only happy path.
       expect(collected.some((event) => event.type === "tool-call")).toBe(false)
       expect(collected.some((event) => event.type === "error")).toBe(false)
+    }),
+  )
+
+  // Phase 2 step 2a: verifies a tool-bearing `nativeTools` array reaches the
+  // wire as Anthropic `tools[]` blocks. The model in this fixture answers with
+  // plain text instead of issuing a tool call (we don't yet have dispatch).
+  // This proves tool definitions plumb through `LLMNative.request` →
+  // `LLMRequest` → adapter `prepare` → wire body.
+  it.effect("forwards nativeTools to the wire as Anthropic tools when the gate is open", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel()
+      const provider = ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl)
+      const userID = MessageID.ascending()
+
+      const lookupParameters = Schema.Struct({
+        query: Schema.String.annotate({ description: "Search query" }),
+      })
+      const lookupTool: Tool.Def<typeof lookupParameters> = {
+        id: "lookup",
+        description: "Lookup project data",
+        parameters: lookupParameters,
+        execute: () => Effect.succeed({ title: "", metadata: {}, output: "" }),
+      }
+
+      const llmRequest = yield* LLMNative.request({
+        id: "smoke-tools",
+        provider,
+        model: mdl,
+        system: ["You are concise."],
+        messages: [userMessage(mdl, userID, [userPart(userID, "Look something up.")])],
+        tools: [lookupTool],
+      })
+
+      const prepared = yield* LLMClient.make({ adapters, patches: ProviderPatch.defaults }).prepare(llmRequest)
+      expect(prepared.target).toMatchObject({
+        tools: [
+          {
+            name: "lookup",
+            description: "Lookup project data",
+            input_schema: {
+              type: "object",
+              properties: { query: { type: "string", description: "Search query" } },
+              required: ["query"],
+            },
+          },
+        ],
+      })
     }),
   )
 })

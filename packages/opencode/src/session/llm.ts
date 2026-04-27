@@ -22,6 +22,8 @@ import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
+// Aliased to avoid a name clash with the AI SDK `Tool` type imported above.
+import type { Tool as OpenCodeTool } from "@/tool"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -60,6 +62,13 @@ export type StreamInput = {
   retries?: number
   toolChoice?: "auto" | "required" | "none"
   nativeMessages?: ReadonlyArray<MessageV2.WithParts>
+  // Opcode-native `Tool.Def[]` parallel to `tools` (AI SDK shape). When
+  // populated alongside `tools`, the LLM-native path forwards definitions to
+  // the model. Dispatch + multi-round tool loops land in Phase 2 step 2b; for
+  // now the request can carry tools but the gate keeps real production tool
+  // sessions on the AI SDK path because no production caller populates this
+  // field yet.
+  nativeTools?: ReadonlyArray<OpenCodeTool.Def>
 }
 
 export type StreamRequest = StreamInput & {
@@ -478,7 +487,13 @@ const live: Layer.Layer<
     const runNative = Effect.fn("LLM.runNative")(function* (input: StreamRequest) {
       if (!Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE) return undefined
       if (!input.nativeMessages || input.nativeMessages.length === 0) return undefined
-      if (Object.keys(input.tools).length > 0) return undefined
+      // Tools without dispatch wiring would mean the model issues tool-call
+      // events that never get a tool-result. The gate fall-through keeps
+      // tool-using sessions on the AI SDK path until step 2b lands the
+      // dispatch loop. Sessions with zero tools, OR sessions that explicitly
+      // opt in by populating `nativeTools`, can route here.
+      const hasAITools = Object.keys(input.tools).length > 0
+      if (hasAITools && (input.nativeTools === undefined || input.nativeTools.length === 0)) return undefined
 
       const item = yield* provider.getProvider(input.model.providerID)
       const llmRequest = yield* LLMNative.request({
@@ -487,6 +502,7 @@ const live: Layer.Layer<
         model: input.model,
         system: input.system,
         messages: input.nativeMessages,
+        tools: input.nativeTools,
       })
       if (!NATIVE_PROTOCOLS.has(llmRequest.model.protocol)) return undefined
 
