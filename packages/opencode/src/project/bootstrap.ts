@@ -1,6 +1,6 @@
 import { Plugin } from "../plugin"
 import { Format } from "../format"
-import { LSP } from "../lsp"
+import { LSP } from "@/lsp/lsp"
 import { File } from "../file"
 import { Snapshot } from "../snapshot"
 import * as Project from "./project"
@@ -8,11 +8,11 @@ import * as Vcs from "./vcs"
 import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { FileWatcher } from "@/file/watcher"
-import { ShareNext } from "@/share"
+import { ShareNext } from "@/share/share-next"
 import * as Effect from "effect/Effect"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })

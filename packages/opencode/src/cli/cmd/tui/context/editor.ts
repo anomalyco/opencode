@@ -31,6 +31,7 @@ const PositionSchema = z.object({
 const EditorSelectionSchema = z.object({
   text: z.string(),
   filePath: z.string(),
+  source: z.enum(["websocket", "zed"]).optional(),
   selection: z.object({
     start: PositionSchema,
     end: PositionSchema,
@@ -107,9 +108,11 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         send({ id: requestID, method, params })
       }
 
-      const scheduleReconnect = (delay: number) => {
+      const scheduleReconnect = () => {
         if (closed) return
         if (reconnect) clearTimeout(reconnect)
+        attempt += 1
+        const delay = Math.min(1000 * 2 ** (attempt - 1), 10_000)
         reconnect = setTimeout(connect, delay)
       }
 
@@ -121,12 +124,14 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
           const dbPath = resolveZedDbPath()
           if (!dbPath) {
             setStore("status", "disabled")
-            scheduleReconnect(1000)
+            scheduleReconnect()
             return
           }
           zedSelection ??= resolveZedSelection(dbPath)
-            .then((selection) => {
+            .then((result) => {
               if (closed || socket) return
+              if (result.type === "unavailable") return
+              const selection = result.type === "selection" ? result.selection : undefined
               const key = editorSelectionKey(selection)
               if (key !== lastZedSelectionKey) {
                 lastZedSelectionKey = key
@@ -135,13 +140,12 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
               }
             })
             .catch(() => {
-              if (closed || socket) return
-              setStore("status", "disabled")
+              // Keep the last known Zed selection for transient polling failures.
             })
             .finally(() => {
               zedSelection = undefined
             })
-          scheduleReconnect(1000)
+          scheduleReconnect()
           return
         }
 
@@ -171,7 +175,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
           const selection =
             message.method === "selection_changed" ? EditorSelectionSchema.safeParse(message.params) : undefined
           if (selection?.success) {
-            setStore("selection", selection.data)
+            setStore("selection", { ...selection.data, source: "websocket" })
             return
           }
 
@@ -205,13 +209,11 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
           if (closed) return
 
           setStore("status", "connecting")
-          attempt += 1
-          const delay = Math.min(1000 * 2 ** (attempt - 1), 30000)
-          scheduleReconnect(delay)
+          scheduleReconnect()
         })
       }
 
-      scheduleReconnect(0)
+      connect()
 
       onCleanup(() => {
         closed = true
@@ -229,6 +231,9 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       },
       selection() {
         return store.selection
+      },
+      clearSelection() {
+        setStore("selection", undefined)
       },
       onMention(listener: (mention: EditorMention) => void) {
         mentionListeners.add(listener)

@@ -1,7 +1,7 @@
 import { File } from "@/file"
 import { Ripgrep } from "@/file/ripgrep"
 import * as InstanceState from "@/effect/instance-state"
-import { LSP } from "@/lsp"
+import { LSP } from "@/lsp/lsp"
 import { Effect, Layer, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"

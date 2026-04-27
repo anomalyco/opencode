@@ -1,8 +1,10 @@
 import z from "zod"
-import { and, Database, eq } from "../storage"
+import { and } from "drizzle-orm"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
@@ -504,3 +506,5 @@ export function setInitialized(id: ProjectID) {
     db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
   )
 }
+
+export * as Project from "./project"

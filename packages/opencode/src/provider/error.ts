@@ -199,3 +199,5 @@ export function parseAPICallError(input: { providerID: ProviderID; error: APICal
     metadata,
   }
 }
+
+export * as ProviderError from "./error"

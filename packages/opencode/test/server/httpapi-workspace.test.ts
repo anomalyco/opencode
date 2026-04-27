@@ -1,34 +1,31 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Context, Effect } from "effect"
+import { Effect } from "effect"
+import type { UpgradeWebSocket } from "hono/ws"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdaptor } from "../../src/control-plane/adaptors"
 import type { WorkspaceAdaptor } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/workspace"
-import { Session } from "../../src/session"
-import { Log } from "../../src/util"
+import { Session } from "@/session/session"
+import * as Log from "@opencode-ai/core/util/log"
+import { InstanceRoutes } from "../../src/server/routes/instance"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 
 void Log.init({ print: false })
 
-const context = Context.empty() as Context.Context<unknown>
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
+const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
 function request(path: string, directory: string, init: RequestInit = {}) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
   const headers = new Headers(init.headers)
   headers.set("x-opencode-directory", directory)
-  return ExperimentalHttpApiServer.webHandler().handler(
-    new Request(`http://localhost${path}`, {
-      ...init,
-      headers,
-    }),
-    context,
-  )
+  return InstanceRoutes(websocket).request(path, { ...init, headers })
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
@@ -61,6 +58,7 @@ function localAdaptor(directory: string): WorkspaceAdaptor {
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
   await Instance.disposeAll()
   await resetDatabase()
 })

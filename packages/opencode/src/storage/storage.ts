@@ -1,4 +1,4 @@
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -329,3 +329,5 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
+
+export * as Storage from "./storage"
