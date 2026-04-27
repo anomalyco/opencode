@@ -209,6 +209,10 @@ exports[`tool parameters JSON Schema (wire shape) lsp 1`] = `
       ],
       "type": "string",
     },
+    "query": {
+      "description": "Search query for workspaceSymbol. Empty string requests all symbols.",
+      "type": "string",
+    },
   },
   "required": [
     "operation",

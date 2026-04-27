@@ -13,6 +13,9 @@ import { Filesystem } from "../../util"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Schema } from "effect"
 
+const decodeMessageInfo = Schema.decodeUnknownSync(MessageV2.Info)
+const decodePart = Schema.decodeUnknownSync(MessageV2.Part)
+
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
   | { type: "session"; data: SDKSession }
@@ -169,7 +172,7 @@ export const ImportCommand = cmd({
       )
 
       for (const msg of exportData.messages) {
-        const msgInfo = MessageV2.Info.zod.parse(msg.info)
+        const msgInfo = decodeMessageInfo(msg.info) as MessageV2.Info
         const { id, sessionID: _, ...msgData } = msgInfo
         Database.use((db) =>
           db
@@ -185,7 +188,7 @@ export const ImportCommand = cmd({
         )
 
         for (const part of msg.parts) {
-          const partInfo = MessageV2.Part.zod.parse(part)
+          const partInfo = decodePart(part) as MessageV2.Part
           const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
           Database.use((db) =>
             db
