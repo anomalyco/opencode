@@ -18,6 +18,9 @@ TASKS=(
   "In packages/opencode/src/tool/edit.ts, the normalizeLineEndings helper is a one-liner. Inline every call site and remove the function declaration."
   "Wrap the body of loadGrammar in packages/opencode/src/ast/parser.ts in a try/catch that rethrows as new Error(\"Failed to load grammar for \${language}: \${e instanceof Error ? e.message : String(e)}\")."
   "In both packages/opencode/src/tool/ast_edit.ts and packages/opencode/src/tool/ast_query.ts, add a console.time(params.filePath) at the start of the execute function body and console.timeEnd(params.filePath) just before each return statement."
+  "In packages/opencode/src/tool/edit.ts, change these 4 comments: 1) // Only match the first occurrence of the last line → // Match first occurrence of last line anchor, 2) // Try to find a unique anchor → // Find a unique anchor for this block, 3) // If the block wasn't found, try again with the last line only → // Fallback: search with last line only, 4) // If we get here, we couldn't find the block → // Block not found after all attempts."
+  "In packages/opencode/src/tool/registry.ts, add console.log('Entering', tool.id) at the start of the execute functions for all, ids, and tools. Do not change other functions."
+  "In packages/opencode/src/ast/parser.ts, rename these variables: grammarMap → grammarCache, parserMap → parserCache, queryCache → patternCache, fileLanguageMap → fileLanguageCache, supportedLanguages → supportedLanguageList."
 )
 
 run_suite() {

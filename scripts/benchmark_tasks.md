@@ -1,6 +1,6 @@
 # Benchmark Task Suite — AST tools vs baseline
 
-10 tasks designed to stress-test large TypeScript files.
+13 tasks designed to stress-test large TypeScript files across edit, ast_edit, and patch_file workflows.
 Each task is run twice: once with AST tools enabled, once disabled.
 
 ## Environment setup
@@ -92,6 +92,39 @@ Prompt:
 Remove the `LspTool` export and all its references from `packages/opencode/src/tool/registry.ts`. Also remove the import of `LspTool` and any conditional that references it.
 
 Expected: ast_query finds the import, declaration, and all call sites. ast_edit removes all nodes. Baseline needs grep + multiple edits.
+
+## Task 11 — Change 4 comments in a large file (patch_file candidate)
+File: `packages/opencode/src/tool/edit.ts` (~480 lines)
+Prompt:
+
+In `packages/opencode/src/tool/edit.ts`, change these 4 comments:
+1. Line with `// Only match the first occurrence of the last line` → `// Match first occurrence of last line anchor`
+2. Line with `// Try to find a unique anchor` → `// Find a unique anchor for this block`
+3. Line with `// If the block wasn't found, try again with the last line only` → `// Fallback: search with last line only`
+4. Line with `// If we get here, we couldn't find the block` → `// Block not found after all attempts`
+
+Expected: patch_file can apply all 4 changes in 2 calls (compute_anchors + patches). Baseline needs 4 edit calls or 1 read + 4 edits.
+
+## Task 12 — Add logging to 3 functions in a large file (patch_file candidate)
+File: `packages/opencode/src/tool/registry.ts` (~360 lines)
+Prompt:
+
+In `packages/opencode/src/tool/registry.ts`, add `console.log("Entering", tool.id)` at the start of the `execute` functions for `all`, `ids`, and `tools`. Do not change other functions.
+
+Expected: patch_file can locate the 3 execute blocks via anchors and patch them. Baseline needs read + 3 edits.
+
+## Task 13 — Rename 5 variables across a large file (patch_file candidate)
+File: `packages/opencode/src/ast/parser.ts` (~220 lines)
+Prompt:
+
+In `packages/opencode/src/ast/parser.ts`, rename these variables:
+- `grammarMap` → `grammarCache`
+- `parserMap` → `parserCache`
+- `queryCache` → `patternCache`
+- `fileLanguageMap` → `fileLanguageCache`
+- `supportedLanguages` → `supportedLanguageList`
+
+Expected: patch_file can apply all 5 renames in 2 calls. Baseline needs grep + 5 edits.
 
 ## How to run
 
