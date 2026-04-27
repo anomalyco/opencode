@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { ProviderLLMBridge } from "../../src/provider/llm-bridge"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { ProviderTest } from "../fake/provider"
-import type { Provider } from "../../src/provider"
+import type { Provider } from "../../src/provider/provider"
 
 const model = (input: {
   readonly id: string

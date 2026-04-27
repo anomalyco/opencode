@@ -2,8 +2,8 @@ import { LLM, type ContentPart, type MediaPart } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { ProviderLLMBridge } from "@/provider/llm-bridge"
 import * as EffectZod from "@/util/effect-zod"
-import type { Provider } from "@/provider"
-import type { Tool } from "@/tool"
+import type { Provider } from "@/provider/provider"
+import type { Tool } from "@/tool/tool"
 import type { MessageV2 } from "./message-v2"
 
 export class UnsupportedModelError extends Schema.TaggedErrorClass<UnsupportedModelError>()(

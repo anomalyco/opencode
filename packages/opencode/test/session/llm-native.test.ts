@@ -7,8 +7,8 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import type { MessageV2 } from "../../src/session/message-v2"
-import type { Provider } from "../../src/provider"
-import type { Tool } from "../../src/tool"
+import type { Provider } from "../../src/provider/provider"
+import type { Tool } from "../../src/tool/tool"
 
 const sessionID = SessionID.descending()
 

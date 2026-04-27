@@ -23,7 +23,7 @@ import { InstanceState } from "@/effect/instance-state"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 // Aliased to avoid a name clash with the AI SDK `Tool` type imported above.
-import type { Tool as OpenCodeTool } from "@/tool"
+import type { Tool as OpenCodeTool } from "@/tool/tool"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@opencode-ai/core/flag/flag"

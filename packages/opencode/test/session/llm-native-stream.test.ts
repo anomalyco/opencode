@@ -21,8 +21,8 @@ import { LLMNativeTools } from "../../src/session/llm-native-tools"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import type { MessageV2 } from "../../src/session/message-v2"
-import type { Provider } from "../../src/provider"
-import type { Tool } from "../../src/tool"
+import type { Provider } from "../../src/provider/provider"
+import type { Tool } from "../../src/tool/tool"
 
 // Inline HTTP layer that returns a single fixed body. Mirrors the
 // `fixedResponse` helper in `packages/llm/test/lib/http.ts` — duplicated here
