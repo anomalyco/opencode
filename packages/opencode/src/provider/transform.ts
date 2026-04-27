@@ -826,6 +826,10 @@ export function options(input: {
 }): Record<string, any> {
   const result: Record<string, any> = {}
 
+  if (input.model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+    result["toolStreaming"] = false
+  }
+
   // openai and providers using openai package should set store to false by default.
   if (
     input.model.providerID === "openai" ||
