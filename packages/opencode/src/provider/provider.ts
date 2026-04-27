@@ -4,25 +4,25 @@ import { Config } from "../config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util"
-import { Npm } from "../npm"
-import { Hash } from "@opencode-ai/shared/util/hash"
+import { Npm } from "@opencode-ai/core/npm"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import * as ModelsDev from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
-import { InstallationVersion } from "../installation/version"
-import { Flag } from "../flag/flag"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { zod } from "@/util/effect-zod"
 import { namedSchemaError } from "@/util/named-schema-error"
 import { iife } from "@/util/iife"
-import { Global } from "../global"
+import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { withStatics } from "@/util/schema"
 
@@ -1135,6 +1135,13 @@ const layer: Layer.Layer<
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
             const existingModel = parsed.models[model.id ?? modelID]
+            const apiID = model.id ?? existingModel?.api.id ?? modelID
+            const apiNpm =
+              model.provider?.npm ??
+              provider.npm ??
+              existingModel?.api.npm ??
+              modelsDev[providerID]?.npm ??
+              "@ai-sdk/openai-compatible"
             const name = iife(() => {
               if (model.name) return model.name
               if (model.id && model.id !== modelID) return modelID
@@ -1143,13 +1150,8 @@ const layer: Layer.Layer<
             const parsedModel: Model = {
               id: ModelID.make(modelID),
               api: {
-                id: model.id ?? existingModel?.api.id ?? modelID,
-                npm:
-                  model.provider?.npm ??
-                  provider.npm ??
-                  existingModel?.api.npm ??
-                  modelsDev[providerID]?.npm ??
-                  "@ai-sdk/openai-compatible",
+                id: apiID,
+                npm: apiNpm,
                 url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? "",
               },
               status: model.status ?? existingModel?.status ?? "active",
@@ -1177,7 +1179,12 @@ const layer: Layer.Layer<
                     model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
                   pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
                 },
-                interleaved: model.interleaved ?? false,
+                interleaved:
+                  model.interleaved ??
+                  existingModel?.capabilities.interleaved ??
+                  (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
+                    ? { field: "reasoning_content" }
+                    : false),
               },
               cost: {
                 input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
