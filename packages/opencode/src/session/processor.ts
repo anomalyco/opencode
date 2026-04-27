@@ -260,9 +260,8 @@ export const layer: Layer.Layer<
             if (ctx.assistantMessage.summary) {
               // During summary generation tools may be emitted by the provider;
               // silently skip executing or recording them to avoid breaking
-              // summary-only flows. Log at debug level so developers can see
-              // what's being skipped when troubleshooting.
-              console.debug(`Skipping tool call ${value.toolName} during summary generation`)
+              // summary-only flows.
+              slog.warn("Skipping tool call during summary generation", { tool: value.toolName })
               return
             }
             const part = yield* session.updatePart({
@@ -293,7 +292,7 @@ export const layer: Layer.Layer<
             if (ctx.assistantMessage.summary) {
               // See note above: don't throw during summary generation — just
               // log and skip the tool call so the stream can continue.
-              console.debug(`Skipping tool call ${value.toolName} during summary generation`)
+              slog.warn("Skipping tool call during summary generation", { tool: value.toolName })
               return
             }
             yield* updateToolCall(value.toolCallId, (match) => ({
