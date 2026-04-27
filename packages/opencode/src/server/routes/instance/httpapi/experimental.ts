@@ -6,10 +6,12 @@ import { InstanceState } from "@/effect"
 import { MCP } from "@/mcp"
 import { Project } from "@/project"
 import { ProviderID, ModelID } from "@/provider/schema"
+import { Session } from "@/session"
 import { ToolRegistry } from "@/tool"
 import * as EffectZod from "@/util/effect-zod"
 import { Worktree } from "@/worktree"
 import { Effect, Layer, Option, Schema } from "effect"
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -50,6 +52,15 @@ const ToolListQuery = Schema.Struct({
 })
 
 const WorktreeList = Schema.Array(Schema.String).annotate({ identifier: "WorktreeList" })
+const SessionListQuery = Schema.Struct({
+  directory: Schema.optional(Schema.String),
+  roots: Schema.optional(Schema.Literals(["true", "false"])),
+  start: Schema.optional(Schema.NumberFromString),
+  cursor: Schema.optional(Schema.NumberFromString),
+  search: Schema.optional(Schema.String),
+  limit: Schema.optional(Schema.NumberFromString),
+  archived: Schema.optional(Schema.Literals(["true", "false"])),
+})
 
 export const ExperimentalPaths = {
   console: "/experimental/console",
@@ -59,6 +70,7 @@ export const ExperimentalPaths = {
   toolIDs: "/experimental/tool/ids",
   worktree: "/experimental/worktree",
   worktreeReset: "/experimental/worktree/reset",
+  session: "/experimental/session",
   resource: "/experimental/resource",
 } as const
 
@@ -152,6 +164,17 @@ export const ExperimentalApi = HttpApi.make("experimental")
             identifier: "worktree.reset",
             summary: "Reset worktree",
             description: "Reset a worktree branch to the primary default branch.",
+          }),
+        ),
+        HttpApiEndpoint.get("session", ExperimentalPaths.session, {
+          query: SessionListQuery,
+          success: Schema.Array(Session.GlobalInfo),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.list",
+            summary: "List sessions",
+            description:
+              "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
           }),
         ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {
@@ -279,6 +302,28 @@ export const experimentalHandlers = Layer.unwrap(
       return true
     })
 
+    const session = Effect.fn("ExperimentalHttpApi.session")(function* (ctx: { query: typeof SessionListQuery.Type }) {
+      const limit = ctx.query.limit ?? 100
+      const sessions = Array.from(
+        Session.listGlobal({
+          directory: ctx.query.directory,
+          roots: ctx.query.roots === "true" ? true : undefined,
+          start: ctx.query.start,
+          cursor: ctx.query.cursor,
+          search: ctx.query.search,
+          limit: limit + 1,
+          archived: ctx.query.archived === "true" ? true : undefined,
+        }),
+      )
+      const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
+      return HttpServerResponse.jsonUnsafe(list, {
+        headers:
+          sessions.length > limit && list.length > 0
+            ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
+            : undefined,
+      })
+    })
+
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {
       return yield* mcp.resources()
     })
@@ -294,6 +339,7 @@ export const experimentalHandlers = Layer.unwrap(
         .handle("worktreeCreate", worktreeCreate)
         .handle("worktreeRemove", worktreeRemove)
         .handle("worktreeReset", worktreeReset)
+        .handle("session", session)
         .handle("resource", resource),
     )
   }),

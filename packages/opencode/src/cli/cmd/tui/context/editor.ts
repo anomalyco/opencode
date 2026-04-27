@@ -278,12 +278,16 @@ function resolveEditorLockFile() {
   }
 
   const cwd = process.cwd()
+  // longest workspace folder that contains cwd; 0 if none match
+  const bestMatchLength = (lock: EditorLockFile) =>
+    Math.max(0, ...lock.workspaceFolders.map((folder) => pathContainsLength(folder, cwd)))
   const locks = entries
     .filter((entry) => entry.endsWith(".lock"))
     .map((entry) => readEditorLockFile(path.join(directory, entry)))
     .filter((entry): entry is EditorLockFile => Boolean(entry))
-    .sort((left, right) => scoreEditorLock(right, cwd) - scoreEditorLock(left, cwd))
-
+    .filter((entry) => bestMatchLength(entry) > 0)
+    // prefer locks with longer matching workspace folders, then more recent ones
+    .sort((left, right) => bestMatchLength(right) - bestMatchLength(left) || right.mtimeMs - left.mtimeMs)
   return locks[0]
 }
 
@@ -310,11 +314,6 @@ function readEditorLockFile(filePath: string): EditorLockFile | undefined {
   }
 }
 
-function scoreEditorLock(lock: EditorLockFile, cwd: string) {
-  const workspaceMatch = lock.workspaceFolders.some((folder) => pathContains(folder, cwd)) ? 1 : 0
-  return workspaceMatch * 1_000_000_000_000 + lock.mtimeMs
-}
-
 function editorSelectionKey(selection: EditorSelection | undefined) {
   if (!selection) return ""
   return [
@@ -327,9 +326,10 @@ function editorSelectionKey(selection: EditorSelection | undefined) {
   ].join("\0")
 }
 
-function pathContains(parent: string, child: string) {
-  const relative = path.relative(path.resolve(parent), path.resolve(child))
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+function pathContainsLength(parent: string, child: string) {
+  const resolved = path.resolve(parent)
+  const relative = path.relative(resolved, path.resolve(child))
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)) ? resolved.length : 0
 }
 
 function openEditorSocket(connection: EditorConnection) {

@@ -170,23 +170,23 @@ Use raw Effect HTTP routes where `HttpApi` does not fit. The goal is deleting Ho
 
 ## Current Route Status
 
-| Area                      | Status            | Notes                                                                                    |
-| ------------------------- | ----------------- | ---------------------------------------------------------------------------------------- |
-| `question`                | `bridged`         | `GET /question`, reply, reject                                                           |
-| `permission`              | `bridged`         | list and reply                                                                           |
-| `provider`                | `bridged`         | list, auth, OAuth authorize/callback                                                     |
-| `config`                  | `bridged`         | read, providers, update                                                                  |
-| `project`                 | `bridged`         | list, current, git init, update                                                          |
-| `file`                    | `bridged` partial | find text/file/symbol, list/content/status                                               |
-| `mcp`                     | `bridged`         | status, add, OAuth, connect/disconnect                                                   |
-| `workspace`               | `bridged` partial | adaptor/list/status; create/remove/session-restore remain                                |
-| top-level instance routes | `bridged`         | path, vcs, command, agent, skill, lsp, formatter, dispose                                |
-| experimental JSON routes  | `bridged` partial | console, tool, worktree list/mutations, resource list; global session list remains later |
-| `session`                 | `later/special`   | large stateful surface plus streaming                                                    |
-| `sync`                    | `later`           | process/control side effects                                                             |
-| `event`                   | `special`         | SSE                                                                                      |
-| `pty`                     | `special`         | websocket                                                                                |
-| `tui`                     | `special`         | UI bridge                                                                                |
+| Area                      | Status            | Notes                                                                      |
+| ------------------------- | ----------------- | -------------------------------------------------------------------------- |
+| `question`                | `bridged`         | `GET /question`, reply, reject                                             |
+| `permission`              | `bridged`         | list and reply                                                             |
+| `provider`                | `bridged`         | list, auth, OAuth authorize/callback                                       |
+| `config`                  | `bridged`         | read, providers, update                                                    |
+| `project`                 | `bridged`         | list, current, git init, update                                            |
+| `file`                    | `bridged` partial | find text/file/symbol, list/content/status                                 |
+| `mcp`                     | `bridged`         | status, add, OAuth, connect/disconnect                                     |
+| `workspace`               | `bridged`         | adaptor/list/status/create/remove/session-restore                          |
+| top-level instance routes | `bridged`         | path, vcs, command, agent, skill, lsp, formatter, dispose                  |
+| experimental JSON routes  | `bridged`         | console, tool, worktree list/mutations, global session list, resource list |
+| `session`                 | `bridged`         | read, lifecycle, prompt, message/part mutations, revert, permission reply  |
+| `sync`                    | `bridged`         | start/replay/history                                                       |
+| `event`                   | `bridged`         | SSE via raw Effect HTTP                                                    |
+| `pty`                     | `special`         | websocket                                                                  |
+| `tui`                     | `special`         | UI bridge                                                                  |
 
 ## Full Route Checklist
 
@@ -266,82 +266,82 @@ This checklist tracks bridge parity only. Checked routes are available through t
 - [x] `POST /experimental/worktree` - create worktree.
 - [x] `DELETE /experimental/worktree` - remove worktree.
 - [x] `POST /experimental/worktree/reset` - reset worktree.
-- [ ] `GET /experimental/session` - global session list.
+- [x] `GET /experimental/session` - global session list.
 - [x] `GET /experimental/resource` - MCP resources.
 
 ### Workspace Routes
 
 - [x] `GET /experimental/workspace/adaptor` - list workspace adaptors.
-- [ ] `POST /experimental/workspace` - create workspace.
+- [x] `POST /experimental/workspace` - create workspace.
 - [x] `GET /experimental/workspace` - list workspaces.
 - [x] `GET /experimental/workspace/status` - workspace status.
-- [ ] `DELETE /experimental/workspace/:id` - remove workspace.
-- [ ] `POST /experimental/workspace/:id/session-restore` - restore session into workspace.
+- [x] `DELETE /experimental/workspace/:id` - remove workspace.
+- [x] `POST /experimental/workspace/:id/session-restore` - restore session into workspace.
 
 ### Sync Routes
 
-- [ ] `POST /sync/start` - start workspace sync.
-- [ ] `POST /sync/replay` - replay sync events.
-- [ ] `POST /sync/history` - list sync event history.
+- [x] `POST /sync/start` - start workspace sync.
+- [x] `POST /sync/replay` - replay sync events.
+- [x] `POST /sync/history` - list sync event history.
 
 ### Session Routes
 
-- [ ] `GET /session` - list sessions.
-- [ ] `GET /session/status` - session status map.
-- [ ] `GET /session/:sessionID` - get session.
-- [ ] `GET /session/:sessionID/children` - get child sessions.
-- [ ] `GET /session/:sessionID/todo` - get session todos.
-- [ ] `POST /session` - create session.
-- [ ] `DELETE /session/:sessionID` - delete session.
-- [ ] `PATCH /session/:sessionID` - update session metadata.
-- [ ] `POST /session/:sessionID/init` - run project init command.
-- [ ] `POST /session/:sessionID/fork` - fork session.
-- [ ] `POST /session/:sessionID/abort` - abort session.
-- [ ] `POST /session/:sessionID/share` - share session.
-- [ ] `GET /session/:sessionID/diff` - session diff.
-- [ ] `DELETE /session/:sessionID/share` - unshare session.
-- [ ] `POST /session/:sessionID/summarize` - summarize session.
-- [ ] `GET /session/:sessionID/message` - list session messages.
-- [ ] `GET /session/:sessionID/message/:messageID` - get message.
-- [ ] `DELETE /session/:sessionID/message/:messageID` - delete message.
-- [ ] `DELETE /session/:sessionID/message/:messageID/part/:partID` - delete part.
-- [ ] `PATCH /session/:sessionID/message/:messageID/part/:partID` - update part.
-- [ ] `POST /session/:sessionID/message` - prompt with streaming response.
-- [ ] `POST /session/:sessionID/prompt_async` - async prompt.
-- [ ] `POST /session/:sessionID/command` - run command.
-- [ ] `POST /session/:sessionID/shell` - run shell command.
-- [ ] `POST /session/:sessionID/revert` - revert message.
-- [ ] `POST /session/:sessionID/unrevert` - restore reverted messages.
-- [ ] `POST /session/:sessionID/permissions/:permissionID` - deprecated permission response route.
+- [x] `GET /session` - list sessions.
+- [x] `GET /session/status` - session status map.
+- [x] `GET /session/:sessionID` - get session.
+- [x] `GET /session/:sessionID/children` - get child sessions.
+- [x] `GET /session/:sessionID/todo` - get session todos.
+- [x] `POST /session` - create session.
+- [x] `DELETE /session/:sessionID` - delete session.
+- [x] `PATCH /session/:sessionID` - update session metadata.
+- [x] `POST /session/:sessionID/init` - run project init command.
+- [x] `POST /session/:sessionID/fork` - fork session.
+- [x] `POST /session/:sessionID/abort` - abort session.
+- [x] `POST /session/:sessionID/share` - share session.
+- [x] `GET /session/:sessionID/diff` - session diff.
+- [x] `DELETE /session/:sessionID/share` - unshare session.
+- [x] `POST /session/:sessionID/summarize` - summarize session.
+- [x] `GET /session/:sessionID/message` - list session messages.
+- [x] `GET /session/:sessionID/message/:messageID` - get message.
+- [x] `DELETE /session/:sessionID/message/:messageID` - delete message.
+- [x] `DELETE /session/:sessionID/message/:messageID/part/:partID` - delete part.
+- [x] `PATCH /session/:sessionID/message/:messageID/part/:partID` - update part.
+- [x] `POST /session/:sessionID/message` - prompt with streaming response.
+- [x] `POST /session/:sessionID/prompt_async` - async prompt.
+- [x] `POST /session/:sessionID/command` - run command.
+- [x] `POST /session/:sessionID/shell` - run shell command.
+- [x] `POST /session/:sessionID/revert` - revert message.
+- [x] `POST /session/:sessionID/unrevert` - restore reverted messages.
+- [x] `POST /session/:sessionID/permissions/:permissionID` - deprecated permission response route.
 
 ### Event Routes
 
-- [ ] `GET /event` - SSE event stream; replace with raw Effect HTTP, not `HttpApi`.
+- [x] `GET /event` - SSE event stream via raw Effect HTTP.
 
 ### PTY Routes
 
-- [ ] `GET /pty` - list PTY sessions.
-- [ ] `POST /pty` - create PTY session.
-- [ ] `GET /pty/:ptyID` - get PTY session.
-- [ ] `PUT /pty/:ptyID` - update PTY session.
-- [ ] `DELETE /pty/:ptyID` - remove PTY session.
-- [ ] `GET /pty/:ptyID/connect` - PTY websocket; replace with raw Effect HTTP/websocket support.
+- [x] `GET /pty` - list PTY sessions.
+- [x] `POST /pty` - create PTY session.
+- [x] `GET /pty/:ptyID` - get PTY session.
+- [x] `PUT /pty/:ptyID` - update PTY session.
+- [x] `DELETE /pty/:ptyID` - remove PTY session.
+- [x] `GET /pty/:ptyID/connect` - PTY websocket; replace with raw Effect HTTP/websocket support.
 
 ### TUI Routes
 
-- [ ] `POST /tui/append-prompt` - append prompt.
-- [ ] `POST /tui/open-help` - open help.
-- [ ] `POST /tui/open-sessions` - open sessions.
-- [ ] `POST /tui/open-themes` - open themes.
-- [ ] `POST /tui/open-models` - open models.
-- [ ] `POST /tui/submit-prompt` - submit prompt.
-- [ ] `POST /tui/clear-prompt` - clear prompt.
-- [ ] `POST /tui/execute-command` - execute command.
-- [ ] `POST /tui/show-toast` - show toast.
-- [ ] `POST /tui/publish` - publish TUI event.
-- [ ] `POST /tui/select-session` - select session.
-- [ ] `GET /tui/control/next` - get next TUI request.
-- [ ] `POST /tui/control/response` - submit TUI control response.
+- [x] `POST /tui/append-prompt` - append prompt.
+- [x] `POST /tui/open-help` - open help.
+- [x] `POST /tui/open-sessions` - open sessions.
+- [x] `POST /tui/open-themes` - open themes.
+- [x] `POST /tui/open-models` - open models.
+- [x] `POST /tui/submit-prompt` - submit prompt.
+- [x] `POST /tui/clear-prompt` - clear prompt.
+- [x] `POST /tui/execute-command` - execute command.
+- [x] `POST /tui/show-toast` - show toast.
+- [x] `POST /tui/publish` - publish TUI event.
+- [x] `POST /tui/select-session` - select session.
+- [x] `GET /tui/control/next` - get next TUI request.
+- [x] `POST /tui/control/response` - submit TUI control response.
 
 ## Remaining PR Plan
 
@@ -351,15 +351,15 @@ Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays rev
 2. [x] Bridge MCP add/connect/disconnect routes.
 3. [x] Bridge MCP OAuth routes: start, callback, authenticate, remove.
 4. [x] Bridge experimental console switch and tool list routes.
-5. [ ] Bridge experimental global session list.
-6. [ ] Bridge workspace create/remove/session-restore routes.
-7. [ ] Bridge sync start/replay/history routes.
-8. [ ] Bridge session read routes: list, status, get, children, todo, diff, messages.
-9. [ ] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
-10. [ ] Bridge session share/summary/message/part mutation routes.
+5. [x] Bridge experimental global session list.
+6. [x] Bridge workspace create/remove/session-restore routes.
+7. [x] Bridge sync start/replay/history routes.
+8. [x] Bridge session read routes: list, status, get, children, todo, diff, messages.
+9. [x] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
+10. [x] Bridge remaining session mutation and prompt routes.
 11. [ ] Replace event SSE with non-Hono Effect HTTP.
-12. [ ] Replace pty websocket/control routes with non-Hono Effect HTTP.
-13. [ ] Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer.
+12. [x] Replace pty websocket/control routes with non-Hono Effect HTTP.
+13. [x] Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer.
 14. [ ] Switch OpenAPI/SDK generation to Effect routes and compare SDK output.
 15. [ ] Flip ported JSON routes default-on, keep a short fallback, then delete replaced Hono route files.
 

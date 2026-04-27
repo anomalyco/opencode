@@ -1,23 +1,31 @@
 import { Effect, Layer, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
+import { Bus } from "@/bus"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Observability } from "@/effect"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
+import { Pty } from "@/pty"
+import { Session } from "@/session"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util"
 import { authorizationLayer } from "./auth"
 import { ConfigApi, configHandlers } from "./config"
+import { eventRoute } from "./event"
 import { FileApi, fileHandlers } from "./file"
 import { ExperimentalApi, experimentalHandlers } from "./experimental"
 import { InstanceApi, instanceHandlers } from "./instance"
 import { McpApi, mcpHandlers } from "./mcp"
 import { PermissionApi, permissionHandlers } from "./permission"
 import { ProjectApi, projectHandlers } from "./project"
+import { PtyApi, ptyConnectRoute, ptyHandlers } from "./pty"
 import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
+import { SessionApi, sessionHandlers } from "./session"
+import { SyncApi, syncHandlers } from "./sync"
+import { TuiApi, tuiHandlers } from "./tui"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
@@ -64,15 +72,25 @@ const instance = HttpRouter.middleware()(
 ).layer
 
 export const routes = Layer.mergeAll(
+  eventRoute,
+  ptyConnectRoute,
   HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
   HttpApiBuilder.layer(ExperimentalApi).pipe(Layer.provide(experimentalHandlers)),
   HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),
   HttpApiBuilder.layer(InstanceApi).pipe(Layer.provide(instanceHandlers)),
   HttpApiBuilder.layer(McpApi).pipe(Layer.provide(mcpHandlers)),
   HttpApiBuilder.layer(ProjectApi).pipe(Layer.provide(projectHandlers)),
+  HttpApiBuilder.layer(PtyApi).pipe(Layer.provide(ptyHandlers), Layer.provide(Pty.defaultLayer)),
   HttpApiBuilder.layer(QuestionApi).pipe(Layer.provide(questionHandlers)),
   HttpApiBuilder.layer(PermissionApi).pipe(Layer.provide(permissionHandlers)),
   HttpApiBuilder.layer(ProviderApi).pipe(Layer.provide(providerHandlers)),
+  HttpApiBuilder.layer(SessionApi).pipe(Layer.provide(sessionHandlers)),
+  HttpApiBuilder.layer(SyncApi).pipe(Layer.provide(syncHandlers)),
+  HttpApiBuilder.layer(TuiApi).pipe(
+    Layer.provide(tuiHandlers),
+    Layer.provide(Session.defaultLayer),
+    Layer.provide(Bus.layer),
+  ),
   HttpApiBuilder.layer(WorkspaceApi).pipe(Layer.provide(workspaceHandlers)),
 ).pipe(
   Layer.provide(authorizationLayer),

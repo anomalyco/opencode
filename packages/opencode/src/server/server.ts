@@ -67,7 +67,10 @@ function create(opts: { cors?: string[] }) {
     const context = Context.empty() as Context.Context<unknown>
     workspaceApp.get(WorkspacePaths.adaptors, (c) => handler(c.req.raw, context))
     workspaceApp.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
+    workspaceApp.post(WorkspacePaths.list, (c) => handler(c.req.raw, context))
     workspaceApp.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
+    workspaceApp.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
+    workspaceApp.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
   }
   workspaceApp.route("/", workspaceLegacyApp)
 
