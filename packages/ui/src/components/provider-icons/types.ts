@@ -86,6 +86,7 @@ export const iconNames = [
   "cloudflare-ai-gateway",
   "cloudferro-sherlock",
   "chutes",
+  "crof-ai",
   "cerebras",
   "berget",
   "baseten",
