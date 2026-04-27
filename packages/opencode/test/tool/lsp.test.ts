@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -28,8 +28,6 @@ const ctx = {
   ask: () => Effect.void,
 }
 
-const workspaceSymbolQueries: string[] = []
-
 const lsp = Layer.succeed(
   LSP.Service,
   LSP.Service.of({
@@ -43,11 +41,7 @@ const lsp = Layer.succeed(
     references: () => Effect.succeed([]),
     implementation: () => Effect.succeed([]),
     documentSymbol: () => Effect.succeed([]),
-    workspaceSymbol: (query) =>
-      Effect.sync(() => {
-        workspaceSymbolQueries.push(query)
-        return []
-      }),
+    workspaceSymbol: () => Effect.succeed([]),
     prepareCallHierarchy: () => Effect.succeed([]),
     incomingCalls: () => Effect.succeed([]),
     outgoingCalls: () => Effect.succeed([]),
@@ -75,6 +69,19 @@ const run = Effect.fn("LspToolTest.run")(function* (
 ) {
   const tool = yield* init()
   return yield* tool.execute(args, next)
+})
+
+const fail = Effect.fn("LspToolTest.fail")(function* (
+  dir: string,
+  args: Tool.InferParameters<typeof LspTool>,
+  next: Tool.Context = ctx,
+) {
+  const exit = yield* run(args, next).pipe(Effect.exit)
+  if (Exit.isFailure(exit)) {
+    const err = Cause.squash(exit.cause)
+    return err instanceof Error ? err : new Error(String(err))
+  }
+  throw new Error("expected lsp to fail")
 })
 
 const put = Effect.fn("LspToolTest.put")(function* (file: string) {
@@ -130,7 +137,7 @@ describe("tool.lsp", () => {
             yield* put(file)
 
             const { items, next } = asks()
-            const result = yield* run({ operation: "documentSymbol", filePath: file, line: 3, character: 7 }, next)
+            const result = yield* run({ operation: "documentSymbol", filePath: file }, next)
             const req = items.find((item) => item.permission === "lsp")
 
             expect(req).toBeDefined()
@@ -144,40 +151,189 @@ describe("tool.lsp", () => {
       ),
     )
 
-    it.live("omits file and cursor details for workspaceSymbol", () =>
+    it.live("workspaceSymbol has no permission request or cursor details", () =>
       provideTmpdirInstance(
         (dir) =>
           Effect.gen(function* () {
-            workspaceSymbolQueries.length = 0
-            const file = path.join(dir, "test.ts")
-            yield* put(file)
-
             const { items, next } = asks()
-            const result = yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7 }, next)
+            const result = yield* run({ operation: "workspaceSymbol", query: "TestSymbol" }, next)
             const req = items.find((item) => item.permission === "lsp")
 
-            expect(req).toBeDefined()
-            expect(req!.metadata).toEqual({
-              operation: "workspaceSymbol",
-            })
-            expect(result.title).toBe("workspaceSymbol")
+            expect(req).toBeUndefined()
+            expect(result.title).toBe(`workspaceSymbol "TestSymbol"`)
+          }),
+        { git: true },
+      ),
+    )
+  })
+
+  describe("required parameters", () => {
+    it.live("workspaceSymbol requires query", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const err = yield* fail(dir, { operation: "workspaceSymbol" }, ctx)
+            expect(err.message).toContain("query is required")
           }),
         { git: true },
       ),
     )
 
-    it.live("passes workspaceSymbol query to LSP", () =>
+    it.live("workspaceSymbol works with query", () =>
       provideTmpdirInstance(
         (dir) =>
           Effect.gen(function* () {
-            workspaceSymbolQueries.length = 0
+            const result = yield* run({ operation: "workspaceSymbol", query: "Foo" }, ctx)
+            expect(result.title).toBe(`workspaceSymbol "Foo"`)
+          }),
+        { git: true },
+      ),
+    )
+
+    const positionOps = [
+      "goToDefinition",
+      "findReferences",
+      "hover",
+      "goToImplementation",
+      "prepareCallHierarchy",
+      "incomingCalls",
+      "outgoingCalls",
+    ] as const
+
+    for (const op of positionOps) {
+      it.live(`${op} requires filePath, line, character`, () =>
+        provideTmpdirInstance(
+          (dir) =>
+            Effect.gen(function* () {
+              const file = path.join(dir, "test.ts")
+              yield* put(file)
+
+              const err1 = yield* fail(dir, { operation: op, line: 1, character: 0 }, ctx)
+              expect(err1.message).toContain("filePath is required")
+
+              const err2 = yield* fail(dir, { operation: op, filePath: file, character: 0 }, ctx)
+              expect(err2.message).toContain("line and character are required")
+
+              const err3 = yield* fail(dir, { operation: op, filePath: file, line: 1 }, ctx)
+              expect(err3.message).toContain("line and character are required")
+
+              const { items, next } = asks()
+              const result = yield* run({ operation: op, filePath: file, line: 1, character: 1 }, next)
+              expect(result.title).toBe(`${op} test.ts:1:1`)
+              const req = items.find((item) => item.permission === "lsp")
+              expect(req!.metadata).toEqual({
+                operation: op,
+                filePath: file,
+                line: 1,
+                character: 1,
+              })
+            }),
+          { git: true },
+        ),
+      )
+    }
+
+    it.live("documentSymbol requires only filePath", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
             const file = path.join(dir, "test.ts")
             yield* put(file)
 
-            yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7, query: "TestSymbol" })
-            yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7 })
+            const { items, next } = asks()
+            const result = yield* run({ operation: "documentSymbol", filePath: file }, next)
+            expect(result.title).toBe("documentSymbol test.ts")
+            const req = items.find((item) => item.permission === "lsp")
+            expect(req!.metadata).toEqual({
+              operation: "documentSymbol",
+              filePath: file,
+            })
+          }),
+        { git: true },
+      ),
+    )
 
-            expect(workspaceSymbolQueries).toEqual(["TestSymbol", ""])
+    it.live("query is ignored by non-workspaceSymbol operations", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const file = path.join(dir, "test.ts")
+            yield* put(file)
+
+            const nonPositionOps = [
+              "goToDefinition",
+              "findReferences",
+              "hover",
+              "documentSymbol",
+              "goToImplementation",
+              "prepareCallHierarchy",
+              "incomingCalls",
+              "outgoingCalls",
+            ] as const
+            for (const op of nonPositionOps) {
+              const result = yield* run(
+                {
+                  operation: op,
+                  filePath: file,
+                  line: 1,
+                  character: 1,
+                  query: "shouldBeIgnored",
+                } as unknown as Tool.InferParameters<typeof LspTool>,
+                ctx,
+              )
+              expect(result).toBeDefined()
+            }
+          }),
+        { git: true },
+      ),
+    )
+
+    it.live("workspaceSymbol ignores line and character", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const { items, next } = asks()
+            const result = yield* run(
+              {
+                operation: "workspaceSymbol",
+                query: "Foo",
+                filePath: "ignored.ts",
+                line: 42,
+                character: 99,
+              } as unknown as Tool.InferParameters<typeof LspTool>,
+              next,
+            )
+            expect(result.title).toBe(`workspaceSymbol "Foo"`)
+            const req = items.find((item) => item.permission === "lsp")
+            expect(req).toBeUndefined()
+          }),
+        { git: true },
+      ),
+    )
+
+    it.live("documentSymbol ignores line and character", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const file = path.join(dir, "test.ts")
+            yield* put(file)
+
+            const { items, next } = asks()
+            const result = yield* run(
+              {
+                operation: "documentSymbol",
+                filePath: file,
+                line: 42,
+                character: 99,
+              } as unknown as Tool.InferParameters<typeof LspTool>,
+              next,
+            )
+            expect(result.title).toBe("documentSymbol test.ts")
+            const req = items.find((item) => item.permission === "lsp")
+            expect(req!.metadata).toEqual({
+              operation: "documentSymbol",
+              filePath: file,
+            })
           }),
         { git: true },
       ),
