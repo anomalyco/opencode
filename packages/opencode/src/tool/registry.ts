@@ -28,6 +28,13 @@ import { Log } from "@/util"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import { PatchFileTool } from "./patch_file"
+import { AstQueryTool } from "./ast_query"
+import { AstEditTool } from "./ast_edit"
+import { AstParser } from "../ast/parser"
+import { SymbolIndexTool } from "./symbol_index"
+import { DependencyGraphTool } from "./dependency_graph"
+import { withTrace } from "./trace"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -89,6 +96,7 @@ export const layer: Layer.Layer<
   | Ripgrep.Service
   | Format.Service
   | Truncate.Service
+  | AstParser.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -114,18 +122,23 @@ export const layer: Layer.Layer<
     const edit = yield* EditTool
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
+    const patchfiletool = yield* PatchFileTool
+    const astquerytool = yield* AstQueryTool
+    const astedittool = yield* AstEditTool
+    const symbolindextool = yield* SymbolIndexTool
+    const dependencygraphtool = yield* DependencyGraphTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
+
+    const sessionLabel = process.env["OPENCODE_SESSION_LABEL"] ?? "default"
+    const sessionId = `${sessionLabel}_${Date.now()}`
+    const disableAst = process.env["OPENCODE_DISABLE_AST"] === "1"
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
 
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
-          // Plugin tools define their args as a raw Zod shape. Wrap the
-          // derived Zod object in a `Schema.declare` so it slots into the
-          // Schema-typed framework, and annotate with `ZodOverride` so the
-          // walker emits the original Zod object for LLM JSON Schema.
           const zodParams = z.object(def.args)
           const parameters = Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success).annotate({
             [ZodOverride]: zodParams,
@@ -142,7 +155,7 @@ export const layer: Layer.Layer<
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
-                const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                const result = yield* Effect.promise(() => def.execute(args as z.infer<typeof zodParams>, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const info = yield* agent.get(toolCtx.agent)
@@ -165,28 +178,27 @@ export const layer: Layer.Layer<
           Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
         )
         if (matches.length) yield* config.waitForDependencies()
-        for (const match of matches) {
-          const namespace = path.basename(match, path.extname(match))
-          // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
-          // Import it as `file://` so Node on Windows accepts the dynamic import.
-          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
-          for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-            custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
-          }
-        }
+        const toolDefs = yield* Effect.forEach(
+          matches,
+          Effect.fnUntraced(function* (match) {
+            const namespace = path.basename(match, path.extname(match))
+            const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
+            return Object.entries<ToolDefinition>(mod).map(([id, def]) =>
+              fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def),
+            )
+          }),
+          { concurrency: "unbounded" },
+        )
+        custom.push(...toolDefs.flat())
 
         const plugins = yield* plugin.list()
-        for (const p of plugins) {
-          for (const [id, def] of Object.entries(p.tool ?? {})) {
-            custom.push(fromPlugin(id, def))
-          }
-        }
+        custom.push(...plugins.flatMap((p) => Object.entries(p.tool ?? {}).map(([id, def]) => fromPlugin(id, def))))
 
         yield* config.get()
         const questionEnabled =
           ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
-        const tool = yield* Effect.all({
+        const raw = yield* Effect.all({
           invalid: Tool.init(invalid),
           bash: Tool.init(bash),
           read: Tool.init(read),
@@ -201,10 +213,23 @@ export const layer: Layer.Layer<
           code: Tool.init(codesearch),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
+          patchfile: Tool.init(patchfiletool),
+          astquery: Tool.init(astquerytool),
+          astedit: Tool.init(astedittool),
+          symbolindex: Tool.init(symbolindextool),
+          dependencygraph: Tool.init(dependencygraphtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
         })
+
+        const tool = {
+          ...raw,
+          edit: withTrace(sessionId, raw.edit),
+          write: withTrace(sessionId, raw.write),
+          astquery: withTrace(sessionId, raw.astquery),
+          astedit: withTrace(sessionId, raw.astedit),
+        }
 
         return {
           custom,
@@ -224,6 +249,8 @@ export const layer: Layer.Layer<
             tool.code,
             tool.skill,
             tool.patch,
+            tool.patchfile,
+            ...(disableAst ? [] : [tool.astquery, tool.astedit, tool.symbolindex, tool.dependencygraph]),
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
           ],
@@ -252,7 +279,7 @@ export const layer: Layer.Layer<
         "",
         "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
         "",
-        'Tool output includes a `<skill_content name="...">` block with the loaded content.',
+        '<skill_content name="..."> block with the loaded content.',
         "",
         "The following skills provide specialized sets of instructions for particular tasks",
         "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
@@ -286,6 +313,10 @@ export const layer: Layer.Layer<
           input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
+        // patch_file, ast_query, ast_edit: always available
+        if (tool.id === PatchFileTool.id) return true
+        if (tool.id === AstQueryTool.id) return true
+        if (tool.id === AstEditTool.id) return true
 
         return true
       })
@@ -345,5 +376,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
+    Layer.provide(AstParser.defaultLayer),
   ),
 )

@@ -58,6 +58,9 @@ export const layer = Layer.effect(
             `  Platform: ${process.platform}`,
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
+            "",
+            "# Tool parallelism",
+            "When editing multiple independent sections of the same file, you may call edit, ast_edit, or patch_file multiple times in a single response. These are independent operations.",
           ].join("\n"),
         ]
       },

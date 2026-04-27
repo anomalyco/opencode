@@ -1,0 +1,46 @@
+Replace an AST node in a source file using a tree-sitter query pattern.
+
+Companion to `ast_query`. After finding a node with `ast_query`, use the same
+pattern (or a more specific one) to replace the matched node.
+
+Unlike `edit` (which matches `oldString` as a raw string and can fail on
+indentation/whitespace drift), `ast_edit` works by **character offset** derived
+from the parsed AST. It is precise, drift-immune, and does not require the model
+to include the original source text in context.
+
+## Workflow
+
+1. Call `ast_query` on the file with an appropriate pattern to locate the target node
+2. Refine the pattern if needed (e.g. add a name predicate to match exactly one function)
+3. Call `ast_edit` with the same `filePath`, the `pattern`, and `newContent`
+
+## Parameters
+
+- `filePath` — absolute path to the file
+- `pattern` — tree-sitter S-expression query that captures the node to replace
+- `newContent` — the complete new source text to substitute for the matched node
+- `language` — optional override for language detection
+
+## When to use ast_edit
+
+- The target is a complete syntactic unit (function, class, method, type alias, import block)
+- The file is large and you do not want to include the full original text in context
+- You are renaming/rewriting an entire function or class body
+- You have already located the node with `ast_query`
+
+## When to use edit instead
+
+- The change is a small inline tweak (variable name, literal value, single line)
+- The target is not a complete AST node (e.g. a single line inside a function body)
+- The file is small enough that full-context edit is fine
+- You are fixing a comment, string, or other non-syntactic text
+
+## Example
+
+```json
+{
+  "filePath": "/abs/path/src/server.ts",
+  "pattern": "(function_declaration name: (identifier) @name (#eq? @name \"handleRequest\")) @fn",
+  "newContent": "function handleRequest(req: Request): Response {\n  return new Response('ok')\n}"
+}
+```

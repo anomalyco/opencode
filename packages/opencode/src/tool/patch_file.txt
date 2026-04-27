@@ -1,0 +1,55 @@
+Apply surgical patches to a file using hash-anchored context windows.
+
+Unlike `edit` (which requires exact oldString matching against the full file),
+`patch_file` identifies each target section by a SHA-256 hash of its surrounding
+lines. Only the relevant code chunk is needed — not the entire file — which
+reduces token usage significantly on large files.
+
+## Workflow
+
+1. **Get anchors** — call `patch_file` with `compute_anchors: true` and the
+   target `filePath`. The tool returns a JSON array of `{ anchor_hash, start_line,
+   preview }` entries, one per line.
+
+2. **Identify targets** — find the `anchor_hash` values for the lines you want
+   to change (match by `preview`).
+
+3. **Apply patches** — call `patch_file` again with `patches` array. Each patch
+   must include:
+   - `anchor_hash`: the hash from step 1
+   - `search`: exact text to replace within the anchor window
+   - `replace`: replacement text
+   - `context_lines` (optional, default 5): must match the value used in step 1
+
+## Rules
+
+- DO NOT guess `anchor_hash`. Always obtain it via `compute_anchors: true` first.
+- Patches must target non-overlapping sections of the file.
+- If an anchor hash is not found (file changed), re-run step 1 to refresh anchors.
+- For small files or simple edits, prefer the `edit` tool which is simpler.
+- Use `patch_file` when editing large files (500+ lines) or when applying
+  multiple independent edits in a single call.
+
+## Example
+
+```json
+// Step 1 — get anchors
+{ "filePath": "/abs/path/to/file.ts", "compute_anchors": true }
+
+// Step 2 — apply patches
+{
+  "filePath": "/abs/path/to/file.ts",
+  "patches": [
+    {
+      "anchor_hash": "a3f9...",
+      "search": "const x = foo()",
+      "replace": "const x = bar()"
+    },
+    {
+      "anchor_hash": "b7c2...",
+      "search": "return null",
+      "replace": "return undefined"
+    }
+  ]
+}
+```

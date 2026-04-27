@@ -1,0 +1,76 @@
+Search a source file for AST nodes matching a tree-sitter query pattern.
+
+Unlike `grep` (text search) or `codesearch` (repo-wide text), `ast_query` understands
+code structure. It finds functions, classes, imports, variables, and any other named
+construct — by type, not by coincidental string match.
+
+## When to use ast_query
+
+- You need to find all functions/methods in a file before deciding which one to edit
+- You want the exact line range of a class or function without reading the full file
+- You need to verify an import exists, or find where a symbol is declared
+- You are about to call `ast_edit` and need the precise line range of a node
+
+## When to use read instead
+
+- You need to see the actual body, comments, or formatting of the code
+- The file is small enough to read entirely
+- You are unfamiliar with the file and need general context
+
+## When to use grep instead
+
+- You are searching for a string literal, comment, or non-syntactic text
+- You need repo-wide search across multiple files
+- You are looking for a variable name that may appear in many contexts
+
+## Pattern syntax (tree-sitter S-expressions)
+
+Patterns use tree-sitter's query syntax. A capture group `@name` marks the node to return.
+
+Common patterns:
+
+| Language      | Pattern                                              | Finds                        |
+|---------------|------------------------------------------------------|------------------------------|
+| TS/JS         | `(function_declaration) @fn`                         | function declarations        |
+| TS/JS         | `(class_declaration) @cls`                           | class declarations           |
+| TS/JS         | `(arrow_function) @arrow`                            | arrow functions              |
+| TS/JS         | `(import_statement) @imp`                            | import statements            |
+| TS/JS         | `(variable_declarator) @var`                         | variable declarations        |
+| TS/JS         | `(method_definition) @method`                        | class methods                |
+| TS            | `(interface_declaration) @iface`                     | interface declarations       |
+| TS            | `(type_alias_declaration) @type`                     | type aliases                 |
+| Python        | `(function_definition) @fn`                          | def statements               |
+| Python        | `(class_definition) @cls`                            | class statements             |
+| Go            | `(function_declaration) @fn`                         | func declarations            |
+| Go            | `(method_declaration) @method`                       | method declarations          |
+| Rust          | `(function_item) @fn`                                | fn items                     |
+| Rust          | `(impl_item) @impl`                                  | impl blocks                  |
+| Ruby          | `(method) @method`                                   | def methods                  |
+| Java          | `(method_declaration) @method`                       | method declarations          |
+| Java          | `(class_declaration) @cls`                           | class declarations           |
+| C/C++         | `(function_definition) @fn`                          | function definitions         |
+| Bash          | `(function_definition) @fn`                          | function definitions         |
+
+For specific names, use field predicates:
+`(function_declaration name: (identifier) @id (#eq? @id "myFunction")) @fn`
+
+## Returns
+
+One line per match:
+`L{start}-{end} [{node_type}] "{name}": {text_preview}`
+
+Use the same `pattern` (or refine it) with `ast_edit` to replace the matched node.
+
+## Supported languages
+
+TypeScript, TSX, JavaScript/JSX, Python, Bash, Go, Rust, Ruby, Java, C, C++, CSS, HTML, JSON, YAML, TOML.
+Language is auto-detected from file extension; use `language` param to override.
+
+## Example
+
+```json
+{
+  "filePath": "/abs/path/src/server.ts",
+  "pattern": "(function_declaration) @fn"
+}
+```
