@@ -45,8 +45,6 @@ describe("event HttpApi bridge", () => {
     expect(response.headers.get("cache-control")).toBe("no-cache, no-transform")
     expect(response.headers.get("x-accel-buffering")).toBe("no")
     expect(response.headers.get("x-content-type-options")).toBe("nosniff")
-    expect(await readFirstChunk(response)).toContain(
-      'data: {"type":"server.connected","properties":{}}\n\n',
-    )
+    expect(await readFirstChunk(response)).toContain('data: {"type":"server.connected","properties":{}}\n\n')
   })
 })
