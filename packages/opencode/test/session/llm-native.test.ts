@@ -29,13 +29,14 @@ const textPart = (messageID: MessageID, text: string, input: Partial<MessageV2.T
   ...input,
 })
 
-const filePart = (messageID: MessageID): MessageV2.FilePart => ({
+const filePart = (messageID: MessageID, input: Partial<MessageV2.FilePart> = {}): MessageV2.FilePart => ({
   id: PartID.ascending(),
   sessionID,
   messageID,
   type: "file",
   mime: "image/png",
   url: "data:image/png;base64,abc",
+  ...input,
 })
 
 const reasoningPart = (messageID: MessageID, text: string): MessageV2.ReasoningPart => ({
@@ -112,6 +113,13 @@ const lookupTool = {
 } satisfies Tool.Def<typeof lookupParameters>
 
 const it = testEffect(Layer.empty)
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const cacheControl = (value: unknown) => isRecord(value) ? value.cache_control : undefined
+
+const targetArray = (value: unknown, key: string) => isRecord(value) && Array.isArray(value[key]) ? value[key] : []
 
 describe("LLMNative.request", () => {
   it.effect("builds a text-only native LLM request", () => Effect.gen(function* () {
@@ -232,6 +240,188 @@ describe("LLMNative.request", () => {
     ])
   }))
 
+  it.effect("converts failed tool results as error tool messages", () => Effect.gen(function* () {
+    const mdl = model()
+    const userID = MessageID.ascending()
+    const assistantID = MessageID.ascending()
+
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "Check weather")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "call_error",
+            tool: "lookup",
+            state: {
+              status: "error",
+              input: { query: "weather" },
+              error: "Lookup failed",
+              time: { start: 1, end: 2 },
+            },
+          }),
+        ]),
+      ],
+    })
+
+    expect(request.messages.map((message) => ({ role: message.role, content: message.content }))).toEqual([
+      { role: "user", content: [{ type: "text", text: "Check weather" }] },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", id: "call_error", name: "lookup", input: { query: "weather" }, metadata: undefined }],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            id: "call_error",
+            name: "lookup",
+            result: { type: "error", value: "Lookup failed" },
+            metadata: undefined,
+          },
+        ],
+      },
+    ])
+  }))
+
+  it.effect("uses interrupted tool metadata output when present", () => Effect.gen(function* () {
+    const mdl = model()
+    const userID = MessageID.ascending()
+    const assistantID = MessageID.ascending()
+
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "Read logs")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "call_interrupted",
+            tool: "read_logs",
+            state: {
+              status: "error",
+              input: { path: "app.log" },
+              error: "Tool execution aborted",
+              metadata: { interrupted: true, output: "partial log output" },
+              time: { start: 1, end: 2 },
+            },
+          }),
+        ]),
+      ],
+    })
+
+    expect(request.messages.at(-1)?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "call_interrupted",
+        name: "read_logs",
+        result: { type: "text", value: "partial log output" },
+        metadata: undefined,
+      },
+    ])
+  }))
+
+  it.effect("marks pending and running tool states as interrupted error results", () => Effect.gen(function* () {
+    const mdl = model()
+    const userID = MessageID.ascending()
+    const assistantID = MessageID.ascending()
+
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "Run tools")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "call_pending",
+            tool: "lookup",
+            state: { status: "pending", input: { query: "pending" }, raw: "" },
+          }),
+          toolPart(assistantID, {
+            callID: "call_running",
+            tool: "lookup",
+            state: { status: "running", input: { query: "running" }, title: "Lookup", time: { start: 1 } },
+          }),
+        ]),
+      ],
+    })
+
+    expect(request.messages.map((message) => ({ role: message.role, content: message.content }))).toEqual([
+      { role: "user", content: [{ type: "text", text: "Run tools" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", id: "call_pending", name: "lookup", input: { query: "pending" }, metadata: undefined },
+          { type: "tool-call", id: "call_running", name: "lookup", input: { query: "running" }, metadata: undefined },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            id: "call_pending",
+            name: "lookup",
+            result: { type: "error", value: "[Tool execution was interrupted]" },
+            metadata: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            id: "call_running",
+            name: "lookup",
+            result: { type: "error", value: "[Tool execution was interrupted]" },
+            metadata: undefined,
+          },
+        ],
+      },
+    ])
+  }))
+
+  it.effect("uses the compacted-output placeholder for compacted completed tools", () => Effect.gen(function* () {
+    const mdl = model()
+    const userID = MessageID.ascending()
+    const assistantID = MessageID.ascending()
+
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "Read old output")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "call_compacted",
+            tool: "lookup",
+            state: {
+              status: "completed",
+              input: { query: "old" },
+              output: "old output",
+              title: "Lookup",
+              metadata: {},
+              time: { start: 1, end: 2, compacted: 3 },
+            },
+          }),
+        ]),
+      ],
+    })
+
+    expect(request.messages.at(-1)?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "call_compacted",
+        name: "lookup",
+        result: { type: "text", value: "[Old tool result content cleared]" },
+        metadata: undefined,
+      },
+    ])
+  }))
+
   it.effect("keeps provider-executed tool results on assistant messages", () => Effect.gen(function* () {
     const mdl = model()
     const userID = MessageID.ascending()
@@ -288,10 +478,12 @@ describe("LLMNative.request", () => {
   it.effect("fails instead of dropping unsupported native parts", () => Effect.gen(function* () {
     const mdl = model()
     const userID = MessageID.ascending()
+    // Reasoning parts are valid on assistant messages but not user messages —
+    // a clean stand-in for the "static gate rejects unknown shapes" path.
     const exit = yield* LLMNative.request({
       provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
       model: mdl,
-      messages: [userMessage(mdl, userID, [filePart(userID)])],
+      messages: [userMessage(mdl, userID, [reasoningPart(userID, "internal thought")])],
     }).pipe(Effect.exit)
 
     expect(Exit.isFailure(exit)).toBe(true)
@@ -299,7 +491,79 @@ describe("LLMNative.request", () => {
       const err = Cause.squash(exit.cause)
       expect(err).toBeInstanceOf(Error)
       if (err instanceof Error) {
-        expect(err.message).toBe(`Native LLM request conversion does not support file parts in message ${userID}`)
+        expect(err.message).toBe(`Native LLM request conversion does not support reasoning parts in message ${userID}`)
+      }
+    }
+  }))
+
+  it.effect("converts user file parts with data: URLs to MediaPart", () => Effect.gen(function* () {
+    const mdl = model()
+    const userID = MessageID.ascending()
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [
+          textPart(userID, "describe this"),
+          filePart(userID, {
+            mime: "image/png",
+            filename: "screenshot.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+          }),
+        ]),
+      ],
+    })
+
+    expect(request.messages).toHaveLength(1)
+    expect(request.messages[0].content).toEqual([
+      { type: "text", text: "describe this" },
+      { type: "media", mediaType: "image/png", data: "iVBORw0KGgo=", filename: "screenshot.png" },
+    ])
+  }))
+
+  it.effect("preserves filename and base64 payload for document data URLs", () => Effect.gen(function* () {
+    const mdl = model()
+    const userID = MessageID.ascending()
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [
+          filePart(userID, {
+            mime: "application/pdf",
+            filename: "report.pdf",
+            url: "data:application/pdf;base64,JVBERi0xLg==",
+          }),
+        ]),
+      ],
+    })
+
+    expect(request.messages[0].content).toEqual([
+      { type: "media", mediaType: "application/pdf", data: "JVBERi0xLg==", filename: "report.pdf" },
+    ])
+  }))
+
+  it.effect("rejects file parts whose URL is not a data: URL", () => Effect.gen(function* () {
+    const mdl = model()
+    const userID = MessageID.ascending()
+    const exit = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.openai }, mdl),
+      model: mdl,
+      messages: [
+        userMessage(mdl, userID, [
+          filePart(userID, { mime: "image/png", url: "https://example.com/img.png" }),
+        ]),
+      ],
+    }).pipe(Effect.exit)
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) {
+      const err = Cause.squash(exit.cause)
+      expect(err).toBeInstanceOf(Error)
+      if (err instanceof Error) {
+        expect(err.message).toContain("file parts")
+        expect(err.message).toContain(userID)
+        expect(err.message).toContain("https://example.com/img.png")
       }
     }
   }))
@@ -625,7 +889,7 @@ describe("LLMNative.request", () => {
         ],
       })
       // The third system block must not carry a cache_control marker.
-      expect((prepared.target as { system: ReadonlyArray<{ cache_control?: unknown }> }).system[2].cache_control).toBeUndefined()
+      expect(cacheControl(targetArray(prepared.target, "system")[2])).toBeUndefined()
     }))
 
   it.effect("lowers cache hints to Anthropic cache_control on the last text block of the last 2 messages", () =>
@@ -650,8 +914,8 @@ describe("LLMNative.request", () => {
         ],
       })
       // The first message's text must not carry cache_control.
-      const target = prepared.target as { messages: ReadonlyArray<{ content: ReadonlyArray<{ cache_control?: unknown }> }> }
-      expect(target.messages[0].content[0].cache_control).toBeUndefined()
+      const firstMessage = targetArray(prepared.target, "messages")[0]
+      expect(cacheControl(targetArray(firstMessage, "content")[0])).toBeUndefined()
     }))
 
   it.effect("lowers cache hints to Bedrock Converse cachePoint marker blocks end-to-end", () =>

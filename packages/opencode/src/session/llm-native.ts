@@ -1,4 +1,4 @@
-import { LLM, type ContentPart, type Message as CoreMessage } from "@opencode-ai/llm"
+import { LLM, type ContentPart, type MediaPart } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { ProviderLLMBridge } from "@/provider/llm-bridge"
 import * as EffectZod from "@/util/effect-zod"
@@ -23,10 +23,12 @@ export class UnsupportedContentError extends Schema.TaggedErrorClass<Unsupported
   {
     messageID: Schema.String,
     partType: Schema.String,
+    reason: Schema.optional(Schema.String),
   },
 ) {
   override get message() {
-    return `Native LLM request conversion does not support ${this.partType} parts in message ${this.messageID}`
+    const base = `Native LLM request conversion does not support ${this.partType} parts in message ${this.messageID}`
+    return this.reason ? `${base}: ${this.reason}` : base
   }
 }
 
@@ -45,8 +47,30 @@ export type RequestInput = {
 
 const isDefined = <T>(value: T | undefined): value is T => value !== undefined
 
-const textContent = (message: MessageV2.WithParts) =>
-  message.parts.flatMap((part) => (part.type === "text" && !part.ignored ? [LLM.text(part.text)] : []))
+// Match `data:<mediaType>[;param=value]*[;base64],<payload>`. Captures only the
+// payload — the bridge passes it through to `MediaPart.data` (already-base64
+// per the convention `ProviderShared.mediaBytes` follows). Non-data URLs
+// (http(s):, file:, relative paths) are out of scope for now and rejected
+// upstream so a future fetch / filesystem-read path can plug in cleanly.
+const DATA_URL_PATTERN = /^data:[^,]*,(.*)$/s
+
+const lowerFilePart = (message: MessageV2.WithParts, part: MessageV2.FilePart) =>
+  Effect.gen(function* () {
+    const match = DATA_URL_PATTERN.exec(part.url)
+    if (!match) {
+      return yield* new UnsupportedContentError({
+        messageID: message.info.id,
+        partType: "file",
+        reason: `file URL must be a data: URL (got ${part.url})`,
+      })
+    }
+    return {
+      type: "media",
+      mediaType: part.mime,
+      data: match[1],
+      filename: part.filename,
+    } satisfies MediaPart
+  })
 
 const nativeMessage = (message: MessageV2.WithParts) => ({
   opencodeMessageID: message.info.id,
@@ -65,6 +89,7 @@ const isToolPart = (part: MessageV2.Part): part is MessageV2.ToolPart => part.ty
 
 const supportsPart = (message: MessageV2.WithParts, part: MessageV2.Part) => {
   if (part.type === "text") return true
+  if (part.type === "file") return message.info.role === "user"
   if (message.info.role !== "assistant") return false
   return part.type === "reasoning" || part.type === "tool"
 }
@@ -141,8 +166,21 @@ const assistantMessages = (input: MessageV2.WithParts) => {
   ].filter(isDefined)
 }
 
-const userMessage = (input: MessageV2.WithParts): ReadonlyArray<CoreMessage> => {
-  const content = textContent(input)
+// User-role parts that pass the static gate: text and file. Text becomes a
+// `LLM.text(...)` ContentPart; file becomes a `MediaPart` via `lowerFilePart`,
+// which can yield `UnsupportedContentError` for non-data URLs.
+const lowerUserPart = (message: MessageV2.WithParts, part: MessageV2.Part) =>
+  Effect.gen(function* () {
+    if (part.type === "text") return part.ignored ? [] : [LLM.text(part.text)]
+    if (part.type === "file") return [yield* lowerFilePart(message, part)]
+    return []
+  })
+
+const userMessage = Effect.fnUntraced(function* (input: MessageV2.WithParts) {
+  const content: ContentPart[] = []
+  for (const part of input.parts) {
+    content.push(...(yield* lowerUserPart(input, part)))
+  }
   if (content.length === 0) return []
   return [
     LLM.message({
@@ -152,12 +190,12 @@ const userMessage = (input: MessageV2.WithParts): ReadonlyArray<CoreMessage> => 
       native: nativeMessage(input),
     }),
   ]
-}
+})
 
-const messages = (input: MessageV2.WithParts): ReadonlyArray<CoreMessage> => {
+const lowerMessage = Effect.fnUntraced(function* (input: MessageV2.WithParts) {
   if (input.info.role === "assistant") return assistantMessages(input)
-  return userMessage(input)
-}
+  return yield* userMessage(input)
+})
 
 export const toolDefinition = (input: { readonly model: Provider.Model; readonly tool: Tool.Def }) =>
   LLM.toolDefinition({
@@ -185,7 +223,6 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
       modelID: input.model.id,
     })
   }
-
   // Cache hints, tool-id scrubbing, and other adapter-aware patches live in
   // `@opencode-ai/llm`'s `ProviderPatch` registry. Callers wire them in at
   // `client({ adapters, patches: ProviderPatch.defaults })` time so the
@@ -194,7 +231,7 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
     id: input.id,
     model,
     system: input.system?.filter((part) => part.trim() !== "").map(LLM.system) ?? [],
-    messages: input.messages.flatMap(messages),
+    messages: (yield* Effect.forEach(input.messages, lowerMessage)).flat(),
     tools: input.tools?.map((tool) => toolDefinition({ model: input.model, tool })) ?? [],
     toolChoice: input.toolChoice,
     generation: input.generation,
