@@ -728,11 +728,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
-      title: kv.get("project_context_enabled", true) ? "Disable project context" : "Enable project context",
-      value: "app.toggle.project_context",
+      title: kv.get("file_context_enabled", true) ? "Disable file context" : "Enable file context",
+      value: "app.toggle.file_context",
       category: "System",
       onSelect: (dialog) => {
-        kv.set("project_context_enabled", !kv.get("project_context_enabled", true))
+        kv.set("file_context_enabled", !kv.get("file_context_enabled", true))
         dialog.clear()
       },
     },

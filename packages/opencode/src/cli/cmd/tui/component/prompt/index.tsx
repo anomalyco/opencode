@@ -112,10 +112,10 @@ export function Prompt(props: PromptProps) {
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
-  const projectContextEnabled = createMemo(() => kv.get("project_context_enabled", true))
-  const editorPath = createMemo(() => (projectContextEnabled() ? editor.selection()?.filePath : undefined))
+  const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
+  const editorPath = createMemo(() => (fileContextEnabled() ? editor.selection()?.filePath : undefined))
   const editorSelectionLabel = createMemo(() => {
-    const selection = projectContextEnabled() ? editor.selection()?.selection : undefined
+    const selection = fileContextEnabled() ? editor.selection()?.selection : undefined
     if (!selection) return
     if (selection.start.line === selection.end.line && selection.start.character === selection.end.character) return
     if (selection.start.line === selection.end.line) return `#${selection.start.line}`
@@ -747,7 +747,7 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
-    const editorSelection = projectContextEnabled() ? editor.selection() : undefined
+    const editorSelection = fileContextEnabled() ? editor.selection() : undefined
     const editorParts = editorSelection
       ? [
           {
