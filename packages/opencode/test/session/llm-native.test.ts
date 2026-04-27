@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AnthropicMessages } from "@opencode-ai/llm"
+import { AnthropicMessages, OpenAICompatibleChat } from "@opencode-ai/llm"
 import { client } from "@opencode-ai/llm/adapter"
 import { OpenAIResponses } from "@opencode-ai/llm/provider/openai-responses"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
@@ -421,6 +421,88 @@ describe("LLMNative.request", () => {
       tool_choice: { type: "tool", name: "lookup" },
       stream: true,
       max_tokens: 20,
+      temperature: 0,
+    })
+  }))
+
+  it.effect("prepares OpenAI-compatible Chat text and tool request body", () => Effect.gen(function* () {
+    const mdl = model({
+      id: ModelID.make("meta-llama/Llama-3.3-70B-Instruct-Turbo"),
+      providerID: ProviderID.make("togetherai"),
+      api: {
+        id: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        url: "https://api.together.xyz/v1",
+        npm: "@ai-sdk/togetherai",
+      },
+    })
+    const userID = MessageID.ascending()
+    const assistantID = MessageID.ascending()
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.make("togetherai"), key: "together-key" }, mdl),
+      model: mdl,
+      generation: { maxTokens: 64, temperature: 0 },
+      messages: [
+        userMessage(mdl, userID, [textPart(userID, "What is the weather?")]),
+        assistantMessage(mdl, assistantID, userID, [
+          toolPart(assistantID, {
+            callID: "call_1",
+            tool: "lookup",
+            state: {
+              status: "completed",
+              input: { query: "weather" },
+              output: '{"forecast":"sunny"}',
+              title: "Weather",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          }),
+        ]),
+      ],
+      tools: [lookupTool],
+      toolChoice: "lookup",
+    })
+    const prepared = yield* client({ adapters: [OpenAICompatibleChat.adapter] }).prepare(request)
+
+    expect(request.model).toMatchObject({
+      provider: "togetherai",
+      protocol: "openai-compatible-chat",
+      baseURL: "https://api.together.xyz/v1",
+      headers: { authorization: "Bearer together-key" },
+    })
+    expect(prepared.target).toMatchObject({
+      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      messages: [
+        { role: "user", content: "What is the weather?" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: { name: "lookup", arguments: '{"query":"weather"}' },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: '{"forecast":"sunny"}' },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "lookup",
+            description: "Lookup project data",
+            parameters: {
+              type: "object",
+              properties: { query: { type: "string", description: "Search query" } },
+              required: ["query"],
+            },
+          },
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "lookup" } },
+      stream: true,
+      max_tokens: 64,
       temperature: 0,
     })
   }))
