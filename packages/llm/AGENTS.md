@@ -45,9 +45,28 @@ Adapters should stay boring and typed:
 - target patches mutate that draft before validation.
 - `validate` validates the final provider target with Schema.
 - `toHttp` creates the `HttpClientRequest`.
-- `parse` decodes provider chunks into `LLMEvent`s. The shared `ProviderShared.sse` helper handles SSE framing, chunk decoding, and stateful chunk-to-event raising; adapters supply `decodeChunk` and a `process` callback that produces events.
+- `parse` decodes provider chunks into `LLMEvent`s. The shared `ProviderShared.framed` helper handles transport-error mapping, chunk decoding, and stateful chunk-to-event raising; adapters supply a `framing` step (bytes → frames), a `decodeChunk`, and a `process` callback that produces events.
 
-The transport is HTTP + SSE today; the `LLMEvent` stream contract is intentionally transport-agnostic. When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), it should land as a sibling adapter with a `toWs` (or analogous) producer + a `parse` that reads frames from that transport — not by leaking transport details into core types.
+The transport is HTTP today, with two framing dialects:
+
+- **SSE** for OpenAI Chat / OpenAI Responses / Anthropic Messages / Gemini / OpenAI-compatible Chat. Use `ProviderShared.sse(...)` — a thin wrapper around `framed` with `sseFraming` (decode bytes → `Sse.decode` → drop `[DONE]` and Retry control events).
+- **AWS event stream** for Bedrock Converse. Bedrock supplies its own `eventStreamFraming` step that runs `@smithy/eventstream-codec` against a cursor-based byte buffer.
+
+When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), it should land as a sibling adapter with a `toWs` (or analogous) producer + a `parse` that reads frames from that transport — not by leaking transport details into core types. The `framed` helper's `framing` parameter is the seam for new wire formats; the rest of the stream pipeline (terminal-error normalization, `mapAccumEffect` state, `onHalt` fallback) is already shared.
+
+### Shared adapter helpers
+
+`ProviderShared` exports a small toolkit so adapters can stay focused on provider-native shapes:
+
+- `framed({ adapter, response, readError, framing, decodeChunk, initial, process, onHalt? })` — the canonical streaming pipeline. Reach for it before hand-rolling a `Stream` chain.
+- `sse({ ... })` — convenience wrapper for SSE adapters. Identical shape to `framed` minus the `framing` field.
+- `sseFraming` — the SSE-specific framing step, exposed in case an adapter wants to wrap or compose it.
+- `joinText(parts)` — joins an array of `TextPart` (or anything with a `.text`) with newlines. Use this anywhere an adapter flattens text content into a single string for a provider field.
+- `parseToolInput(adapter, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<adapter>` tool call `<name>`" error message. Treats empty input as `{}`. Use this in `finishToolCall` / `finalizeToolCalls`; do not roll a fresh `parseJson` callsite.
+- `parseJson(adapter, raw, message)` — generic JSON-via-Schema decode for non-tool payloads.
+- `chunkError(adapter, message, ...)` — typed `ProviderChunkError` constructor for stream-time failures.
+
+If you find yourself copying a 3-to-5-line snippet between two adapters, lift it into `ProviderShared` next to these helpers rather than duplicating.
 
 ### Patches
 
