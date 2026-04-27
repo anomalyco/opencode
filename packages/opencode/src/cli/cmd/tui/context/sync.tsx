@@ -231,6 +231,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
+        case "session.error": {
+          Log.Default.error("session error", {
+            sessionID: event.properties.sessionID,
+            error: event.properties.error,
+          })
+          break
+        }
+
         case "message.updated": {
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
@@ -438,6 +446,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
             project.workspace.sync(),
+            project.multiRootWorkspace.sync(),
           ]).then(() => {
             setStore("status", "complete")
           })

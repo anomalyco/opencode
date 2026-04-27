@@ -41,6 +41,7 @@ import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
+import { WorkspaceProvider } from "@/context/workspace"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
@@ -95,7 +96,9 @@ function AppShellProviders(props: ParentProps) {
             <ModelsProvider>
               <CommandProvider>
                 <HighlightsProvider>
-                  <Layout>{props.children}</Layout>
+                  <WorkspaceProvider>
+                    <Layout>{props.children}</Layout>
+                  </WorkspaceProvider>
                 </HighlightsProvider>
               </CommandProvider>
             </ModelsProvider>

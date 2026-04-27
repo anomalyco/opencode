@@ -122,11 +122,13 @@ export const layer = Layer.effect(
           const cfgIgnores = cfg.watcher?.ignore ?? []
 
           if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-            yield* subscribe(Instance.directory, [
-              ...FileIgnore.PATTERNS,
-              ...cfgIgnores,
-              ...protecteds(Instance.directory),
-            ])
+            for (const root of Instance.roots) {
+              yield* subscribe(root, [
+                ...FileIgnore.PATTERNS,
+                ...cfgIgnores,
+                ...protecteds(root),
+              ])
+            }
           }
 
           if (Instance.project.vcs === "git") {

@@ -35,6 +35,10 @@ export const workspaceID = Effect.gen(function* () {
 
 export const directory = Effect.map(context, (ctx) => ctx.directory)
 
+export const roots = Effect.map(context, (ctx) => ctx.roots)
+
+export const multiRootWorkspaceID = Effect.map(context, (ctx) => ctx.multiRootWorkspaceID)
+
 export const make = <A, E = never, R = never>(
   init: (ctx: InstanceContext) => Effect.Effect<A, E, R | Scope.Scope>,
 ): Effect.Effect<InstanceState<A, E, Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>

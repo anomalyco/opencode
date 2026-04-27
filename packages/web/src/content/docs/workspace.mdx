@@ -1,0 +1,116 @@
+---
+title: Workspaces
+description: Work with multiple project folders in a single workspace.
+---
+
+Workspaces let you group multiple project folders together and work with them as a single unit. Instead of switching between separate projects, you can see all your folders in one view.
+
+---
+
+## Create a workspace
+
+OpenCode workspaces use the `.code-workspace` file format, which is compatible with [VS Code](https://code.visualstudio.com/docs/editor/workspaces). You can create a workspace from within the app or by writing a workspace file directly.
+
+### From the TUI
+
+Use the workspace commands in the TUI to create and manage workspaces:
+
+- `workspace.open` — Open an existing workspace file
+- `workspace.addFolder` — Add a folder to the current workspace
+- `workspace.removeFolder` — Remove a folder from the current workspace
+
+### From a file
+
+Create a `.code-workspace` file with a `folders` array. Each folder needs a `path` and can optionally have a `name`:
+
+```json title="my-workspace.code-workspace"
+{
+  "folders": [
+    {
+      "path": "packages/backend",
+      "name": "API"
+    },
+    {
+      "path": "packages/frontend",
+      "name": "Web UI"
+    },
+    {
+      "path": "/absolute/path/to/docs"
+    }
+  ],
+  "settings": {}
+}
+```
+
+Relative paths are resolved from the location of the workspace file. Absolute paths work too, but they make the workspace less portable.
+
+---
+
+## Open a workspace
+
+Open a workspace by selecting its `.code-workspace` file through the `workspace.open` command, or by opening a workspace file you have already created.
+
+When you open a workspace, OpenCode loads all the folders listed in the file. Each folder becomes a root in your project view.
+
+---
+
+## Add and remove folders
+
+You can modify a workspace without editing the file directly.
+
+### Add a folder
+
+Use the `workspace.addFolder` command and pick the directory you want to add. The folder will be appended to the workspace file and the database entry will be updated.
+
+### Remove a folder
+
+Use the `workspace.removeFolder` command and select the folder to remove. This updates both the workspace file and the internal state.
+
+---
+
+## File format
+
+Workspace files are plain JSON. The structure follows the VS Code workspace specification.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `folders` | `array` | Yes | List of folders in the workspace |
+| `folders[].path` | `string` | Yes | Path to the folder, relative to the workspace file or absolute |
+| `folders[].name` | `string` | No | Display name shown in the UI |
+| `settings` | `object` | No | Workspace-level settings (reserved for future use) |
+| `extensions` | `object` | No | Extension recommendations (reserved for future use) |
+| `launch` | `object` | No | Debug launch configurations (reserved for future use) |
+
+For full details on the VS Code workspace format, see the [VS Code workspaces documentation](https://code.visualstudio.com/docs/editor/workspaces).
+
+---
+
+## Where workspace files are stored
+
+OpenCode stores workspace files in its data directory under `workspaces/`:
+
+- **macOS**: `~/Library/Application Support/opencode/workspaces/`
+- **Linux**: `~/.local/share/opencode/workspaces/` or `$XDG_DATA_HOME/opencode/workspaces/`
+- **Windows**: `%APPDATA%\opencode\workspaces\`
+
+Each workspace gets its own `.code-workspace` file in this directory. The internal database keeps track of workspace metadata, including the file path and folder list.
+
+---
+
+## Example
+
+A typical monorepo workspace might look like this:
+
+```json title="monorepo.code-workspace"
+{
+  "folders": [
+    { "path": "apps/web" },
+    { "path": "apps/api" },
+    { "path": "packages/shared" },
+    { "path": "packages/ui" }
+  ],
+  "settings": {}
+}
+```
+
+Place this file in the root of your repository, then open it with OpenCode. All four packages will appear as roots in your workspace view.

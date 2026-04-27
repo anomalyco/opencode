@@ -491,6 +491,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "Der opstod en fejl",
 
   "home.recentProjects": "Seneste projekter",
+  "home.recentWorkspaces": "Seneste arbejdsområder",
   "home.empty.title": "Ingen seneste projekter",
   "home.empty.description": "Kom i gang ved at åbne et lokalt projekt",
 
@@ -812,6 +813,11 @@ export const dict = {
   "session.delete.confirm": 'Slet session "{{name}}"?',
   "session.delete.button": "Slet session",
 
+  "workspace.open": "Åbn arbejdsområde",
+  "workspace.create": "Opret arbejdsområde",
+  "workspace.close": "Luk arbejdsområde",
+  "workspace.addFolder": "Tilføj mappe til arbejdsområde",
+  "workspace.removeFolder": "Fjern mappe fra arbejdsområde",
   "workspace.new": "Nyt arbejdsområde",
   "workspace.type.local": "lokal",
   "workspace.type.sandbox": "sandkasse",
@@ -926,4 +932,18 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Kunne ikke oprette vedvarende projektikon",
   "error.childStore.storeCreateFailed": "Kunne ikke oprette lager",
   "terminal.connectionLost.abnormalClose": "WebSocket lukkede unormalt: {{code}}",
+  "dialog.workspace.open.title": "Open Workspace",
+  "dialog.workspace.search.placeholder": "Search workspaces",
+  "dialog.workspace.empty": "No workspaces yet. Create one first!",
+  "dialog.workspace.open.button": "Open",
+  "dialog.workspace.delete.confirm": "Delete this workspace?",
+  "dialog.workspace.folders": "{{count}} folders",
+  "dialog.workspace.create.title": "Create Workspace",
+  "dialog.workspace.create.name": "Workspace name",
+  "dialog.workspace.create.name.placeholder": "My workspace",
+  "dialog.workspace.create.folders": "Folders",
+  "dialog.workspace.create.folders.empty": "No folders added yet",
+  "dialog.workspace.create.addFolder": "Add Folder",
+  "dialog.workspace.create.removeFolder": "Remove folder",
+  "dialog.workspace.create.button": "Create Workspace",
 }

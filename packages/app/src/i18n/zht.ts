@@ -488,6 +488,7 @@ export const dict = {
   "notification.session.error.fallbackDescription": "發生錯誤",
 
   "home.recentProjects": "最近專案",
+  "home.recentWorkspaces": "最近工作區",
   "home.empty.title": "沒有最近專案",
   "home.empty.description": "透過開啟本地專案開始使用",
 
@@ -801,6 +802,11 @@ export const dict = {
   "session.delete.confirm": '刪除工作階段 "{{name}}"?',
   "session.delete.button": "刪除工作階段",
 
+  "workspace.open": "開啟工作區",
+  "workspace.create": "建立工作區",
+  "workspace.close": "關閉工作區",
+  "workspace.addFolder": "新增資料夾至工作區",
+  "workspace.removeFolder": "從工作區移除資料夾",
   "workspace.new": "新增工作區",
   "workspace.type.local": "本地",
   "workspace.type.sandbox": "沙盒",
@@ -913,4 +919,18 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "建立持續性專案圖示失敗",
   "error.childStore.storeCreateFailed": "建立儲存區失敗",
   "terminal.connectionLost.abnormalClose": "WebSocket 異常關閉：{{code}}",
+  "dialog.workspace.open.title": "Open Workspace",
+  "dialog.workspace.search.placeholder": "Search workspaces",
+  "dialog.workspace.empty": "No workspaces yet. Create one first!",
+  "dialog.workspace.open.button": "Open",
+  "dialog.workspace.delete.confirm": "Delete this workspace?",
+  "dialog.workspace.folders": "{{count}} folders",
+  "dialog.workspace.create.title": "Create Workspace",
+  "dialog.workspace.create.name": "Workspace name",
+  "dialog.workspace.create.name.placeholder": "My workspace",
+  "dialog.workspace.create.folders": "Folders",
+  "dialog.workspace.create.folders.empty": "No folders added yet",
+  "dialog.workspace.create.addFolder": "Add Folder",
+  "dialog.workspace.create.removeFolder": "Remove folder",
+  "dialog.workspace.create.button": "Create Workspace",
 } satisfies Partial<Record<Keys, string>>

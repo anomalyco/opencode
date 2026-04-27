@@ -545,6 +545,12 @@ export const Assistant = Schema.Struct({
   path: Schema.Struct({
     cwd: Schema.String,
     root: Schema.String,
+    /**
+     * Full list of workspace roots available during this message. Always
+     * includes `cwd` as the first entry; extra entries indicate a multi-root
+     * session. Optional for backwards compatibility with older messages.
+     */
+    roots: Schema.optional(Schema.Array(Schema.String)),
   }),
   summary: Schema.optional(Schema.Boolean),
   cost: Schema.Number,

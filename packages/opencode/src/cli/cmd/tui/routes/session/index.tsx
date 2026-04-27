@@ -207,6 +207,15 @@ export function Session() {
           await sync.bootstrap({ fatal: false })
         } catch {}
       }
+
+      // Mirror the session's multi-root workspace onto the project store so
+      // the sidebar / SDK header stay in sync across navigation and restart.
+      if (result.data.multiRootWorkspaceID !== project.multiRootWorkspace.current()) {
+        project.multiRootWorkspace.set(result.data.multiRootWorkspaceID)
+        try {
+          await project.multiRootWorkspace.sync()
+        } catch {}
+      }
       await sync.session.sync(sessionID)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {

@@ -166,6 +166,7 @@ export const layer = Layer.effect(
           log.info("all LSPs are disabled")
         } else {
           for (const server of Object.values(LSPServer)) {
+            if (typeof server !== "object" || server === null || !("id" in server)) continue
             servers[server.id] = server
           }
 
@@ -221,10 +222,10 @@ export const layer = Layer.effect(
 
     const getClients = Effect.fnUntraced(function* (file: string) {
       const ctx = yield* InstanceState.context
-      if (
-        !AppFileSystem.contains(ctx.directory, file) &&
-        (ctx.worktree === "/" || !AppFileSystem.contains(ctx.worktree, file))
-      ) {
+      const cfg = yield* config.get()
+      const multiRootEnabled = cfg.experimental?.lsp_multi_root !== false
+      const allowedRoots = [...ctx.roots, ctx.worktree].filter((r) => r && r !== "/")
+      if (!allowedRoots.some((r) => AppFileSystem.contains(r, file))) {
         return [] as LSPClient.Info[]
       }
       const s = yield* InstanceState.get(state)
@@ -248,11 +249,15 @@ export const layer = Layer.effect(
           if (!handle) return undefined
           log.info("spawned lsp server", { serverID: server.id, root })
 
+          // Share cross-root awareness with compliant servers while still
+          // spawning one process per detected root (hybrid strategy).
+          const extraRoots = multiRootEnabled ? ctx.roots.filter((r) => r !== root) : []
           const client = await LSPClient.create({
             serverID: server.id,
             server: handle,
             root,
             directory: ctx.directory,
+            extraRoots,
           }).catch(async (err) => {
             s.broken.add(key)
             await Process.stop(handle.process)

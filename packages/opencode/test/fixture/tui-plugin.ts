@@ -97,6 +97,8 @@ type Opts = {
     part?: HostPluginApi["state"]["part"]
     lsp?: HostPluginApi["state"]["lsp"]
     mcp?: HostPluginApi["state"]["mcp"]
+    workspace?: Partial<HostPluginApi["state"]["workspace"]>
+    multiRootWorkspace?: Partial<HostPluginApi["state"]["multiRootWorkspace"]>
   }
   theme?: {
     selected?: string
@@ -293,6 +295,16 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       part: opts.state?.part ?? (() => []),
       lsp: opts.state?.lsp ?? (() => []),
       mcp: opts.state?.mcp ?? (() => []),
+      workspace: {
+        current: opts.state?.workspace?.current ?? (() => undefined),
+        get: opts.state?.workspace?.get ?? (() => undefined),
+        status: opts.state?.workspace?.status ?? (() => undefined),
+      },
+      multiRootWorkspace: {
+        current: opts.state?.multiRootWorkspace?.current ?? (() => undefined),
+        get: opts.state?.multiRootWorkspace?.get ?? (() => undefined),
+        list: opts.state?.multiRootWorkspace?.list ?? (() => []),
+      },
     },
     theme: {
       get current() {

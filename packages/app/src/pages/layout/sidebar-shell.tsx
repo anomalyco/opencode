@@ -11,6 +11,9 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
+import { useWorkspace } from "@/context/workspace"
+import { SidebarWorkspaceGroup } from "./sidebar-workspace-group"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -31,9 +34,13 @@ export const SidebarContent = (props: {
   helpLabel: Accessor<string>
   onOpenHelp: () => void
   renderPanel: () => JSX.Element
+  clearHoverProjectSoon?: () => void
+  prefetchSession?: (session: Session, priority?: "high" | "low") => void
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
+  const workspace = useWorkspace()
+  const currentWorkspace = workspace.workspaces.current()
   let panel: HTMLDivElement | undefined
 
   createEffect(() => {
@@ -118,7 +125,12 @@ export const SidebarContent = (props: {
         classList={{ "flex-1 flex h-full min-h-0 min-w-0 overflow-hidden": true, "pointer-events-none": !expanded() }}
         aria-hidden={!expanded()}
       >
-        {props.renderPanel()}
+        <Show when={currentWorkspace} fallback={props.renderPanel()}>
+          <SidebarWorkspaceGroup
+            clearHoverProjectSoon={props.clearHoverProjectSoon}
+            prefetchSession={props.prefetchSession}
+          />
+        </Show>
       </div>
     </div>
   )

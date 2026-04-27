@@ -19,7 +19,7 @@ type Adaptor = {
 function scoped(sdk: ReturnType<typeof useSDK>, sync: ReturnType<typeof useSync>, workspaceID: string) {
   return createOpencodeClient({
     baseUrl: sdk.url,
-    fetch: sdk.fetch,
+    fetch: sdk.fetch as typeof fetch,
     directory: sync.path.directory || sdk.directory,
     experimental_workspaceID: workspaceID,
   })

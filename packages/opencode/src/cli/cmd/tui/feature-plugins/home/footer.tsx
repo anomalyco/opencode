@@ -54,6 +54,46 @@ function Version(props: { api: TuiPluginApi }) {
   )
 }
 
+function Workspace(props: { api: TuiPluginApi }) {
+  const theme = () => props.api.theme.current
+  const workspaceID = createMemo(() => props.api.state.workspace.current())
+  const workspaceInfo = createMemo(() => {
+    const id = workspaceID()
+    return id ? props.api.state.workspace.get(id) : undefined
+  })
+  const workspaceStatus = createMemo(() => {
+    const id = workspaceID()
+    return id ? props.api.state.workspace.status(id) : undefined
+  })
+
+  return (
+    <Show when={workspaceInfo()}>
+      <text fg={theme().textMuted}>
+        <span style={{ fg: workspaceStatus() === "connected" ? theme().success : theme().error }}>●</span>{" "}
+        {workspaceInfo()?.type}: {workspaceInfo()?.name}
+      </text>
+    </Show>
+  )
+}
+
+function MultiRootWorkspace(props: { api: TuiPluginApi }) {
+  const theme = () => props.api.theme.current
+  const workspaceID = createMemo(() => props.api.state.multiRootWorkspace.current())
+  const workspaceInfo = createMemo(() => {
+    const id = workspaceID()
+    return id ? props.api.state.multiRootWorkspace.get(id) : undefined
+  })
+
+  return (
+    <Show when={workspaceInfo()}>
+      <text fg={theme().textMuted}>
+        <span style={{ fg: theme().success }}>◆</span> ws: {workspaceInfo()?.name} ({workspaceInfo()?.folders.length}{" "}
+        folder{workspaceInfo()?.folders.length === 1 ? "" : "s"})
+      </text>
+    </Show>
+  )
+}
+
 function View(props: { api: TuiPluginApi }) {
   return (
     <box
@@ -68,6 +108,8 @@ function View(props: { api: TuiPluginApi }) {
     >
       <Directory api={props.api} />
       <Mcp api={props.api} />
+      <Workspace api={props.api} />
+      <MultiRootWorkspace api={props.api} />
       <box flexGrow={1} />
       <Version api={props.api} />
     </box>

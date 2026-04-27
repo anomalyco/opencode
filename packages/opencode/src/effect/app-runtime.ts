@@ -47,6 +47,7 @@ import { Installation } from "@/installation"
 import { ShareNext } from "@/share"
 import { SessionShare } from "@/share"
 import { Npm } from "@opencode-ai/core/npm"
+import { MultiRootWorkspace } from "@/workspace"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 export const AppLayer = Layer.mergeAll(
@@ -95,6 +96,7 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
+  MultiRootWorkspace.defaultLayer,
 ).pipe(Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

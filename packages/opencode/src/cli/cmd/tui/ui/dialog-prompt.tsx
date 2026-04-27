@@ -12,6 +12,13 @@ export type DialogPromptProps = {
   value?: string
   busy?: boolean
   busyText?: string
+  /**
+   * When true, the dialog automatically closes via `dialog.clear()` after
+   * `onConfirm` is invoked. Defaults to false to preserve the legacy behavior
+   * where callers are expected to close or replace the dialog themselves
+   * (for example to show an error state inside the same prompt).
+   */
+  autoClose?: boolean
   onConfirm?: (value: string) => void
   onCancel?: () => void
 }
@@ -20,6 +27,16 @@ export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
   let textarea: TextareaRenderable
+  let submitted = false
+
+  const handleSubmit = () => {
+    if (props.busy) return
+    if (submitted) return
+    submitted = true
+    const value = textarea?.plainText ?? ""
+    props.onConfirm?.(value)
+    if (props.autoClose === true) dialog.clear()
+  }
 
   useKeyboard((evt) => {
     if (props.busy) {
@@ -29,7 +46,9 @@ export function DialogPrompt(props: DialogPromptProps) {
       return
     }
     if (evt.name === "return") {
-      props.onConfirm?.(textarea.plainText)
+      evt.preventDefault()
+      evt.stopPropagation()
+      handleSubmit()
     }
   })
 
@@ -73,8 +92,7 @@ export function DialogPrompt(props: DialogPromptProps) {
         {props.description}
         <textarea
           onSubmit={() => {
-            if (props.busy) return
-            props.onConfirm?.(textarea.plainText)
+            handleSubmit()
           }}
           height={3}
           keyBindings={props.busy ? [] : [{ name: "return", action: "submit" }]}
@@ -105,11 +123,23 @@ export function DialogPrompt(props: DialogPromptProps) {
 
 DialogPrompt.show = (dialog: DialogContext, title: string, options?: Omit<DialogPromptProps, "title">) => {
   return new Promise<string | null>((resolve) => {
+    let resolved = false
+    const settle = (value: string | null) => {
+      if (resolved) return
+      resolved = true
+      resolve(value)
+    }
     dialog.replace(
       () => (
-        <DialogPrompt title={title} {...options} onConfirm={(value) => resolve(value)} onCancel={() => resolve(null)} />
+        <DialogPrompt
+          title={title}
+          autoClose
+          {...options}
+          onConfirm={(value) => settle(value)}
+          onCancel={() => settle(null)}
+        />
       ),
-      () => resolve(null),
+      () => settle(null),
     )
   })
 }
