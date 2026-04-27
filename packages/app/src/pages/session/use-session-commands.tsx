@@ -571,7 +571,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     ...viewCmds(),
     ...terminalCmds(),
     ...messageCmds(),
-    ...modelCmds(),
+    // ENT-69 운영 빌드에서는 모델 피커 진입(`mod+'`, `/model`, `shift+mod+d`)을 차단 (로컬 vite dev에서만 유지).
+    ...(import.meta.env.DEV ? modelCmds() : []),
     ...mcpCmds(),
     ...agentCmds(),
     ...permissionsCmds(),

@@ -1084,7 +1084,8 @@ export default function Layout(props: ParentProps) {
         id: "settings.open",
         title: language.t("command.settings.open"),
         category: language.t("command.category.settings"),
-        keybind: "mod+comma",
+        // ENT-69 minimum 모드에서 설정 다이얼로그 → SettingsModels로 이어지는 진입 경로를 차단하기 위해 비활성화
+        // keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
       {
