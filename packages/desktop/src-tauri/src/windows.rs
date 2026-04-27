@@ -56,8 +56,6 @@ impl MainWindow {
         .title("OpenCode")
         .disable_drag_drop_handler()
         .zoom_hotkeys_enabled(false)
-        .visible(true)
-        .maximized(true)
         .initialization_script(format!(
             r#"
             window.__OPENCODE__ ??= {{}};
@@ -68,8 +66,14 @@ impl MainWindow {
 
         let window = window_builder.build()?;
 
-        // Ensure window is focused after creation (e.g., after update/relaunch)
-        let _ = window.set_focus();
+        // Show window only after webview loads to avoid flash/jump
+        let window_clone = window.clone();
+        window.on_webview_event(move |event| {
+            if matches!(event, tauri::WebviewEvent::DidFinishLoad(_)) {
+                let _ = window_clone.show();
+                let _ = window_clone.set_focus();
+            }
+        });
 
         setup_window_state_listener(app, &window);
 
@@ -138,10 +142,19 @@ impl LoadingWindow {
         )
         .center()
         .resizable(false)
-        .inner_size(640.0, 480.0)
-        .visible(true);
+        .inner_size(640.0, 480.0);
 
-        Ok(Self(window_builder.build()?))
+        let window = window_builder.build()?;
+
+        let window_clone = window.clone();
+        window.on_webview_event(move |event| {
+            if matches!(event, tauri::WebviewEvent::DidFinishLoad(_)) {
+                let _ = window_clone.show();
+                let _ = window_clone.set_focus();
+            }
+        });
+
+        Ok(Self(window))
     }
 }
 
