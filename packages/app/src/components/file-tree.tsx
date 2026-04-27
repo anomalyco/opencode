@@ -2,6 +2,15 @@ import { useFile } from "@/context/file"
 import { useSDK } from "@/context/sdk"
 import { encodeFilePath } from "@/context/file/path"
 import { DialogFileTreePrompt, DialogFileTreeConfirm } from "@/components/dialog-file-tree"
+// FORK: 文件树拖放移动 2026-04-27
+import {
+  encodeDragPaths,
+  parseDataTransferPaths,
+  isValidMoveTarget,
+  uniqueParents,
+  absoluteToRelative,
+} from "@/utils/file-tree-dnd"
+import { computeAvailableTarget } from "@/utils/file-conflict"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -16,6 +25,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   Show,
   splitProps,
   Switch,
@@ -116,6 +126,27 @@ const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, Kind>, marks?: 
   return kind
 }
 
+// FORK-BEGIN: 拖放移动 — 全树共享的 drag state(模块级 signal,支持跨 FileTree 层级)2026-04-27
+const [draggingPaths, setDraggingPaths] = createSignal<readonly string[]>([])
+const [dropTargetPath, setDropTargetPath] = createSignal<string | null>(null)
+
+/** 当前是否有项被拖动 */
+function isDragging(): boolean {
+  return draggingPaths().length > 0
+}
+
+/** 给定 absolute 是否被拖动(用于源行 opacity 控制) */
+function isPathDragging(absolute: string): boolean {
+  return draggingPaths().includes(absolute)
+}
+
+/** 重置 drag 状态(dragend / 任何位置 drop 完成 / cancel) */
+function resetDragState(): void {
+  setDraggingPaths([])
+  setDropTargetPath(null)
+}
+// FORK-END
+
 const buildDragImage = (target: HTMLElement) => {
   const icon = target.querySelector('[data-component="file-icon"]') ?? target.querySelector("svg")
   const text = target.querySelector("span")
@@ -181,6 +212,8 @@ const FileTreeNode = (
       classList={{
         "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
         "bg-surface-base-active": local.node.path === local.active || !!local.contextOpen,
+        // FORK: 拖动中的源行半透明 2026-04-27
+        "opacity-50": isPathDragging(local.node.absolute),
         ...local.classList,
         [local.class ?? ""]: !!local.class,
         [local.nodeClass ?? ""]: !!local.nodeClass,
@@ -191,9 +224,14 @@ const FileTreeNode = (
         if (!local.draggable) return
         event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
         event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
-        if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
+        // FORK: copyMove 让目标按住 Ctrl 也能切到 copy(默认 move)2026-04-27
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "copyMove"
         withFileDragImage(event)
+        // FORK: 写模块信号,FileTree drop handler 用它判断 in-tree 拖动 + 取源路径
+        setDraggingPaths([local.node.absolute])
       }}
+      // FORK: 拖动结束(成功/取消都会触发)清状态 2026-04-27
+      onDragEnd={() => resetDragState()}
       {...rest}
     >
       {local.children}
@@ -299,6 +337,86 @@ export default function FileTree(props: {
       />
     ))
   }
+
+  // FORK-BEGIN: 拖放移动 — drop handler + spring-load 共享 timer 2026-04-27
+  let springTimer: ReturnType<typeof setTimeout> | undefined
+  const cancelSpringTimer = () => {
+    if (springTimer) {
+      clearTimeout(springTimer)
+      springTimer = undefined
+    }
+  }
+  onCleanup(cancelSpringTimer)
+
+  /** 真正执行拖放移动:多源循环 rename + 错误聚合 + 刷新源父目录与目标 */
+  const handleMoveDrop = async (targetAbs: string, targetRel: string) => {
+    const sources = draggingPaths()
+    if (sources.length === 0) return // 非 in-tree 拖动(commit #4 处理外部)
+
+    const valid = sources.filter((s) => isValidMoveTarget(s, { absolute: targetAbs, type: "directory" }))
+    if (valid.length === 0) return // 全部无效(拖父进子 / 拖到自身 / 已在目标),静默 no-op
+
+    const errors: string[] = []
+    for (const src of valid) {
+      try {
+        const targetPath = await computeAvailableTarget(targetAbs, basename(src))
+        await invoke("rename_path", { from: src, to: targetPath })
+      } catch (e) {
+        errors.push(`${basename(src)}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+
+    // 刷新源父目录(去重)+ 目标目录
+    const refreshTargets = new Set<string>([targetRel])
+    for (const parent of uniqueParents(valid)) {
+      const rel = absoluteToRelative(parent, sdk.directory)
+      if (rel !== null) refreshTargets.add(rel)
+    }
+    await Promise.all([...refreshTargets].map((r) => file.tree.refresh(r)))
+
+    if (errors.length > 0) {
+      showToast({
+        variant: "error",
+        title: errors.length === 1 ? "移动失败" : `${errors.length} 项移动失败`,
+        description: errors[0],
+      })
+    }
+  }
+
+  /** 给文件夹行(level > 0)和树根(level 0 空白区)绑 drop handlers */
+  const dropHandlers = (targetAbs: string, targetRel: string) => ({
+    onDragOver: (event: DragEvent) => {
+      if (!isDragging()) return // 非 in-tree 拖动放行(commit #4 让 Tauri event 接管外部)
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move"
+
+      // 仅在 target 真切换时重置 timer + 视觉 — 否则同一行的连续 dragover 会反复重置
+      // 注意:HTML5 dragleave 在子元素间移动时会假触发,不能用它来重置 timer
+      if (dropTargetPath() === targetAbs) return
+      cancelSpringTimer()
+      setDropTargetPath(targetAbs)
+
+      // spring-load:折叠或从未加载的目录 hover 600ms 自动展开(state undefined 也算"未展开")
+      if (targetRel !== props.path /* 跳过自己 FileTree 的根 */) {
+        const state = file.tree.state(targetRel)
+        if (!state?.expanded) {
+          springTimer = setTimeout(() => {
+            file.tree.expand(targetRel)
+            springTimer = undefined
+          }, 600)
+        }
+      }
+    },
+    // 不在 dragleave 清 timer 或视觉 — 留给 onDragOver(target 切换时)/ onDrop / onDragEnd 处理
+    onDrop: (event: DragEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+      cancelSpringTimer()
+      void handleMoveDrop(targetAbs, targetRel).finally(() => resetDragState())
+    },
+  })
+  // FORK-END
 
   const promptDelete = (target: FileNode) => {
     dialog.show(() => (
@@ -558,11 +676,17 @@ export default function FileTree(props: {
                 <ContextMenu onOpenChange={setContextOpen}>
                   <Collapsible
                     variant="ghost"
-                    class="w-full"
+                    classList={{
+                      "w-full": true,
+                      // FORK: drop target 高亮 ring 2026-04-27
+                      "rounded-md ring-2 ring-interactive-base ring-inset":
+                        dropTargetPath() === node.absolute,
+                    }}
                     data-scope="filetree"
                     forceMount={false}
                     open={expanded()}
                     onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
+                    {...dropHandlers(node.absolute, node.path)}
                   >
                     <ContextMenu.Trigger as="div" class="contents">
                       <Collapsible.Trigger>
@@ -683,12 +807,34 @@ export default function FileTree(props: {
     )
   }
 
+  // FORK-BEGIN: 树根空白区也接收 drop = 移到项目根;dragLeave 用 relatedTarget 判定真离开 2026-04-27
+  const rootDropHandlers = dropHandlers(sdk.directory, props.path)
+  const onRootDragLeave = (event: DragEvent) => {
+    const root = event.currentTarget as HTMLElement | null
+    const related = event.relatedTarget as Node | null
+    // 仍在树内(进入子元素)→ 不清,避免假离开
+    if (root && related && root.contains(related)) return
+    cancelSpringTimer()
+    setDropTargetPath(null)
+  }
   return (
     <ContextMenu>
-      <ContextMenu.Trigger as="div" data-component="filetree" class={bodyClass}>
+      <ContextMenu.Trigger
+        as="div"
+        data-component="filetree"
+        classList={{
+          [bodyClass]: true,
+          // 拖动时整个根区域淡蓝背景提示可 drop
+          "bg-surface-raised-base/30": isDragging() && dropTargetPath() === sdk.directory,
+        }}
+        onDragOver={rootDropHandlers.onDragOver}
+        onDragLeave={onRootDragLeave}
+        onDrop={rootDropHandlers.onDrop}
+      >
         {treeContent}
       </ContextMenu.Trigger>
       <ContextMenu.Portal>{renderEmptyMenuItems()}</ContextMenu.Portal>
     </ContextMenu>
   )
 }
+// FORK-END

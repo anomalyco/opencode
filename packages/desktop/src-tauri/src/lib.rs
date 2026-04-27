@@ -240,6 +240,13 @@ fn trash_path(path: String) -> Result<(), String> {
     trash::delete(&path).map_err(|e| format!("trash failed: {}: {}", path, e))
 }
 
+// FORK: 用于文件树拖放冲突检测,前端 computeAvailableTarget 循环试探 base-1 / base-2 ... 时调 2026-04-27
+#[tauri::command]
+#[specta::specta]
+fn exists_path(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
 #[cfg(target_os = "macos")]
 fn check_macos_app(app_name: &str) -> bool {
     // Check common installation locations
@@ -441,6 +448,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             create_empty_file,
             rename_path,
             trash_path,
+            exists_path, // FORK: 文件树拖放冲突检测 2026-04-27
             text_file::write_text_file,
             text_file::get_file_mtime,
             text_file::read_binary_file_base64
