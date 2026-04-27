@@ -105,10 +105,17 @@ describe("HttpApi JSON parity", () => {
 
     await [
       { label: "session.list roots", path: `${SessionPaths.list}?roots=true`, headers },
+      { label: "session.list roots false", path: `${SessionPaths.list}?roots=false`, headers },
+      { label: "session.list roots numeric", path: `${SessionPaths.list}?roots=1`, headers },
       { label: "session.list all", path: SessionPaths.list, headers },
       { label: "session.get", path: pathFor(SessionPaths.get, { sessionID: seeded.parent.id }), headers },
       { label: "session.children", path: pathFor(SessionPaths.children, { sessionID: seeded.parent.id }), headers },
       { label: "session.messages", path: pathFor(SessionPaths.messages, { sessionID: seeded.parent.id }), headers },
+      {
+        label: "session.messages empty before",
+        path: `${pathFor(SessionPaths.messages, { sessionID: seeded.parent.id })}?before=`,
+        headers,
+      },
       {
         label: "session.message",
         path: pathFor(SessionPaths.message, { sessionID: seeded.parent.id, messageID: seeded.message.id }),
@@ -117,6 +124,16 @@ describe("HttpApi JSON parity", () => {
       {
         label: "experimental.session",
         path: `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.path, limit: "10" })}`,
+        headers,
+      },
+      {
+        label: "experimental.session roots false",
+        path: `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.path, limit: "10", roots: "false" })}`,
+        headers,
+      },
+      {
+        label: "experimental.session roots numeric",
+        path: `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.path, limit: "10", roots: "1" })}`,
         headers,
       },
     ].reduce(

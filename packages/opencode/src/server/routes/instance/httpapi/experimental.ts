@@ -54,13 +54,17 @@ const ToolListQuery = Schema.Struct({
 const WorktreeList = Schema.Array(Schema.String).annotate({ identifier: "WorktreeList" })
 const SessionListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
-  roots: Schema.optional(Schema.Literals(["true", "false"])),
+  roots: Schema.optional(Schema.String),
   start: Schema.optional(Schema.NumberFromString),
   cursor: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
-  archived: Schema.optional(Schema.Literals(["true", "false"])),
+  archived: Schema.optional(Schema.String),
 })
+
+function legacyQueryBoolean(value: string | undefined) {
+  return value ? true : undefined
+}
 
 export const ExperimentalPaths = {
   console: "/experimental/console",
@@ -307,12 +311,12 @@ export const experimentalHandlers = Layer.unwrap(
       const sessions = Array.from(
         Session.listGlobal({
           directory: ctx.query.directory,
-          roots: ctx.query.roots === "true" ? true : undefined,
+          roots: legacyQueryBoolean(ctx.query.roots),
           start: ctx.query.start,
           cursor: ctx.query.cursor,
           search: ctx.query.search,
           limit: limit + 1,
-          archived: ctx.query.archived === "true" ? true : undefined,
+          archived: legacyQueryBoolean(ctx.query.archived),
         }),
       )
       const list = sessions.length > limit ? sessions.slice(0, limit) : sessions

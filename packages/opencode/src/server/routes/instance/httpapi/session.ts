@@ -39,7 +39,7 @@ const log = Log.create({ service: "server" })
 const root = "/session"
 const ListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
-  roots: Schema.optional(Schema.Literals(["true", "false"])),
+  roots: Schema.optional(Schema.String),
   start: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
@@ -87,6 +87,10 @@ const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields
 const PermissionResponsePayload = Schema.Struct({
   response: Permission.Reply,
 }).annotate({ identifier: "SessionPermissionResponseInput" })
+
+function legacyQueryBoolean(value: string | undefined) {
+  return value ? true : undefined
+}
 
 export const SessionPaths = {
   list: root,
@@ -436,7 +440,7 @@ export const sessionHandlers = Layer.unwrap(
         Array.from(
           Session.list({
             directory: ctx.query.directory,
-            roots: ctx.query.roots === "true" ? true : undefined,
+            roots: legacyQueryBoolean(ctx.query.roots),
             start: ctx.query.start,
             search: ctx.query.search,
             limit: ctx.query.limit,
@@ -472,8 +476,8 @@ export const sessionHandlers = Layer.unwrap(
       params: { sessionID: SessionID }
       query: typeof MessagesQuery.Type
     }) {
-      if (ctx.query.before !== undefined && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
-      if (ctx.query.before !== undefined) {
+      if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
+      if (ctx.query.before) {
         const before = ctx.query.before
         yield* Effect.try({
           try: () => MessageV2.cursor.decode(before),
