@@ -3,6 +3,7 @@ import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
+import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
 const encoder = new TextEncoder()
 
@@ -68,31 +69,46 @@ describe("installation", () => {
       expect(result).toBe("4.0.0-beta.1")
     })
 
-    test("reads npm registry versions", async () => {
-      const layer = testLayer(
-        () => jsonResponse({ version: "1.5.0" }),
-        (cmd, args) => {
-          if (cmd === "npm" && args.includes("registry")) return "https://registry.npmjs.org\n"
-          return ""
-        },
-      )
+    test("reads npm versions via registry", async () => {
+      const calls: string[] = []
+      const layer = testLayer((request) => {
+        calls.push(request.url)
+        return jsonResponse({ version: "1.5.0" })
+      })
 
       const result = await Effect.runPromise(
         Installation.Service.use((svc) => svc.latest("npm")).pipe(Effect.provide(layer)),
       )
       expect(result).toBe("1.5.0")
+      expect(calls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
     })
 
-    test("reads npm registry versions for bun method", async () => {
-      const layer = testLayer(
-        () => jsonResponse({ version: "1.6.0" }),
-        () => "",
-      )
+    test("reads bun versions via registry", async () => {
+      const calls: string[] = []
+      const layer = testLayer((request) => {
+        calls.push(request.url)
+        return jsonResponse({ version: "1.6.0" })
+      })
 
       const result = await Effect.runPromise(
         Installation.Service.use((svc) => svc.latest("bun")).pipe(Effect.provide(layer)),
       )
       expect(result).toBe("1.6.0")
+      expect(calls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
+    })
+
+    test("reads pnpm versions via registry", async () => {
+      const calls: string[] = []
+      const layer = testLayer((request) => {
+        calls.push(request.url)
+        return jsonResponse({ version: "1.7.0" })
+      })
+
+      const result = await Effect.runPromise(
+        Installation.Service.use((svc) => svc.latest("pnpm")).pipe(Effect.provide(layer)),
+      )
+      expect(result).toBe("1.7.0")
+      expect(calls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
     })
 
     test("reads scoop manifest versions", async () => {

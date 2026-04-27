@@ -1,13 +1,14 @@
-import z from "zod"
+import { Schema } from "effect"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Worktree } from "@/worktree"
 import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
 
-const WorktreeConfig = z.object({
-  name: WorkspaceInfo.shape.name,
-  branch: WorkspaceInfo.shape.branch.unwrap(),
-  directory: WorkspaceInfo.shape.directory.unwrap(),
+const WorktreeConfig = Schema.Struct({
+  name: WorkspaceInfo.fields.name,
+  branch: Schema.String,
+  directory: Schema.String,
 })
+const decodeWorktreeConfig = Schema.decodeUnknownSync(WorktreeConfig)
 
 export const WorktreeAdaptor: WorkspaceAdaptor = {
   name: "Worktree",
@@ -22,7 +23,7 @@ export const WorktreeAdaptor: WorkspaceAdaptor = {
     }
   },
   async create(info) {
-    const config = WorktreeConfig.parse(info)
+    const config = decodeWorktreeConfig(info)
     await AppRuntime.runPromise(
       Worktree.Service.use((svc) =>
         svc.createFromInfo({
@@ -34,11 +35,11 @@ export const WorktreeAdaptor: WorkspaceAdaptor = {
     )
   },
   async remove(info) {
-    const config = WorktreeConfig.parse(info)
+    const config = decodeWorktreeConfig(info)
     await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove({ directory: config.directory })))
   },
   target(info) {
-    const config = WorktreeConfig.parse(info)
+    const config = decodeWorktreeConfig(info)
     return {
       type: "local",
       directory: config.directory,

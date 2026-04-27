@@ -249,7 +249,7 @@ export const dict = {
   "common.default": "默认",
   "common.attachment": "附件",
 
-  "prompt.placeholder.shell": "输入 shell 命令...",
+  "prompt.placeholder.shell": "输入 shell 命令... {{example}}",
   "prompt.placeholder.normal": '随便问点什么... "{{example}}"',
   "prompt.placeholder.simple": "随便问点什么...",
   "prompt.placeholder.summarizeComments": "总结评论…",

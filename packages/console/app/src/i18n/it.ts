@@ -251,7 +251,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Modelli di coding a basso costo per tutti",
   "go.meta.description":
-    "Go inizia a $5 per il primo mese, poi $10/mese, con generosi limiti di richiesta di 5 ore per GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 e MiniMax M2.7.",
+    "Go inizia a $5 per il primo mese, poi $10/mese, con generosi limiti di richiesta di 5 ore per GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro e DeepSeek V4 Flash.",
   "go.hero.title": "Modelli di coding a basso costo per tutti",
   "go.hero.body":
     "Go porta il coding agentico ai programmatori di tutto il mondo. Offrendo limiti generosi e un accesso affidabile ai modelli open source più capaci, in modo da poter costruire con agenti potenti senza preoccuparsi dei costi o della disponibilità.",
@@ -302,7 +302,7 @@ export const dict = {
   "go.problem.item2": "Limiti generosi e accesso affidabile",
   "go.problem.item3": "Costruito per il maggior numero possibile di programmatori",
   "go.problem.item4":
-    "Include GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 e MiniMax M2.7",
+    "Include GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro e DeepSeek V4 Flash",
   "go.how.title": "Come funziona Go",
   "go.how.body": "Go inizia a $5 per il primo mese, poi $10/mese. Puoi usarlo con OpenCode o qualsiasi agente.",
   "go.how.step1.title": "Crea un account",
@@ -327,7 +327,7 @@ export const dict = {
   "go.faq.a2": "Go include i modelli elencati di seguito, con limiti generosi e accesso affidabile.",
   "go.faq.q3": "Go è lo stesso di Zen?",
   "go.faq.a3":
-    "No. Zen è a consumo, mentre Go inizia a $5 per il primo mese, poi $10/mese, con limiti generosi e accesso affidabile ai modelli open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 e MiniMax M2.7.",
+    "No. Zen è a consumo, mentre Go inizia a $5 per il primo mese, poi $10/mese, con limiti generosi e accesso affidabile ai modelli open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro e DeepSeek V4 Flash.",
   "go.faq.q4": "Quanto costa Go?",
   "go.faq.a4.p1.beforePricing": "Go costa",
   "go.faq.a4.p1.pricingLink": "$5 il primo mese",
@@ -351,7 +351,7 @@ export const dict = {
 
   "go.faq.q9": "Qual è la differenza tra i modelli gratuiti e Go?",
   "go.faq.a9":
-    "I modelli gratuiti includono Big Pickle più modelli promozionali disponibili al momento, con una quota di 200 richieste/giorno. Go include GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5 e MiniMax M2.7 con quote di richiesta più elevate applicate su finestre mobili (5 ore, settimanale e mensile), approssimativamente equivalenti a $12 ogni 5 ore, $30 a settimana e $60 al mese (il conteggio effettivo delle richieste varia in base al modello e all'utilizzo).",
+    "I modelli gratuiti includono Big Pickle più modelli promozionali disponibili al momento, con una quota di 200 richieste/giorno. Go include GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro e DeepSeek V4 Flash con quote di richiesta più elevate applicate su finestre mobili (5 ore, settimanale e mensile), approssimativamente equivalenti a $12 ogni 5 ore, $30 a settimana e $60 al mese (il conteggio effettivo delle richieste varia in base al modello e all'utilizzo).",
 
   "zen.api.error.rateLimitExceeded": "Limite di richieste superato. Riprova più tardi.",
   "zen.api.error.modelNotSupported": "Modello {{model}} non supportato",

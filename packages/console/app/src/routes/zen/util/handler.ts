@@ -101,12 +101,13 @@ export async function handler(
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
+    const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
       is_stream: isStream,
       session: sessionId,
       request: requestId,
       client: ocClient,
-      ...(model === "mimo-v2-pro-free" && JSON.stringify(body).length < 1000 ? { payload: JSON.stringify(body) } : {}),
+      user_agent: userAgent,
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
@@ -187,6 +188,8 @@ export async function handler(
       // Try another provider => stop retrying if using fallback provider
       if (
         res.status !== 200 &&
+        // ie. 400 error is usually provider error like malformed request
+        res.status !== 400 &&
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
         res.status !== 404 &&
         // ie. cannot change codex model providers mid-session
@@ -226,7 +229,7 @@ export async function handler(
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
     // Handle non-streaming response
-    if (!isStream || res.status === 429) {
+    if (!isStream || [400, 404, 429].includes(res.status)) {
       const json = await res.json()
       await rateLimiter?.track()
       if (json.usage) {
@@ -237,6 +240,9 @@ export async function handler(
         await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
         await reload(billingSource, authInfo, costInfo)
         json.cost = calculateOccurredCost(billingSource, costInfo)
+      }
+      if (res.status === 400) {
+        logger.metric({ "error.response": JSON.stringify(json) })
       }
       if (json.error?.message) {
         json.error.message = `Error from provider${providerInfo.displayName ? ` (${providerInfo.displayName})` : ""}: ${json.error.message}`
@@ -393,7 +399,7 @@ export async function handler(
         type: "error",
         error: {
           type: "error",
-          message: error.message,
+          message: "Internal server error",
         },
       }),
       { status: 500 },

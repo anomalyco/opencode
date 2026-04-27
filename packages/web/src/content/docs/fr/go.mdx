@@ -65,6 +65,8 @@ La liste actuelle des modèles comprend :
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
 - **MiniMax M2.7**
+- **DeepSeek V4 Pro**
+- **DeepSeek V4 Flash**
 
 La liste des modèles peut changer au fur et à mesure que nous en testons et en ajoutons de nouveaux.
 
@@ -82,28 +84,32 @@ Les limites sont définies en valeur monétaire (dollars). Cela signifie que vot
 
 Le tableau ci-dessous fournit une estimation du nombre de requêtes basée sur des modèles d'utilisation typiques de Go :
 
-| Model         | requêtes par 5 heures | requêtes par semaine | requêtes par mois |
-| ------------- | --------------------- | -------------------- | ----------------- |
-| GLM-5.1       | 880                   | 2,150                | 4,300             |
-| GLM-5         | 1,150                 | 2,880                | 5,750             |
-| Kimi K2.5     | 1,850                 | 4,630                | 9,250             |
-| Kimi K2.6     | 1,150                 | 2,880                | 5,750             |
-| MiMo-V2-Pro   | 1,290                 | 3,225                | 6,450             |
-| MiMo-V2-Omni  | 2,150                 | 5,450                | 10,900            |
-| MiMo-V2.5-Pro | 1,290                 | 3,225                | 6,450             |
-| MiMo-V2.5     | 2,150                 | 5,450                | 10,900            |
-| Qwen3.6 Plus  | 3,300                 | 8,200                | 16,300            |
-| MiniMax M2.7  | 3,400                 | 8,500                | 17,000            |
-| MiniMax M2.5  | 6,300                 | 15,900               | 31,800            |
-| Qwen3.5 Plus  | 10,200                | 25,200               | 50,500            |
+| Model              | requêtes par 5 heures | requêtes par semaine | requêtes par mois |
+| ------------------ | --------------------- | -------------------- | ----------------- |
+| GLM-5.1            | 880                   | 2,150                | 4,300             |
+| GLM-5              | 1,150                 | 2,880                | 5,750             |
+| Kimi K2.5          | 1,850                 | 4,630                | 9,250             |
+| Kimi K2.6          | 1,150                 | 2,880                | 5,750             |
+| MiMo-V2-Pro        | 1,290                 | 3,225                | 6,450             |
+| MiMo-V2-Omni       | 2,150                 | 5,450                | 10,900            |
+| MiMo-V2.5-Pro      | 1,290                 | 3,225                | 6,450             |
+| MiMo-V2.5 (≤ 256K) | 2,150                 | 5,450                | 10,900            |
+| MiniMax M2.7       | 3,400                 | 8,500                | 17,000            |
+| MiniMax M2.5       | 6,300                 | 15,900               | 31,800            |
+| Qwen3.6 Plus       | 3,300                 | 8,200                | 16,300            |
+| Qwen3.5 Plus       | 10,200                | 25,200               | 50,500            |
+| DeepSeek V4 Pro    | 3,450                 | 8,550                | 17,150            |
+| DeepSeek V4 Flash  | 31,650                | 79,050               | 158,150           |
 
 Les estimations sont basées sur les modèles de requêtes moyens observés :
 
 - GLM-5/5.1 — 700 tokens en entrée, 52,000 en cache, 150 tokens en sortie par requête
 - Kimi K2.5/K2.6 — 870 tokens en entrée, 55,000 en cache, 200 tokens en sortie par requête
+- DeepSeek V4 Pro — 750 tokens en entrée, 82,000 en cache, 290 tokens en sortie par requête
+- DeepSeek V4 Flash — 790 tokens en entrée, 68,000 en cache, 280 tokens en sortie par requête
 - MiniMax M2.7/M2.5 — 300 tokens en entrée, 55,000 en cache, 125 tokens en sortie par requête
-- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
-- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- Qwen3.5 Plus — 410 tokens en entrée, 47,000 en cache, 140 tokens en sortie par requête
+- Qwen3.6 Plus — 500 tokens en entrée, 57,000 en cache, 190 tokens en sortie par requête
 - MiMo-V2-Pro — 350 tokens en entrée, 41,000 en cache, 250 tokens en sortie par requête
 - MiMo-V2-Omni — 1000 tokens en entrée, 60,000 en cache, 140 tokens en sortie par requête
 - MiMo-V2.5-Pro — 350 tokens en entrée, 41,000 en cache, 250 tokens en sortie par requête
@@ -129,22 +135,34 @@ Si vous avez également des crédits sur votre solde Zen, vous pouvez activer l'
 
 Vous pouvez également accéder aux modèles Go via les points de terminaison d'API suivants.
 
-| Modèle        | ID de modèle  | Point de terminaison                             | Package AI SDK              |
-| ------------- | ------------- | ------------------------------------------------ | --------------------------- |
-| GLM-5.1       | glm-5.1       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5         | glm-5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5     | kimi-k2.5     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.6     | kimi-k2.6     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Pro   | mimo-v2-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Omni  | mimo-v2-omni  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5-Pro | mimo-v2.5-pro | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5     | mimo-v2.5     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiniMax M2.7  | minimax-m2.7  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.5  | minimax-m2.5  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus  | qwen3.6-plus  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus  | qwen3.5-plus  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Modèle            | ID de modèle      | Point de terminaison                             | Package AI SDK              |
+| ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro       | mimo-v2-pro       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni      | mimo-v2-omni      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 
 L'[ID de modèle](/docs/config/#models) dans votre configuration OpenCode utilise le format `opencode-go/<model-id>`. Par exemple, pour Kimi K2.6, vous utiliseriez `opencode-go/kimi-k2.6` dans votre configuration.
+
+---
+
+### Modèles
+
+Vous pouvez récupérer la liste complète des modèles disponibles et leurs métadonnées à partir de :
+
+```
+https://opencode.ai/zen/go/v1/models
+```
 
 ---
 

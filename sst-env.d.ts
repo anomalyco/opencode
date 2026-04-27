@@ -174,6 +174,9 @@ declare module "sst" {
       "price": string
       "priceInr": number
       "product": string
+      "sixMonths100Coupon": string
+      "threeMonths100Coupon": string
+      "twelveMonths100Coupon": string
       "type": "sst.sst.Linkable"
     }
     "ZEN_MODELS1": {

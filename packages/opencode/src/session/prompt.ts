@@ -1,6 +1,7 @@
 import path from "path"
 import os from "os"
 import z from "zod"
+import * as EffectZod from "@/util/effect-zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util"
@@ -23,23 +24,23 @@ import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "../tool"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
-import { Flag } from "../flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { ulid } from "ulid"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
-import { ConfigMarkdown } from "../config"
+import { Config, ConfigMarkdown } from "../config"
 import { SessionSummary } from "./summary"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
 import { Tool } from "@/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@/shell/shell"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Truncate } from "@/tool"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util"
@@ -91,6 +92,7 @@ export const layer = Layer.effect(
     const compaction = yield* SessionCompaction.Service
     const plugin = yield* Plugin.Service
     const commands = yield* Command.Service
+    const config = yield* Config.Service
     const permission = yield* Permission.Service
     const fsys = yield* AppFileSystem.Service
     const mcp = yield* MCP.Service
@@ -405,7 +407,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         providerID: input.model.providerID,
         agent: input.agent,
       })) {
-        const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+        const schema = ProviderTransform.schema(input.model, EffectZod.toJsonSchema(item.parameters))
         tools[item.id] = tool({
           description: item.description,
           inputSchema: jsonSchema(schema),
@@ -782,47 +784,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       yield* sessions.updatePart(part)
 
-      const sh = Shell.preferred()
-      const shellName = (
-        process.platform === "win32" ? path.win32.basename(sh, ".exe") : path.basename(sh)
-      ).toLowerCase()
-      const invocations: Record<string, { args: string[] }> = {
-        nu: { args: ["-c", input.command] },
-        fish: { args: ["-c", input.command] },
-        zsh: {
-          args: [
-            "-l",
-            "-c",
-            `
-              __oc_cwd=$PWD
-              [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-              [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-              cd "$__oc_cwd"
-              eval ${JSON.stringify(input.command)}
-            `,
-          ],
-        },
-        bash: {
-          args: [
-            "-l",
-            "-c",
-            `
-              __oc_cwd=$PWD
-              shopt -s expand_aliases
-              [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-              cd "$__oc_cwd"
-              eval ${JSON.stringify(input.command)}
-            `,
-          ],
-        },
-        cmd: { args: ["/c", input.command] },
-        powershell: { args: ["-NoProfile", "-Command", input.command] },
-        pwsh: { args: ["-NoProfile", "-Command", input.command] },
-        "": { args: ["-c", input.command] },
-      }
-
-      const args = (invocations[shellName] ?? invocations[""]).args
+      const cfg = yield* config.get()
+      const sh = Shell.preferred(cfg.shell)
       const cwd = ctx.directory
+      const args = Shell.args(sh, input.command, cwd)
       const shellEnv = yield* plugin.trigger(
         "shell.env",
         { cwd, sessionID: input.sessionID, callID: part.callID },
@@ -839,7 +804,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       let output = ""
       let aborted = false
-
       const finish = Effect.uninterruptible(
         Effect.gen(function* () {
           if (aborted) {
@@ -1585,7 +1549,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const shellMatches = ConfigMarkdown.shell(template)
       if (shellMatches.length > 0) {
-        const sh = Shell.preferred()
+        const cfg = yield* config.get()
+        const sh = Shell.preferred(cfg.shell)
         const results = yield* Effect.promise(() =>
           Promise.all(
             shellMatches.map(async ([, cmd]) => (await Process.text([cmd], { shell: sh, nothrow: true })).text),
@@ -1686,6 +1651,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(ToolRegistry.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
     Layer.provide(Provider.defaultLayer),
+    Layer.provide(Config.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Plugin.defaultLayer),

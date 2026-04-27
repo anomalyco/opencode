@@ -28,16 +28,16 @@ export type Info = Schema.Schema.Type<typeof Info>
 export const Event = {
   Status: BusEvent.define(
     "session.status",
-    z.object({
-      sessionID: SessionID.zod,
-      status: Info.zod,
+    Schema.Struct({
+      sessionID: SessionID,
+      status: Info,
     }),
   ),
   // deprecated
   Idle: BusEvent.define(
     "session.idle",
-    z.object({
-      sessionID: SessionID.zod,
+    Schema.Struct({
+      sessionID: SessionID,
     }),
   ),
 }
