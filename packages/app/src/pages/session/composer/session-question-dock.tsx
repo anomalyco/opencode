@@ -122,13 +122,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (!root) return
 
     const scroller = document.querySelector(".scroll-view__viewport")
-    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
-    const top =
-      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
-    if (!top) {
+    if (!(scroller instanceof HTMLElement)) {
       root.style.removeProperty("--question-prompt-max-height")
       return
     }
+
+    const sticky = scroller.querySelector("[data-session-title]")
+    const top =
+      sticky instanceof HTMLElement ? sticky.getBoundingClientRect().bottom : scroller.getBoundingClientRect().top
 
     const dock = root.closest('[data-component="session-prompt-dock"]')
     if (!(dock instanceof HTMLElement)) return
