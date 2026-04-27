@@ -24,6 +24,8 @@ import { createFileViewCache } from "./file/view-cache"
 import { createFileTreeStore } from "./file/tree-store"
 // FORK: 文件树多选 (commit #2 of file-tree-dnd) 2026-04-27
 import { createSelectionStore } from "./file/selection-store"
+// FORK: 文件树剪切/复制板 (commit #3 of file-tree-dnd) 2026-04-27
+import { createClipboardStore } from "./file/clipboard-store"
 import { invalidateFromWatcher } from "./file/watcher"
 import {
   selectionFromLines,
@@ -87,6 +89,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     // FORK: 文件树多选 store(commit #2 of file-tree-dnd)2026-04-27
     const selection = createSelectionStore()
+
+    // FORK: 文件树剪切/复制板 store(commit #3 of file-tree-dnd)2026-04-27
+    const clipboard = createClipboardStore()
 
     const evictContent = (keep?: Set<string>) => {
       evictContentLru(keep, (target) => {
@@ -262,6 +267,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         children: tree.children,
         expand: tree.expandDir,
         collapse: tree.collapseDir,
+        // FORK: 暴露 node 给 pasteSmart 用(commit #3 of file-tree-dnd)2026-04-27
+        node: tree.node,
         toggle(input: string) {
           if (tree.dirState(input)?.expanded) {
             tree.collapseDir(input)
@@ -272,6 +279,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       },
       // FORK: 文件树多选 store(commit #2 of file-tree-dnd)2026-04-27
       selection,
+      // FORK: 文件树剪切/复制板 store(commit #3 of file-tree-dnd)2026-04-27
+      clipboard,
       get,
       load,
       scrollTop,

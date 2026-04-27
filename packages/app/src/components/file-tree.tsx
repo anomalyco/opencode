@@ -11,6 +11,8 @@ import {
   absoluteToRelative,
 } from "@/utils/file-tree-dnd"
 import { computeAvailableTarget } from "@/utils/file-conflict"
+// FORK: 文件树键盘快捷键 (commit #3 of file-tree-dnd) 2026-04-27
+import { useFileTreeShortcuts } from "@/hooks/use-file-tree-shortcuts"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -184,10 +186,14 @@ const FileTreeNode = (
       contextOpen?: boolean
       // FORK: 多选 — 是否处于 selection 集合(用于视觉)2026-04-27
       selected?: boolean
+      // FORK: 是否被剪切(在 clipboard.cut 中)— 视觉:opacity + italic 2026-04-27
+      cut?: boolean
       // FORK: 多选 — 处理修饰键(Shift/Ctrl/Cmd),返回 true = 已处理(应阻止默认 click 行为)
       onSelectMaybe?: (event: MouseEvent) => boolean
       // FORK: 整组源用于拖动(可能是单个或整个 selection)— onDragStart 内部用,绕过 selection 信号读取
       computeDragSources?: () => readonly string[]
+      // FORK: 右键时同步更新 selection(OS-like:右键未选中行 → replace 为该行)
+      onRowContextMenu?: () => void
     },
 ) => {
   const [local, rest] = splitProps(p, [
@@ -201,13 +207,17 @@ const FileTreeNode = (
     "as",
     "contextOpen",
     "selected",
+    "cut",
     "onSelectMaybe",
     "computeDragSources",
+    "onRowContextMenu",
     "children",
     "class",
     "classList",
     // FORK: 把 onClick 拽进 local,与 handleClick 组合后再传给 Dynamic,避免 {...rest} 覆盖 2026-04-27
     "onClick",
+    // FORK: 同理 onContextMenu 也拽进 local,避免被 {...rest} 重置 undefined 2026-04-27
+    "onContextMenu",
   ])
   const kind = () => visibleKind(local.node, local.kinds, local.marks)
   const active = () => !!kind() && !local.node.ignored
@@ -244,6 +254,8 @@ const FileTreeNode = (
         "opacity-50": isPathDragging(local.node.absolute),
         // FORK: 多选选中行 — 用 ring 区分于 active(filled)2026-04-27
         "ring-1 ring-interactive-base ring-inset": !!local.selected && local.node.path !== local.active,
+        // FORK: 被剪切行 — 半透明 + 斜体提示"已在 clipboard 等待粘贴"(commit #3 of file-tree-dnd)2026-04-27
+        "opacity-60 italic": !!local.cut,
         ...local.classList,
         [local.class ?? ""]: !!local.class,
         [local.nodeClass ?? ""]: !!local.nodeClass,
@@ -268,6 +280,8 @@ const FileTreeNode = (
       }}
       onDragEnd={() => resetDragState()}
       onClick={handleClick}
+      // FORK: 右键时同步 selection(OS-like)— 在 Kobalte ContextMenu 打开前 fire,菜单看到正确 selection 2026-04-27
+      onContextMenu={() => local.onRowContextMenu?.()}
       {...rest}
     >
       {local.children}
@@ -349,6 +363,135 @@ export default function FileTree(props: {
     const sel = selection.paths()
     if (sel.includes(node.absolute)) return sel
     return [node.absolute]
+  }
+
+  /** OS-like 右键行为:右键未选中的行 → 清空 selection,把右键项设为唯一选中 */
+  const handleRowContextMenu = (node: FileNode) => {
+    if (!selection.isSelected(node.absolute)) {
+      selection.replace(node.absolute)
+    }
+    // 已在 selection 中 → 保持多选(右键多选项弹出菜单作用于整组)
+  }
+  // FORK-END
+
+  // FORK-BEGIN: 剪切/复制/粘贴 (commit #3 of file-tree-dnd) 2026-04-27
+  const clipboard = file.clipboard
+
+  /** 算给定上下文(右键节点 / 快捷键)的源路径列表:节点在 selection 中→整组 selection,否则只拖该节点 */
+  const sourcesFor = (node: FileNode | null): string[] => {
+    if (!node) return [...selection.paths()]
+    const sel = selection.paths()
+    if (sel.includes(node.absolute)) return [...sel]
+    return [node.absolute]
+  }
+
+  const cutFor = (node: FileNode | null) => {
+    const paths = sourcesFor(node)
+    if (paths.length === 0) return
+    clipboard.setCut(paths)
+  }
+
+  const copyFor = (node: FileNode | null) => {
+    const paths = sourcesFor(node)
+    if (paths.length === 0) return
+    clipboard.setCopy(paths)
+  }
+
+  /** 把 clipboard 内容粘贴到 targetDirAbs。cut → rename_path 后清 clipboard;copy → copy_path 保留 clipboard */
+  const pasteTo = async (targetDirAbs: string, targetDirRel: string) => {
+    if (!clipboard.hasContent()) return
+    const sources = clipboard.paths()
+    const mode = clipboard.mode()
+    if (!mode) return
+
+    // cycle 检测复用拖放逻辑;copy 模式允许 same-dir(创建副本),cut 不允许(no-op)
+    const valid = sources.filter((s) =>
+      isValidMoveTarget(s, { absolute: targetDirAbs, type: "directory" }, { allowSameDir: mode === "copy" }),
+    )
+    if (valid.length === 0) return
+
+    const errors: string[] = []
+    for (const src of valid) {
+      try {
+        const target = await computeAvailableTarget(targetDirAbs, basename(src))
+        if (mode === "cut") {
+          await invoke("rename_path", { from: src, to: target })
+        } else {
+          await invoke("copy_path", { from: src, to: target })
+        }
+      } catch (e) {
+        errors.push(`${basename(src)}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+
+    // 刷新源父目录(cut 模式才需要,但都刷成本可忽略)+ 目标
+    const refreshTargets = new Set<string>([targetDirRel])
+    if (mode === "cut") {
+      for (const parent of uniqueParents(valid)) {
+        const rel = absoluteToRelative(parent, sdk.directory)
+        if (rel !== null) refreshTargets.add(rel)
+      }
+    }
+    await Promise.all([...refreshTargets].map((r) => file.tree.refresh(r)))
+
+    // cut 用完即弃,copy 保留供多次粘贴
+    if (mode === "cut") clipboard.clear()
+
+    if (errors.length > 0) {
+      showToast({
+        variant: "error",
+        title: errors.length === 1 ? "粘贴失败" : `${errors.length} 项粘贴失败`,
+        description: errors[0],
+      })
+    }
+  }
+
+  /** Ctrl+V 智能 paste:从 selection 推断 target(文件夹→自身;文件→其父目录);否则到项目根 */
+  const pasteSmart = async () => {
+    const sel = selection.paths()
+    let targetAbs = sdk.directory
+    let targetRel = props.path
+    if (sel.length >= 1) {
+      // 用 selection 中第一个作锚(多选时通常用户视觉锚定的是第一个/最后一个)
+      const anchorAbs = sel[0]
+      // 直接通过 children 查找匹配的 node,避免 file.tree.node(path) 因 normalize 不一致取不到
+      const node = findNodeByAbsolute(anchorAbs)
+      if (node?.type === "directory") {
+        targetAbs = node.absolute
+        targetRel = node.path
+      } else {
+        // 文件 → 粘到其父目录
+        const parentAbs = anchorAbs.replace(/[/\\][^/\\]+$/, "")
+        const parentRel = absoluteToRelative(parentAbs, sdk.directory)
+        if (parentRel !== null) {
+          targetAbs = parentAbs
+          targetRel = parentRel
+        }
+      }
+    }
+    await pasteTo(targetAbs, targetRel)
+  }
+
+  /** 通过遍历 children 找 node,避免 path normalize 不一致导致 file.tree.node(rel) 找不到 */
+  const findNodeByAbsolute = (abs: string): FileNode | undefined => {
+    const parentAbs = abs.replace(/[/\\][^/\\]+$/, "")
+    const parentRel = absoluteToRelative(parentAbs, sdk.directory)
+    if (parentRel === null) return undefined
+    const children = file.tree.children(parentRel)
+    return children.find((n) => n.absolute === abs)
+  }
+
+  // 全局快捷键:文件树聚焦时 OR(selection 非空 + 焦点不在可编辑控件)时触发 Ctrl+X/C/V/Z
+  // 只在 level 0(根 FileTree)注册 — FileTree 是递归组件,每层都注册会导致 N 个 listener,
+  // 一次 keydown 触发 N 次粘贴(踩过坑:文件被自动 -1 -2 ... 多次创建,从第二次起 already_exists 报错)
+  if (level === 0) {
+    useFileTreeShortcuts({
+      onCut: () => cutFor(null),
+      onCopy: () => copyFor(null),
+      onPaste: pasteSmart,
+      hasSelection: () => selection.paths().length > 0,
+      // onUndo 在 commit #4 接入
+    })
   }
   // FORK-END
 
@@ -486,15 +629,41 @@ export default function FileTree(props: {
   // FORK-END
 
   const promptDelete = (target: FileNode) => {
+    // FORK: 批量删除 — 右键的 target 在 selection 中就删整组,否则只删 target(同 sourcesFor 规约)2026-04-27
+    const targets = sourcesFor(target)
+    const single = targets.length === 1
+    const onlyName = single ? basename(targets[0]) : `${targets.length} 个项目`
     dialog.show(() => (
       <DialogFileTreeConfirm
-        title={target.type === "directory" ? "删除文件夹" : "删除文件"}
-        message={`确定要删除 "${basename(target.absolute)}" 吗?`}
+        title={single ? (target.type === "directory" ? "删除文件夹" : "删除文件") : "批量删除"}
+        message={`确定要删除 ${single ? `"${onlyName}"` : onlyName} 吗?`}
         detail="将移到系统回收站,可从回收站恢复。"
         confirmLabel="删除"
         onConfirm={async () => {
-          await invoke("trash_path", { path: target.absolute })
-          await file.tree.refresh(dirname(target.path))
+          const errors: string[] = []
+          for (const path of targets) {
+            try {
+              await invoke("trash_path", { path })
+            } catch (e) {
+              errors.push(`${basename(path)}: ${e instanceof Error ? e.message : String(e)}`)
+            }
+          }
+          // 刷新所有源父目录(去重)
+          const refreshTargets = new Set<string>()
+          for (const parent of uniqueParents(targets)) {
+            const rel = absoluteToRelative(parent, sdk.directory)
+            if (rel !== null) refreshTargets.add(rel)
+          }
+          await Promise.all([...refreshTargets].map((r) => file.tree.refresh(r)))
+          // 删完清 selection
+          selection.clear()
+          if (errors.length > 0) {
+            showToast({
+              variant: "error",
+              title: errors.length === 1 ? "删除失败" : `${errors.length} 项删除失败`,
+              description: errors[0],
+            })
+          }
         }}
       />
     ))
@@ -523,6 +692,26 @@ export default function FileTree(props: {
           <ContextMenu.ItemLabel>打印</ContextMenu.ItemLabel>
         </ContextMenu.Item>
         <ContextMenu.Separator />
+        {/* FORK: 剪切/复制/粘贴 (commit #3 of file-tree-dnd) 2026-04-27 */}
+        <ContextMenu.Item onSelect={() => cutFor(target)}>
+          <ContextMenu.ItemLabel>剪切</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => copyFor(target)}>
+          <ContextMenu.ItemLabel>复制</ContextMenu.ItemLabel>
+        </ContextMenu.Item>
+        {/* FORK: 粘贴 — 文件夹粘到自身,文件粘到其父目录(便于在文件附近粘);clipboard 非空才显示 2026-04-27 */}
+        <Show when={clipboard.hasContent()}>
+          <ContextMenu.Item
+            onSelect={() => {
+              const targetAbs = isFolder ? target.absolute : dirname(target.absolute)
+              const targetRel = isFolder ? target.path : dirname(target.path)
+              void pasteTo(targetAbs, targetRel)
+            }}
+          >
+            <ContextMenu.ItemLabel>{isFolder ? "粘贴到此文件夹" : "粘贴到当前目录"}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+        </Show>
+        <ContextMenu.Separator />
         <ContextMenu.Item onSelect={() => promptDelete(target)}>
           <ContextMenu.ItemLabel>删除</ContextMenu.ItemLabel>
         </ContextMenu.Item>
@@ -548,6 +737,12 @@ export default function FileTree(props: {
         <ContextMenu.Item onSelect={() => promptNewFolderAt(rootAbs, rootRel)}>
           <ContextMenu.ItemLabel>新建文件夹</ContextMenu.ItemLabel>
         </ContextMenu.Item>
+        {/* FORK: 树根空白处也支持粘贴到项目根 (commit #3 of file-tree-dnd) 2026-04-27 */}
+        <Show when={clipboard.hasContent()}>
+          <ContextMenu.Item onSelect={() => void pasteTo(rootAbs, rootRel)}>
+            <ContextMenu.ItemLabel>粘贴到项目根</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+        </Show>
         <ContextMenu.Separator />
         <ContextMenu.Item onSelect={() => void file.tree.refresh(rootRel)}>
           <ContextMenu.ItemLabel>刷新</ContextMenu.ItemLabel>
@@ -767,8 +962,10 @@ export default function FileTree(props: {
                           marks={marks()}
                           contextOpen={contextOpen()}
                           selected={selection.isSelected(node.absolute)}
+                          cut={clipboard.isCut(node.absolute)}
                           onSelectMaybe={(e) => handleRowSelect(node, e)}
                           computeDragSources={computeDragSources(node)}
+                          onRowContextMenu={() => handleRowContextMenu(node)}
                         >
                           <div class="size-4 flex items-center justify-center text-icon-weak">
                             <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />

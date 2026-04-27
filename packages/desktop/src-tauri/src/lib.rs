@@ -247,6 +247,79 @@ fn exists_path(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
 
+// FORK-BEGIN: next_available_path — 一次 Tauri 调用算出不冲突的目标路径(避免前端多次往返 + path 分隔符问题)2026-04-27
+fn split_name_ext(name: &str) -> (&str, &str) {
+    // 与 JS splitNameExt 同语义:仅在最后一个 `.` 之后切;开头 `.` 不算扩展名(.gitignore)
+    if let Some(idx) = name.rfind('.') {
+        if idx > 0 && idx < name.len() - 1 {
+            return (&name[..idx], &name[idx..]);
+        }
+    }
+    (name, "")
+}
+
+#[tauri::command]
+#[specta::specta]
+fn next_available_path(dir: String, name: String) -> String {
+    let dir_path = std::path::Path::new(&dir);
+    let initial = dir_path.join(&name);
+    if !initial.exists() {
+        return initial.to_string_lossy().into_owned();
+    }
+    let (base, ext) = split_name_ext(&name);
+    for i in 1..=1000 {
+        let candidate = dir_path.join(format!("{}-{}{}", base, i, ext));
+        if !candidate.exists() {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+    // give up — 返回 initial,让上层 copy/rename 自己报 already_exists
+    initial.to_string_lossy().into_owned()
+}
+// FORK-END
+
+// FORK-BEGIN: 文件树复制粘贴 — copy_path 命令(commit #3 of file-tree-dnd)2026-04-27
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else if file_type.is_symlink() {
+            // 跨平台 symlink 处理略显复杂,v1 直接 fail 让上层报错。后续可补
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                format!("symlink copy not supported: {}", src_path.display()),
+            ));
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+fn copy_path(from: String, to: String) -> Result<(), String> {
+    let from_path = std::path::Path::new(&from);
+    let to_path = std::path::Path::new(&to);
+    if to_path.exists() {
+        return Err(format!("already_exists: {}", to));
+    }
+    if from_path.is_dir() {
+        copy_dir_recursive(from_path, to_path)
+            .map_err(|e| format!("copy dir failed: {} -> {}: {}", from, to, e))
+    } else {
+        std::fs::copy(&from, &to)
+            .map(|_| ())
+            .map_err(|e| format!("copy file failed: {} -> {}: {}", from, to, e))
+    }
+}
+// FORK-END
+
 #[cfg(target_os = "macos")]
 fn check_macos_app(app_name: &str) -> bool {
     // Check common installation locations
@@ -448,7 +521,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             create_empty_file,
             rename_path,
             trash_path,
-            exists_path, // FORK: 文件树拖放冲突检测 2026-04-27
+            exists_path,         // FORK: 文件树拖放冲突检测 2026-04-27
+            next_available_path, // FORK: 后端一次性算出不冲突目标 2026-04-27
+            copy_path,           // FORK: 文件树复制粘贴 2026-04-27
             text_file::write_text_file,
             text_file::get_file_mtime,
             text_file::read_binary_file_base64

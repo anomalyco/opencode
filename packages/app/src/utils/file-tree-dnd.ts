@@ -54,14 +54,20 @@ function dirname(p: string): string {
 }
 
 /**
- * 验证 source 能否移动到 targetDir。返回 false 时静默拒绝(类资源管理器)。
+ * 验证 source 能否移动/复制到 targetDir。返回 false 时静默拒绝(类资源管理器)。
  *
- * 拒绝条件:
+ * 默认行为(move/cut)拒绝:
  * 1. source === targetDir(拖到自身)
  * 2. targetDir 在 source 的子树里(拖父进子,会形成 cycle)
  * 3. source 已直接位于 targetDir 下(no-op,避免无意义 rename 触发刷新)
+ *
+ * copy 模式(allowSameDir=true)只拒 1+2,不拒 3 — 同目录复制 = 创建副本(自动加后缀)是合理操作。
  */
-export function isValidMoveTarget(sourceAbs: string, targetDir: { absolute: string; type?: string }): boolean {
+export function isValidMoveTarget(
+  sourceAbs: string,
+  targetDir: { absolute: string; type?: string },
+  options?: { allowSameDir?: boolean },
+): boolean {
   if (targetDir.type && targetDir.type !== "directory") return false
   const src = trimTrailingSep(sourceAbs)
   const dst = trimTrailingSep(targetDir.absolute)
@@ -70,8 +76,8 @@ export function isValidMoveTarget(sourceAbs: string, targetDir: { absolute: stri
   for (const sep of SEPS) {
     if (dst === src || dst.startsWith(src + sep)) return false
   }
-  // 已在目标目录
-  if (dirname(src) === dst) return false
+  // 已在目标目录(只对 move/cut 拦截,copy 合理 → 创建副本)
+  if (!options?.allowSameDir && dirname(src) === dst) return false
   return true
 }
 
