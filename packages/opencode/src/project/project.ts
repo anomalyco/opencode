@@ -194,8 +194,8 @@ export const layer: Layer.Layer<
         if (!dotgit) {
           return {
             id: ProjectID.global,
-            worktree: "/",
-            sandbox: "/",
+            worktree: directory,
+            sandbox: directory,
             vcs: fakeVcs,
           }
         }
