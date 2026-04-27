@@ -67,6 +67,13 @@ export const Flag = {
   OPENCODE_ENABLE_EXA: truthy("OPENCODE_ENABLE_EXA") || OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA"),
   OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: number("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
   OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: number("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"),
+  // Opt-in to the LLM-native stream path in `session/llm.ts`. Today this
+  // routes a narrow slice of sessions (text-only, Anthropic, with explicit
+  // `nativeMessages` populated by the caller) through the
+  // `@opencode-ai/llm` core stack instead of `streamText` from the AI SDK.
+  // Everything else falls through to the existing path. The flag will go
+  // away once parity is proven across all six protocols.
+  OPENCODE_EXPERIMENTAL_LLM_NATIVE: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_LLM_NATIVE"),
   OPENCODE_EXPERIMENTAL_OXFMT: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_OXFMT"),
   OPENCODE_EXPERIMENTAL_LSP_TY: truthy("OPENCODE_EXPERIMENTAL_LSP_TY"),
   OPENCODE_EXPERIMENTAL_LSP_TOOL: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_LSP_TOOL"),

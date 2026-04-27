@@ -5,6 +5,18 @@ import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
+import {
+  AnthropicMessages,
+  BedrockConverse,
+  Gemini,
+  LLMClient,
+  OpenAIChat,
+  OpenAICompatibleChat,
+  OpenAIResponses,
+  ProviderPatch,
+  RequestExecutor,
+  type Protocol,
+} from "@opencode-ai/llm"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
@@ -23,6 +35,8 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { LLMNative } from "./llm-native"
+import { LLMNativeEvents } from "./llm-native-events"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -63,7 +77,12 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 const live: Layer.Layer<
   Service,
   never,
-  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service
+  | Auth.Service
+  | Config.Service
+  | Provider.Service
+  | Plugin.Service
+  | Permission.Service
+  | RequestExecutor.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -72,6 +91,11 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
+    // Required by the LLM-native stream path. The default layer wires it on
+    // top of `FetchHttpClient.layer`. Yielded here (not inside `runNative`)
+    // so the executor instance is shared across every native stream the
+    // service hands out.
+    const executor = yield* RequestExecutor.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log
@@ -420,6 +444,73 @@ const live: Layer.Layer<
       })
     })
 
+    // ----- Phase 1: LLM-native opt-in path -----
+    //
+    // `runNative` returns the session-shaped Stream when (and only when) the
+    // request matches a narrow opt-in profile we've actively wired:
+    //
+    //   - The flag `OPENCODE_EXPERIMENTAL_LLM_NATIVE` is set.
+    //   - The caller populated `input.nativeMessages` with `MessageV2.WithParts`
+    //     (the AI SDK `messages` array isn't enough — the LLM-native bridge
+    //     needs the typed parts).
+    //   - The bridge can route the model to one of the protocols listed in
+    //     `NATIVE_PROTOCOLS` (today: Anthropic only).
+    //   - The session has no tools (Phase 2 will lift this).
+    //
+    // Otherwise it returns `undefined` and the caller falls through to the
+    // existing AI SDK path. The return shape is deliberately narrow — we are
+    // not yet committed to native-by-default for any provider.
+    const NATIVE_PROTOCOLS = new Set<Protocol>(["anthropic-messages"])
+    const NATIVE_ADAPTERS = [
+      AnthropicMessages.adapter,
+      OpenAIChat.adapter,
+      OpenAIResponses.adapter,
+      Gemini.adapter,
+      OpenAICompatibleChat.adapter,
+      BedrockConverse.adapter,
+    ]
+
+    const nativeClient = LLMClient.make({
+      adapters: NATIVE_ADAPTERS,
+      patches: ProviderPatch.defaults,
+    })
+
+    const runNative = Effect.fn("LLM.runNative")(function* (input: StreamRequest) {
+      if (!Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE) return undefined
+      if (!input.nativeMessages || input.nativeMessages.length === 0) return undefined
+      if (Object.keys(input.tools).length > 0) return undefined
+
+      const item = yield* provider.getProvider(input.model.providerID)
+      const llmRequest = yield* LLMNative.request({
+        id: input.user.id,
+        provider: item,
+        model: input.model,
+        system: input.system,
+        messages: input.nativeMessages,
+      })
+      if (!NATIVE_PROTOCOLS.has(llmRequest.model.protocol)) return undefined
+
+      log.info("native stream", {
+        sessionID: input.sessionID,
+        modelID: input.model.id,
+        providerID: input.model.providerID,
+        protocol: llmRequest.model.protocol,
+      })
+
+      // Stateful LLMEvent → SessionEvent translator. `map.map(event)` is called
+      // per-element, `map.flush()` emits the remaining `*-end` events for any
+      // text/reasoning/tool-input parts left open at stream close. The flush
+      // stream is built lazily (`Stream.unwrap(Effect.sync(...))`) so it
+      // observes the mapper's final state after `mapConcat` has consumed every
+      // upstream event.
+      const map = LLMNativeEvents.mapper()
+      return nativeClient.stream(llmRequest).pipe(
+        Stream.flatMap((event) => Stream.fromIterable(map.map(event))),
+        Stream.concat(Stream.unwrap(Effect.sync(() => Stream.fromIterable(map.flush())))),
+        Stream.provideService(RequestExecutor.Service, executor),
+      )
+    })
+
     const stream: Interface["stream"] = (input) =>
       Stream.scoped(
         Stream.unwrap(
@@ -428,6 +519,9 @@ const live: Layer.Layer<
               Effect.sync(() => new AbortController()),
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
+
+            const native = yield* runNative({ ...input, abort: ctrl.signal })
+            if (native) return native
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
@@ -448,6 +542,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
+    Layer.provide(RequestExecutor.defaultLayer),
   ),
 )
 
