@@ -115,6 +115,17 @@ describe("Glob", () => {
 
       expect(results).toEqual(["visible"])
     })
+
+    test("returns results in sorted order", async () => {
+      await using tmp = await tmpdir()
+      await fs.writeFile(path.join(tmp.path, "c.txt"), "", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "a.txt"), "", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "b.txt"), "", "utf-8")
+
+      const results = await Glob.scan("*.txt", { cwd: tmp.path })
+
+      expect(results).toEqual(["a.txt", "b.txt", "c.txt"])
+    })
   })
 
   describe("scanSync()", () => {

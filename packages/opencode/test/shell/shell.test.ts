@@ -29,6 +29,36 @@ describe("shell", () => {
     }
   })
 
+  test("Shell.ps detects powershell shells", () => {
+    expect(Shell.ps("/bin/pwsh")).toBe(true)
+    expect(Shell.ps("powershell")).toBe(true)
+    expect(Shell.ps("/bin/bash")).toBe(false)
+    expect(Shell.ps("/bin/zsh")).toBe(false)
+  })
+
+  test("Shell.args returns correct flags for bash", () => {
+    const result = Shell.args("/bin/bash", "echo hello", "/tmp")
+    expect(result[0]).toBe("-l")
+    expect(result[1]).toBe("-c")
+    expect(result[result.length - 1]).toBe("/tmp")
+  })
+
+  test("Shell.args returns correct flags for zsh", () => {
+    const result = Shell.args("/bin/zsh", "echo hello", "/tmp")
+    expect(result[0]).toBe("-l")
+    expect(result[1]).toBe("-c")
+    expect(result[result.length - 1]).toBe("/tmp")
+  })
+
+  test("Shell.args returns -c for nu and fish", () => {
+    expect(Shell.args("/bin/nu", "echo hi", "/tmp")).toEqual(["-c", "echo hi"])
+    expect(Shell.args("/bin/fish", "echo hi", "/tmp")).toEqual(["-c", "echo hi"])
+  })
+
+  test("Shell.args returns /c for cmd", () => {
+    expect(Shell.args("cmd", "echo hi", "/tmp")).toEqual(["/c", "echo hi"])
+  })
+
   test("detects login shells", () => {
     expect(Shell.login("/bin/bash")).toBe(true)
     expect(Shell.login("C:/tools/pwsh.exe")).toBe(false)
