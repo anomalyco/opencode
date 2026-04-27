@@ -6,6 +6,8 @@ import { tmpdir } from "../../fixture/fixture"
 
 type ZedFixtureOptions = {
   workspacePaths?: string | null
+  itemKind?: string
+  editor?: boolean
   selectionStart?: number | null
   selectionEnd?: number | null
 }
@@ -23,12 +25,14 @@ async function writeZedFixture(dir: string, options: ZedFixtureOptions = {}) {
   db.run("create table editor_selections (editor_id integer, workspace_id integer, start integer, end integer)")
   db.run("insert into workspaces values (1, ?, ?)", [options.workspacePaths ?? JSON.stringify([dir]), "2026-04-27"])
   db.run("insert into panes values (1, 1, 1)")
-  db.run("insert into items values (1, 1, 1, 1, 'Editor')")
-  db.run("insert into editors values (1, 1, ?, ?)", [filePath, "one\ntwo\nthree"])
-  db.run("insert into editor_selections values (1, 1, ?, ?)", [
-    options.selectionStart === undefined ? 4 : options.selectionStart,
-    options.selectionEnd === undefined ? 7 : options.selectionEnd,
-  ])
+  db.run("insert into items values (1, 1, 1, 1, ?)", [options.itemKind ?? "Editor"])
+  if (options.editor !== false) {
+    db.run("insert into editors values (1, 1, ?, ?)", [filePath, "one\ntwo\nthree"])
+    db.run("insert into editor_selections values (1, 1, ?, ?)", [
+      options.selectionStart === undefined ? 4 : options.selectionStart,
+      options.selectionEnd === undefined ? 7 : options.selectionEnd,
+    ])
+  }
   db.close()
 
   return { dbPath, filePath }
@@ -66,6 +70,13 @@ test("resolveZedSelection returns empty when no workspace matches", async () => 
   })
 
   expect(await resolveZedSelection(fixture.dbPath, tmp.path)).toEqual({ type: "empty" })
+})
+
+test("resolveZedSelection returns unavailable when a Zed terminal is active", async () => {
+  await using tmp = await tmpdir()
+  const fixture = await writeZedFixture(tmp.path, { itemKind: "Terminal", editor: false })
+
+  expect(await resolveZedSelection(fixture.dbPath, tmp.path)).toEqual({ type: "unavailable" })
 })
 
 test("resolveZedSelection returns unavailable when the database cannot be queried", async () => {
