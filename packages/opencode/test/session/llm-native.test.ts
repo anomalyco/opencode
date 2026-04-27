@@ -968,4 +968,153 @@ describe("LLMNative.request", () => {
       expect(json).not.toContain("cachePoint")
       expect(json).not.toContain("ephemeral")
     }))
+
+  // Encrypted reasoning round-trip. OpenCode persists the encrypted blob in
+  // `MessageV2.ReasoningPart.metadata` using the AI-SDK's provider-keyed
+  // shape (`metadata.anthropic.signature`,
+  // `metadata.openai.reasoningEncryptedContent`) for sessions started on the
+  // AI-SDK path. Future LLM-native sessions will store it as a top-level
+  // `metadata.encrypted` string. The bridge probes both conventions and
+  // populates `LLM.ReasoningPart.encrypted` so adapters can lower it to the
+  // wire (Anthropic `thinking.signature`, Bedrock `reasoningText.signature`).
+
+  const reasoningPartWithMetadata = (
+    messageID: MessageID,
+    text: string,
+    metadata: Record<string, unknown>,
+  ): MessageV2.ReasoningPart => ({
+    id: PartID.ascending(),
+    sessionID,
+    messageID,
+    type: "reasoning",
+    text,
+    metadata,
+    time: { start: 1 },
+  })
+
+  it.effect("extracts AI-SDK Anthropic signature into LLM.ReasoningPart.encrypted", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel()
+      const userID = MessageID.ascending()
+      const assistantID = MessageID.ascending()
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+        model: mdl,
+        messages: [
+          userMessage(mdl, userID, [textPart(userID, "think about it")]),
+          assistantMessage(mdl, assistantID, userID, [
+            reasoningPartWithMetadata(assistantID, "thinking...", {
+              anthropic: { signature: "ant-signature-abc" },
+            }),
+          ]),
+        ],
+      })
+
+      // The bridge surfaces `encrypted` on the LLM IR's ReasoningPart.
+      expect(request.messages[1].content[0]).toMatchObject({
+        type: "reasoning",
+        text: "thinking...",
+        encrypted: "ant-signature-abc",
+      })
+    }))
+
+  it.effect("lowers encrypted reasoning to Anthropic thinking.signature end-to-end", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel()
+      const userID = MessageID.ascending()
+      const assistantID = MessageID.ascending()
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+        model: mdl,
+        messages: [
+          userMessage(mdl, userID, [textPart(userID, "think about it")]),
+          assistantMessage(mdl, assistantID, userID, [
+            reasoningPartWithMetadata(assistantID, "thinking...", {
+              anthropic: { signature: "ant-signature-abc" },
+            }),
+          ]),
+        ],
+      })
+      const prepared = yield* LLMClient.make({
+        adapters: [AnthropicMessages.adapter],
+        patches: ProviderPatch.defaults,
+      }).prepare(request)
+
+      expect(prepared.target).toMatchObject({
+        messages: [
+          { role: "user" },
+          {
+            role: "assistant",
+            content: [{ type: "thinking", thinking: "thinking...", signature: "ant-signature-abc" }],
+          },
+        ],
+      })
+    }))
+
+  it.effect("extracts AI-SDK OpenAI reasoningEncryptedContent into LLM.ReasoningPart.encrypted", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel() // any cache-irrelevant cache-capable model works for the bridge check
+      const userID = MessageID.ascending()
+      const assistantID = MessageID.ascending()
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+        model: mdl,
+        messages: [
+          userMessage(mdl, userID, [textPart(userID, "think")]),
+          assistantMessage(mdl, assistantID, userID, [
+            reasoningPartWithMetadata(assistantID, "internal", {
+              openai: { reasoningEncryptedContent: "openai-blob-xyz" },
+            }),
+          ]),
+        ],
+      })
+
+      expect(request.messages[1].content[0]).toMatchObject({
+        type: "reasoning",
+        encrypted: "openai-blob-xyz",
+      })
+    }))
+
+  it.effect("extracts a top-level metadata.encrypted string", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel()
+      const userID = MessageID.ascending()
+      const assistantID = MessageID.ascending()
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+        model: mdl,
+        messages: [
+          userMessage(mdl, userID, [textPart(userID, "think")]),
+          assistantMessage(mdl, assistantID, userID, [
+            reasoningPartWithMetadata(assistantID, "internal", { encrypted: "native-blob" }),
+          ]),
+        ],
+      })
+
+      expect(request.messages[1].content[0]).toMatchObject({
+        type: "reasoning",
+        encrypted: "native-blob",
+      })
+    }))
+
+  it.effect("leaves encrypted unset when reasoning metadata carries no known key", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel()
+      const userID = MessageID.ascending()
+      const assistantID = MessageID.ascending()
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+        model: mdl,
+        messages: [
+          userMessage(mdl, userID, [textPart(userID, "think")]),
+          assistantMessage(mdl, assistantID, userID, [
+            reasoningPartWithMetadata(assistantID, "internal", { somethingElse: "x" }),
+          ]),
+        ],
+      })
+
+      const reasoning = request.messages[1].content[0]
+      expect(reasoning).toMatchObject({ type: "reasoning", text: "internal" })
+      if (reasoning.type === "reasoning") expect(reasoning.encrypted).toBeUndefined()
+    }))
 })

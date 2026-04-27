@@ -47,6 +47,9 @@ export type RequestInput = {
 
 const isDefined = <T>(value: T | undefined): value is T => value !== undefined
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
 // Match `data:<mediaType>[;param=value]*[;base64],<payload>`. Captures only the
 // payload — the bridge passes it through to `MediaPart.data` (already-base64
 // per the convention `ProviderShared.mediaBytes` follows). Non-data URLs
@@ -85,6 +88,16 @@ const providerMeta = (metadata: Record<string, unknown> | undefined) => {
 const providerExecuted = (metadata: Record<string, unknown> | undefined) =>
   metadata?.providerExecuted === true ? true : undefined
 
+const encryptedReasoning = (metadata: Record<string, unknown> | undefined) => {
+  if (!metadata) return undefined
+  if (typeof metadata.encrypted === "string") return metadata.encrypted
+  if (isRecord(metadata.anthropic) && typeof metadata.anthropic.signature === "string") return metadata.anthropic.signature
+  if (isRecord(metadata.openai) && typeof metadata.openai.reasoningEncryptedContent === "string") {
+    return metadata.openai.reasoningEncryptedContent
+  }
+  return undefined
+}
+
 const isToolPart = (part: MessageV2.Part): part is MessageV2.ToolPart => part.type === "tool"
 
 const supportsPart = (message: MessageV2.WithParts, part: MessageV2.Part) => {
@@ -116,7 +129,7 @@ const toolResultValue = (part: MessageV2.ToolPart) => {
 
 const assistantContent = (part: MessageV2.Part): ReadonlyArray<ContentPart> => {
   if (part.type === "text" && !part.ignored) return [LLM.text(part.text)]
-  if (part.type === "reasoning") return [{ type: "reasoning", text: part.text, metadata: part.metadata }]
+  if (part.type === "reasoning") return [{ type: "reasoning", text: part.text, encrypted: encryptedReasoning(part.metadata), metadata: part.metadata }]
   if (part.type !== "tool") return []
 
   return [
