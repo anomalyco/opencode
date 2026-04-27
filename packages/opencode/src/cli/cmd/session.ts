@@ -11,6 +11,8 @@ import { Process } from "@/util/process"
 import { Database } from "@/storage/db"
 import { SessionTable } from "@/session/session.sql"
 import { eq, and, inArray, type SQL } from "drizzle-orm"
+import { Instance } from "@/project/instance"
+import * as Log from "@opencode-ai/core/util/log"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
@@ -90,19 +92,15 @@ export const SessionMoveCommand = cmd({
         describe: "move all sessions matching this directory ('cwd' for current working directory)",
         type: "string",
       })
-      .option("directory", {
-        describe: "new directory for the sessions",
+      .option("to-directory", {
+        describe: "new directory for the sessions (default: current project root)",
         type: "string",
       })
-      .option("project", {
-        describe: "new project ID for the sessions",
+      .option("to-project", {
+        describe: "new project ID for the sessions (default: current project ID)",
         type: "string",
       }),
   handler: async (args) => {
-    if (!args.directory && !args.project) {
-      UI.error("At least one of --directory or --project is required")
-      process.exit(1)
-    }
     if (!args.id?.length && !args.fromDir) {
       UI.error("At least one of --id or --from-dir is required")
       process.exit(1)
@@ -118,8 +116,8 @@ export const SessionMoveCommand = cmd({
         conditions.push(eq(SessionTable.directory, dir))
       }
       const set: Record<string, string> = {}
-      if (args.directory) set.directory = Filesystem.resolve(args.directory)
-      if (args.project) set.project_id = args.project
+      set.directory = args.toDirectory ? Filesystem.resolve(args.toDirectory) : Instance.worktree
+      set.project_id = args.toProject ?? Instance.project.id
       const result = Database.use((db) =>
         db
           .update(SessionTable)
@@ -133,10 +131,11 @@ export const SessionMoveCommand = cmd({
         process.exit(1)
       }
       for (const row of result) {
-        const parts: string[] = [`moved ${row.id}`]
-        if (args.directory) parts.push(`directory=${row.directory}`)
-        if (args.project) parts.push(`project=${row.project_id}`)
-        UI.println(UI.Style.TEXT_SUCCESS_BOLD + parts.join(" ") + UI.Style.TEXT_NORMAL)
+        UI.println(
+          UI.Style.TEXT_SUCCESS_BOLD +
+            `moved ${row.id} directory=${row.directory} project=${row.project_id}` +
+            UI.Style.TEXT_NORMAL,
+        )
       }
     })
   },
