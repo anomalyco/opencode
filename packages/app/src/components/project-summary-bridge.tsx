@@ -22,7 +22,7 @@ export function ProjectSummaryBridge() {
       callback: async (): Promise<Result> => {
         const sid = currentSessionID()
         if (!sid) return { status: "failed", error: "no session" }
-        const res = await fetch("/project-summary/generate", {
+        const res = await fetch(new URL("project-summary/generate", document.baseURI), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionID: sid }),
