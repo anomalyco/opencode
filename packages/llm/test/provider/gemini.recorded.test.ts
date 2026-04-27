@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
-import { client } from "../../src/adapter"
+import { LLMClient } from "../../src/adapter"
 import { Gemini } from "../../src/provider/gemini"
 import { recordedTests } from "../recorded-test"
 
@@ -42,7 +42,7 @@ const toolRequest = LLM.request({
 })
 
 const recorded = recordedTests({ prefix: "gemini", requires: ["GOOGLE_GENERATIVE_AI_API_KEY"] })
-const gemini = client({ adapters: [Gemini.adapter] })
+const gemini = LLMClient.make({ adapters: [Gemini.adapter] })
 
 describe("Gemini recorded", () => {
   recorded.effect("streams text", () =>

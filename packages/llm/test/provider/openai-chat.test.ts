@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { LLM, ProviderRequestError } from "../../src"
-import { client } from "../../src/adapter"
+import { LLMClient } from "../../src/adapter"
 import { OpenAIChat } from "../../src/provider/openai-chat"
 import { testEffect } from "../lib/effect"
 import { fixedResponse, truncatedStream } from "../lib/http"
@@ -41,7 +41,7 @@ const usageChunk = (usage: object) => ({
 describe("OpenAI Chat adapter", () => {
   it.effect("prepares OpenAI Chat target", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({
+      const prepared = yield* LLMClient.make({
         adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])],
       }).prepare(request)
 
@@ -62,7 +62,7 @@ describe("OpenAI Chat adapter", () => {
 
   it.effect("prepares assistant tool-call and tool-result messages", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({ adapters: [OpenAIChat.adapter] }).prepare(
+      const prepared = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] }).prepare(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -98,7 +98,7 @@ describe("OpenAI Chat adapter", () => {
 
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
-      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+      const error = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
         .prepare(
           LLM.request({
             id: "req_media",
@@ -114,7 +114,7 @@ describe("OpenAI Chat adapter", () => {
 
   it.effect("rejects unsupported assistant reasoning content", () =>
     Effect.gen(function* () {
-      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+      const error = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
         .prepare(
           LLM.request({
             id: "req_reasoning",
@@ -142,7 +142,7 @@ describe("OpenAI Chat adapter", () => {
           completion_tokens_details: { reasoning_tokens: 0 },
         }),
       )
-      const response = yield* client({ adapters: [OpenAIChat.adapter] })
+      const response = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
         .generate(request)
         .pipe(Effect.provide(fixedResponse(body)))
 
@@ -184,10 +184,9 @@ describe("OpenAI Chat adapter", () => {
         deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
         deltaChunk({}, "tool_calls"),
       )
-      const response = yield* client({ adapters: [OpenAIChat.adapter] })
+      const response = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
         .generate(
-          LLM.request({
-            ...request,
+          LLM.updateRequest(request, {
             tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
           }),
         )
@@ -213,10 +212,9 @@ describe("OpenAI Chat adapter", () => {
         }),
         deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
       )
-      const response = yield* client({ adapters: [OpenAIChat.adapter] })
+      const response = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
         .generate(
-          LLM.request({
-            ...request,
+          LLM.updateRequest(request, {
             tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
           }),
         )
@@ -233,7 +231,7 @@ describe("OpenAI Chat adapter", () => {
   it.effect("fails on malformed stream chunks", () =>
     Effect.gen(function* () {
       const body = sseEvents(deltaChunk({ content: 123 }))
-      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+      const error = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
         .generate(request)
         .pipe(Effect.provide(fixedResponse(body)), Effect.flip)
 
@@ -246,7 +244,7 @@ describe("OpenAI Chat adapter", () => {
       const layer = truncatedStream([
         `data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}\n\n`,
       ])
-      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+      const error = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
         .generate(request)
         .pipe(Effect.provide(layer), Effect.flip)
 
@@ -256,7 +254,7 @@ describe("OpenAI Chat adapter", () => {
 
   it.effect("fails HTTP provider errors before stream parsing", () =>
     Effect.gen(function* () {
-      const error = yield* client({ adapters: [OpenAIChat.adapter] })
+      const error = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
         .generate(request)
         .pipe(
           Effect.provide(
@@ -276,7 +274,7 @@ describe("OpenAI Chat adapter", () => {
 
   it.effect("short-circuits the upstream stream when the consumer takes a prefix", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       // The body has more chunks than we'll consume. If `Stream.take(1)` did
       // not interrupt the upstream HTTP body the test would hang waiting for
       // the rest of the stream to drain.

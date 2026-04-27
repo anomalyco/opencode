@@ -159,6 +159,21 @@ export const generation = (input: GenerationOptions | ConstructorParameters<type
   return new GenerationOptions(input)
 }
 
+export const requestInput = (input: LLMRequest): RequestInput => ({
+  id: input.id,
+  model: input.model,
+  system: input.system,
+  messages: input.messages,
+  tools: input.tools,
+  toolChoice: input.toolChoice,
+  generation: input.generation,
+  reasoning: input.reasoning,
+  cache: input.cache,
+  responseFormat: input.responseFormat,
+  metadata: input.metadata,
+  native: input.native,
+})
+
 export const request = (input: RequestInput) => {
   const { system: requestSystem, prompt, messages, tools, toolChoice: requestToolChoice, generation: requestGeneration, ...rest } = input
   return new LLMRequest({
@@ -170,6 +185,9 @@ export const request = (input: RequestInput) => {
     generation: generation(requestGeneration),
   })
 }
+
+export const updateRequest = (input: LLMRequest, patch: Partial<RequestInput>) =>
+  request({ ...requestInput(input), ...patch })
 
 export const outputText = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) =>
   response.events

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
-import { client } from "../../src/adapter"
+import { LLMClient } from "../../src/adapter"
 import { AnthropicMessages } from "../../src/provider/anthropic-messages"
 import { recordedTests } from "../recorded-test"
 
@@ -46,7 +46,7 @@ const recorded = recordedTests({
   requires: ["ANTHROPIC_API_KEY"],
   options: { requestHeaders: ["content-type", "anthropic-version"] },
 })
-const anthropic = client({ adapters: [AnthropicMessages.adapter] })
+const anthropic = LLMClient.make({ adapters: [AnthropicMessages.adapter] })
 
 describe("Anthropic Messages recorded", () => {
   recorded.effect("streams text", () =>

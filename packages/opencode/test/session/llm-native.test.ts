@@ -1,7 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AnthropicMessages, Gemini, OpenAICompatibleChat } from "@opencode-ai/llm"
-import { client } from "@opencode-ai/llm/adapter"
-import { OpenAIResponses } from "@opencode-ai/llm/provider/openai-responses"
+import { AnthropicMessages, BedrockConverse, Gemini, LLMClient, OpenAICompatibleChat, OpenAIResponses } from "@opencode-ai/llm"
 import { Cause, Effect, Exit, Layer, Schema } from "effect"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { LLMNative } from "../../src/session/llm-native"
@@ -333,7 +331,7 @@ describe("LLMNative.request", () => {
       tools: [lookupTool],
       toolChoice: "lookup",
     })
-    const prepared = yield* client({ adapters: [OpenAIResponses.adapter] }).prepare(request)
+    const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(request)
 
     expect(prepared.target).toMatchObject({
       model: "gpt-5",
@@ -392,7 +390,7 @@ describe("LLMNative.request", () => {
       tools: [lookupTool],
       toolChoice: "lookup",
     })
-    const prepared = yield* client({ adapters: [AnthropicMessages.adapter] }).prepare(request)
+    const prepared = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] }).prepare(request)
 
     expect(request.model).toMatchObject({
       provider: "anthropic",
@@ -461,7 +459,7 @@ describe("LLMNative.request", () => {
       tools: [lookupTool],
       toolChoice: "lookup",
     })
-    const prepared = yield* client({ adapters: [OpenAICompatibleChat.adapter] }).prepare(request)
+    const prepared = yield* LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] }).prepare(request)
 
     expect(request.model).toMatchObject({
       provider: "togetherai",
@@ -540,7 +538,7 @@ describe("LLMNative.request", () => {
       tools: [lookupTool],
       toolChoice: "lookup",
     })
-    const prepared = yield* client({ adapters: [Gemini.adapter] }).prepare(request)
+    const prepared = yield* LLMClient.make({ adapters: [Gemini.adapter] }).prepare(request)
 
     expect(request.model).toMatchObject({
       provider: "google",
@@ -577,4 +575,110 @@ describe("LLMNative.request", () => {
       generationConfig: { maxOutputTokens: 32, temperature: 0 },
     })
   }))
+
+  // Cache hint policy. The LLM-native path mirrors the AI-SDK applyCaching
+  // policy from packages/opencode/src/provider/transform.ts: mark the first 2
+  // system parts and the last 2 messages as cacheable, gated on the resolved
+  // model's `capabilities.cache.prompt`. Adapters lower CacheHint to the
+  // provider-specific marker (cache_control on Anthropic, cachePoint on
+  // Bedrock); non-cache-capable adapters never see a hint.
+
+  const anthropicModel = () =>
+    model({
+      id: ModelID.make("claude-sonnet-4-5"),
+      providerID: ProviderID.make("anthropic"),
+      api: { id: "claude-sonnet-4-5", url: "https://api.anthropic.com/v1", npm: "@ai-sdk/anthropic" },
+    })
+
+  const bedrockModel = () =>
+    model({
+      id: ModelID.make("us.amazon.nova-micro-v1:0"),
+      providerID: ProviderID.make("amazon-bedrock"),
+      api: {
+        id: "us.amazon.nova-micro-v1:0",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    })
+
+  it.effect("applies cache hints to the first 2 system parts on cache-capable models", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel()
+      const userID = MessageID.ascending()
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+        model: mdl,
+        system: ["First", "Second", "Third"],
+        messages: [userMessage(mdl, userID, [textPart(userID, "hello")])],
+      })
+
+      expect(request.system).toHaveLength(3)
+      expect(request.system[0]).toMatchObject({ text: "First", cache: { type: "ephemeral" } })
+      expect(request.system[1]).toMatchObject({ text: "Second", cache: { type: "ephemeral" } })
+      expect(request.system[2]).toMatchObject({ text: "Third" })
+      expect(request.system[2].cache).toBeUndefined()
+    }))
+
+  it.effect("applies cache hints to the final text part of the last 2 messages on cache-capable models", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel()
+      const messageIds = [MessageID.ascending(), MessageID.ascending(), MessageID.ascending()]
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+        model: mdl,
+        messages: messageIds.map((id, index) => userMessage(mdl, id, [textPart(id, `m${index}`)])),
+      })
+
+      expect(request.messages).toHaveLength(3)
+      // First message: no cache hint.
+      const first = request.messages[0].content[0]
+      if (first.type === "text") expect(first.cache).toBeUndefined()
+      // Last two messages: cache on the (only) text part.
+      expect(request.messages[1].content[0]).toMatchObject({ type: "text", text: "m1", cache: { type: "ephemeral" } })
+      expect(request.messages[2].content[0]).toMatchObject({ type: "text", text: "m2", cache: { type: "ephemeral" } })
+    }))
+
+  it.effect("lowers cache hints to Bedrock Converse cachePoint marker blocks end-to-end", () =>
+    Effect.gen(function* () {
+      const mdl = bedrockModel()
+      const userID = MessageID.ascending()
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.make("amazon-bedrock"), key: "bedrock-bearer" }, mdl),
+        model: mdl,
+        system: ["You are concise."],
+        messages: [userMessage(mdl, userID, [textPart(userID, "hello")])],
+      })
+      const prepared = yield* LLMClient.make({ adapters: [BedrockConverse.adapter] }).prepare(request)
+
+      expect(prepared.target).toMatchObject({
+        system: [{ text: "You are concise." }, { cachePoint: { type: "default" } }],
+        messages: [
+          {
+            role: "user",
+            content: [{ text: "hello" }, { cachePoint: { type: "default" } }],
+          },
+        ],
+      })
+    }))
+
+  it.effect("does not apply cache hints when the model does not support prompt caching", () =>
+    Effect.gen(function* () {
+      // gpt-5 / openai resolves to openai-responses, which advertises
+      // capabilities.cache.prompt: false. The bridge must skip the policy.
+      const mdl = model()
+      const ids = [MessageID.ascending(), MessageID.ascending()]
+      const request = yield* LLMNative.request({
+        provider: ProviderTest.info({ id: ProviderID.openai, key: "openai-key" }, mdl),
+        model: mdl,
+        system: ["A", "B", "C"],
+        messages: ids.map((id, index) => userMessage(mdl, id, [textPart(id, `m${index}`)])),
+      })
+
+      for (const part of request.system) expect(part.cache).toBeUndefined()
+      for (const message of request.messages) {
+        for (const part of message.content) {
+          if (part.type === "text") expect(part.cache).toBeUndefined()
+        }
+      }
+    }))
 })

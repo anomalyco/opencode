@@ -1,5 +1,6 @@
 import { Effect, Stream } from "effect"
 import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import * as LLM from "./llm"
 import { RequestExecutor } from "./executor"
 import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry, target as targetPatch } from "./patch"
@@ -97,6 +98,8 @@ export function define<Draft, Target>(input: AdapterInput<Draft, Target>): Adapt
     protocol: input.protocol,
     patches,
     get runtime() {
+      // Runtime registry erases adapter draft/target generics after validation.
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       return this as unknown as RuntimeAdapter
     },
     redact: input.redact,
@@ -125,7 +128,7 @@ export function compose<Draft, Target>(input: ComposeInput<Draft, Target>): Adap
   })
 }
 
-export function client(options: ClientOptions): LLMClient {
+const makeClient = (options: ClientOptions): LLMClient => {
   const registry = normalizeRegistry(options.patches)
   const adapters = options.adapters.map((adapter) => adapter.runtime)
   const providerAdapters = adapters
@@ -173,13 +176,13 @@ export function client(options: ClientOptions): LLMClient {
     const patchedRequest =
       requestBeforeToolPatches.tools.length === 0
         ? requestBeforeToolPatches
-        : { ...requestBeforeToolPatches, tools: requestBeforeToolPatches.tools.map(toolSchemaPlan.apply) }
+        : LLM.updateRequest(requestBeforeToolPatches, { tools: requestBeforeToolPatches.tools.map(toolSchemaPlan.apply) })
     const patchContext = context({ request: patchedRequest })
     const draft = yield* adapter.prepare(patchedRequest)
     const targetPlan = plan({
       phase: "target",
       context: patchContext,
-      patches: [...adapter.patches, ...(registry.target as ReadonlyArray<Patch<unknown>>)],
+      patches: [...adapter.patches, ...registry.target],
     })
     const target = yield* adapter.validate(targetPlan.apply(draft))
     const targetPatchTrace = [
@@ -240,5 +243,7 @@ export function client(options: ClientOptions): LLMClient {
 
   return { prepare, stream, generate }
 }
+
+export const LLMClient = { make: makeClient }
 
 export * as Adapter from "./adapter"

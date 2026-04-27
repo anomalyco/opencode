@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMEvent } from "../../src"
-import { client } from "../../src/adapter"
+import { LLMClient } from "../../src/adapter"
 import { OpenAIChat } from "../../src/provider/openai-chat"
 import { tool } from "../../src/tool"
 import { ToolRuntime } from "../../src/tool-runtime"
@@ -39,7 +39,7 @@ const request = LLM.request({
 })
 
 const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
-const openai = client({ adapters: [OpenAIChat.adapter] })
+const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
 
 describe("OpenAI Chat tool-loop recorded", () => {
   recorded.effect("drives a tool loop end-to-end", () =>

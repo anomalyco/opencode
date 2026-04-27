@@ -2,21 +2,53 @@ import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM } from "../src"
-import { Adapter, client } from "../src/adapter"
+import { Adapter, LLMClient } from "../src/adapter"
 import { Patch } from "../src/patch"
-import type { LLMRequest } from "../src/schema"
+import type { LLMRequest, Message, ModelRef, ToolDefinition } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
 
-const mapText = (fn: (text: string) => string) => (request: LLMRequest): LLMRequest => ({
-  ...request,
-  messages: request.messages.map((message) => ({
-    ...message,
-    content: message.content.map((part) =>
-      part.type === "text" ? { ...part, text: fn(part.text) } : part,
+const updateMessageContent = (message: Message, content: Message["content"]) =>
+  LLM.message({
+    id: message.id,
+    role: message.role,
+    content,
+    metadata: message.metadata,
+    native: message.native,
+  })
+
+const updateModel = (model: ModelRef, patch: Partial<LLM.ModelInput>) =>
+  LLM.model({
+    id: model.id,
+    provider: model.provider,
+    protocol: model.protocol,
+    baseURL: model.baseURL,
+    headers: model.headers,
+    capabilities: model.capabilities,
+    limits: model.limits,
+    native: model.native,
+    ...patch,
+  })
+
+const updateToolDefinition = (tool: ToolDefinition, patch: Partial<ToolDefinition>) =>
+  LLM.toolDefinition({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    metadata: tool.metadata,
+    native: tool.native,
+    ...patch,
+  })
+
+const mapText = (fn: (text: string) => string) => (request: LLMRequest): LLMRequest =>
+  LLM.updateRequest(request, {
+    messages: request.messages.map((message) =>
+      updateMessageContent(
+        message,
+        message.content.map((part) => (part.type === "text" ? { ...part, text: fn(part.text) } : part)),
+      ),
     ),
-  })),
-})
+  })
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -26,9 +58,12 @@ type FakeDraft = {
   readonly includeUsage?: boolean
 }
 
-type FakeChunk =
-  | { readonly type: "text"; readonly text: string }
-  | { readonly type: "finish"; readonly reason: "stop" }
+const FakeChunk = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("finish"), reason: Schema.Literal("stop") }),
+])
+type FakeChunk = Schema.Schema.Type<typeof FakeChunk>
+const FakeChunks = Schema.Array(FakeChunk)
 
 const request = LLM.request({
   id: "req_1",
@@ -68,7 +103,12 @@ const fake = Adapter.define<FakeDraft, FakeDraft>({
       ),
     ),
   parse: (response) =>
-    Stream.fromEffect(response.json.pipe(Effect.orDie, Effect.map((body) => body as FakeChunk[]))).pipe(
+    Stream.fromEffect(
+      response.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(FakeChunks)),
+        Effect.orDie,
+      ),
+    ).pipe(
       Stream.flatMap(Stream.fromIterable),
       Stream.map(raiseChunk),
     ),
@@ -103,7 +143,7 @@ const it = testEffect(echoLayer)
 describe("llm adapter", () => {
   it.effect("prepare applies target patches with trace", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({
+      const prepared = yield* LLMClient.make({
         adapters: [
           fake.withPatches([
             fake.patch("include-usage", {
@@ -121,7 +161,7 @@ describe("llm adapter", () => {
 
   it.effect("stream and generate use the adapter pipeline", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [fake] })
+      const llm = LLMClient.make({ adapters: [fake] })
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
       const response = yield* llm.generate(request)
 
@@ -132,11 +172,8 @@ describe("llm adapter", () => {
 
   it.effect("selects adapters by request protocol", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({ adapters: [fake, gemini] }).prepare(
-        LLM.request({
-          ...request,
-          model: LLM.model({ ...request.model, protocol: "gemini" }),
-        }),
+      const prepared = yield* LLMClient.make({ adapters: [fake, gemini] }).prepare(
+        LLM.updateRequest(request, { model: updateModel(request.model, { protocol: "gemini" }) }),
       )
 
       expect(prepared.adapter).toBe("gemini-fake")
@@ -145,7 +182,7 @@ describe("llm adapter", () => {
 
   it.effect("prefers provider-specific adapters over protocol fallbacks", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({ adapters: [fake, providerFake] }).prepare(request)
+      const prepared = yield* LLMClient.make({ adapters: [fake, providerFake] }).prepare(request)
 
       expect(prepared.adapter).toBe("provider-fake")
       expect(prepared.target).toEqual({ body: "provider:hello" })
@@ -154,12 +191,12 @@ describe("llm adapter", () => {
 
   it.effect("request, prompt, and tool-schema patches run before adapter prepare", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({
+      const prepared = yield* LLMClient.make({
         adapters: [fake],
         patches: [
           Patch.request("test.id", {
             reason: "rewrite request id",
-            apply: (request) => ({ ...request, id: "req_patched" }),
+            apply: (request) => LLM.updateRequest(request, { id: "req_patched" }),
           }),
           Patch.prompt("test.message", {
             reason: "rewrite prompt text",
@@ -167,12 +204,11 @@ describe("llm adapter", () => {
           }),
           Patch.toolSchema("test.description", {
             reason: "rewrite tool description",
-            apply: (tool) => ({ ...tool, description: "patched tool" }),
+            apply: (tool) => updateToolDefinition(tool, { description: "patched tool" }),
           }),
         ],
       }).prepare(
-        LLM.request({
-          ...request,
+        LLM.updateRequest(request, {
           tools: [{ name: "lookup", description: "original", inputSchema: {} }],
         }),
       )
@@ -189,7 +225,7 @@ describe("llm adapter", () => {
 
   it.effect("request patches feed into prompt-patch predicates so phases see updated context", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({
+      const prepared = yield* LLMClient.make({
         adapters: [fake],
         patches: [
           // Earlier phase rewrites the provider, later phase only fires for the
@@ -197,10 +233,7 @@ describe("llm adapter", () => {
           // test fails because the prompt patch's `when` would not match.
           Patch.request("rewrite-provider", {
             reason: "swap provider before prompt phase",
-            apply: (request) => ({
-              ...request,
-              model: LLM.model({ ...request.model, provider: "rewritten" }),
-            }),
+            apply: (request) => LLM.updateRequest(request, { model: updateModel(request.model, { provider: "rewritten" }) }),
           }),
           Patch.prompt("rewrite-only-when-rewritten", {
             reason: "rewrite prompt text only after provider swap",
@@ -220,7 +253,7 @@ describe("llm adapter", () => {
 
   it.effect("patches with the same order sort by id for deterministic application", () =>
     Effect.gen(function* () {
-      const prepared = yield* client({
+      const prepared = yield* LLMClient.make({
         adapters: [fake],
         patches: [
           Patch.prompt("zeta", {
@@ -242,7 +275,7 @@ describe("llm adapter", () => {
 
   it.effect("stream patches transform raised events", () =>
     Effect.gen(function* () {
-      const llm = client({
+      const llm = LLMClient.make({
         adapters: [fake],
         patches: [
           Patch.stream("test.uppercase", {
@@ -262,7 +295,7 @@ describe("llm adapter", () => {
     Effect.gen(function* () {
       // Verifies stream patches run on every event, not just the first.
       const seen: string[] = []
-      const llm = client({
+      const llm = LLMClient.make({
         adapters: [fake],
         patches: [
           Patch.stream("test.tap", {
@@ -283,12 +316,9 @@ describe("llm adapter", () => {
 
   it.effect("rejects protocol mismatch", () =>
     Effect.gen(function* () {
-      const error = yield* client({ adapters: [fake] })
+      const error = yield* LLMClient.make({ adapters: [fake] })
         .prepare(
-          LLM.request({
-            ...request,
-            model: LLM.model({ ...request.model, protocol: "gemini" }),
-          }),
+          LLM.updateRequest(request, { model: updateModel(request.model, { protocol: "gemini" }) }),
         )
         .pipe(Effect.flip)
 

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
-import { client } from "../../src/adapter"
+import { LLMClient } from "../../src/adapter"
 import { OpenAICompatibleChat } from "../../src/provider/openai-compatible-chat"
 import { recordedTests } from "../recorded-test"
 
@@ -55,7 +55,7 @@ const togetherToolRequest = LLM.request({
 })
 
 const recorded = recordedTests({ prefix: "openai-compatible-chat" })
-const llm = client({ adapters: [OpenAICompatibleChat.adapter] })
+const llm = LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] })
 
 describe("OpenAI-compatible Chat recorded", () => {
   recorded.effect.with("deepseek streams text", { requires: ["DEEPSEEK_API_KEY"] }, () =>

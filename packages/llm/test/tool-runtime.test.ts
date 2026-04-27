@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { LLM, LLMEvent } from "../src"
-import { client, type LLMClient } from "../src/adapter"
+import { LLMClient } from "../src/adapter"
 import { RequestExecutor } from "../src/executor"
 import { OpenAIChat } from "../src/provider/openai-chat"
 import { tool, ToolFailure } from "../src/tool"
@@ -39,7 +39,7 @@ const get_weather = tool({
 describe("ToolRuntime", () => {
   it.effect("dispatches a tool call, appends results, and resumes streaming", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "It's sunny in Paris." }), finishChunk("stop")),
@@ -66,7 +66,7 @@ describe("ToolRuntime", () => {
 
   it.effect("emits tool-error for unknown tools so the model can self-correct", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "missing_tool", "{}"), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Sorry." }), finishChunk("stop")),
@@ -93,7 +93,7 @@ describe("ToolRuntime", () => {
 
   it.effect("emits tool-error when the LLM input fails the parameters schema", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":42}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop")),
@@ -114,7 +114,7 @@ describe("ToolRuntime", () => {
 
   it.effect("emits tool-error when the handler returns a ToolFailure", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"FAIL"}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Sorry." }), finishChunk("stop")),
@@ -135,7 +135,7 @@ describe("ToolRuntime", () => {
 
   it.effect("stops when the model finishes without requesting more tools", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([sseEvents(deltaChunk({ role: "assistant", content: "Done." }), finishChunk("stop"))])
 
       const events = Array.from(
@@ -152,7 +152,7 @@ describe("ToolRuntime", () => {
 
   it.effect("respects maxSteps and stops the loop", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       // Every script entry asks for another tool call. With maxSteps: 2 the
       // runtime should run at most two model rounds and then exit even though
       // the model still wants to keep going.
@@ -172,7 +172,7 @@ describe("ToolRuntime", () => {
 
   it.effect("stops when stopWhen returns true after the first step", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"Paris"}'), finishChunk("tool_calls")),
         sseEvents(deltaChunk({ role: "assistant", content: "Should not run." }), finishChunk("stop")),
@@ -254,7 +254,7 @@ describe("ToolRuntime", () => {
 
   it.effect("dispatches multiple tool calls in one step concurrently", () =>
     Effect.gen(function* () {
-      const llm = client({ adapters: [OpenAIChat.adapter] })
+      const llm = LLMClient.make({ adapters: [OpenAIChat.adapter] })
       const layer = scriptedResponses([
         sseEvents(
           deltaChunk({

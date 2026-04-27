@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
-import { client } from "../../src/adapter"
+import { LLMClient } from "../../src/adapter"
 import { OpenAIChat } from "../../src/provider/openai-chat"
 import { recordedTests } from "../recorded-test"
 
@@ -58,8 +58,8 @@ const toolResultRequest = LLM.request({
 // `length > 0` checks so adapter parsing regressions surface immediately.
 // Re-record (`RECORD=true`) only when intentionally refreshing a cassette.
 const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
-const openai = client({ adapters: [OpenAIChat.adapter] })
-const openaiWithUsage = client({ adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])] })
+const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
+const openaiWithUsage = LLMClient.make({ adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])] })
 
 describe("OpenAI Chat recorded", () => {
   recorded.effect("streams text", () =>

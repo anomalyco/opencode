@@ -20,6 +20,24 @@ describe("llm constructors", () => {
     expect(request.tools).toEqual([])
   })
 
+  test("updates requests without spreading schema class instances", () => {
+    const base = LLM.request({
+      id: "req_1",
+      model: LLM.model({ id: "fake-model", provider: "fake", protocol: "openai-chat" }),
+      prompt: "Say hello.",
+    })
+    const updated = LLM.updateRequest(base, {
+      generation: { maxTokens: 20 },
+      messages: [...base.messages, LLM.assistant("Hi.")],
+    })
+
+    expect(updated).toBeInstanceOf(LLMRequest)
+    expect(updated.id).toBe("req_1")
+    expect(updated.model).toEqual(base.model)
+    expect(updated.generation).toEqual({ maxTokens: 20 })
+    expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
+  })
+
   test("builds tool choices from names and tools", () => {
     const tool = LLM.toolDefinition({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })
 
