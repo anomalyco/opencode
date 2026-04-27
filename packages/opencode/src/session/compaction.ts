@@ -38,7 +38,6 @@ const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 8_000
 const SUMMARY_TEMPLATE = `Output exactly this Markdown structure and keep the section order unchanged:
----
 ## Goal
 - [single-sentence task summary]
 
@@ -66,7 +65,6 @@ const SUMMARY_TEMPLATE = `Output exactly this Markdown structure and keep the se
 
 ## Relevant Files
 - [file or directory path: why it matters, or "(none)"]
----
 
 Rules:
 - Keep every section, even when empty.
