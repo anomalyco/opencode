@@ -2089,6 +2089,34 @@ describe("SessionNs.getUsage", () => {
     expect(result.cost).toBe(3 + 1.5)
   })
 
+  test("does not return negative cost when cache tokens exceed input tokens", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: { input: 10, output: 0, cache: { read: 0, write: 0 } },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: 200,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(0)
+    expect(result.cost).toBe(0)
+  })
+
   test.each(["@ai-sdk/anthropic", "@ai-sdk/amazon-bedrock", "@ai-sdk/google-vertex/anthropic"])(
     "computes total from components for %s models",
     (npm) => {

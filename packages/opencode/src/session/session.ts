@@ -298,7 +298,7 @@ export function plan(input: { slug: string; time: { created: number } }) {
 
 export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
-    if (!Number.isFinite(value)) return 0
+    if (!Number.isFinite(value) || value < 0) return 0
     return value
   }
   const inputTokens = safe(input.usage.inputTokens ?? 0)
