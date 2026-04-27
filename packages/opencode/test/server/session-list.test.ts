@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
-import { Session as SessionNs } from "../../src/session"
-import { Log } from "../../src/util"
+import { Session as SessionNs } from "@/session/session"
+import * as Log from "@opencode-ai/core/util/log"
 import { tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })

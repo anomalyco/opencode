@@ -1,9 +1,11 @@
 import z from "zod"
-import { and, Database, eq } from "../storage"
+import { and } from "drizzle-orm"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
-import { Log } from "../util"
-import { Flag } from "@/flag/flag"
+import * as Log from "@opencode-ai/core/util/log"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
@@ -11,8 +13,8 @@ import { ProjectID } from "./schema"
 import { Effect, Layer, Path, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
@@ -90,6 +92,15 @@ export const UpdateInput = z.object({
   commands: zod(ProjectCommands).optional(),
 })
 export type UpdateInput = z.infer<typeof UpdateInput>
+
+export const UpdatePayload = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
+})
+  .annotate({ identifier: "ProjectUpdateInput" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
 // ---------------------------------------------------------------------------
 // Effect service
@@ -495,3 +506,5 @@ export function setInitialized(id: ProjectID) {
     db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
   )
 }
+
+export * as Project from "./project"

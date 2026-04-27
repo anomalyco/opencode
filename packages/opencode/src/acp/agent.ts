@@ -31,29 +31,30 @@ import {
   type Usage,
 } from "@agentclientprotocol/sdk"
 
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { pathToFileURL } from "url"
-import { Filesystem } from "../util"
-import { Hash } from "@opencode-ai/shared/util/hash"
+import { Filesystem } from "@/util/filesystem"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
-import { Provider } from "../provider"
+import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
-import { z } from "zod"
+import { Result, Schema } from "effect"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
-import { InstallationVersion } from "@/installation/version"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
+const decodeTodos = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Array(Todo.Info)))
 
 const DEFAULT_VARIANT_VALUE = "default"
 
@@ -372,14 +373,14 @@ export class Agent implements ACPAgent {
               }
 
               if (part.tool === "todowrite") {
-                const parsedTodos = z.array(Todo.Info.zod).safeParse(JSON.parse(part.state.output))
-                if (parsedTodos.success) {
+                const parsedTodos = decodeTodos(part.state.output)
+                if (Result.isSuccess(parsedTodos)) {
                   await this.connection
                     .sessionUpdate({
                       sessionId,
                       update: {
                         sessionUpdate: "plan",
-                        entries: parsedTodos.data.map((todo) => {
+                        entries: parsedTodos.success.map((todo) => {
                           const status: PlanEntry["status"] =
                             todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                           return {
@@ -394,7 +395,7 @@ export class Agent implements ACPAgent {
                       log.error("failed to send session update for todo", { error })
                     })
                 } else {
-                  log.error("failed to parse todo output", { error: parsedTodos.error })
+                  log.error("failed to parse todo output", { error: parsedTodos.failure })
                 }
               }
 
@@ -901,14 +902,14 @@ export class Agent implements ACPAgent {
             }
 
             if (part.tool === "todowrite") {
-              const parsedTodos = z.array(Todo.Info.zod).safeParse(JSON.parse(part.state.output))
-              if (parsedTodos.success) {
+              const parsedTodos = decodeTodos(part.state.output)
+              if (Result.isSuccess(parsedTodos)) {
                 await this.connection
                   .sessionUpdate({
                     sessionId,
                     update: {
                       sessionUpdate: "plan",
-                      entries: parsedTodos.data.map((todo) => {
+                      entries: parsedTodos.success.map((todo) => {
                         const status: PlanEntry["status"] =
                           todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                         return {
@@ -923,7 +924,7 @@ export class Agent implements ACPAgent {
                     log.error("failed to send session update for todo", { error: err })
                   })
               } else {
-                log.error("failed to parse todo output", { error: parsedTodos.error })
+                log.error("failed to parse todo output", { error: parsedTodos.failure })
               }
             }
 

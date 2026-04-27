@@ -1,6 +1,6 @@
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import * as Fence from "./fence"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
@@ -101,7 +101,7 @@ const app = (upgrade: UpgradeWebSocket) =>
     }),
   )
 
-const log = Log.Default.clone().tag("service", "server-proxy")
+const log = Log.create({ service: "server-proxy" })
 
 export async function http(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
   if (!Workspace.isSyncing(workspaceID)) {

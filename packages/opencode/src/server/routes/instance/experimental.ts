@@ -3,13 +3,13 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import * as EffectZod from "@/util/effect-zod"
 import { ProviderID, ModelID } from "@/provider/schema"
-import { ToolRegistry } from "@/tool"
+import { ToolRegistry } from "@/tool/registry"
 import { Worktree } from "@/worktree"
 import { Instance } from "@/project/instance"
-import { Project } from "@/project"
+import { Project } from "@/project/project"
 import { MCP } from "@/mcp"
-import { Session } from "@/session"
-import { Config } from "@/config"
+import { Session } from "@/session/session"
+import { Config } from "@/config/config"
 import { ConsoleState } from "@/config/console-state"
 import { Account } from "@/account/account"
 import { AccountID, OrgID } from "@/account/schema"
@@ -230,14 +230,14 @@ export const ExperimentalRoutes = lazy(() =>
             description: "Worktree created",
             content: {
               "application/json": {
-                schema: resolver(Worktree.Info),
+                schema: resolver(Worktree.Info.zod),
               },
             },
           },
           ...errors(400),
         },
       }),
-      validator("json", Worktree.CreateInput.optional()),
+      validator("json", Worktree.CreateInput.zod.optional()),
       async (c) =>
         jsonRequest("ExperimentalRoutes.worktree.create", c, function* () {
           const body = c.req.valid("json")
@@ -286,7 +286,7 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", Worktree.RemoveInput),
+      validator("json", Worktree.RemoveInput.zod),
       async (c) =>
         jsonRequest("ExperimentalRoutes.worktree.remove", c, function* () {
           const body = c.req.valid("json")
@@ -315,7 +315,7 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", Worktree.ResetInput),
+      validator("json", Worktree.ResetInput.zod),
       async (c) =>
         jsonRequest("ExperimentalRoutes.worktree.reset", c, function* () {
           const body = c.req.valid("json")
@@ -394,7 +394,7 @@ export const ExperimentalRoutes = lazy(() =>
             description: "MCP resources",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), MCP.Resource)),
+                schema: resolver(z.record(z.string(), MCP.Resource.zod)),
               },
             },
           },

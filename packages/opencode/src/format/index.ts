@@ -1,26 +1,25 @@
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { InstanceState } from "@/effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { InstanceState } from "@/effect/instance-state"
 import path from "path"
 import { mergeDeep } from "remeda"
-import z from "zod"
-import { Config } from "../config"
-import { Log } from "../util"
+import { Config } from "@/config/config"
+import * as Log from "@opencode-ai/core/util/log"
 import * as Formatter from "./formatter"
+import { zod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "format" })
 
-export const Status = z
-  .object({
-    name: z.string(),
-    extensions: z.string().array(),
-    enabled: z.boolean(),
-  })
-  .meta({
-    ref: "FormatterStatus",
-  })
-export type Status = z.infer<typeof Status>
+export const Status = Schema.Struct({
+  name: Schema.String,
+  extensions: Schema.Array(Schema.String),
+  enabled: Schema.Boolean,
+})
+  .annotate({ identifier: "FormatterStatus" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Status = Schema.Schema.Type<typeof Status>
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>

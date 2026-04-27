@@ -215,7 +215,7 @@ export const dict = {
   "common.saving": "Speichert...",
   "common.default": "Standard",
   "common.attachment": "Anhang",
-  "prompt.placeholder.shell": "Shell-Befehl eingeben...",
+  "prompt.placeholder.shell": "Shell-Befehl eingeben... {{example}}",
   "prompt.placeholder.normal": 'Fragen Sie alles... "{{example}}"',
   "prompt.placeholder.simple": "Fragen Sie alles...",
   "prompt.placeholder.summarizeComments": "Kommentare zusammenfassen…",

@@ -11,8 +11,8 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/shared/util/path"
-import { retry } from "@opencode-ai/shared/util/retry"
+import { getFilename } from "@opencode-ai/core/util/path"
+import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
@@ -78,7 +78,7 @@ export async function bootstrapGlobal(input: {
     () =>
       retry(() =>
         input.globalSDK.global.config.get().then((x) => {
-          input.setGlobalStore("config", x.data!)
+          input.setGlobalStore("config", reconcile(x.data!, { merge: false }))
         }),
       ),
   ]
@@ -245,7 +245,7 @@ export async function bootstrapDirectory(input: {
     input.setStore("provider", input.global.provider)
   }
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
-    input.setStore("config", input.global.config)
+    input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
   if (loading || input.store.provider.all.length === 0) {
     input.setStore("provider_ready", false)
@@ -265,7 +265,8 @@ export async function bootstrapDirectory(input: {
         input.queryClient.ensureQueryData(
           loadAgentsQuery(input.directory, input.sdk, (x) => input.setStore("agent", normalizeAgentList(x.data))),
         ),
-      () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
+      () =>
+        retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
       () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
       !seededProject &&
         (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
