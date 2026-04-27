@@ -99,7 +99,7 @@ export const projectHandlers = Layer.unwrap(
       params: { projectID: ProjectID }
       payload: Project.UpdatePayload
     }) {
-      return yield* svc.update({ ...Project.UpdatePayload.zod.parse(ctx.payload), projectID: ctx.params.projectID })
+      return yield* svc.update({ ...ctx.payload, projectID: ctx.params.projectID })
     })
 
     return HttpApiBuilder.group(ProjectApi, "project", (handlers) =>

@@ -52,7 +52,28 @@ function normalizeMessages(
 ): ModelMessage[] {
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
+  if (model.api.npm === "@ai-sdk/anthropic") {
+    msgs = msgs
+      .map((msg) => {
+        if (typeof msg.content === "string") {
+          if (msg.content === "") return undefined
+          return msg
+        }
+        if (!Array.isArray(msg.content)) return msg
+        const filtered = msg.content.filter((part) => {
+          if (part.type === "text" || part.type === "reasoning") {
+            return part.text !== ""
+          }
+          return true
+        })
+        if (filtered.length === 0) return undefined
+        return { ...msg, content: filtered }
+      })
+      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+  }
+
+  // Bedrock specific transforms
+  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -193,7 +214,11 @@ function normalizeMessages(
     })
   }
 
-  if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
+  if (
+    typeof model.capabilities.interleaved === "object" &&
+    model.capabilities.interleaved.field &&
+    model.api.npm !== "@openrouter/ai-sdk-provider"
+  ) {
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -821,6 +846,10 @@ export function options(input: {
   providerOptions?: Record<string, any>
 }): Record<string, any> {
   const result: Record<string, any> = {}
+
+  if (input.model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+    result["toolStreaming"] = false
+  }
 
   // openai and providers using openai package should set store to false by default.
   if (

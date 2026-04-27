@@ -101,7 +101,7 @@ const app = (upgrade: UpgradeWebSocket) =>
     }),
   )
 
-const log = Log.Default.clone().tag("service", "server-proxy")
+const log = Log.create({ service: "server-proxy" })
 
 export async function http(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
   if (!Workspace.isSyncing(workspaceID)) {
