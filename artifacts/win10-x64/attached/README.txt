@@ -23,9 +23,7 @@
 opencode.exe           - CLI 主程序（含 Bun 运行时 + 内嵌解析器）
 parsers/               - tree-sitter 离线解析器（外置备用）
 run.bat                - 快速启动脚本
-run-with-config.bat    - 带配置初始化的启动脚本
-config-examples/       - 配置模板目录
-scripts/               - 运维脚本目录
+config/                - 配置模板目录
 
 日志
 --------------------
