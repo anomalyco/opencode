@@ -2245,6 +2245,173 @@ it.instance("records aborted errors when prompt is cancelled mid-stream", () =>
 // Agent variant
 
 noLLMServer.instance(
+  "prompt without agent and model preserves current session agent and model",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const next = yield* prompt.prompt({
+        sessionID: session.id,
+        noReply: true,
+        parts: [{ type: "text", text: "hello again" }],
+      })
+      if (next.info.role !== "user") throw new Error("expected user message")
+      expect(next.info.agent).toBe("build")
+      expect(next.info.model).toEqual(ref)
+
+      yield* sessions.remove(session.id)
+    }),
+  {
+    config: {
+      ...cfg,
+      default_agent: "plan",
+    },
+  },
+)
+
+noLLMServer.instance(
+  "explicit agent without model keeps the session's current model",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: { providerID: ProviderV2.ID.make("opencode"), modelID: ModelV2.ID.make("kimi-k2.5-free") },
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      // pty/envoy-style injection: echoes the agent captured at spawn time but
+      // omits the model. Must NOT revert to the agent's configured model.
+      const next = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "notification" }],
+      })
+      if (next.info.role !== "user") throw new Error("expected user message")
+      expect(next.info.agent).toBe("build")
+      expect(next.info.model.providerID).toBe(ProviderV2.ID.make("opencode"))
+      expect(next.info.model.modelID).toBe(ModelV2.ID.make("kimi-k2.5-free"))
+
+      yield* sessions.remove(session.id)
+    }),
+  {
+    config: {
+      ...cfg,
+      agent: {
+        build: {
+          model: "test/test-model",
+        },
+      },
+    },
+  },
+)
+
+noLLMServer.instance(
+  "explicit agent switch without model uses the new agent's model",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: { providerID: ProviderV2.ID.make("opencode"), modelID: ModelV2.ID.make("kimi-k2.5-free") },
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const next = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "plan",
+        noReply: true,
+        parts: [{ type: "text", text: "switch" }],
+      })
+      if (next.info.role !== "user") throw new Error("expected user message")
+      expect(next.info.agent).toBe("plan")
+      expect(next.info.model.providerID).toBe(ProviderV2.ID.make("test"))
+      expect(next.info.model.modelID).toBe(ModelV2.ID.make("test-model"))
+
+      yield* sessions.remove(session.id)
+    }),
+  {
+    config: {
+      ...cfg,
+      agent: {
+        plan: {
+          model: "test/test-model",
+        },
+      },
+    },
+  },
+)
+
+noLLMServer.instance(
+  "prompt without agent, model, and variant preserves the current variant",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: ref,
+        variant: "xhigh",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const next = yield* prompt.prompt({
+        sessionID: session.id,
+        noReply: true,
+        parts: [{ type: "text", text: "hello again" }],
+      })
+      if (next.info.role !== "user") throw new Error("expected user message")
+      expect(next.info.agent).toBe("build")
+      expect(next.info.model).toEqual({ ...ref, variant: "xhigh" })
+
+      yield* sessions.remove(session.id)
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { xhigh: {}, high: {} },
+            },
+          },
+        },
+      },
+      default_agent: "plan",
+    },
+  },
+)
+
+noLLMServer.instance(
   "applies agent variant only when using agent model",
   () =>
     Effect.gen(function* () {
@@ -2265,6 +2432,7 @@ noLLMServer.instance(
       const match = yield* prompt.prompt({
         sessionID: session.id,
         agent: "build",
+        model: ref,
         noReply: true,
         parts: [{ type: "text", text: "hello again" }],
       })
@@ -2312,6 +2480,7 @@ noLLMServer.instance(
     },
   },
 )
+
 
 // Agent / command resolution errors
 

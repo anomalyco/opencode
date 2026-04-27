@@ -633,7 +633,20 @@ const layer = Layer.effect(
     })
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-      const agentName = input.agent
+      // The session row is the durable record of the session's current agent and
+      // model (written back below via setAgentModel), so injected prompts that omit
+      // agent/model (envoy, pty notifications, prompt_async) stick to whatever the
+      // session is currently using instead of reverting to configured defaults.
+      // It also survives compaction, which can empty the message-based lookup below.
+      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      const prev =
+        input.agent || current.agent
+          ? undefined
+          : (yield* MessageV2.filterCompactedEffect(input.sessionID).pipe(Effect.provideService(Database.Service, database))).findLast(
+              (m): m is SessionV1.WithParts & { info: SessionV1.User } =>
+                m.info.role === "user" && !!m.info.agent,
+            )
+      const agentName = input.agent ?? current.agent ?? prev?.info.agent
       const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -643,7 +656,20 @@ const layer = Layer.effect(
         throw error
       }
 
-      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      // Only a genuine agent switch may reset the model to the agent's configured
+      // default; an explicit agent equal to the session's current one (e.g. a pty
+      // exit notification echoing its spawn-time agent) keeps the current model.
+      const switched = !!current.agent && ag.name !== current.agent
+      const sessionModel =
+        !switched && current.model
+          ? {
+              providerID: ProviderV2.ID.make(current.model.providerID),
+              modelID: ModelV2.ID.make(current.model.id),
+              variant: current.model.variant === "default" ? undefined : current.model.variant,
+            }
+          : undefined
+      const model =
+        input.model ?? sessionModel ?? prev?.info.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
@@ -651,7 +677,9 @@ const layer = Layer.effect(
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
-      const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      const modelVariant = model === sessionModel ? sessionModel.variant : model === prev?.info.model ? prev.info.model.variant : undefined
+      const variant =
+        input.variant ?? modelVariant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
@@ -669,7 +697,6 @@ const layer = Layer.effect(
         format: input.format,
       }
 
-      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (
         current.agent !== info.agent ||
         current.model?.providerID !== info.model.providerID ||
