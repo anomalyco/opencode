@@ -47,6 +47,7 @@ export type ToolChoiceInput =
   | ConstructorParameters<typeof ToolChoice>[0]
   | ToolDefinition
   | string
+export type ToolChoiceMode = Exclude<ToolChoice["type"], "tool">
 
 export type ToolResultInput = Omit<ToolResultPart, "type" | "result"> & {
   readonly result: unknown
@@ -111,7 +112,7 @@ export const model = (input: ModelInput) => {
   })
 }
 
-export const tool = (input: ToolDefinition | ConstructorParameters<typeof ToolDefinition>[0]) => {
+export const toolDefinition = (input: ToolDefinition | ConstructorParameters<typeof ToolDefinition>[0]) => {
   if (input instanceof ToolDefinition) return input
   return new ToolDefinition(input)
 }
@@ -141,10 +142,15 @@ export const toolResult = (input: ToolResultInput): ToolResultPart => ({
 export const toolMessage = (input: ToolResultPart | ToolResultInput) =>
   message({ role: "tool", content: ["type" in input ? input : toolResult(input)] })
 
+export const toolChoiceName = (name: string) => new ToolChoice({ type: "tool", name })
+
+const isToolChoiceMode = (value: string): value is ToolChoiceMode =>
+  value === "auto" || value === "none" || value === "required"
+
 export const toolChoice = (input: ToolChoiceInput) => {
   if (input instanceof ToolChoice) return input
   if (input instanceof ToolDefinition) return new ToolChoice({ type: "tool", name: input.name })
-  if (typeof input === "string") return new ToolChoice({ type: "tool", name: input })
+  if (typeof input === "string") return isToolChoiceMode(input) ? new ToolChoice({ type: input }) : toolChoiceName(input)
   return new ToolChoice(input)
 }
 
@@ -159,7 +165,7 @@ export const request = (input: RequestInput) => {
     ...rest,
     system: systemParts(requestSystem),
     messages: [...(messages?.map(message) ?? []), ...(prompt === undefined ? [] : [user(prompt)])],
-    tools: tools?.map(tool) ?? [],
+    tools: tools?.map(toolDefinition) ?? [],
     toolChoice: requestToolChoice ? toolChoice(requestToolChoice) : undefined,
     generation: generation(requestGeneration),
   })

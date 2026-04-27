@@ -21,11 +21,23 @@ describe("llm constructors", () => {
   })
 
   test("builds tool choices from names and tools", () => {
-    const tool = LLM.tool({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })
+    const tool = LLM.toolDefinition({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })
 
     expect(tool).toBeInstanceOf(ToolDefinition)
     expect(LLM.toolChoice("lookup")).toEqual(new ToolChoice({ type: "tool", name: "lookup" }))
+    expect(LLM.toolChoiceName("required")).toEqual(new ToolChoice({ type: "tool", name: "required" }))
     expect(LLM.toolChoice(tool)).toEqual(new ToolChoice({ type: "tool", name: "lookup" }))
+  })
+
+  test("builds tool choice modes from reserved strings", () => {
+    expect(LLM.toolChoice("auto")).toEqual(new ToolChoice({ type: "auto" }))
+    expect(LLM.toolChoice("none")).toEqual(new ToolChoice({ type: "none" }))
+    expect(LLM.toolChoice("required")).toEqual(new ToolChoice({ type: "required" }))
+    expect(LLM.request({
+      model: LLM.model({ id: "fake-model", provider: "fake", protocol: "openai-chat" }),
+      prompt: "Use tools if needed.",
+      toolChoice: "required",
+    }).toolChoice).toEqual(new ToolChoice({ type: "required" }))
   })
 
   test("builds assistant tool calls and tool result messages", () => {

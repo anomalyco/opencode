@@ -18,7 +18,7 @@ const request = LLM.request({
   generation: { maxTokens: 80, temperature: 0 },
 })
 
-const getWeather = LLM.tool({
+const getWeather = LLM.toolDefinition({
   name: "get_weather",
   description: "Get current weather for a city.",
   inputSchema: {

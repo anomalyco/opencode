@@ -160,7 +160,7 @@ const messages = (input: MessageV2.WithParts): ReadonlyArray<CoreMessage> => {
 }
 
 export const toolDefinition = (input: { readonly model: Provider.Model; readonly tool: Tool.Def }) =>
-  LLM.tool({
+  LLM.toolDefinition({
     name: input.tool.id,
     description: input.tool.description,
     inputSchema: EffectZod.toJsonSchema(input.tool.parameters),
