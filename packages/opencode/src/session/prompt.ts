@@ -634,7 +634,13 @@ export const layer = Layer.effect(
     })
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-      const agentName = input.agent
+      const prev = input.agent
+        ? undefined
+        : (yield* MessageV2.filterCompactedEffect(input.sessionID).pipe(Effect.provideService(Database.Service, database))).findLast(
+            (m): m is SessionV1.WithParts & { info: SessionV1.User } =>
+              m.info.role === "user" && !!m.info.agent,
+          )
+      const agentName = input.agent ?? prev?.info.agent
       const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
@@ -650,7 +656,7 @@ export const layer = Layer.effect(
         .where(eq(SessionTable.id, input.sessionID))
         .get()
         .pipe(Effect.orDie)
-      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      const model = input.model ?? prev?.info.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
