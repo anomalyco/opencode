@@ -149,19 +149,17 @@ Configure agents in your `opencode.json` config file:
       "mode": "primary",
       "model": "anthropic/claude-sonnet-4-20250514",
       "prompt": "{file:./prompts/build.txt}",
-      "tools": {
-        "write": true,
-        "edit": true,
-        "bash": true
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
       }
     },
     "plan": {
       "mode": "primary",
       "model": "anthropic/claude-haiku-4-20250514",
-      "tools": {
-        "write": false,
-        "edit": false,
-        "bash": false
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
       }
     },
     "code-reviewer": {
@@ -169,9 +167,8 @@ Configure agents in your `opencode.json` config file:
       "mode": "subagent",
       "model": "anthropic/claude-sonnet-4-20250514",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
-        "write": false,
-        "edit": false
+      "permission": {
+        "edit": "deny"
       }
     }
   }
@@ -193,10 +190,9 @@ description: Reviews code for quality and best practices
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
-tools:
-  write: false
-  edit: false
-  bash: false
+permission:
+  edit: deny
+  bash: deny
 ---
 
 You are in code review mode. Focus on:
@@ -417,11 +413,38 @@ You can also use wildcards in legacy `tools` entries to control multiple tools a
 
 ### Permissions
 
-You can configure permissions to manage what actions an agent can take. Currently, the permissions for the `edit`, `bash`, and `webfetch` tools can be configured to:
+You can configure permissions to manage what actions an agent can take. Each permission key can be set to:
 
 - `"ask"` — Prompt for approval before running the tool
 - `"allow"` — Allow all operations without approval
 - `"deny"` — Disable the tool
+
+The available permission keys are:
+
+| Key                  | Tools it gates                                                   |
+| -------------------- | ---------------------------------------------------------------- |
+| `read`               | `read`                                                           |
+| `edit`               | `write`, `edit`, `apply_patch`                                   |
+| `glob`               | `glob`                                                           |
+| `grep`               | `grep`                                                           |
+| `list`               | `list`                                                           |
+| `bash`               | `bash`                                                           |
+| `task`               | `task`                                                           |
+| `external_directory` | Any tool that reads or writes files outside the project worktree |
+| `todowrite`          | `todowrite`, `todoread`                                          |
+| `webfetch`           | `webfetch`                                                       |
+| `websearch`          | `websearch`                                                      |
+| `codesearch`         | `codesearch`                                                     |
+| `lsp`                | `lsp`                                                            |
+| `skill`              | `skill`                                                          |
+| `question`           | `question`                                                       |
+| `doom_loop`          | Recovery prompts when an agent appears stuck                     |
+
+`read`, `edit`, `glob`, `grep`, `list`, `bash`, `task`, `external_directory`, `lsp`, and `skill` accept either a shorthand action (`"allow" | "ask" | "deny"`) or an object of glob/pattern → action for fine-grained control. The remaining keys accept the shorthand action only.
+
+:::note
+Permission keys are matched as wildcard patterns against the underlying tool name, so the same syntax works for built-ins, custom tools, and MCP tools — for example `"mymcp_*": "deny"` denies every tool from an MCP server, and `"mymcp_search": "ask"` targets a single one.
+:::
 
 ```json title="opencode.json"
 {
@@ -680,7 +703,7 @@ This interactive command will:
 1. Ask where to save the agent; global or project-specific.
 2. Description of what the agent should do.
 3. Generate an appropriate system prompt and identifier.
-4. Let you select which tools the agent can access.
+4. Let you select which permissions the agent should be allowed (anything you don't select is denied).
 5. Finally, create a markdown file with the agent configuration.
 
 ---
@@ -713,8 +736,8 @@ Do you have an agent you'd like to share? [Submit a PR](https://github.com/anoma
 ---
 description: Writes and maintains project documentation
 mode: subagent
-tools:
-  bash: false
+permission:
+  bash: deny
 ---
 
 You are a technical writer. Create clear, comprehensive documentation.
@@ -735,9 +758,8 @@ Focus on:
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent
-tools:
-  write: false
-  edit: false
+permission:
+  edit: deny
 ---
 
 You are a security expert. Focus on identifying potential security issues.

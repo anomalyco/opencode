@@ -10,7 +10,7 @@ import { LANGUAGE_EXTENSIONS } from "./language"
 import z from "zod"
 import { Schema } from "effect"
 import type * as LSPServer from "./server"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { withTimeout } from "../util/timeout"
 import { Filesystem } from "../util"
 

@@ -1,9 +1,8 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
-import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "../../installation"
-import { Global } from "../../global"
+import { Global } from "@opencode-ai/core/global"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
@@ -58,7 +57,7 @@ export const UninstallCommand = {
     UI.empty()
     prompts.intro("Uninstall OpenCode")
 
-    const method = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.method()))
+    const method = await Installation.method()
     prompts.log.info(`Installation method: ${method}`)
 
     const targets = await collectRemovalTargets(args, method)
