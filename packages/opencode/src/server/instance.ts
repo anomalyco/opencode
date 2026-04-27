@@ -24,6 +24,7 @@ import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { EnvRoutes } from "./routes/env"
 import { ExperimentalRoutes } from "./routes/experimental"
+import { ProjectSummaryRoutes } from "./routes/project-summary"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
 import { errorHandler } from "./middleware"
@@ -44,6 +45,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/config", ConfigRoutes())
     .route("/env", EnvRoutes())
     .route("/experimental", ExperimentalRoutes())
+    .route("/project-summary", ProjectSummaryRoutes())
     .route("/session", SessionRoutes())
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())

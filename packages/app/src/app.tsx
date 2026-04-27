@@ -41,6 +41,7 @@ import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
+import { ProjectSummaryBridge } from "@/components/project-summary-bridge"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
@@ -288,6 +289,7 @@ export function AppInterface(props: {
       disableHealthCheck={props.disableHealthCheck}
       servers={props.servers}
     >
+      <ProjectSummaryBridge />
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
         <ServerKey>
           <GlobalSDKProvider>
