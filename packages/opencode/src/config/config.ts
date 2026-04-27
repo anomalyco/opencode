@@ -603,7 +603,6 @@ export const layer = Layer.effect(
               { concurrency: 2 },
             )
             if (Option.isSome(tokenOpt)) {
-              process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value
               yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
             }
 
