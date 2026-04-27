@@ -33,8 +33,8 @@ import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
 import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
-import { Glob } from "@opencode-ai/shared/util/glob"
 import { Npm } from "@opencode-ai/core/npm"
+import { Glob } from "@opencode-ai/core/util/glob"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
 // Custom merge function that concatenates array fields instead of replacing them
