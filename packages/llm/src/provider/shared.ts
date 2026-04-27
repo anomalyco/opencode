@@ -9,6 +9,13 @@ export const decodeJson = Schema.decodeUnknownSync(Json)
 export const encodeJson = Schema.encodeSync(Json)
 
 /**
+ * Plain-record narrowing. Excludes arrays so adapters checking nested JSON
+ * Schema fragments don't accidentally treat a tuple as a key/value bag.
+ */
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+/**
  * Streaming tool-call accumulator. Adapters that build a tool call across
  * multiple `tool-input-delta` chunks store the partial JSON input string here
  * and finalize it with `parseToolInput` once the call completes. Anthropic

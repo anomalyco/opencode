@@ -256,7 +256,6 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "length") return "length"
   if (reason === "content_filter") return "content-filter"
   if (reason === "function_call" || reason === "tool_calls") return "tool-calls"
-  if (reason === undefined || reason === null) return "unknown"
   return "unknown"
 }
 

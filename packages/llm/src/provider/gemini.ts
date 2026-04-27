@@ -151,8 +151,7 @@ const baseUrl = (request: LLMRequest) =>
 
 const mediaData = ProviderShared.mediaBytes
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+const isRecord = ProviderShared.isRecord
 
 // Tool-schema conversion has two distinct concerns:
 //

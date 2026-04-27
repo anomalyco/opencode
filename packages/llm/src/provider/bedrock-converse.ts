@@ -279,7 +279,7 @@ const decodeChunk = (data: unknown) =>
       ProviderShared.chunkError(
         ADAPTER,
         "Invalid Bedrock Converse stream chunk",
-        typeof data === "string" ? data : JSON.stringify(data),
+        typeof data === "string" ? data : ProviderShared.encodeJson(data),
       ),
   })
 
@@ -558,10 +558,6 @@ const signRequest = (input: {
 const toHttp = Effect.fn("BedrockConverse.toHttp")(function* (target: BedrockConverseTarget, request: LLMRequest) {
   const url = `${baseUrl(request)}/model/${encodeURIComponent(target.modelId)}/converse-stream`
   const body = encodeTarget(target)
-  const baseHeaders: Record<string, string> = {
-    ...request.model.headers,
-    "content-type": "application/json",
-  }
 
   if (isBearerAuth(request.model.headers)) {
     return ProviderShared.jsonPost({ url, body, headers: request.model.headers })
@@ -573,10 +569,16 @@ const toHttp = Effect.fn("BedrockConverse.toHttp")(function* (target: BedrockCon
       "Bedrock Converse requires either a Bearer API key in headers or AWS credentials in model.native.aws_credentials",
     )
   }
-  // SigV4 signs the request including content-type; keep `baseHeaders` so the
-  // signed payload matches what `jsonPost` ultimately sends.
-  const signed = yield* signRequest({ url, body, headers: baseHeaders, credentials })
-  return ProviderShared.jsonPost({ url, body, headers: { ...baseHeaders, ...signed } })
+  // SigV4 signs the request including `content-type`. The signing input must
+  // match what `jsonPost` ultimately sends, so set `content-type` here for
+  // signing — `jsonPost` then sets the same value (caller-supplied keys win
+  // on equal case) and the signature stays valid.
+  const headersForSigning: Record<string, string> = {
+    ...request.model.headers,
+    "content-type": "application/json",
+  }
+  const signed = yield* signRequest({ url, body, headers: headersForSigning, credentials })
+  return ProviderShared.jsonPost({ url, body, headers: { ...headersForSigning, ...signed } })
 })
 
 const mapFinishReason = (reason: string): FinishReason => {
@@ -765,8 +767,14 @@ const consumeFrames = (state: FrameBufferState, chunk: Uint8Array) =>
       const payload = utf8.decode(decoded.body)
       if (!payload) continue
       // The AWS event stream pads short payloads with a `p` field. Drop it
-      // before handing the object to the chunk schema.
-      const parsed = JSON.parse(payload) as Record<string, unknown>
+      // before handing the object to the chunk schema. JSON decode goes
+      // through the shared Schema-driven codec to satisfy the package rule
+      // against ad-hoc `JSON.parse` calls.
+      const parsed = (yield* ProviderShared.parseJson(
+        ADAPTER,
+        payload,
+        "Failed to parse Bedrock Converse event-stream payload",
+      )) as Record<string, unknown>
       delete parsed.p
       out.push({ [eventType]: parsed })
     }

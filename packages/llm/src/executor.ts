@@ -22,12 +22,21 @@ const statusError = (response: HttpClientResponse.HttpClientResponse) =>
   })
 
 const toHttpError = (error: unknown) => {
-  if (Cause.isTimeoutError(error)) return new TransportError({ message: error.message })
+  if (Cause.isTimeoutError(error)) return new TransportError({ message: error.message, reason: "Timeout" })
   if (!HttpClientError.isHttpClientError(error)) return new TransportError({ message: "HTTP transport failed" })
+  const url = "request" in error ? error.request.url : undefined
   if (error.reason._tag === "TransportError") {
-    return new TransportError({ message: error.reason.description ?? "HTTP transport failed" })
+    return new TransportError({
+      message: error.reason.description ?? "HTTP transport failed",
+      reason: error.reason._tag,
+      url,
+    })
   }
-  return new TransportError({ message: `HTTP transport failed: ${error.reason._tag}` })
+  return new TransportError({
+    message: `HTTP transport failed: ${error.reason._tag}`,
+    reason: error.reason._tag,
+    url,
+  })
 }
 
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(

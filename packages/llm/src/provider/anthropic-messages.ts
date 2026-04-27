@@ -475,9 +475,9 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
       if (!current) {
         return yield* ProviderShared.chunkError(ADAPTER, "Anthropic Messages tool argument delta is missing its tool call")
       }
-      const next = { ...current, input: `${current.input}${chunk.delta.partial_json ?? ""}` }
+      const next = { ...current, input: `${current.input}${chunk.delta.partial_json}` }
       return [{ ...state, tools: { ...state.tools, [chunk.index]: next } }, [
-        { type: "tool-input-delta" as const, id: next.id, name: next.name, text: chunk.delta.partial_json ?? "" },
+        { type: "tool-input-delta" as const, id: next.id, name: next.name, text: chunk.delta.partial_json },
       ]] as const
     }
 

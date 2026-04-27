@@ -379,6 +379,12 @@ export class ProviderRequestError extends Schema.TaggedErrorClass<ProviderReques
 
 export class TransportError extends Schema.TaggedErrorClass<TransportError>()("LLM.TransportError", {
   message: Schema.String,
+  // Optional originating reason — populated for structured HTTP transport
+  // failures (e.g. `RequestError`, `ResponseError`, `IsTimeoutError`) so
+  // consumers can render the underlying cause without parsing the message.
+  reason: Schema.optional(Schema.String),
+  // Optional URL of the failing request when the transport layer surfaces it.
+  url: Schema.optional(Schema.String),
 }) {}
 
 /**
