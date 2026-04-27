@@ -135,13 +135,22 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
+    const baseFetch = props.fetch ?? fetch
+    const authedFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!props.headers) return baseFetch(input, init)
+      const base = new Headers(props.headers)
+      const extra = new Headers(init?.headers)
+      extra.forEach((value, key) => base.set(key, value))
+      return baseFetch(input, { ...init, headers: base })
+    }
+
     return {
       get client() {
         return sdk
       },
       directory: props.directory,
       event: emitter,
-      fetch: props.fetch ?? fetch,
+      fetch: authedFetch,
       url: props.url,
       multiRootWorkspaceID,
       setMultiRootWorkspaceID,

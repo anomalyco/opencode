@@ -131,6 +131,17 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
               break
             }
           }
+          // Multi-root: also discover instruction files from extra workspace roots.
+          for (const root of ctx.roots) {
+            if (root === ctx.directory) continue
+            for (const file of FILES) {
+              const matches = yield* fs.findUp(file, root, root)
+              if (matches.length > 0) {
+                matches.forEach((item) => paths.add(path.resolve(item)))
+                break
+              }
+            }
+          }
         }
 
         for (const file of globalFiles()) {

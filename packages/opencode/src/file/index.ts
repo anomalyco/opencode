@@ -379,22 +379,25 @@ export const layer = Layer.effect(
 
         next.dirs = Array.from(dirs).toSorted()
       } else {
-        const files = yield* rg.files({ cwd: ctx.directory }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => [...chunk]),
-        )
         const seen = new Set<string>()
-        for (const file of files) {
-          next.files.push(file)
-          let current = file
-          while (true) {
-            const dir = path.dirname(current)
-            if (dir === ".") break
-            if (dir === current) break
-            current = dir
-            if (seen.has(dir)) continue
-            seen.add(dir)
-            next.dirs.push(dir + "/")
+        for (const root of ctx.roots) {
+          const rootFiles = yield* rg.files({ cwd: root }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => [...chunk]),
+          )
+          for (const file of rootFiles) {
+            const qualified = root === ctx.directory ? file : path.join(root, file)
+            next.files.push(qualified)
+            let current = qualified
+            while (true) {
+              const dir = path.dirname(current)
+              if (dir === ".") break
+              if (dir === current) break
+              current = dir
+              if (seen.has(dir)) continue
+              seen.add(dir)
+              next.dirs.push(dir + "/")
+            }
           }
         }
       }

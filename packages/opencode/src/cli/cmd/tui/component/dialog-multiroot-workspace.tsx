@@ -82,6 +82,7 @@ export function DialogMultiRootWorkspaceList() {
         log.error("sync failed", { error: errorMessage(err) })
         toast.show({ message: `Sync failed: ${errorMessage(err)}`, variant: "error" })
       })
+      await project.sync()
       toast.show({
         message: `Workspace active: ${workspace.name} (${workspace.folders.length} folder${workspace.folders.length === 1 ? "" : "s"})`,
         variant: "success",
