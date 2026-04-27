@@ -601,7 +601,7 @@ export const BashTool = Tool.define(
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
               yield* ask(ctx, scan)
 
-              return yield* run(
+              const result = yield* run(
                 {
                   shell,
                   name,
@@ -613,6 +613,7 @@ export const BashTool = Tool.define(
                 },
                 ctx,
               )
+              return { ...result, args: params }
             }),
         }
       })

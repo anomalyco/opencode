@@ -144,6 +144,7 @@ export const GrepTool = Tool.define(
               truncated,
             },
             output: output.join("\n"),
+            args: params,
           }
         }).pipe(Effect.orDie),
     }
