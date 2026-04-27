@@ -10,7 +10,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { Database } from "@/storage/db"
 import { SessionTable } from "@/session/session.sql"
-import { eq, and, inArray } from "drizzle-orm"
+import { eq, and, inArray, type SQL } from "drizzle-orm"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
@@ -85,7 +85,10 @@ export const SessionMoveCommand = cmd({
         describe: "session ID to move (can be specified multiple times)",
         type: "string",
         array: true,
-        demandOption: true,
+      })
+      .option("from-dir", {
+        describe: "move all sessions matching this directory ('cwd' for current working directory)",
+        type: "string",
       })
       .option("directory", {
         describe: "new directory for the sessions",
@@ -100,16 +103,33 @@ export const SessionMoveCommand = cmd({
       UI.error("At least one of --directory or --project is required")
       process.exit(1)
     }
+    if (!args.id?.length && !args.fromDir) {
+      UI.error("At least one of --id or --from-dir is required")
+      process.exit(1)
+    }
     await bootstrap(process.cwd(), async () => {
-      const ids = args.id.map((id) => SessionID.make(id))
+      const conditions: SQL[] = []
+      if (args.id?.length) {
+        const ids = args.id.map((id) => SessionID.make(id))
+        conditions.push(inArray(SessionTable.id, ids))
+      }
+      if (args.fromDir) {
+        const dir = args.fromDir === "cwd" ? process.cwd() : Filesystem.resolve(args.fromDir)
+        conditions.push(eq(SessionTable.directory, dir))
+      }
       const set: Record<string, string> = {}
       if (args.directory) set.directory = Filesystem.resolve(args.directory)
       if (args.project) set.project_id = args.project
       const result = Database.use((db) =>
-        db.update(SessionTable).set(set).where(inArray(SessionTable.id, ids)).returning().all(),
+        db
+          .update(SessionTable)
+          .set(set)
+          .where(conditions.length === 1 ? conditions[0] : and(...conditions))
+          .returning()
+          .all(),
       )
       if (result.length === 0) {
-        UI.error("No sessions found matching the given IDs")
+        UI.error("No sessions found matching the given criteria")
         process.exit(1)
       }
       for (const row of result) {
