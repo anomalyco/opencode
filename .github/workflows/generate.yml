@@ -1,9 +1,7 @@
 name: generate
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   generate:
