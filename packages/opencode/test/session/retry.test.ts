@@ -230,6 +230,18 @@ describe("session.retry.retryable", () => {
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Response decompression failed")
   })
+
+  test("retries SSE read timed out errors", () => {
+    const error = new MessageV2.APIError({
+      message: "SSE stream idle timeout",
+      isRetryable: true,
+      metadata: { code: "SSE_TIMEOUT", message: "SSE read timed out" },
+    }).toObject() as MessageV2.APIError
+
+    const retryable = SessionRetry.retryable(error)
+    expect(retryable).toBeDefined()
+    expect(retryable).toBe("SSE stream idle timeout")
+  })
 })
 
 describe("session.message-v2.fromError", () => {
@@ -315,5 +327,14 @@ describe("session.message-v2.fromError", () => {
     expect(MessageV2.APIError.isInstance(result)).toBe(true)
     expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
     expect(SessionRetry.retryable(result)).toBe("An error occurred while processing your request.")
+  })
+
+  test("maps SSE read timed out to retryable APIError", () => {
+    const error = new Error("SSE read timed out")
+    const result = MessageV2.fromError(error, { providerID }) as MessageV2.APIError
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect(result.data.isRetryable).toBe(true)
+    expect(result.data.message).toBe("SSE stream idle timeout")
+    expect(result.data.metadata?.code).toBe("SSE_TIMEOUT")
   })
 })

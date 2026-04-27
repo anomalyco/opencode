@@ -1115,6 +1115,15 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case e instanceof Error && e.message === "SSE read timed out":
+      return new APIError(
+        {
+          message: "SSE stream idle timeout",
+          isRetryable: true,
+          metadata: { code: "SSE_TIMEOUT", message: e.message },
+        },
+        { cause: e },
+      ).toObject()
     case (e as SystemError)?.code === "ECONNRESET":
       return new APIError(
         {
