@@ -24,6 +24,7 @@ import { InstancePaths } from "./httpapi/instance"
 import { McpPaths } from "./httpapi/mcp"
 import { SessionPaths } from "./httpapi/session"
 import { SyncPaths } from "./httpapi/sync"
+import { TuiPaths } from "./httpapi/tui"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -130,6 +131,19 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.delete(SessionPaths.deleteMessage, (c) => handler(c.req.raw, context))
     app.delete(SessionPaths.deletePart, (c) => handler(c.req.raw, context))
     app.patch(SessionPaths.updatePart, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.appendPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openHelp, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openSessions, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openThemes, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openModels, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.submitPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.clearPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.executeCommand, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.showToast, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.publish, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.selectSession, (c) => handler(c.req.raw, context))
+    app.get(TuiPaths.controlNext, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.controlResponse, (c) => handler(c.req.raw, context))
   }
 
   return app

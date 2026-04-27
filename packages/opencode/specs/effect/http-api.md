@@ -329,19 +329,19 @@ This checklist tracks bridge parity only. Checked routes are available through t
 
 ### TUI Routes
 
-- [ ] `POST /tui/append-prompt` - append prompt.
-- [ ] `POST /tui/open-help` - open help.
-- [ ] `POST /tui/open-sessions` - open sessions.
-- [ ] `POST /tui/open-themes` - open themes.
-- [ ] `POST /tui/open-models` - open models.
-- [ ] `POST /tui/submit-prompt` - submit prompt.
-- [ ] `POST /tui/clear-prompt` - clear prompt.
-- [ ] `POST /tui/execute-command` - execute command.
-- [ ] `POST /tui/show-toast` - show toast.
-- [ ] `POST /tui/publish` - publish TUI event.
-- [ ] `POST /tui/select-session` - select session.
-- [ ] `GET /tui/control/next` - get next TUI request.
-- [ ] `POST /tui/control/response` - submit TUI control response.
+- [x] `POST /tui/append-prompt` - append prompt.
+- [x] `POST /tui/open-help` - open help.
+- [x] `POST /tui/open-sessions` - open sessions.
+- [x] `POST /tui/open-themes` - open themes.
+- [x] `POST /tui/open-models` - open models.
+- [x] `POST /tui/submit-prompt` - submit prompt.
+- [x] `POST /tui/clear-prompt` - clear prompt.
+- [x] `POST /tui/execute-command` - execute command.
+- [x] `POST /tui/show-toast` - show toast.
+- [x] `POST /tui/publish` - publish TUI event.
+- [x] `POST /tui/select-session` - select session.
+- [x] `GET /tui/control/next` - get next TUI request.
+- [x] `POST /tui/control/response` - submit TUI control response.
 
 ## Remaining PR Plan
 
@@ -358,8 +358,8 @@ Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays rev
 9. [x] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
 10. [x] Bridge remaining session mutation and prompt routes.
 11. [ ] Replace event SSE with non-Hono Effect HTTP.
-12. [ ] Replace pty websocket/control routes with non-Hono Effect HTTP.
-13. [ ] Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer.
+12. [x] Replace pty websocket/control routes with non-Hono Effect HTTP.
+13. [x] Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer.
 14. [ ] Switch OpenAPI/SDK generation to Effect routes and compare SDK output.
 15. [ ] Flip ported JSON routes default-on, keep a short fallback, then delete replaced Hono route files.
 

@@ -1,12 +1,14 @@
 import { Effect, Layer, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
+import { Bus } from "@/bus"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Observability } from "@/effect"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
 import { Pty } from "@/pty"
+import { Session } from "@/session"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util"
 import { authorizationLayer } from "./auth"
@@ -23,6 +25,7 @@ import { ProviderApi, providerHandlers } from "./provider"
 import { QuestionApi, questionHandlers } from "./question"
 import { SessionApi, sessionHandlers } from "./session"
 import { SyncApi, syncHandlers } from "./sync"
+import { TuiApi, tuiHandlers } from "./tui"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
@@ -83,6 +86,11 @@ export const routes = Layer.mergeAll(
   HttpApiBuilder.layer(ProviderApi).pipe(Layer.provide(providerHandlers)),
   HttpApiBuilder.layer(SessionApi).pipe(Layer.provide(sessionHandlers)),
   HttpApiBuilder.layer(SyncApi).pipe(Layer.provide(syncHandlers)),
+  HttpApiBuilder.layer(TuiApi).pipe(
+    Layer.provide(tuiHandlers),
+    Layer.provide(Session.defaultLayer),
+    Layer.provide(Bus.layer),
+  ),
   HttpApiBuilder.layer(WorkspaceApi).pipe(Layer.provide(workspaceHandlers)),
 ).pipe(
   Layer.provide(authorizationLayer),
