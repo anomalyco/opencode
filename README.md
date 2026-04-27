@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://opencode.ai">
-    <img src="packages/console/app/src/asset/logo-ornate.svg" alt="Grafo logo">
+    <img src="packages/console/app/src/asset/logo.svg" alt="Grafo logo">
   </a>
 </p>
 <p align="center">Grafo is the open source AI coding agent for the terminal.</p>
