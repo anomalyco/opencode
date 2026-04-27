@@ -1,9 +1,8 @@
 import { Effect, Schema, Stream } from "effect"
-import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import {
-  InvalidRequestError,
   Usage,
   type FinishReason,
   type LLMEvent,
@@ -149,7 +148,7 @@ interface ParserState {
   readonly tools: Record<string, ToolAccumulator>
 }
 
-const invalid = (message: string) => new InvalidRequestError({ message })
+const invalid = ProviderShared.invalidRequest
 
 const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.openai.com/v1").replace(/\/+$/, "")
 
@@ -239,13 +238,11 @@ const prepare = Effect.fn("OpenAIResponses.prepare")(function* (request: LLMRequ
 
 const toHttp = (target: OpenAIResponsesTarget, request: LLMRequest) =>
   Effect.succeed(
-    HttpClientRequest.post(`${baseUrl(request)}/responses`).pipe(
-      HttpClientRequest.setHeaders({
-        ...request.model.headers,
-        "content-type": "application/json",
-      }),
-      HttpClientRequest.bodyText(encodeTarget(target), "application/json"),
-    ),
+    ProviderShared.jsonPost({
+      url: `${baseUrl(request)}/responses`,
+      body: encodeTarget(target),
+      headers: request.model.headers,
+    }),
   )
 
 const mapUsage = (usage: OpenAIResponsesUsage | undefined) => {
@@ -396,7 +393,7 @@ export const adapter = Adapter.define<OpenAIResponsesDraft, OpenAIResponsesTarge
   protocol: "openai-responses",
   redact: (target) => target,
   prepare,
-  validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
+  validate: ProviderShared.validateWith(decodeTarget),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
 })

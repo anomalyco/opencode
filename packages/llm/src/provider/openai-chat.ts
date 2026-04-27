@@ -1,9 +1,8 @@
 import { Effect, Schema, Stream } from "effect"
-import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import {
-  InvalidRequestError,
   Usage,
   type FinishReason,
   type ContentPart,
@@ -164,7 +163,7 @@ interface ParserState {
 
 const decodeTarget = Schema.decodeUnknownEffect(OpenAIChatDraft.pipe(Schema.decodeTo(OpenAIChatTarget)))
 
-const invalid = (message: string) => new InvalidRequestError({ message })
+const invalid = ProviderShared.invalidRequest
 
 const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.openai.com/v1").replace(/\/+$/, "")
 
@@ -263,13 +262,11 @@ const prepare = Effect.fn("OpenAIChat.prepare")(function* (request: LLMRequest) 
 
 const toHttp = (target: OpenAIChatTarget, request: LLMRequest) =>
   Effect.succeed(
-    HttpClientRequest.post(`${baseUrl(request)}/chat/completions`).pipe(
-      HttpClientRequest.setHeaders({
-        ...request.model.headers,
-        "content-type": "application/json",
-      }),
-      HttpClientRequest.bodyText(encodeTarget(target), "application/json"),
-    ),
+    ProviderShared.jsonPost({
+      url: `${baseUrl(request)}/chat/completions`,
+      body: encodeTarget(target),
+      headers: request.model.headers,
+    }),
   )
 
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
@@ -371,7 +368,7 @@ export const adapter = Adapter.define<OpenAIChatDraft, OpenAIChatTarget>({
   protocol: "openai-chat",
   redact: (target) => target,
   prepare,
-  validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
+  validate: ProviderShared.validateWith(decodeTarget),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
 })

@@ -2,11 +2,10 @@ import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { AwsV4Signer } from "aws4fetch"
 import { Effect, Option, Schema, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import {
-  InvalidRequestError,
   Usage,
   type FinishReason,
   type LLMEvent,
@@ -225,7 +224,7 @@ const decodeChunk = (data: unknown) =>
 const encodeTarget = Schema.encodeSync(Schema.fromJsonString(BedrockConverseTarget))
 const decodeTarget = Schema.decodeUnknownEffect(BedrockConverseDraft.pipe(Schema.decodeTo(BedrockConverseTarget)))
 
-const invalid = (message: string) => new InvalidRequestError({ message })
+const invalid = ProviderShared.invalidRequest
 
 const region = (request: LLMRequest) => {
   const fromNative = request.model.native?.aws_region
@@ -401,9 +400,7 @@ const signRequest = (input: {
       return Object.fromEntries(signed.headers.entries())
     },
     catch: (error) =>
-      new InvalidRequestError({
-        message: `Bedrock Converse SigV4 signing failed: ${error instanceof Error ? error.message : String(error)}`,
-      }),
+      invalid(`Bedrock Converse SigV4 signing failed: ${error instanceof Error ? error.message : String(error)}`),
   })
 
 const toHttp = Effect.fn("BedrockConverse.toHttp")(function* (target: BedrockConverseTarget, request: LLMRequest) {
@@ -415,10 +412,7 @@ const toHttp = Effect.fn("BedrockConverse.toHttp")(function* (target: BedrockCon
   }
 
   if (isBearerAuth(request.model.headers)) {
-    return HttpClientRequest.post(url).pipe(
-      HttpClientRequest.setHeaders(baseHeaders),
-      HttpClientRequest.bodyText(body, "application/json"),
-    )
+    return ProviderShared.jsonPost({ url, body, headers: request.model.headers })
   }
 
   const credentials = credentialsFromInput(request)
@@ -427,11 +421,10 @@ const toHttp = Effect.fn("BedrockConverse.toHttp")(function* (target: BedrockCon
       "Bedrock Converse requires either a Bearer API key in headers or AWS credentials in model.native.aws_credentials",
     )
   }
+  // SigV4 signs the request including content-type; keep `baseHeaders` so the
+  // signed payload matches what `jsonPost` ultimately sends.
   const signed = yield* signRequest({ url, body, headers: baseHeaders, credentials })
-  return HttpClientRequest.post(url).pipe(
-    HttpClientRequest.setHeaders({ ...baseHeaders, ...signed }),
-    HttpClientRequest.bodyText(body, "application/json"),
-  )
+  return ProviderShared.jsonPost({ url, body, headers: { ...baseHeaders, ...signed } })
 })
 
 const mapFinishReason = (reason: string): FinishReason => {
@@ -666,7 +659,7 @@ export const adapter = Adapter.define<BedrockConverseDraft, BedrockConverseTarge
   protocol: "bedrock-converse",
   redact: (target) => target,
   prepare,
-  validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
+  validate: ProviderShared.validateWith(decodeTarget),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: parseStream,
 })

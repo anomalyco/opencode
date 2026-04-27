@@ -1,9 +1,8 @@
 import { Effect, Schema, Stream } from "effect"
-import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import {
-  InvalidRequestError,
   Usage,
   type CacheHint,
   type FinishReason,
@@ -205,7 +204,7 @@ const decodeChunk = (data: string) =>
 const encodeTarget = Schema.encodeSync(AnthropicTargetJson)
 const decodeTarget = Schema.decodeUnknownEffect(AnthropicMessagesDraft.pipe(Schema.decodeTo(AnthropicMessagesTarget)))
 
-const invalid = (message: string) => new InvalidRequestError({ message })
+const invalid = ProviderShared.invalidRequest
 
 const baseUrl = (request: LLMRequest) => (request.model.baseURL ?? "https://api.anthropic.com/v1").replace(/\/+$/, "")
 
@@ -348,14 +347,11 @@ const prepare = Effect.fn("AnthropicMessages.prepare")(function* (request: LLMRe
 
 const toHttp = (target: AnthropicMessagesTarget, request: LLMRequest) =>
   Effect.succeed(
-    HttpClientRequest.post(`${baseUrl(request)}/messages`).pipe(
-      HttpClientRequest.setHeaders({
-        "anthropic-version": "2023-06-01",
-        ...request.model.headers,
-        "content-type": "application/json",
-      }),
-      HttpClientRequest.bodyText(encodeTarget(target), "application/json"),
-    ),
+    ProviderShared.jsonPost({
+      url: `${baseUrl(request)}/messages`,
+      body: encodeTarget(target),
+      headers: { "anthropic-version": "2023-06-01", ...request.model.headers },
+    }),
   )
 
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
@@ -529,7 +525,7 @@ export const adapter = Adapter.define<AnthropicMessagesDraft, AnthropicMessagesT
   protocol: "anthropic-messages",
   redact: (target) => target,
   prepare,
-  validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
+  validate: ProviderShared.validateWith(decodeTarget),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
 })

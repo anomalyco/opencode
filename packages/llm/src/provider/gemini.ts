@@ -1,10 +1,9 @@
 import { Buffer } from "node:buffer"
 import { Effect, Schema, Stream } from "effect"
-import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
 import {
-  InvalidRequestError,
   Usage,
   type FinishReason,
   type LLMEvent,
@@ -151,7 +150,7 @@ const decodeChunk = (data: string) =>
 const encodeTarget = Schema.encodeSync(GeminiTargetJson)
 const decodeTarget = Schema.decodeUnknownEffect(GeminiDraft.pipe(Schema.decodeTo(GeminiTarget)))
 
-const invalid = (message: string) => new InvalidRequestError({ message })
+const invalid = ProviderShared.invalidRequest
 
 const baseUrl = (request: LLMRequest) =>
   (request.model.baseURL ?? "https://generativelanguage.googleapis.com/v1beta").replace(/\/+$/, "")
@@ -315,13 +314,11 @@ const prepare = Effect.fn("Gemini.prepare")(function* (request: LLMRequest) {
 
 const toHttp = (target: GeminiTarget, request: LLMRequest) =>
   Effect.succeed(
-    HttpClientRequest.post(`${baseUrl(request)}/models/${request.model.id}:streamGenerateContent?alt=sse`).pipe(
-      HttpClientRequest.setHeaders({
-        ...request.model.headers,
-        "content-type": "application/json",
-      }),
-      HttpClientRequest.bodyText(encodeTarget(target), "application/json"),
-    ),
+    ProviderShared.jsonPost({
+      url: `${baseUrl(request)}/models/${request.model.id}:streamGenerateContent?alt=sse`,
+      body: encodeTarget(target),
+      headers: request.model.headers,
+    }),
   )
 
 const mapUsage = (usage: GeminiUsage | undefined) => {
@@ -412,7 +409,7 @@ export const adapter = Adapter.define<GeminiDraft, GeminiTarget>({
   protocol: "gemini",
   redact: (target) => target,
   prepare,
-  validate: (draft) => decodeTarget(draft).pipe(Effect.mapError((error) => invalid(error.message))),
+  validate: ProviderShared.validateWith(decodeTarget),
   toHttp: (target, context) => toHttp(target, context.request),
   parse: events,
 })

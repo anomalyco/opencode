@@ -1,7 +1,7 @@
 import { Cause, Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
-import type { HttpClientResponse } from "effect/unstable/http"
-import { ProviderChunkError } from "../schema"
+import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import { InvalidRequestError, ProviderChunkError } from "../schema"
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
@@ -113,5 +113,42 @@ export const sse = <Chunk, State, Event>(input: {
   ) => Effect.Effect<readonly [State, ReadonlyArray<Event>], ProviderChunkError>
   readonly onHalt?: (state: State) => ReadonlyArray<Event>
 }): Stream.Stream<Event, ProviderChunkError> => framed({ ...input, framing: sseFraming })
+
+/**
+ * Canonical `InvalidRequestError` constructor. Lift one-line `const invalid =
+ * (message) => new InvalidRequestError({ message })` aliases out of every
+ * adapter so the error constructor lives in one place. If we ever extend
+ * `InvalidRequestError` with adapter context or trace metadata, the change
+ * lands here.
+ */
+export const invalidRequest = (message: string) => new InvalidRequestError({ message })
+
+/**
+ * Build a `validate` step from a Schema decoder. Replaces the per-adapter
+ * lambda body `(draft) => decode(draft).pipe(Effect.mapError((e) =>
+ * invalid(e.message)))`. Any decode error is translated into
+ * `InvalidRequestError` carrying the original parse-error message.
+ */
+export const validateWith =
+  <A, I, E extends { readonly message: string }>(decode: (input: I) => Effect.Effect<A, E>) =>
+  (draft: I) =>
+    decode(draft).pipe(Effect.mapError((error) => invalidRequest(error.message)))
+
+/**
+ * Build an HTTP POST with a JSON body. Sets `content-type: application/json`
+ * automatically (callers can't override it — every adapter today places it
+ * last so caller headers win on everything else) and merges caller-supplied
+ * headers. The body is passed pre-encoded so adapters can choose between
+ * `Schema.encodeSync(target)` and `ProviderShared.encodeJson(target)`.
+ */
+export const jsonPost = (input: {
+  readonly url: string
+  readonly body: string
+  readonly headers?: Record<string, string>
+}) =>
+  HttpClientRequest.post(input.url).pipe(
+    HttpClientRequest.setHeaders({ ...input.headers, "content-type": "application/json" }),
+    HttpClientRequest.bodyText(input.body, "application/json"),
+  )
 
 export * as ProviderShared from "./shared"
