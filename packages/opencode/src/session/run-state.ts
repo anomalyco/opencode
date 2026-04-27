@@ -1,5 +1,5 @@
-import { InstanceState } from "@/effect"
-import { Runner } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
+import { Runner } from "@/effect/runner"
 import { Effect, Layer, Scope, Context } from "effect"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"

@@ -1,5 +1,5 @@
 import { Bus } from "@/bus"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http"

@@ -1,5 +1,5 @@
 import { Global } from "@opencode-ai/core/global"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { rename, rm } from "fs/promises"
 import { createSignal, type Setter } from "solid-js"

@@ -11,9 +11,9 @@ import { AsyncQueue } from "@/util/queue"
 import { Instance } from "../../project/instance"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Log } from "../../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { lazy } from "../../util/lazy"
-import { Config } from "../../config"
+import { Config } from "@/config/config"
 import { errors } from "../error"
 
 const log = Log.create({ service: "server" })
