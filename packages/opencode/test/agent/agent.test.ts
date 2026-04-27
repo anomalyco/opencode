@@ -188,6 +188,7 @@ it.instance(
       expect(custom?.description).toBe("My custom agent")
       expect(custom?.temperature).toBe(0.5)
       expect(custom?.topP).toBe(0.9)
+      expect(custom?.ignoreInstructions).toBe(true)
       expect(custom?.native).toBe(false)
       expect(custom?.mode).toBe("all")
     }),
@@ -199,6 +200,7 @@ it.instance(
           description: "My custom agent",
           temperature: 0.5,
           top_p: 0.9,
+          ignore_instructions: true,
         },
       },
     },

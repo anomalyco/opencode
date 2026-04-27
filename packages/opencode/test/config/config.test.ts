@@ -669,6 +669,7 @@ test("handles agent configuration", async () => {
             model: "test/model",
             temperature: 0.7,
             description: "test agent",
+            ignore_instructions: true,
           },
         },
       })
@@ -683,8 +684,10 @@ test("handles agent configuration", async () => {
           model: "test/model",
           temperature: 0.7,
           description: "test agent",
+          ignore_instructions: true,
         }),
       )
+      expect(config.agent?.["test_agent"]?.options).not.toHaveProperty("ignore_instructions")
     },
   })
 })

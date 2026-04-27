@@ -235,19 +235,17 @@ describe("Instruction.system", () => {
       )
     }),
   )
-})
 
-describe("Instruction.systemPaths global config", () => {
-  it.live("uses Global.Service config AGENTS.md", () =>
-    Effect.gen(function* () {
-      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
-      const projectTmp = yield* tmpdirScoped()
-
-      yield* Effect.gen(function* () {
+  it.live("returns empty when agent ignores instructions", () =>
+    withFiles({ "AGENTS.md": "# Project Instructions" }, () =>
+      Effect.gen(function* () {
         const svc = yield* Instruction.Service
-        const paths = yield* svc.systemPaths()
-        expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
-      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
-    }),
+        const paths = yield* svc.systemPaths({ ignoreInstructions: true })
+        expect(paths.size).toBe(0)
+
+        const rules = yield* svc.system({ ignoreInstructions: true })
+        expect(rules).toEqual([])
+      }),
+    ),
   )
 })

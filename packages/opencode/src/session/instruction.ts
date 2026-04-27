@@ -17,6 +17,8 @@ const files = (disableClaudeCodePrompt: boolean) => [
   "CONTEXT.md", // deprecated
 ]
 
+type AgentInstructions = { ignoreInstructions?: boolean }
+
 function extract(messages: MessageV2.WithParts[]) {
   const paths = new Set<string>()
   for (const msg of messages) {
@@ -36,8 +38,8 @@ function extract(messages: MessageV2.WithParts[]) {
 
 export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
-  readonly systemPaths: () => Effect.Effect<Set<string>, AppFileSystem.Error>
-  readonly system: () => Effect.Effect<string[], AppFileSystem.Error>
+  readonly systemPaths: (agent?: AgentInstructions) => Effect.Effect<Set<string>, AppFileSystem.Error>
+  readonly system: (agent?: AgentInstructions) => Effect.Effect<string[], AppFileSystem.Error>
   readonly find: (dir: string) => Effect.Effect<string | undefined, AppFileSystem.Error>
   readonly resolve: (
     messages: MessageV2.WithParts[],
@@ -106,7 +108,9 @@ export const layer: Layer.Layer<
       s.claims.delete(messageID)
     })
 
-    const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
+    const systemPaths = Effect.fn("Instruction.systemPaths")(function* (agent?: AgentInstructions) {
+      if (agent?.ignoreInstructions) return new Set<string>()
+
       const config = yield* cfg.get()
       const ctx = yield* InstanceState.context
       const paths = new Set<string>()
@@ -151,9 +155,11 @@ export const layer: Layer.Layer<
       return paths
     })
 
-    const system = Effect.fn("Instruction.system")(function* () {
+    const system = Effect.fn("Instruction.system")(function* (agent?: AgentInstructions) {
+      if (agent?.ignoreInstructions) return []
+
       const config = yield* cfg.get()
-      const paths = yield* systemPaths()
+      const paths = yield* systemPaths(agent)
       const urls = (config.instructions ?? []).filter(
         (item) => item.startsWith("https://") || item.startsWith("http://"),
       )

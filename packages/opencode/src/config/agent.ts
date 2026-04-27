@@ -26,6 +26,9 @@ const AgentSchema = Schema.StructWithRest(
     temperature: Schema.optional(Schema.Finite),
     top_p: Schema.optional(Schema.Finite),
     prompt: Schema.optional(Schema.String),
+    ignore_instructions: Schema.optional(Schema.Boolean).annotate({
+      description: "Skip loading instruction files for this agent.",
+    }),
     tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
       description: "@deprecated Use 'permission' field instead",
     }),
@@ -53,6 +56,7 @@ const KNOWN_KEYS = new Set([
   "model",
   "variant",
   "prompt",
+  "ignore_instructions",
   "description",
   "temperature",
   "top_p",
