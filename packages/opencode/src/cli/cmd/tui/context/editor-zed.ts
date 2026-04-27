@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite"
 import os from "node:os"
 import path from "node:path"
 import z from "zod"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import type { EditorSelection } from "./editor"
 
 const ZedEditorRowSchema = z.object({

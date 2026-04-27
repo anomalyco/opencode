@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import path from "path"
-import { LSP } from "../lsp"
+import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"
 import { pathToFileURL } from "url"
@@ -29,6 +29,9 @@ export const Parameters = Schema.Struct({
   character: Schema.Number.check(Schema.isInt())
     .check(Schema.isGreaterThanOrEqualTo(1))
     .annotate({ description: "The character offset (1-based, as shown in editors)" }),
+  query: Schema.optional(Schema.String).annotate({
+    description: "Search query for workspaceSymbol. Empty string requests all symbols.",
+  }),
 })
 
 export const LspTool = Tool.define(
@@ -39,10 +42,7 @@ export const LspTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
-      execute: (
-        args: { operation: (typeof operations)[number]; filePath: string; line: number; character: number },
-        ctx: Tool.Context,
-      ) =>
+      execute: (args: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
           yield* assertExternalDirectoryEffect(ctx, file)
@@ -89,7 +89,7 @@ export const LspTool = Tool.define(
               case "documentSymbol":
                 return lsp.documentSymbol(uri)
               case "workspaceSymbol":
-                return lsp.workspaceSymbol("")
+                return lsp.workspaceSymbol(args.query ?? "")
               case "goToImplementation":
                 return lsp.implementation(position)
               case "prepareCallHierarchy":

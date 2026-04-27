@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { Session } from "../../src/session"
+import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 
