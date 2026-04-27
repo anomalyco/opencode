@@ -32,6 +32,7 @@ import { PatchFileTool } from "./patch_file"
 import { AstQueryTool } from "./ast_query"
 import { AstEditTool } from "./ast_edit"
 import { AstParser } from "../ast/parser"
+import { withTrace } from "./trace"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -125,6 +126,10 @@ export const layer: Layer.Layer<
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
+    const sessionLabel = process.env["OPENCODE_SESSION_LABEL"] ?? "default"
+    const sessionId = `${sessionLabel}_${Date.now()}`
+    const disableAst = process.env["OPENCODE_DISABLE_AST"] === "1"
+
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
@@ -189,7 +194,7 @@ export const layer: Layer.Layer<
         const questionEnabled =
           ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
-        const tool = yield* Effect.all({
+        const raw = yield* Effect.all({
           invalid: Tool.init(invalid),
           bash: Tool.init(bash),
           read: Tool.init(read),
@@ -212,6 +217,14 @@ export const layer: Layer.Layer<
           plan: Tool.init(plan),
         })
 
+        const tool = {
+          ...raw,
+          edit: withTrace(sessionId, raw.edit),
+          write: withTrace(sessionId, raw.write),
+          astquery: withTrace(sessionId, raw.astquery),
+          astedit: withTrace(sessionId, raw.astedit),
+        }
+
         return {
           custom,
           builtin: [
@@ -231,8 +244,7 @@ export const layer: Layer.Layer<
             tool.skill,
             tool.patch,
             tool.patchfile,
-            tool.astquery,
-            tool.astedit,
+            ...(disableAst ? [] : [tool.astquery, tool.astedit]),
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
             ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
           ],
