@@ -13,86 +13,85 @@ export OPENCODE_TOOL_TRACE=1
 export OPENCODE_BENCHMARK_TASK=01
 ```
 
-## Task 01 — Rename a function across one file
-File: `packages/opencode/src/tool/registry.ts` (~300 lines)
+## Task 01 — Remove a deprecated function
+File: `packages/opencode/src/tool/registry.ts` (~360 lines)
 Prompt:
 
-Rename the function `describeTask` to `buildTaskDescription` everywhere it appears in `packages/opencode/src/tool/registry.ts`. Do not touch other files.
+In `packages/opencode/src/tool/registry.ts`, remove the `describeTask` function entirely (declaration and all call sites). Do not touch other files.
 
-Expected: 1 edit, no file rewrite needed — ast_edit should target only the declaration node and the two call sites.
+Expected: ast_query finds the function and all references, ast_edit replaces them with empty text. Baseline needs multiple edit calls.
 
-## Task 02 — Add a parameter to an existing function
+## Task 02 — Replace a function implementation
 File: `packages/opencode/src/ast/parser.ts` (~220 lines)
 Prompt:
 
-In `packages/opencode/src/ast/parser.ts`, add an optional parameter `maxResults?: number` to the `queryFile` function signature and apply a `.slice(0, maxResults)` to the return value before returning.
+In `packages/opencode/src/ast/parser.ts`, replace the entire body of `queryFile` with a new implementation that adds an optional `maxResults?: number` parameter and applies `.slice(0, maxResults)` to the return value.
 
-Expected: surgical edit on 2 nodes (signature + return).
+Expected: ast_query finds `queryFile`, ast_edit replaces the entire function. Baseline needs read + edit with full context.
 
-## Task 03 — Add a new export to a large index file
-File: `packages/opencode/src/tool/registry.ts`
-Prompt:
-
-Add `export { AstQueryTool } from "./ast_query"` and `export { AstEditTool } from "./ast_edit"` at the end of `packages/opencode/src/tool/registry.ts`.
-
-Expected: append-only — ast_edit or patch_file should touch 0 existing lines.
-
-## Task 04 — Fix a bug in a deeply nested function
+## Task 03 — Move a class to a new file
 File: `packages/opencode/src/tool/edit.ts` (~480 lines)
 Prompt:
 
-In `packages/opencode/src/tool/edit.ts`, inside the `BlockAnchorReplacer` generator, change the comment `// Only match the first occurrence of the last line` to `// Match first occurrence of last line anchor (greedy=false)`.
+In `packages/opencode/src/tool/edit.ts`, move the `BlockAnchorReplacer` class into a new file `packages/opencode/src/tool/block_anchor.ts` and update imports in the original file.
 
-Expected: 1-line edit inside a 480-line file — baseline sends full file, ast_edit sends only the ~10-line containing block.
+Expected: ast_query finds the class, ast_edit removes it from edit.ts. Baseline needs to read the entire class and rewrite the file.
 
-## Task 05 — Extract a constant from a function body
+## Task 04 — Rename a method across call sites (control negative)
 File: `packages/opencode/src/tool/edit.ts`
 Prompt:
 
-In `packages/opencode/src/tool/edit.ts`, extract the two similarity threshold constants `SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.0` and `MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD = 0.3` into a new exported `const SIMILARITY_THRESHOLDS` object at the top of the file.
+In `packages/opencode/src/tool/edit.ts`, rename the `replace` method to `applyReplacement` everywhere it appears.
 
-Expected: 3 coordinated edits (add const, remove 2 inline declarations).
+Expected: This is a simple string rename. Both approaches will likely use edit/replaceAll. Use this as a control to measure AST overhead when not beneficial.
 
-## Task 06 — Add JSDoc to a specific function
-File: `packages/opencode/src/ast/parser.ts`
-Prompt:
-
-Add a JSDoc comment to the `detectLanguage` exported function in `packages/opencode/src/ast/parser.ts` explaining that it returns null for unsupported extensions.
-
-Expected: insert-only before the function node — ast_edit targets exact position.
-
-## Task 07 — Change return type of an interface method
-File: `packages/opencode/src/ast/parser.ts`
-Prompt:
-
-In the `Interface` type in `packages/opencode/src/ast/parser.ts`, change the return type of `queryFile` from `Effect.Effect<QueryMatch[], Error>` to `Effect.Effect<QueryMatch[], Error | ParseError>`.
-Also add `export class ParseError extends Error {}` before the `Interface`.
-
-Expected: 2 edits (new class + interface method return type).
-
-## Task 08 — Refactor: inline a one-line helper
+## Task 05 — Add a method to a class
 File: `packages/opencode/src/tool/edit.ts`
 Prompt:
 
-In `packages/opencode/src/tool/edit.ts`, the `normalizeLineEndings` helper is a one-liner. Inline every call site and remove the function declaration.
+In `packages/opencode/src/tool/edit.ts`, add a `validate()` method to the `BlockAnchorReplacer` class that checks if `startAnchor` and `endAnchor` are non-empty strings.
 
-Expected: finds all 3 call sites + declaration via ast_query, then 4 edits.
+Expected: ast_query finds the class, ast_edit replaces the entire class with the new version. Baseline needs read + edit on the class body.
 
-## Task 09 — Add error handling to an async function
+## Task 06 — Change an interface shape
 File: `packages/opencode/src/ast/parser.ts`
 Prompt:
 
-Wrap the body of `loadGrammar` in `packages/opencode/src/ast/parser.ts` in a try/catch that rethrows as `new Error("Failed to load grammar for ${language}: ${e instanceof Error ? e.message : String(e)}")`.
+In `packages/opencode/src/ast/parser.ts`, change the `Interface` type: rename `queryFile` to `queryNodes`, change its return type to `Effect.Effect<QueryMatch[], Error | ParseError>`, and add `export class ParseError extends Error {}` before the interface.
 
-Expected: edit wraps exactly the function body — 1 node replacement.
+Expected: ast_query finds the interface, ast_edit replaces it. The new class can be added with edit. Baseline needs read + multiple edits.
 
-## Task 10 — Large-scale: add logging to every tool execute()
-File: `packages/opencode/src/tool/ast_edit.ts` + `ast_query.ts`
+## Task 07 — Inline a helper function
+File: `packages/opencode/src/tool/edit.ts`
 Prompt:
 
-In both `ast_edit.ts` and `ast_query.ts`, add a `console.time(params.filePath)` at the start of the execute function body and `console.timeEnd(params.filePath)` just before each return statement.
+In `packages/opencode/src/tool/edit.ts`, inline the `normalizeLineEndings` helper at every call site and remove the function declaration.
 
-Expected: multi-file, multi-node edit — most demanding task for both approaches.
+Expected: ast_query finds the function and all call sites, ast_edit replaces all 4 nodes. Baseline needs grep + multiple edits.
+
+## Task 08 — Wrap a function body in try/catch
+File: `packages/opencode/src/ast/parser.ts`
+Prompt:
+
+Wrap the entire body of `loadGrammar` in `packages/opencode/src/ast/parser.ts` in a try/catch that rethrows as `new Error("Failed to load grammar for ${language}: ${e instanceof Error ? e.message : String(e)}")`.
+
+Expected: ast_query finds `loadGrammar`, ast_edit replaces the entire function. Baseline needs read + edit.
+
+## Task 09 — Add logging to all tool execute functions
+Files: `packages/opencode/src/tool/ast_edit.ts` + `ast_query.ts`
+Prompt:
+
+In both `ast_edit.ts` and `ast_query.ts`, add `console.time(params.filePath)` at the start of the execute function body and `console.timeEnd(params.filePath)` just before each return statement.
+
+Expected: Multi-file, multi-node replacement. ast_query + ast_edit on both files. Most demanding task.
+
+## Task 10 — Remove an entire exported module
+File: `packages/opencode/src/tool/registry.ts`
+Prompt:
+
+Remove the `LspTool` export and all its references from `packages/opencode/src/tool/registry.ts`. Also remove the import of `LspTool` and any conditional that references it.
+
+Expected: ast_query finds the import, declaration, and all call sites. ast_edit removes all nodes. Baseline needs grep + multiple edits.
 
 ## How to run
 

@@ -53,7 +53,7 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-function computeAnchor(lines: string[], centerLine: number, contextLines: number): string {
+export function computeAnchor(lines: string[], centerLine: number, contextLines: number): string {
   const from = Math.max(0, centerLine - contextLines)
   const to = Math.min(lines.length - 1, centerLine + contextLines)
   return crypto.createHash("sha256").update(lines.slice(from, to + 1).join("\n")).digest("hex")
@@ -66,7 +66,7 @@ interface AnchorInfo {
   preview:       string
 }
 
-function buildAnchorMap(content: string, contextLines: number): AnchorInfo[] {
+export function buildAnchorMap(content: string, contextLines: number): AnchorInfo[] {
   const lines = content.split("\n")
   return lines.map((line, i) => ({
     anchor_hash:   computeAnchor(lines, i, contextLines),
@@ -83,7 +83,7 @@ interface ResolvedPatch {
   replace:   string
 }
 
-function resolvePatch(
+export function resolvePatch(
   lines: string[],
   patch: Schema.Schema.Type<typeof PatchSchema>,
 ): ResolvedPatch {
@@ -103,7 +103,7 @@ function resolvePatch(
   return { startLine: from, endLine: to, search: patch.search, replace: patch.replace }
 }
 
-function applyPatches(lines: string[], resolved: ResolvedPatch[]): string[] {
+export function applyPatches(lines: string[], resolved: ResolvedPatch[]): string[] {
   // Apply in reverse line order to prevent offset drift.
   const sorted = [...resolved].sort((a, b) => b.startLine - a.startLine)
   return sorted.reduce((acc, p) => {
