@@ -6,7 +6,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 # 加聊天-preview-fix — changelog
 
-**关联 commit**: `<待回填>`
+**关联 commit**: `b269ceb69`
 **所在分支**: `feat/editable-file-viewer`
 **baseline tag**: 沿用线(无新 baseline)
 **触发原因**: User 报 `.md` 文件右键「添加到聊天窗口」后模型回答"看不到选中的文字"。详见 `1-spec.md` 触发原因段(双层根因:preview 字段从未进模型可见文本 + `findLineRange` 对 markdown 几乎必然失败)。
