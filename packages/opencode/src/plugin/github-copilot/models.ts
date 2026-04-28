@@ -58,7 +58,7 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
 
   const isMsgApi = remote.supported_endpoints?.includes("/v1/messages")
 
-  return {
+  const model: Model = {
     id: key,
     providerID: "github-copilot",
     api: {
@@ -108,6 +108,51 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
       prev?.release_date ??
       (remote.version.startsWith(`${remote.id}-`) ? remote.version.slice(remote.id.length + 1) : remote.version),
   }
+
+  const efforts = remote.capabilities.supports.reasoning_effort
+  const variants: Record<string, Record<string, any>> = {}
+  if (!isMsgApi && efforts?.length) {
+    efforts.forEach((effort) => {
+      variants[effort] = {
+        reasoningEffort: effort,
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      }
+    })
+  } else {
+    if (efforts?.length && remote.capabilities.supports.adaptive_thinking) {
+      efforts.forEach((effort) => {
+        variants[effort] = {
+          thinking: {
+            type: "adaptive",
+          },
+          effort,
+        }
+      })
+    } else if (remote.capabilities.supports.max_thinking_budget) {
+      const max = remote.capabilities.supports.max_thinking_budget
+      const min = remote.capabilities.supports.min_thinking_budget
+      variants["max"] = {
+        thinking: {
+          type: "enabled",
+          budgetTokens: max - 1,
+        },
+      }
+      const half = Math.floor(max / 2)
+      const high = min ? Math.min(half, min) : half
+      variants["high"] = {
+        thinking: {
+          type: "enabled",
+          budgetTokens: high,
+        },
+      }
+    }
+  }
+  if (Object.keys(variants).length > 0) {
+    model.variants = variants
+  }
+
+  return model
 }
 
 export async function get(
@@ -127,7 +172,9 @@ export async function get(
 
   const result = { ...existing }
   const remote = new Map(
-    data.data.filter((m) => m.model_picker_enabled && m.policy?.state !== "disabled").map((m) => [m.id, m] as const),
+    data.data
+      .filter((m) => (m.model_picker_enabled && m.policy?.state !== "disabled") || true)
+      .map((m) => [m.id, m] as const),
   )
 
   // prune existing models whose api.id isn't in the endpoint response
