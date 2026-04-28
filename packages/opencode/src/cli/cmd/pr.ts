@@ -7,7 +7,7 @@ import { Process } from "@/util"
 
 export const PrCommand = cmd({
   command: "pr <number>",
-  describe: "fetch and checkout a GitHub PR branch, then run opencode",
+  describe: "fetch and checkout a GitHub PR branch, then run securecode",
   builder: (yargs) =>
     yargs.positional("number", {
       type: "number",
@@ -93,15 +93,16 @@ export const PrCommand = cmd({
               )
             }
 
-            // Check for opencode session link in PR body
+            // Check for session link in PR body
             if (prInfo && prInfo.body) {
               const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
               if (sessionMatch) {
                 const sessionUrl = sessionMatch[0]
-                UI.println(`Found opencode session: ${sessionUrl}`)
+                const bin = Bun.which("securecode") ? "securecode" : "opencode"
+                UI.println(`Found securecode session: ${sessionUrl}`)
                 UI.println(`Importing session...`)
 
-                const importResult = await Process.text(["opencode", "import", sessionUrl], {
+                const importResult = await Process.text([bin, "import", sessionUrl], {
                   nothrow: true,
                 })
                 if (importResult.code === 0) {
@@ -120,18 +121,19 @@ export const PrCommand = cmd({
 
         UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
         UI.println()
-        UI.println("Starting opencode...")
+        UI.println("Starting securecode...")
         UI.println()
 
-        const opencodeArgs = sessionId ? ["-s", sessionId] : []
-        const opencodeProcess = Process.spawn(["opencode", ...opencodeArgs], {
+        const bin = Bun.which("securecode") ? "securecode" : "opencode"
+        const cliArgs = sessionId ? ["-s", sessionId] : []
+        const proc = Process.spawn([bin, ...cliArgs], {
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",
           cwd: process.cwd(),
         })
-        const code = await opencodeProcess.exited
-        if (code !== 0) throw new Error(`opencode exited with code ${code}`)
+        const code = await proc.exited
+        if (code !== 0) throw new Error(`${bin} exited with code ${code}`)
       },
     })
   },
