@@ -6,6 +6,28 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 
+// Bun compiled binaries on Windows throw EUNKNOWN (not ENOENT) for missing virtual-FS
+// files. y18n only silences ENOENT, so locale-file reads crash the CLI at startup.
+// This plugin patches y18n's Node.js platform shim to recode EUNKNOWN → ENOENT so
+// y18n falls back gracefully to an empty locale without touching the disk.
+const y18nPatchPlugin = {
+  name: "y18n-eunknown-fix",
+  setup(build: { onLoad: Function }) {
+    build.onLoad({ filter: /y18n.*platform-shims[/\\\\]node/ }, async (args: { path: string }) => {
+      const src = await Bun.file(args.path).text()
+      const patched = src.replace(
+        "import { readFileSync, statSync, writeFile } from 'fs';",
+        `import { readFileSync as _readFileSync, statSync, writeFile } from 'fs';
+function readFileSync(p, o) {
+  try { return _readFileSync(p, o) }
+  catch (e) { if (e.code === 'EUNKNOWN') e.code = 'ENOENT'; throw e }
+}`,
+      )
+      return { contents: patched, loader: "js" }
+    })
+  },
+}
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
@@ -208,7 +230,7 @@ for (const item of targets) {
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
-    plugins: [plugin],
+    plugins: [plugin, y18nPatchPlugin],
     external: ["node-gyp"],
     compile: {
       autoloadBunfig: false,
