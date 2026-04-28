@@ -863,22 +863,16 @@ export function Prompt(props: PromptProps) {
         ],
       }
 
-      if (isBusy && followupMode === "queue") {
+      if (isBusy) {
         setStore("queuedDrafts", [...store.queuedDrafts, { ...payload, followupMode }])
         toast.show({
-          message: "Queued",
-          variant: "info",
-          duration: 2000,
-        })
-      } else if (isBusy) {
-        sdk.client.session.promptAsync(payload).catch(() => {})
-        toast.show({
-          message: followupMode === "steer" ? "Steering..." : "Wrapping up...",
+          message: followupMode === "steer" ? "Steering..." : followupMode === "wrap" ? "Wrapping up..." : "Queued",
           variant: "info",
           duration: 2000,
         })
       } else {
-        sdk.client.session.prompt(payload).catch(() => {})
+        const cleanPayload = payload
+        sdk.client.session.prompt(cleanPayload).catch(() => {})
       }
     }
     history.append({
