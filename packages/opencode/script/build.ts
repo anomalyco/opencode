@@ -17,8 +17,8 @@ await import("./generate.ts")
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 
-const npmPackageName = "@vinirabli/grafo"
-const commandName = "grafo"
+const npmPackageName = "@vinirabli/opencode"
+const commandName = "opencode"
 const legacyCommandName = pkg.name
 
 // Load migrations from migration directories

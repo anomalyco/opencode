@@ -4,7 +4,7 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "@vinirabli/grafo",
+      "package-name": "@vinirabli/opencode",
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",
       "extra-files": [

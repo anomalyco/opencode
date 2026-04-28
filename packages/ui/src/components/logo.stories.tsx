@@ -2,7 +2,7 @@
 import * as mod from "./logo"
 
 const docs = `### Overview
-Grafo logo assets: mark, splash, and wordmark.
+OpenCode logo assets: mark, splash, and wordmark.
 
 Use Mark for compact spaces, Logo for headers, Splash for hero sections.
 
@@ -46,7 +46,7 @@ export const Basic = {
       </div>
       <div>
         <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>Splash</div>
-        <mod.Splash style={{ width: "200px" }} />
+        <mod.Splash style={{ width: "80px", height: "100px" }} />
       </div>
       <div>
         <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>Logo</div>

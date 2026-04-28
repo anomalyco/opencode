@@ -7,12 +7,11 @@ import path from "path"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
-const npmPackageName = "@vinirabli/grafo"
+const npmPackageName = "@vinirabli/opencode"
 const npmPackageDir = `./dist/${npmPackageName}`
-const commandName = "grafo"
-const legacyCommandName = pkg.name
+const commandName = pkg.name
 const releaseArtifactBaseName = pkg.name
-const npmOnly = process.env.GRAFO_NPM_ONLY === "true"
+const npmOnly = process.env.OPENCODE_NPM_ONLY === "true"
 const releaseArtifact = (platform: string, arch: string, extension: "tar.gz" | "zip") =>
   `${releaseArtifactBaseName}-${platform}-${arch}.${extension}`
 
@@ -53,8 +52,7 @@ await Bun.file(`${npmPackageDir}/package.json`).write(
     {
       name: npmPackageName,
       bin: {
-        [commandName]: `./bin/${legacyCommandName}`,
-        [legacyCommandName]: `./bin/${legacyCommandName}`,
+        [commandName]: `./bin/${commandName}`,
       },
       scripts: {
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
@@ -81,7 +79,7 @@ const tagFlags = tags.flatMap((t) => ["-t", t])
 
 // registries
 if (npmOnly) {
-  console.log("GRAFO_NPM_ONLY=true; skipping Docker, AUR, and Homebrew publishing")
+  console.log("OPENCODE_NPM_ONLY=true; skipping Docker, AUR, and Homebrew publishing")
 } else if (!Script.preview) {
   await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
   // Calculate SHA values

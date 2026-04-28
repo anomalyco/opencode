@@ -3,7 +3,7 @@ name: Auto Release
 on:
   push:
     branches:
-      - main
+      - dev
 
 concurrency:
   group: release-${{ github.ref }}
@@ -46,7 +46,7 @@ jobs:
         run: bun typecheck
         working-directory: packages/opencode
 
-      - name: Build Grafo CLI packages
+      - name: Build opencode CLI packages
         run: bun ./packages/opencode/script/build.ts
         env:
           OPENCODE_VERSION: ${{ needs.release-please.outputs.version }}
@@ -102,11 +102,11 @@ jobs:
           name: opencode-cli-windows
           path: packages/opencode/dist
 
-      - name: Publish Grafo npm packages
+      - name: Publish opencode npm packages
         run: bun ./packages/opencode/script/publish.ts
         env:
           OPENCODE_VERSION: ${{ needs.release-please.outputs.version }}
           OPENCODE_CHANNEL: latest
-          GRAFO_NPM_ONLY: "true"
+          OPENCODE_NPM_ONLY: "true"
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "false"

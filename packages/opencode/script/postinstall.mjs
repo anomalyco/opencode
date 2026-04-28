@@ -8,9 +8,8 @@ import { createRequire } from "module"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
-const packageBase = "@vinirabli/grafo"
-const commandName = "grafo"
-const legacyCommandName = "opencode"
+const packageBase = "@vinirabli/opencode"
+const commandName = "opencode"
 
 function detectPlatformAndArch() {
   // Map platform names
@@ -53,17 +52,16 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const packageName = `${packageBase}-${platform}-${arch}`
-  const binaryNames =
-    platform === "windows" ? [`${commandName}.exe`, `${legacyCommandName}.exe`] : [commandName, legacyCommandName]
+  const binaryName = platform === "windows" ? `${commandName}.exe` : commandName
 
   try {
     // Use require.resolve to find the package
     const packageJsonPath = require.resolve(`${packageName}/package.json`)
     const packageDir = path.dirname(packageJsonPath)
-    const binaryPath = binaryNames.map((name) => path.join(packageDir, "bin", name)).find((item) => fs.existsSync(item))
+    const binaryPath = path.join(packageDir, "bin", binaryName)
 
-    if (!binaryPath) {
-      throw new Error(`Binary not found in ${path.join(packageDir, "bin")}`)
+    if (!fs.existsSync(binaryPath)) {
+      throw new Error(`Binary not found at ${binaryPath}`)
     }
 
     return { binaryPath }
@@ -77,14 +75,14 @@ async function main() {
     if (os.platform() === "win32") {
       // On Windows, the .exe is already included in the package and bin field points to it
       // No postinstall setup needed
-      console.log("Windows detected: grafo binary setup not needed (using packaged .exe)")
+      console.log("Windows detected: opencode binary setup not needed (using packaged .exe)")
       return
     }
 
     // On non-Windows platforms, just verify the binary package exists
     // Don't replace the wrapper script - it handles binary execution
     const { binaryPath } = findBinary()
-    const target = path.join(__dirname, "bin", ".grafo")
+    const target = path.join(__dirname, "bin", ".opencode")
     if (fs.existsSync(target)) fs.unlinkSync(target)
     try {
       fs.linkSync(binaryPath, target)
@@ -93,7 +91,7 @@ async function main() {
     }
     fs.chmodSync(target, 0o755)
   } catch (error) {
-    console.error("Failed to setup grafo binary:", error.message)
+    console.error("Failed to setup opencode binary:", error.message)
     process.exit(1)
   }
 }

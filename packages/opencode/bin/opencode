@@ -4,8 +4,7 @@ const childProcess = require("child_process")
 const fs = require("fs")
 const path = require("path")
 const os = require("os")
-const commandName = "grafo"
-const legacyCommandName = "opencode"
+const commandName = "opencode"
 
 function run(target) {
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
@@ -19,7 +18,7 @@ function run(target) {
   process.exit(code)
 }
 
-const envPath = process.env.GRAFO_BIN_PATH || process.env.OPENCODE_BIN_PATH
+const envPath = process.env.OPENCODE_BIN_PATH
 if (envPath) {
   run(envPath)
 }
@@ -27,11 +26,9 @@ if (envPath) {
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
-for (const cacheName of [`.${commandName}`, `.${legacyCommandName}`]) {
-  const cached = path.join(scriptDir, cacheName)
-  if (fs.existsSync(cached)) {
-    run(cached)
-  }
+const cached = path.join(scriptDir, `.${commandName}`)
+if (fs.existsSync(cached)) {
+  run(cached)
 }
 
 const platformMap = {
@@ -53,10 +50,9 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const packageBase = "@vinirabli/grafo"
+const packageBase = "@vinirabli/opencode"
 const base = packageBase + "-" + platform + "-" + arch
-const binaryNames =
-  platform === "windows" ? [`${commandName}.exe`, `${legacyCommandName}.exe`] : [commandName, legacyCommandName]
+const binaryName = platform === "windows" ? `${commandName}.exe` : commandName
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -159,10 +155,8 @@ function findBinary(startDir) {
     const modules = path.join(current, "node_modules")
     if (fs.existsSync(modules)) {
       for (const name of names) {
-        for (const binary of binaryNames) {
-          const candidate = path.join(modules, name, "bin", binary)
-          if (fs.existsSync(candidate)) return candidate
-        }
+        const candidate = path.join(modules, name, "bin", binaryName)
+        if (fs.existsSync(candidate)) return candidate
       }
     }
     const parent = path.dirname(current)
@@ -176,7 +170,7 @@ function findBinary(startDir) {
 const resolved = findBinary(scriptDir)
 if (!resolved) {
   console.error(
-    "It seems that your package manager failed to install the right version of the grafo CLI for your platform. You can try manually installing " +
+    "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +
       names.map((n) => `\"${n}\"`).join(" or ") +
       " package",
   )
