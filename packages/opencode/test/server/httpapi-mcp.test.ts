@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { McpPaths } from "../../src/server/routes/instance/httpapi/mcp"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
+import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { provideInstance, tmpdir } from "../fixture/fixture"
@@ -16,13 +15,13 @@ void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const context = Context.empty() as Context.Context<unknown>
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 const it = testEffect(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))
 
 function app(experimental: boolean) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return InstanceRoutes(websocket)
+  return Server.Default().app
 }
+type TestApp = ReturnType<typeof app>
 
 function request(route: string, directory: string, init?: RequestInit) {
   const headers = new Headers(init?.headers)
@@ -66,7 +65,7 @@ function withMcpProject<A, E, R>(self: (dir: string) => Effect.Effect<A, E, R>) 
 }
 
 const readResponse = Effect.fnUntraced(function* (input: {
-  app: ReturnType<typeof InstanceRoutes>
+  app: TestApp
   path: string
   headers: HeadersInit
 }) {

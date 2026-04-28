@@ -1,7 +1,7 @@
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
-import { Context, Effect } from "effect"
+import { Effect } from "effect"
 import z from "zod"
 import { Format } from "@/format"
 import { TuiRoutes } from "./tui"
@@ -14,18 +14,6 @@ import { LSP } from "@/lsp/lsp"
 import { Command } from "@/command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { ExperimentalHttpApiServer } from "./httpapi/server"
-import { PtyPaths } from "./httpapi/pty"
-import { EventPaths } from "./httpapi/event"
-import { ExperimentalPaths } from "./httpapi/experimental"
-import { FilePaths } from "./httpapi/file"
-import { InstancePaths } from "./httpapi/instance"
-import { McpPaths } from "./httpapi/mcp"
-import { SessionPaths } from "./httpapi/session"
-import { SyncPaths } from "./httpapi/sync"
-import { TuiPaths } from "./httpapi/tui"
-import { WorkspacePaths } from "./httpapi/workspace"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -41,118 +29,6 @@ import { jsonRequest } from "./trace"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   const app = new Hono()
-
-  if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
-    const handler = ExperimentalHttpApiServer.webHandler().handler
-    const context = Context.empty() as Context.Context<unknown>
-    app.get(EventPaths.event, (c) => handler(c.req.raw, context))
-    app.get("/question", (c) => handler(c.req.raw, context))
-    app.post("/question/:requestID/reply", (c) => handler(c.req.raw, context))
-    app.post("/question/:requestID/reject", (c) => handler(c.req.raw, context))
-    app.get("/permission", (c) => handler(c.req.raw, context))
-    app.post("/permission/:requestID/reply", (c) => handler(c.req.raw, context))
-    app.get("/config", (c) => handler(c.req.raw, context))
-    app.patch("/config", (c) => handler(c.req.raw, context))
-    app.get("/config/providers", (c) => handler(c.req.raw, context))
-    app.get(ExperimentalPaths.console, (c) => handler(c.req.raw, context))
-    app.get(ExperimentalPaths.consoleOrgs, (c) => handler(c.req.raw, context))
-    app.post(ExperimentalPaths.consoleSwitch, (c) => handler(c.req.raw, context))
-    app.get(ExperimentalPaths.tool, (c) => handler(c.req.raw, context))
-    app.get(ExperimentalPaths.toolIDs, (c) => handler(c.req.raw, context))
-    app.get(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
-    app.post(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
-    app.delete(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
-    app.post(ExperimentalPaths.worktreeReset, (c) => handler(c.req.raw, context))
-    app.get(ExperimentalPaths.session, (c) => handler(c.req.raw, context))
-    app.get(ExperimentalPaths.resource, (c) => handler(c.req.raw, context))
-    app.get("/provider", (c) => handler(c.req.raw, context))
-    app.get("/provider/auth", (c) => handler(c.req.raw, context))
-    app.post("/provider/:providerID/oauth/authorize", (c) => handler(c.req.raw, context))
-    app.post("/provider/:providerID/oauth/callback", (c) => handler(c.req.raw, context))
-    app.get("/project", (c) => handler(c.req.raw, context))
-    app.get("/project/current", (c) => handler(c.req.raw, context))
-    app.post("/project/git/init", (c) => handler(c.req.raw, context))
-    app.patch("/project/:projectID", (c) => handler(c.req.raw, context))
-    app.get(FilePaths.findText, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.findFile, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.findSymbol, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.list, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.content, (c) => handler(c.req.raw, context))
-    app.get(FilePaths.status, (c) => handler(c.req.raw, context))
-    app.get(InstancePaths.path, (c) => handler(c.req.raw, context))
-    app.post(InstancePaths.dispose, (c) => handler(c.req.raw, context))
-    app.get(InstancePaths.vcs, (c) => handler(c.req.raw, context))
-    app.get(InstancePaths.vcsDiff, (c) => handler(c.req.raw, context))
-    app.get(InstancePaths.command, (c) => handler(c.req.raw, context))
-    app.get(InstancePaths.agent, (c) => handler(c.req.raw, context))
-    app.get(InstancePaths.skill, (c) => handler(c.req.raw, context))
-    app.get(InstancePaths.lsp, (c) => handler(c.req.raw, context))
-    app.get(InstancePaths.formatter, (c) => handler(c.req.raw, context))
-    app.get(McpPaths.status, (c) => handler(c.req.raw, context))
-    app.post(McpPaths.status, (c) => handler(c.req.raw, context))
-    app.post(McpPaths.auth, (c) => handler(c.req.raw, context))
-    app.post(McpPaths.authCallback, (c) => handler(c.req.raw, context))
-    app.post(McpPaths.authAuthenticate, (c) => handler(c.req.raw, context))
-    app.delete(McpPaths.auth, (c) => handler(c.req.raw, context))
-    app.post(McpPaths.connect, (c) => handler(c.req.raw, context))
-    app.post(McpPaths.disconnect, (c) => handler(c.req.raw, context))
-    app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
-    app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
-    app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
-    app.get(PtyPaths.shells, (c) => handler(c.req.raw, context))
-    app.get(PtyPaths.list, (c) => handler(c.req.raw, context))
-    app.post(PtyPaths.create, (c) => handler(c.req.raw, context))
-    app.get(PtyPaths.get, (c) => handler(c.req.raw, context))
-    app.put(PtyPaths.update, (c) => handler(c.req.raw, context))
-    app.delete(PtyPaths.remove, (c) => handler(c.req.raw, context))
-    app.get(PtyPaths.connect, (c) => handler(c.req.raw, context))
-    app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
-    app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
-    app.get(SessionPaths.get, (c) => handler(c.req.raw, context))
-    app.get(SessionPaths.children, (c) => handler(c.req.raw, context))
-    app.get(SessionPaths.todo, (c) => handler(c.req.raw, context))
-    app.get(SessionPaths.diff, (c) => handler(c.req.raw, context))
-    app.get(SessionPaths.messages, (c) => handler(c.req.raw, context))
-    app.get(SessionPaths.message, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.create, (c) => handler(c.req.raw, context))
-    app.delete(SessionPaths.remove, (c) => handler(c.req.raw, context))
-    app.patch(SessionPaths.update, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.init, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.fork, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.abort, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.share, (c) => handler(c.req.raw, context))
-    app.delete(SessionPaths.share, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.summarize, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.prompt, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.promptAsync, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.command, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.shell, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.revert, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.unrevert, (c) => handler(c.req.raw, context))
-    app.post(SessionPaths.permissions, (c) => handler(c.req.raw, context))
-    app.delete(SessionPaths.deleteMessage, (c) => handler(c.req.raw, context))
-    app.delete(SessionPaths.deletePart, (c) => handler(c.req.raw, context))
-    app.patch(SessionPaths.updatePart, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.appendPrompt, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.openHelp, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.openSessions, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.openThemes, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.openModels, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.submitPrompt, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.clearPrompt, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.executeCommand, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.showToast, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.publish, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.selectSession, (c) => handler(c.req.raw, context))
-    app.get(TuiPaths.controlNext, (c) => handler(c.req.raw, context))
-    app.post(TuiPaths.controlResponse, (c) => handler(c.req.raw, context))
-    app.get(WorkspacePaths.adaptors, (c) => handler(c.req.raw, context))
-    app.post(WorkspacePaths.list, (c) => handler(c.req.raw, context))
-    app.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
-    app.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
-    app.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
-    app.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
-  }
 
   return app
     .route("/project", ProjectRoutes())
