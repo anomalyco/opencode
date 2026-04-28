@@ -132,10 +132,10 @@ describe("pty", () => {
 
               ctx.connId = 2
 
-              yield* pty.write(a.id, "AAA\n")
+              yield* pty.write(a.id, "@@@\n")
               yield* Effect.promise(() => sleep(100))
 
-              expect(out.join("")).toContain("AAA")
+              expect(out.join("")).toContain("@")
             } finally {
               yield* pty.remove(a.id)
             }
