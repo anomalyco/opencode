@@ -16,8 +16,8 @@ const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+function app(httpapi = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpapi
   return InstanceRoutes(websocket)
 }
 
@@ -80,5 +80,49 @@ describe("sync HttpApi", () => {
     })
     expect(replayed.status).toBe(200)
     expect(await replayed.json()).toEqual({ sessionID: session.id })
+  })
+
+  test("matches legacy seq validation", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+    const cases = [
+      {
+        path: SyncPaths.history,
+        body: { aggregate: -1 },
+      },
+      {
+        path: SyncPaths.history,
+        body: { aggregate: 1.5 },
+      },
+      {
+        path: SyncPaths.replay,
+        body: {
+          directory: tmp.path,
+          events: [{ id: "event", aggregateID: "session", seq: -1, type: "session.created", data: {} }],
+        },
+      },
+      {
+        path: SyncPaths.replay,
+        body: {
+          directory: tmp.path,
+          events: [{ id: "event", aggregateID: "session", seq: 1.5, type: "session.created", data: {} }],
+        },
+      },
+    ]
+
+    for (const item of cases) {
+      const legacy = await app(false).request(item.path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(item.body),
+      })
+      const httpapi = await app(true).request(item.path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(item.body),
+      })
+      expect(httpapi.status).toBe(legacy.status)
+      expect(httpapi.status).toBe(400)
+    }
   })
 })

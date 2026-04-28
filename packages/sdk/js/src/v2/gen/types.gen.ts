@@ -2129,6 +2129,10 @@ export type McpStatus =
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
 
+export type McpUnsupportedOAuthError = {
+  error: string
+}
+
 export type Path = {
   home: string
   state: string
@@ -3217,7 +3221,7 @@ export type ExperimentalSessionListData = {
     /**
      * Only return root sessions (no parentID)
      */
-    roots?: boolean
+    roots?: boolean | "true" | "false"
     /**
      * Filter sessions updated on or after this timestamp (milliseconds since epoch)
      */
@@ -3237,7 +3241,7 @@ export type ExperimentalSessionListData = {
     /**
      * Include archived sessions (default false)
      */
-    archived?: boolean
+    archived?: boolean | "true" | "false"
   }
   url: "/experimental/session"
 }
@@ -3285,7 +3289,7 @@ export type SessionListData = {
     /**
      * Only return root sessions (no parentID)
      */
-    roots?: boolean
+    roots?: boolean | "true" | "false"
     /**
      * Filter sessions updated on or after this timestamp (milliseconds since epoch)
      */
@@ -4907,9 +4911,9 @@ export type McpAuthStartData = {
 
 export type McpAuthStartErrors = {
   /**
-   * Bad request
+   * MCP server does not support OAuth
    */
-  400: BadRequestError
+  400: McpUnsupportedOAuthError
   /**
    * Not found
    */
@@ -4985,9 +4989,9 @@ export type McpAuthAuthenticateData = {
 
 export type McpAuthAuthenticateErrors = {
   /**
-   * Bad request
+   * MCP server does not support OAuth
    */
-  400: BadRequestError
+  400: McpUnsupportedOAuthError
   /**
    * Not found
    */

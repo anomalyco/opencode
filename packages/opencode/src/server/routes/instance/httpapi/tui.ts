@@ -61,6 +61,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("appendPrompt", TuiPaths.appendPrompt, {
           payload: TuiEvent.PromptAppend.properties,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.appendPrompt",
@@ -113,6 +114,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("executeCommand", TuiPaths.executeCommand, {
           payload: CommandPayload,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.executeCommand",
@@ -133,6 +135,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("publish", TuiPaths.publish, {
           payload: TuiPublishPayload,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.publish",
@@ -143,7 +146,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("selectSession", TuiPaths.selectSession, {
           payload: TuiEvent.SessionSelect.properties,
           success: Schema.Boolean,
-          error: HttpApiError.NotFound,
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.selectSession",

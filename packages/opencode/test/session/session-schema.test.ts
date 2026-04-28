@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { ProjectID } from "../../src/project/schema"
-import { SessionID } from "../../src/session/schema"
+import { MessageID, SessionID } from "../../src/session/schema"
 import { Session } from "../../src/session/session"
 
 const info = {
@@ -49,5 +49,28 @@ describe("Session schema", () => {
 
     expect(Object.hasOwn(encoded, "parentID")).toBe(false)
     expect(Object.hasOwn(encoded.project as Record<string, unknown>, "name")).toBe(false)
+  })
+
+  test("encodes nested undefined optional session fields as omitted keys", () => {
+    const encoded = Schema.encodeUnknownSync(Session.Info)({
+      ...info,
+      summary: {
+        additions: 1,
+        deletions: 2,
+        files: 3,
+        diffs: undefined,
+      },
+      revert: {
+        messageID: MessageID.ascending(),
+        partID: undefined,
+        snapshot: undefined,
+        diff: undefined,
+      },
+    }) as Record<string, unknown>
+
+    expect(Object.hasOwn(encoded.summary as Record<string, unknown>, "diffs")).toBe(false)
+    for (const key of ["partID", "snapshot", "diff"]) {
+      expect(Object.hasOwn(encoded.revert as Record<string, unknown>, key)).toBe(false)
+    }
   })
 })
