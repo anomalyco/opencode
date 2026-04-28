@@ -29,3 +29,6 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# FORK: Obsidian 编辑器本地配置(user 用 Obsidian 浏览 docs/features/) 2026-04-28
+.obsidian/

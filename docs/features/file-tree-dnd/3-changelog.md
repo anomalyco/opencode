@@ -1,7 +1,7 @@
 ---
 feat-id: file-tree-dnd
-status: in-progress
-related: ./1-spec.md ./2-plan.md ./3-changelog.md
+status: done
+related: ./1-spec.md ./2-plan.md ./3-changelog.md ./4-test-checklist.md
 ---
 
 # 文件树拖放移动 — changelog
@@ -104,7 +104,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ## Commit #4 — Undo + 外部文件拖入(FileReader 路径) + tree-store 刷新 fix
 
-**关联 commit**: `<待填>`
+**关联 commit**: `b9a4accc1`
 **实际改动**:
 - 新文件 `packages/app/src/context/file/undo-stack.ts` (~50 行):`createUndoStack()` — push/pop/clear/size,容量 20。entry: `move`(pairs)/ `copy`(created)。pop 调用注入的 reverter,reverter 自己跑反向 rename / trash
 - `packages/app/src/context/file.tsx`(+5 行):createUndoStack + 挂到 `useFile().undoStack`

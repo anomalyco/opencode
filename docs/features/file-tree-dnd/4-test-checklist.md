@@ -1,6 +1,6 @@
 ---
 feat-id: file-tree-dnd
-status: in-progress
+status: done
 related: ./1-spec.md ./2-plan.md ./3-changelog.md ./4-test-checklist.md
 ---
 

@@ -1,7 +1,7 @@
 ---
 feat-id: file-tree-dnd
-status: in-progress
-related: ./1-spec.md ./2-plan.md ./3-changelog.md
+status: done
+related: ./1-spec.md ./2-plan.md ./3-changelog.md ./4-test-checklist.md
 ---
 
 # 文件树拖放移动 — plan
