@@ -5480,6 +5480,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "DuplicateIDError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateIDError"
+                }
+              }
+            }
           }
         },
         "description": "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
@@ -5490,6 +5500,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
                   "parentID": {
                     "type": "string",
                     "pattern": "^ses"
@@ -22337,6 +22351,27 @@
             }
           }
         }
+      },
+      "DuplicateIDError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["DuplicateIDError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
       },
       "TextPartInput": {
         "type": "object",

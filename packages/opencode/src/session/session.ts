@@ -29,6 +29,7 @@ import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
@@ -38,7 +39,6 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
-import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
@@ -248,6 +248,7 @@ export type GlobalInfo = Types.DeepMutable<Schema.Schema.Type<typeof GlobalInfo>
 
 export const CreateInput = Schema.optional(
   Schema.Struct({
+    id: Schema.optional(SessionID),
     parentID: Schema.optional(SessionID),
     title: Schema.optional(Schema.String),
     agent: Schema.optional(Schema.String),
@@ -308,49 +309,6 @@ export type GlobalListInput = {
   limit?: number
   archived?: boolean
 }
-
-const CreatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  info: Info,
-})
-
-const UpdatedShare = Schema.Struct({
-  url: Schema.optional(Schema.NullOr(Schema.String)),
-})
-
-const UpdatedTime = Schema.Struct({
-  created: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  updated: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  compacting: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  archived: Schema.optional(Schema.NullOr(ArchivedTimestamp)),
-})
-
-const UpdatedInfo = Schema.Struct({
-  id: Schema.optional(Schema.NullOr(SessionID)),
-  slug: Schema.optional(Schema.NullOr(Schema.String)),
-  projectID: Schema.optional(Schema.NullOr(ProjectV2.ID)),
-  workspaceID: Schema.optional(Schema.NullOr(WorkspaceV2.ID)),
-  directory: Schema.optional(Schema.NullOr(Schema.String)),
-  path: Schema.optional(Schema.NullOr(Schema.String)),
-  parentID: Schema.optional(Schema.NullOr(SessionID)),
-  summary: Schema.optional(Schema.NullOr(Summary)),
-  cost: Schema.optional(Schema.Finite),
-  tokens: Schema.optional(Tokens),
-  share: Schema.optional(UpdatedShare),
-  title: Schema.optional(Schema.NullOr(Schema.String)),
-  agent: Schema.optional(Schema.NullOr(Schema.String)),
-  model: Schema.optional(Schema.NullOr(Model)),
-  version: Schema.optional(Schema.NullOr(Schema.String)),
-  metadata: Schema.optional(Schema.NullOr(Metadata)),
-  time: Schema.optional(UpdatedTime),
-  permission: Schema.optional(Schema.NullOr(PermissionV1.Ruleset)),
-  revert: Schema.optional(Schema.NullOr(Revert)),
-})
-
-const UpdatedEventSchema = Schema.Struct({
-  sessionID: SessionID,
-  info: UpdatedInfo,
-})
 
 export const Event = {
   Created: SessionV1.Event.Created,
@@ -458,10 +416,16 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusy
 
 export type NotFound = NotFoundError
 
+export const DuplicateIDError = NamedError.create("DuplicateIDError", {
+  id: Schema.String,
+})
+export type DuplicateIDError = InstanceType<typeof DuplicateIDError>
+
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly listGlobal: (input?: GlobalListInput) => Effect.Effect<GlobalInfo[]>
   readonly create: (input?: {
+    id?: SessionID
     parentID?: SessionID
     title?: string
     agent?: string
@@ -469,7 +433,7 @@ export interface Interface {
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
     workspaceID?: WorkspaceV2.ID
-  }) => Effect.Effect<Info>
+  }) => Effect.Effect<Info, DuplicateIDError>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
@@ -707,6 +671,7 @@ export const layer: Layer.Layer<
     })
 
     const create = Effect.fn("Session.create")(function* (input?: {
+      id?: SessionID
       parentID?: SessionID
       title?: string
       agent?: string
@@ -717,7 +682,17 @@ export const layer: Layer.Layer<
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
+      if (input?.id) {
+        const existing = yield* db
+          .select({ id: SessionTable.id })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.id))
+          .get()
+          .pipe(Effect.orDie)
+        if (existing) return yield* Effect.fail(new DuplicateIDError({ id: input.id }))
+      }
       return yield* createNext({
+        id: input?.id,
         parentID: input?.parentID,
         directory: ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),

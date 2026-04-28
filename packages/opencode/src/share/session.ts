@@ -7,7 +7,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ShareNext } from "./share-next"
 
 export interface Interface {
-  readonly create: (input?: Session.CreateInput) => Effect.Effect<Session.Info>
+  readonly create: (input?: Session.CreateInput) => Effect.Effect<Session.Info, Session.DuplicateIDError>
   readonly share: (sessionID: SessionID) => Effect.Effect<{ url: string }, unknown>
   readonly unshare: (sessionID: SessionID) => Effect.Effect<void, unknown>
 }

@@ -3,10 +3,10 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Deferred, Effect, Exit, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
-import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -37,7 +37,7 @@ const awaitDeferred = <T>(deferred: Deferred.Deferred<T>, message: string) =>
     Effect.sleep("2 seconds").pipe(Effect.flatMap(() => Effect.fail(new Error(message)))),
   )
 
-const remove = (id: SessionID) => SessionNs.use.remove(id)
+const remove = (id: SessionIDType) => SessionNs.use.remove(id)
 
 describe("session.created event", () => {
   it.instance("should emit session.created event when session is created", () =>
@@ -243,6 +243,46 @@ describe("Session", () => {
 
       expect(created.metadata).toBeUndefined()
       expect(saved.metadata).toBeUndefined()
+    }),
+  )
+})
+
+describe("custom session ID", () => {
+  it.instance("round-trip: create with custom id returns same id and is retrievable", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const customID = SessionID.descending()
+      const created = yield* session.create({ id: customID })
+      const fetched = yield* session.get(customID)
+
+      expect(created.id).toBe(customID)
+      expect(fetched.id).toBe(customID)
+    }),
+  )
+
+  it.instance("creating with duplicate id throws DuplicateIDError", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const customID = SessionID.descending()
+      yield* session.create({ id: customID })
+
+      const exit = yield* session.create({ id: customID }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ name: "DuplicateIDError", data: { id: customID } })
+      }
+    }),
+  )
+
+  it.instance("creating with malformed id (wrong prefix) throws", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const exit = yield* session.create({ id: "not-a-session-id" as never }).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.pretty(exit.cause)).toContain('Expected a string starting with "ses"')
+      }
     }),
   )
 })

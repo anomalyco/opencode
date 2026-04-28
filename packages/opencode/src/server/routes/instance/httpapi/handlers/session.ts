@@ -151,7 +151,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload?: Session.CreateInput }) {
-      return yield* shareSvc.create(ctx.payload)
+      return yield* SessionError.mapDuplicateID(shareSvc.create(ctx.payload))
     })
 
     const createRaw = Effect.fn("SessionHttpApi.createRaw")(function* (ctx: {
