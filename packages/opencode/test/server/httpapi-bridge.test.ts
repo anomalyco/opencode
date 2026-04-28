@@ -62,6 +62,7 @@ function openApiRequestBodies(spec: { paths: Record<string, Partial<Record<(type
 
 type Operation = {
   parameters?: unknown[]
+  responses?: unknown
   requestBody?: unknown
 }
 
@@ -76,6 +77,19 @@ function parameterKey(param: unknown) {
   return `${param.in}:${param.name}:${"required" in param && param.required === true}`
 }
 
+function parameterSchema(input: {
+  spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }
+  path: string
+  method: (typeof methods)[number]
+  name: string
+}) {
+  const param = input.spec.paths[input.path]?.[input.method]?.parameters?.find(
+    (param) => !!param && typeof param === "object" && "name" in param && param.name === input.name,
+  )
+  if (!param || typeof param !== "object" || !("schema" in param)) return
+  return JSON.stringify(param.schema)
+}
+
 function requestBodyKey(body: unknown) {
   if (!body || typeof body !== "object" || !("content" in body)) return ""
   const requestBody = body as RequestBody
@@ -85,6 +99,23 @@ function requestBodyKey(body: unknown) {
       .map(([type, value]) => [type, value.schema?.$ref ?? value.schema?.type ?? "inline"])
       .sort(),
   })
+}
+
+function responseContentTypes(input: {
+  spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }
+  path: string
+  method: (typeof methods)[number]
+  status: string
+}) {
+  const responses = input.spec.paths[input.path]?.[input.method]?.responses
+  if (!responses || typeof responses !== "object" || !(input.status in responses)) return []
+  const response = (responses as Record<string, unknown>)[input.status]
+  if (!response || typeof response !== "object" || !("content" in response)) return []
+  const content = (response as { content?: unknown }).content
+  if (!content || typeof content !== "object") {
+    return []
+  }
+  return Object.keys(content).sort()
 }
 
 function authorization(username: string, password: string) {
@@ -136,6 +167,31 @@ describe("HttpApi server", () => {
         .filter((route) => hono[route] !== effect[route])
         .map((route) => ({ route, hono: hono[route], effect: effect[route] })),
     ).toEqual([])
+  })
+
+  test("matches SDK-affecting query parameter schemas", async () => {
+    const effect = OpenApi.fromApi(PublicApi)
+
+    expect(parameterSchema({ spec: effect, path: "/session", method: "get", name: "roots" })).toEqual(
+      JSON.stringify({ anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }] }),
+    )
+    expect(parameterSchema({ spec: effect, path: "/session", method: "get", name: "start" })).toEqual(
+      JSON.stringify({ type: "number" }),
+    )
+    expect(parameterSchema({ spec: effect, path: "/find/file", method: "get", name: "limit" })).toEqual(
+      JSON.stringify({ type: "number" }),
+    )
+  })
+
+  test("documents event routes as server-sent events", () => {
+    const effect = OpenApi.fromApi(PublicApi)
+
+    expect(responseContentTypes({ spec: effect, path: "/event", method: "get", status: "200" })).toEqual([
+      "text/event-stream",
+    ])
+    expect(responseContentTypes({ spec: effect, path: "/global/event", method: "get", status: "200" })).toEqual([
+      "text/event-stream",
+    ])
   })
 
   test("allows requests when auth is disabled", async () => {

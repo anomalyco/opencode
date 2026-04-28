@@ -21,11 +21,12 @@ type OpenApiParameter = {
   name: string
   in: string
   required?: boolean
-  schema?: unknown
+  schema?: OpenApiSchema
 }
 
 type OpenApiOperation = {
   parameters?: OpenApiParameter[]
+  responses?: Record<string, unknown>
   requestBody?: {
     required?: boolean
     content?: Record<string, { schema?: OpenApiSchema }>
@@ -46,8 +47,10 @@ type OpenApiSchema = {
   additionalProperties?: OpenApiSchema | boolean
   allOf?: OpenApiSchema[]
   anyOf?: OpenApiSchema[]
+  enum?: string[]
   items?: OpenApiSchema
   oneOf?: OpenApiSchema[]
+  prefixItems?: OpenApiSchema[]
   properties?: Record<string, OpenApiSchema>
   type?: string
 }
@@ -71,6 +74,7 @@ const LegacyBodyRefParameters = new Set(["Auth", "Config", "Part", "WorktreeRemo
 
 function matchLegacyOpenApi(input: Record<string, unknown>) {
   const spec = input as OpenApiSpec
+  if (spec.components?.schemas && !spec.components.schemas.Event) spec.components.schemas.Event = {}
   for (const [path, item] of Object.entries(spec.paths ?? {})) {
     const isInstanceRoute = !path.startsWith("/global/") && !path.startsWith("/auth/")
     for (const method of ["get", "post", "put", "delete", "patch"] as const) {
@@ -87,6 +91,45 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           }
           if (media.schema) media.schema = normalizeRequestSchema(media.schema)
         }
+        if (path === "/experimental/workspace" && method === "post") {
+          const properties = operation.requestBody.content?.["application/json"]?.schema?.properties
+          if (properties?.branch) properties.branch = { anyOf: [properties.branch, { type: "null" }] }
+          if (properties?.extra) properties.extra = { anyOf: [properties.extra, { type: "null" }] }
+        }
+        if (path === "/tui/publish" && method === "post" && spec.components?.schemas) {
+          const schema = operation.requestBody.content?.["application/json"]?.schema
+          const anyOf = schema?.anyOf
+          if (anyOf?.length === 4) {
+            spec.components.schemas.EventTuiPromptAppend = anyOf[0]
+            spec.components.schemas.EventTuiCommandExecute = anyOf[1]
+            spec.components.schemas.EventTuiToastShow = anyOf[2]
+            spec.components.schemas.EventTuiSessionSelect = anyOf[3]
+            operation.requestBody.content!["application/json"]!.schema = {
+              anyOf: [
+                { $ref: "#/components/schemas/EventTuiPromptAppend" },
+                { $ref: "#/components/schemas/EventTuiCommandExecute" },
+                { $ref: "#/components/schemas/EventTuiToastShow" },
+                { $ref: "#/components/schemas/EventTuiSessionSelect" },
+              ],
+            }
+          }
+        }
+        if (path === "/sync/replay" && method === "post" && spec.components?.schemas?.SyncReplayEvent) {
+          const events = operation.requestBody.content?.["application/json"]?.schema?.properties?.events
+          if (events?.items?.$ref === "#/components/schemas/SyncReplayEvent") {
+            events.items = normalizeRequestSchema(structuredClone(spec.components.schemas.SyncReplayEvent))
+          }
+        }
+      }
+      if ((path === "/event" || path === "/global/event") && method === "get") {
+        operation.responses!["200"] = {
+          description: "Event stream",
+          content: {
+            "text/event-stream": {
+              schema: { $ref: path === "/event" ? "#/components/schemas/Event" : "#/components/schemas/GlobalEvent" },
+            },
+          },
+        }
       }
       if (!isInstanceRoute) continue
       operation.parameters = [
@@ -95,22 +138,27 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           (param) => param.in !== "query" || (param.name !== "directory" && param.name !== "workspace"),
         ),
       ]
+      for (const param of operation.parameters) normalizeParameter(param)
     }
   }
   return input
 }
 
 function normalizeRequestSchema(schema: OpenApiSchema): OpenApiSchema {
-  const options = schema.anyOf ?? schema.oneOf
+  const options = flattenOptions(schema.anyOf ?? schema.oneOf)
   if (options) {
     const withoutNull = options.filter((item) => item.type !== "null")
     const finite = withoutNull.find((item) => item.type === "number")
-    if (finite && withoutNull.every((item) => item.type === "number" || item.type === "string")) return finite
+    if (finite && withoutNull.every(isFiniteNumberOption)) return { type: "number" }
     if (withoutNull.length === 1) return normalizeRequestSchema(withoutNull[0])
     if (schema.anyOf) schema.anyOf = withoutNull.map(normalizeRequestSchema)
     if (schema.oneOf) schema.oneOf = withoutNull.map(normalizeRequestSchema)
   }
-  if (schema.allOf) schema.allOf = schema.allOf.map(normalizeRequestSchema)
+  if (schema.allOf) {
+    if (schema.type) delete schema.allOf
+    else schema.allOf = schema.allOf.map(normalizeRequestSchema)
+  }
+  if (schema.prefixItems && schema.items) delete schema.prefixItems
   if (schema.items) schema.items = normalizeRequestSchema(schema.items)
   if (schema.properties) {
     for (const [key, value] of Object.entries(schema.properties)) {
@@ -121,6 +169,30 @@ function normalizeRequestSchema(schema: OpenApiSchema): OpenApiSchema {
     schema.additionalProperties = normalizeRequestSchema(schema.additionalProperties)
   }
   return schema
+}
+
+function flattenOptions(options: OpenApiSchema[] | undefined): OpenApiSchema[] | undefined {
+  return options?.flatMap((item) => flattenOptions(item.anyOf ?? item.oneOf) ?? [item])
+}
+
+function isFiniteNumberOption(schema: OpenApiSchema) {
+  if (schema.type === "number") return true
+  return schema.type === "string" && schema.enum?.every((value) => ["Infinity", "-Infinity", "NaN"].includes(value)) === true
+}
+
+function normalizeParameter(param: OpenApiParameter) {
+  if (param.in !== "query" || !param.schema || typeof param.schema !== "object") return
+  if (["start", "cursor", "limit", "method"].includes(param.name)) {
+    param.schema = { type: "number" }
+    return
+  }
+  if (["roots", "archived"].includes(param.name)) {
+    param.schema = {
+      anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
+    }
+    return
+  }
+  param.schema = normalizeRequestSchema(param.schema)
 }
 
 export const PublicApi = HttpApi.make("opencode")
