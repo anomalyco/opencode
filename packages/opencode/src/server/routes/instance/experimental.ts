@@ -37,7 +37,15 @@ const ConsoleSwitchBody = z.object({
   orgID: z.string(),
 })
 
-const QueryBoolean = z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean())
+const QueryBoolean = z.union([
+  z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean()),
+  z.enum(["true", "false"]),
+])
+
+function queryBoolean(value: z.infer<typeof QueryBoolean> | undefined) {
+  if (value === undefined) return
+  return value === true || value === "true"
+}
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
@@ -368,12 +376,12 @@ export const ExperimentalRoutes = lazy(() =>
         const sessions: Session.GlobalInfo[] = []
         for await (const session of Session.listGlobal({
           directory: query.directory,
-          roots: query.roots,
+          roots: queryBoolean(query.roots),
           start: query.start,
           cursor: query.cursor,
           search: query.search,
           limit: limit + 1,
-          archived: query.archived,
+          archived: queryBoolean(query.archived),
         })) {
           sessions.push(session)
         }

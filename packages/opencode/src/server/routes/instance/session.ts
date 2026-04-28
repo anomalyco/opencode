@@ -30,7 +30,15 @@ import { jsonRequest, runRequest } from "./trace"
 
 const log = Log.create({ service: "server" })
 
-const QueryBoolean = z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean())
+const QueryBoolean = z.union([
+  z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean()),
+  z.enum(["true", "false"]),
+])
+
+function queryBoolean(value: z.infer<typeof QueryBoolean> | undefined) {
+  if (value === undefined) return
+  return value === true || value === "true"
+}
 
 export const SessionRoutes = lazy(() =>
   new Hono()
@@ -69,7 +77,7 @@ export const SessionRoutes = lazy(() =>
         const sessions: Session.Info[] = []
         for await (const session of Session.list({
           directory: query.directory,
-          roots: query.roots,
+          roots: queryBoolean(query.roots),
           start: query.start,
           search: query.search,
           limit: query.limit,
