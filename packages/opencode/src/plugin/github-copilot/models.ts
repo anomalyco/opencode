@@ -131,19 +131,16 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
       })
     } else if (remote.capabilities.supports.max_thinking_budget) {
       const max = remote.capabilities.supports.max_thinking_budget
-      const min = remote.capabilities.supports.min_thinking_budget
       variants["max"] = {
         thinking: {
           type: "enabled",
           budgetTokens: max - 1,
         },
       }
-      const half = Math.floor(max / 2)
-      const high = min ? Math.min(half, min) : half
       variants["high"] = {
         thinking: {
           type: "enabled",
-          budgetTokens: high,
+          budgetTokens: Math.floor(max / 2),
         },
       }
     }
