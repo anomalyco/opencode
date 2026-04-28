@@ -30,7 +30,7 @@ import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
-import { isSessionActuallyWorking } from "@/utils/session-working"
+import { isSessionWorking } from "@/utils/session-working"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -245,7 +245,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "idle",
       },
   )
-  const working = createMemo(() => isSessionActuallyWorking(status(), params.id ? sync.data.message[params.id] ?? [] : []))
+  const working = createMemo(() => isSessionWorking(status()))
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )

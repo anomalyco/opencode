@@ -63,7 +63,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
-import { isSessionActuallyWorking, isSessionWorking } from "@/utils/session-working"
+import { isSessionWorking } from "@/utils/session-working"
 
 const emptyUserMessages: UserMessage[] = []
 type FollowupItem = FollowupDraft & { id: string }
@@ -1528,7 +1528,7 @@ export default function Page() {
     })
 
   const busy = (sessionID: string) => {
-    return isSessionActuallyWorking(sync.data.session_status[sessionID], sync.data.message[sessionID] ?? [])
+    return isSessionWorking(sync.data.session_status[sessionID])
   }
 
   const queuedFollowups = createMemo(() => {

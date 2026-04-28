@@ -30,6 +30,15 @@ describe("isSessionWorking", () => {
     ).toBe(false)
   })
 
+  test("treats tool-call assistant responses as unsettled", () => {
+    expect(
+      hasSettledLatestAssistantTurn([
+        { role: "user", time: {} },
+        { role: "assistant", finish: "tool-calls", time: { completed: Date.now() } },
+      ]),
+    ).toBe(false)
+  })
+
   test("suppresses stale busy state once latest assistant turn is settled", () => {
     expect(
       isSessionActuallyWorking(
@@ -40,5 +49,17 @@ describe("isSessionWorking", () => {
         ],
       ),
     ).toBe(false)
+  })
+
+  test("keeps busy state during tool-call turns", () => {
+    expect(
+      isSessionActuallyWorking(
+        { type: "busy" },
+        [
+          { role: "user", time: {} },
+          { role: "assistant", finish: "tool-calls", time: { completed: Date.now() } },
+        ],
+      ),
+    ).toBe(true)
   })
 })

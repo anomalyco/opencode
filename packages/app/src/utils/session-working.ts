@@ -6,13 +6,15 @@ export function hasSettledLatestAssistantTurn(
   messages: Array<{
     role: string
     error?: unknown
+    finish?: string
     time?: { completed?: number; created?: number }
   }>,
 ) {
   let sawLatestUser = false
   let latestAssistant:
     | {
-      error?: unknown
+        error?: unknown
+        finish?: string
         time?: { completed?: number; created?: number }
       }
     | undefined
@@ -29,6 +31,7 @@ export function hasSettledLatestAssistantTurn(
   }
 
   if (!sawLatestUser || !latestAssistant) return false
+  if (latestAssistant.finish === "tool-calls") return false
   if (typeof latestAssistant.time?.completed === "number") return true
   return !!latestAssistant.error
 }
@@ -38,6 +41,7 @@ export function isSessionActuallyWorking(
   messages: Array<{
     role: string
     error?: unknown
+    finish?: string
     time?: { completed?: number; created?: number }
   }>,
 ) {

@@ -13,7 +13,8 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { usePush } from "@/context/push"
-import { useSDK } from "@/context/sdk"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import {
   monoDefault,
   monoFontFamily,
@@ -26,7 +27,6 @@ import {
   terminalInput,
   useSettings,
 } from "@/context/settings"
-import { useSync } from "@/context/sync"
 import { normalizeAgentList } from "@/context/global-sync/utils"
 import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
@@ -77,10 +77,10 @@ export const SettingsGeneral: Component = () => {
   const permission = usePermission()
   const platform = usePlatform()
   const push = usePush()
-  const sdk = useSDK()
+  const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
   const params = useParams()
   const settings = useSettings()
-  const sync = useSync()
 
   onMount(() => {
     void theme.loadThemes()
@@ -398,13 +398,18 @@ export const SettingsGeneral: Component = () => {
   }
 
   const refreshSkills = async () => {
+    const value = dir()
+    if (!value) return
+
     setStore("refreshingSkills", true)
     try {
-      const skills = await sdk.client.app.refreshSkills()
-      const [agents, commands] = await Promise.all([sdk.client.app.agents(), sdk.client.command.list()])
+      const client = globalSDK.createClient({ directory: value, throwOnError: true })
+      const skills = await client.app.refreshSkills()
+      const [agents, commands] = await Promise.all([client.app.agents(), client.command.list()])
+      const [, setWorkspace] = globalSync.child(value, { bootstrap: false })
       batch(() => {
-        sync.set("agent", normalizeAgentList(agents.data))
-        sync.set("command", commands.data ?? [])
+        setWorkspace("agent", normalizeAgentList(agents.data))
+        setWorkspace("command", commands.data ?? [])
       })
       showToast({
         variant: "success",
@@ -509,7 +514,7 @@ export const SettingsGeneral: Component = () => {
           <Button
             size="small"
             variant="secondary"
-            disabled={store.refreshingSkills}
+            disabled={store.refreshingSkills || !dir()}
             onClick={() => void refreshSkills()}
           >
             {store.refreshingSkills
