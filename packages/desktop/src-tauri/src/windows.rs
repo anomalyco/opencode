@@ -3,7 +3,7 @@ use crate::{
     server::get_wsl_config,
 };
 use std::{ops::Deref, time::Duration};
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Listener, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::AppHandleExt;
 use tokio::sync::mpsc;
 
@@ -56,23 +56,36 @@ impl MainWindow {
         .title("OpenCode")
         .disable_drag_drop_handler()
         .zoom_hotkeys_enabled(false)
+        .visible(false)
         .initialization_script(format!(
             r#"
             window.__OPENCODE__ ??= {{}};
             window.__OPENCODE__.updaterEnabled = {UPDATER_ENABLED};
             window.__OPENCODE__.wsl = {wsl_enabled};
+            window.addEventListener('load', () => {{
+                if (window.__TAURI_INTERNALS__) {{
+                    window.__TAURI_INTERNALS__.invoke('plugin:event|emit', {{
+                        event: 'opencode-webview-ready',
+                        payload: {{}}
+                    }});
+                }}
+            }});
           "#
         ));
 
         let window = window_builder.build()?;
 
-        // Show window only after webview loads to avoid flash/jump
         let window_clone = window.clone();
-        window.on_webview_event(move |event| {
-            if matches!(event, tauri::WebviewEvent::DidFinishLoad(_)) {
-                let _ = window_clone.show();
-                let _ = window_clone.set_focus();
-            }
+        window.listen("opencode-webview-ready", move |_| {
+            let _ = window_clone.show();
+            let _ = window_clone.set_focus();
+        });
+
+        let window_clone2 = window.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            let _ = window_clone2.show();
+            let _ = window_clone2.set_focus();
         });
 
         setup_window_state_listener(app, &window);
@@ -142,16 +155,32 @@ impl LoadingWindow {
         )
         .center()
         .resizable(false)
-        .inner_size(640.0, 480.0);
+        .visible(false)
+        .inner_size(640.0, 480.0)
+        .initialization_script(r#"
+            window.addEventListener('load', () => {
+                if (window.__TAURI_INTERNALS__) {
+                    window.__TAURI_INTERNALS__.invoke('plugin:event|emit', {
+                        event: 'opencode-webview-ready',
+                        payload: {}
+                    });
+                }
+            });
+        "#);
 
         let window = window_builder.build()?;
 
         let window_clone = window.clone();
-        window.on_webview_event(move |event| {
-            if matches!(event, tauri::WebviewEvent::DidFinishLoad(_)) {
-                let _ = window_clone.show();
-                let _ = window_clone.set_focus();
-            }
+        window.listen("opencode-webview-ready", move |_| {
+            let _ = window_clone.show();
+            let _ = window_clone.set_focus();
+        });
+
+        let window_clone2 = window.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            let _ = window_clone2.show();
+            let _ = window_clone2.set_focus();
         });
 
         Ok(Self(window))
