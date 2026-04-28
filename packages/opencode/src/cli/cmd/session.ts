@@ -10,7 +10,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { Database } from "@/storage/db"
 import { SessionTable } from "@/session/session.sql"
-import { eq, and, inArray, type SQL } from "drizzle-orm"
+import { eq, and, inArray, like } from "drizzle-orm"
 import { Instance } from "@/project/instance"
 import * as Log from "@opencode-ai/core/util/log"
 import { EOL } from "os"
@@ -94,12 +94,16 @@ export const SessionMoveCommand = cmd({
         describe: "move all sessions matching this directory ('cwd' for current working directory)",
         type: "string",
       })
+      .option("from-project", {
+        describe: "move all sessions matching this project ID",
+        type: "string",
+      })
       .option("to-directory", {
-        describe: "new directory for the sessions (default: current project root)",
+        describe: "new directory for the sessions ('keep' to leave unchanged, default: current project root)",
         type: "string",
       })
       .option("to-project", {
-        describe: "new project ID for the sessions (default: current project ID)",
+        describe: "new project ID for the sessions ('keep' to leave unchanged, default: current project ID)",
         type: "string",
       })
       .option("dry-run", {
@@ -119,15 +123,27 @@ export const SessionMoveCommand = cmd({
       process.exit(1)
     }
     await bootstrap(process.cwd(), async () => {
-      const conditions: SQL[] = []
-      if (args.fromId?.length) conditions.push(inArray(SessionTable.id, args.fromId.map((id) => SessionID.make(id))))
-      if (args.fromDir)
-        conditions.push(eq(SessionTable.directory, args.fromDir === "cwd" ? process.cwd() : Filesystem.resolve(args.fromDir)))
-      const where = conditions.length === 1 ? conditions[0] : and(...conditions)
-      const set: Record<string, string> = {
-        directory: args.toDirectory ? Filesystem.resolve(args.toDirectory) : Instance.worktree,
-        project_id: args.toProject ?? Instance.project.id,
-      }
+      const fromId = args.fromId?.length
+        ? inArray(
+            SessionTable.id,
+            args.fromId.map((id) => SessionID.make(id)),
+          )
+        : undefined
+      const fromDir = args.fromDir
+        ? (() => {
+            const dir = args.fromDir === "cwd" ? process.cwd() : args.fromDir
+            return dir.includes("*") || dir.includes("?")
+              ? like(SessionTable.directory, dir.replace(/\*/g, "%").replace(/\?/g, "_"))
+              : eq(SessionTable.directory, Filesystem.resolve(dir))
+          })()
+        : undefined
+      const fromProject = args.fromProject ? eq(SessionTable.project_id, args.fromProject) : undefined
+      const where = and(fromId, fromDir, fromProject)
+      const set: Record<string, string> = {}
+      if (args.toDirectory && args.toDirectory !== "keep") set.directory = Filesystem.resolve(args.toDirectory)
+      else if (args.toDirectory !== "keep") set.directory = Instance.worktree
+      if (args.toProject && args.toProject !== "keep") set.project_id = args.toProject
+      else if (args.toProject !== "keep") set.project_id = Instance.project.id
       const before = Database.use((db) => db.select().from(SessionTable).where(where).all()).map(Session.fromRow)
       if (before.length === 0) return
       log.debug("session move parameters", { set })
