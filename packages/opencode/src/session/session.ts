@@ -74,6 +74,7 @@ export function fromRow(row: SessionRow): Info {
     projectID: row.project_id,
     workspaceID: row.workspace_id ?? undefined,
     directory: row.directory,
+    path: row.path ?? undefined,
     parentID: row.parent_id ?? undefined,
     title: row.title,
     version: row.version,
@@ -98,6 +99,7 @@ export function toRow(info: Info) {
     parent_id: info.parentID,
     slug: info.slug,
     directory: info.directory,
+    path: info.path,
     title: info.title,
     version: info.version,
     share_url: info.share?.url,
@@ -122,6 +124,10 @@ function getForkedTitle(title: string): string {
     return `${base} (fork #${num + 1})`
   }
   return `${title} (fork #1)`
+}
+
+function sessionPath(worktree: string, cwd: string) {
+  return path.relative(path.resolve(worktree), cwd).replaceAll("\\", "/")
 }
 
 const Summary = Schema.Struct({
@@ -155,6 +161,7 @@ export const Info = Schema.Struct({
   projectID: ProjectID,
   workspaceID: optionalOmitUndefined(WorkspaceID),
   directory: Schema.String,
+  path: optionalOmitUndefined(Schema.String),
   parentID: optionalOmitUndefined(SessionID),
   summary: optionalOmitUndefined(Summary),
   share: optionalOmitUndefined(Share),
@@ -245,6 +252,7 @@ const UpdatedInfo = Schema.Struct({
   projectID: Schema.optional(Schema.NullOr(ProjectID)),
   workspaceID: Schema.optional(Schema.NullOr(WorkspaceID)),
   directory: Schema.optional(Schema.NullOr(Schema.String)),
+  path: Schema.optional(Schema.NullOr(Schema.String)),
   parentID: Schema.optional(Schema.NullOr(SessionID)),
   summary: Schema.optional(Schema.NullOr(Summary)),
   share: Schema.optional(UpdatedShare),
@@ -442,6 +450,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       parentID?: SessionID
       workspaceID?: WorkspaceID
       directory: string
+      path?: string
       permission?: Permission.Ruleset
     }) {
       const ctx = yield* InstanceState.context
@@ -451,6 +460,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
         version: InstallationVersion,
         projectID: ctx.project.id,
         directory: input.directory,
+        path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
         title: input.title ?? createDefaultTitle(!!input.parentID),
@@ -566,11 +576,12 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       permission?: Permission.Ruleset
       workspaceID?: WorkspaceID
     }) {
-      const directory = yield* InstanceState.directory
+      const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
       return yield* createNext({
         parentID: input?.parentID,
-        directory,
+        directory: ctx.directory,
+        path: sessionPath(ctx.worktree, ctx.directory),
         title: input?.title,
         permission: input?.permission,
         workspaceID: workspace,
@@ -578,11 +589,12 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
     })
 
     const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
-      const directory = yield* InstanceState.directory
+      const ctx = yield* InstanceState.context
       const original = yield* get(input.sessionID)
       const title = getForkedTitle(original.title)
       const session = yield* createNext({
-        directory,
+        directory: ctx.directory,
+        path: sessionPath(ctx.worktree, ctx.directory),
         workspaceID: original.workspaceID,
         title,
       })

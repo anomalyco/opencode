@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import type { Context } from "hono"
-import type { UpgradeWebSocket } from "hono/ws"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { SessionID } from "../../src/session/schema"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
 import { TuiApi, TuiPaths } from "../../src/server/routes/instance/httpapi/tui"
 import { callTui } from "../../src/server/routes/instance/tui"
 import { Server } from "../../src/server/server"
@@ -16,11 +14,10 @@ import { tmpdir } from "../fixture/fixture"
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
 function app() {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return InstanceRoutes(websocket)
+  return Server.Default().app
 }
 
 async function expectTrue(path: string, headers: Record<string, string>, body?: unknown) {

@@ -20,6 +20,8 @@ const ZedEditorContentsSchema = z.object({
   contents: z.string().nullable(),
 })
 
+const utf8 = new TextEncoder()
+
 type ZedEditorRow = z.infer<typeof ZedEditorRowSchema>
 type ZedActiveEditorRow = ZedEditorRow & { item_kind: "Editor"; editor_id: number }
 
@@ -45,8 +47,8 @@ export async function resolveZedSelection(dbPath: string, cwd = process.cwd()): 
           .catch(() => undefined)
   if (text == null) return { type: "unavailable" }
 
-  const startOffset = Math.min(row.selection_start, row.selection_end)
-  const endOffset = Math.max(row.selection_start, row.selection_end)
+  const startOffset = utf8ByteOffsetToStringIndex(text, Math.min(row.selection_start, row.selection_end))
+  const endOffset = utf8ByteOffsetToStringIndex(text, Math.max(row.selection_start, row.selection_end))
 
   return {
     type: "selection",
@@ -158,7 +160,25 @@ function zedWorkspacePaths(value: string | null) {
 }
 
 export function offsetToPosition(text: string, offset: number) {
-  return offsetsToSelection(text, offset, offset).start
+  const stringOffset = utf8ByteOffsetToStringIndex(text, offset)
+  return offsetsToSelection(text, stringOffset, stringOffset).start
+}
+
+function utf8ByteOffsetToStringIndex(text: string, byteOffset: number) {
+  if (byteOffset <= 0) return 0
+
+  let bytes = 0
+  for (let index = 0; index < text.length; ) {
+    const codePoint = text.codePointAt(index)
+    if (codePoint === undefined) return text.length
+
+    const nextIndex = index + (codePoint > 0xffff ? 2 : 1)
+    bytes += utf8.encode(text.slice(index, nextIndex)).length
+    if (bytes >= byteOffset) return nextIndex
+    index = nextIndex
+  }
+
+  return text.length
 }
 
 function offsetsToSelection(text: string, startOffset: number, endOffset: number) {
