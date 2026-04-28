@@ -608,6 +608,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
             id: PartID.ascending(),
             messageID: cloned.id,
             sessionID: session.id,
+            ...(part.type === "compaction" && part.tail_start_id && { tail_start_id: idMap.get(part.tail_start_id) }),
           })
         }
       }
