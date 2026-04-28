@@ -191,6 +191,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: MessagesQuery,
           success: Schema.Array(MessageV2.WithParts),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.messages",
@@ -211,6 +212,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("create", SessionPaths.create, {
           payload: [HttpApiSchema.NoContent, Session.CreateInput],
           success: Session.Info,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.create",

@@ -105,6 +105,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         HttpApiEndpoint.post("consoleSwitch", ExperimentalPaths.consoleSwitch, {
           payload: ConsoleSwitchPayload,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.console.switchOrg",

@@ -37,6 +37,7 @@ export const ProviderApi = HttpApi.make("provider")
           params: { providerID: ProviderID },
           payload: ProviderAuth.AuthorizeInput,
           success: Schema.UndefinedOr(ProviderAuth.Authorization),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.oauth.authorize",
@@ -48,6 +49,7 @@ export const ProviderApi = HttpApi.make("provider")
           params: { providerID: ProviderID },
           payload: ProviderAuth.CallbackInput,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.oauth.callback",
