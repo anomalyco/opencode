@@ -64,7 +64,7 @@ describe("OpenAI Chat adapter", () => {
   it.effect("adds native query params to the Chat Completions URL", () =>
     Effect.gen(function* () {
       yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
-        .generate(LLM.updateRequest(request, { model: LLM.model({ ...model, native: { queryParams: { "api-version": "v1" } } }) }))
+        .generate(LLM.updateRequest(request, { model: LLM.model({ ...model, queryParams: { "api-version": "v1" } }) }))
         .pipe(
           Effect.provide(
             dynamicResponse((input) =>

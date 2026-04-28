@@ -38,22 +38,18 @@ export const adapter = Adapter.fromProtocol({
   framing: Framing.sse,
 })
 
-export const model = (input: OpenAICompatibleChatModelInput) => {
-  const { queryParams, native, ...rest } = input
-  return llmModel({
-    ...rest,
+export const model = (input: OpenAICompatibleChatModelInput) =>
+  llmModel({
+    ...input,
     protocol: "openai-compatible-chat",
-    native: queryParams ? { ...native, queryParams } : native,
     capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
   })
-}
 
 const familyModel = (family: ProviderFamily, input: ProviderFamilyModelInput) =>
   model({
     ...input,
     provider: family.provider,
     baseURL: input.baseURL ?? family.baseURL,
-    native: { ...input.native, openaiCompatibleProvider: family.provider },
   })
 
 export const baseten = (input: ProviderFamilyModelInput) => familyModel(families.baseten, input)

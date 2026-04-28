@@ -45,7 +45,7 @@ describe("OpenAI Responses adapter", () => {
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
       yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] })
-        .generate(LLM.updateRequest(request, { model: LLM.model({ ...model, native: { queryParams: { "api-version": "v1" } } }) }))
+        .generate(LLM.updateRequest(request, { model: LLM.model({ ...model, queryParams: { "api-version": "v1" } }) }))
         .pipe(
           Effect.provide(
             dynamicResponse((input) =>

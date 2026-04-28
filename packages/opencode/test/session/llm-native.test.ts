@@ -792,7 +792,7 @@ describe("LLMNative.request", () => {
       protocol: "openai-responses",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
       apiKey: "azure-key",
-      native: { queryParams: { "api-version": "2025-04-01-preview" } },
+      queryParams: { "api-version": "2025-04-01-preview" },
     })
   }))
 
@@ -816,7 +816,7 @@ describe("LLMNative.request", () => {
       protocol: "openai-chat",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
       apiKey: "azure-key",
-      native: { queryParams: { "api-version": "v1" } },
+      queryParams: { "api-version": "v1" },
     })
   }))
 

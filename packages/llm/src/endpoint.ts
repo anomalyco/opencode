@@ -22,10 +22,9 @@ export interface EndpointInput<Target> {
 }
 
 /**
- * Build a URL from the model's `baseURL` (or a default) plus a path.
- * Honors `model.native.queryParams` so adapters that need request-level query
- * params (Azure `api-version`, etc.) do not have to thread them through
- * manually.
+ * Build a URL from the model's `baseURL` (or a default) plus a path. Appends
+ * `model.queryParams` so adapters that need request-level query params
+ * (Azure `api-version`, etc.) get them for free.
  *
  * Both `default` and `path` may be strings or functions of the
  * `EndpointInput`, for adapters whose URL embeds the model id, region, or
@@ -43,7 +42,7 @@ export const baseURL = <Target>(input: {
     if (!base) return yield* ProviderShared.invalidRequest(input.required ?? "Missing baseURL")
     const path = typeof input.path === "string" ? input.path : input.path(ctx)
     const url = new URL(`${ProviderShared.trimBaseUrl(base)}${path}`)
-    const params = ProviderShared.queryParams(ctx.request)
+    const params = ctx.request.model.queryParams
     if (params) for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
     return url
   })

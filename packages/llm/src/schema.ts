@@ -84,8 +84,21 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
    */
   apiKey: Schema.optional(Schema.String),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /**
+   * Query params appended to the request URL by `Endpoint.baseURL`. Used for
+   * deployment-level URL-scoped settings such as Azure's `api-version` or any
+   * provider that requires a per-request key in the URL. Generic concern, so
+   * lives as a typed first-class field instead of `native`.
+   */
+  queryParams: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   capabilities: ModelCapabilities,
   limits: ModelLimits,
+  /**
+   * Provider-specific opaque options. Reach for this only when the value is
+   * genuinely provider-private and does not fit a typed axis (e.g. Bedrock's
+   * `aws_credentials` / `aws_region` for SigV4). Anything used by more than
+   * one adapter should grow into a typed field instead.
+   */
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 

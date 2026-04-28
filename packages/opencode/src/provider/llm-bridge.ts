@@ -134,14 +134,9 @@ export const toModelRef = (input: Input): ModelRef | undefined => {
     baseURL: baseURL(input, resolution, options),
     apiKey: apiKey(input, resolution, options),
     headers: headers(input, options),
+    queryParams: resolution.queryParams,
     capabilities: capabilities(input, resolution),
     limits: LLM.limits({ context: input.model.limit.context, output: input.model.limit.output }),
-    native: {
-      opencodeProviderID: input.provider.id,
-      opencodeModelID: input.model.id,
-      npm: input.model.api.npm,
-      ...(resolution.queryParams ? { queryParams: resolution.queryParams } : {}),
-    },
   })
 }
 

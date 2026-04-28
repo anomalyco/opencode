@@ -249,11 +249,7 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
     toolChoice: input.toolChoice,
     generation: input.generation,
     metadata: input.metadata,
-    native: {
-      opencodeProviderID: input.provider.id,
-      opencodeModelID: input.model.id,
-      ...input.native,
-    },
+    native: input.native,
   })
 })
 
