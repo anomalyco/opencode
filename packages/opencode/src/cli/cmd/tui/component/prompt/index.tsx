@@ -1022,6 +1022,7 @@ export function Prompt(props: PromptProps) {
             bottomLeft: "╹",
           }}
         >
+          <box border={["left"]} borderColor={modePrefixColor()}>
           <box
             paddingLeft={2}
             paddingRight={2}
@@ -1103,6 +1104,22 @@ export function Prompt(props: PromptProps) {
                   }
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
+                if (e.name === "tab" && !e.shift && !e.ctrl && !e.meta && !e.defaultPrevented && !autocomplete.visible) {
+                  if (shouldUseShellCompletion(store.mode, executionMode.mode())) {
+                    e.preventDefault()
+                    const result = await handleShellTabCompletion({
+                      input: input.plainText,
+                      cursorPosition: input.cursorOffset,
+                      cwd: sync.data.path.cwd || sync.data.path.directory || undefined,
+                    })
+                    if (result.applied) {
+                      input.setText(result.newInput)
+                      setStore("prompt", "input", result.newInput)
+                      input.cursorOffset = result.newCursorPosition
+                    }
+                    return
+                  }
+                }
                 if (!autocomplete.visible) {
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
@@ -1270,6 +1287,7 @@ export function Prompt(props: PromptProps) {
                 </box>
               </Show>
             </box>
+          </box>
           </box>
         </box>
         <box
