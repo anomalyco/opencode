@@ -49,6 +49,14 @@ test("offsetToPosition converts Zed offsets to 1-based editor positions", () => 
   expect(offsetToPosition("one\ntwo\nthree", 4)).toEqual({ line: 2, character: 1 })
   expect(offsetToPosition("one\ntwo\nthree", 6)).toEqual({ line: 2, character: 3 })
   expect(offsetToPosition("one\ntwo\nthree", 100)).toEqual({ line: 3, character: 6 })
+  expect(offsetToPosition("Ж\nabc", utf8ByteOffset("Ж\nabc", "Ж\nabc".indexOf("a")))).toEqual({
+    line: 2,
+    character: 1,
+  })
+  expect(offsetToPosition("😀\nabc", utf8ByteOffset("😀\nabc", "😀\nabc".indexOf("a")))).toEqual({
+    line: 2,
+    character: 1,
+  })
 })
 
 test("resolveZedSelection returns active editor selection", async () => {
@@ -88,6 +96,78 @@ test("resolveZedSelection converts Zed UTF-8 byte offsets to string offsets", as
       selection: {
         start: { line: 4, character: 1 },
         end: { line: 4, character: 7 },
+      },
+    },
+  })
+})
+
+test("resolveZedSelection handles non-ASCII text inside the selected range", async () => {
+  await using tmp = await tmpdir()
+  const contents = "a\npre\nвыбор\nz"
+  const start = contents.indexOf("выбор")
+  const fixture = await writeZedFixture(tmp.path, {
+    contents,
+    selectionStart: utf8ByteOffset(contents, start),
+    selectionEnd: utf8ByteOffset(contents, start + "выбор".length),
+  })
+
+  expect(await resolveZedSelection(fixture.dbPath, tmp.path)).toEqual({
+    type: "selection",
+    selection: {
+      text: "выбор",
+      filePath: fixture.filePath,
+      source: "zed",
+      selection: {
+        start: { line: 3, character: 1 },
+        end: { line: 3, character: 6 },
+      },
+    },
+  })
+})
+
+test("resolveZedSelection handles emoji before the selected range", async () => {
+  await using tmp = await tmpdir()
+  const contents = "😀\nTARGET\nz"
+  const start = contents.indexOf("TARGET")
+  const fixture = await writeZedFixture(tmp.path, {
+    contents,
+    selectionStart: utf8ByteOffset(contents, start),
+    selectionEnd: utf8ByteOffset(contents, start + "TARGET".length),
+  })
+
+  expect(await resolveZedSelection(fixture.dbPath, tmp.path)).toEqual({
+    type: "selection",
+    selection: {
+      text: "TARGET",
+      filePath: fixture.filePath,
+      source: "zed",
+      selection: {
+        start: { line: 2, character: 1 },
+        end: { line: 2, character: 7 },
+      },
+    },
+  })
+})
+
+test("resolveZedSelection handles reversed Zed byte offsets", async () => {
+  await using tmp = await tmpdir()
+  const contents = "a\nЖЖЖ\nTARGET\nz"
+  const start = contents.indexOf("TARGET")
+  const fixture = await writeZedFixture(tmp.path, {
+    contents,
+    selectionStart: utf8ByteOffset(contents, start + "TARGET".length),
+    selectionEnd: utf8ByteOffset(contents, start),
+  })
+
+  expect(await resolveZedSelection(fixture.dbPath, tmp.path)).toEqual({
+    type: "selection",
+    selection: {
+      text: "TARGET",
+      filePath: fixture.filePath,
+      source: "zed",
+      selection: {
+        start: { line: 3, character: 1 },
+        end: { line: 3, character: 7 },
       },
     },
   })
