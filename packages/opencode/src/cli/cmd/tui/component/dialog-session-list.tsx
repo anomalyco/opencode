@@ -118,19 +118,14 @@ export function DialogSessionList() {
 
   const [browseOrder, setBrowseOrder] = createSignal<string[]>([])
 
-  const searchOrder = createMemo(() => {
-    const results = searchResults()
-    if (results !== undefined) return orderByRecency(results)
-    return null
-  })
-
-  const displayOrder = createMemo(() => searchOrder() ?? browseOrder())
-
   const options = createMemo(() => {
     const today = new Date().toDateString()
     const sessionMap = new Map(sessions().filter((x) => x.parentID === undefined).map((x) => [x.id, x]))
 
-    return displayOrder()
+    const results = searchResults()
+    const displayOrder = results !== undefined ? orderByRecency(results) : browseOrder()
+
+    return displayOrder
       .map((id) => sessionMap.get(id))
       .filter((x) => x !== undefined)
       .map((x) => {
