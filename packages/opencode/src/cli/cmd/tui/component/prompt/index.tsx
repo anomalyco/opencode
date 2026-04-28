@@ -1022,7 +1022,14 @@ export function Prompt(props: PromptProps) {
             bottomLeft: "╹",
           }}
         >
-          <box border={["left"]} borderColor={modePrefixColor()} customBorderChars={{ ...SplitBorder.customBorderChars }}>
+          <box flexDirection="row">
+          <box
+            width={1}
+            alignSelf="stretch"
+            border={["left"]}
+            borderColor={modePrefixColor()}
+            customBorderChars={{ ...SplitBorder.customBorderChars }}
+          />
           <box
             paddingLeft={2}
             paddingRight={2}
