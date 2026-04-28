@@ -936,6 +936,7 @@ export type Session = {
   projectID: string
   workspaceID?: string
   directory: string
+  path?: string
   parentID?: string
   summary?: {
     additions: number
@@ -1063,6 +1064,7 @@ export type SyncEventSessionUpdated = {
       projectID?: string | null
       workspaceID?: string | null
       directory?: string | null
+      path?: string | null
       parentID?: string | null
       summary?: {
         additions: number
@@ -1882,6 +1884,7 @@ export type GlobalSession = {
   projectID: string
   workspaceID?: string
   directory: string
+  path?: string
   parentID?: string
   summary?: {
     additions: number
