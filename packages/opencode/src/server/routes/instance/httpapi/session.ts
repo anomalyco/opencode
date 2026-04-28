@@ -7,8 +7,8 @@ import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { Instance } from "@/project/instance"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { SessionShare } from "@/share"
-import { Session } from "@/session"
+import { SessionShare } from "@/share/session"
+import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -19,9 +19,9 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Effect, Layer, Schema, Struct } from "effect"
+import { Effect, Layer, Schema, SchemaGetter, Struct } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import {
@@ -37,9 +37,15 @@ import { Authorization } from "./auth"
 
 const log = Log.create({ service: "server" })
 const root = "/session"
+const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
+  }),
+)
 const ListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
-  roots: Schema.optional(Schema.Literals(["true", "false"])),
+  roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
@@ -185,6 +191,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: MessagesQuery,
           success: Schema.Array(MessageV2.WithParts),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.messages",
@@ -203,8 +210,9 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.post("create", SessionPaths.create, {
-          payload: Session.CreateInput,
+          payload: [HttpApiSchema.NoContent, Session.CreateInput],
           success: Session.Info,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.create",
@@ -436,7 +444,7 @@ export const sessionHandlers = Layer.unwrap(
         Array.from(
           Session.list({
             directory: ctx.query.directory,
-            roots: ctx.query.roots === "true" ? true : undefined,
+            roots: ctx.query.roots,
             start: ctx.query.start,
             search: ctx.query.search,
             limit: ctx.query.limit,
@@ -472,8 +480,8 @@ export const sessionHandlers = Layer.unwrap(
       params: { sessionID: SessionID }
       query: typeof MessagesQuery.Type
     }) {
-      if (ctx.query.before !== undefined && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
-      if (ctx.query.before !== undefined) {
+      if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
+      if (ctx.query.before) {
         const before = ctx.query.before
         yield* Effect.try({
           try: () => MessageV2.cursor.decode(before),
@@ -513,7 +521,7 @@ export const sessionHandlers = Layer.unwrap(
       )
     })
 
-    const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload: Session.CreateInput }) {
+    const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload?: Session.CreateInput }) {
       const instance = yield* InstanceState.context
       return yield* Effect.promise(() =>
         Instance.restore(instance, () =>
@@ -522,6 +530,22 @@ export const sessionHandlers = Layer.unwrap(
           ),
         ),
       )
+    })
+
+    const createRaw = Effect.fn("SessionHttpApi.createRaw")(function* (ctx: {
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      if (body.trim().length === 0) return yield* create({})
+
+      const json = yield* Effect.try({
+        try: () => JSON.parse(body) as unknown,
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+      const payload = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
+        Effect.mapError(() => new HttpApiError.BadRequest({})),
+      )
+      return yield* create({ payload })
     })
 
     const remove = Effect.fn("SessionHttpApi.remove")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -894,7 +918,7 @@ export const sessionHandlers = Layer.unwrap(
         .handle("diff", diff)
         .handle("messages", messages)
         .handle("message", message)
-        .handle("create", create)
+        .handleRaw("create", createRaw)
         .handle("remove", remove)
         .handle("update", update)
         .handle("fork", fork)

@@ -1,6 +1,7 @@
-import { EffectBridge } from "@/effect"
+import { EffectBridge } from "@/effect/bridge"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
+import { Shell } from "@/shell/shell"
 import { Effect, Layer, Schema } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -14,8 +15,14 @@ const Params = Schema.Struct({
 const CursorQuery = Schema.Struct({
   cursor: Schema.optional(Schema.String),
 })
+const ShellItem = Schema.Struct({
+  path: Schema.String,
+  name: Schema.String,
+  acceptable: Schema.Boolean,
+})
 
 export const PtyPaths = {
+  shells: `${root}/shells`,
   list: root,
   create: root,
   get: `${root}/:ptyID`,
@@ -28,6 +35,15 @@ export const PtyApi = HttpApi.make("pty")
   .add(
     HttpApiGroup.make("pty")
       .add(
+        HttpApiEndpoint.get("shells", PtyPaths.shells, {
+          success: Schema.Array(ShellItem),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "pty.shells",
+            summary: "List available shells",
+            description: "Get a list of available shells on the system.",
+          }),
+        ),
         HttpApiEndpoint.get("list", PtyPaths.list, {
           success: Schema.Array(Pty.Info),
         }).annotateMerge(
@@ -97,9 +113,32 @@ export const PtyApi = HttpApi.make("pty")
     }),
   )
 
+export const PtyConnectApi = HttpApi.make("pty-connect").add(
+  HttpApiGroup.make("pty-connect")
+    .add(
+      HttpApiEndpoint.get("connect", PtyPaths.connect, {
+        params: Params,
+        query: CursorQuery,
+        success: Schema.Boolean,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "pty.connect",
+          summary: "Connect to PTY session",
+          description:
+            "Establish a WebSocket connection to interact with a pseudo-terminal (PTY) session in real-time.",
+        }),
+      ),
+    )
+    .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." })),
+)
+
 export const ptyHandlers = Layer.unwrap(
   Effect.gen(function* () {
     const pty = yield* Pty.Service
+
+    const shells = Effect.fn("PtyHttpApi.shells")(function* () {
+      return yield* Effect.promise(() => Shell.list())
+    })
 
     const list = Effect.fn("PtyHttpApi.list")(function* () {
       return yield* pty.list()
@@ -143,6 +182,7 @@ export const ptyHandlers = Layer.unwrap(
 
     return HttpApiBuilder.group(PtyApi, "pty", (handlers) =>
       handlers
+        .handle("shells", shells)
         .handle("list", list)
         .handle("create", create)
         .handle("get", get)

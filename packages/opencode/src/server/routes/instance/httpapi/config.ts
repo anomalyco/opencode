@@ -1,5 +1,5 @@
-import { Config } from "@/config"
-import { Provider } from "@/provider"
+import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
 import * as InstanceState from "@/effect/instance-state"
 import { Effect, Layer } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -67,10 +67,9 @@ export const configHandlers = Layer.unwrap(
     })
 
     const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
-      const payload = Config.Info.zod.parse(ctx.payload)
-      yield* configSvc.update(payload, { dispose: false })
+      yield* configSvc.update(ctx.payload, { dispose: false })
       yield* markInstanceForDisposal(yield* InstanceState.context)
-      return payload
+      return ctx.payload
     })
 
     const providers = Effect.fn("ConfigHttpApi.providers")(function* () {

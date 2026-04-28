@@ -6,11 +6,11 @@ import z from "zod"
 import { Format } from "@/format"
 import { TuiRoutes } from "./tui"
 import { Instance } from "@/project/instance"
-import { Vcs } from "@/project"
+import { Vcs } from "@/project/vcs"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
 import { Global } from "@opencode-ai/core/global"
-import { LSP } from "@/lsp"
+import { LSP } from "@/lsp/lsp"
 import { Command } from "@/command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
@@ -25,6 +25,7 @@ import { McpPaths } from "./httpapi/mcp"
 import { SessionPaths } from "./httpapi/session"
 import { SyncPaths } from "./httpapi/sync"
 import { TuiPaths } from "./httpapi/tui"
+import { WorkspacePaths } from "./httpapi/workspace"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -98,6 +99,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
     app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.shells, (c) => handler(c.req.raw, context))
     app.get(PtyPaths.list, (c) => handler(c.req.raw, context))
     app.post(PtyPaths.create, (c) => handler(c.req.raw, context))
     app.get(PtyPaths.get, (c) => handler(c.req.raw, context))
@@ -144,6 +146,12 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(TuiPaths.selectSession, (c) => handler(c.req.raw, context))
     app.get(TuiPaths.controlNext, (c) => handler(c.req.raw, context))
     app.post(TuiPaths.controlResponse, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.adaptors, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.list, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
+    app.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
   }
 
   return app

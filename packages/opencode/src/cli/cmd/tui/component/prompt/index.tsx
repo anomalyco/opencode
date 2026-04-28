@@ -3,7 +3,7 @@ import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, S
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
 import { EmptyBorder, SplitBorder } from "@tui/component/border"
@@ -29,7 +29,7 @@ import * as Clipboard from "../../util/clipboard"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
-import { Locale } from "@/util"
+import { Locale } from "@/util/locale"
 import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
@@ -112,9 +112,10 @@ export function Prompt(props: PromptProps) {
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
-  const editorPath = createMemo(() => editor.selection()?.filePath)
+  const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
+  const editorPath = createMemo(() => (fileContextEnabled() ? editor.selection()?.filePath : undefined))
   const editorSelectionLabel = createMemo(() => {
-    const selection = editor.selection()?.selection
+    const selection = fileContextEnabled() ? editor.selection()?.selection : undefined
     if (!selection) return
     if (selection.start.line === selection.end.line && selection.start.character === selection.end.character) return
     if (selection.start.line === selection.end.line) return `#${selection.start.line}`
@@ -746,7 +747,7 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
-    const editorSelection = editor.selection()
+    const editorSelection = fileContextEnabled() ? editor.selection() : undefined
     const editorParts = editorSelection
       ? [
           {
@@ -755,15 +756,25 @@ export function Prompt(props: PromptProps) {
             text: (() => {
               const start = editorSelection.selection.start
               const end = editorSelection.selection.end
+
+              let text = ""
               if (start.line === end.line && start.character === end.character) {
-                return `Note: The user opened the file "${editorSelection.filePath}".`
+                text = `Note: The user opened the file "${editorSelection.filePath}".`
+              } else if (start.line === end.line) {
+                text = `Note: The user selected line ${start.line + 1} from "${editorSelection.filePath}". \`\`\`${editorSelection.text}\`\`\`\n\n`
+              } else {
+                text = `Note: The user selected lines ${start.line + 1} to ${end.line + 1} from "${editorSelection.filePath}". \`\`\`${editorSelection.text}\`\`\`\n\n`
               }
-              if (start.line === end.line) {
-                return `Note: The user selected line ${start.line} from  "${editorSelection.filePath}": ${editorSelection.text}`
-              }
-              return `Note: The user selected lines ${start.line} to ${end.line} from "${editorSelection.filePath}": ${editorSelection.text}`
+
+              return `<system-reminder>${text} This may or may not be relevant to the current task.</system-reminder>\n`
             })(),
             synthetic: true,
+            metadata: {
+              kind: "editor_context",
+              source: editorSelection.source ?? "editor",
+              filePath: editorSelection.filePath,
+              selection: editorSelection.selection,
+            },
           },
         ]
       : []
@@ -829,6 +840,7 @@ export function Prompt(props: PromptProps) {
           ],
         })
         .catch(() => {})
+      editor.clearSelection()
     }
     history.append({
       ...store.prompt,
