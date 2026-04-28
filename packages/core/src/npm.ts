@@ -186,16 +186,32 @@ export const layer = Layer.effect(
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
-      const name = (() => {
+      const npaName = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg).name ?? undefined
         } catch {
-          return pkg
+          return undefined
         }
       })()
 
       if (yield* afs.existsSafe(dir)) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        // For non-registry specs (remote tarball URLs, git+https://, github:
+        // shorthand, file: paths), npa(pkg).name returns undefined — only
+        // registry packages have inferable names from the spec alone. Read
+        // the install-root package.json (written by Arborist on the initial
+        // install) to recover the actual installed package name from its
+        // first dependency entry, matching what the fresh-install path
+        // computes from the arborist tree below.
+        const cachedPkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.option)
+        const installedName = (() => {
+          if (Option.isSome(cachedPkg)) {
+            const deps = (cachedPkg.value as { dependencies?: Record<string, unknown> })?.dependencies
+            const first = deps && Object.keys(deps)[0]
+            if (first) return first
+          }
+          return npaName ?? pkg
+        })()
+        return resolveEntryPoint(installedName, path.join(dir, "node_modules", installedName))
       }
 
       const tree = yield* reify({ dir, add: [pkg] })

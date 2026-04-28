@@ -9,6 +9,7 @@ import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Npm } from "@opencode-ai/core/npm"
 import { tmpdir } from "./fixture/fixture"
+import os from "os"
 
 const win = process.platform === "win32"
 const encoder = new TextEncoder()
@@ -139,5 +140,118 @@ describe("Npm.outdated", () => {
     expect(result).toBe(true)
     expect(calls).toContainEqual(["npm", "view", "example", "dist-tags.latest", "--json"])
     expect(calls).toContainEqual(["pnpm", "view", "example", "dist-tags.latest", "--json"])
+  })
+})
+
+describe("Npm.add cache fast-path", () => {
+  // Helper: build a layer where Global.cache points at the given dir.
+  // Other Global fields aren't read by Npm.add but Service.of requires them.
+  function cacheLayer(cacheDir: string) {
+    const tmp = os.tmpdir()
+    return Npm.layer.pipe(
+      Layer.provide(mockSpawner()),
+      Layer.provide(EffectFlock.layer),
+      Layer.provide(AppFileSystem.layer),
+      Layer.provide(
+        Layer.succeed(
+          Global.Service,
+          Global.Service.of({
+            home: tmp,
+            data: tmp,
+            cache: cacheDir,
+            config: tmp,
+            state: tmp,
+            bin: tmp,
+            log: tmp,
+          }),
+        ),
+      ),
+      Layer.provide(NodeFileSystem.layer),
+    )
+  }
+
+  // Helper: simulate a populated cache install for `pkg` whose actual
+  // installed name is `installedName`. Mirrors what Arborist produces:
+  //   <cache>/packages/<sanitize(pkg)>/package.json     (declares dep)
+  //   <cache>/packages/<sanitize(pkg)>/node_modules/<installedName>/package.json
+  async function seedCache(cacheDir: string, pkg: string, installedName: string) {
+    const installRoot = path.join(cacheDir, "packages", Npm.sanitize(pkg))
+    const pkgDir = path.join(installRoot, "node_modules", installedName)
+    await fs.mkdir(pkgDir, { recursive: true })
+    await Bun.write(
+      path.join(installRoot, "package.json"),
+      JSON.stringify({ dependencies: { [installedName]: pkg } }),
+    )
+    await Bun.write(
+      path.join(pkgDir, "package.json"),
+      JSON.stringify({ name: installedName, version: "1.0.0", main: "index.js" }),
+    )
+    await Bun.write(path.join(pkgDir, "index.js"), "module.exports = {}")
+    return { installRoot, pkgDir }
+  }
+
+  test("resolves remote tarball URL to actual installed package directory", async () => {
+    await using tmp = await tmpdir()
+    const url =
+      "https://github.com/sjawhar/opencode-anthropic-auth/releases/download/v0.4.2/sjawhar-opencode-anthropic-auth-0.4.2.tgz"
+    const installed = "@sjawhar/opencode-anthropic-auth"
+    const { pkgDir } = await seedCache(tmp.path, url, installed)
+
+    const result = await Effect.runPromise(
+      Npm.Service.use((svc) => svc.add(url)).pipe(Effect.provide(cacheLayer(tmp.path))),
+    )
+
+    expect(result.directory).toBe(pkgDir)
+  })
+
+  test("resolves git+https spec to actual installed package directory", async () => {
+    await using tmp = await tmpdir()
+    const spec = "git+https://github.com/example/some-repo.git"
+    const installed = "@example/some-repo"
+    const { pkgDir } = await seedCache(tmp.path, spec, installed)
+
+    const result = await Effect.runPromise(
+      Npm.Service.use((svc) => svc.add(spec)).pipe(Effect.provide(cacheLayer(tmp.path))),
+    )
+
+    expect(result.directory).toBe(pkgDir)
+  })
+
+  test("resolves github: shorthand to actual installed package directory", async () => {
+    await using tmp = await tmpdir()
+    const spec = "github:example/another-repo"
+    const installed = "another-repo"
+    const { pkgDir } = await seedCache(tmp.path, spec, installed)
+
+    const result = await Effect.runPromise(
+      Npm.Service.use((svc) => svc.add(spec)).pipe(Effect.provide(cacheLayer(tmp.path))),
+    )
+
+    expect(result.directory).toBe(pkgDir)
+  })
+
+  test("resolves local tarball file: spec to actual installed package directory", async () => {
+    await using tmp = await tmpdir()
+    const spec = "file:/some/local/path/example-1.0.0.tgz"
+    const installed = "@example/local-pkg"
+    const { pkgDir } = await seedCache(tmp.path, spec, installed)
+
+    const result = await Effect.runPromise(
+      Npm.Service.use((svc) => svc.add(spec)).pipe(Effect.provide(cacheLayer(tmp.path))),
+    )
+
+    expect(result.directory).toBe(pkgDir)
+  })
+
+  test("still resolves registry packages correctly", async () => {
+    await using tmp = await tmpdir()
+    const spec = "prettier"
+    const { pkgDir } = await seedCache(tmp.path, spec, spec)
+
+    const result = await Effect.runPromise(
+      Npm.Service.use((svc) => svc.add(spec)).pipe(Effect.provide(cacheLayer(tmp.path))),
+    )
+
+    expect(result.directory).toBe(pkgDir)
   })
 })
