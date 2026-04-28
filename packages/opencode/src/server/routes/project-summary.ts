@@ -82,8 +82,13 @@ export const ProjectSummaryRoutes = lazy(() =>
         .filter((line) => line.length > 0)
         .join("\n\n")
 
+      if (transcript.trim().length === 0) {
+        return c.json({ title: "", description: "", usage: "" })
+      }
+
       const { object } = await generateObject({
         model: language,
+        abortSignal: c.req.raw.signal,
         schema: ProjectSummaryShape,
         system: [
           "당신은 공유 갤러리에 올라갈 '서비스 소개글' 을 작성합니다.",
@@ -102,7 +107,7 @@ export const ProjectSummaryRoutes = lazy(() =>
   분석 시작 버튼을 클릭합니다"
 
 작업 기록:
-${transcript || "(empty session)"}`,
+${transcript}`,
       })
 
       return c.json(object)
