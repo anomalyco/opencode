@@ -150,7 +150,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md ./4-test-checklist.md
 
 ## Commit #6 — 文档对齐到最终实现
 
-**关联 commit**: `<待填>`(本次)
+**关联 commit**: `0b73e7d19`
 **实际改动**:
 - `1-spec.md`:验收标准从 unchecked 占位改成 `[x]` 已通过 + 拓展到完整 7 组覆盖;架构选型段重写,增加"外部文件 drop 终选方案"小节(撤销 onDragDropEvent 路径,改 FileReader)
 - `2-plan.md`:Commit #4 实施步骤改成"FileReader 路径"对应实际方案;决策轨迹补 D4-D9 6 条踩坑(路径分隔符 / tree-store force / hook 多注册 / `{...rest}` 覆盖 / 外部 drop 终选 / build rename Defender 锁)
