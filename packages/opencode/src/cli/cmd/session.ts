@@ -12,6 +12,9 @@ import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Instance } from "@/project/instance"
+import { ProjectID } from "@/project/schema"
+import { Effect } from "effect"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -43,7 +46,13 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs
+      .command(SessionListCommand)
+      .command(SessionOrphansCommand)
+      .command(SessionMigrateCommand)
+      .command(SessionDeleteCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -131,6 +140,107 @@ export const SessionListCommand = cmd({
       } else {
         console.log(output)
       }
+    })
+  },
+})
+
+export const SessionOrphansCommand = cmd({
+  command: "orphans",
+  describe: "list orphaned sessions",
+  builder: (yargs: Argv) => {
+    return yargs
+      .option("max-count", {
+        alias: "n",
+        describe: "limit to N most recent orphaned sessions",
+        type: "number",
+      })
+      .option("format", {
+        describe: "output format",
+        type: "string",
+        choices: ["table", "json"],
+        default: "table",
+      })
+      .option("archived", {
+        describe: "include archived sessions",
+        type: "boolean",
+        default: false,
+      })
+  },
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      const sessions = [
+        ...Session.listOrphans({
+          limit: args.maxCount,
+          archived: args.archived,
+        }),
+      ]
+
+      if (sessions.length === 0) return
+
+      const output = args.format === "json" ? formatSessionJSON(sessions) : formatSessionTable(sessions, true)
+      console.log(output)
+    })
+  },
+})
+
+export const SessionMigrateCommand = cmd({
+  command: "migrate <sessionID> [directory]",
+  aliases: ["rebind"],
+  describe: "migrate a session to another project or directory",
+  builder: (yargs: Argv) => {
+    return yargs
+      .positional("sessionID", {
+        describe: "session ID to migrate",
+        type: "string",
+        demandOption: true,
+      })
+      .positional("directory", {
+        describe: "target directory; defaults to the current working directory",
+        type: "string",
+      })
+      .option("project", {
+        describe: "target project ID; defaults to the project discovered from the target directory",
+        type: "string",
+      })
+      .option("format", {
+        describe: "output format",
+        type: "string",
+        choices: ["table", "json"],
+        default: "table",
+      })
+  },
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      const sessionID = SessionID.make(args.sessionID)
+      const directory = path.resolve(args.directory ?? process.cwd())
+      const input = args.project
+        ? {
+            sessionID,
+            projectID: ProjectID.make(args.project),
+            directory,
+          }
+        : await Instance.provide({
+            directory,
+            fn: async () => ({
+              sessionID,
+              projectID: Instance.project.id,
+              directory,
+            }),
+          })
+      const session = await AppRuntime.runPromise(
+        Session.Service.use((svc) => svc.migrate(input)).pipe(Effect.provide(Session.defaultLayer)),
+      )
+
+      if (args.format === "json") {
+        console.log(formatSessionJSON([session]))
+        return
+      }
+
+      UI.println(
+        UI.Style.TEXT_SUCCESS_BOLD +
+          `Session ${session.id} migrated to ${session.projectID} (${session.directory})` +
+          UI.Style.TEXT_NORMAL,
+      )
     })
   },
 })

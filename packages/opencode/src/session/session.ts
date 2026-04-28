@@ -1,5 +1,6 @@
 import { Slug } from "@opencode-ai/core/util/slug"
 import path from "path"
+import { existsSync } from "fs"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -210,6 +211,12 @@ export const SetArchivedInput = Schema.Struct({
   sessionID: SessionID,
   time: Schema.optional(Schema.Number),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const MigrateInput = Schema.Struct({
+  sessionID: SessionID,
+  projectID: ProjectID,
+  directory: Schema.String,
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type MigrateInput = Types.DeepMutable<Schema.Schema.Type<typeof MigrateInput>>
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
   permission: Permission.Ruleset,
@@ -389,6 +396,7 @@ export interface Interface {
   readonly get: (id: SessionID) => Effect.Effect<Info>
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
+  readonly migrate: (input: MigrateInput) => Effect.Effect<Info>
   readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
   readonly setRevert: (input: {
     sessionID: SessionID
@@ -618,6 +626,22 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
     const patch = (sessionID: SessionID, info: Patch) =>
       Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID, info }))
 
+    const descendants = (sessionID: SessionID) =>
+      Effect.sync(() => {
+        const ids = [sessionID]
+        const seen = new Set(ids)
+        let pending = [sessionID]
+        while (pending.length > 0) {
+          const rows = Database.use((db) =>
+            db.select({ id: SessionTable.id }).from(SessionTable).where(inArray(SessionTable.parent_id, pending)).all(),
+          )
+          pending = rows.map((row) => row.id).filter((id) => !seen.has(id))
+          pending.forEach((id) => seen.add(id))
+          ids.push(...pending)
+        }
+        return ids
+      })
+
     const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
       yield* patch(sessionID, { time: { updated: Date.now() } })
     })
@@ -628,6 +652,18 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
 
     const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
       yield* patch(input.sessionID, { time: { archived: input.time } })
+    })
+
+    const migrate = Effect.fn("Session.migrate")(function* (input: MigrateInput) {
+      yield* get(input.sessionID)
+      const ids = yield* descendants(input.sessionID)
+      yield* Effect.forEach(ids, (id) =>
+        patch(id, {
+          projectID: input.projectID,
+          directory: input.directory,
+        }),
+      )
+      return yield* get(input.sessionID)
     })
 
     const setPermission = Effect.fn("Session.setPermission")(function* (input: {
@@ -725,6 +761,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       get,
       setTitle,
       setArchived,
+      migrate,
       setPermission,
       setRevert,
       clearRevert,
@@ -863,6 +900,62 @@ export function* listGlobal(input?: {
   for (const row of rows) {
     const project = projects.get(row.project_id) ?? null
     yield { ...fromRow(row), project }
+  }
+}
+
+function isInside(root: string, target: string) {
+  const relative = path.relative(path.resolve(root), path.resolve(target))
+  return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative))
+}
+
+export function* listOrphans(input?: { workspaceID?: WorkspaceID; limit?: number; archived?: boolean }) {
+  const conditions: SQL[] = [isNull(SessionTable.parent_id)]
+  const workspace = input?.workspaceID ?? WorkspaceContext.workspaceID
+
+  if (workspace) {
+    conditions.push(eq(SessionTable.workspace_id, workspace))
+  }
+  if (!input?.archived) {
+    conditions.push(isNull(SessionTable.time_archived))
+  }
+
+  const rows = Database.use((db) =>
+    db
+      .select()
+      .from(SessionTable)
+      .where(and(...conditions))
+      .orderBy(desc(SessionTable.time_updated))
+      .all(),
+  )
+  const items = Database.use((db) =>
+    db
+      .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
+      .from(ProjectTable)
+      .all(),
+  )
+  const projects = new Map<string, ProjectInfo>()
+  const worktrees: string[] = []
+  for (const item of items) {
+    projects.set(item.id, {
+      id: item.id,
+      name: item.name ?? undefined,
+      worktree: item.worktree,
+    })
+    if (item.id !== ProjectID.global && item.worktree !== "/") {
+      worktrees.push(item.worktree)
+    }
+  }
+
+  let count = 0
+  for (const row of rows) {
+    const orphan = !existsSync(row.directory)
+    const misplaced =
+      row.project_id === ProjectID.global && worktrees.some((worktree) => isInside(worktree, row.directory))
+    if (!orphan && !misplaced) continue
+
+    yield { ...fromRow(row), project: projects.get(row.project_id) ?? null }
+    count++
+    if (input?.limit && count >= input.limit) return
   }
 }
 

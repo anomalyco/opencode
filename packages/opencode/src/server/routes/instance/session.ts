@@ -21,6 +21,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { ProjectID } from "@/project/schema"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { zodObject } from "@/util/effect-zod"
@@ -168,6 +169,43 @@ export const SessionRoutes = lazy(() =>
           c.header("x-next-cursor", String(list[list.length - 1].time.updated))
         }
         return c.json(list)
+      },
+    )
+    .get(
+      "/orphans",
+      describeRoute({
+        summary: "List orphaned sessions",
+        description:
+          "Get sessions whose directory no longer exists or global sessions that are inside a known project worktree.",
+        operationId: "session.orphans",
+        responses: {
+          200: {
+            description: "List of orphaned sessions",
+            content: {
+              "application/json": {
+                schema: resolver(Session.GlobalInfo.zod.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
+          archived: QueryBoolean.optional().meta({ description: "Include archived sessions (default false)" }),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        const sessions: Session.GlobalInfo[] = []
+        for await (const session of Session.listOrphans({
+          limit: query.limit,
+          archived: queryBoolean(query.archived),
+        })) {
+          sessions.push(session)
+        }
+        return c.json(sessions)
       },
     )
     .get(
@@ -464,6 +502,45 @@ export const SessionRoutes = lazy(() =>
           const body = c.req.valid("json") as { messageID?: MessageID }
           const svc = yield* Session.Service
           return yield* svc.fork({ ...body, sessionID })
+        }),
+    )
+    .post(
+      "/:sessionID/migrate",
+      describeRoute({
+        summary: "Migrate session",
+        description: "Migrate a session and its child sessions to another project and directory.",
+        operationId: "session.migrate",
+        responses: {
+          200: {
+            description: "Migrated session",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info.zod),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          projectID: ProjectID.zod,
+          directory: z.string(),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("SessionRoutes.migrate", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          const svc = yield* Session.Service
+          return yield* svc.migrate({ ...body, sessionID })
         }),
     )
     .post(

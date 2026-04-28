@@ -77,6 +77,9 @@ const UpdatePayload = Schema.Struct({
 const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"])).annotate({
   identifier: "SessionForkInput",
 })
+const MigratePayload = Schema.Struct(Struct.omit(Session.MigrateInput.fields, ["sessionID"])).annotate({
+  identifier: "SessionMigrateInput",
+})
 const InitPayload = Schema.Struct({
   modelID: ModelID,
   providerID: ProviderID,
@@ -107,6 +110,7 @@ export const SessionPaths = {
   list: root,
   status: `${root}/status`,
   history: `${root}/history`,
+  orphans: `${root}/orphans`,
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
@@ -117,6 +121,7 @@ export const SessionPaths = {
   remove: `${root}/:sessionID`,
   update: `${root}/:sessionID`,
   fork: `${root}/:sessionID/fork`,
+  migrate: `${root}/:sessionID/migrate`,
   abort: `${root}/:sessionID/abort`,
   share: `${root}/:sessionID/share`,
   init: `${root}/:sessionID/init`,
@@ -165,6 +170,20 @@ export const SessionApi = HttpApi.make("session")
             summary: "List session history",
             description:
               "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+          }),
+        ),
+        HttpApiEndpoint.get("orphans", SessionPaths.orphans, {
+          query: Schema.Struct({
+            limit: Schema.optional(Schema.NumberFromString),
+            archived: Schema.optional(QueryBoolean),
+          }),
+          success: Schema.Array(Session.GlobalInfo),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.orphans",
+            summary: "List orphaned sessions",
+            description:
+              "Get sessions whose directory no longer exists or global sessions that are inside a known project worktree.",
           }),
         ),
         HttpApiEndpoint.get("get", SessionPaths.get, {
@@ -271,6 +290,17 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.fork",
             summary: "Fork session",
             description: "Create a new session by forking an existing session at a specific message point.",
+          }),
+        ),
+        HttpApiEndpoint.post("migrate", SessionPaths.migrate, {
+          params: { sessionID: SessionID },
+          payload: MigratePayload,
+          success: Session.Info,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.migrate",
+            summary: "Migrate session",
+            description: "Migrate a session and its child sessions to another project and directory.",
           }),
         ),
         HttpApiEndpoint.post("abort", SessionPaths.abort, {
@@ -500,6 +530,17 @@ export const sessionHandlers = Layer.unwrap(
       })
     })
 
+    const orphans = Effect.fn("SessionHttpApi.orphans")(function* (ctx: {
+      query: { limit?: number; archived?: boolean }
+    }) {
+      return Array.from(
+        Session.listOrphans({
+          limit: ctx.query.limit,
+          archived: ctx.query.archived,
+        }),
+      )
+    })
+
     const get = Effect.fn("SessionHttpApi.get")(function* (ctx: { params: { sessionID: SessionID } }) {
       return yield* session.get(ctx.params.sessionID)
     })
@@ -644,6 +685,25 @@ export const sessionHandlers = Layer.unwrap(
           AppRuntime.runPromise(
             Session.Service.use((svc) =>
               svc.fork({ sessionID: ctx.params.sessionID, messageID: ctx.payload.messageID }),
+            ).pipe(Effect.provide(Session.defaultLayer)),
+          ),
+        ),
+      )
+    })
+
+    const migrate = Effect.fn("SessionHttpApi.migrate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof MigratePayload.Type
+    }) {
+      const instance = yield* InstanceState.context
+      return yield* Effect.promise(() =>
+        Instance.restore(instance, () =>
+          AppRuntime.runPromise(
+            Session.Service.use((svc) =>
+              svc.migrate({
+                ...ctx.payload,
+                sessionID: ctx.params.sessionID,
+              }),
             ).pipe(Effect.provide(Session.defaultLayer)),
           ),
         ),
@@ -956,6 +1016,7 @@ export const sessionHandlers = Layer.unwrap(
         .handle("list", list)
         .handle("status", status)
         .handle("history", history)
+        .handle("orphans", orphans)
         .handle("get", get)
         .handle("children", children)
         .handle("todo", todo)
@@ -966,6 +1027,7 @@ export const sessionHandlers = Layer.unwrap(
         .handle("remove", remove)
         .handle("update", update)
         .handle("fork", fork)
+        .handle("migrate", migrate)
         .handle("abort", abort)
         .handle("init", init)
         .handle("share", share)

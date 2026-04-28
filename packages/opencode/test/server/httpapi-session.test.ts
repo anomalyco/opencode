@@ -126,6 +126,8 @@ describe("session HttpApi", () => {
         expect(history.map((item) => item.id)).toContain(parent.id)
         expect(history.find((item) => item.id === parent.id)?.project?.id).toBe(parent.projectID)
 
+        expect(yield* requestJson<Session.GlobalInfo[]>(SessionPaths.orphans, { headers })).toEqual([])
+
         expect(
           yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: parent.id }), { headers }),
         ).toMatchObject({ id: parent.id, title: "parent" })
@@ -205,6 +207,25 @@ describe("session HttpApi", () => {
           body: JSON.stringify({}),
         })
         expect(forked.id).not.toBe(created.id)
+
+        const target = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir({ git: true, config: { formatter: false, lsp: false } })),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const targetProject = yield* Effect.promise(
+          async () =>
+            await Instance.provide({
+              directory: target.path,
+              fn: async () => Instance.project,
+            }),
+        )
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.migrate, { sessionID: created.id }), {
+            method: "POST",
+            headers: { "x-opencode-directory": target.path, "content-type": "application/json" },
+            body: JSON.stringify({ projectID: targetProject.id, directory: target.path }),
+          }),
+        ).toMatchObject({ id: created.id, projectID: targetProject.id, directory: target.path })
 
         expect(
           yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: created.id }), {

@@ -138,6 +138,9 @@ import type {
   SessionMessageResponses,
   SessionMessagesErrors,
   SessionMessagesResponses,
+  SessionMigrateErrors,
+  SessionMigrateResponses,
+  SessionOrphansResponses,
   SessionPromptAsyncErrors,
   SessionPromptAsyncResponses,
   SessionPromptErrors,
@@ -1793,6 +1796,40 @@ export class Session2 extends HeyApiClient {
   }
 
   /**
+   * List orphaned sessions
+   *
+   * Get sessions whose directory no longer exists or global sessions that are inside a known project worktree.
+   */
+  public orphans<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      limit?: number
+      archived?: boolean | "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "archived" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionOrphansResponses, unknown, ThrowOnError>({
+      url: "/session/orphans",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Delete session
    *
    * Delete a session and permanently remove all associated data, including messages and history.
@@ -2037,6 +2074,55 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionForkResponses, unknown, ThrowOnError>({
       url: "/session/{sessionID}/fork",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Migrate session
+   *
+   * Migrate a session and its child sessions to another project and directory.
+   */
+  public migrate<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      query_directory?: string
+      workspace?: string
+      projectID?: string
+      body_directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "projectID" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionMigrateResponses, SessionMigrateErrors, ThrowOnError>({
+      url: "/session/{sessionID}/migrate",
       ...options,
       ...params,
       headers: {

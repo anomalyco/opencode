@@ -24,8 +24,17 @@ const svc = {
   create(input?: SessionNs.CreateInput) {
     return run(SessionNs.Service.use((svc) => svc.create(input)))
   },
+  get(sessionID: SessionNs.Info["id"]) {
+    return run(SessionNs.Service.use((svc) => svc.get(sessionID)))
+  },
+  children(sessionID: SessionNs.Info["id"]) {
+    return run(SessionNs.Service.use((svc) => svc.children(sessionID)))
+  },
   setArchived(input: z.output<typeof SessionNs.SetArchivedInput.zod>) {
     return run(SessionNs.Service.use((svc) => svc.setArchived(input)))
+  },
+  migrate(input: SessionNs.MigrateInput) {
+    return run(SessionNs.Service.use((svc) => svc.migrate(input)))
   },
 }
 
@@ -143,6 +152,61 @@ describe("session.listGlobal", () => {
     expect(ids).not.toContain(second.id)
   })
 
+  test("migrates a root session and its children to another project", async () => {
+    await using source = await tmpdir({ git: true })
+    await using target = await tmpdir({ git: true })
+
+    const parent = await Instance.provide({
+      directory: source.path,
+      fn: async () => svc.create({ title: "migrate-parent" }),
+    })
+    const child = await Instance.provide({
+      directory: source.path,
+      fn: async () => svc.create({ title: "migrate-child", parentID: parent.id }),
+    })
+    const targetProject = await Instance.provide({
+      directory: target.path,
+      fn: async () => Instance.project,
+    })
+
+    await Instance.provide({
+      directory: target.path,
+      fn: async () =>
+        svc.migrate({
+          sessionID: parent.id,
+          projectID: targetProject.id,
+          directory: target.path,
+        }),
+    })
+
+    const migratedParent = await svc.get(parent.id)
+    const migratedChild = await svc.get(child.id)
+
+    expect(migratedParent.projectID).toBe(targetProject.id)
+    expect(migratedParent.directory).toBe(target.path)
+    expect(migratedChild.projectID).toBe(targetProject.id)
+    expect(migratedChild.directory).toBe(target.path)
+  })
+
+  test("lists sessions whose directory no longer exists as orphans", async () => {
+    const source = await tmpdir({ git: true })
+    await using current = await tmpdir({ git: true })
+
+    const session = await Instance.provide({
+      directory: source.path,
+      fn: async () => svc.create({ title: "missing-directory" }),
+    })
+
+    await source[Symbol.asyncDispose]()
+
+    const orphans = await Instance.provide({
+      directory: current.path,
+      fn: async () => [...svc.listOrphans()],
+    })
+
+    expect(orphans.map((item) => item.id)).toContain(session.id)
+  })
+
   test("session history endpoint lists sessions across projects", async () => {
     await using first = await tmpdir({ git: true })
     await using second = await tmpdir({ git: true })
@@ -169,6 +233,50 @@ describe("session.listGlobal", () => {
     expect(ids).toContain(two.id)
     expect(sessions.find((session) => session.id === one.id)?.project?.id).toBe(one.projectID)
     expect(sessions.find((session) => session.id === two.id)?.project?.id).toBe(two.projectID)
+  })
+
+  test("session orphans and migrate endpoints", async () => {
+    const source = await tmpdir({ git: true })
+    await using target = await tmpdir({ git: true })
+    await using current = await tmpdir({ git: true })
+
+    const session = await Instance.provide({
+      directory: source.path,
+      fn: async () => svc.create({ title: "endpoint-orphan" }),
+    })
+    const targetProject = await Instance.provide({
+      directory: target.path,
+      fn: async () => Instance.project,
+    })
+
+    await source[Symbol.asyncDispose]()
+
+    const orphanResponse = await Instance.provide({
+      directory: current.path,
+      fn: async () => InstanceRoutes(websocket).request("/session/orphans"),
+    })
+    expect(orphanResponse.status).toBe(200)
+
+    const orphans = (await orphanResponse.json()) as SessionNs.GlobalInfo[]
+    expect(orphans.map((item) => item.id)).toContain(session.id)
+
+    const migrateResponse = await Instance.provide({
+      directory: target.path,
+      fn: async () =>
+        InstanceRoutes(websocket).request(`/session/${session.id}/migrate`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectID: targetProject.id,
+            directory: target.path,
+          }),
+        }),
+    })
+    expect(migrateResponse.status).toBe(200)
+
+    const migrated = (await migrateResponse.json()) as SessionNs.Info
+    expect(migrated.projectID).toBe(targetProject.id)
+    expect(migrated.directory).toBe(target.path)
   })
 
   test("session history endpoint supports cursor pagination", async () => {
