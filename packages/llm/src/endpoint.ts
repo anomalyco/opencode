@@ -7,7 +7,7 @@ import type { LLMError, LLMRequest } from "./schema"
  *
  * `Endpoint` is the deployment-side answer to "where does this request go?"
  * It receives the `LLMRequest` (so it can read `model.id`, `model.baseURL`,
- * and `model.native.queryParams`) and the validated `Target` (so adapters
+ * and `model.queryParams`) and the validated `Target` (so adapters
  * whose path depends on a target field — e.g. Bedrock's `modelId` segment —
  * can read it safely after target patches).
  *
