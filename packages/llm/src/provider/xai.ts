@@ -1,5 +1,5 @@
-import { ProviderRoute } from "../provider-route"
+import { ProviderResolver } from "../provider-resolver"
 
-export const provider = ProviderRoute.fixed("xai", "openai-responses")
+export const resolver = ProviderResolver.fixed("xai", "openai-responses", { auth: "bearer" })
 
 export * as XAI from "./xai"

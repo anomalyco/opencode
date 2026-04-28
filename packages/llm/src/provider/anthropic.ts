@@ -1,5 +1,5 @@
-import { ProviderRoute } from "../provider-route"
+import { ProviderResolver } from "../provider-resolver"
 
-export const provider = ProviderRoute.fixed("anthropic", "anthropic-messages")
+export const resolver = ProviderResolver.fixed("anthropic", "anthropic-messages", { auth: "anthropic-api-key" })
 
 export * as Anthropic from "./anthropic"

@@ -1,4 +1,4 @@
-import { ProviderRoute } from "../provider-route"
+import { ProviderResolver } from "../provider-resolver"
 
 export interface ProviderFamily {
   readonly provider: string
@@ -18,11 +18,12 @@ export const byProvider: Record<string, ProviderFamily> = Object.fromEntries(
   Object.values(families).map((family) => [family.provider, family]),
 )
 
-export const route = (provider: string) => ProviderRoute.make(provider, "openai-compatible-chat")
+export const resolve = (provider: string) =>
+  ProviderResolver.make(provider, "openai-compatible-chat", { baseURL: byProvider[provider]?.baseURL, auth: "bearer" })
 
-export const provider = ProviderRoute.define({
-  id: ProviderRoute.make("openai-compatible", "openai-compatible-chat").provider,
-  route: (input) => route(input.providerID),
+export const resolver = ProviderResolver.define({
+  id: ProviderResolver.make("openai-compatible", "openai-compatible-chat").provider,
+  resolve: (input) => resolve(input.providerID),
 })
 
 export * as OpenAICompatibleFamily from "./openai-compatible-family"

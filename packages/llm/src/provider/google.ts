@@ -1,5 +1,5 @@
-import { ProviderRoute } from "../provider-route"
+import { ProviderResolver } from "../provider-resolver"
 
-export const provider = ProviderRoute.fixed("google", "gemini")
+export const resolver = ProviderResolver.fixed("google", "gemini", { auth: "google-api-key" })
 
 export * as Google from "./google"

@@ -1,13 +1,12 @@
-import { ProviderRoute } from "../provider-route"
+import { ProviderResolver } from "../provider-resolver"
 import { ProviderID } from "../schema"
 
 export const id = ProviderID.make("azure")
 
-export const provider = ProviderRoute.define({
+export const resolver = ProviderResolver.define({
   id,
-  route: (input) => ProviderRoute.make(id, input.options.useCompletionUrls ? "openai-chat" : "openai-responses"),
+  resolve: (input) =>
+    ProviderResolver.make(id, input.options.useCompletionUrls ? "openai-chat" : "openai-responses", { auth: "bearer" }),
 })
-
-export const route = provider.route
 
 export * as Azure from "./azure"

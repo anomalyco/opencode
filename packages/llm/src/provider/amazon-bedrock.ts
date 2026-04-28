@@ -1,5 +1,5 @@
-import { ProviderRoute } from "../provider-route"
+import { ProviderResolver } from "../provider-resolver"
 
-export const provider = ProviderRoute.fixed("amazon-bedrock", "bedrock-converse")
+export const resolver = ProviderResolver.fixed("amazon-bedrock", "bedrock-converse", { auth: "bearer" })
 
 export * as AmazonBedrock from "./amazon-bedrock"

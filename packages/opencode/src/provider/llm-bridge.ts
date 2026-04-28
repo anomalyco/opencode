@@ -6,13 +6,14 @@ import {
   LLM,
   OpenAI,
   OpenAICompatibleFamily,
-  ProviderRoute,
+  ProviderResolver,
   ReasoningEfforts,
   XAI,
+  type CapabilitiesInput,
   type ModelRef,
-  type Protocol,
-  type ProviderDefinition,
-  type ProviderRouteShape,
+  type ProviderAuth,
+  type ProviderResolution,
+  type ProviderResolverShape,
   type ReasoningEffort,
 } from "@opencode-ai/llm"
 import { isRecord } from "@/util/record"
@@ -23,19 +24,19 @@ type Input = {
   readonly model: Provider.Model
 }
 
-const PROVIDERS: Record<string, ProviderDefinition> = {
-  "@ai-sdk/amazon-bedrock": AmazonBedrock.provider,
-  "@ai-sdk/anthropic": Anthropic.provider,
-  "@ai-sdk/baseten": OpenAICompatibleFamily.provider,
-  "@ai-sdk/cerebras": OpenAICompatibleFamily.provider,
-  "@ai-sdk/deepinfra": OpenAICompatibleFamily.provider,
-  "@ai-sdk/fireworks": OpenAICompatibleFamily.provider,
-  "@ai-sdk/github-copilot": GitHubCopilot.provider,
-  "@ai-sdk/google": Google.provider,
-  "@ai-sdk/openai": OpenAI.provider,
-  "@ai-sdk/openai-compatible": OpenAICompatibleFamily.provider,
-  "@ai-sdk/togetherai": OpenAICompatibleFamily.provider,
-  "@ai-sdk/xai": XAI.provider,
+const PROVIDERS: Record<string, ProviderResolverShape> = {
+  "@ai-sdk/amazon-bedrock": AmazonBedrock.resolver,
+  "@ai-sdk/anthropic": Anthropic.resolver,
+  "@ai-sdk/baseten": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/cerebras": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/deepinfra": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/fireworks": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/github-copilot": GitHubCopilot.resolver,
+  "@ai-sdk/google": Google.resolver,
+  "@ai-sdk/openai": OpenAI.resolver,
+  "@ai-sdk/openai-compatible": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/togetherai": OpenAICompatibleFamily.resolver,
+  "@ai-sdk/xai": XAI.resolver,
 }
 
 const REASONING_EFFORTS = new Set<ReasoningEffort>(ReasoningEfforts)
@@ -52,29 +53,29 @@ const recordOption = (options: Record<string, unknown>, key: string): Record<str
   return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
 }
 
-export const route = (
+export const resolve = (
   input: Input,
   options: Record<string, unknown> = { ...input.provider.options, ...input.model.options },
-): ProviderRouteShape | undefined =>
-  PROVIDERS[input.model.api.npm]?.route(ProviderRoute.input(input.model.api.id, input.model.providerID, options))
+): ProviderResolution | undefined =>
+  PROVIDERS[input.model.api.npm]?.resolve(ProviderResolver.input(input.model.api.id, input.model.providerID, options))
 
-const baseURL = (input: Input, selected: Protocol, options: Record<string, unknown>) => {
+const baseURL = (input: Input, resolution: ProviderResolution, options: Record<string, unknown>) => {
   const configured = stringOption(options, "baseURL") ?? input.model.api.url
   if (configured) return configured
-  if (selected === "openai-compatible-chat") return OpenAICompatibleFamily.byProvider[input.model.providerID]?.baseURL
-  return undefined
+  return resolution.baseURL
 }
 
-const authHeader = (selected: Protocol, apiKey: string | undefined): Record<string, string> => {
+const authHeader = (auth: ProviderAuth | undefined, apiKey: string | undefined): Record<string, string> => {
   if (!apiKey) return {}
-  if (selected === "anthropic-messages") return { "x-api-key": apiKey }
-  if (selected === "gemini") return { "x-goog-api-key": apiKey }
+  if (auth === "none") return {}
+  if (auth === "anthropic-api-key") return { "x-api-key": apiKey }
+  if (auth === "google-api-key") return { "x-goog-api-key": apiKey }
   return { authorization: `Bearer ${apiKey}` }
 }
 
-const headers = (input: Input, selected: Protocol, options: Record<string, unknown>) => {
+const headers = (input: Input, resolution: ProviderResolution, options: Record<string, unknown>) => {
   const result = {
-    ...authHeader(selected, stringOption(options, "apiKey") ?? input.provider.key),
+    ...authHeader(resolution.auth, stringOption(options, "apiKey") ?? input.provider.key),
     ...recordOption(options, "headers"),
     ...input.model.headers,
   }
@@ -86,48 +87,61 @@ const reasoningEfforts = (input: Input) =>
     REASONING_EFFORTS.has(effort as ReasoningEffort),
   )
 
-const capabilities = (input: Input, selected: Protocol) =>
-  LLM.capabilities({
-    input: {
-      text: input.model.capabilities.input.text,
-      image: input.model.capabilities.input.image,
-      audio: input.model.capabilities.input.audio,
-      video: input.model.capabilities.input.video,
-      pdf: input.model.capabilities.input.pdf,
-    },
-    output: {
-      text: input.model.capabilities.output.text,
-      reasoning: input.model.capabilities.reasoning,
-    },
-    tools: {
-      calls: input.model.capabilities.toolcall,
-      streamingInput: selected !== "gemini" && input.model.capabilities.toolcall,
-    },
-    cache: {
-      // Both Anthropic Messages and Bedrock Converse honour positional cache
-      // markers — Anthropic via `cache_control` on content blocks, Bedrock via
-      // its `cachePoint` marker block (added to BedrockConverse in 9d7d518ac).
-      prompt: ["anthropic-messages", "bedrock-converse"].includes(selected),
-      contentBlocks: ["anthropic-messages", "bedrock-converse"].includes(selected),
-    },
-    reasoning: {
-      efforts: reasoningEfforts(input),
-      summaries: selected === "openai-responses",
-      encryptedContent: selected === "openai-responses" || selected === "anthropic-messages",
-    },
-  })
+const mergeCapabilities = (base: CapabilitiesInput, override: CapabilitiesInput | undefined): CapabilitiesInput => ({
+  input: { ...base.input, ...override?.input },
+  output: { ...base.output, ...override?.output },
+  tools: { ...base.tools, ...override?.tools },
+  cache: { ...base.cache, ...override?.cache },
+  reasoning: { ...base.reasoning, ...override?.reasoning },
+})
+
+const capabilities = (input: Input, resolution: ProviderResolution) =>
+  LLM.capabilities(
+    mergeCapabilities(
+      {
+        input: {
+          text: input.model.capabilities.input.text,
+          image: input.model.capabilities.input.image,
+          audio: input.model.capabilities.input.audio,
+          video: input.model.capabilities.input.video,
+          pdf: input.model.capabilities.input.pdf,
+        },
+        output: {
+          text: input.model.capabilities.output.text,
+          reasoning: input.model.capabilities.reasoning,
+        },
+        tools: {
+          calls: input.model.capabilities.toolcall,
+          streamingInput: resolution.protocol !== "gemini" && input.model.capabilities.toolcall,
+        },
+        cache: {
+          // Both Anthropic Messages and Bedrock Converse honour positional cache
+          // markers — Anthropic via `cache_control` on content blocks, Bedrock via
+          // its `cachePoint` marker block (added to BedrockConverse in 9d7d518ac).
+          prompt: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
+          contentBlocks: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
+        },
+        reasoning: {
+          efforts: reasoningEfforts(input),
+          summaries: resolution.protocol === "openai-responses",
+          encryptedContent: resolution.protocol === "openai-responses" || resolution.protocol === "anthropic-messages",
+        },
+      },
+      resolution.capabilities,
+    ),
+  )
 
 export const toModelRef = (input: Input): ModelRef | undefined => {
   const options = { ...input.provider.options, ...input.model.options }
-  const selected = route(input, options)
-  if (!selected) return undefined
+  const resolution = resolve(input, options)
+  if (!resolution) return undefined
   return LLM.model({
     id: input.model.api.id,
-    provider: selected.provider,
-    protocol: selected.protocol,
-    baseURL: baseURL(input, selected.protocol, options),
-    headers: headers(input, selected.protocol, options),
-    capabilities: capabilities(input, selected.protocol),
+    provider: resolution.provider,
+    protocol: resolution.protocol,
+    baseURL: baseURL(input, resolution, options),
+    headers: headers(input, resolution, options),
+    capabilities: capabilities(input, resolution),
     limits: LLM.limits({ context: input.model.limit.context, output: input.model.limit.output }),
     native: {
       opencodeProviderID: input.provider.id,

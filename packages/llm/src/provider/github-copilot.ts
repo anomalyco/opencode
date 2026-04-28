@@ -1,4 +1,4 @@
-import { ProviderRoute } from "../provider-route"
+import { ProviderResolver } from "../provider-resolver"
 import { ProviderID } from "../schema"
 
 export const id = ProviderID.make("github-copilot")
@@ -9,11 +9,10 @@ export const shouldUseResponsesApi = (modelID: string) => {
   return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
 }
 
-export const provider = ProviderRoute.define({
+export const resolver = ProviderResolver.define({
   id,
-  route: (input) => ProviderRoute.make(id, shouldUseResponsesApi(input.modelID) ? "openai-responses" : "openai-chat"),
+  resolve: (input) =>
+    ProviderResolver.make(id, shouldUseResponsesApi(input.modelID) ? "openai-responses" : "openai-chat", { auth: "bearer" }),
 })
-
-export const route = provider.route
 
 export * as GitHubCopilot from "./github-copilot"
