@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { Session } from "@/session/session"
 import { SessionID } from "../../session/schema"
+import { ProjectID } from "@/project/schema"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { Locale } from "@/util/locale"
@@ -143,7 +144,7 @@ export const SessionMoveCommand = cmd({
               : eq(SessionTable.directory, Filesystem.resolve(dir))
           })()
         : undefined
-      const fromProject = args.fromProject ? eq(SessionTable.project_id, args.fromProject) : undefined
+      const fromProject = args.fromProject ? eq(SessionTable.project_id, ProjectID.make(args.fromProject)) : undefined
       const where = and(fromId, fromDir, fromProject)
       const set: Record<string, string> = {}
       if (args.toDirectory && args.toDirectory !== "keep") set.directory = Filesystem.resolve(args.toDirectory)
@@ -226,37 +227,26 @@ export const SessionDetachedCommand = cmd({
         (s): s is Session.Info & { detachReason: string } => s !== undefined,
       )
       if (detached.length === 0) return
-      if (args.format === "json") {
-        const jsonData = detached.map((s) => ({
-          id: s.id,
-          title: s.title,
-          updated: s.time.updated,
-          created: s.time.created,
-          projectId: s.projectID,
-          directory: s.directory,
-          detachReason: s.detachReason,
-        }))
-        console.log(JSON.stringify(jsonData, null, 2))
-        return
-      }
-      const maxIdWidth = Math.max(20, ...detached.map((s) => s.id.length))
-      const maxReasonWidth = Math.max(12, ...detached.map((s) => s.detachReason.length))
-      const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Reason${" ".repeat(maxReasonWidth - 6)}  Directory`
-      console.log(header)
-      console.log("─".repeat(header.length))
-      for (const s of detached) {
-        console.log(`${s.id.padEnd(maxIdWidth)}  ${s.detachReason.padEnd(maxReasonWidth)}  ${s.directory}`)
-      }
+      await printSessions(detached, args, [{ header: "Reason", value: (s) => s.detachReason! }])
     })
   },
 })
 
-async function printSessions(sessions: Session.Info[], args: { format?: string; maxCount?: number }) {
+type ExtraColumn = {
+  header: string
+  value: (s: Session.Info & { detachReason?: string }) => string
+}
+
+async function printSessions(
+  sessions: (Session.Info & { detachReason?: string })[],
+  args: { format?: string; maxCount?: number },
+  extras: ExtraColumn[] = [],
+) {
   let output: string
   if (args.format === "json") {
-    output = formatSessionJSON(sessions)
+    output = formatSessionJSON(sessions, extras)
   } else {
-    output = formatSessionTable(sessions)
+    output = formatSessionTable(sessions, extras)
   }
   await paginate(output, { paginate: process.stdout.isTTY && !args.maxCount && args.format === "table" })
 }
@@ -311,33 +301,46 @@ export const SessionListCommand = cmd({
   },
 })
 
-function formatSessionTable(sessions: Session.Info[]): string {
+function formatSessionTable(
+  sessions: (Session.Info & { detachReason?: string })[],
+  extras: ExtraColumn[] = [],
+): string {
   const lines: string[] = []
 
   const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
   const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
+  const extraWidths = extras.map((col) => ({
+    ...col,
+    width: Math.max(col.header.length, ...sessions.map((s) => col.value(s).length)),
+  }))
 
-  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
+  let header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
+  for (const col of extraWidths) header += `  ${col.header.padEnd(col.width)}`
   lines.push(header)
   lines.push("─".repeat(header.length))
   for (const session of sessions) {
     const truncatedTitle = Locale.truncate(session.title, maxTitleWidth)
     const timeStr = Locale.todayTimeOrDateTime(session.time.updated)
-    const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
+    let line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
+    for (const col of extraWidths) line += `  ${col.value(session).padEnd(col.width)}`
     lines.push(line)
   }
 
   return lines.join(EOL)
 }
 
-function formatSessionJSON(sessions: Session.Info[]): string {
-  const jsonData = sessions.map((session) => ({
-    id: session.id,
-    title: session.title,
-    updated: session.time.updated,
-    created: session.time.created,
-    projectId: session.projectID,
-    directory: session.directory,
-  }))
+function formatSessionJSON(sessions: (Session.Info & { detachReason?: string })[], extras: ExtraColumn[] = []): string {
+  const jsonData = sessions.map((session) => {
+    const base: Record<string, unknown> = {
+      id: session.id,
+      title: session.title,
+      updated: session.time.updated,
+      created: session.time.created,
+      projectId: session.projectID,
+      directory: session.directory,
+    }
+    for (const col of extras) base[col.header] = col.value(session)
+    return base
+  })
   return JSON.stringify(jsonData, null, 2)
 }
