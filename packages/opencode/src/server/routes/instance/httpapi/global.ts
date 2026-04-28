@@ -4,9 +4,11 @@ import { Installation } from "@/installation"
 import { Instance } from "@/project/instance"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
-import { Effect, Schema } from "effect"
+import { Effect, Queue, Schema } from "effect"
+import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import * as Sse from "effect/unstable/encoding/Sse"
 
 const log = Log.create({ service: "server" })
 
@@ -108,8 +110,13 @@ export const GlobalApi = HttpApi.make("global").add(
     .annotateMerge(OpenApi.annotations({ title: "global", description: "Global server routes." })),
 )
 
-function eventData(data: unknown) {
-  return `data: ${JSON.stringify(data)}\n\n`
+function eventData(data: unknown): Sse.Event {
+  return {
+    _tag: "Event",
+    event: "message",
+    id: undefined,
+    data: JSON.stringify(data),
+  }
 }
 
 function parseBody(body: string) {
@@ -121,49 +128,35 @@ function parseBody(body: string) {
 }
 
 function eventResponse() {
-  const encoder = new TextEncoder()
-  let heartbeat: ReturnType<typeof setInterval> | undefined
-  let unsubscribe = () => {}
-  let done = false
-
-  const cleanup = () => {
-    if (done) return
-    done = true
-    if (heartbeat) clearInterval(heartbeat)
-    unsubscribe()
-    log.info("global event disconnected")
-  }
-
   log.info("global event connected")
-  return HttpServerResponse.raw(
-    new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          const write = (data: unknown) => {
-            if (done) return
-            try {
-              controller.enqueue(encoder.encode(eventData(data)))
-            } catch {
-              cleanup()
-            }
-          }
-          const handler = (event: GlobalBusEvent) => write(event)
-          unsubscribe = () => GlobalBus.off("event", handler)
-          GlobalBus.on("event", handler)
-          write({ payload: { type: "server.connected", properties: {} } })
-          heartbeat = setInterval(() => write({ payload: { type: "server.heartbeat", properties: {} } }), 10_000)
-        },
-        cancel: cleanup,
-      }),
-      {
-        headers: {
-          "Cache-Control": "no-cache, no-transform",
-          "Content-Type": "text/event-stream",
-          "X-Accel-Buffering": "no",
-          "X-Content-Type-Options": "nosniff",
-        },
-      },
+  const events = Stream.callback<GlobalBusEvent>((queue) => {
+    const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
+    return Effect.acquireRelease(
+      Effect.sync(() => GlobalBus.on("event", handler)),
+      () => Effect.sync(() => GlobalBus.off("event", handler)),
+    )
+  })
+  const heartbeat = Stream.tick("10 seconds").pipe(
+    Stream.drop(1),
+    Stream.map(() => ({ payload: { type: "server.heartbeat", properties: {} } })),
+  )
+
+  return HttpServerResponse.stream(
+    Stream.make({ payload: { type: "server.connected", properties: {} } }).pipe(
+      Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
+      Stream.map(eventData),
+      Stream.pipeThroughChannel(Sse.encode()),
+      Stream.encodeText,
+      Stream.ensuring(Effect.sync(() => log.info("global event disconnected"))),
     ),
+    {
+      contentType: "text/event-stream",
+      headers: {
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+        "X-Content-Type-Options": "nosniff",
+      },
+    },
   )
 }
 
