@@ -1,15 +1,7 @@
 import { MCP } from "@/mcp"
 import { ConfigMCP } from "@/config/mcp"
 import { Effect, Layer, Schema } from "effect"
-import {
-  HttpApi,
-  HttpApiBuilder,
-  HttpApiEndpoint,
-  HttpApiError,
-  HttpApiGroup,
-  HttpApiSchema,
-  OpenApi,
-} from "effect/unstable/httpapi"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
 const AddPayload = Schema.Struct({
@@ -28,15 +20,10 @@ const AuthCallbackPayload = Schema.Struct({
 const AuthRemoveResponse = Schema.Struct({
   success: Schema.Literal(true),
 }).annotate({ identifier: "McpAuthRemoveResponse" })
-const UnsupportedOAuthError = Schema.Struct({
-  error: Schema.String,
-})
-  .pipe(HttpApiSchema.status(400))
-  .annotate({ identifier: "McpUnsupportedOAuthError" })
-
-function unsupportedOAuthError(name: string) {
-  return UnsupportedOAuthError.make({ error: `MCP server ${name} does not support OAuth` })
-}
+class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthError>("McpUnsupportedOAuthError")(
+  { error: Schema.String },
+  { httpApiStatus: 400 },
+) {}
 
 export const McpPaths = {
   status: "/mcp",
@@ -167,7 +154,7 @@ export const mcpHandlers = Layer.unwrap(
 
     const authStart = Effect.fn("McpHttpApi.authStart")(function* (ctx: { params: { name: string } }) {
       if (!(yield* mcp.supportsOAuth(ctx.params.name))) {
-        return yield* Effect.fail(unsupportedOAuthError(ctx.params.name))
+        return yield* new UnsupportedOAuthError({ error: `MCP server ${ctx.params.name} does not support OAuth` })
       }
       return yield* mcp.startAuth(ctx.params.name)
     })
@@ -181,7 +168,7 @@ export const mcpHandlers = Layer.unwrap(
 
     const authAuthenticate = Effect.fn("McpHttpApi.authAuthenticate")(function* (ctx: { params: { name: string } }) {
       if (!(yield* mcp.supportsOAuth(ctx.params.name))) {
-        return yield* Effect.fail(unsupportedOAuthError(ctx.params.name))
+        return yield* new UnsupportedOAuthError({ error: `MCP server ${ctx.params.name} does not support OAuth` })
       }
       return yield* mcp.authenticate(ctx.params.name)
     })
