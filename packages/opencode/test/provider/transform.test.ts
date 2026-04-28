@@ -3314,3 +3314,79 @@ describe("ProviderTransform.variants", () => {
     })
   })
 })
+
+describe("ProviderTransform.message - mergeTextParts for text-only models", () => {
+  const textOnlyModel = {
+    id: "nvidia/deepseek-ai/deepseek-v4-pro",
+    providerID: "nvidia",
+    api: {
+      id: "deepseek-ai/deepseek-v4-pro",
+      url: "https://integrate.api.nvidia.com/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DeepSeek V4 Pro",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: { field: "reasoning_content" },
+    },
+    cost: { input: 1.74, output: 3.48, cache: { read: 0.145, write: 0 } },
+    limit: { context: 1048576, output: 393216 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-04-24",
+  } as any
+
+  test("merges multiple text parts into one when model is text-only", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Analyze this school page" },
+          { type: "file", mediaType: "image/png", data: "base64data", filename: "screenshot.png" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, textOnlyModel, {})
+
+    expect(result).toHaveLength(1)
+    // Image is unsupported → converted to error text → merged with original text into one part
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0].type).toBe("text")
+    expect(result[0].content[0].text).toContain("Analyze this school page")
+    expect(result[0].content[0].text).toContain("ERROR")
+  })
+
+  test("does not merge when model supports images (multimodal)", () => {
+    const multimodalModel = {
+      ...textOnlyModel,
+      capabilities: {
+        ...textOnlyModel.capabilities,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+      },
+    }
+    const validBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Analyze this" },
+          { type: "image", image: `data:image/png;base64,${validBase64}` },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, multimodalModel, {})
+
+    expect(result).toHaveLength(1)
+    // Image is supported → kept as-is → two separate parts, no merging
+    expect(result[0].content).toHaveLength(2)
+  })
+})

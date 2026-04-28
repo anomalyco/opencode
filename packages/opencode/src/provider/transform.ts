@@ -340,8 +340,30 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
   })
 }
 
+// After unsupportedParts converts non-text file/image parts to error-text parts, a user message
+// may end up with multiple text-only parts (e.g. original text + "ERROR: Cannot read image…").
+// Some OpenAI-compatible backends (e.g. NVIDIA NIM) send a 500 when content is an array instead
+// of a plain string.  For text-only models, merging all-text content into one part lets the SDK
+// emit the scalar form ("content": "…") instead of an array.
+function mergeTextParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  // Only needed for models that don't support any non-text input; multimodal models handle arrays fine.
+  const input = model.capabilities.input
+  if (!input) return msgs
+  const isTextOnly = !input.image && !input.audio && !input.video && !input.pdf
+  if (!isTextOnly) return msgs
+
+  return msgs.map((msg) => {
+    if (msg.role !== "user" || !Array.isArray(msg.content) || msg.content.length <= 1) return msg
+    const allText = msg.content.every((part) => part.type === "text")
+    if (!allText) return msg
+    const merged = (msg.content as Array<{ type: "text"; text: string }>).map((p) => p.text).join("\n\n")
+    return { ...msg, content: [{ type: "text" as const, text: merged }] }
+  })
+}
+
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
+  msgs = mergeTextParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (
     (model.providerID === "anthropic" ||
