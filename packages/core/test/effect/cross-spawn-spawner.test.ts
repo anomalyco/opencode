@@ -282,6 +282,36 @@ describe("cross-spawn spawner", () => {
         expect(running).toBe(false)
       }),
     )
+
+    fx.effect(
+      "exit fallback resolves when close hangs due to grandchild holding pipe",
+      Effect.gen(function* () {
+        // Windows-specific: grandchild inheriting stdout pipe can block close event
+        if (process.platform !== "win32") return
+
+        // Spawn child that creates grandchild inheriting stdout and running 10s.
+        // Child exits immediately; grandchild holds pipe, preventing close event.
+        // Expected: exitCode resolves after ~2s fallback, not hangs indefinitely.
+        const started = Date.now()
+        const handle = yield* js(`
+          const { spawn } = require('child_process')
+          spawn(process.execPath, ['-e', 'setTimeout(()=>{}, 10000)'], {
+            stdio: ['ignore', process.stdout, 'ignore'],
+            detached: true
+          })
+          process.exit(0)
+        `)
+        const code = yield* handle.exitCode
+        const elapsed = Date.now() - started
+
+        // Fallback timeout = 2000ms in cross-spawn-spawner.ts spawn function.
+        // - Lower bound 1500ms: ensures fallback was triggered (not close firing early)
+        // - Upper bound 5000ms: allows for child spawn overhead + system load variance
+        expect(elapsed).toBeGreaterThan(1500)
+        expect(elapsed).toBeLessThan(5000)
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
   })
 
   describe("error handling", () => {

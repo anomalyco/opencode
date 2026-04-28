@@ -273,6 +273,12 @@ export const make = Effect.gen(function* () {
       })
       proc.on("exit", (...args) => {
         exit = args
+        setTimeout(() => {
+          if (!end) {
+            end = true
+            Deferred.doneUnsafe(signal, Exit.succeed(args))
+          }
+        }, 2000)
       })
       proc.on("close", (...args) => {
         if (end) return
