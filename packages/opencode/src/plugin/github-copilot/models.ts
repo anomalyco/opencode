@@ -110,7 +110,7 @@ function build(key: string, remote: Item, url: string, prev?: Model): Model {
   }
 
   const efforts = remote.capabilities.supports.reasoning_effort
-  const variants: Record<string, Record<string, any>> = {}
+  const variants: NonNullable<Model["variants"]> = {}
   if (!isMsgApi && efforts?.length) {
     efforts.forEach((effort) => {
       variants[effort] = {
