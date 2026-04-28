@@ -109,15 +109,30 @@ export function DialogSessionList() {
     ))
   }
 
+  function orderByRecency(sessionsList: NonNullable<ReturnType<typeof sessions>>) {
+    return sessionsList
+      .filter((x) => x.parentID === undefined)
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .map((x) => x.id)
+  }
+
+  const [browseOrder, setBrowseOrder] = createSignal<string[]>([])
+
+  const searchOrder = createMemo(() => {
+    const results = searchResults()
+    if (results !== undefined) return orderByRecency(results)
+    return null
+  })
+
+  const displayOrder = createMemo(() => searchOrder() ?? browseOrder())
+
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    return sessions()
-      .filter((x) => x.parentID === undefined)
-      .toSorted((a, b) => {
-        const updatedDay = new Date(b.time.updated).setHours(0, 0, 0, 0) - new Date(a.time.updated).setHours(0, 0, 0, 0)
-        if (updatedDay !== 0) return updatedDay
-        return b.time.created - a.time.created
-      })
+    const sessionMap = new Map(sessions().filter((x) => x.parentID === undefined).map((x) => [x.id, x]))
+
+    return displayOrder()
+      .map((id) => sessionMap.get(id))
+      .filter((x) => x !== undefined)
       .map((x) => {
         const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
 
@@ -172,6 +187,7 @@ export function DialogSessionList() {
 
   onMount(() => {
     dialog.setSize("large")
+    setBrowseOrder(orderByRecency(sync.data.session))
   })
 
   return (
