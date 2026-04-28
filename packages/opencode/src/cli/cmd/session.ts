@@ -174,8 +174,9 @@ async function resolveDir(dir: string): Promise<DirResult> {
   }
   if (!st.isDirectory()) return { reason: "path is not a directory" }
   const gitText = (args: string[]) => Process.text(["git", ...args], { cwd: dir, nothrow: true })
-  const commonDir = (await gitText(["rev-parse", "--git-common-dir"])).text.trim()
-  if (commonDir) {
+  const commonDirRaw = (await gitText(["rev-parse", "--git-common-dir"])).text.trim()
+  const commonDir = path.resolve(dir, commonDirRaw)
+  if (commonDirRaw) {
     const cached = path.join(commonDir, "opencode")
     try {
       return { projectID: (await readFile(cached, "utf-8")).trim() }
