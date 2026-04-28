@@ -737,6 +737,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
+      title: kv.get("session_directory_filter_enabled", true)
+        ? "Disable session directory filtering"
+        : "Enable session directory filtering",
+      value: "app.toggle.session_directory_filter",
+      category: "System",
+      onSelect: async (dialog) => {
+        kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
+        await sync.session.refresh()
+        dialog.clear()
+      },
+    },
+    {
       title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
       value: "app.toggle.diffwrap",
       category: "System",

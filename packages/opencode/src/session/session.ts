@@ -18,6 +18,7 @@ import { desc } from "drizzle-orm"
 import { like } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
+import { or } from "drizzle-orm"
 import { SyncEvent } from "../sync"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "./session.sql"
@@ -759,6 +760,8 @@ export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(S
 
 export function* list(input?: {
   directory?: string
+  scope?: "project"
+  path?: string
   workspaceID?: WorkspaceID
   roots?: boolean
   start?: number
@@ -771,7 +774,17 @@ export function* list(input?: {
   if (input?.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
   }
-  if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+  if (input?.path !== undefined) {
+    if (input.path) {
+      const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
+
+      conditions.push(
+        input.directory
+          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          : or(...conds)!,
+      )
+    }
+  } else if (input?.scope !== "project" && !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
     if (input?.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }
