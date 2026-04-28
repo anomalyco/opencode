@@ -65,6 +65,7 @@ export interface Interface {
   readonly hasHead: (cwd: string) => Effect.Effect<boolean>
   readonly mergeBase: (cwd: string, base: string, head?: string) => Effect.Effect<string | undefined>
   readonly show: (cwd: string, ref: string, file: string, prefix?: string) => Effect.Effect<string>
+  readonly showMany: (cwd: string, ref: string, files: string[], prefix?: string) => Effect.Effect<Map<string, string>>
   readonly status: (cwd: string) => Effect.Effect<Item[]>
   readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[]>
   readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[]>
@@ -192,6 +193,82 @@ export const layer = Layer.effect(
       return result.text()
     })
 
+    const showMany = Effect.fn("Git.showMany")(function* (cwd: string, ref: string, files: string[], prefix = "") {
+      if (!files.length) return new Map<string, string>()
+
+      const fallback = Effect.fnUntraced(function* () {
+        return new Map<string, string>(
+          yield* Effect.forEach(
+            files,
+            (file) =>
+              Effect.gen(function* () {
+                return [file, yield* show(cwd, ref, file, prefix)] as const
+              }),
+            { concurrency: 8 },
+          ),
+        )
+      })
+
+      const batch = Effect.fnUntraced(
+        function* () {
+          const items = files.map((file) => ({ file, target: `${ref}:${prefix ? `${prefix}${file}` : file}` }))
+          if (items.some((item) => item.target.includes("\n") || item.target.includes("\r"))) return
+
+          const proc = ChildProcess.make("git", [...cfg, "cat-file", "--batch"], {
+            cwd,
+            extendEnv: true,
+            stdin: Stream.make(new TextEncoder().encode(items.map((item) => item.target).join("\n") + "\n")),
+            stdout: "pipe",
+            stderr: "pipe",
+          })
+          const handle = yield* spawner.spawn(proc)
+          const [stdout] = yield* Effect.all(
+            [Stream.mkUint8Array(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
+            { concurrency: 2 },
+          )
+
+          if ((yield* handle.exitCode) !== 0) return
+
+          const result = new Map<string, string>()
+          const decoder = new TextDecoder()
+          let offset = 0
+
+          for (const item of items) {
+            let end = offset
+            while (end < stdout.length && stdout[end] !== 10) end++
+            if (end >= stdout.length) return
+
+            const header = decoder.decode(stdout.slice(offset, end))
+            offset = end + 1
+            if (header.endsWith(" missing")) {
+              result.set(item.file, "")
+              continue
+            }
+
+            const match = header.match(/^[0-9a-f]+ blob (\d+)$/)
+            if (!match) return
+
+            const size = Number(match[1])
+            if (!Number.isInteger(size) || size < 0 || offset + size >= stdout.length || stdout[offset + size] !== 10) {
+              return
+            }
+
+            const content = stdout.slice(offset, offset + size)
+            result.set(item.file, content.includes(0) ? "" : decoder.decode(content))
+            offset += size + 1
+          }
+
+          if (offset !== stdout.length) return
+
+          return result
+        },
+        Effect.scoped,
+        Effect.catch(() => Effect.void),
+      )
+
+      return (yield* batch()) ?? (yield* fallback())
+    })
+
     const status = Effect.fn("Git.status")(function* (cwd: string) {
       return nuls(
         yield* text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], {
@@ -248,6 +325,7 @@ export const layer = Layer.effect(
       hasHead,
       mergeBase,
       show,
+      showMany,
       status,
       diff,
       stats,

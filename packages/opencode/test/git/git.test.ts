@@ -125,4 +125,31 @@ describe("Git", () => {
       expect(text).toBe("")
     })
   })
+
+  test("showMany() preserves exact text for multiple blobs", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await fs.writeFile(path.join(tmp.path, "a.txt"), "alpha\n\n", "utf-8")
+    await fs.writeFile(path.join(tmp.path, "b.txt"), " bravo  \n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add files"`.cwd(tmp.path).quiet()
+
+    await withGit(async (rt) => {
+      const text = await rt.runPromise(Git.Service.use((git) => git.showMany(tmp.path, "HEAD", ["a.txt", "b.txt"])))
+      expect(text.get("a.txt")).toBe("alpha\n\n")
+      expect(text.get("b.txt")).toBe(" bravo  \n")
+    })
+  })
+
+  test("showMany() falls back for newline paths", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const file = "line\nbreak.txt"
+    await fs.writeFile(path.join(tmp.path, file), "hello\n", "utf-8")
+    await $`git add .`.cwd(tmp.path).quiet()
+    await $`git commit --no-gpg-sign -m "add newline path"`.cwd(tmp.path).quiet()
+
+    await withGit(async (rt) => {
+      const text = await rt.runPromise(Git.Service.use((git) => git.showMany(tmp.path, "HEAD", [file])))
+      expect(text.get(file)).toBe("hello\n")
+    })
+  })
 })

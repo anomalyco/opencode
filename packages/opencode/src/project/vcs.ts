@@ -49,18 +49,25 @@ const files = Effect.fnUntraced(function* (
   const base = ref ? yield* git.prefix(cwd) : ""
   const patch = (file: string, before: string, after: string) =>
     formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
+  const beforeByFile = ref
+    ? yield* git.showMany(
+        cwd,
+        ref,
+        list.filter((item) => item.status !== "added").map((item) => item.file),
+        base,
+      )
+    : new Map<string, string>()
   const next = yield* Effect.forEach(
     list,
     (item) =>
       Effect.gen(function* () {
-        const before = item.status === "added" || !ref ? "" : yield* git.show(cwd, ref, item.file, base)
         const after = item.status === "deleted" ? "" : yield* work(fs, cwd, item.file)
         const stat = map.get(item.file)
         return {
           file: item.file,
-          patch: patch(item.file, before, after),
+          patch: patch(item.file, item.status === "added" || !ref ? "" : (beforeByFile.get(item.file) ?? ""), after),
           additions: stat?.additions ?? (item.status === "added" ? count(after) : 0),
-          deletions: stat?.deletions ?? (item.status === "deleted" ? count(before) : 0),
+          deletions: stat?.deletions ?? (item.status === "deleted" ? count(beforeByFile.get(item.file) ?? "") : 0),
           status: item.status,
         } satisfies FileDiff
       }),
