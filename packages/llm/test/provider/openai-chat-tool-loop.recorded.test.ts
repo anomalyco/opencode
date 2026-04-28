@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { LLM, LLMEvent } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { OpenAIChat } from "../../src/provider/openai-chat"
-import { tool } from "../../src/tool"
 import { ToolRuntime } from "../../src/tool-runtime"
+import { weatherRuntimeTool } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 // Multi-interaction recorded test: drives the typed `ToolRuntime` against a
@@ -16,18 +16,6 @@ import { recordedTests } from "../recorded-test"
 const model = OpenAIChat.model({
   id: "gpt-4o-mini",
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-})
-
-const get_weather = tool({
-  description: "Get current weather for a city.",
-  parameters: Schema.Struct({ city: Schema.String }),
-  success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
-  execute: ({ city }) =>
-    Effect.succeed(
-      city === "Paris"
-        ? { temperature: 22, condition: "sunny" }
-        : { temperature: 0, condition: "unknown" },
-    ),
 })
 
 const request = LLM.request({
@@ -50,7 +38,7 @@ describe("OpenAI Chat tool-loop recorded", () => {
   recorded.effect.with("drives a tool loop end-to-end", { tags: ["tool", "tool-loop"] }, () =>
     Effect.gen(function* () {
       const events = Array.from(
-        yield* ToolRuntime.run(openai, { request, tools: { get_weather } }).pipe(Stream.runCollect),
+        yield* ToolRuntime.run(openai, { request, tools: { get_weather: weatherRuntimeTool } }).pipe(Stream.runCollect),
       )
 
       // Two model rounds: tool-call + tool-result + final answer. Two

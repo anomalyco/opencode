@@ -7,6 +7,7 @@ import { LLMClient } from "../../src/adapter"
 import { BedrockConverse } from "../../src/provider/bedrock-converse"
 import { testEffect } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
+import { expectFinish, expectWeatherToolCall, weatherTool } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const codec = new EventStreamCodec(toUtf8, fromUtf8)
@@ -518,28 +519,15 @@ describe("Bedrock Converse recorded", () => {
           model: recordedModel(),
           system: "Call tools exactly as requested.",
           prompt: "Call get_weather with city exactly Paris.",
-          tools: [
-            {
-              name: "get_weather",
-              description: "Get current weather for a city.",
-              inputSchema: {
-                type: "object",
-                properties: { city: { type: "string" } },
-                required: ["city"],
-                additionalProperties: false,
-              },
-            },
-          ],
-          toolChoice: LLM.toolChoice({ type: "tool", name: "get_weather" }),
+          tools: [weatherTool],
+          toolChoice: LLM.toolChoice(weatherTool),
           generation: { maxTokens: 80, temperature: 0 },
         }),
       )
 
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
-      expect(LLM.outputToolCalls(response)).toEqual([
-        { type: "tool-call", id: expect.any(String), name: "get_weather", input: { city: "Paris" } },
-      ])
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
+      expectWeatherToolCall(response)
+      expectFinish(response.events, "tool-calls")
     }),
   )
 })
