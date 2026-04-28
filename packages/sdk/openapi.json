@@ -2168,7 +2168,15 @@
             "in": "query",
             "name": "roots",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Only return root sessions (no parentID)"
           },
@@ -2208,7 +2216,15 @@
             "in": "query",
             "name": "archived",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Include archived sessions (default false)"
           }
@@ -2308,7 +2324,15 @@
             "in": "query",
             "name": "roots",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Only return root sessions (no parentID)"
           },
@@ -6089,11 +6113,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "MCP server does not support OAuth",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/McpUnsupportedOAuthError"
                 }
               }
             }
@@ -6307,11 +6331,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "MCP server does not support OAuth",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/McpUnsupportedOAuthError"
                 }
               }
             }
@@ -13251,6 +13275,15 @@
             "$ref": "#/components/schemas/MCPStatusNeedsClientRegistration"
           }
         ]
+      },
+      "McpUnsupportedOAuthError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["error"]
       },
       "Path": {
         "type": "object",
