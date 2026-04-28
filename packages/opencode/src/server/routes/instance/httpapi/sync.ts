@@ -10,14 +10,15 @@ import { or } from "drizzle-orm"
 import { SyncEvent } from "@/sync"
 import { EventTable } from "@/sync/event.sql"
 import { Effect, Layer, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
 const root = "/sync"
+const Seq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 const ReplayEvent = Schema.Struct({
   id: Schema.String,
   aggregateID: Schema.String,
-  seq: Schema.Number,
+  seq: Seq,
   type: Schema.String,
   data: Schema.Record(Schema.String, Schema.Unknown),
 }).annotate({ identifier: "SyncReplayEvent" })
@@ -28,7 +29,7 @@ const ReplayPayload = Schema.Struct({
 const ReplayResponse = Schema.Struct({
   sessionID: Schema.String,
 }).annotate({ identifier: "SyncReplayResponse" })
-const HistoryPayload = Schema.Record(Schema.String, Schema.Number)
+const HistoryPayload = Schema.Record(Schema.String, Seq)
 const HistoryEvent = Schema.Struct({
   id: Schema.String,
   aggregate_id: Schema.String,
@@ -59,6 +60,7 @@ export const SyncApi = HttpApi.make("sync")
         HttpApiEndpoint.post("replay", SyncPaths.replay, {
           payload: ReplayPayload,
           success: ReplayResponse,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "sync.replay",
@@ -69,6 +71,7 @@ export const SyncApi = HttpApi.make("sync")
         HttpApiEndpoint.post("history", SyncPaths.history, {
           payload: HistoryPayload,
           success: Schema.Array(HistoryEvent),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "sync.history.list",
