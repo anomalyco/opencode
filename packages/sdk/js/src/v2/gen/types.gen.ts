@@ -2687,10 +2687,55 @@ export type ExperimentalConsoleGetResponses = {
     consoleManagedProviders: Array<string>
     activeOrgName?: string
     switchableOrgCount: number
+    codexQuota?: {
+      fiveHour?: {
+        remainingPercent: number
+        resetSeconds?: number
+        resetAt?: number
+      }
+      weekly?: {
+        remainingPercent: number
+        resetSeconds?: number
+        resetAt?: number
+      }
+      fetchedAt?: number
+    }
   }
 }
 
 export type ExperimentalConsoleGetResponse = ExperimentalConsoleGetResponses[keyof ExperimentalConsoleGetResponses]
+
+export type ExperimentalConsoleCodexQuotaData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/console/codex-quota"
+}
+
+export type ExperimentalConsoleCodexQuotaResponses = {
+  /**
+   * Codex quota snapshot
+   */
+  200: {
+    fiveHour?: {
+      remainingPercent: number
+      resetSeconds?: number
+      resetAt?: number
+    }
+    weekly?: {
+      remainingPercent: number
+      resetSeconds?: number
+      resetAt?: number
+    }
+    fetchedAt?: number
+  }
+}
+
+export type ExperimentalConsoleCodexQuotaResponse =
+  ExperimentalConsoleCodexQuotaResponses[keyof ExperimentalConsoleCodexQuotaResponses]
 
 export type ExperimentalConsoleListOrgsData = {
   body?: never

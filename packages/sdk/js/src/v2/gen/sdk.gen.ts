@@ -24,6 +24,7 @@ import type {
   EventTuiPromptAppend,
   EventTuiSessionSelect,
   EventTuiToastShow,
+  ExperimentalConsoleCodexQuotaResponses,
   ExperimentalConsoleGetResponses,
   ExperimentalConsoleListOrgsResponses,
   ExperimentalConsoleSwitchOrgResponses,
@@ -1010,6 +1011,36 @@ export class Console extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<ExperimentalConsoleGetResponses, unknown, ThrowOnError>({
       url: "/experimental/console",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get Codex quota snapshot
+   *
+   * Get the current Codex quota snapshot for the active OpenAI OAuth account.
+   */
+  public codexQuota<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalConsoleCodexQuotaResponses, unknown, ThrowOnError>({
+      url: "/experimental/console/codex-quota",
       ...options,
       ...params,
     })
