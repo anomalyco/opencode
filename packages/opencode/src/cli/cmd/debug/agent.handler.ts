@@ -6,7 +6,6 @@ import { Cause, Effect } from "effect"
 import { Agent } from "../../../agent/agent"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
-import type { MessageV2 } from "../../../session/message-v2"
 import { MessageID, PartID } from "../../../session/schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Permission } from "../../../permission"
@@ -128,7 +127,7 @@ const createToolContext = Effect.fn("Cli.debug.agent.createToolContext")(functio
   ctx: InstanceContext,
 ) {
   const sessionSvc = yield* Session.Service
-  const session = yield* sessionSvc.create({ title: `Debug tool run (${agent.name})` })
+  const session = yield* sessionSvc.create({ title: `Debug tool run (${agent.name})` }).pipe(Effect.orDie)
   const messageID = MessageID.ascending()
   const model = agent.model
     ? agent.model

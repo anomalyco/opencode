@@ -20,7 +20,7 @@ import {
   WorkspaceRoutingQuery,
   WorkspaceRoutingQueryFields,
 } from "../middleware/workspace-routing"
-import { ApiNotFoundError, PermissionNotFoundError, SessionBusyError } from "../errors"
+import { ApiDuplicateIDError, ApiNotFoundError, PermissionNotFoundError, SessionBusyError } from "../errors"
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -204,7 +204,7 @@ export const SessionApi = HttpApi.make("session")
           query: WorkspaceRoutingQuery,
           payload: [HttpApiSchema.NoContent, Session.CreateInput],
           success: described(Session.Info, "Successfully created session"),
-          error: HttpApiError.BadRequest,
+          error: [HttpApiError.BadRequest, ApiDuplicateIDError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.create",

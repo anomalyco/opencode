@@ -185,9 +185,26 @@ export class ApiNotFoundError extends Schema.ErrorClass<ApiNotFoundError>("NotFo
   { httpApiStatus: 404 },
 ) {}
 
+export class ApiDuplicateIDError extends Schema.ErrorClass<ApiDuplicateIDError>("DuplicateIDError")(
+  {
+    name: Schema.Literal("DuplicateIDError"),
+    data: Schema.Struct({
+      id: Schema.String,
+    }),
+  },
+  { httpApiStatus: 409 },
+) {}
+
 export function notFound(message: string) {
   return new ApiNotFoundError({
     name: "NotFoundError",
     data: { message },
+  })
+}
+
+export function duplicateID(id: string) {
+  return new ApiDuplicateIDError({
+    name: "DuplicateIDError",
+    data: { id },
   })
 }

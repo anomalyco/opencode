@@ -2543,6 +2543,13 @@ export type NotFoundError = {
   }
 }
 
+export type DuplicateIdError = {
+  name: "DuplicateIDError"
+  data: {
+    id: string
+  }
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -9468,6 +9475,7 @@ export type SessionListResponse = SessionListResponses[keyof SessionListResponse
 
 export type SessionCreateData = {
   body?: {
+    id?: string
     parentID?: string
     title?: string
     agent?: string
@@ -9495,6 +9503,10 @@ export type SessionCreateErrors = {
    * BadRequest | InvalidRequestError
    */
   400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * DuplicateIDError
+   */
+  409: DuplicateIdError
 }
 
 export type SessionCreateError = SessionCreateErrors[keyof SessionCreateErrors]

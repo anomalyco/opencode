@@ -3,9 +3,6 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Cause, Duration, Effect, Layer, Scope } from "effect"
 import { TestLLMServer } from "../../lib/llm-server"
-import type { Config } from "../../../src/config/config"
-
-import type { MessageV2 } from "../../../src/session/message-v2"
 import { MessageID, PartID } from "../../../src/session/schema"
 import { call, callAuthProbe, disposeApps } from "./backend"
 import { original } from "./environment"
@@ -134,7 +131,11 @@ function withContext<A, E>(
               return Bun.write(`${directory()}/${name}`, content)
             }).pipe(Effect.asVoid),
           session: (input) =>
-            run(modules.Session.Service.use((svc) => svc.create({ title: input?.title, parentID: input?.parentID }))),
+            run(
+              modules.Session.Service.use((svc) =>
+                svc.create({ title: input?.title, parentID: input?.parentID }).pipe(Effect.orDie),
+              ),
+            ),
           sessionGet: (sessionID) =>
             run(modules.Session.Service.use((svc) => svc.get(sessionID))).pipe(
               Effect.catchCause(() => Effect.succeed(undefined)),
