@@ -17,6 +17,7 @@ import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
 import { AppRuntime } from "@/effect/app-runtime"
+import { existsSync, readFileSync } from "fs"
 
 const log = Log.create({ service: "command-session" })
 
@@ -51,7 +52,12 @@ export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
   builder: (yargs: Argv) =>
-    yargs.command(SessionListCommand).command(SessionDeleteCommand).command(SessionMoveCommand).demandCommand(),
+    yargs
+      .command(SessionListCommand)
+      .command(SessionDeleteCommand)
+      .command(SessionMoveCommand)
+      .command(SessionDetachedCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -149,6 +155,98 @@ export const SessionMoveCommand = cmd({
       log.debug("session move parameters", { set })
       if (!args.dryRun) Database.use((db) => db.update(SessionTable).set(set).where(where).run())
       await printSessions(before, args)
+    })
+  },
+})
+
+async function resolveProjectId(dir: string): Promise<string | undefined> {
+  const gitText = async (args: string[]) => {
+    const proc = Bun.spawn(["git", ...args], { cwd: dir, stdout: "pipe", stderr: "pipe" })
+    const exitCode = await proc.exited
+    if (exitCode !== 0) return undefined
+    return await new Response(proc.stdout).text().then((t) => t.trim())
+  }
+  const commonDir = await gitText(["rev-parse", "--git-common-dir"])
+  if (commonDir) {
+    const cached = path.join(commonDir, "opencode")
+    if (existsSync(cached)) return readFileSync(cached, "utf-8").trim()
+  }
+  const revList = await gitText(["rev-list", "--max-parents=0", "HEAD"])
+  if (!revList) return undefined
+  return revList
+    .split("\n")
+    .filter(Boolean)
+    .map((x) => x.trim())
+    .toSorted()[0]
+}
+
+export const SessionDetachedCommand = cmd({
+  command: "detached",
+  describe: "find sessions with missing directories or mismatched project IDs",
+  builder: (yargs: Argv) =>
+    yargs.option("format", {
+      describe: "output format",
+      type: "string",
+      choices: ["table", "json"],
+      default: "table",
+    }),
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      const sessions = Database.use((db) => db.select().from(SessionTable).all()).map(Session.fromRow)
+      const byDir = new Map<string, Session.Info[]>()
+      for (const s of sessions) {
+        const list = byDir.get(s.directory) ?? []
+        list.push(s)
+        byDir.set(s.directory, list)
+      }
+      const detached: (Session.Info & { detachReason: string })[] = []
+      const projectIdCache = new Map<string, string | undefined>()
+      for (const [dir, dirSessions] of byDir) {
+        if (!existsSync(dir)) {
+          for (const s of dirSessions) detached.push({ ...s, detachReason: "directory does not exist" })
+          continue
+        }
+        const stat = Filesystem.stat(dir)
+        if (!stat?.isDirectory()) {
+          for (const s of dirSessions) detached.push({ ...s, detachReason: "path is not a directory" })
+          continue
+        }
+        let correctId = projectIdCache.get(dir)
+        if (!projectIdCache.has(dir)) {
+          correctId = (await resolveProjectId(dir)) ?? "global"
+          projectIdCache.set(dir, correctId)
+        }
+        for (const s of dirSessions) {
+          if (s.projectID !== correctId) {
+            detached.push({
+              ...s,
+              detachReason: `project_id ${s.projectID} != expected ${correctId}`,
+            })
+          }
+        }
+      }
+      if (detached.length === 0) return
+      if (args.format === "json") {
+        const jsonData = detached.map((s) => ({
+          id: s.id,
+          title: s.title,
+          updated: s.time.updated,
+          created: s.time.created,
+          projectId: s.projectID,
+          directory: s.directory,
+          detachReason: s.detachReason,
+        }))
+        console.log(JSON.stringify(jsonData, null, 2))
+        return
+      }
+      const maxIdWidth = Math.max(20, ...detached.map((s) => s.id.length))
+      const maxReasonWidth = Math.max(12, ...detached.map((s) => s.detachReason.length))
+      const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Reason${" ".repeat(maxReasonWidth - 6)}  Directory`
+      console.log(header)
+      console.log("─".repeat(header.length))
+      for (const s of detached) {
+        console.log(`${s.id.padEnd(maxIdWidth)}  ${s.detachReason.padEnd(maxReasonWidth)}  ${s.directory}`)
+      }
     })
   },
 })
