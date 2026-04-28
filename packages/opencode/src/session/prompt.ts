@@ -1294,7 +1294,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
         }
 
-        yield* elog.info("prompt called", { isSteer: input.isSteer })
+        yield* elog.info("prompt called", { isSteer: input.isSteer, followupMode: input.followupMode })
 
         if (input.noReply === true) return message
         return yield* loop({ sessionID: input.sessionID, isSteer: input.isSteer, followupMode: input.followupMode })
@@ -1524,11 +1524,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const interrupt = yield* state.getInterrupt(sessionID)
             if (interrupt === "wrap") {
               yield* state.clearInterrupt(sessionID)
-              return "break" as const
+              return "continue" as const
             }
             if (interrupt === "steer") {
               yield* state.clearInterrupt(sessionID)
-              return "break" as const
+              return "continue" as const
             }
 
             if (result === "stop") return "break" as const

@@ -163,6 +163,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       parts: requestParts,
       variant: input.draft.variant,
       isSteer: input.draft.isSteer,
+      followupMode: input.draft.followupMode as any,
     })
     return true
   } catch (err) {

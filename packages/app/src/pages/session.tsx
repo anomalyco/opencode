@@ -1760,11 +1760,7 @@ export default function Page() {
     const item = queuedFollowups()[0]
     if (!item) return
     
-    // In steer and wrap mode, we send the message immediately so the backend can 
-    // pick it up cleanly in its next loop iteration without going idle.
-    if (!item.isSteer && item.followupMode !== "wrap") {
-      if (busy(sessionID)) return
-    }
+    if (busy(sessionID)) return
 
     if (followupBusy(sessionID)) return
     if (followup.failed[sessionID] === item.id) return
