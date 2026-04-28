@@ -1,4 +1,4 @@
-import { ModelID, ProviderID, type Protocol } from "./schema"
+import { ModelID, ProviderID, type ProtocolID } from "./schema"
 import type { ModelID as ModelIDType, ProviderID as ProviderIDType } from "./schema"
 import type { CapabilitiesInput } from "./llm"
 
@@ -6,7 +6,7 @@ export type ProviderAuth = "bearer" | "anthropic-api-key" | "google-api-key" | "
 
 export interface ProviderResolution {
   readonly provider: ProviderIDType
-  readonly protocol: Protocol
+  readonly protocol: ProtocolID
   readonly baseURL?: string
   readonly auth: ProviderAuth
   readonly queryParams?: Record<string, string>
@@ -26,7 +26,7 @@ export interface ProviderResolver {
 
 export const make = (
   provider: string | ProviderIDType,
-  protocol: Protocol,
+  protocol: ProtocolID,
   options: Partial<Omit<ProviderResolution, "provider" | "protocol">> = {},
 ): ProviderResolution => ({
   provider: ProviderID.make(provider),
@@ -39,7 +39,7 @@ export const define = (input: ProviderResolver): ProviderResolver => input
 
 export const fixed = (
   provider: string | ProviderIDType,
-  protocol: Protocol,
+  protocol: ProtocolID,
   options: Partial<Omit<ProviderResolution, "provider" | "protocol">> = {},
 ): ProviderResolver => {
   const resolution = make(provider, protocol, options)

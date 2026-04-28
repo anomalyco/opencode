@@ -1,6 +1,12 @@
 import { Schema } from "effect"
 
-export const Protocol = Schema.Literals([
+/**
+ * Stable string identifier for a protocol implementation. The discriminator
+ * value lives on `ModelRef.protocolId` and on the `Adapter.protocolId` field;
+ * the runtime registry keys lookups by it. The implementation type itself is
+ * `Protocol` (see `protocol.ts`).
+ */
+export const ProtocolID = Schema.Literals([
   "openai-chat",
   "openai-compatible-chat",
   "openai-responses",
@@ -8,7 +14,7 @@ export const Protocol = Schema.Literals([
   "gemini",
   "bedrock-converse",
 ])
-export type Protocol = Schema.Schema.Type<typeof Protocol>
+export type ProtocolID = Schema.Schema.Type<typeof ProtocolID>
 
 export const ModelID = Schema.String.pipe(Schema.brand("LLM.ModelID"))
 export type ModelID = typeof ModelID.Type
@@ -69,7 +75,7 @@ export class ModelLimits extends Schema.Class<ModelLimits>("LLM.ModelLimits")({
 export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   id: ModelID,
   provider: ProviderID,
-  protocol: Protocol,
+  protocol: ProtocolID,
   baseURL: Schema.optional(Schema.String),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   capabilities: ModelCapabilities,
@@ -356,7 +362,7 @@ export class InvalidRequestError extends Schema.TaggedErrorClass<InvalidRequestE
 }) {}
 
 export class NoAdapterError extends Schema.TaggedErrorClass<NoAdapterError>()("LLM.NoAdapterError", {
-  protocol: Protocol,
+  protocol: ProtocolID,
   provider: ProviderID,
   model: ModelID,
 }) {

@@ -4,13 +4,13 @@ import * as LLM from "./llm"
 import { RequestExecutor } from "./executor"
 import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry, target as targetPatch } from "./patch"
-import type { LLMError, LLMEvent, LLMRequest, ModelRef, PatchTrace, PreparedRequest, Protocol } from "./schema"
+import type { LLMError, LLMEvent, LLMRequest, ModelRef, PatchTrace, PreparedRequest, ProtocolID } from "./schema"
 import { LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema } from "./schema"
 
 interface RuntimeAdapter {
   readonly id: string
   readonly provider?: string
-  readonly protocol: Protocol
+  readonly protocol: ProtocolID
   readonly patches: ReadonlyArray<Patch<unknown>>
   readonly redact: (target: unknown) => unknown
   readonly prepare: (request: LLMRequest) => Effect.Effect<unknown, LLMError>
@@ -31,7 +31,7 @@ export interface HttpContext {
 export interface Adapter<Draft, Target> {
   readonly id: string
   readonly provider?: string
-  readonly protocol: Protocol
+  readonly protocol: ProtocolID
   readonly patches: ReadonlyArray<Patch<Draft>>
   readonly redact: (target: Target) => unknown
   readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
@@ -43,7 +43,7 @@ export interface Adapter<Draft, Target> {
 export interface AdapterInput<Draft, Target> {
   readonly id: string
   readonly provider?: string
-  readonly protocol: Protocol
+  readonly protocol: ProtocolID
   readonly patches?: ReadonlyArray<Patch<Draft>>
   readonly redact: (target: Target) => unknown
   readonly prepare: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
@@ -61,7 +61,7 @@ export interface AdapterDefinition<Draft, Target> extends Adapter<Draft, Target>
 export interface ComposeInput<Draft, Target> {
   readonly id: string
   readonly provider?: string
-  readonly protocol?: Protocol
+  readonly protocol?: ProtocolID
   readonly base: Adapter<Draft, Target>
   readonly patches?: ReadonlyArray<Patch<Draft>>
   readonly redact?: (target: Target) => unknown
@@ -134,10 +134,10 @@ const makeClient = (options: ClientOptions): LLMClient => {
   const providerAdapters = adapters
     .filter((adapter): adapter is RuntimeAdapter & { readonly provider: string } => adapter.provider !== undefined)
     .reduce((map, adapter) => {
-      const current = map.get(adapter.provider) ?? new Map<Protocol, RuntimeAdapter>()
+      const current = map.get(adapter.provider) ?? new Map<ProtocolID, RuntimeAdapter>()
       current.set(adapter.protocol, adapter)
       return map.set(adapter.provider, current)
-    }, new Map<string, Map<Protocol, RuntimeAdapter>>())
+    }, new Map<string, Map<ProtocolID, RuntimeAdapter>>())
   const protocolAdapters = new Map(
     adapters
       .filter((adapter) => adapter.provider === undefined)

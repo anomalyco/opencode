@@ -1,4 +1,4 @@
-import type { LLMEvent, LLMRequest, ModelRef, PatchPhase, Protocol, ToolDefinition } from "./schema"
+import type { LLMEvent, LLMRequest, ModelRef, PatchPhase, ProtocolID, ToolDefinition } from "./schema"
 import { PatchTrace } from "./schema"
 
 export interface PatchContext {
@@ -75,7 +75,7 @@ export const predicate = (run: (context: PatchContext) => boolean): PatchPredica
 
 export const Model = {
   provider: (provider: string) => predicate((context) => context.model.provider === provider),
-  protocol: (protocol: Protocol) => predicate((context) => context.protocol === protocol),
+  protocol: (protocol: ProtocolID) => predicate((context) => context.protocol === protocol),
   id: (id: string) => predicate((context) => context.model.id === id),
   idIncludes: (value: string) => predicate((context) => context.model.id.toLowerCase().includes(value.toLowerCase())),
 }

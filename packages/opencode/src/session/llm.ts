@@ -15,7 +15,7 @@ import {
   OpenAIResponses,
   ProviderPatch,
   RequestExecutor,
-  type Protocol,
+  type ProtocolID,
 } from "@opencode-ai/llm"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -469,7 +469,7 @@ const live: Layer.Layer<
     // Otherwise it returns `undefined` and the caller falls through to the
     // existing AI SDK path. The return shape is deliberately narrow — we are
     // not yet committed to native-by-default for any provider.
-    const NATIVE_PROTOCOLS = new Set<Protocol>(["anthropic-messages"])
+    const NATIVE_PROTOCOLS = new Set<ProtocolID>(["anthropic-messages"])
     const NATIVE_ADAPTERS = [
       AnthropicMessages.adapter,
       OpenAIChat.adapter,
