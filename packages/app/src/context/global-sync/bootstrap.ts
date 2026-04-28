@@ -140,12 +140,13 @@ export async function bootstrapGlobal(input: {
         loadProjectsQuery(input.globalSDK, (data) => input.setGlobalStore("project", data ?? [])),
       ),
   ]
-  showErrors({
-    errors: errors(await runAll(slow)),
-    title: input.requestFailedTitle,
-    translate: input.translate,
-    formatMoreCount: input.formatMoreCount,
-  })
+  await runAll(slow)
+  // showErrors({
+  //   errors: errors(),
+  //   title: input.requestFailedTitle,
+  //   translate: input.translate,
+  //   formatMoreCount: input.formatMoreCount,
+  // })
 }
 
 function groupBySession<T extends { id: string; sessionID: string }>(input: T[]) {
