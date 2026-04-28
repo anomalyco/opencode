@@ -27,9 +27,35 @@ export interface AuthInput {
 }
 
 /**
- * Auth that returns the headers untouched. Default for providers whose auth
- * header is statically baked into `model.headers`.
+ * Auth that returns the headers untouched. Use when authentication is
+ * handled outside the LLM core (e.g. caller supplied `headers.authorization`
+ * directly, or there is genuinely no auth).
  */
 export const passthrough: Auth = ({ headers }) => Effect.succeed(headers)
+
+/**
+ * Builds an `Auth` that reads `request.model.apiKey` and merges the headers
+ * produced by `from(apiKey)` into the outgoing headers. No-op when
+ * `model.apiKey` is unset, so callers who pre-set their own auth header keep
+ * working. The shared core for `bearer` and `apiKeyHeader`.
+ */
+const fromApiKey = (from: (apiKey: string) => Record<string, string>): Auth => ({ request, headers }) => {
+  const key = request.model.apiKey
+  if (!key) return Effect.succeed(headers)
+  return Effect.succeed({ ...headers, ...from(key) })
+}
+
+/**
+ * `Authorization: Bearer <apiKey>` from `request.model.apiKey`. No-op when
+ * `model.apiKey` is unset. Used by OpenAI, OpenAI Responses, OpenAI-compatible
+ * Chat, and (with Bedrock-specific fallback) Bedrock Converse.
+ */
+export const bearer: Auth = fromApiKey((key) => ({ authorization: `Bearer ${key}` }))
+
+/**
+ * Set a custom header to `request.model.apiKey`. No-op when `model.apiKey`
+ * is unset. Used by Anthropic (`x-api-key`) and Gemini (`x-goog-api-key`).
+ */
+export const apiKeyHeader = (name: string): Auth => fromApiKey((key) => ({ [name]: key }))
 
 export * as Auth from "./auth"
