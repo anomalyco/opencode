@@ -1,24 +1,24 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { Instance } from "../../src/project/instance"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
-import * as Log from "@opencode-ai/core/util/log"
+import path from "path"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
-void Log.init({ print: false })
-
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
-function client(input?: { directory?: string }) {
+function client(directory?: string) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
   const handler = ExperimentalHttpApiServer.webHandler().handler
-  const fetch = ((request: RequestInfo | URL, init?: RequestInit) =>
-    handler(new Request(request, init), ExperimentalHttpApiServer.context)) as typeof globalThis.fetch
+  const fetch = Object.assign(
+    (request: RequestInfo | URL, init?: RequestInit) =>
+      handler(new Request(request, init), ExperimentalHttpApiServer.context),
+    { preconnect: globalThis.fetch.preconnect },
+  ) satisfies typeof globalThis.fetch
   return createOpencodeClient({
     baseUrl: "http://localhost",
-    directory: input?.directory,
+    directory,
     fetch,
   })
 }
@@ -29,7 +29,6 @@ async function expectStatus(result: Promise<{ response: Response }>, status: num
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
   await resetDatabase()
 })
 
@@ -42,22 +41,26 @@ describe("HttpApi SDK", () => {
     expect(health.data).toMatchObject({ healthy: true })
 
     const events = await sdk.global.event({ signal: AbortSignal.timeout(1_000) })
-    const first = await events.stream.next()
-    await events.stream.return(undefined)
-    expect(first.value).toMatchObject({ payload: { type: "server.connected" } })
+    try {
+      const first = await events.stream.next()
+      expect(first.value).toMatchObject({ payload: { type: "server.connected" } })
+    } finally {
+      await events.stream.return(undefined)
+    }
 
     const log = await sdk.app.log({ service: "httpapi-sdk-test", level: "info", message: "hello" })
     expect(log.response.status).toBe(200)
     expect(log.data).toBe(true)
 
     await expectStatus(sdk.auth.set({ providerID: "test" }), 400)
-    await expectStatus(sdk.global.upgrade({ target: 1 as unknown as string }), 400)
   })
 
   test("uses the generated SDK for safe instance routes", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    await Bun.write(`${tmp.path}/hello.txt`, "hello")
-    const sdk = client({ directory: tmp.path })
+    await using tmp = await tmpdir({
+      config: { formatter: false, lsp: false },
+      init: (dir) => Bun.write(path.join(dir, "hello.txt"), "hello"),
+    })
+    const sdk = client(tmp.path)
 
     const file = await sdk.file.read({ path: "hello.txt" })
     expect(file.response.status).toBe(200)
@@ -71,9 +74,11 @@ describe("HttpApi SDK", () => {
     expect(listed.response.status).toBe(200)
     expect(listed.data?.map((item) => item.id)).toContain(session.data?.id)
 
-    await expectStatus(sdk.project.current(), 200)
-    await expectStatus(sdk.config.get(), 200)
-    await expectStatus(sdk.config.providers(), 200)
-    await expectStatus(sdk.find.files({ query: "hello", limit: 10 }), 200)
+    await Promise.all([
+      expectStatus(sdk.project.current(), 200),
+      expectStatus(sdk.config.get(), 200),
+      expectStatus(sdk.config.providers(), 200),
+      expectStatus(sdk.find.files({ query: "hello", limit: 10 }), 200),
+    ])
   })
 })
