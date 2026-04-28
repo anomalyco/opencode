@@ -1,0 +1,61 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Void0",
+  "id": "void0",
+  "dark": {
+    "palette": {
+      "neutral": "#000000",
+      "ink": "#FFFFFF",
+      "primary": "#55C5C0",
+      "accent": "#7DD5D1",
+      "success": "#55C5C0",
+      "warning": "#D4A05A",
+      "error": "#CC6666",
+      "info": "#7DD5D1",
+      "diffAdd": "#55C5C0",
+      "diffDelete": "#CC6666"
+    },
+    "overrides": {
+      "text-weak": "#999999",
+      "syntax-comment": "#666666",
+      "syntax-keyword": "#55C5C0",
+      "syntax-string": "#D4A05A",
+      "syntax-primitive": "#7DD5D1",
+      "syntax-variable": "#FFFFFF",
+      "syntax-property": "#7DD5D1",
+      "syntax-type": "#55C5C0",
+      "syntax-constant": "#D4A05A",
+      "syntax-operator": "#999999",
+      "syntax-punctuation": "#666666",
+      "syntax-object": "#FFFFFF",
+      "markdown-heading": "#55C5C0",
+      "markdown-text": "#FFFFFF",
+      "markdown-link": "#7DD5D1",
+      "markdown-link-text": "#55C5C0",
+      "markdown-code": "#D4A05A",
+      "markdown-block-quote": "#999999",
+      "markdown-emph": "#7DD5D1",
+      "markdown-strong": "#FFFFFF",
+      "markdown-horizontal-rule": "#333333",
+      "markdown-list-item": "#55C5C0",
+      "markdown-list-enumeration": "#7DD5D1",
+      "markdown-image": "#7DD5D1",
+      "markdown-image-text": "#55C5C0",
+      "markdown-code-block": "#FFFFFF"
+    }
+  },
+  "light": {
+    "palette": {
+      "neutral": "#FFFFFF",
+      "ink": "#1A1A1A",
+      "primary": "#2A9590",
+      "accent": "#4FB8B3",
+      "success": "#2A9590",
+      "warning": "#B07F3D",
+      "error": "#B04D4D",
+      "info": "#4FB8B3",
+      "diffAdd": "#2A9590",
+      "diffDelete": "#B04D4D"
+    }
+  }
+}
