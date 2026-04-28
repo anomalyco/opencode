@@ -852,6 +852,7 @@ export function Prompt(props: PromptProps) {
         model: selectedModel,
         variant,
         isSteer,
+        followupMode,
         parts: [
           ...editorParts,
           {
@@ -863,15 +864,23 @@ export function Prompt(props: PromptProps) {
         ],
       }
 
-      if (isBusy) {
-        setStore("queuedDrafts", [...store.queuedDrafts, { ...payload, followupMode }])
+      if (isBusy && followupMode === "queue") {
+        setStore("queuedDrafts", [...store.queuedDrafts, payload])
         toast.show({
-          message: followupMode === "steer" ? "Steering..." : followupMode === "wrap" ? "Wrapping up..." : "Queued",
+          message: "Queued",
+          variant: "info",
+          duration: 2000,
+        })
+      } else if (isBusy) {
+        const { followupMode: _, ...cleanPayload } = payload
+        sdk.client.session.promptAsync(cleanPayload).catch(() => {})
+        toast.show({
+          message: followupMode === "steer" ? "Steering..." : "Wrapping up...",
           variant: "info",
           duration: 2000,
         })
       } else {
-        const cleanPayload = payload
+        const { followupMode: _, ...cleanPayload } = payload
         sdk.client.session.prompt(cleanPayload).catch(() => {})
       }
     }
