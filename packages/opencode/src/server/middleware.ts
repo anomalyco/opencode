@@ -36,7 +36,7 @@ export const ErrorMiddleware: ErrorHandler = (err, c) => {
   })
 }
 
-export const AuthMiddleware: MiddlewareHandler = (c, next) => {
+export const AuthMiddleware: MiddlewareHandler = async (c, next) => {
   // Allow CORS preflight requests to succeed without auth.
   // Browser clients sending Authorization headers will preflight with OPTIONS.
   if (c.req.method === "OPTIONS") return next()
@@ -46,7 +46,25 @@ export const AuthMiddleware: MiddlewareHandler = (c, next) => {
 
   if (c.req.query("auth_token")) c.req.raw.headers.set("authorization", `Basic ${c.req.query("auth_token")}`)
 
-  return basicAuth({ username, password })(c, next)
+  // hono's basicAuth builds the 401 response without a Content-Type. Bun's
+  // HTTP layer then defaults to `application/octet-stream`, which Chromium
+  // briefly treats as a download attachment before settling on the basic-auth
+  // dialog. The race produces 2-3 dialog flashes before the password field
+  // accepts input, and Playwright surfaces it as `Error: Download is starting`
+  // on the navigation call. Wrap the call so the 401 carries an explicit
+  // text/plain Content-Type. Refs upstream issue anomalyco/opencode#18325.
+  try {
+    return await basicAuth({ username, password })(c, next)
+  } catch (err) {
+    if (err instanceof HTTPException && err.res && err.res.status === 401 && !err.res.headers.get("content-type")) {
+      const headers = new Headers(err.res.headers)
+      headers.set("content-type", "text/plain; charset=utf-8")
+      throw new HTTPException(401, {
+        res: new Response(err.res.body, { status: 401, headers }),
+      })
+    }
+    throw err
+  }
 }
 
 export const LoggerMiddleware: MiddlewareHandler = async (c, next) => {
