@@ -127,6 +127,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const start = () => {
       if (started) return run
       started = true
+      let reconnectDelay = RECONNECT_DELAY_MS
+      const MAX_RECONNECT_DELAY_MS = 10000
+
       run = (async () => {
         // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
         while (!abort.signal.aborted && started) {
@@ -152,6 +155,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
             })
             let yielded = Date.now()
             resetHeartbeat()
+            reconnectDelay = RECONNECT_DELAY_MS // Reset backoff on successful connection
             for await (const event of events.stream) {
               resetHeartbeat()
               streamErrorLogged = false
@@ -198,7 +202,8 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           }
 
           if (abort.signal.aborted || !started) return
-          await wait(RECONNECT_DELAY_MS)
+          await wait(reconnectDelay)
+          reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS)
         }
       })().finally(() => {
         run = undefined
