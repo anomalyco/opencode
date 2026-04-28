@@ -18,8 +18,15 @@ export const byProvider: Record<string, ProviderFamily> = Object.fromEntries(
   Object.values(families).map((family) => [family.provider, family]),
 )
 
+const resolutions = Object.fromEntries(
+  Object.values(families).map((family) => [
+    family.provider,
+    ProviderResolver.make(family.provider, "openai-compatible-chat", { baseURL: family.baseURL }),
+  ]),
+)
+
 export const resolve = (provider: string) =>
-  ProviderResolver.make(provider, "openai-compatible-chat", { baseURL: byProvider[provider]?.baseURL, auth: "bearer" })
+  resolutions[provider] ?? ProviderResolver.make(provider, "openai-compatible-chat")
 
 export const resolver = ProviderResolver.define({
   id: ProviderResolver.make("openai-compatible", "openai-compatible-chat").provider,

@@ -65,7 +65,7 @@ const baseURL = (input: Input, resolution: ProviderResolution, options: Record<s
   return resolution.baseURL
 }
 
-const authHeader = (auth: ProviderAuth | undefined, apiKey: string | undefined): Record<string, string> => {
+const authHeader = (auth: ProviderAuth, apiKey: string | undefined): Record<string, string> => {
   if (!apiKey) return {}
   if (auth === "none") return {}
   if (auth === "anthropic-api-key") return { "x-api-key": apiKey }
@@ -87,7 +87,7 @@ const reasoningEfforts = (input: Input) =>
     REASONING_EFFORTS.has(effort as ReasoningEffort),
   )
 
-const mergeCapabilities = (base: CapabilitiesInput, override: CapabilitiesInput | undefined): CapabilitiesInput => ({
+const mergeCapabilities = (base: CapabilitiesInput, override: CapabilitiesInput): CapabilitiesInput => ({
   input: { ...base.input, ...override?.input },
   output: { ...base.output, ...override?.output },
   tools: { ...base.tools, ...override?.tools },
@@ -95,41 +95,38 @@ const mergeCapabilities = (base: CapabilitiesInput, override: CapabilitiesInput 
   reasoning: { ...base.reasoning, ...override?.reasoning },
 })
 
-const capabilities = (input: Input, resolution: ProviderResolution) =>
-  LLM.capabilities(
-    mergeCapabilities(
-      {
-        input: {
-          text: input.model.capabilities.input.text,
-          image: input.model.capabilities.input.image,
-          audio: input.model.capabilities.input.audio,
-          video: input.model.capabilities.input.video,
-          pdf: input.model.capabilities.input.pdf,
-        },
-        output: {
-          text: input.model.capabilities.output.text,
-          reasoning: input.model.capabilities.reasoning,
-        },
-        tools: {
-          calls: input.model.capabilities.toolcall,
-          streamingInput: resolution.protocol !== "gemini" && input.model.capabilities.toolcall,
-        },
-        cache: {
-          // Both Anthropic Messages and Bedrock Converse honour positional cache
-          // markers — Anthropic via `cache_control` on content blocks, Bedrock via
-          // its `cachePoint` marker block (added to BedrockConverse in 9d7d518ac).
-          prompt: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
-          contentBlocks: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
-        },
-        reasoning: {
-          efforts: reasoningEfforts(input),
-          summaries: resolution.protocol === "openai-responses",
-          encryptedContent: resolution.protocol === "openai-responses" || resolution.protocol === "anthropic-messages",
-        },
-      },
-      resolution.capabilities,
-    ),
-  )
+const capabilities = (input: Input, resolution: ProviderResolution) => {
+  const base: CapabilitiesInput = {
+    input: {
+      text: input.model.capabilities.input.text,
+      image: input.model.capabilities.input.image,
+      audio: input.model.capabilities.input.audio,
+      video: input.model.capabilities.input.video,
+      pdf: input.model.capabilities.input.pdf,
+    },
+    output: {
+      text: input.model.capabilities.output.text,
+      reasoning: input.model.capabilities.reasoning,
+    },
+    tools: {
+      calls: input.model.capabilities.toolcall,
+      streamingInput: resolution.protocol !== "gemini" && input.model.capabilities.toolcall,
+    },
+    cache: {
+      // Both Anthropic Messages and Bedrock Converse honour positional cache
+      // markers — Anthropic via `cache_control` on content blocks, Bedrock via
+      // its `cachePoint` marker block (added to BedrockConverse in 9d7d518ac).
+      prompt: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
+      contentBlocks: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
+    },
+    reasoning: {
+      efforts: reasoningEfforts(input),
+      summaries: resolution.protocol === "openai-responses",
+      encryptedContent: resolution.protocol === "openai-responses" || resolution.protocol === "anthropic-messages",
+    },
+  }
+  return LLM.capabilities(resolution.capabilities ? mergeCapabilities(base, resolution.capabilities) : base)
+}
 
 export const toModelRef = (input: Input): ModelRef | undefined => {
   const options = { ...input.provider.options, ...input.model.options }

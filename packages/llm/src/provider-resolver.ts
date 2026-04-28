@@ -8,7 +8,7 @@ export interface ProviderResolution {
   readonly provider: ProviderIDType
   readonly protocol: Protocol
   readonly baseURL?: string
-  readonly auth?: ProviderAuth
+  readonly auth: ProviderAuth
   readonly capabilities?: CapabilitiesInput
 }
 
@@ -26,10 +26,11 @@ export interface ProviderResolver {
 export const make = (
   provider: string | ProviderIDType,
   protocol: Protocol,
-  options: Omit<ProviderResolution, "provider" | "protocol"> = {},
+  options: Partial<Omit<ProviderResolution, "provider" | "protocol">> = {},
 ): ProviderResolution => ({
   provider: ProviderID.make(provider),
   protocol,
+  auth: options.auth ?? "bearer",
   ...options,
 })
 
@@ -38,7 +39,7 @@ export const define = (input: ProviderResolver): ProviderResolver => input
 export const fixed = (
   provider: string | ProviderIDType,
   protocol: Protocol,
-  options: Omit<ProviderResolution, "provider" | "protocol"> = {},
+  options: Partial<Omit<ProviderResolution, "provider" | "protocol">> = {},
 ): ProviderResolver => {
   const resolution = make(provider, protocol, options)
   return define({ id: resolution.provider, resolve: () => resolution })
