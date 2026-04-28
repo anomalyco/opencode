@@ -30,7 +30,7 @@ import { jsonRequest, runRequest } from "./trace"
 
 const log = Log.create({ service: "server" })
 
-const QueryBoolean = z.enum(["true", "false"]).transform((value) => value === "true")
+const QueryBoolean = z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean())
 
 export const SessionRoutes = lazy(() =>
   new Hono()

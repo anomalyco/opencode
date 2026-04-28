@@ -37,7 +37,7 @@ const ConsoleSwitchBody = z.object({
   orgID: z.string(),
 })
 
-const QueryBoolean = z.enum(["true", "false"]).transform((value) => value === "true")
+const QueryBoolean = z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean())
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
