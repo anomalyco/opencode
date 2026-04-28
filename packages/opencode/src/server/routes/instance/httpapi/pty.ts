@@ -118,7 +118,6 @@ export const PtyConnectApi = HttpApi.make("pty-connect").add(
     .add(
       HttpApiEndpoint.get("connect", PtyPaths.connect, {
         params: Params,
-        query: CursorQuery,
         success: Schema.Boolean,
       }).annotateMerge(
         OpenApi.annotations({

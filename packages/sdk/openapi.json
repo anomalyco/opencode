@@ -10154,6 +10154,9 @@
           "directory": {
             "type": "string"
           },
+          "path": {
+            "type": "string"
+          },
           "parentID": {
             "type": "string",
             "pattern": "^ses.*"
@@ -10575,6 +10578,16 @@
                     ]
                   },
                   "directory": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "path": {
                     "anyOf": [
                       {
                         "type": "string"
@@ -12536,6 +12549,9 @@
             "pattern": "^wrk.*"
           },
           "directory": {
+            "type": "string"
+          },
+          "path": {
             "type": "string"
           },
           "parentID": {
