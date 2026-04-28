@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
-import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import {
+  canReuseRootSessionCache,
+  estimateRootSessionTotal,
+  loadRootSessionsWithFallback,
+  nextRootSessionLimit,
+} from "./global-sync/session-load"
+import { SESSION_ROOT_PAGE_SIZE } from "./global-sync/types"
 
 describe("pickDirectoriesToEvict", () => {
   test("keeps pinned stores and evicts idle stores", () => {
@@ -74,6 +80,52 @@ describe("estimateRootSessionTotal", () => {
 
   test("keeps exact total when limited fetch is under limit", () => {
     expect(estimateRootSessionTotal({ count: 9, limit: 10, limited: true })).toBe(9)
+  })
+})
+
+describe("sidebar session page sizing", () => {
+  test("starts from a larger bounded root-session page", () => {
+    expect(SESSION_ROOT_PAGE_SIZE).toBe(20)
+  })
+
+  test("loads another full page of root sessions", () => {
+    expect(nextRootSessionLimit(undefined)).toBe(SESSION_ROOT_PAGE_SIZE)
+    expect(nextRootSessionLimit(SESSION_ROOT_PAGE_SIZE)).toBe(SESSION_ROOT_PAGE_SIZE * 2)
+  })
+})
+
+describe("canReuseRootSessionCache", () => {
+  test("reuses cache when it already covers the visible limit", () => {
+    expect(
+      canReuseRootSessionCache({
+        cachedRootCount: 40,
+        fetchedLimit: 70,
+        requestedLimit: 40,
+        total: 71,
+      }),
+    ).toBe(true)
+  })
+
+  test("refetches when trimmed cache cannot satisfy load more", () => {
+    expect(
+      canReuseRootSessionCache({
+        cachedRootCount: 20,
+        fetchedLimit: 70,
+        requestedLimit: 40,
+        total: 71,
+      }),
+    ).toBe(false)
+  })
+
+  test("reuses cache when all available roots are already cached", () => {
+    expect(
+      canReuseRootSessionCache({
+        cachedRootCount: 20,
+        fetchedLimit: 70,
+        requestedLimit: 40,
+        total: 20,
+      }),
+    ).toBe(true)
   })
 })
 
