@@ -1586,6 +1586,7 @@ export default function Page() {
 
   const queueFollowup = (draft: FollowupDraft, editID?: string) => {
     const followupMode = settings.general.followup()
+    draft.followupMode = followupMode
     if (followupMode === "steer") {
       draft.isSteer = true
     }
@@ -1613,7 +1614,7 @@ export default function Page() {
     }
   }
 
-  const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
+  const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item), followupMode: item.followupMode })))
 
   const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
     if (sync.session.get(sessionID)?.parentID) return Promise.resolve()

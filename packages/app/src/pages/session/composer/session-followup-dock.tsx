@@ -6,7 +6,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useLanguage } from "@/context/language"
 
 export function SessionFollowupDock(props: {
-  items: { id: string; text: string }[]
+  items: { id: string; text: string; followupMode?: string }[]
   sending?: string
   onSend: (id: string) => void
   onEdit: (id: string) => void
@@ -19,11 +19,18 @@ export function SessionFollowupDock(props: {
 
   const toggle = () => setStore("collapsed", (value) => !value)
   const total = createMemo(() => props.items.length)
-  const label = createMemo(() =>
-    language.t(total() === 1 ? "session.followupDock.summary.one" : "session.followupDock.summary.other", {
+  const label = createMemo(() => {
+    const mode = props.items[0]?.followupMode ?? "queue"
+    if (mode === "steer") {
+      return total() === 1 ? "1 message steering" : `${total()} messages steering`
+    }
+    if (mode === "wrap") {
+      return total() === 1 ? "1 message wrapping up" : `${total()} messages wrapping up`
+    }
+    return language.t(total() === 1 ? "session.followupDock.summary.one" : "session.followupDock.summary.other", {
       count: total(),
-    }),
-  )
+    })
+  })
   const preview = createMemo(() => props.items[0]?.text ?? "")
 
   return (

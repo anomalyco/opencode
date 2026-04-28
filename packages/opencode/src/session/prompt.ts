@@ -1524,11 +1524,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const interrupt = yield* state.getInterrupt(sessionID)
             if (interrupt === "wrap") {
               yield* state.clearInterrupt(sessionID)
-              return "continue" as const
+              return "break" as const
             }
             if (interrupt === "steer") {
               yield* state.clearInterrupt(sessionID)
-              return "continue" as const
+              return "break" as const
             }
 
             if (result === "stop") return "break" as const
