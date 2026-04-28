@@ -172,9 +172,7 @@ export async function get(
 
   const result = { ...existing }
   const remote = new Map(
-    data.data
-      .filter((m) => (m.model_picker_enabled && m.policy?.state !== "disabled") || true)
-      .map((m) => [m.id, m] as const),
+    data.data.filter((m) => m.model_picker_enabled && m.policy?.state !== "disabled").map((m) => [m.id, m] as const),
   )
 
   // prune existing models whose api.id isn't in the endpoint response
