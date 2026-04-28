@@ -136,28 +136,49 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md ./4-test-checklist.md
 - T9d 拖到 chat 输入框走 attachments ✅(没被文件树抢)
 - 已知限制 OS 文件夹拖入不支持(HTML5 限制)
 
-## 总体 review 自检(commit #5 索引收尾时填)
+## Commit #5 — 索引收尾 + .gitignore 排除 Obsidian
 
-- [ ] FORK marker 全加(file-tree.tsx 多处 / file.tsx 挂载点 / lib.rs 块 / tauri-overrides 配置)
-- [ ] typecheck + i18n parity 通过
-- [ ] DeskFox build wrapper 验证通过
-- [ ] T1-T11 验收点全过
-- [ ] 改动日志.md 已加索引行
+**关联 commit**: `f0418382a`
+**实际改动**:
+- `改动日志.md`:加 file-tree-dnd 索引行(列出 4 笔 commit hash)
+- `docs/features/INDEX.md`:把 file-tree-dnd 标 done
+- `docs/features/file-tree-dnd/{1-spec,2-plan,3-changelog,4-test-checklist}.md`:status 全部 in-progress → done
+- `docs/features/file-tree-dnd/3-changelog.md`:回填 commit #4 hash `b9a4accc1`
+- `.gitignore`:加 `.obsidian/`(user 用 Obsidian 浏览 docs/features/,本地配置不入库)
 
-## 已知遗留
+**行数**: 13 行 +,9 行 -(<500,无 large-diff)
 
-- 跨设备 move(D: → C:)失败时 toast 报错,不做 copy+delete fallback(v2)
-- Undo 仅 in-memory,重启失效(v2 可考虑 localStorage 持久化)
-- 拖动浮动 tooltip "将移动 N 个文件"未做(v2 UX)
+## Commit #6 — 文档对齐到最终实现
+
+**关联 commit**: `<待填>`(本次)
+**实际改动**:
+- `1-spec.md`:验收标准从 unchecked 占位改成 `[x]` 已通过 + 拓展到完整 7 组覆盖;架构选型段重写,增加"外部文件 drop 终选方案"小节(撤销 onDragDropEvent 路径,改 FileReader)
+- `2-plan.md`:Commit #4 实施步骤改成"FileReader 路径"对应实际方案;决策轨迹补 D4-D9 6 条踩坑(路径分隔符 / tree-store force / hook 多注册 / `{...rest}` 覆盖 / 外部 drop 终选 / build rename Defender 锁)
+- `3-changelog.md`:总体 review 自检勾上 + 加 Commit #5 / #6 条目 + 回退方法填实际 hash
+
+**行数**: 待填
+
+## 总体 review 自检
+
+- [x] FORK marker 全加(file-tree.tsx 多处 FORK-BEGIN/END / file.tsx 挂载点 / tree-store.ts 一处 / lib.rs 多处 / text_file.rs 一处)
+- [x] typecheck + i18n parity 通过(每笔 commit 都跑过)
+- [x] DeskFox build wrapper 验证通过(每笔 commit 都 user 双击 release exe 验过)
+- [x] T1-T11 + D1-D3 + R1-R5 验收点全过(详见 `4-test-checklist.md`)
+- [x] 改动日志.md 已加索引行(`f0418382a`)
+
+## 已知遗留(v2 优化点)
+
+- 跨设备 move(`D:` → `C:`)失败时 toast 报错,不做 copy+delete fallback
+- Undo 仅 in-memory,重启失效;v2 可考虑 localStorage 持久化
+- HTML5 拖文件夹只给空 File(不递归),OS 文件夹拖入 v1 跳过
+- 拖动浮动 tooltip "将移动 N 个文件" 未做
 
 ## 回退方法
 
-```
-git revert <#4 hash> <#3 hash> <#2 hash> <#1 hash>
-```
+```bash
+# 整组撤回(保留 history)
+git revert f0418382a b9a4accc1 fe0994293 ce043ee69 4b73b1229
 
-或一笔回滚到 #5 之前:
-
-```
-git reset --hard <pre-commit-1-hash>
+# 一刀回滚(销毁 history),回到 file-tree-dnd 第一笔之前
+git reset --hard 30f76dfaf
 ```

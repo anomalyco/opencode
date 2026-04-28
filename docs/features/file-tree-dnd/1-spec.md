@@ -20,38 +20,40 @@ DeskFox 右侧文件树(`packages/app/src/components/file-tree.tsx`)目前只能
 
 ## 验收标准
 
-### 核心
+> 全部条目详见 `4-test-checklist.md`(完整 32 条 7 组),user 已逐项手测通过(2026-04-27 → 28)。
+> 下表是 spec 级别的关键路径概览。
 
-- [ ] T1 拖文件 `a/x.txt` 到 `b/` → 移动到 `b/x.txt`
-- [ ] T2 同名 → 自动后缀 `x-1.txt` / `x-2.txt`
-- [ ] T3 拖父进子 → 静默拒绝
-- [ ] T4 拖到自身 / 已在目标目录 → no-op
-- [ ] T5 hover 折叠文件夹 600ms → spring-load 自动展开
-- [ ] T10 拖动时源行 opacity 50%,hover 目标 folder 时 outline ring,拖出 viewport 反馈消失
+### 核心拖放(A 组)
 
-### 多选
+- [x] T1-T5 跨目录拖、同名自动后缀、cycle 拒绝、no-op、spring-load
+- [x] T10 视觉(源行半透明 / 目标 ring / 根淡蓝)
+- [x] T11 跨设备 move 错误 toast(已知限制,不做 copy+delete fallback)
 
-- [ ] T6a Ctrl+click 选 3 个 → 拖第一个 → 全部移动
-- [ ] T6b Shift+click 范围 → 拖 → 全部移动
+### 多选(B 组)
 
-### 剪切/粘贴
+- [x] T6 全套(Ctrl/Shift+click + 整组拖动 + 视觉区分)
 
-- [ ] T7a Ctrl+X 剪切 → 视觉 opacity-60 → Ctrl+V 粘贴目标 → 移动
-- [ ] T7b Ctrl+C 复制 → Ctrl+V → 复制(原文件保留)
+### 剪切/粘贴(C 组)
 
-### Undo
+- [x] T7 全套(Ctrl+X/C/V + 右键菜单粘贴 + 同名后缀 + 不抢编辑器快捷键 + 选文件夹粘进去 + 选文件粘到同级)
 
-- [ ] T8a 任何 move/copy 后 Ctrl+Z → 撤销
-- [ ] T8b 连续 5 次 move 后 5 次 Ctrl+Z → 完全撤回
+### 右键 OS-like(D 组)
 
-### 外部拖入
+- [x] D1-D3 右键自动 replace selection / 多选保持 / 批量删除对话框
 
-- [ ] T9a 从 Windows Explorer 拖 1 个文件到树某文件夹 → 复制进去(原文件不动)
-- [ ] T9b 拖多个文件 → 全部进去,冲突自动后缀
+### Undo(E 组)
 
-### 错误处理
+- [x] T8a-c move/copy 撤销 + 连续撤销
 
-- [ ] T11 跨设备 move 失败(D:\ → C:\) → toast 错误,不做 fallback(已知限制)
+### 外部 OS 文件拖入(F 组)
+
+- [x] T9a-c 单文件 / 多文件 / 拖到根 → 复制成功
+- [x] T9d chat 输入框拖入仍走 attachments(没被文件树抢)
+- ⚠️ 不支持文件夹拖入(HTML5 dataTransfer.files 不递归子项)
+
+### 回归(G 组)
+
+- [x] R1-R5 原打开文件 / 展开 / 右键菜单 / 状态保持 / 多 provider 切换
 
 ## 不做什么
 
@@ -61,9 +63,23 @@ DeskFox 右侧文件树(`packages/app/src/components/file-tree.tsx`)目前只能
 - ❌ 拖动时浮动 tooltip "将移动 N 个文件"(v2 优化)
 - ❌ 跨设备 move 的 copy+delete fallback
 
-## 架构选型
+## 架构选型(最终落地)
 
-复用 `rename_path` Tauri 命令做 move(零后端开发)。新增 `copy_path` 用于复制粘贴模式。selection / clipboard / undo 都是 fork-only 新文件,不动上游 store。外部文件拖入走 Tauri WebviewWindow `onDragDropEvent`,通过 `branding/tauri-overrides/*.json` 注入 `dragDropEnabled: false`(避免触发 tauri.conf.json 黑名单 override)。
+### 移动 / 复制后端
+- **复用 `rename_path` Tauri 命令做 move**(零后端开发,std::fs::rename 跨目录就是 OS 层 move)
+- **新增 `copy_path` 命令**(含 `copy_dir_recursive` 助手做递归目录复制)
+- **新增 `next_available_path` 命令**:Rust 端一次性算出不冲突路径(替代 JS 多次 exists_path 调用,避免 `\` vs `/` path 分隔符歧义 — 路径分隔符问题踩过坑,详见 plan D4)
+- **新增 `exists_path` 命令**(commit #1 加,仅供少数场景);**新增 `write_binary_file_absolute_base64` 命令**(commit #4 给外部文件 drop 用,见下)
+
+### 前端状态分离
+- selection / clipboard / undo-stack 三个 store 都是 **fork-only 新文件**,放 `packages/app/src/context/file/`,挂到 `useFile()` 返回值
+- 不动上游 `tree-store.ts` 的核心结构(只补一处 `force=true` 真生效的 fix)
+
+### 外部 OS 文件拖入(走 FileReader)
+- ❌ **第一版方案被推翻**:Tauri WebviewWindow `onDragDropEvent` API 实测在本环境不工作(原因未定位,可能 capability/版本/dragDropEnabled 配置交互),也试过把 `dragDropEnabled: false` 注入 `branding/tauri-overrides/*.json` 让 webview 直接收 HTML5 drop — 但 webview 给的 File 对象**没有** `.path` 字段(Windows WebView2 安全策略),拿不到 OS 文件绝对路径
+- ✅ **最终方案**:走 HTML5 drop event(Tauri 默认配置即可,不动 dragDropEnabled)→ `dataTransfer.files` 拿 File 对象 → `FileReader.readAsDataURL` 读成 base64 → invoke 新 Rust 命令 `write_binary_file_absolute_base64` 写盘
+- 副作用:文件夹拖入不支持(HTML5 不递归子项),v1 接受这个限制
+- 决策轨迹详见 `2-plan.md` D8
 
 ## 复用现有
 
@@ -79,4 +95,4 @@ DeskFox 右侧文件树(`packages/app/src/components/file-tree.tsx`)目前只能
 
 ## 详细 plan
 
-见 `2-plan.md`。
+见 `2-plan.md`(实施步骤 + 决策轨迹 + 踩坑) / `3-changelog.md`(实际 commit 列表 + 文件级行数 + 验收) / `4-test-checklist.md`(完整 32 条测试)。
