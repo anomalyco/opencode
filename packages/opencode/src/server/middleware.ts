@@ -10,7 +10,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { basicAuth } from "hono/basic-auth"
 import { cors } from "hono/cors"
 import { compress } from "hono/compress"
-import * as ServerRuntime from "./runtime"
+import * as ServerBackend from "./backend"
 
 const log = Log.create({ service: "server" })
 
@@ -50,14 +50,14 @@ export const AuthMiddleware: MiddlewareHandler = (c, next) => {
   return basicAuth({ username, password })(c, next)
 }
 
-export function LoggerMiddleware(runtimeAttributes: ServerRuntime.Attributes): MiddlewareHandler {
+export function LoggerMiddleware(backendAttributes: ServerBackend.Attributes): MiddlewareHandler {
   return async (c, next) => {
     const skip = c.req.path === "/log"
     if (skip) return next()
     const attributes = {
       method: c.req.method,
       path: c.req.path,
-      ...runtimeAttributes,
+      ...backendAttributes,
     }
     log.info("request", attributes)
     const timer = log.time("request", attributes)

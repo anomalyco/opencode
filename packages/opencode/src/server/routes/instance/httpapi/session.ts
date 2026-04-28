@@ -19,6 +19,7 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
+import { NotFoundError } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Effect, Schema, SchemaGetter, Struct } from "effect"
@@ -193,7 +194,7 @@ export const SessionApi = HttpApi.make("session")
           params: { sessionID: SessionID },
           query: MessagesQuery,
           success: Schema.Array(MessageV2.WithParts),
-          error: HttpApiError.BadRequest,
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.messages",
@@ -484,37 +485,47 @@ export const sessionHandlers = HttpApiBuilder.group(SessionApi, "session", (hand
       params: { sessionID: SessionID }
       query: typeof MessagesQuery.Type
     }) {
-      if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
-      if (ctx.query.before) {
-        const before = ctx.query.before
-        yield* Effect.try({
-          try: () => MessageV2.cursor.decode(before),
-          catch: () => new HttpApiError.BadRequest({}),
-        })
-      }
-      if (ctx.query.limit === undefined || ctx.query.limit === 0) {
+      return yield* Effect.gen(function* () {
+        if (ctx.query.before && ctx.query.limit === undefined) return yield* new HttpApiError.BadRequest({})
+        if (ctx.query.before) {
+          const before = ctx.query.before
+          yield* Effect.try({
+            try: () => MessageV2.cursor.decode(before),
+            catch: () => new HttpApiError.BadRequest({}),
+          })
+        }
+        if (ctx.query.limit === undefined || ctx.query.limit === 0) {
+          yield* session.get(ctx.params.sessionID)
+          return yield* session.messages({ sessionID: ctx.params.sessionID })
+        }
+
         yield* session.get(ctx.params.sessionID)
-        return yield* session.messages({ sessionID: ctx.params.sessionID })
-      }
+        const page = MessageV2.page({
+          sessionID: ctx.params.sessionID,
+          limit: ctx.query.limit,
+          before: ctx.query.before,
+        })
+        if (!page.cursor) return page.items
 
-      const page = MessageV2.page({
-        sessionID: ctx.params.sessionID,
-        limit: ctx.query.limit,
-        before: ctx.query.before,
-      })
-      if (!page.cursor) return page.items
-
-      const request = yield* HttpServerRequest.HttpServerRequest
-      const url = new URL(request.url, "http://localhost")
-      url.searchParams.set("limit", ctx.query.limit.toString())
-      url.searchParams.set("before", page.cursor)
-      return HttpServerResponse.jsonUnsafe(page.items, {
-        headers: {
-          "Access-Control-Expose-Headers": "Link, X-Next-Cursor",
-          Link: `<${url.toString()}>; rel="next"`,
-          "X-Next-Cursor": page.cursor,
-        },
-      })
+        const request = yield* HttpServerRequest.HttpServerRequest
+        const url = new URL(request.url, "http://localhost")
+        url.searchParams.set("limit", ctx.query.limit.toString())
+        url.searchParams.set("before", page.cursor)
+        return HttpServerResponse.jsonUnsafe(page.items, {
+          headers: {
+            "Access-Control-Expose-Headers": "Link, X-Next-Cursor",
+            Link: `<${url.toString()}>; rel="next"`,
+            "X-Next-Cursor": page.cursor,
+          },
+        })
+      }).pipe(
+        Effect.catchIf(NotFoundError.isInstance, () => Effect.fail(new HttpApiError.NotFound({}))),
+        Effect.catchDefect((error) =>
+          NotFoundError.isInstance(error)
+            ? Effect.fail(new HttpApiError.NotFound({}))
+            : Effect.die(error),
+        ),
+      )
     })
 
     const message = Effect.fn("SessionHttpApi.message")(function* (ctx: {

@@ -17,7 +17,7 @@ import { WorkspaceRouterMiddleware } from "./workspace"
 import { InstanceMiddleware } from "./routes/instance/middleware"
 import { WorkspaceRoutes } from "./routes/control/workspace"
 import { ExperimentalHttpApiServer } from "./routes/instance/httpapi/server"
-import * as ServerRuntime from "./runtime"
+import * as ServerBackend from "./backend"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -38,37 +38,37 @@ type ServerApp = {
   request(input: string | URL | Request, init?: RequestInit): Response | Promise<Response>
 }
 
-const DefaultHono = lazy(() => withRuntime({ runtime: "hono", reason: "stable" }, createHono({}, { runtime: "hono", reason: "stable" })))
+const DefaultHono = lazy(() => withBackend({ backend: "hono", reason: "stable" }, createHono({}, { backend: "hono", reason: "stable" })))
 const DefaultHttpApi = lazy(() => createDefaultHttpApi())
 
 function select() {
-  return ServerRuntime.select()
+  return ServerBackend.select()
 }
 
-export const runtime = select
+export const backend = select
 
 export const Default = () => {
   const selected = select()
-  return selected.runtime === "effect-httpapi" ? DefaultHttpApi() : DefaultHono()
+  return selected.backend === "effect-httpapi" ? DefaultHttpApi() : DefaultHono()
 }
 
 function create(opts: { cors?: string[] }) {
   const selected = select()
-  return selected.runtime === "effect-httpapi"
-    ? withRuntime(selected, createHttpApi())
-    : withRuntime(selected, createHono(opts, selected))
+  return selected.backend === "effect-httpapi"
+    ? withBackend(selected, createHttpApi())
+    : withBackend(selected, createHono(opts, selected))
 }
 
 export function Legacy(opts: { cors?: string[] } = {}) {
-  return withRuntime({ runtime: "hono", reason: "explicit" }, createHono(opts, { runtime: "hono", reason: "explicit" }))
+  return withBackend({ backend: "hono", reason: "explicit" }, createHono(opts, { backend: "hono", reason: "explicit" }))
 }
 
 function createDefaultHttpApi() {
-  return withRuntime(select(), createHttpApi())
+  return withBackend(select(), createHttpApi())
 }
 
-function withRuntime<T extends { app: ServerApp; runtime: unknown }>(selection: ServerRuntime.Selection, built: T) {
-  log.info("server runtime selected", ServerRuntime.attributes(selection))
+function withBackend<T extends { app: ServerApp; runtime: unknown }>(selection: ServerBackend.Selection, built: T) {
+  log.info("server backend selected", ServerBackend.attributes(selection))
   return built
 }
 
@@ -86,12 +86,12 @@ function createHttpApi() {
   }
 }
 
-function createHono(opts: { cors?: string[] }, selection: ServerRuntime.Selection = ServerRuntime.force(select(), "hono")) {
-  const runtimeAttributes = ServerRuntime.attributes(selection)
+function createHono(opts: { cors?: string[] }, selection: ServerBackend.Selection = ServerBackend.force(select(), "hono")) {
+  const backendAttributes = ServerBackend.attributes(selection)
   const app = new Hono()
     .onError(ErrorMiddleware)
     .use(AuthMiddleware)
-    .use(LoggerMiddleware(runtimeAttributes))
+    .use(LoggerMiddleware(backendAttributes))
     .use(CompressionMiddleware)
     .use(CorsMiddleware(opts))
     .route("/global", GlobalRoutes())

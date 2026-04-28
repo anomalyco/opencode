@@ -146,9 +146,9 @@ afterEach(async () => {
 })
 
 describe("HttpApi server", () => {
-  test("defaults local/dev builds to the Effect HttpApi runtime", () => {
+  test("defaults local/dev builds to the Effect HttpApi backend", () => {
     Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = false
-    expect(Server.runtime().runtime).toBe("effect-httpapi")
+    expect(Server.backend().backend).toBe("effect-httpapi")
   })
 
   test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {

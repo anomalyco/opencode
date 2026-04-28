@@ -1,10 +1,10 @@
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 
-export type Runtime = "effect-httpapi" | "hono"
+export type Backend = "effect-httpapi" | "hono"
 
 export type Selection = {
-  runtime: Runtime
+  backend: Backend
   reason: "env" | "channel" | "stable" | "explicit"
 }
 
@@ -18,23 +18,23 @@ const channelDefaultsToHttpApi = () =>
   InstallationVersion.includes("-beta")
 
 export function select(): Selection {
-  if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) return { runtime: "effect-httpapi", reason: "env" }
-  if (channelDefaultsToHttpApi()) return { runtime: "effect-httpapi", reason: "channel" }
-  return { runtime: "hono", reason: "stable" }
+  if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) return { backend: "effect-httpapi", reason: "env" }
+  if (channelDefaultsToHttpApi()) return { backend: "effect-httpapi", reason: "channel" }
+  return { backend: "hono", reason: "stable" }
 }
 
 export function attributes(selection: Selection): Record<string, string> {
   return {
-    "opencode.server.runtime": selection.runtime,
-    "opencode.server.runtime.reason": selection.reason,
+    "opencode.server.backend": selection.backend,
+    "opencode.server.backend.reason": selection.reason,
     "opencode.installation.channel": InstallationChannel,
     "opencode.installation.version": InstallationVersion,
   }
 }
 
-export function force(selection: Selection, runtime: Runtime): Selection {
+export function force(selection: Selection, backend: Backend): Selection {
   return {
-    runtime,
-    reason: selection.runtime === runtime ? selection.reason : "explicit",
+    backend,
+    reason: selection.backend === backend ? selection.reason : "explicit",
   }
 }

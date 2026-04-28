@@ -254,6 +254,7 @@ export const tuiHandlers = HttpApiBuilder.group(TuiApi, "tui", (handlers) =>
     const selectSession = Effect.fn("TuiHttpApi.selectSession")(function* (ctx: {
       payload: typeof TuiEvent.SessionSelect.properties.Type
     }) {
+      if (!ctx.payload.sessionID.startsWith("ses")) return yield* new HttpApiError.BadRequest({})
       const row = yield* Effect.sync(() =>
         Database.use((db) =>
           db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, ctx.payload.sessionID)).get(),

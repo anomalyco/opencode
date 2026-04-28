@@ -55,7 +55,7 @@ import { TuiApi, tuiHandlers } from "./tui"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
-import * as ServerRuntime from "@/server/runtime"
+import * as ServerBackend from "@/server/backend"
 
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
@@ -78,13 +78,21 @@ function decode(input: string) {
   }
 }
 
+function currentDirectory() {
+  try {
+    return Instance.directory
+  } catch {
+    return process.cwd()
+  }
+}
+
 const instance = HttpRouter.middleware()(
   Effect.gen(function* () {
     return (effect) =>
       Effect.gen(function* () {
         const query = yield* HttpServerRequest.schemaSearchParams(Query)
         const headers = yield* HttpServerRequest.schemaHeaders(Headers)
-        const raw = query.directory || headers["x-opencode-directory"] || process.cwd()
+        const raw = query.directory || headers["x-opencode-directory"] || currentDirectory()
         const workspace = query.workspace || undefined
         const ctx = yield* Effect.promise(() =>
           Instance.provide({
@@ -103,9 +111,9 @@ const instance = HttpRouter.middleware()(
 const runtime = HttpRouter.middleware()(
   Effect.succeed((effect) =>
     Effect.gen(function* () {
-      const selected = ServerRuntime.select()
+      const selected = ServerBackend.select()
       yield* Effect.annotateCurrentSpan(
-        ServerRuntime.attributes(ServerRuntime.force(selected, "effect-httpapi")),
+        ServerBackend.attributes(ServerBackend.force(selected, "effect-httpapi")),
       )
       return yield* effect
     }),
