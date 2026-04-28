@@ -1757,6 +1757,61 @@ test("closest returns undefined when no partial match found", async () => {
   })
 })
 
+test("provider and model theme from config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              theme: "provider-theme",
+              models: {
+                "claude-sonnet-4-20250514": {
+                  theme: "model-theme",
+                },
+                "claude-opus-4-20250514": {
+                  // No theme defined on the model.
+                  // The config parser leaves this as undefined.
+                  // The UI layer (local.tsx) handles the fallback to provider.theme.
+                }
+              },
+            },
+            openai: {
+              // No theme configured for this provider
+              models: {
+                "gpt-4": {}
+              }
+            }
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+      set("OPENAI_API_KEY", "test-openai-key")
+    },
+    fn: async () => {
+      const providers = await list()
+      const provider = providers[ProviderID.anthropic]
+      expect(provider.theme).toBe("provider-theme")
+      
+      const sonnet = provider.models["claude-sonnet-4-20250514"]
+      expect(sonnet.theme).toBe("model-theme")
+
+      const opus = provider.models["claude-opus-4-20250514"]
+      expect(opus.theme).toBeUndefined()
+
+      const openaiProvider = providers[ProviderID.openai]
+      expect(openaiProvider.theme).toBeUndefined()
+    },
+  })
+})
+
 test("closest checks multiple query terms in order", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

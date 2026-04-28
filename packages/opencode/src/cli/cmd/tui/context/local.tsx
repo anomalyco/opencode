@@ -22,6 +22,18 @@ export function parseModel(model: string) {
   }
 }
 
+export function resolveThemeFallback(
+  current: { providerID: string; modelID: string } | undefined,
+  providers: any[],
+  tuiTheme: string | undefined,
+): string {
+  if (!current) return tuiTheme ?? "opencode"
+  const provider = providers.find((x) => x.id === current.providerID)
+  if (!provider) return tuiTheme ?? "opencode"
+  const modelInfo = provider.models[current.modelID]
+  return modelInfo?.theme ?? provider.theme ?? tuiTheme ?? "opencode"
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -422,16 +434,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     // Automatically update theme when model changes
     createEffect(() => {
-      const current = model.current()
-      if (!current) return
-
-      const provider = sync.data.provider.find((x) => x.id === current.providerID)
-      if (!provider) return
-
-      const modelInfo = provider.models[current.modelID]
-      
-      const targetTheme = modelInfo?.theme ?? provider.theme ?? tuiConfig.theme ?? "opencode"
-      
+      const targetTheme = resolveThemeFallback(model.current(), sync.data.provider, tuiConfig.theme)
       if (targetTheme && themeApi.has(targetTheme)) {
         themeApi.set(targetTheme)
       }
