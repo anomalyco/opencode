@@ -30,24 +30,23 @@ export function Avatar(props: AvatarProps) {
     "classList",
     "style",
   ])
-  const src = split.src // did this so i can zero it out to test fallback
   return (
     <div
       {...rest}
       data-component="avatar"
       data-size={split.size || "normal"}
-      data-has-image={src ? "" : undefined}
+      data-has-image={split.src ? "" : undefined}
       classList={{
         ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
       style={{
         ...(typeof split.style === "object" ? split.style : {}),
-        ...(!src && split.background ? { "--avatar-bg": split.background } : {}),
-        ...(!src && split.foreground ? { "--avatar-fg": split.foreground } : {}),
+        ...(!split.src && split.background ? { "--avatar-bg": split.background } : {}),
+        ...(!split.src && split.foreground ? { "--avatar-fg": split.foreground } : {}),
       }}
     >
-      <Show when={src} fallback={first(split.fallback)}>
+      <Show when={split.src} fallback={first(split.fallback)}>
         {(src) => <img src={src()} draggable={false} data-slot="avatar-image" />}
       </Show>
     </div>
