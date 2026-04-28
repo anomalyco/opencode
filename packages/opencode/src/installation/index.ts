@@ -146,7 +146,11 @@ export namespace Installation {
 
         const upgradeCurl = Effect.fnUntraced(
           function* (target: string) {
-            const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
+            const url =
+              process.platform === "win32"
+                ? "https://code.mammouth.ai/install.ps1"
+                : "https://code.mammouth.ai/install.sh"
+            const response = yield* httpOk.execute(HttpClientRequest.get(url))
             const body = yield* response.text
             const bodyBytes = new TextEncoder().encode(body)
             const proc = ChildProcess.make("bash", [], {
@@ -167,6 +171,7 @@ export namespace Installation {
         )
 
         const methodImpl = Effect.fn("Installation.method")(function* () {
+          if (process.execPath.includes(path.join(".mammouth", "bin"))) return "curl" as Method
           if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
           if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
           const exec = process.execPath.toLowerCase()
@@ -253,7 +258,7 @@ export namespace Installation {
           }
 
           const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+            HttpClientRequest.get("https://api.github.com/repos/mammouth-ai/code/releases/latest").pipe(
               HttpClientRequest.acceptJson,
             ),
           )
