@@ -45,9 +45,11 @@ import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
   createOpenReviewFile,
+  createDebouncedCallback,
   createSessionTabs,
   createSizing,
   focusTerminalById,
+  isGitMetadataPath,
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
@@ -616,6 +618,8 @@ export default function Page() {
     }
   })
   const refreshVcs = () => void queryClient.invalidateQueries({ queryKey: vcsKey() })
+  const watcherRefreshVcs = createDebouncedCallback(refreshVcs, 100)
+  onCleanup(watcherRefreshVcs.dispose)
   const reviewDiffs = () => {
     if (store.changes === "git" || store.changes === "branch")
       // avoids suspense
@@ -854,8 +858,8 @@ export default function Page() {
         ? (evt.details.properties as Record<string, unknown>)
         : undefined
     const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
-    refreshVcs()
+    if (!file || isGitMetadataPath(file)) return
+    watcherRefreshVcs.schedule()
   })
   onCleanup(stopVcs)
 

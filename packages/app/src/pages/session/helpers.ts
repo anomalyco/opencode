@@ -151,6 +151,30 @@ export const getTabReorderIndex = (tabs: readonly string[], from: string, to: st
   return toIndex
 }
 
+export const createDebouncedCallback = (fn: () => void, wait: number) => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  return {
+    schedule() {
+      if (timer !== undefined) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = undefined
+        fn()
+      }, wait)
+    },
+    dispose() {
+      if (timer === undefined) return
+      clearTimeout(timer)
+      timer = undefined
+    },
+  }
+}
+
+export const isGitMetadataPath = (file: string) => {
+  const normalized = file.replaceAll("\\", "/")
+  return normalized === ".git" || normalized.endsWith("/.git") || normalized.startsWith(".git/") || normalized.includes("/.git/")
+}
+
 export const createSizing = () => {
   const [state, setState] = createStore({ active: false })
   let t: number | undefined

@@ -1,12 +1,14 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, vi } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  createDebouncedCallback,
   createOpenReviewFile,
   createOpenSessionFileTab,
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  isGitMetadataPath,
   shouldFocusTerminalOnKeyDown,
 } from "./helpers"
 
@@ -114,6 +116,60 @@ describe("getTabReorderIndex", () => {
 
   test("returns undefined for unknown droppable id", () => {
     expect(getTabReorderIndex(["a", "b", "c"], "a", "missing")).toBeUndefined()
+  })
+})
+
+describe("createDebouncedCallback", () => {
+  test("coalesces scheduled calls", () => {
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      const debounced = createDebouncedCallback(() => calls++, 100)
+
+      debounced.schedule()
+      debounced.schedule()
+      debounced.schedule()
+      vi.advanceTimersByTime(99)
+      expect(calls).toBe(0)
+
+      vi.advanceTimersByTime(1)
+      expect(calls).toBe(1)
+      debounced.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("cancels pending calls on dispose", () => {
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      const debounced = createDebouncedCallback(() => calls++, 100)
+
+      debounced.schedule()
+      debounced.dispose()
+      vi.advanceTimersByTime(100)
+
+      expect(calls).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe("isGitMetadataPath", () => {
+  test("matches relative, absolute, and windows git metadata paths", () => {
+    expect(isGitMetadataPath(".git")).toBe(true)
+    expect(isGitMetadataPath(".git/HEAD")).toBe(true)
+    expect(isGitMetadataPath("/repo/.git")).toBe(true)
+    expect(isGitMetadataPath("/repo/.git/worktrees/feature/HEAD")).toBe(true)
+    expect(isGitMetadataPath("C:\\repo\\.git")).toBe(true)
+    expect(isGitMetadataPath("C:\\repo\\.git\\worktrees\\feature\\HEAD")).toBe(true)
+  })
+
+  test("does not match regular file paths containing git in the name", () => {
+    expect(isGitMetadataPath("src/git/index.ts")).toBe(false)
+    expect(isGitMetadataPath("src/.github/workflows/test.yml")).toBe(false)
   })
 })
 
