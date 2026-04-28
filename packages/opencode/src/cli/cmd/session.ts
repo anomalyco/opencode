@@ -200,7 +200,7 @@ export const SessionDetachedCommand = cmd({
         byDir.set(s.directory, list)
       }
       const detached: (Session.Info & { detachReason: string })[] = []
-      const projectIdCache = new Map<string, string | undefined>()
+      const validDirs = new Map<string, Session.Info[]>()
       for (const [dir, dirSessions] of byDir) {
         if (!existsSync(dir)) {
           for (const s of dirSessions) detached.push({ ...s, detachReason: "directory does not exist" })
@@ -211,11 +211,15 @@ export const SessionDetachedCommand = cmd({
           for (const s of dirSessions) detached.push({ ...s, detachReason: "path is not a directory" })
           continue
         }
-        let correctId = projectIdCache.get(dir)
-        if (!projectIdCache.has(dir)) {
-          correctId = (await resolveProjectId(dir)) ?? "global"
-          projectIdCache.set(dir, correctId)
-        }
+        validDirs.set(dir, dirSessions)
+      }
+      const projectIds = new Map(
+        await Promise.all(
+          [...validDirs.keys()].map(async (dir) => [dir, (await resolveProjectId(dir)) ?? "global"] as const),
+        ),
+      )
+      for (const [dir, dirSessions] of validDirs) {
+        const correctId = projectIds.get(dir)!
         for (const s of dirSessions) {
           if (s.projectID !== correctId) {
             detached.push({
