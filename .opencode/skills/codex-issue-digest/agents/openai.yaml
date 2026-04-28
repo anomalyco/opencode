@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Issue Digest"
+  short_description: "Summarize Codex issues by labels or all areas"
+  default_prompt: "Use $codex-issue-digest to run the Codex issue digest for labels tui and exec over the previous 24 hours."

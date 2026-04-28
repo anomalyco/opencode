@@ -243,6 +243,16 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolved.backgroundElement
   }
 
+  // Keep prose-like markdown readable across themes by using the base text color.
+  resolved.markdownText = resolved.text
+  resolved.markdownHeading = resolved.text
+  resolved.markdownBlockQuote = resolved.text
+  resolved.markdownEmph = resolved.text
+  resolved.markdownStrong = resolved.text
+  resolved.markdownListItem = resolved.text
+  resolved.markdownListEnumeration = resolved.text
+  resolved.markdownImageText = resolved.text
+
   // Handle thinkingOpacity - optional with default of 0.6
   const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
 

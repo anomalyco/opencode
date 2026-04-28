@@ -239,20 +239,20 @@ registerCustomTheme("OpenCode", () => {
       {
         scope: "punctuation.definition.list.begin.markdown",
         settings: {
-          foreground: "var(--syntax-punctuation)",
+          foreground: "var(--text-strong)",
         },
       },
       {
         scope: ["markup.heading", "markup.heading entity.name"],
         settings: {
           fontStyle: "bold",
-          foreground: "var(--syntax-info)",
+          foreground: "var(--text-strong)",
         },
       },
       {
         scope: "markup.quote",
         settings: {
-          foreground: "var(--syntax-info)",
+          foreground: "var(--text-strong)",
         },
       },
       {

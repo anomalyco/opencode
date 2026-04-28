@@ -49,3 +49,18 @@ test("resolveTheme rejects circular color refs", () => {
 
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
 })
+
+test("resolveTheme keeps markdown prose on base text color", () => {
+  const resolved = resolveTheme(DEFAULT_THEMES.matrix, "dark")
+
+  expect(resolved.markdownText).toBe(resolved.text)
+  expect(resolved.markdownHeading).toBe(resolved.text)
+  expect(resolved.markdownBlockQuote).toBe(resolved.text)
+  expect(resolved.markdownEmph).toBe(resolved.text)
+  expect(resolved.markdownStrong).toBe(resolved.text)
+  expect(resolved.markdownListItem).toBe(resolved.text)
+  expect(resolved.markdownListEnumeration).toBe(resolved.text)
+  expect(resolved.markdownImageText).toBe(resolved.text)
+  expect(resolved.markdownCode).not.toBe(resolved.text)
+  expect(resolved.markdownLink).not.toBe(resolved.text)
+})
