@@ -26,7 +26,7 @@ import {
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
-import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import { canReuseRootSessionCache, estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
@@ -209,7 +209,16 @@ function createGlobalSync() {
     children.pin(directory)
     const [store, setStore] = children.child(directory, { bootstrap: false })
     const meta = sessionMeta.get(directory)
-    if (meta && meta.limit >= store.limit) {
+    const cachedRootCount = store.session.filter((s) => !!s?.id && !s.parentID && !s.time?.archived).length
+    if (
+      meta &&
+      canReuseRootSessionCache({
+        cachedRootCount,
+        fetchedLimit: meta.limit,
+        requestedLimit: store.limit,
+        total: store.sessionTotal,
+      })
+    ) {
       const next = trimSessions(store.session, {
         limit: store.limit,
         permission: store.permission,
