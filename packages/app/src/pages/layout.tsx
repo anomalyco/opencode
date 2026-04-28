@@ -148,6 +148,8 @@ export default function Layout(props: ParentProps) {
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => route().dir)
 
+  const pendingWorktreeEvents = new Map<string, "ready" | "failed">()
+
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
     busyWorkspaces: {} as Record<string, boolean>,
@@ -164,6 +166,10 @@ export default function Layout(props: ParentProps) {
   const setBusy = (directory: string, value: boolean) => {
     const key = pathKey(directory)
     if (value) {
+      if (pendingWorktreeEvents.has(key)) {
+        pendingWorktreeEvents.delete(key)
+        return
+      }
       setState("busyWorkspaces", key, true)
       return
     }
@@ -430,13 +436,21 @@ export default function Layout(props: ParentProps) {
 
       const unsub = globalSDK.event.listen((e) => {
         if (e.details?.type === "worktree.ready") {
-          setBusy(e.name, false)
+          if (state.busyWorkspaces[workspaceKey(e.name)]) {
+            setBusy(e.name, false)
+          } else {
+            pendingWorktreeEvents.set(workspaceKey(e.name), "ready")
+          }
           WorktreeState.ready(e.name)
           return
         }
 
         if (e.details?.type === "worktree.failed") {
-          setBusy(e.name, false)
+          if (state.busyWorkspaces[workspaceKey(e.name)]) {
+            setBusy(e.name, false)
+          } else {
+            pendingWorktreeEvents.set(workspaceKey(e.name), "failed")
+          }
           WorktreeState.failed(e.name, e.details.properties?.message ?? language.t("common.requestFailed"))
           return
         }
