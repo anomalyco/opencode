@@ -34,6 +34,32 @@ function openApiRouteKeys(spec: { paths: Record<string, Partial<Record<(typeof m
     .sort()
 }
 
+function openApiParameters(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }) {
+  return Object.fromEntries(
+    Object.entries(spec.paths).flatMap(([path, item]) =>
+      methods
+        .filter((method) => item[method])
+        .map((method) => [
+          `${method.toUpperCase()} ${path}`,
+          (item[method]?.parameters ?? [])
+            .map(parameterKey)
+            .filter((param) => param !== undefined)
+            .sort(),
+        ]),
+    ),
+  )
+}
+
+type Operation = {
+  parameters?: unknown[]
+}
+
+function parameterKey(param: unknown) {
+  if (!param || typeof param !== "object" || !("in" in param) || !("name" in param)) return
+  if (typeof param.in !== "string" || typeof param.name !== "string") return
+  return `${param.in}:${param.name}:${"required" in param && param.required === true}`
+}
+
 function authorization(username: string, password: string) {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
 }
@@ -61,6 +87,17 @@ describe("HttpApi server", () => {
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
     expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
+  })
+
+  test("matches generated OpenAPI route parameters", async () => {
+    const hono = openApiParameters(await Server.openapi())
+    const effect = openApiParameters(OpenApi.fromApi(PublicApi))
+
+    expect(
+      Object.keys(hono)
+        .filter((route) => JSON.stringify(hono[route]) !== JSON.stringify(effect[route]))
+        .map((route) => ({ route, hono: hono[route], effect: effect[route] })),
+    ).toEqual([])
   })
 
   test("allows requests when auth is disabled", async () => {
