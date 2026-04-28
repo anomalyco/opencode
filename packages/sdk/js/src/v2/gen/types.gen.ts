@@ -3808,6 +3808,7 @@ export type SessionPromptData = {
     agent?: string
     noReply?: boolean
     isSteer?: boolean
+    followupMode?: "steer" | "wrap" | "queue"
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
      */
@@ -4009,6 +4010,7 @@ export type SessionPromptAsyncData = {
     agent?: string
     noReply?: boolean
     isSteer?: boolean
+    followupMode?: "steer" | "wrap" | "queue"
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
      */

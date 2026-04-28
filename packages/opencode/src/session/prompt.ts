@@ -1297,7 +1297,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         yield* elog.info("prompt called", { isSteer: input.isSteer })
 
         if (input.noReply === true) return message
-        return yield* loop({ sessionID: input.sessionID, isSteer: input.isSteer })
+        return yield* loop({ sessionID: input.sessionID, isSteer: input.isSteer, followupMode: input.followupMode })
       },
     )
 
@@ -1556,7 +1556,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      const type = input.followupMode === "steer" || input.followupMode === "wrap" ? input.followupMode : "busy"
+      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID), { type })
     })
 
     const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
@@ -1734,6 +1735,7 @@ export const PromptInput = Schema.Struct({
   agent: Schema.optional(Schema.String),
   noReply: Schema.optional(Schema.Boolean),
   isSteer: Schema.optional(Schema.Boolean),
+  followupMode: Schema.optional(Schema.Union([Schema.Literal("steer"), Schema.Literal("wrap"), Schema.Literal("queue")])),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
     description:
       "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
@@ -1766,6 +1768,7 @@ export type PromptInput = Omit<Schema.Schema.Type<typeof PromptInput>, "parts"> 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
   isSteer: Schema.optional(Schema.Boolean),
+  followupMode: Schema.optional(Schema.Union([Schema.Literal("steer"), Schema.Literal("wrap"), Schema.Literal("queue")])),
 }) {
   static readonly zod = zod(this)
 }
