@@ -373,6 +373,6 @@ export async function bootstrapDirectory(input: {
       })
     }
 
-    if (loading && slowErrs.length === 0) input.setStore("status", "complete")
+    if (loading) input.setStore("status", "complete")
   })()
 }
