@@ -4,6 +4,8 @@ import path from "path"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
 const rootPkg = await Bun.file(rootPkgPath).json()
+const opencodePkgPath = path.resolve(import.meta.dir, "../../opencode/package.json")
+const opencodePkg = await Bun.file(opencodePkgPath).json()
 const expectedBunVersion = rootPkg.packageManager?.split("@")[1]
 
 if (!expectedBunVersion) {
@@ -23,6 +25,8 @@ const env = {
   OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
   OPENCODE_RELEASE: process.env["OPENCODE_RELEASE"],
 }
+const platform = process.platform === "win32" ? "windows" : process.platform
+const packageNames = [`@viniraioli/opencode`, `@viniraioli/opencode-${platform}-${process.arch}`]
 const CHANNEL = await (async () => {
   if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
   if (env.OPENCODE_BUMP) return "latest"
@@ -34,13 +38,22 @@ const IS_PREVIEW = CHANNEL !== "latest"
 const VERSION = await (async () => {
   if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch(`https://registry.npmjs.org/${encodeURIComponent("@vinirabli/opencode")}/latest`)
-    .then((res) => {
-      if (!res.ok) throw new Error(res.statusText)
-      return res.json()
-    })
-    .then((data: any) => data.version)
-  const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
+  const published = await Promise.all(
+    packageNames.map((name) =>
+      fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`)
+        .then((res) => {
+          if (res.status === 404) return null
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json()
+        })
+        .then((data) => (typeof data?.version === "string" ? data.version : null)),
+    ),
+  )
+  const base = [...published, opencodePkg.version]
+    .filter((version) => typeof version === "string" && semver.valid(version))
+    .sort((a, b) => semver.rcompare(a, b))[0]
+  if (!base) throw new Error("Could not determine current version from npm or packages/opencode/package.json")
+  const [major, minor, patch] = base.split(".").map((x) => Number(x) || 0)
   const t = env.OPENCODE_BUMP?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
   if (t === "minor") return `${major}.${minor + 1}.0`

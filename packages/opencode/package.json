@@ -15,7 +15,8 @@
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
-    "db": "bun drizzle-kit"
+    "db": "bun drizzle-kit",
+    "release": "bun run script/release.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"

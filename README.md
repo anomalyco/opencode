@@ -10,7 +10,7 @@
 <p align="center">The open source AI coding agent.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/%40vinirabli%2Fopencode"><img alt="npm" src="https://img.shields.io/npm/v/%40vinirabli%2Fopencode?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/%40viniraioli%2Fopencode"><img alt="npm" src="https://img.shields.io/npm/v/%40viniraioli%2Fopencode?style=flat-square" /></a>
   <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
@@ -25,10 +25,10 @@
 curl -fsSL https://opencode.ai/install | bash
 
 # Package managers
-npm i -g @vinirabli/opencode@latest
-bun add -g @vinirabli/opencode@latest
-pnpm add -g @vinirabli/opencode@latest
-yarn global add @vinirabli/opencode@latest
+npm i -g @viniraioli/opencode@latest
+bun add -g @viniraioli/opencode@latest
+pnpm add -g @viniraioli/opencode@latest
+yarn global add @viniraioli/opencode@latest
 scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
@@ -79,6 +79,18 @@ For more info on how to configure OpenCode, [**head over to our docs**](https://
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
+
+#### Releasing From The Repo Root
+
+You can run the CLI release flow from the repo root without opening a terminal in `packages/opencode`.
+
+```bash
+bun run release
+bun run release:skip-build
+```
+
+- `bun run release` builds and publishes the CLI packages
+- `bun run release:skip-build` reuses the existing build and only runs the publish flow
 
 ### Building on OpenCode
 

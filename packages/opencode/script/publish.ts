@@ -7,7 +7,7 @@ import path from "path"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
-const npmPackageName = "@vinirabli/opencode"
+const npmPackageName = "@viniraioli/opencode"
 const npmPackageDir = `./dist/${npmPackageName}`
 const commandName = pkg.name
 const releaseArtifactBaseName = pkg.name
@@ -28,7 +28,19 @@ async function publish(dir: string, name: string, version: string) {
     return
   }
   await $`bun pm pack`.cwd(dir)
-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
+  for (let i = 0; i < 10; i++) {
+    const result = await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir).nothrow()
+    if (result.exitCode === 0) return
+    if (await published(name, version)) {
+      console.log(`published after registry delay ${name}@${version}`)
+      return
+    }
+    const stderr = result.stderr.toString()
+    if (!stderr.includes("npm error code E409")) throw new Error(stderr)
+    console.log(`registry still processing ${name}@${version}, retrying (${i + 1}/10)`)
+    await Bun.sleep(3000)
+  }
+  throw new Error(`timed out waiting for npm to accept ${name}@${version}`)
 }
 
 const binaries: Record<string, string> = {}
@@ -42,9 +54,10 @@ for (const filepath of new Bun.Glob("**/package.json").scanSync({ cwd: "./dist" 
 console.log("binaries", binaries)
 const version = Object.values(binaries)[0]
 
-await $`mkdir -p ${npmPackageDir}`
-await $`cp -r ./bin ${npmPackageDir}/bin`
-await $`cp ./script/postinstall.mjs ${npmPackageDir}/postinstall.mjs`
+const fs = await import("fs/promises")
+await fs.mkdir(npmPackageDir, { recursive: true })
+await fs.cp("./bin", `${npmPackageDir}/bin`, { recursive: true })
+await fs.cp("./script/postinstall.mjs", `${npmPackageDir}/postinstall.mjs`)
 await Bun.file(`${npmPackageDir}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 
 await Bun.file(`${npmPackageDir}/package.json`).write(

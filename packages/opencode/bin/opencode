@@ -50,7 +50,7 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const packageBase = "@vinirabli/opencode"
+const packageBase = "@viniraioli/opencode"
 const base = packageBase + "-" + platform + "-" + arch
 const binaryName = platform === "windows" ? `${commandName}.exe` : commandName
 

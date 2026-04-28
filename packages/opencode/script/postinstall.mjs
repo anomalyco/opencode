@@ -8,7 +8,7 @@ import { createRequire } from "module"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
-const packageBase = "@vinirabli/opencode"
+const packageBase = "@viniraioli/opencode"
 const commandName = "opencode"
 
 function detectPlatformAndArch() {

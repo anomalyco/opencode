@@ -17,7 +17,7 @@ await import("./generate.ts")
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
 
-const npmPackageName = "@vinirabli/opencode"
+const npmPackageName = "@viniraioli/opencode"
 const commandName = "opencode"
 const legacyCommandName = pkg.name
 
