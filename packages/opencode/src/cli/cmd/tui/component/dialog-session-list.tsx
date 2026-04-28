@@ -122,7 +122,7 @@ export function DialogSessionList() {
     const today = new Date().toDateString()
     const sessionMap = new Map(sessions().filter((x) => x.parentID === undefined).map((x) => [x.id, x]))
 
-    const displayOrder = searchResults() !== undefined ? orderByRecency(searchResults()) : browseOrder()
+    const displayOrder = searchResults() ? orderByRecency(searchResults()) : browseOrder()
 
     return displayOrder
       .map((id) => sessionMap.get(id))
