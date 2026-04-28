@@ -1,7 +1,7 @@
 import { Effect, Stream } from "effect"
 import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import type { Auth } from "./auth"
-import { passthrough as authPassthrough } from "./auth"
+import { bearer as authBearer } from "./auth"
 import type { Endpoint } from "./endpoint"
 import * as LLM from "./llm"
 import { RequestExecutor } from "./executor"
@@ -143,7 +143,13 @@ export interface FromProtocolInput<Draft, Target, Frame, Chunk, State> {
   readonly protocol: Protocol<Draft, Target, Frame, Chunk, State>
   /** Where the request is sent. */
   readonly endpoint: Endpoint<Target>
-  /** Per-request transport authentication. Defaults to `Auth.passthrough`. */
+  /**
+   * Per-request transport authentication. Defaults to `Auth.bearer`, which
+   * sets `Authorization: Bearer <model.apiKey>` when `model.apiKey` is set
+   * and is a no-op otherwise. Override with `Auth.apiKeyHeader(name)` for
+   * providers that use a custom header (Anthropic, Gemini), or supply a
+   * custom `Auth` for per-request signing (Bedrock SigV4).
+   */
   readonly auth?: Auth
   /** Stream framing — bytes -> frames before `protocol.decode`. */
   readonly framing: Framing<Frame>
@@ -177,7 +183,7 @@ export interface FromProtocolInput<Draft, Target, Frame, Chunk, State> {
 export function fromProtocol<Draft, Target, Frame, Chunk, State>(
   input: FromProtocolInput<Draft, Target, Frame, Chunk, State>,
 ): AdapterDefinition<Draft, Target> {
-  const auth = input.auth ?? authPassthrough
+  const auth = input.auth ?? authBearer
   const protocol = input.protocol
   const buildHeaders = input.headers ?? (() => ({}))
 

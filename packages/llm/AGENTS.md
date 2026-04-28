@@ -41,7 +41,7 @@ An adapter is the registered, runnable composition of four orthogonal pieces:
 
 - **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, target validation, body encoding, and the streaming chunk-to-event state machine. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
 - **`Endpoint`** (`src/endpoint.ts`) — URL construction. Receives the request and the validated target so it can read `model.id`, `model.baseURL`, `model.native.queryParams`, and any target field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
-- **`Auth`** (`src/auth.ts`) — per-request transport authentication. Most adapters use `Auth.passthrough`: their auth header is statically baked into `model.headers` by their `model()` constructor. Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
+- **`Auth`** (`src/auth.ts`) — per-request transport authentication. Adapters read `model.apiKey` at request time via `Auth.bearer` (the `Adapter.fromProtocol` default; sets `Authorization: Bearer <apiKey>`) or `Auth.apiKeyHeader(name)` for providers that use a custom header (Anthropic `x-api-key`, Gemini `x-goog-api-key`). Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
 - **`Framing`** (`src/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
 
 Compose them via `Adapter.fromProtocol(...)`:
@@ -74,7 +74,7 @@ packages/llm/src/
 
   protocol.ts           // Protocol type + Protocol.define
   endpoint.ts           // Endpoint type + Endpoint.baseURL
-  auth.ts               // Auth type + Auth.passthrough
+  auth.ts               // Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
   framing.ts            // Framing type + Framing.sse
 
   provider/

@@ -7,10 +7,10 @@ import type { LLMError, LLMRequest } from "./schema"
  * Receives the unsigned HTTP request shape (URL, method, body, headers) and
  * returns the headers to actually send.
  *
- * Most adapters use `Auth.passthrough`: their auth header
- * (`Authorization: Bearer ...`, `x-api-key`, `x-goog-api-key`) is already
- * baked into `model.headers` by the provider's `model()` constructor, and
- * `Auth` has nothing to do per request.
+ * Most adapters use the default `Auth.bearer`, which reads
+ * `request.model.apiKey` and sets `Authorization: Bearer ...`. Providers
+ * that use a different header pick `Auth.apiKeyHeader(name)` (e.g.
+ * Anthropic's `x-api-key`, Gemini's `x-goog-api-key`).
  *
  * Adapters that need per-request signing (AWS SigV4, future Vertex IAM,
  * future Azure AAD) implement `Auth` as a function that hashes the body,

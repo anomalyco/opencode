@@ -1,5 +1,4 @@
 import { Adapter } from "../adapter"
-import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -36,7 +35,6 @@ export const adapter = Adapter.fromProtocol({
     path: "/chat/completions",
     required: "OpenAI-compatible Chat requires a baseURL",
   }),
-  auth: Auth.bearer,
   framing: Framing.sse,
 })
 
