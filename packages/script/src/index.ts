@@ -49,8 +49,8 @@ const VERSION = await (async () => {
         .then((data) => (typeof data?.version === "string" ? data.version : null)),
     ),
   )
-  const base = [...published, opencodePkg.version]
-    .filter((version) => typeof version === "string" && semver.valid(version))
+  const base = [...published, typeof opencodePkg.version === "string" ? opencodePkg.version : null]
+    .flatMap((version) => (typeof version === "string" && semver.valid(version) ? [version] : []))
     .sort((a, b) => semver.rcompare(a, b))[0]
   if (!base) throw new Error("Could not determine current version from npm or packages/opencode/package.json")
   const [major, minor, patch] = base.split(".").map((x) => Number(x) || 0)
