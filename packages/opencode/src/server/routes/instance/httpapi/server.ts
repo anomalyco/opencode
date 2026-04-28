@@ -1,16 +1,16 @@
-import { Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
 import { Bus } from "@/bus"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
-import { Observability } from "@/effect"
+import * as Observability from "@opencode-ai/core/effect/observability"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
 import { Pty } from "@/pty"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { lazy } from "@/util/lazy"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { authorizationLayer } from "./auth"
 import { ConfigApi, configHandlers } from "./config"
 import { eventRoute } from "./event"
@@ -40,6 +40,8 @@ const Headers = Schema.Struct({
   authorization: Schema.optional(Schema.String),
   "x-opencode-directory": Schema.optional(Schema.String),
 })
+
+export const context = Context.empty() as Context.Context<unknown>
 
 function decode(input: string) {
   try {

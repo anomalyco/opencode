@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Shell } from "../../src/shell/shell"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
 import { which } from "../../src/util/which"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {

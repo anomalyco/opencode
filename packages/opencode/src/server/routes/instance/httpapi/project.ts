@@ -1,6 +1,6 @@
 import * as InstanceState from "@/effect/instance-state"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Project } from "@/project"
+import { Project } from "@/project/project"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { ProjectID } from "@/project/schema"
 import { Effect, Layer, Schema } from "effect"
@@ -99,7 +99,7 @@ export const projectHandlers = Layer.unwrap(
       params: { projectID: ProjectID }
       payload: Project.UpdatePayload
     }) {
-      return yield* svc.update({ ...Project.UpdatePayload.zod.parse(ctx.payload), projectID: ctx.params.projectID })
+      return yield* svc.update({ ...ctx.payload, projectID: ctx.params.projectID })
     })
 
     return HttpApiBuilder.group(ProjectApi, "project", (handlers) =>

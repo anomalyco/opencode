@@ -6,10 +6,10 @@ import { tmpdir } from "../fixture/fixture"
 import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin/index"
-import { ModelsDev } from "../../src/provider"
-import { Provider } from "../../src/provider"
+import { ModelsDev } from "@/provider/models"
+import { Provider } from "@/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
 import { Effect } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
@@ -308,6 +308,67 @@ test("custom provider with npm package", async () => {
       expect(providers[ProviderID.make("custom-provider")]).toBeDefined()
       expect(providers[ProviderID.make("custom-provider")].name).toBe("Custom Provider")
       expect(providers[ProviderID.make("custom-provider")].models["custom-model"]).toBeDefined()
+    },
+  })
+})
+
+test("custom DeepSeek openai-compatible model defaults interleaved reasoning field", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-provider": {
+              name: "Custom Provider",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://api.custom.com/v1",
+              models: {
+                "deepseek-r1": {
+                  name: "DeepSeek R1",
+                },
+                "deepseek-details": {
+                  name: "DeepSeek Details",
+                  interleaved: { field: "reasoning_details" },
+                },
+                "custom-model": {
+                  name: "Custom Model",
+                },
+              },
+              options: {
+                apiKey: "custom-key",
+              },
+            },
+            "custom-anthropic-provider": {
+              name: "Custom Anthropic Provider",
+              npm: "@ai-sdk/anthropic",
+              api: "https://api.custom.com/v1",
+              models: {
+                "deepseek-r1": {
+                  name: "DeepSeek R1",
+                },
+              },
+              options: {
+                apiKey: "custom-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const provider = providers[ProviderID.make("custom-provider")]
+      expect(provider.models["deepseek-r1"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+      expect(provider.models["deepseek-details"].capabilities.interleaved).toEqual({ field: "reasoning_details" })
+      expect(provider.models["custom-model"].capabilities.interleaved).toBe(false)
+      expect(
+        providers[ProviderID.make("custom-anthropic-provider")].models["deepseek-r1"].capabilities.interleaved,
+      ).toBe(false)
     },
   })
 })

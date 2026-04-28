@@ -1,6 +1,6 @@
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { Auth } from "@/auth"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { zod } from "@/util/effect-zod"
 import { namedSchemaError } from "@/util/named-schema-error"
 import { withStatics } from "@/util/schema"
@@ -222,3 +222,5 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
 )
+
+export * as ProviderAuth from "./auth"

@@ -1,10 +1,11 @@
-import { ProviderAuth } from "@/provider"
-import { Config } from "@/config"
-import { ModelsDev } from "@/provider"
-import { Provider } from "@/provider"
+import { ProviderAuth } from "@/provider/auth"
+import { Config } from "@/config/config"
+import { ModelsDev } from "@/provider/models"
+import { Provider } from "@/provider/provider"
 import { ProviderID } from "@/provider/schema"
 import { mapValues } from "remeda"
 import { Effect, Layer, Schema } from "effect"
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -35,7 +36,8 @@ export const ProviderApi = HttpApi.make("provider")
         HttpApiEndpoint.post("authorize", `${root}/:providerID/oauth/authorize`, {
           params: { providerID: ProviderID },
           payload: ProviderAuth.AuthorizeInput,
-          success: ProviderAuth.Authorization,
+          success: Schema.UndefinedOr(ProviderAuth.Authorization),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.oauth.authorize",
@@ -47,6 +49,7 @@ export const ProviderApi = HttpApi.make("provider")
           params: { providerID: ProviderID },
           payload: ProviderAuth.CallbackInput,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.oauth.callback",
@@ -115,8 +118,20 @@ export const providerHandlers = Layer.unwrap(
           inputs: ctx.payload.inputs,
         })
         .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
-      if (!result) return yield* new HttpApiError.BadRequest({})
       return result
+    })
+
+    const authorizeRaw = Effect.fn("ProviderHttpApi.authorizeRaw")(function* (ctx: {
+      params: { providerID: ProviderID }
+      request: HttpServerRequest.HttpServerRequest
+    }) {
+      const body = yield* Effect.orDie(ctx.request.text)
+      const payload = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ProviderAuth.AuthorizeInput))(body).pipe(
+        Effect.mapError(() => new HttpApiError.BadRequest({})),
+      )
+      const result = yield* authorize({ params: ctx.params, payload })
+      if (result === undefined) return HttpServerResponse.empty({ status: 200 })
+      return HttpServerResponse.jsonUnsafe(result)
     })
 
     const callback = Effect.fn("ProviderHttpApi.callback")(function* (ctx: {
@@ -134,7 +149,11 @@ export const providerHandlers = Layer.unwrap(
     })
 
     return HttpApiBuilder.group(ProviderApi, "provider", (handlers) =>
-      handlers.handle("list", list).handle("auth", auth).handle("authorize", authorize).handle("callback", callback),
+      handlers
+        .handle("list", list)
+        .handle("auth", auth)
+        .handleRaw("authorize", authorizeRaw)
+        .handle("callback", callback),
     )
   }),
 ).pipe(
