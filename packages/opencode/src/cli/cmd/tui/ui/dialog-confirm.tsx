@@ -25,6 +25,8 @@ export function DialogConfirm(props: DialogConfirmProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
       if (store.active === "confirm") props.onConfirm?.()
       if (store.active === "cancel") props.onCancel?.()
       dialog.clear()

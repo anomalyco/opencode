@@ -20,6 +20,10 @@ const AuthCallbackPayload = Schema.Struct({
 const AuthRemoveResponse = Schema.Struct({
   success: Schema.Literal(true),
 }).annotate({ identifier: "McpAuthRemoveResponse" })
+class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthError>("McpUnsupportedOAuthError")(
+  { error: Schema.String },
+  { httpApiStatus: 400 },
+) {}
 
 export const McpPaths = {
   status: "/mcp",
@@ -46,6 +50,7 @@ export const McpApi = HttpApi.make("mcp")
         HttpApiEndpoint.post("add", McpPaths.status, {
           payload: AddPayload,
           success: StatusMap,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.add",
@@ -56,6 +61,7 @@ export const McpApi = HttpApi.make("mcp")
         HttpApiEndpoint.post("authStart", McpPaths.auth, {
           params: { name: Schema.String },
           success: AuthStartResponse,
+          error: UnsupportedOAuthError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.start",
@@ -78,6 +84,7 @@ export const McpApi = HttpApi.make("mcp")
         HttpApiEndpoint.post("authAuthenticate", McpPaths.authAuthenticate, {
           params: { name: Schema.String },
           success: MCP.Status,
+          error: UnsupportedOAuthError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.authenticate",
@@ -146,7 +153,9 @@ export const mcpHandlers = Layer.unwrap(
     })
 
     const authStart = Effect.fn("McpHttpApi.authStart")(function* (ctx: { params: { name: string } }) {
-      if (!(yield* mcp.supportsOAuth(ctx.params.name))) return yield* new HttpApiError.BadRequest({})
+      if (!(yield* mcp.supportsOAuth(ctx.params.name))) {
+        return yield* new UnsupportedOAuthError({ error: `MCP server ${ctx.params.name} does not support OAuth` })
+      }
       return yield* mcp.startAuth(ctx.params.name)
     })
 
@@ -158,7 +167,9 @@ export const mcpHandlers = Layer.unwrap(
     })
 
     const authAuthenticate = Effect.fn("McpHttpApi.authAuthenticate")(function* (ctx: { params: { name: string } }) {
-      if (!(yield* mcp.supportsOAuth(ctx.params.name))) return yield* new HttpApiError.BadRequest({})
+      if (!(yield* mcp.supportsOAuth(ctx.params.name))) {
+        return yield* new UnsupportedOAuthError({ error: `MCP server ${ctx.params.name} does not support OAuth` })
+      }
       return yield* mcp.authenticate(ctx.params.name)
     })
 

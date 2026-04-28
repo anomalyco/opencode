@@ -1470,6 +1470,10 @@ unix(
 
           const exit = yield* Fiber.await(loop)
           expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) {
+            const tool = completedTool(exit.value.parts)
+            expect(tool?.state.output).toContain("User aborted the command")
+          }
 
           yield* Fiber.await(sh)
         }),

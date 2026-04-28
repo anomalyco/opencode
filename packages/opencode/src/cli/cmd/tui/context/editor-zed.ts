@@ -6,7 +6,8 @@ import { Filesystem } from "@/util/filesystem"
 import type { EditorSelection } from "./editor"
 
 const ZedEditorRowSchema = z.object({
-  editor_id: z.number(),
+  item_kind: z.string(),
+  editor_id: z.number().nullable(),
   workspace_id: z.number(),
   workspace_paths: z.string().nullable(),
   timestamp: z.string(),
@@ -20,6 +21,7 @@ const ZedEditorContentsSchema = z.object({
 })
 
 type ZedEditorRow = z.infer<typeof ZedEditorRowSchema>
+type ZedActiveEditorRow = ZedEditorRow & { item_kind: "Editor"; editor_id: number }
 
 export type ZedSelectionResult =
   | { type: "selection"; selection: EditorSelection }
@@ -64,8 +66,9 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
     const raw = db
       .query(
         `select
+          i.kind as item_kind,
           e.item_id as editor_id,
-          e.workspace_id as workspace_id,
+          i.workspace_id as workspace_id,
           w.paths as workspace_paths,
           w.timestamp as timestamp,
           e.buffer_path as buffer_path,
@@ -74,9 +77,9 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
         from items i
         join panes p on p.pane_id = i.pane_id and p.workspace_id = i.workspace_id
         join workspaces w on w.workspace_id = i.workspace_id
-        join editors e on e.item_id = i.item_id and e.workspace_id = i.workspace_id
+        left join editors e on e.item_id = i.item_id and e.workspace_id = i.workspace_id
         left join editor_selections s on s.editor_id = e.item_id and s.workspace_id = e.workspace_id
-        where i.active = 1 and p.active = 1 and i.kind = 'Editor' and e.buffer_path is not null
+        where i.active = 1 and p.active = 1
         order by w.timestamp desc`,
       )
       .all()
@@ -93,6 +96,8 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
       .filter((entry) => entry.score > 0)
       .sort((left, right) => right.score - left.score || right.row.timestamp.localeCompare(left.row.timestamp))[0]?.row
     if (!row) return { type: "empty" as const }
+    if (row.item_kind !== "Editor") return { type: "unavailable" as const }
+    if (!isZedActiveEditorRow(row)) return { type: "empty" as const }
     return { type: "row" as const, row }
   } catch {
     return { type: "unavailable" as const }
@@ -101,7 +106,7 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
   }
 }
 
-function queryZedEditorContents(dbPath: string, row: ZedEditorRow) {
+function queryZedEditorContents(dbPath: string, row: ZedActiveEditorRow) {
   let db: Database | undefined
   try {
     db = new Database(dbPath, { readonly: true })
@@ -121,6 +126,10 @@ function queryZedEditorContents(dbPath: string, row: ZedEditorRow) {
   } finally {
     db?.close()
   }
+}
+
+function isZedActiveEditorRow(row: ZedEditorRow): row is ZedActiveEditorRow {
+  return row.item_kind === "Editor" && row.editor_id != null
 }
 
 export function resolveZedDbPath() {
