@@ -3,11 +3,15 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
+import { Portal } from "solid-js/web"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
+import { SkillsProvider } from "@/context/skills"
 import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
+import { StatusPopover } from "@/components/status-popover"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
@@ -31,6 +35,23 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>
+  )
+}
+
+function ProjectStatusPortal() {
+  const language = useLanguage()
+  const mount = createMemo(() => document.getElementById("opencode-titlebar-center-project"))
+
+  return (
+    <Show when={mount()}>
+      {(node) => (
+        <Portal mount={node()}>
+          <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
+            <StatusPopover />
+          </Tooltip>
+        </Portal>
+      )}
+    </Show>
   )
 }
 
@@ -67,7 +88,10 @@ export default function Layout(props: ParentProps) {
       {(resolved) => (
         <SDKProvider directory={() => resolved}>
           <SyncProvider>
-            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+            <SkillsProvider>
+              <ProjectStatusPortal />
+              <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+            </SkillsProvider>
           </SyncProvider>
         </SDKProvider>
       )}

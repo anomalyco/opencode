@@ -143,9 +143,10 @@ export function Titlebar() {
   }
 
   const drag = (e: MouseEvent) => {
+    const blocked = interactive(e.target)
     if (platform.platform !== "desktop") return
     if (e.buttons !== 1) return
-    if (interactive(e.target)) return
+    if (blocked) return
 
     const win = getWin()
     if (!win?.startDragging) return
@@ -296,7 +297,10 @@ export function Titlebar() {
       </div>
 
       <div class="min-w-0 flex items-center justify-center pointer-events-none">
-        <div id="opencode-titlebar-center" class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full" />
+        <div class="pointer-events-auto min-w-0 flex items-center justify-center gap-2 w-fit max-w-full">
+          <div id="opencode-titlebar-center" class="min-w-0 flex justify-center w-fit max-w-full" />
+          <div id="opencode-titlebar-center-project" class="hidden md:flex shrink-0" />
+        </div>
       </div>
 
       <div
