@@ -1,6 +1,7 @@
 import { Button as Kobalte } from "@kobalte/core/button"
 import { type ComponentProps, splitProps } from "solid-js"
 import { Icon, IconProps } from "./icon"
+import { isStopIconButton } from "./icon-button-utils"
 
 export interface IconButtonProps extends ComponentProps<typeof Kobalte> {
   icon: IconProps["name"]
@@ -23,7 +24,11 @@ export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <Icon name={props.icon} size={split.iconSize ?? (split.size === "large" ? "normal" : "small")} />
+      {isStopIconButton(props.icon) ? (
+        <span data-slot="icon-stop" aria-hidden="true" />
+      ) : (
+        <Icon name={props.icon} size={split.iconSize ?? (split.size === "large" ? "normal" : "small")} />
+      )}
     </Kobalte>
   )
 }

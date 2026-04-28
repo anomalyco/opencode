@@ -15,6 +15,7 @@ import Code from "lucide-solid/icons/code"
 import CodeXml from "lucide-solid/icons/code-xml"
 import Copy from "lucide-solid/icons/copy"
 import CircleAlert from "lucide-solid/icons/circle-alert"
+import Diff from "lucide-solid/icons/diff"
 import Ellipsis from "lucide-solid/icons/ellipsis"
 import Download from "lucide-solid/icons/download"
 import Eye from "lucide-solid/icons/eye"
@@ -44,7 +45,7 @@ import PanelRightClose from "lucide-solid/icons/panel-right-close"
 import PanelRightOpen from "lucide-solid/icons/panel-right-open"
 import Plus from "lucide-solid/icons/plus"
 import Server from "lucide-solid/icons/server"
-import RotateCcw from "lucide-solid/icons/rotate-ccw"
+import Undo2 from "lucide-solid/icons/undo-2"
 import Search from "lucide-solid/icons/search"
 import Settings from "lucide-solid/icons/settings"
 import Share2 from "lucide-solid/icons/share-2"
@@ -90,9 +91,8 @@ const sharpIcons = {
   terminal: `<path d="M6.5 8L8.64286 10L6.5 12M10.9286 12H13.5M2 18H18V2H2V18Z" stroke="currentColor" stroke-linecap="square"/>`,
   "terminal-active": `<path d="M2 18H18V2H2V18Z" fill="currentColor" fill-opacity="0.1"/>
 <path d="M6.5 8L8.64286 10L6.5 12M10.9286 12H13.5M2 18H18V2H2V18Z" stroke="currentColor" stroke-linecap="square"/>`,
-  review: `<path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
-  "review-active": `<path d="M18 18V2L2 2L2 18H18Z" fill="currentColor" fill-opacity="0.1"/>
-<path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
+  review: Diff,
+  "review-active": Diff,
   expand: `<path d="M4.58301 10.4163V15.4163H9.58301M10.4163 4.58301H15.4163V9.58301" stroke="currentColor" stroke-linecap="square"/>`,
   collapse: `<path d="M16.666 8.33398H11.666V3.33398" stroke="currentColor" stroke-linecap="square"/><path d="M8.33398 16.666V11.666H3.33398" stroke="currentColor" stroke-linecap="square"/>`,
   code: `<path d="M8.7513 7.5013L6.2513 10.0013L8.7513 12.5013M11.2513 7.5013L13.7513 10.0013L11.2513 12.5013M2.91797 2.91797H17.0846V17.0846H2.91797V2.91797Z" stroke="currentColor"/>`,
@@ -214,9 +214,9 @@ const softIcons: Partial<Record<keyof typeof sharpIcons, Component<ComponentProp
   plus: Plus,
   "plus-small": Plus,
   prompt: SquarePen,
-  reset: RotateCcw,
-  review: Ellipsis,
-  "review-active": Ellipsis,
+  reset: Undo2,
+  review: Diff,
+  "review-active": Diff,
   server: Server,
   "settings-gear": Settings,
   share: Share2,
@@ -248,6 +248,9 @@ export function Icon(props: IconProps) {
   const [local, others] = splitProps(props, ["name", "size", "class", "classList"])
   const preset = useIconPreset()
   const SoftIcon = softIcons[local.name as keyof typeof softIcons]
+  const sharpIcon = sharpIcons[local.name as keyof typeof sharpIcons]
+  const sharpPath = typeof sharpIcon === "string" ? sharpIcon : undefined
+  const SharpIcon = typeof sharpIcon === "string" ? undefined : sharpIcon
   const softClass = () =>
     [
       local.class,
@@ -266,6 +269,16 @@ export function Icon(props: IconProps) {
           aria-hidden="true"
           {...others}
         />
+      ) : SharpIcon ? (
+        <SharpIcon
+          data-slot="icon-svg"
+          classList={{
+            ...local.classList,
+            [local.class ?? ""]: !!local.class,
+          }}
+          aria-hidden="true"
+          {...others}
+        />
       ) : (
         <svg
           data-slot="icon-svg"
@@ -275,7 +288,7 @@ export function Icon(props: IconProps) {
           }}
           fill="none"
           viewBox={getIconViewBox(local.name)}
-          innerHTML={sharpIcons[local.name as keyof typeof sharpIcons]}
+          innerHTML={sharpPath}
           aria-hidden="true"
           {...others}
         />
