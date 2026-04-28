@@ -33,5 +33,6 @@ rubdos
 shantur
 simonklee
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
+-terisuke
 thdxr
 -toastythebot
