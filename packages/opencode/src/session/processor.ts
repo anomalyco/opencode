@@ -20,6 +20,12 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
+import {
+  WorkflowTraceSessionRef,
+  traceChatFinalizeAssistant,
+  traceRecordLlmStreamEvent,
+  traceRecordMessagePartDelta,
+} from "@/server/workflow-trace"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
@@ -71,6 +77,8 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
   reasoningMap: Record<string, MessageV2.ReasoningPart>
+  /** Accumulated assistant plain text for workflow trace preview */
+  traceAssistantText: string
 }
 
 type StreamEvent = Event
@@ -121,6 +129,7 @@ export const layer: Layer.Layer<
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        traceAssistantText: "",
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
@@ -214,6 +223,8 @@ export const layer: Layer.Layer<
       })
 
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
+        const wfTrace = yield* WorkflowTraceSessionRef
+        yield* Effect.sync(() => traceRecordLlmStreamEvent(wfTrace, value))
         switch (value.type) {
           case "start":
             yield* status.set(ctx.sessionID, { type: "busy" })
@@ -239,6 +250,12 @@ export const layer: Layer.Layer<
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             yield* session.updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
+              messageID: ctx.reasoningMap[value.id].messageID,
+              partID: ctx.reasoningMap[value.id].id,
+              field: "text",
+              delta: value.text,
+            })
+            traceRecordMessagePartDelta(wfTrace, {
               messageID: ctx.reasoningMap[value.id].messageID,
               partID: ctx.reasoningMap[value.id].id,
               field: "text",
@@ -419,9 +436,16 @@ export const layer: Layer.Layer<
           case "text-delta":
             if (!ctx.currentText) return
             ctx.currentText.text += value.text
+            ctx.traceAssistantText += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePartDelta({
               sessionID: ctx.currentText.sessionID,
+              messageID: ctx.currentText.messageID,
+              partID: ctx.currentText.id,
+              field: "text",
+              delta: value.text,
+            })
+            traceRecordMessagePartDelta(wfTrace, {
               messageID: ctx.currentText.messageID,
               partID: ctx.currentText.id,
               field: "text",
@@ -518,6 +542,10 @@ export const layer: Layer.Layer<
         ctx.toolcalls = {}
         ctx.assistantMessage.time.completed = Date.now()
         yield* session.updateMessage(ctx.assistantMessage)
+        const wfTraceDone = yield* WorkflowTraceSessionRef
+        yield* Effect.sync(() =>
+          traceChatFinalizeAssistant(wfTraceDone, ctx.assistantMessage.id, ctx.traceAssistantText),
+        )
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {

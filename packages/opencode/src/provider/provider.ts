@@ -31,6 +31,93 @@ import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
 
+/** Set `OPENCODE_LOG_SSE=1` to log each raw SSE body chunk after fetch (`request_id`, bytes, UTF-8 preview). */
+function sseLoggingEnabled() {
+  const v = process.env.OPENCODE_LOG_SSE?.toLowerCase()
+  return v === "1" || v === "true" || v === "all"
+}
+
+function requestUrlString(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input
+  if (input instanceof URL) return input.href
+  return input.url
+}
+
+/** Stable id for one streamed response: prefer provider headers, else a new UUID for this tap. */
+function sseStreamRequestId(res: Response): string {
+  const h = res.headers
+  const fromHeader =
+    h.get("x-request-id") ??
+    h.get("request-id") ??
+    h.get("cf-ray") ??
+    h.get("x-amzn-requestid") ??
+    h.get("x-openai-request-id")
+  const trimmed = fromHeader?.trim()
+  if (trimmed) return trimmed
+  return crypto.randomUUID()
+}
+
+/** Pass-through stream that logs every chunk from the provider (debugging SSE granularity). */
+function tapSSEBody(res: Response, url: string): Response {
+  if (!sseLoggingEnabled() || !res.body) return res
+  const ct = res.headers.get("content-type") ?? ""
+  if (!ct.includes("event-stream")) return res
+
+  const requestId = sseStreamRequestId(res)
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let seq = 0
+  const maxPreview = envInt("OPENCODE_LOG_SSE_PREVIEW", 2000)
+
+  const body = new ReadableStream<Uint8Array>({
+    async pull(ctrl) {
+      const part = await reader.read()
+      if (part.done) {
+        const tail = dec.decode()
+        if (tail) {
+          seq += 1
+          log.info("sse chunk", {
+            request_id: requestId,
+            url,
+            seq,
+            bytes: 0,
+            text: tail.length > maxPreview ? `${tail.slice(0, maxPreview)}...` : tail,
+            flush: true,
+          })
+        }
+        ctrl.close()
+        return
+      }
+      seq += 1
+      const text = dec.decode(part.value, { stream: true })
+      log.info("sse chunk", {
+        request_id: requestId,
+        url,
+        seq,
+        bytes: part.value.byteLength,
+        text: text.length > maxPreview ? `${text.slice(0, maxPreview)}...` : text,
+      })
+      ctrl.enqueue(part.value)
+    },
+    cancel(reason) {
+      return reader.cancel(reason)
+    },
+  })
+
+  return new Response(body, {
+    headers: new Headers(res.headers),
+    status: res.status,
+    statusText: res.statusText,
+  })
+}
+
+function envInt(name: string, fallback: number) {
+  const raw = process.env[name]
+  if (raw === undefined || raw === "") return fallback
+  const n = Number.parseInt(raw, 10)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
   if (!match) return false
@@ -1484,8 +1571,11 @@ const layer: Layer.Layer<
             timeout: false,
           })
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          const urlStr = requestUrlString(input as RequestInfo | URL)
+          const tapped = tapSSEBody(res, urlStr)
+
+          if (!chunkAbortCtl) return tapped
+          return wrapSSE(tapped, chunkTimeout, chunkAbortCtl)
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]

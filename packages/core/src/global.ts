@@ -18,6 +18,7 @@ const paths = {
   data,
   bin: path.join(cache, "bin"),
   log: path.join(data, "log"),
+  trace: path.join(data, "trace"),
   cache,
   config,
   state,
@@ -32,6 +33,7 @@ await Promise.all([
   fs.mkdir(Path.config, { recursive: true }),
   fs.mkdir(Path.state, { recursive: true }),
   fs.mkdir(Path.log, { recursive: true }),
+  fs.mkdir(Path.trace, { recursive: true }),
   fs.mkdir(Path.bin, { recursive: true }),
 ])
 
@@ -45,6 +47,7 @@ export interface Interface {
   readonly state: string
   readonly bin: string
   readonly log: string
+  readonly trace: string
 }
 
 export const layer = Layer.effect(
@@ -58,6 +61,7 @@ export const layer = Layer.effect(
       state: Path.state,
       bin: Path.bin,
       log: Path.log,
+      trace: Path.trace,
     })
   }),
 )

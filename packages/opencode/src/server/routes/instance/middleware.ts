@@ -5,6 +5,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { WorkspaceID } from "@/control-plane/schema"
+import { traceStep } from "@/server/workflow-trace"
 
 export function InstanceMiddleware(workspaceID?: WorkspaceID): MiddlewareHandler {
   return async (c, next) => {
@@ -19,14 +20,29 @@ export function InstanceMiddleware(workspaceID?: WorkspaceID): MiddlewareHandler
       })(),
     )
 
+    traceStep({
+      business: "instance",
+      method: "resolve_directory",
+      detail: {
+        directory,
+        ...(workspaceID !== undefined ? { workspace_id: String(workspaceID) } : {}),
+      },
+    })
+
     return WorkspaceContext.provide({
       workspaceID,
       async fn() {
+        traceStep({ business: "instance", method: "workspace.enter" })
         return Instance.provide({
           directory,
           init: () => AppRuntime.runPromise(InstanceBootstrap),
           async fn() {
-            return next()
+            traceStep({ business: "instance", method: "route.enter" })
+            try {
+              return await next()
+            } finally {
+              traceStep({ business: "instance", method: "route.exit" })
+            }
           },
         })
       },

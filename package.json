@@ -6,6 +6,9 @@
   "type": "module",
   "packageManager": "bun@1.3.13",
   "scripts": {
+    "build": "bun run --cwd packages/opencode build",
+    "build:fast": "bun run --cwd packages/opencode build -- --single --skip-embed-web-ui",
+    "build:web": "bash scripts/build-and-web.sh",
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop-electron dev",
     "dev:web": "bun --cwd packages/app dev",

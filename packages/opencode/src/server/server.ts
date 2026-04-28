@@ -7,6 +7,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { WorkspaceID } from "@/control-plane/schema"
 import { MDNS } from "./mdns"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
+import { WorkflowTraceMiddleware } from "./workflow-trace"
 import { FenceMiddleware } from "./fence"
 import { initProjectors } from "./projectors"
 import { InstanceRoutes } from "./routes/instance"
@@ -40,6 +41,7 @@ function create(opts: { cors?: string[] }) {
   const app = new Hono()
     .onError(ErrorMiddleware)
     .use(AuthMiddleware)
+    .use(WorkflowTraceMiddleware)
     .use(LoggerMiddleware)
     .use(CompressionMiddleware)
     .use(CorsMiddleware(opts))

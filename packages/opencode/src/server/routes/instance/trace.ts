@@ -1,6 +1,7 @@
 import type { Context } from "hono"
 import { Effect } from "effect"
 import { AppRuntime } from "@/effect/app-runtime"
+import { getWorkflowTraceSession, traceStepWithSession, WorkflowTraceSessionRef } from "@/server/workflow-trace"
 
 type AppEnv = Parameters<typeof AppRuntime.runPromise>[0] extends Effect.Effect<any, any, infer R> ? R : never
 
@@ -41,7 +42,40 @@ export function requestAttributes(c: RequestLike): Record<string, string> {
 }
 
 export function runRequest<A, E>(name: string, c: Context, effect: Effect.Effect<A, E, AppEnv>) {
-  return AppRuntime.runPromise(effect.pipe(Effect.withSpan(name, { attributes: requestAttributes(c) })))
+  const session = getWorkflowTraceSession()
+  const attrs = requestAttributes(c)
+  traceStepWithSession(session, {
+    business: "handler",
+    method: "run_request.schedule",
+    detail: {
+      span: name,
+      http_method: attrs["http.method"],
+      http_path: attrs["http.path"],
+    },
+  })
+  const traced = effect.pipe(
+    Effect.withSpan(name, { attributes: attrs }),
+    Effect.tap(() =>
+      Effect.sync(() =>
+        traceStepWithSession(session, {
+          business: "handler",
+          method: "run_request.ok",
+          detail: { span: name },
+        }),
+      ),
+    ),
+    Effect.tapError((e) =>
+      Effect.sync(() =>
+        traceStepWithSession(session, {
+          business: "handler",
+          method: "run_request.fail",
+          detail: { span: name, error: String(e) },
+        }),
+      ),
+    ),
+    Effect.provideService(WorkflowTraceSessionRef, session),
+  )
+  return AppRuntime.runPromise(traced)
 }
 
 export async function jsonRequest<C extends Context, A, E>(

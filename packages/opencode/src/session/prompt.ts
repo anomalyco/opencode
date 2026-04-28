@@ -53,6 +53,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
+import { WorkflowTraceSessionRef, traceChatInitFromUserMessage } from "@/server/workflow-trace"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1247,6 +1248,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const session = yield* sessions.get(input.sessionID)
         yield* revert.cleanup(session)
         const message = yield* createUserMessage(input)
+        const wfTrace = yield* WorkflowTraceSessionRef
+        yield* Effect.sync(() => traceChatInitFromUserMessage(wfTrace, input, message.info))
         yield* sessions.touch(input.sessionID)
 
         const permissions: Permission.Ruleset = []
