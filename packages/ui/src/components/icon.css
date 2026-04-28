@@ -31,4 +31,8 @@
     width: 100%;
     height: auto;
   }
+
+  &[data-size="small"] [data-slot="icon-svg"] {
+    stroke-width: 2.5;
+  }
 }

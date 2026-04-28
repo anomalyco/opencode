@@ -3,8 +3,9 @@ import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "./collapsible"
-import type { IconProps } from "./icon"
+import { Icon, type IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
+import { getToolIcon } from "./tool-icon"
 
 export type TriggerTitle = {
   title: string
@@ -130,6 +131,11 @@ export function BasicTool(props: BasicToolProps) {
       data-clickable={props.clickable ? "true" : undefined}
       data-hide-details={props.hideDetails ? "true" : undefined}
     >
+      <Show when={props.icon}>
+        <div data-slot="basic-tool-tool-indicator">
+          <Icon name={props.icon!} size="small" />
+        </div>
+      </Show>
       <div data-slot="basic-tool-tool-trigger-content">
         <div data-slot="basic-tool-tool-info">
           <Switch>
@@ -270,7 +276,7 @@ export function GenericTool(props: {
 
   return (
     <BasicTool
-      icon="mcp"
+      icon={getToolIcon(props.tool)}
       status={props.status}
       trigger={{
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),

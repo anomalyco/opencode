@@ -460,7 +460,7 @@
     gap: 8px;
     min-width: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 12px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -504,6 +504,7 @@
     flex-grow: 1;
     min-width: 0;
     font-weight: var(--font-weight-regular);
+    font-size: 12px;
   }
 
   [data-slot="message-part-directory"] {
@@ -513,6 +514,7 @@
     white-space: nowrap;
     direction: rtl;
     text-align: left;
+    font-size: 12px;
   }
 
   [data-slot="message-part-filename"] {
@@ -649,12 +651,21 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0px;
+  gap: 8px;
   cursor: default;
+
+  [data-slot="context-tool-group-icon"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    line-height: 0;
+  }
 
   [data-slot="context-tool-group-title"] {
     flex-shrink: 1;
     min-width: 0;
+    font-size: 12px;
   }
 
   [data-slot="collapsible-arrow"] {

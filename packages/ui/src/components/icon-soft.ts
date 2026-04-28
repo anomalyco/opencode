@@ -43,6 +43,7 @@ export const softIconNames = [
   "magnifying-glass",
   "magnifying-glass-menu",
   "menu",
+  "globe",
   "new-session",
   "new-session-active",
   "dot-grid",

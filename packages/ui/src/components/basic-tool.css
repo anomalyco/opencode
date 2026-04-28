@@ -29,6 +29,7 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    margin-right: 8px;
 
     [data-component="spinner"] {
       width: 16px;
@@ -84,7 +85,7 @@
   [data-slot="basic-tool-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 12px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -109,7 +110,7 @@
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 12px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
@@ -155,7 +156,7 @@
     white-space: nowrap;
     font-family: var(--font-family-sans);
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 12px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
@@ -224,7 +225,7 @@
   [data-component="task-tool-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-size: 12px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);

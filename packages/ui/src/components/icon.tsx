@@ -15,6 +15,7 @@ import Code from "lucide-solid/icons/code"
 import CodeXml from "lucide-solid/icons/code-xml"
 import Copy from "lucide-solid/icons/copy"
 import CircleAlert from "lucide-solid/icons/circle-alert"
+import Ellipsis from "lucide-solid/icons/ellipsis"
 import Download from "lucide-solid/icons/download"
 import Eye from "lucide-solid/icons/eye"
 import FolderPlus from "lucide-solid/icons/folder-plus"
@@ -22,6 +23,8 @@ import FolderTree from "lucide-solid/icons/folder-tree"
 import GitFork from "lucide-solid/icons/git-fork"
 import Grid2x2 from "lucide-solid/icons/grid-2x2"
 import Glasses from "lucide-solid/icons/glasses"
+import Globe from "lucide-solid/icons/globe"
+import Hammer from "lucide-solid/icons/hammer"
 import Keyboard from "lucide-solid/icons/keyboard"
 import LayoutGrid from "lucide-solid/icons/layout-grid"
 import LayoutPanelLeft from "lucide-solid/icons/layout-panel-left"
@@ -48,13 +51,19 @@ import Share2 from "lucide-solid/icons/share-2"
 import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal"
 import SquareArrowOutUpRight from "lucide-solid/icons/square-arrow-out-up-right"
 import SquarePen from "lucide-solid/icons/square-pen"
+import SquareStop from "lucide-solid/icons/square-stop"
 import Terminal from "lucide-solid/icons/terminal"
 import Trash2 from "lucide-solid/icons/trash-2"
 import Undo from "lucide-solid/icons/undo"
 import X from "lucide-solid/icons/x"
 
 import { useIconPreset } from "../context/icon-preset"
+import { MCP_ICON } from "./mcp-icon"
 import { shouldUseSoftIcon } from "./icon-soft"
+import { getIconViewBox } from "./icon-viewbox"
+import type { IconProps } from "./icon-types"
+
+export type { IconProps } from "./icon-types"
 
 const sharpIcons = {
   "align-right": `<path d="M12.292 6.04167L16.2503 9.99998L12.292 13.9583M2.91699 9.99998H15.6253M17.0837 3.75V16.25" stroke="currentColor" stroke-linecap="square"/>`,
@@ -97,13 +106,15 @@ const sharpIcons = {
   "file-tree-active": `<path d="M2 2L2 18H5L6.5 8.5H18V5H9.5L7.5 2H2Z" fill="currentColor" fill-opacity="0.1"/>
 <path d="M5 18H18L19.5 8.5H18M5 18H2L2 2H7.5L9.5 5H18V8.5M5 18L6.5 8.5H18" stroke="currentColor" stroke-linecap="square"/>`,
   "magnifying-glass": `<path d="M13 13L10.6418 10.6418M11.9552 7.47761C11.9552 9.95053 9.95053 11.9552 7.47761 11.9552C5.0047 11.9552 3 9.95053 3 7.47761C3 5.0047 5.0047 3 7.47761 3C9.95053 3 11.9552 5.0047 11.9552 7.47761Z" stroke="currentColor" stroke-linecap="square" vector-effect="non-scaling-stroke"/>`,
+  globe: `<circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2.5"/><path d="M2 10H18M10 2C12.5 4.5 12.5 15.5 10 18C7.5 15.5 7.5 4.5 10 2ZM10 2C7.5 4.5 7.5 15.5 10 18C12.5 15.5 12.5 4.5 10 2Z" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="round"/>`,
   "plus-small": `<path d="M9.99984 5.41699V10.0003M9.99984 10.0003V14.5837M9.99984 10.0003H5.4165M9.99984 10.0003H14.5832" stroke="currentColor" stroke-linecap="square"/>`,
   plus: `<path d="M9.9987 2.20703V9.9987M9.9987 9.9987V17.7904M9.9987 9.9987H2.20703M9.9987 9.9987H17.7904" stroke="currentColor" stroke-linecap="square"/>`,
   "new-session": `<path d="M12 2H2V18H18V8M6 11.3818V14H8.61818L18 4.61818L15.3818 2L6 11.3818Z" stroke="currentColor"/>`,
   "new-session-active": `<path d="M6 11.3818V14H8.61818L18 4.61818L15.3818 2L6 11.3818Z" fill="currentColor" fill-opacity="0.1"/>
 <path d="M12 2H2V18H18V8M6 11.3818V14H8.61818L18 4.61818L15.3818 2L6 11.3818Z" stroke="currentColor"/>`,
   "pencil-line": `<path d="M9.58301 17.9166H17.9163M17.9163 5.83325L14.1663 2.08325L2.08301 14.1666V17.9166H5.83301L17.9163 5.83325Z" stroke="currentColor" stroke-linecap="square"/>`,
-  mcp: `<g><path d="M0.972656 9.37176L9.5214 1.60019C10.7018 0.527151 12.6155 0.527151 13.7957 1.60019C14.9761 2.67321 14.9761 4.41295 13.7957 5.48599L7.3397 11.3552" stroke="currentColor" stroke-linecap="round"/><path d="M7.42871 11.2747L13.7957 5.48643C14.9761 4.41338 16.8898 4.41338 18.0702 5.48643L18.1147 5.52688C19.2951 6.59993 19.2951 8.33966 18.1147 9.4127L10.3831 16.4414C9.98966 16.7991 9.98966 17.379 10.3831 17.7366L11.9707 19.1799" stroke="currentColor" stroke-linecap="round"/><path d="M11.6587 3.54346L5.33619 9.29119C4.15584 10.3642 4.15584 12.1039 5.33619 13.177C6.51649 14.25 8.43019 14.25 9.61054 13.177L15.9331 7.42923" stroke="currentColor" stroke-linecap="round"/></g>`,
+  mcp: MCP_ICON,
+  hammer: `<path d="M12.9167 2.91675L16.2501 6.25008V8.33341H12.9167L10.8334 10.4167L8.75008 8.33341L5.83341 11.2501L8.75008 14.1667L5.41675 17.5001L2.50008 14.5834L5.83341 11.2501L3.75008 9.16675L7.91675 5.00008H10.0001L12.9167 2.91675Z" fill="currentColor"/>`,
   glasses: `<path d="M0.416626 7.91667H1.66663M19.5833 7.91667H18.3333M11.866 7.57987C11.3165 7.26398 10.6793 7.08333 9.99996 7.08333C9.32061 7.08333 8.68344 7.26398 8.13389 7.57987M8.74996 10C8.74996 12.0711 7.07103 13.75 4.99996 13.75C2.92889 13.75 1.24996 12.0711 1.24996 10C1.24996 7.92893 2.92889 6.25 4.99996 6.25C7.07103 6.25 8.74996 7.92893 8.74996 10ZM18.75 10C18.75 12.0711 17.071 13.75 15 13.75C12.9289 13.75 11.25 12.0711 11.25 10C11.25 7.92893 12.9289 6.25 15 6.25C17.071 6.25 18.75 7.92893 18.75 10Z" stroke="currentColor" stroke-linecap="square"/>`,
   "magnifying-glass-menu": `<path d="M2.08325 10.0002H4.58325M2.08325 5.41683H5.41659M2.08325 14.5835H5.41659M16.4583 13.9585L18.7499 16.2502M17.9166 10.0002C17.9166 12.9917 15.4915 15.4168 12.4999 15.4168C9.50838 15.4168 7.08325 12.9917 7.08325 10.0002C7.08325 7.00862 9.50838 4.5835 12.4999 4.5835C15.4915 4.5835 17.9166 7.00862 17.9166 10.0002Z" stroke="currentColor" stroke-linecap="square"/>`,
   "window-cursor": `<path d="M17.9166 10.4167V3.75H2.08325V17.0833H10.4166M17.9166 13.5897L11.6666 11.6667L13.5897 17.9167L15.032 15.0321L17.9166 13.5897Z" stroke="currentColor" stroke-width="1.07143" stroke-linecap="square"/><path d="M5.00024 6.125C5.29925 6.12518 5.54126 6.36795 5.54126 6.66699C5.54108 6.96589 5.29914 7.20783 5.00024 7.20801C4.7012 7.20801 4.45843 6.966 4.45825 6.66699C4.45825 6.36784 4.70109 6.125 5.00024 6.125ZM7.91626 6.125C8.21541 6.125 8.45825 6.36784 8.45825 6.66699C8.45808 6.966 8.21531 7.20801 7.91626 7.20801C7.61736 7.20783 7.37542 6.96589 7.37524 6.66699C7.37524 6.36795 7.61726 6.12518 7.91626 6.125ZM10.8333 6.125C11.1324 6.125 11.3752 6.36784 11.3752 6.66699C11.3751 6.966 11.1323 7.20801 10.8333 7.20801C10.5342 7.20801 10.2914 6.966 10.2913 6.66699C10.2913 6.36784 10.5341 6.125 10.8333 6.125Z" fill="currentColor" stroke="currentColor" stroke-width="0.25" stroke-linecap="square"/>`,
@@ -188,6 +199,8 @@ const softIcons: Partial<Record<keyof typeof sharpIcons, Component<ComponentProp
   "folder-add-left": FolderPlus,
   folder: FolderTree,
   glasses: Glasses,
+  globe: (props) => <Globe {...props} strokeWidth={2.5} />,
+  hammer: Hammer,
   github: GitFork,
   help: CircleQuestionMark,
   keyboard: Keyboard,
@@ -197,13 +210,13 @@ const softIcons: Partial<Record<keyof typeof sharpIcons, Component<ComponentProp
   menu: Menu,
   "new-session": SquarePen,
   "new-session-active": SquarePen,
-  "dot-grid": Grid2x2,
+  "dot-grid": Ellipsis,
   plus: Plus,
   "plus-small": Plus,
   prompt: SquarePen,
   reset: RotateCcw,
-  review: SquarePen,
-  "review-active": SquarePen,
+  review: Ellipsis,
+  "review-active": Ellipsis,
   server: Server,
   "settings-gear": Settings,
   share: Share2,
@@ -212,7 +225,7 @@ const softIcons: Partial<Record<keyof typeof sharpIcons, Component<ComponentProp
   sliders: SlidersHorizontal,
   status: LayoutPanelLeft,
   "status-active": LayoutPanelLeft,
-  stop: CircleCheck,
+  stop: SquareStop,
   "square-arrow-top-right": SquareArrowOutUpRight,
   terminal: Terminal,
   "terminal-active": Terminal,
@@ -231,11 +244,6 @@ const softIcons: Partial<Record<keyof typeof sharpIcons, Component<ComponentProp
   "file-tree": ListTree,
 }
 
-export interface IconProps extends ComponentProps<"svg"> {
-  name: keyof typeof sharpIcons
-  size?: "small" | "normal" | "medium" | "large"
-}
-
 export function Icon(props: IconProps) {
   const [local, others] = splitProps(props, ["name", "size", "class", "classList"])
   const preset = useIconPreset()
@@ -249,8 +257,6 @@ export function Icon(props: IconProps) {
     ]
       .filter(Boolean)
       .join(" ")
-  const viewBox = () =>
-    local.name === "magnifying-glass" || local.name === "arrow-undo-down" ? "0 0 16 16" : "0 0 20 20"
   return (
     <div data-component="icon" data-size={local.size || "normal"}>
       {shouldUseSoftIcon(preset(), local.name) && SoftIcon ? (
@@ -268,7 +274,7 @@ export function Icon(props: IconProps) {
             [local.class ?? ""]: !!local.class,
           }}
           fill="none"
-          viewBox={viewBox()}
+          viewBox={getIconViewBox(local.name)}
           innerHTML={sharpIcons[local.name as keyof typeof sharpIcons]}
           aria-hidden="true"
           {...others}

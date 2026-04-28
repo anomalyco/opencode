@@ -264,6 +264,7 @@ function getDirectory(path: string | undefined) {
 }
 
 import type { IconProps } from "./icon"
+import { getToolIcon } from "./tool-icon"
 
 export type ToolInfo = {
   icon: IconProps["name"]
@@ -331,13 +332,13 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
       }
     case "glob":
       return {
-        icon: "magnifying-glass-menu",
+        icon: getToolIcon(tool),
         title: i18n.t("ui.tool.glob"),
         subtitle: input.pattern,
       }
     case "grep":
       return {
-        icon: "magnifying-glass-menu",
+        icon: getToolIcon(tool),
         title: i18n.t("ui.tool.grep"),
         subtitle: input.pattern,
       }
@@ -349,7 +350,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
       }
     case "websearch":
       return {
-        icon: "window-cursor",
+        icon: getToolIcon(tool),
         title: i18n.t("ui.tool.websearch"),
         subtitle: input.query,
       }
@@ -366,7 +367,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
     }
     case "bash":
       return {
-        icon: "console",
+        icon: getToolIcon(tool),
         title: i18n.t("ui.tool.shell"),
         subtitle: input.description,
       }
@@ -407,7 +408,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
       }
     default:
       return {
-        icon: "mcp",
+        icon: getToolIcon(tool),
         title: tool,
       }
   }
@@ -899,9 +900,12 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
     <Collapsible open={open()} onOpenChange={setOpen} variant="ghost" class="tool-collapsible">
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
+          <span data-slot="context-tool-group-icon" class="shrink-0 text-icon-base">
+            <Icon name="magnifying-glass" size="small" />
+          </span>
           <span
             data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
+            class="min-w-0 flex items-center gap-2 text-12-medium text-text-strong"
           >
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
@@ -1688,7 +1692,7 @@ ToolRegistry.register({
     return (
       <BasicTool
         {...props}
-        icon="window-cursor"
+        icon={getToolIcon("websearch")}
         trigger={{
           title: i18n.t("ui.tool.websearch"),
           subtitle: query(),
