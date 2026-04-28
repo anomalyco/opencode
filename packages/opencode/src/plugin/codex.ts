@@ -1,20 +1,61 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import { Log } from "../util/log"
+import z from "zod"
+import type { Auth } from "../auth"
+import { OAUTH_DUMMY_KEY } from "../auth"
 import { Installation } from "../installation"
-import { Auth, OAUTH_DUMMY_KEY } from "../auth"
-import os from "os"
-import { ProviderTransform } from "@/provider/transform"
-import { ModelID, ProviderID } from "@/provider/schema"
+import { Log } from "../util/log"
+import { createServer } from "node:http"
+import os from "node:os"
 import { setTimeout as sleep } from "node:timers/promises"
-import { createServer } from "http"
 
 const log = Log.create({ service: "plugin.codex" })
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
+const CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+
+const CodexUsageWindow = z.object({
+  used_percent: z.coerce.number().finite(),
+  reset_at: z.coerce.number().int().nonnegative().nullish(),
+  reset_after_seconds: z.coerce.number().int().nonnegative().nullish(),
+})
+
+const CodexUsageRateLimit = z.object({
+  primary_window: CodexUsageWindow.nullish(),
+  secondary_window: CodexUsageWindow.nullish(),
+})
+
+const CodexUsageResponse = z.object({
+  rate_limit: CodexUsageRateLimit.nullish(),
+  rate_limits: CodexUsageRateLimit.nullish(),
+})
+
+export interface CodexQuotaWindowSnapshot {
+  remainingPercent: number
+  resetSeconds?: number
+  resetAt?: number
+}
+
+export interface CodexQuotaSnapshot {
+  fiveHour?: CodexQuotaWindowSnapshot
+  weekly?: CodexQuotaWindowSnapshot
+}
+
+type CodexOauthAuth = Extract<Auth.Info, { type: "oauth" }>
+
+interface CodexAuthStore {
+  getAuth: () => Promise<Auth.Info | undefined>
+  setAuth: (auth: CodexOauthAuth) => Promise<void>
+  fetchImpl?: typeof fetch
+}
+
+interface CodexOauthSession {
+  accessToken: string
+  accountId?: string
+}
 
 interface PkceCodes {
   verifier: string
@@ -104,12 +145,14 @@ function buildAuthorizeUrl(redirectUri: string, pkce: PkceCodes, state: string):
   return `${ISSUER}/oauth/authorize?${params.toString()}`
 }
 
-interface TokenResponse {
-  id_token: string
-  access_token: string
-  refresh_token: string
-  expires_in?: number
-}
+const TokenResponseSchema = z.object({
+  access_token: z.string(),
+  id_token: z.string().optional(),
+  refresh_token: z.string().optional(),
+  expires_in: z.number().optional(),
+})
+
+type TokenResponse = z.infer<typeof TokenResponseSchema>
 
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
   const response = await fetch(`${ISSUER}/oauth/token`, {
@@ -126,11 +169,11 @@ async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: Pk
   if (!response.ok) {
     throw new Error(`Token exchange failed: ${response.status}`)
   }
-  return response.json()
+  return TokenResponseSchema.parse(await response.json())
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
-  const response = await fetch(`${ISSUER}/oauth/token`, {
+async function refreshAccessToken(refreshToken: string, fetchImpl: typeof fetch = fetch): Promise<TokenResponse> {
+  const response = await fetchImpl(`${ISSUER}/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -142,7 +185,91 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> 
   if (!response.ok) {
     throw new Error(`Token refresh failed: ${response.status}`)
   }
-  return response.json()
+  return TokenResponseSchema.parse(await response.json())
+}
+
+function createCodexHeaders(session: CodexOauthSession, headersInit?: HeadersInit): Headers {
+  const headers = new Headers(headersInit)
+  headers.set("authorization", `Bearer ${session.accessToken}`)
+  headers.set("originator", "opencode")
+  headers.set("User-Agent", `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`)
+  if (session.accountId) {
+    headers.set("ChatGPT-Account-Id", session.accountId)
+  }
+  return headers
+}
+
+export async function resolveCodexOauthSession(input: CodexAuthStore): Promise<CodexOauthSession | undefined> {
+  const auth = await input.getAuth()
+  if (!auth || auth.type !== "oauth") return undefined
+
+  let currentAuth: CodexOauthAuth = auth
+  if (!currentAuth.access || currentAuth.expires < Date.now()) {
+    log.info("refreshing codex access token")
+    const tokens = await refreshAccessToken(currentAuth.refresh, input.fetchImpl)
+    const accountId = extractAccountId(tokens) || currentAuth.accountId
+    currentAuth = {
+      type: "oauth",
+      refresh: tokens.refresh_token ?? currentAuth.refresh,
+      access: tokens.access_token,
+      expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+      ...(accountId ? { accountId } : {}),
+      ...(currentAuth.enterpriseUrl ? { enterpriseUrl: currentAuth.enterpriseUrl } : {}),
+    }
+    await input.setAuth(currentAuth)
+  }
+
+  return {
+    accessToken: currentAuth.access,
+    accountId: currentAuth.accountId,
+  }
+}
+
+function toRemainingPercent(usedPercent: number) {
+  return Math.max(0, Math.min(100, 100 - usedPercent))
+}
+
+function mapQuotaWindow(window: z.infer<typeof CodexUsageWindow> | null | undefined): CodexQuotaWindowSnapshot | undefined {
+  if (!window) return undefined
+  return {
+    remainingPercent: toRemainingPercent(window.used_percent),
+    ...(window.reset_after_seconds != null ? { resetSeconds: window.reset_after_seconds } : {}),
+    ...(window.reset_at != null ? { resetAt: window.reset_at } : {}),
+  }
+}
+
+export async function getCodexQuotaSnapshot(input: CodexAuthStore): Promise<CodexQuotaSnapshot | undefined> {
+  try {
+    const session = await resolveCodexOauthSession(input)
+    if (!session) return undefined
+
+    const fetchImpl = input.fetchImpl ?? fetch
+    const response = await fetchImpl(CODEX_USAGE_ENDPOINT, {
+      method: "GET",
+      headers: createCodexHeaders(session, {
+        accept: "application/json",
+      }),
+    })
+    if (!response.ok) return undefined
+
+    const parsed = CodexUsageResponse.safeParse(await response.json())
+    if (!parsed.success) return undefined
+
+    const rateLimit = parsed.data.rate_limit ?? parsed.data.rate_limits
+    if (!rateLimit) return undefined
+
+    const quota: CodexQuotaSnapshot = {
+      fiveHour: mapQuotaWindow(rateLimit.primary_window ?? undefined),
+      weekly: mapQuotaWindow(rateLimit.secondary_window ?? undefined),
+    }
+    if (!quota.fiveHour && !quota.weekly) return undefined
+    return quota
+  } catch (error) {
+    log.warn("failed to fetch codex quota snapshot", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return undefined
+  }
 }
 
 const HTML_SUCCESS = `<!doctype html>
@@ -373,6 +500,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           "gpt-5.2",
           "gpt-5.2-codex",
           "gpt-5.3-codex",
+          "gpt-5.5",
           "gpt-5.4",
           "gpt-5.4-mini",
         ])
@@ -407,54 +535,19 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               }
             }
 
-            const currentAuth = await getAuth()
-            if (currentAuth.type !== "oauth") return fetch(requestInput, init)
-
-            // Cast to include accountId field
-            const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
-
-            // Check if token needs refresh
-            if (!currentAuth.access || currentAuth.expires < Date.now()) {
-              log.info("refreshing codex access token")
-              const tokens = await refreshAccessToken(currentAuth.refresh)
-              const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
-              await input.client.auth.set({
-                path: { id: "openai" },
-                body: {
-                  type: "oauth",
-                  refresh: tokens.refresh_token,
-                  access: tokens.access_token,
-                  expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  ...(newAccountId && { accountId: newAccountId }),
-                },
-              })
-              currentAuth.access = tokens.access_token
-              authWithAccount.accountId = newAccountId
-            }
+            const session = await resolveCodexOauthSession({
+              getAuth,
+              setAuth: async (auth) => {
+                await input.client.auth.set({
+                  path: { id: "openai" },
+                  body: auth,
+                })
+              },
+            })
+            if (!session) return fetch(requestInput, init)
 
             // Build headers
-            const headers = new Headers()
-            if (init?.headers) {
-              if (init.headers instanceof Headers) {
-                init.headers.forEach((value, key) => headers.set(key, value))
-              } else if (Array.isArray(init.headers)) {
-                for (const [key, value] of init.headers) {
-                  if (value !== undefined) headers.set(key, String(value))
-                }
-              } else {
-                for (const [key, value] of Object.entries(init.headers)) {
-                  if (value !== undefined) headers.set(key, String(value))
-                }
-              }
-            }
-
-            // Set authorization header with access token
-            headers.set("authorization", `Bearer ${currentAuth.access}`)
-
-            // Set ChatGPT-Account-Id header for organization subscriptions
-            if (authWithAccount.accountId) {
-              headers.set("ChatGPT-Account-Id", authWithAccount.accountId)
-            }
+            const headers = createCodexHeaders(session, init?.headers)
 
             // Rewrite URL to Codex endpoint
             const parsed =
@@ -492,6 +585,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               callback: async () => {
                 const tokens = await callbackPromise
                 stopOAuthServer()
+                if (!tokens.refresh_token) return { type: "failed" as const }
                 const accountId = extractAccountId(tokens)
                 return {
                   type: "success" as const,
@@ -566,7 +660,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                       throw new Error(`Token exchange failed: ${tokenResponse.status}`)
                     }
 
-                    const tokens: TokenResponse = await tokenResponse.json()
+                    const tokens = TokenResponseSchema.parse(await tokenResponse.json())
+                    if (!tokens.refresh_token) return { type: "failed" as const }
 
                     return {
                       type: "success" as const,
