@@ -180,6 +180,22 @@ async function resolveProjectId(dir: string): Promise<string | undefined> {
     .toSorted()[0]
 }
 
+async function checkDetached(
+  dir: string,
+  sessions: Session.Info[],
+): Promise<(Session.Info & { detachReason: string })[]> {
+  if (!existsSync(dir)) return sessions.map((s) => ({ ...s, detachReason: "directory does not exist" }))
+  const stat = Filesystem.stat(dir)
+  if (!stat?.isDirectory()) return sessions.map((s) => ({ ...s, detachReason: "path is not a directory" }))
+  const correctId = (await resolveProjectId(dir)) ?? "global"
+  return sessions
+    .filter((s) => s.projectID !== correctId)
+    .map((s) => ({
+      ...s,
+      detachReason: `project_id ${s.projectID} != expected ${correctId}`,
+    }))
+}
+
 export const SessionDetachedCommand = cmd({
   command: "detached",
   describe: "find sessions with missing directories or mismatched project IDs",
@@ -199,36 +215,9 @@ export const SessionDetachedCommand = cmd({
         list.push(s)
         byDir.set(s.directory, list)
       }
-      const detached: (Session.Info & { detachReason: string })[] = []
-      const validDirs = new Map<string, Session.Info[]>()
-      for (const [dir, dirSessions] of byDir) {
-        if (!existsSync(dir)) {
-          for (const s of dirSessions) detached.push({ ...s, detachReason: "directory does not exist" })
-          continue
-        }
-        const stat = Filesystem.stat(dir)
-        if (!stat?.isDirectory()) {
-          for (const s of dirSessions) detached.push({ ...s, detachReason: "path is not a directory" })
-          continue
-        }
-        validDirs.set(dir, dirSessions)
-      }
-      const projectIds = new Map(
-        await Promise.all(
-          [...validDirs.keys()].map(async (dir) => [dir, (await resolveProjectId(dir)) ?? "global"] as const),
-        ),
-      )
-      for (const [dir, dirSessions] of validDirs) {
-        const correctId = projectIds.get(dir)!
-        for (const s of dirSessions) {
-          if (s.projectID !== correctId) {
-            detached.push({
-              ...s,
-              detachReason: `project_id ${s.projectID} != expected ${correctId}`,
-            })
-          }
-        }
-      }
+      const detached = (
+        await Promise.all([...byDir].map(([dir, dirSessions]) => checkDetached(dir, dirSessions)))
+      ).flat()
       if (detached.length === 0) return
       if (args.format === "json") {
         const jsonData = detached.map((s) => ({
