@@ -83,7 +83,9 @@ function wrap<Parameters extends z.ZodType, Result extends Metadata>(
           ...(ctx.callID ? { "tool.call_id": ctx.callID } : {}),
         }
         return Effect.gen(function* () {
-          yield* Effect.try({
+          // Capture the parsed result so any z.preprocess (e.g. question tool's
+          // normalizeQuestionsInput for malformed Qwen JSON) reaches execute().
+          const parsed = yield* Effect.try({
             try: () => toolInfo.parameters.parse(args),
             catch: (error) => {
               if (error instanceof z.ZodError && toolInfo.formatValidationError) {
@@ -95,7 +97,7 @@ function wrap<Parameters extends z.ZodType, Result extends Metadata>(
               )
             },
           })
-          const result = yield* execute(args, ctx)
+          const result = yield* execute(parsed, ctx)
           if (result.metadata.truncated !== undefined) {
             return result
           }

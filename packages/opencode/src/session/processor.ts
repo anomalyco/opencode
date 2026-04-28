@@ -20,6 +20,15 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { Log } from "@/util"
 import { isRecord } from "@/util/record"
+import { normalizeQuestionsInput } from "@/tool/question"
+
+function normalizeToolInput<T>(toolName: string, input: T): T {
+  if (toolName !== "question") return input
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input
+  const obj = input as Record<string, unknown>
+  if (!("questions" in obj)) return input
+  return { ...obj, questions: normalizeQuestionsInput(obj.questions) } as T
+}
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
@@ -288,13 +297,19 @@ export const layer: Layer.Layer<
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
+            // Apply the same preprocessing the tool's z.preprocess runs so that
+            // ToolPart.state.input matches what execute() actually received.
+            // Otherwise Qwen-style malformed inputs (e.g. `questions` as a
+            // truncated JSON string) leak into the UI and render as
+            // "Asked N questions" with N === string length. See issue #67.
+            const toolInput = normalizeToolInput(value.toolName, value.input)
             yield* updateToolCall(value.toolCallId, (match) => ({
               ...match,
               tool: value.toolName,
               state: {
                 ...match.state,
                 status: "running",
-                input: value.input,
+                input: toolInput,
                 time: { start: Date.now() },
               },
               metadata: match.metadata?.providerExecuted
@@ -312,7 +327,7 @@ export const layer: Layer.Layer<
                   part.type === "tool" &&
                   part.tool === value.toolName &&
                   part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(value.input),
+                  JSON.stringify(part.state.input) === JSON.stringify(toolInput),
               )
             ) {
               return
@@ -323,7 +338,7 @@ export const layer: Layer.Layer<
               permission: "doom_loop",
               patterns: [value.toolName],
               sessionID: ctx.assistantMessage.sessionID,
-              metadata: { tool: value.toolName, input: value.input },
+              metadata: { tool: value.toolName, input: toolInput },
               always: [value.toolName],
               ruleset: agent.permission,
             })
