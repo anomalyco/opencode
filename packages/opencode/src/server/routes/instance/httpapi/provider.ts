@@ -4,7 +4,7 @@ import { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { ProviderID } from "@/provider/schema"
 import { mapValues } from "remeda"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
@@ -74,7 +74,7 @@ export const ProviderApi = HttpApi.make("provider")
     }),
   )
 
-export const providerHandlers = Layer.unwrap(
+export const providerHandlers = HttpApiBuilder.group(ProviderApi, "provider", (handlers) =>
   Effect.gen(function* () {
     const cfg = yield* Config.Service
     const provider = yield* Provider.Service
@@ -148,16 +148,10 @@ export const providerHandlers = Layer.unwrap(
       return true
     })
 
-    return HttpApiBuilder.group(ProviderApi, "provider", (handlers) =>
-      handlers
-        .handle("list", list)
-        .handle("auth", auth)
-        .handleRaw("authorize", authorizeRaw)
-        .handle("callback", callback),
-    )
+    return handlers
+      .handle("list", list)
+      .handle("auth", auth)
+      .handleRaw("authorize", authorizeRaw)
+      .handle("callback", callback)
   }),
-).pipe(
-  Layer.provide(ProviderAuth.defaultLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(Config.defaultLayer),
 )

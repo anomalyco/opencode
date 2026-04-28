@@ -2,7 +2,7 @@ import { File } from "@/file"
 import { Ripgrep } from "@/file/ripgrep"
 import * as InstanceState from "@/effect/instance-state"
 import { LSP } from "@/lsp/lsp"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -116,7 +116,7 @@ export const FileApi = HttpApi.make("file")
     }),
   )
 
-export const fileHandlers = Layer.unwrap(
+export const fileHandlers = HttpApiBuilder.group(FileApi, "file", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* File.Service
     const ripgrep = yield* Ripgrep.Service
@@ -154,14 +154,12 @@ export const fileHandlers = Layer.unwrap(
       return yield* svc.status()
     })
 
-    return HttpApiBuilder.group(FileApi, "file", (handlers) =>
-      handlers
-        .handle("findText", findText)
-        .handle("findFile", findFile)
-        .handle("findSymbol", findSymbol)
-        .handle("list", list)
-        .handle("content", content)
-        .handle("status", status),
-    )
+    return handlers
+      .handle("findText", findText)
+      .handle("findFile", findFile)
+      .handle("findSymbol", findSymbol)
+      .handle("list", list)
+      .handle("content", content)
+      .handle("status", status)
   }),
-).pipe(Layer.provide(File.defaultLayer), Layer.provide(Ripgrep.defaultLayer))
+)

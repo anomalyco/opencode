@@ -2,7 +2,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { Shell } from "@/shell/shell"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -131,7 +131,7 @@ export const PtyConnectApi = HttpApi.make("pty-connect").add(
     .annotateMerge(OpenApi.annotations({ title: "pty", description: "PTY websocket route." })),
 )
 
-export const ptyHandlers = Layer.unwrap(
+export const ptyHandlers = HttpApiBuilder.group(PtyApi, "pty", (handlers) =>
   Effect.gen(function* () {
     const pty = yield* Pty.Service
 
@@ -179,15 +179,13 @@ export const ptyHandlers = Layer.unwrap(
       return true
     })
 
-    return HttpApiBuilder.group(PtyApi, "pty", (handlers) =>
-      handlers
-        .handle("shells", shells)
-        .handle("list", list)
-        .handle("create", create)
-        .handle("get", get)
-        .handle("update", update)
-        .handle("remove", remove),
-    )
+    return handlers
+      .handle("shells", shells)
+      .handle("list", list)
+      .handle("create", create)
+      .handle("get", get)
+      .handle("update", update)
+      .handle("remove", remove)
   }),
 )
 
