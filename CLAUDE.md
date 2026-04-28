@@ -80,14 +80,25 @@ grep `[feat: <id>]` 能反查到对应文档。
 
 `本仓 改动日志.md` 不再存详细条目,改为**索引表**:每个 feature 一行,指向 `docs/features/<feat-id>/3-changelog.md`。历史条目 #1-#12 保留不动。
 
-### 规划/治理仍走 opencode-plan
+### 规划 / 治理 / 历史档案 — 全部收口于 `docs/`
 
-| 文档 | 路径 | 作用 |
+> **2026-04-28 起**:opencode-plan 仓所有 fork 相关文档已迁入本仓 `docs/`,与上游 sst/opencode 0 路径冲突(上游无 `docs/` 目录)。
+> opencode-plan 仓只剩 prototype 原型代码 + 历史快照,不再维护。
+> 完整导航见 [`docs/README.md`](./docs/README.md)。
+
+| 文档 | 新路径 | 作用 |
 |---|---|---|
-| 治理总纲 | `D:/project/opencode-plan/规划/12-fork-跟随升级与协作规范.md` | 完整原则 / 规范 / SOP |
-| 改动规则细则 | `D:/project/opencode-plan/规划/09-改动规则.md` | 白黑名单 / baseline tag / diff 阈值 / hook 体系 |
-| 改动索引 | `本仓 改动日志.md` | feature 索引(规范 v2 起,详细内容在 docs/features/) |
-| DeskFox 品牌替换计划 | `D:/project/opencode-plan/规划/13-DeskFox-品牌替换-最小可见档.md` | 已落地 |
+| 治理总纲 | `docs/governance/fork-跟随升级与协作规范.md` | 完整原则 / 规范 / SOP |
+| 改动规则细则 | `docs/governance/改动规则.md` | 白黑名单 / baseline tag / diff 阈值 / hook 体系 |
+| **上游 merge SOP**(本次新增) | `docs/governance/UPSTREAM-MERGE-GUIDE.md` | 与 sst/opencode 合并的完整 checklist + 自动化辅助 |
+| DeskFox 品牌替换 | `docs/governance/DeskFox-品牌替换.md` | 已落地 |
+| 跨平台协作 | `docs/governance/跨平台协作.md` | 三端环境(目前已收口 Win) |
+| 数字签名问题 | `docs/governance/数字签名问题.md` | installer 不签名决策 |
+| 改动索引 | `本仓 改动日志.md` | feature 索引(规范 v2 起,详细在 docs/features/) |
+| 项目概览 | `docs/PLANNING-OVERVIEW.md` | 立项 + 路线 + 当前快照 |
+| 实施进度 | `docs/STATUS.md` | 分 Phase + 时间轴 + 里程碑 |
+| 早期调研 | `docs/history/规划-archive/01..11-*.md` | Phase 0-2 用过现已超越,锁死保留 |
+| 沟通历史 | `docs/history/沟通记录.md` | 关键决策时刻对话日志 |
 
 ## 默认仓库约定
 

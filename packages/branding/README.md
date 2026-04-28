@@ -2,7 +2,7 @@
 
 > **[fork-only]** 本包不与 sst/opencode 上游同步,rebase 时永远保留。
 >
-> 见 [`D:/project/opencode-plan/规划/13-DeskFox-品牌替换-最小可见档.md`](../../../opencode-plan/规划/13-DeskFox-品牌替换-最小可见档.md)。
+> 见 [`docs/governance/DeskFox-品牌替换.md`](../../docs/governance/DeskFox-品牌替换.md)。
 
 ## 目录结构
 
@@ -42,7 +42,7 @@ cd D:\project\opencode-fork
 .\packages\branding\scripts\build-deskfox.ps1 -Env prod
 ```
 
-## 设计原则(对齐 [12 号规范](../../../opencode-plan/规划/12-fork-跟随升级与协作规范.md))
+## 设计原则(对齐 [governance/fork-跟随升级与协作规范.md](../../docs/governance/fork-跟随升级与协作规范.md))
 
 - **R1 隔离**:所有 fork 自有文件集中本包,不动上游同名文件
 - **R3 hardcode 三禁令**:productName 走 tauri-overrides + `--config`,icon 走 build hook 临时拷贝 + git 恢复,主题色走 CSS overlay
