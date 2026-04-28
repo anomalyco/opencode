@@ -257,6 +257,10 @@ export const SettingsGeneral: Component = () => {
   const mono = () => monoInput(settings.appearance.font())
   const sans = () => sansInput(settings.appearance.uiFont())
   const terminal = () => terminalInput(settings.appearance.terminalFont())
+  const iconPresetOptions = [
+    { value: "soft" as const, label: language.t("settings.general.row.iconPreset.option.soft") },
+    { value: "sharp" as const, label: language.t("settings.general.row.iconPreset.option.sharp") },
+  ]
 
   const soundSelectProps = (
     enabled: () => boolean,
@@ -515,6 +519,24 @@ export const SettingsGeneral: Component = () => {
             variant="secondary"
             size="small"
             triggerVariant="settings"
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.iconPreset.title")}
+          description={language.t("settings.general.row.iconPreset.description")}
+        >
+          <Select
+            data-action="settings-icon-preset"
+            options={iconPresetOptions}
+            current={iconPresetOptions.find((o) => o.value === settings.appearance.iconPreset())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && settings.appearance.setIconPreset(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "min-width": "220px" }}
           />
         </SettingsRow>
 

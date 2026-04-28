@@ -1,6 +1,62 @@
-import { splitProps, type ComponentProps } from "solid-js"
+import { splitProps, type Component, type ComponentProps } from "solid-js"
+import Archive from "lucide-solid/icons/archive"
+import ArrowDownToLine from "lucide-solid/icons/arrow-down-to-line"
+import ArrowLeft from "lucide-solid/icons/arrow-left"
+import ArrowRight from "lucide-solid/icons/arrow-right"
+import ArrowUp from "lucide-solid/icons/arrow-up"
+import Ban from "lucide-solid/icons/ban"
+import Check from "lucide-solid/icons/check"
+import ChevronDown from "lucide-solid/icons/chevron-down"
+import ChevronLeft from "lucide-solid/icons/chevron-left"
+import ChevronRight from "lucide-solid/icons/chevron-right"
+import CircleCheck from "lucide-solid/icons/circle-check"
+import CircleQuestionMark from "lucide-solid/icons/circle-question-mark"
+import Code from "lucide-solid/icons/code"
+import CodeXml from "lucide-solid/icons/code-xml"
+import Copy from "lucide-solid/icons/copy"
+import CircleAlert from "lucide-solid/icons/circle-alert"
+import Download from "lucide-solid/icons/download"
+import Eye from "lucide-solid/icons/eye"
+import FolderPlus from "lucide-solid/icons/folder-plus"
+import FolderTree from "lucide-solid/icons/folder-tree"
+import GitFork from "lucide-solid/icons/git-fork"
+import Grid2x2 from "lucide-solid/icons/grid-2x2"
+import Glasses from "lucide-solid/icons/glasses"
+import Keyboard from "lucide-solid/icons/keyboard"
+import LayoutGrid from "lucide-solid/icons/layout-grid"
+import LayoutPanelLeft from "lucide-solid/icons/layout-panel-left"
+import Link from "lucide-solid/icons/link"
+import ListChecks from "lucide-solid/icons/list-checks"
+import ListTree from "lucide-solid/icons/list-tree"
+import Menu from "lucide-solid/icons/menu"
+import MoveRight from "lucide-solid/icons/move-right"
+import PanelBottom from "lucide-solid/icons/panel-bottom"
+import PanelBottomClose from "lucide-solid/icons/panel-bottom-close"
+import PanelBottomOpen from "lucide-solid/icons/panel-bottom-open"
+import PanelLeft from "lucide-solid/icons/panel-left"
+import PanelLeftClose from "lucide-solid/icons/panel-left-close"
+import PanelLeftOpen from "lucide-solid/icons/panel-left-open"
+import PanelRight from "lucide-solid/icons/panel-right"
+import PanelRightClose from "lucide-solid/icons/panel-right-close"
+import PanelRightOpen from "lucide-solid/icons/panel-right-open"
+import Plus from "lucide-solid/icons/plus"
+import Server from "lucide-solid/icons/server"
+import RotateCcw from "lucide-solid/icons/rotate-ccw"
+import Search from "lucide-solid/icons/search"
+import Settings from "lucide-solid/icons/settings"
+import Share2 from "lucide-solid/icons/share-2"
+import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal"
+import SquareArrowOutUpRight from "lucide-solid/icons/square-arrow-out-up-right"
+import SquarePen from "lucide-solid/icons/square-pen"
+import Terminal from "lucide-solid/icons/terminal"
+import Trash2 from "lucide-solid/icons/trash-2"
+import Undo from "lucide-solid/icons/undo"
+import X from "lucide-solid/icons/x"
 
-const icons = {
+import { useIconPreset } from "../context/icon-preset"
+import { shouldUseSoftIcon } from "./icon-soft"
+
+const sharpIcons = {
   "align-right": `<path d="M12.292 6.04167L16.2503 9.99998L12.292 13.9583M2.91699 9.99998H15.6253M17.0837 3.75V16.25" stroke="currentColor" stroke-linecap="square"/>`,
   "arrow-up": `<path fill-rule="evenodd" clip-rule="evenodd" d="M9.99991 2.24121L16.0921 8.33343L15.2083 9.21731L10.6249 4.63397V17.5001H9.37492V4.63398L4.7916 9.21731L3.90771 8.33343L9.99991 2.24121Z" fill="currentColor"/>`,
   "arrow-left": `<path d="M8.33464 4.58398L2.91797 10.0007L8.33464 15.4173M3.33464 10.0007H17.0846" stroke="currentColor" stroke-linecap="square"/>`,
@@ -105,29 +161,119 @@ const icons = {
   "arrow-undo-down": `<path d="M4.08333 11.0859L1.75 8.7526L4.08333 6.41927M2.33333 8.7526L12.5417 8.7526L12.5417 3.21094L7 3.21094" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>`,
 }
 
+const softIcons: Partial<Record<keyof typeof sharpIcons, Component<ComponentProps<"svg">>>> = {
+  archive: Archive,
+  "arrow-down-to-line": ArrowDownToLine,
+  "arrow-left": ArrowLeft,
+  "arrow-right": ArrowRight,
+  "arrow-up": ArrowUp,
+  "arrow-undo-down": Undo,
+  check: Check,
+  "check-small": Check,
+  "chevron-down": ChevronDown,
+  "chevron-left": ChevronLeft,
+  "chevron-right": ChevronRight,
+  checklist: ListChecks,
+  "circle-ban-sign": Ban,
+  "circle-check": CircleCheck,
+  "circle-x": X,
+  close: X,
+  "close-small": X,
+  code: Code,
+  "code-lines": CodeXml,
+  copy: Copy,
+  download: Download,
+  edit: SquarePen,
+  eye: Eye,
+  "folder-add-left": FolderPlus,
+  folder: FolderTree,
+  glasses: Glasses,
+  github: GitFork,
+  help: CircleQuestionMark,
+  keyboard: Keyboard,
+  link: Link,
+  "magnifying-glass": Search,
+  "magnifying-glass-menu": Search,
+  menu: Menu,
+  "new-session": SquarePen,
+  "new-session-active": SquarePen,
+  "dot-grid": Grid2x2,
+  plus: Plus,
+  "plus-small": Plus,
+  prompt: SquarePen,
+  reset: RotateCcw,
+  review: SquarePen,
+  "review-active": SquarePen,
+  server: Server,
+  "settings-gear": Settings,
+  share: Share2,
+  sidebar: PanelLeft,
+  "sidebar-active": PanelLeftClose,
+  sliders: SlidersHorizontal,
+  status: LayoutPanelLeft,
+  "status-active": LayoutPanelLeft,
+  stop: CircleCheck,
+  "square-arrow-top-right": SquareArrowOutUpRight,
+  terminal: Terminal,
+  "terminal-active": Terminal,
+  trash: Trash2,
+  warning: CircleAlert,
+  "window-cursor": MoveRight,
+  "layout-left": LayoutPanelLeft,
+  "layout-left-partial": PanelLeftOpen,
+  "layout-left-full": PanelLeftClose,
+  "layout-right": PanelRight,
+  "layout-right-partial": PanelRightOpen,
+  "layout-right-full": PanelRightClose,
+  "layout-bottom": PanelBottom,
+  "layout-bottom-partial": PanelBottomOpen,
+  "layout-bottom-full": PanelBottomClose,
+  "file-tree": ListTree,
+}
+
 export interface IconProps extends ComponentProps<"svg"> {
-  name: keyof typeof icons
+  name: keyof typeof sharpIcons
   size?: "small" | "normal" | "medium" | "large"
 }
 
 export function Icon(props: IconProps) {
   const [local, others] = splitProps(props, ["name", "size", "class", "classList"])
+  const preset = useIconPreset()
+  const SoftIcon = softIcons[local.name as keyof typeof softIcons]
+  const softClass = () =>
+    [
+      local.class,
+      ...(Object.entries(local.classList ?? {})
+        .filter(([, value]) => !!value)
+        .map(([name]) => name) as string[]),
+    ]
+      .filter(Boolean)
+      .join(" ")
   const viewBox = () =>
     local.name === "magnifying-glass" || local.name === "arrow-undo-down" ? "0 0 16 16" : "0 0 20 20"
   return (
     <div data-component="icon" data-size={local.size || "normal"}>
-      <svg
-        data-slot="icon-svg"
-        classList={{
-          ...local.classList,
-          [local.class ?? ""]: !!local.class,
-        }}
-        fill="none"
-        viewBox={viewBox()}
-        innerHTML={icons[local.name as keyof typeof icons]}
-        aria-hidden="true"
-        {...others}
-      />
+      {shouldUseSoftIcon(preset(), local.name) && SoftIcon ? (
+        <SoftIcon
+          data-slot="icon-svg"
+          class={softClass()}
+          aria-hidden="true"
+          {...others}
+        />
+      ) : (
+        <svg
+          data-slot="icon-svg"
+          classList={{
+            ...local.classList,
+            [local.class ?? ""]: !!local.class,
+          }}
+          fill="none"
+          viewBox={viewBox()}
+          innerHTML={sharpIcons[local.name as keyof typeof sharpIcons]}
+          aria-hidden="true"
+          {...others}
+        />
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { I18nProvider } from "@opencode-ai/ui/context"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
+import { IconPresetProvider } from "@opencode-ai/ui/context/icon-preset"
 import { File } from "@opencode-ai/ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
@@ -40,7 +41,7 @@ import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
-import { SettingsProvider } from "@/context/settings"
+import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
@@ -97,21 +98,19 @@ function QueryProvider(props: ParentProps) {
 
 function AppShellProviders(props: ParentProps) {
   return (
-    <SettingsProvider>
-      <PermissionProvider>
-        <LayoutProvider>
-          <NotificationProvider>
-            <ModelsProvider>
-              <CommandProvider>
-                <HighlightsProvider>
-                  <Layout>{props.children}</Layout>
-                </HighlightsProvider>
-              </CommandProvider>
-            </ModelsProvider>
-          </NotificationProvider>
-        </LayoutProvider>
-      </PermissionProvider>
-    </SettingsProvider>
+    <PermissionProvider>
+      <LayoutProvider>
+        <NotificationProvider>
+          <ModelsProvider>
+            <CommandProvider>
+              <HighlightsProvider>
+                <Layout>{props.children}</Layout>
+              </HighlightsProvider>
+            </CommandProvider>
+          </ModelsProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    </PermissionProvider>
   )
 }
 
@@ -138,34 +137,41 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   )
 }
 
+function IconPresetBridge(props: ParentProps) {
+  const settings = useSettings()
+  return <IconPresetProvider value={settings.appearance.iconPreset}>{props.children}</IconPresetProvider>
+}
+
 export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
   return (
     <MetaProvider>
       <Font />
-      <ThemeProvider
-        onThemeApplied={(_, mode) => {
-          void window.api?.setTitlebar?.({ mode })
-        }}
-      >
-        <LanguageProvider locale={props.locale}>
-          <UiI18nBridge>
-            <ErrorBoundary
-              fallback={(error) => {
-                Sentry.captureException(error)
-                return <ErrorPage error={error} />
-              }}
-            >
-              <QueryProvider>
-                <DialogProvider>
-                  <MarkedProvider>
-                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProvider>
-                </DialogProvider>
-              </QueryProvider>
-            </ErrorBoundary>
-          </UiI18nBridge>
-        </LanguageProvider>
-      </ThemeProvider>
+      <SettingsProvider>
+        <IconPresetBridge>
+          <ThemeProvider
+            onThemeApplied={(_, mode) => {
+              void window.api?.setTitlebar?.({ mode })
+            }}
+          >
+            <LanguageProvider locale={props.locale}>
+              <UiI18nBridge>
+                <ErrorBoundary
+                  fallback={(error) => {
+                    Sentry.captureException(error)
+                    return <ErrorPage error={error} />
+                  }}
+                >
+                  <DialogProvider>
+                    <MarkedProvider>
+                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                    </MarkedProvider>
+                  </DialogProvider>
+                </ErrorBoundary>
+              </UiI18nBridge>
+            </LanguageProvider>
+          </ThemeProvider>
+        </IconPresetBridge>
+      </SettingsProvider>
     </MetaProvider>
   )
 }

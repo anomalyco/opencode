@@ -3,6 +3,8 @@ import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
 
+export type IconPreset = "sharp" | "soft"
+
 export interface NotificationSettings {
   agent: boolean
   permissions: boolean
@@ -42,6 +44,7 @@ export interface Settings {
     sans: string
     terminal: string
     agentProgressIndicator: "border" | "bar"
+    iconPreset: IconPreset
   }
   keybinds: Record<string, string>
   permissions: {
@@ -128,6 +131,7 @@ const defaultSettings: Settings = {
     sans: "",
     terminal: "",
     agentProgressIndicator: "bar",
+    iconPreset: "soft",
   },
   keybinds: {},
   permissions: {
@@ -268,6 +272,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setAgentProgressIndicator(value: "border" | "bar") {
           setStore("appearance", "agentProgressIndicator", value)
+        },
+        iconPreset: withFallback(() => store.appearance?.iconPreset, defaultSettings.appearance.iconPreset),
+        setIconPreset(value: IconPreset) {
+          setStore("appearance", "iconPreset", value)
         },
       },
       keybinds: {
