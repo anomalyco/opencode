@@ -958,7 +958,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const metaHead = createMemo(() => {
     const agent = props.message.agent
-    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
+    // ENT-69 운영 빌드에서는 모델명을 메타에서 가림 (로컬 vite dev에서만 표시).
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", import.meta.env.DEV ? model() : ""]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
@@ -1361,9 +1362,10 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const meta = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const agent = (props.message as AssistantMessage).agent
+    // ENT-69 운영 빌드에서는 모델명을 메타에서 가림 (로컬 vite dev에서만 표시).
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      model(),
+      import.meta.env.DEV ? model() : "",
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
     ]

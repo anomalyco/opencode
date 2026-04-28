@@ -223,6 +223,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const current = () => {
+      // ENT-69 prod 환경에서는 IndexedDB sticky·agent fallback 모두 무시하고 sonnet-4-6으로 강제 (로컬 dev 제외)
+      if (!import.meta.env.DEV) {
+        const locked = models.find({ providerID: "anthropic", modelID: "claude-sonnet-4-6" })
+        // 레지스트리 로드 race 등으로 sonnet-4-6이 일시 부재할 때만 일반 흐름으로 폴백
+        if (locked) return locked
+      }
       const item = firstModel(
         () => scope()?.model,
         () => agent.current()?.model,
