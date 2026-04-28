@@ -574,7 +574,14 @@ export const layer: Layer.Layer<
               Effect.gen(function* () {
                 aborted = true
                 if (!ctx.assistantMessage.error) {
-                  yield* halt(new DOMException("Aborted", "AbortError"))
+                  // Wait, if it's a steer interrupt, we DO NOT want to set the error!
+                  // Setting the error will cause the loop to break.
+                  const currentInterrupt = yield* runState.getInterrupt(ctx.sessionID)
+                  if (currentInterrupt === "steer") {
+                    // Do nothing, just let it cleanly abort
+                  } else {
+                    yield* halt(new DOMException("Aborted", "AbortError"))
+                  }
                 }
               }),
             ),
