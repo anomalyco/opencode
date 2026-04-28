@@ -92,8 +92,34 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (agent?.color) {
             const color = agent.color
             if (color.startsWith("#")) return RGBA.fromHex(color)
+
+            let mapped: string
+            switch (color.toLowerCase()) {
+              case "red":
+                mapped = "error"
+                break
+              case "blue":
+                mapped = "primary"
+                break
+              case "green":
+                mapped = "success"
+                break
+              case "yellow":
+              case "orange":
+                mapped = "warning"
+                break
+              case "purple":
+              case "pink":
+                mapped = "accent"
+                break
+              case "cyan":
+                mapped = "info"
+                break
+              default:
+                mapped = color
+            }
             // already validated by config, just satisfying TS here
-            return theme[color as keyof typeof theme] as RGBA
+            return theme[mapped as keyof typeof theme] as RGBA
           }
           return colors()[index % colors().length]
         },

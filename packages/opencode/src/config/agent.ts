@@ -18,6 +18,7 @@ const log = Log.create({ service: "config" })
 const Color = Schema.Union([
   Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
   Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
+  Schema.Literals(["red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan"]),
 ])
 
 const AgentSchema = Schema.StructWithRest(

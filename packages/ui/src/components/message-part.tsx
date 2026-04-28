@@ -281,6 +281,14 @@ const agentTones: Record<string, string> = {
   build: "var(--icon-agent-build-base)",
   docs: "var(--icon-agent-docs-base)",
   plan: "var(--icon-agent-plan-base)",
+  red: "var(--syntax-critical)",
+  blue: "var(--syntax-info)",
+  green: "var(--syntax-success)",
+  yellow: "var(--syntax-warning)",
+  purple: "var(--syntax-property)",
+  orange: "var(--syntax-warning)",
+  pink: "var(--syntax-property)",
+  cyan: "var(--syntax-info)",
 }
 
 const agentPalette = [
