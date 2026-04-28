@@ -2,17 +2,18 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import os from "os"
 import path from "path"
+import { Config } from "@/config/config"
 import { Shell } from "../../src/shell/shell"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
-import { Truncate } from "../../src/tool"
+import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Plugin } from "../../src/plugin"
 
 const runtime = ManagedRuntime.make(
@@ -21,6 +22,7 @@ const runtime = ManagedRuntime.make(
     AppFileSystem.defaultLayer,
     Plugin.defaultLayer,
     Truncate.defaultLayer,
+    Config.defaultLayer,
     Agent.defaultLayer,
   ),
 )
@@ -150,6 +152,33 @@ describe("tool.bash", () => {
         )
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("test")
+      },
+    })
+  })
+
+  test("falls back from terminal-only configured shell", async () => {
+    await using tmp = await tmpdir({
+      config: { shell: "fish" },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await initBash()
+        const fallback = Shell.name(Shell.acceptable("fish"))
+        expect(fallback).not.toBe("fish")
+        expect(bash.description).toContain(fallback)
+
+        const result = await Effect.runPromise(
+          bash.execute(
+            {
+              command: "echo fallback",
+              description: "Echo fallback text",
+            },
+            ctx,
+          ),
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain("fallback")
       },
     })
   })

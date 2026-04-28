@@ -22,6 +22,7 @@ describe("createChildStoreManager", () => {
       onBootstrap() {},
       onDispose() {},
       translate: (key) => key,
+      getSdk: () => null!,
     })
 
     Array.from({ length: 30 }, (_, index) => `/pinned-${index}`).forEach((directory) => {

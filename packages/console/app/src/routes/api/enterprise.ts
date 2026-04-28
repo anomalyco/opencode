@@ -27,22 +27,7 @@ function splitFullName(fullName: string) {
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") }
 }
 
-function getEmailOctopusApiKey() {
-  if (process.env.EMAILOCTOPUS_API_KEY) return process.env.EMAILOCTOPUS_API_KEY
-  try {
-    return Resource.EMAILOCTOPUS_API_KEY.value
-  } catch {
-    return
-  }
-}
-
 function subscribe(email: string, fullName: string) {
-  const apiKey = getEmailOctopusApiKey()
-  if (!apiKey) {
-    console.warn("Skipping EmailOctopus subscribe: missing API key")
-    return Promise.resolve(false)
-  }
-
   const name = splitFullName(fullName)
   const fields: Record<string, string> = {}
   if (name.firstName) fields.FirstName = name.firstName
@@ -54,14 +39,14 @@ function subscribe(email: string, fullName: string) {
   return fetch(`https://api.emailoctopus.com/lists/${EMAIL_OCTOPUS_LIST_ID}/contacts`, {
     method: "PUT",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${Resource.EMAILOCTOPUS_API_KEY.value}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
   }).then(
-    (res) => {
+    async (res) => {
       if (!res.ok) {
-        console.error("EmailOctopus subscribe failed:", res.status, res.statusText)
+        console.error("EmailOctopus subscribe failed:", res.status, res.statusText, await res.text())
         return false
       }
       return true

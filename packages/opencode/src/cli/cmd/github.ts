@@ -1,6 +1,6 @@
 import path from "path"
 import { exec } from "child_process"
-import { Filesystem } from "../../util"
+import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
@@ -18,21 +18,21 @@ import type {
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { ModelsDev } from "../../provider"
+import { ModelsDev } from "@/provider/models"
 import { Instance } from "@/project/instance"
 import { bootstrap } from "../bootstrap"
-import { SessionShare } from "@/share"
-import { Session } from "../../session"
+import { SessionShare } from "@/share/session"
+import { Session } from "@/session/session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
-import { Provider } from "../../provider"
+import { Provider } from "@/provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Process } from "@/util"
+import { Process } from "@/util/process"
 import { Effect } from "effect"
 
 type GitHubAuthor = {
@@ -985,7 +985,8 @@ export const GithubRunCommand = cmd({
               const err = result.info.error
               console.error("Agent error:", err)
               if (err.name === "ContextOverflowError") throw new Error(formatPromptTooLargeError(files))
-              throw new Error(`${err.name}: ${err.data?.message || ""}`)
+              const message = "message" in err.data ? err.data.message : ""
+              throw new Error(`${err.name}: ${message}`)
             }
 
             const text = extractResponseText(result.parts)
@@ -1014,7 +1015,8 @@ export const GithubRunCommand = cmd({
               const err = summary.info.error
               console.error("Summary agent error:", err)
               if (err.name === "ContextOverflowError") throw new Error(formatPromptTooLargeError(files))
-              throw new Error(`${err.name}: ${err.data?.message || ""}`)
+              const message = "message" in err.data ? err.data.message : ""
+              throw new Error(`${err.name}: ${message}`)
             }
 
             const summaryText = extractResponseText(summary.parts)

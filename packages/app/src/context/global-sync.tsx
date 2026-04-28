@@ -8,25 +8,31 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/shared/util/path"
-import { createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import { getFilename } from "@opencode-ai/core/util/path"
+import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
-import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-sync/bootstrap"
+import {
+  bootstrapDirectory,
+  bootstrapGlobal,
+  clearProviderRev,
+  loadGlobalConfigQuery,
+  loadPathQuery,
+  loadProjectsQuery,
+  loadProvidersQuery,
+} from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
-import { createRefreshQueue } from "./global-sync/queue"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
-import { queryOptions, skipToken, useQueryClient } from "@tanstack/solid-query"
+import { queryOptions, skipToken, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
+import { createRefreshQueue } from "./global-sync/queue"
 
 type GlobalStore = {
   ready: boolean
@@ -45,6 +51,18 @@ type GlobalStore = {
 export const loadSessionsQuery = (directory: string) =>
   queryOptions<null>({ queryKey: [directory, "loadSessions"], queryFn: skipToken })
 
+export const loadMcpQuery = (directory: string, sdk?: OpencodeClient) =>
+  queryOptions({
+    queryKey: [directory, "mcp"],
+    queryFn: sdk ? () => sdk.mcp.status().then((r) => r.data ?? {}) : skipToken,
+  })
+
+export const loadLspQuery = (directory: string, sdk?: OpencodeClient) =>
+  queryOptions({
+    queryKey: [directory, "lsp"],
+    queryFn: sdk ? () => sdk.lsp.status().then((r) => r.data ?? []) : skipToken,
+  })
+
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
@@ -56,54 +74,49 @@ function createGlobalSync() {
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
-  const [projectCache, setProjectCache, projectInit] = persisted(
-    Persist.global("globalSync.project", ["globalSync.project.v1"]),
-    createStore({ value: [] as Project[] }),
-  )
+  const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
+    queries: [loadGlobalConfigQuery(), loadProvidersQuery(null), loadPathQuery(null), loadProjectsQuery()],
+  }))
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
-    ready: false,
-    path: { state: "", config: "", worktree: "", directory: "", home: "" },
-    project: projectCache.value,
+    get ready() {
+      return bootstrap.isPending
+    },
+    project: [],
     session_todo: {},
-    provider: { all: [], connected: [], default: {} },
     provider_auth: {},
-    config: {},
-    reload: undefined,
+    get path() {
+      const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
+      if (pathQuery.isLoading) return EMPTY
+      return pathQuery.data ?? EMPTY
+    },
+    get provider() {
+      const EMPTY = { all: [], connected: [], default: {} }
+      if (providerQuery.isLoading) return EMPTY
+      return providerQuery.data ?? EMPTY
+    },
+    get config() {
+      if (configQuery.isLoading) return {}
+      return configQuery.data ?? {}
+    },
+    get reload() {
+      return updateConfigMutation.isPending ? "pending" : undefined
+    },
   })
   const queryClient = useQueryClient()
 
-  let active = true
-  let projectWritten = false
   let bootedAt = 0
   let bootingRoot = false
   let eventFrame: number | undefined
   let eventTimer: ReturnType<typeof setTimeout> | undefined
 
   onCleanup(() => {
-    active = false
-  })
-  onCleanup(() => {
     if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
     if (eventTimer !== undefined) clearTimeout(eventTimer)
   })
 
-  const cacheProjects = () => {
-    setProjectCache(
-      "value",
-      untrack(() => globalStore.project.map(sanitizeProject)),
-    )
-  }
-
-  const setProjects = (next: Project[] | ((draft: Project[]) => void)) => {
-    projectWritten = true
-    if (typeof next === "function") {
-      setGlobalStore("project", produce(next))
-      cacheProjects()
-      return
-    }
+  const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
     setGlobalStore("project", next)
-    cacheProjects()
   }
 
   const setBootStore = ((...input: unknown[]) => {
@@ -114,23 +127,29 @@ function createGlobalSync() {
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
   }) as typeof setGlobalStore
 
+  const bootstrap = useQuery(() => ({
+    queryKey: ["bootstrap"],
+    queryFn: async () => {
+      await bootstrapGlobal({
+        globalSDK: globalSDK.client,
+        requestFailedTitle: language.t("common.requestFailed"),
+        translate: language.t,
+        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+        setGlobalStore: setBootStore,
+        queryClient,
+      })
+      bootedAt = Date.now()
+      return bootedAt
+    },
+  }))
+
   const set = ((...input: unknown[]) => {
     if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      setProjects(input[1] as Project[] | ((draft: Project[]) => void))
+      setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
       return input[1]
     }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
   }) as typeof setGlobalStore
-
-  if (projectInit instanceof Promise) {
-    void projectInit.then(() => {
-      if (!active) return
-      if (projectWritten) return
-      const cached = projectCache.value
-      if (cached.length === 0) return
-      setGlobalStore("project", cached)
-    })
-  }
 
   const setSessionTodo = (sessionID: string, todos: Todo[] | undefined) => {
     if (!sessionID) return
@@ -150,9 +169,20 @@ function createGlobalSync() {
 
   const queue = createRefreshQueue({
     paused,
-    bootstrap,
+    bootstrap: () => queryClient.fetchQuery({ queryKey: ["bootstrap"] }),
     bootstrapInstance,
   })
+
+  const sdkFor = (directory: string) => {
+    const cached = sdkCache.get(directory)
+    if (cached) return cached
+    const sdk = globalSDK.createClient({
+      directory,
+      throwOnError: true,
+    })
+    sdkCache.set(directory, sdk)
+    return sdk
+  }
 
   const children = createChildStoreManager({
     owner,
@@ -169,18 +199,8 @@ function createGlobalSync() {
       clearSessionPrefetchDirectory(directory)
     },
     translate: language.t,
+    getSdk: sdkFor,
   })
-
-  const sdkFor = (directory: string) => {
-    const cached = sdkCache.get(directory)
-    if (cached) return cached
-    const sdk = globalSDK.createClient({
-      directory,
-      throwOnError: true,
-    })
-    sdkCache.set(directory, sdk)
-    return sdk
-  }
 
   async function loadSessions(directory: string) {
     const pending = sessionLoads.get(directory)
@@ -223,16 +243,18 @@ function createGlobalSync() {
                 limit,
                 permission: store.permission,
               })
-              setStore(
-                "sessionTotal",
-                estimateRootSessionTotal({
-                  count: nonArchived.length,
-                  limit: x.limit,
-                  limited: x.limited,
-                }),
-              )
-              setStore("session", reconcile(sessions, { key: "id" }))
-              cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
+              batch(() => {
+                setStore(
+                  "sessionTotal",
+                  estimateRootSessionTotal({
+                    count: nonArchived.length,
+                    limit: x.limit,
+                    limited: x.limited,
+                  }),
+                )
+                setStore("session", reconcile(sessions, { key: "id" }))
+                cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
+              })
               sessionMeta.set(directory, { limit })
             })
             .catch((err) => {
@@ -304,7 +326,7 @@ function createGlobalSync() {
         project: globalStore.project,
         refresh: () => {
           if (recent) return
-          queue.refresh()
+          bootstrap.refetch()
         },
         setGlobalProject: setProjects,
       })
@@ -330,12 +352,7 @@ function createGlobalSync() {
       setSessionTodo,
       vcsCache: children.vcsCache.get(directory),
       loadLsp: () => {
-        void sdkFor(directory)
-          .lsp.status()
-          .then((x) => {
-            setStore("lsp", x.data ?? [])
-            setStore("lsp_ready", true)
-          })
+        void queryClient.fetchQuery(loadLspQuery(directory, sdkFor(directory)))
       },
     })
   })
@@ -349,23 +366,6 @@ function createGlobalSync() {
       children.disposeDirectory(directory)
     }
   })
-
-  async function bootstrap() {
-    bootingRoot = true
-    try {
-      await bootstrapGlobal({
-        globalSDK: globalSDK.client,
-        requestFailedTitle: language.t("common.requestFailed"),
-        translate: language.t,
-        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
-        setGlobalStore: setBootStore,
-        queryClient,
-      })
-      bootedAt = Date.now()
-    } finally {
-      bootingRoot = false
-    }
-  }
 
   onMount(() => {
     if (typeof requestAnimationFrame === "function") {
@@ -382,7 +382,6 @@ function createGlobalSync() {
         void globalSDK.event.start()
       }, 0)
     }
-    void bootstrap()
   })
 
   const projectApi = {
@@ -395,21 +394,10 @@ function createGlobalSync() {
     },
   }
 
-  const updateConfig = async (config: Config) => {
-    setGlobalStore("reload", "pending")
-    return globalSDK.client.global.config
-      .update({ config })
-      .then(bootstrap)
-      .then(() => {
-        queue.refresh()
-        setGlobalStore("reload", undefined)
-        queue.refresh()
-      })
-      .catch((error) => {
-        setGlobalStore("reload", undefined)
-        throw error
-      })
-  }
+  const updateConfigMutation = useMutation(() => ({
+    mutationFn: (config: Config) => globalSDK.client.global.config.update({ config }),
+    onSuccess: () => bootstrap.refetch(),
+  }))
 
   return {
     data: globalStore,
@@ -422,8 +410,8 @@ function createGlobalSync() {
     },
     child: children.child,
     peek: children.peek,
-    bootstrap,
-    updateConfig,
+    // bootstrap,
+    updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
     todo: {
       set: setSessionTodo,
