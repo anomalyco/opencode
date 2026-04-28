@@ -109,6 +109,32 @@ describe("Instruction.resolve", () => {
     })
   })
 
+  test("does not attach instructions from sibling paths with matching prefixes", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "project", "src", "file.ts"), "const x = 1")
+        await Bun.write(path.join(dir, "project-sibling", "AGENTS.md"), "# Sibling Instructions")
+        await Bun.write(path.join(dir, "project-sibling", "nested", "file.ts"), "const x = 2")
+      },
+    })
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: () =>
+        run(
+          Instruction.Service.use((svc) =>
+            Effect.gen(function* () {
+              const results = yield* svc.resolve(
+                [],
+                path.join(tmp.path, "project-sibling", "nested", "file.ts"),
+                MessageID.make("message-test-sibling-prefix"),
+              )
+              expect(results).toEqual([])
+            }),
+          ),
+        ),
+    })
+  })
+
   test("doesn't reload AGENTS.md when reading it directly", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

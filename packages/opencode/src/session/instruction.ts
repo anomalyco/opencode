@@ -198,7 +198,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         let current = path.dirname(target)
 
         // Walk upward from the file being read and attach nearby instruction files once per message.
-        while (current.startsWith(root) && current !== root) {
+        while (current !== root && AppFileSystem.contains(root, current)) {
           const found = yield* find(current)
           if (!found || found === target || sys.has(found) || already.has(found)) {
             current = path.dirname(current)

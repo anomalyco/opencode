@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { dirname, join, relative, resolve as pathResolve } from "path"
+import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
@@ -224,13 +224,28 @@ export namespace AppFileSystem {
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
   }
 
+  function isWindowsAbsolutePath(p: string) {
+    return /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\")
+  }
+
+  function relativePath(from: string, to: string) {
+    if (isWindowsAbsolutePath(from) || isWindowsAbsolutePath(to)) return win32.relative(from, to)
+    return relative(from, to)
+  }
+
+  function isParentRelativePath(p: string) {
+    return p === ".." || p.startsWith("../") || p.startsWith("..\\")
+  }
+
+  function isContainedRelativePath(p: string) {
+    return !p || (!isParentRelativePath(p) && !win32.isAbsolute(p))
+  }
+
   export function overlaps(a: string, b: string) {
-    const relA = relative(a, b)
-    const relB = relative(b, a)
-    return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
+    return isContainedRelativePath(relativePath(a, b)) || isContainedRelativePath(relativePath(b, a))
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    return isContainedRelativePath(relativePath(parent, child))
   }
 }

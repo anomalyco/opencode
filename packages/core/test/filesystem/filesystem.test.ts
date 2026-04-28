@@ -326,13 +326,20 @@ describe("AppFileSystem", () => {
 
     test("contains checks path containment", () => {
       expect(AppFileSystem.contains("/a/b", "/a/b/c")).toBe(true)
+      expect(AppFileSystem.contains("/a/b", "/a/b/..c")).toBe(true)
       expect(AppFileSystem.contains("/a/b", "/a/c")).toBe(false)
+      expect(AppFileSystem.contains("C:\\a\\b", "C:\\a\\b\\c")).toBe(true)
+      expect(AppFileSystem.contains("C:\\a\\b", "C:\\a\\b\\..c")).toBe(true)
+      expect(AppFileSystem.contains("C:\\a\\b", "C:\\a\\c")).toBe(false)
+      expect(AppFileSystem.contains("C:\\a\\b", "D:\\a\\b\\c")).toBe(false)
     })
 
     test("overlaps detects overlapping paths", () => {
       expect(AppFileSystem.overlaps("/a/b", "/a/b/c")).toBe(true)
       expect(AppFileSystem.overlaps("/a/b/c", "/a/b")).toBe(true)
       expect(AppFileSystem.overlaps("/a", "/b")).toBe(false)
+      expect(AppFileSystem.overlaps("C:\\a\\b", "C:\\a\\b\\c")).toBe(true)
+      expect(AppFileSystem.overlaps("C:\\a\\b", "D:\\a\\b\\c")).toBe(false)
     })
   })
 })

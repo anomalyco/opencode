@@ -35,6 +35,13 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
   })
+
+  test("handles Windows drive boundaries", () => {
+    expect(Filesystem.contains("C:\\project", "C:\\project\\src")).toBe(true)
+    expect(Filesystem.contains("C:\\project", "C:\\project\\..config")).toBe(true)
+    expect(Filesystem.contains("C:\\project", "C:\\project-other\\file")).toBe(false)
+    expect(Filesystem.contains("C:\\project", "D:\\project\\src")).toBe(false)
+  })
 })
 
 /*
