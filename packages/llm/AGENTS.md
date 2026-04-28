@@ -28,12 +28,12 @@ const request = LLM.request({
   prompt: "Say hello.",
 })
 
-const response = yield* client({ adapters: [OpenAIChat.adapter] }).generate(request)
+const response = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] }).generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `client(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `LLMClient.make(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
-Use `client(...).stream(request)` when callers want incremental `LLMEvent`s. Use `client(...).generate(request)` when callers want those same events collected into an `LLMResponse`.
+Use `LLMClient.make(...).stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.make(...).generate(request)` when callers want those same events collected into an `LLMResponse`.
 
 ### Adapters
 
@@ -246,7 +246,6 @@ Do not blanket re-record an entire test file when adding one cassette. `RECORD=t
 - [x] Refactor the recorder toward extractable library boundaries: core HTTP cassette schema/matching/redaction/diffing should stay LLM-agnostic; LLM tests should supply metadata and semantic assertions from a thin wrapper.
 - [x] Add cassette metadata support: recorder schema version, recorded timestamp, scenario name, tags, and caller-provided subject metadata such as provider/protocol/model/capabilities without making the core recorder depend on LLM concepts.
 - [x] Improve replay mismatch diagnostics: show method/URL/header/body diffs and closest recorded interaction while keeping secrets redacted. Unused-interaction reporting is still TODO if a test needs it.
-- [ ] Add a cassette doctor command/test helper that validates schema versions, detects secrets, checks duplicate or unused interactions where possible, and reports cassette coverage by provider/protocol/scenario.
 - [ ] Add semantic replay assertions for LLM cassettes: replay raw HTTP, parse provider streams, and compare normalized `LLMEvent[]` or `LLMResponse` snapshots in addition to request matching.
 - [ ] Add stream chunk-boundary fuzzing for text/SSE cassettes so parser tests prove correctness independent of provider chunk boundaries.
 - [ ] Keep deterministic coverage for malformed chunks and tool arguments that arrive in the first chunk unless a live provider reliably produces those shapes.

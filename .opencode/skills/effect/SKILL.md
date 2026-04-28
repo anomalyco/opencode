@@ -24,7 +24,6 @@ Use the current Effect v4 / effect-smol source, not memory or older Effect v2/v3
 - Prefer Effect `Schema` for API and domain data shapes. Use branded schemas for IDs and `Schema.TaggedErrorClass` for typed domain errors when modeling new error surfaces.
 - Keep HTTP handlers thin: decode input, read request context, call services, and map transport errors. Put business rules in services.
 - In Effect service code, prefer Effect-aware platform abstractions and dependencies over ad hoc promises where the surrounding code already does so.
-- Service public methods should not leak implementation dependencies. Yield required services once while constructing the layer, close over them in the returned service implementation, and keep method return types focused on the service API rather than requiring callers to provide transitive dependencies.
 - Keep layer composition explicit. Avoid broad hidden provisioning that makes missing dependencies hard to see.
 - In tests, prefer the repo's existing Effect test helpers and live tests for filesystem, git, child process, locks, or timing behavior.
 - Do not introduce `any`, non-null assertions, unchecked casts, or older Effect APIs just to satisfy types.

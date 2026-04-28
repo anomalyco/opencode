@@ -63,12 +63,10 @@ export type StreamInput = {
   retries?: number
   toolChoice?: "auto" | "required" | "none"
   nativeMessages?: ReadonlyArray<MessageV2.WithParts>
-  // Opcode-native `Tool.Def[]` parallel to `tools` (AI SDK shape). When
+  // OpenCode-native `Tool.Def[]` parallel to `tools` (AI SDK shape). When
   // populated alongside `tools`, the LLM-native path forwards definitions to
-  // the model. Dispatch + multi-round tool loops land in Phase 2 step 2b; for
-  // now the request can carry tools but the gate keeps real production tool
-  // sessions on the AI SDK path because no production caller populates this
-  // field yet.
+  // the model and can dispatch multi-round tool loops without changing the
+  // existing AI SDK path.
   nativeTools?: ReadonlyArray<OpenCodeTool.Def>
 }
 
@@ -454,10 +452,10 @@ const live: Layer.Layer<
       })
     })
 
-    // ----- Phase 1: LLM-native opt-in path -----
+    // ----- LLM-native opt-in path -----
     //
     // `runNative` returns the session-shaped Stream when (and only when) the
-    // request matches a narrow opt-in profile we've actively wired:
+    // request matches the narrow opt-in profile we've actively wired:
     //
     //   - The flag `OPENCODE_EXPERIMENTAL_LLM_NATIVE` is set.
     //   - The caller populated `input.nativeMessages` with `MessageV2.WithParts`
@@ -465,7 +463,8 @@ const live: Layer.Layer<
     //     needs the typed parts).
     //   - The bridge can route the model to one of the protocols listed in
     //     `NATIVE_PROTOCOLS` (today: Anthropic only).
-    //   - The session has no tools (Phase 2 will lift this).
+    //   - If tools are present, the caller supplied a native tool definition
+    //     for every AI SDK tool key so the native path can dispatch them.
     //
     // Otherwise it returns `undefined` and the caller falls through to the
     // existing AI SDK path. The return shape is deliberately narrow — we are
