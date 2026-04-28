@@ -1391,7 +1391,7 @@ export class Agent implements ACPAgent {
               filename,
               mime: part.mimeType,
             })
-          } else if (part.uri && part.uri.startsWith("http:")) {
+          } else if (part.uri && (part.uri.startsWith("http://") || part.uri.startsWith("https://"))) {
             parts.push({
               type: "file",
               url: part.uri,
