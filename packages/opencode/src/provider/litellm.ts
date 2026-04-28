@@ -1,4 +1,4 @@
-import { Log } from "../util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import type { Provider } from "./provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
