@@ -116,6 +116,12 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         reconnect = setTimeout(connect, delay)
       }
 
+      const scheduleZedPoll = () => {
+        if (closed) return
+        if (reconnect) clearTimeout(reconnect)
+        reconnect = setTimeout(connect, 1000)
+      }
+
       const connect = () => {
         if (closed) return
 
@@ -145,7 +151,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
             .finally(() => {
               zedSelection = undefined
             })
-          scheduleReconnect()
+          scheduleZedPoll()
           return
         }
 
