@@ -44,7 +44,7 @@ import {
   type DomainId,
 } from "@/pages/layout/extra-agents"
 
-type GlobalStore = {
+export type GlobalStore = {
   ready: boolean
   error?: InitError
   path: Path
