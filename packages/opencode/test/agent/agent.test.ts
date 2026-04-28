@@ -47,8 +47,8 @@ test("build agent has correct default properties", async () => {
       expect(build).toBeDefined()
       expect(build?.mode).toBe("primary")
       expect(build?.native).toBe(true)
-      expect(evalPerm(build, "edit")).toBe("allow")
-      expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "edit")).toBe("ask")
+      expect(evalPerm(build, "bash")).toBe("ask")
     },
   })
 })
@@ -224,8 +224,8 @@ test("agent permission config merges with defaults", async () => {
       expect(build).toBeDefined()
       // Specific pattern is denied
       expect(Permission.evaluate("bash", "rm -rf *", build!.permission).action).toBe("deny")
-      // Edit still allowed
-      expect(evalPerm(build, "edit")).toBe("allow")
+      // Edit still asks by default
+      expect(evalPerm(build, "edit")).toBe("ask")
     },
   })
 })
@@ -440,13 +440,13 @@ test("default permission includes doom_loop and external_directory as ask", asyn
   })
 })
 
-test("webfetch is allowed by default", async () => {
+test("webfetch asks by default", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const build = await load(tmp.path, (svc) => svc.get("build"))
-      expect(evalPerm(build, "webfetch")).toBe("allow")
+      expect(evalPerm(build, "webfetch")).toBe("ask")
     },
   })
 })

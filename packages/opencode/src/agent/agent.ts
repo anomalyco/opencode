@@ -84,7 +84,13 @@ export const layer = Layer.effect(
         const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
 
         const defaults = Permission.fromConfig({
-          "*": "allow",
+          "*": "ask",
+          glob: "allow",
+          grep: "allow",
+          todowrite: "allow",
+          codesearch: "allow",
+          lsp: "allow",
+          skill: "allow",
           doom_loop: "ask",
           external_directory: {
             "*": "ask",
