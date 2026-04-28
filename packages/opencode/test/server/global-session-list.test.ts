@@ -1,13 +1,19 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import type { UpgradeWebSocket } from "hono/ws"
 import { Effect } from "effect"
 import z from "zod"
 import { Instance } from "../../src/project/instance"
+import { InstanceRoutes } from "../../src/server/routes/instance"
 import { Project } from "@/project/project"
 import { Session as SessionNs } from "@/session/session"
+import { WorkspaceContext } from "../../src/control-plane/workspace-context"
+import { WorkspaceID } from "../../src/control-plane/schema"
 import * as Log from "@opencode-ai/core/util/log"
+import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
+const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
   return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))
@@ -22,6 +28,11 @@ const svc = {
     return run(SessionNs.Service.use((svc) => svc.setArchived(input)))
   },
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+  await resetDatabase()
+})
 
 describe("session.listGlobal", () => {
   test("lists sessions across projects with project metadata", async () => {
@@ -98,6 +109,103 @@ describe("session.listGlobal", () => {
 
     const next = [...svc.listGlobal({ directory: tmp.path, limit: 10, cursor: page[0].time.updated })]
     const ids = next.map((session) => session.id)
+
+    expect(ids).toContain(first.id)
+    expect(ids).not.toContain(second.id)
+  })
+
+  test("filters by workspace", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const one = WorkspaceID.ascending()
+    const two = WorkspaceID.ascending()
+
+    const first = await WorkspaceContext.provide({
+      workspaceID: one,
+      fn: () =>
+        Instance.provide({
+          directory: tmp.path,
+          fn: async () => svc.create({ title: "workspace-one-session" }),
+        }),
+    })
+    const second = await WorkspaceContext.provide({
+      workspaceID: two,
+      fn: () =>
+        Instance.provide({
+          directory: tmp.path,
+          fn: async () => svc.create({ title: "workspace-two-session" }),
+        }),
+    })
+
+    const sessions = [...svc.listGlobal({ workspaceID: one, limit: 200 })]
+    const ids = sessions.map((session) => session.id)
+
+    expect(ids).toContain(first.id)
+    expect(ids).not.toContain(second.id)
+  })
+
+  test("session history endpoint lists sessions across projects", async () => {
+    await using first = await tmpdir({ git: true })
+    await using second = await tmpdir({ git: true })
+
+    const one = await Instance.provide({
+      directory: first.path,
+      fn: async () => svc.create({ title: "history-first" }),
+    })
+    const two = await Instance.provide({
+      directory: second.path,
+      fn: async () => svc.create({ title: "history-second" }),
+    })
+
+    const response = await Instance.provide({
+      directory: first.path,
+      fn: async () => InstanceRoutes(websocket).request("/session/history?roots=true&limit=200"),
+    })
+    expect(response.status).toBe(200)
+
+    const sessions = (await response.json()) as SessionNs.GlobalInfo[]
+    const ids = sessions.map((session) => session.id)
+
+    expect(ids).toContain(one.id)
+    expect(ids).toContain(two.id)
+    expect(sessions.find((session) => session.id === one.id)?.project?.id).toBe(one.projectID)
+    expect(sessions.find((session) => session.id === two.id)?.project?.id).toBe(two.projectID)
+  })
+
+  test("session history endpoint supports cursor pagination", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const first = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => svc.create({ title: "history-page-one" }),
+    })
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const second = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => svc.create({ title: "history-page-two" }),
+    })
+
+    const page = await Instance.provide({
+      directory: tmp.path,
+      fn: async () =>
+        InstanceRoutes(websocket).request(`/session/history?directory=${encodeURIComponent(tmp.path)}&limit=1`),
+    })
+    expect(page.status).toBe(200)
+    expect(page.headers.get("x-next-cursor")).toBeTruthy()
+
+    const sessions = (await page.json()) as SessionNs.GlobalInfo[]
+    expect(sessions.map((session) => session.id)).toEqual([second.id])
+
+    const next = await Instance.provide({
+      directory: tmp.path,
+      fn: async () =>
+        InstanceRoutes(websocket).request(
+          `/session/history?directory=${encodeURIComponent(tmp.path)}&limit=10&cursor=${sessions[0].time.updated}`,
+        ),
+    })
+    expect(next.status).toBe(200)
+
+    const rest = (await next.json()) as SessionNs.GlobalInfo[]
+    const ids = rest.map((session) => session.id)
 
     expect(ids).toContain(first.id)
     expect(ids).not.toContain(second.id)

@@ -131,6 +131,7 @@ describe("HttpApi JSON parity", () => {
           [
             { label: "session.list roots", path: `${SessionPaths.list}?roots=true`, headers },
             { label: "session.list all", path: SessionPaths.list, headers },
+            { label: "session.history", path: `${SessionPaths.history}?roots=false`, headers },
             { label: "session.get", path: pathFor(SessionPaths.get, { sessionID: seeded.parent.id }), headers },
             {
               label: "session.children",

@@ -50,6 +50,15 @@ const ListQuery = Schema.Struct({
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
 })
+const HistoryQuery = Schema.Struct({
+  directory: Schema.optional(Schema.String),
+  roots: Schema.optional(QueryBoolean),
+  start: Schema.optional(Schema.NumberFromString),
+  cursor: Schema.optional(Schema.NumberFromString),
+  search: Schema.optional(Schema.String),
+  limit: Schema.optional(Schema.NumberFromString),
+  archived: Schema.optional(QueryBoolean),
+})
 const DiffQuery = Schema.Struct(Struct.omit(SessionSummary.DiffInput.fields, ["sessionID"]))
 const MessagesQuery = Schema.Struct({
   limit: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
@@ -97,6 +106,7 @@ const PermissionResponsePayload = Schema.Struct({
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
+  history: `${root}/history`,
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
@@ -144,6 +154,17 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.status",
             summary: "Get session status",
             description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
+          }),
+        ),
+        HttpApiEndpoint.get("history", SessionPaths.history, {
+          query: HistoryQuery,
+          success: Schema.Array(Session.GlobalInfo),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.history",
+            summary: "List session history",
+            description:
+              "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
           }),
         ),
         HttpApiEndpoint.get("get", SessionPaths.get, {
@@ -455,6 +476,28 @@ export const sessionHandlers = Layer.unwrap(
 
     const status = Effect.fn("SessionHttpApi.status")(function* () {
       return Object.fromEntries(yield* statusSvc.list())
+    })
+
+    const history = Effect.fn("SessionHttpApi.history")(function* (ctx: { query: typeof HistoryQuery.Type }) {
+      const limit = ctx.query.limit ?? 100
+      const sessions = Array.from(
+        Session.listGlobal({
+          directory: ctx.query.directory,
+          roots: ctx.query.roots,
+          start: ctx.query.start,
+          cursor: ctx.query.cursor,
+          search: ctx.query.search,
+          limit: limit + 1,
+          archived: ctx.query.archived,
+        }),
+      )
+      const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
+      return HttpServerResponse.jsonUnsafe(list, {
+        headers:
+          sessions.length > limit && list.length > 0
+            ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
+            : undefined,
+      })
     })
 
     const get = Effect.fn("SessionHttpApi.get")(function* (ctx: { params: { sessionID: SessionID } }) {
@@ -912,6 +955,7 @@ export const sessionHandlers = Layer.unwrap(
       handlers
         .handle("list", list)
         .handle("status", status)
+        .handle("history", history)
         .handle("get", get)
         .handle("children", children)
         .handle("todo", todo)

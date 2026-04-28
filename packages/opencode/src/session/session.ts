@@ -30,6 +30,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
+import { WorkspaceContext } from "../control-plane/workspace-context"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
@@ -755,9 +756,10 @@ export function* list(input?: {
 }) {
   const project = Instance.project
   const conditions = [eq(SessionTable.project_id, project.id)]
+  const workspace = input?.workspaceID ?? WorkspaceContext.workspaceID
 
-  if (input?.workspaceID) {
-    conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
+  if (workspace) {
+    conditions.push(eq(SessionTable.workspace_id, workspace))
   }
   if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
     if (input?.directory) {
@@ -792,6 +794,7 @@ export function* list(input?: {
 
 export function* listGlobal(input?: {
   directory?: string
+  workspaceID?: WorkspaceID
   roots?: boolean
   start?: number
   cursor?: number
@@ -800,7 +803,11 @@ export function* listGlobal(input?: {
   archived?: boolean
 }) {
   const conditions: SQL[] = []
+  const workspace = input?.workspaceID ?? WorkspaceContext.workspaceID
 
+  if (workspace) {
+    conditions.push(eq(SessionTable.workspace_id, workspace))
+  }
   if (input?.directory) {
     conditions.push(eq(SessionTable.directory, input.directory))
   }

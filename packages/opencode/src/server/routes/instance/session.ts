@@ -112,6 +112,65 @@ export const SessionRoutes = lazy(() =>
         }),
     )
     .get(
+      "/history",
+      describeRoute({
+        summary: "List session history",
+        description:
+          "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+        operationId: "session.history",
+        responses: {
+          200: {
+            description: "List of sessions across projects",
+            content: {
+              "application/json": {
+                schema: resolver(Session.GlobalInfo.zod.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
+          roots: QueryBoolean.optional().meta({ description: "Only return root sessions (no parentID)" }),
+          start: z.coerce
+            .number()
+            .optional()
+            .meta({ description: "Filter sessions updated on or after this timestamp (milliseconds since epoch)" }),
+          cursor: z.coerce
+            .number()
+            .optional()
+            .meta({ description: "Return sessions updated before this timestamp (milliseconds since epoch)" }),
+          search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
+          limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
+          archived: QueryBoolean.optional().meta({ description: "Include archived sessions (default false)" }),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        const limit = query.limit ?? 100
+        const sessions: Session.GlobalInfo[] = []
+        for await (const session of Session.listGlobal({
+          directory: query.directory,
+          roots: queryBoolean(query.roots),
+          start: query.start,
+          cursor: query.cursor,
+          search: query.search,
+          limit: limit + 1,
+          archived: queryBoolean(query.archived),
+        })) {
+          sessions.push(session)
+        }
+        const more = sessions.length > limit
+        const list = more ? sessions.slice(0, limit) : sessions
+        if (more && list.length > 0) {
+          c.header("x-next-cursor", String(list[list.length - 1].time.updated))
+        }
+        return c.json(list)
+      },
+    )
+    .get(
       "/:sessionID",
       describeRoute({
         summary: "Get session",

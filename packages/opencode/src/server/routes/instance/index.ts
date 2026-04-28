@@ -108,6 +108,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.get(PtyPaths.connect, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.history, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.get, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.children, (c) => handler(c.req.raw, context))
     app.get(SessionPaths.todo, (c) => handler(c.req.raw, context))

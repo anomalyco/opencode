@@ -122,6 +122,10 @@ describe("session HttpApi", () => {
 
         expect(yield* requestJson<Record<string, unknown>>(SessionPaths.status, { headers })).toEqual({})
 
+        const history = yield* requestJson<Session.GlobalInfo[]>(`${SessionPaths.history}?roots=true`, { headers })
+        expect(history.map((item) => item.id)).toContain(parent.id)
+        expect(history.find((item) => item.id === parent.id)?.project?.id).toBe(parent.projectID)
+
         expect(
           yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: parent.id }), { headers }),
         ).toMatchObject({ id: parent.id, title: "parent" })

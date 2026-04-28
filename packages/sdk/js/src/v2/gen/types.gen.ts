@@ -3374,6 +3374,52 @@ export type SessionStatusResponses = {
 
 export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
 
+export type SessionHistoryData = {
+  body?: never
+  path?: never
+  query?: {
+    /**
+     * Filter sessions by project directory
+     */
+    directory?: string
+    workspace?: string
+    /**
+     * Only return root sessions (no parentID)
+     */
+    roots?: boolean | "true" | "false"
+    /**
+     * Filter sessions updated on or after this timestamp (milliseconds since epoch)
+     */
+    start?: number
+    /**
+     * Return sessions updated before this timestamp (milliseconds since epoch)
+     */
+    cursor?: number
+    /**
+     * Filter sessions by title (case-insensitive)
+     */
+    search?: string
+    /**
+     * Maximum number of sessions to return
+     */
+    limit?: number
+    /**
+     * Include archived sessions (default false)
+     */
+    archived?: boolean | "true" | "false"
+  }
+  url: "/session/history"
+}
+
+export type SessionHistoryResponses = {
+  /**
+   * List of sessions across projects
+   */
+  200: Array<GlobalSession>
+}
+
+export type SessionHistoryResponse = SessionHistoryResponses[keyof SessionHistoryResponses]
+
 export type SessionDeleteData = {
   body?: never
   path: {
