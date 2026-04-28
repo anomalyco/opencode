@@ -15,6 +15,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { loadSessionsQuery, useGlobalSync } from "@/context/global-sync"
+import { nextRootSessionLimit } from "@/context/global-sync/session-load"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { sortedRootSessions, workspaceKey } from "./helpers"
@@ -325,7 +326,7 @@ export const SortableWorkspace = (props: {
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
   const loadMore = async () => {
-    setWorkspaceStore("limit", (limit) => (limit ?? 0) + 5)
+    setWorkspaceStore("limit", nextRootSessionLimit)
     await globalSync.project.loadSessions(props.directory)
   }
 
@@ -457,7 +458,7 @@ export const LocalWorkspace = (props: {
   const hasMore = createMemo(() => workspace().store.sessionTotal > count())
   const loading = () => query.isLoading && count() === 0
   const loadMore = async () => {
-    workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
+    workspace().setStore("limit", nextRootSessionLimit)
     await globalSync.project.loadSessions(props.project.worktree)
   }
 

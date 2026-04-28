@@ -5,6 +5,7 @@ import type { OpencodeClient, VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
+  SESSION_ROOT_PAGE_SIZE,
   type ChildOptions,
   type DirState,
   type IconCache,
@@ -209,7 +210,7 @@ export function createChildStoreManager(input: {
               return lspQuery.isLoading ? [] : (lspQuery.data ?? [])
             },
             vcs: vcsStore.value,
-            limit: 5,
+            limit: SESSION_ROOT_PAGE_SIZE,
             message: {},
             part: {},
           })
