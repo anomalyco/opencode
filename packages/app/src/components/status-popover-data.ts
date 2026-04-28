@@ -79,11 +79,10 @@ const skillSource = (value: string) => {
 
 export const skill = (value: { name: string; location: string }, list: Project[]) => {
   const hit = owner(value.location, list)
-  const scope = hit?.item.name || (hit ? getFilename(hit.item.worktree) : "global")
   return {
     name: value.name,
-    scope,
-    source: skillSource(value.location),
+    scope: hit ? "project" : "global",
+    source: hit?.item.name || (hit ? getFilename(hit.item.worktree) : skillSource(value.location)),
     value: value.location,
   }
 }

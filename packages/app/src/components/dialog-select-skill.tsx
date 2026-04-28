@@ -1,23 +1,22 @@
-import { Component, createMemo, createResource } from "solid-js"
-import { useSDK } from "@/context/sdk"
+import { Component, createMemo } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { useLanguage } from "@/context/language"
-import { cachedSkills, loadSkills } from "@/utils/skills"
+import { useGlobalSync } from "@/context/global-sync"
+import { useSkills } from "@/context/skills"
+import { skill } from "@/components/status-popover-data"
 
 export const DialogSelectSkill: Component = () => {
-  const sdk = useSDK()
+  const global = useGlobalSync()
+  const skills = useSkills()
   const language = useLanguage()
 
-  // Use sdk.client as source to only reload if client changes
-  // Provide cached data as initialValue to avoid flash of empty state
-  const [skills] = createResource(
-    () => sdk.client,
-    () => loadSkills(sdk),
-    { initialValue: cachedSkills(sdk.directory) },
+  const items = createMemo(() =>
+    skills
+      .list()
+      .map((item) => ({ ...item, meta: skill(item, global.data.project) }))
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
-
-  const items = createMemo(() => (skills() ?? []).toSorted((a, b) => a.name.localeCompare(b.name)))
 
   return (
     <Dialog
@@ -35,6 +34,8 @@ export const DialogSelectSkill: Component = () => {
         {(item) => (
           <div class="w-full flex items-center gap-2">
             <span class="text-14-regular text-text-strong whitespace-nowrap">/{item.name}</span>
+            <span class="text-12-regular text-text-weak whitespace-nowrap">{item.meta.scope}</span>
+            <span class="text-12-regular text-text-weak whitespace-nowrap">{item.meta.source ?? "-"}</span>
             <span class="text-14-regular text-text-weak truncate">{item.description}</span>
           </div>
         )}

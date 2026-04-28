@@ -30,8 +30,8 @@ describe("status popover data", () => {
 
     expect(skill({ name: "review", location: "file:///Users/me/repo/.claude/skills/review/SKILL.md" }, list)).toEqual({
       name: "review",
-      scope: "workspace-a",
-      source: ".claude",
+      scope: "project",
+      source: "workspace-a",
       value: "file:///Users/me/repo/.claude/skills/review/SKILL.md",
     })
   })

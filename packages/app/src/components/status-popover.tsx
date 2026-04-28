@@ -8,15 +8,17 @@ import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, createResource, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { claude, item, label, mcp, parse, skill } from "@/components/status-popover-data"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import { useServer } from "@/context/server"
+import { usePlatform } from "@/context/platform"
+import { useSDK } from "@/context/sdk"
+import { useSkills } from "@/context/skills"
+import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { cachedSkills, loadSkills } from "@/utils/skills"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
@@ -60,10 +62,7 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Acc
   const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
 
   createEffect(() => {
-    if (!enabled()) {
-      setStatus(reconcile({}))
-      return
-    }
+    if (!enabled()) return
     const list = servers()
     let dead = false
 
@@ -78,7 +77,8 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Acc
       setStatus(reconcile(results))
     }
 
-    void refresh()
+    const stale = list.some((conn) => status[ServerConnection.key(conn)] === undefined)
+    if (stale) void refresh()
     const id = setInterval(() => void refresh(), pollMs)
     onCleanup(() => {
       dead = true
@@ -136,9 +136,8 @@ const useDefaultServerKey = (
   }
 }
 
-const useMcpToggleMutation = () => {
+const useMcpToggleMutation = (sdk: ReturnType<typeof useSDK>) => {
   const sync = useSync()
-  const sdk = useSDK()
   const language = useLanguage()
 
   return useMutation(() => ({
@@ -162,6 +161,7 @@ export function StatusPopover() {
   const sync = useSync()
   const global = useGlobalSync()
   const sdk = useSDK()
+  const skills = useSkills()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -169,6 +169,7 @@ export function StatusPopover() {
   const server = useServer()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
+  const [tab, setTab] = createSignal<"servers" | "mcp" | "lsp" | "plugins" | "skills">("servers")
   let dialogRun = 0
   let dialogDead = false
   onCleanup(() => {
@@ -182,9 +183,9 @@ export function StatusPopover() {
     if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
     return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
-  const health = useServerHealth(servers, shown)
+  const health = useServerHealth(servers, () => shown() && tab() === "servers")
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
-  const toggleMcp = useMcpToggleMutation()
+  const toggleMcp = useMcpToggleMutation(sdk)
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const [cfg, setCfg] = createStore({
     project: undefined as string | undefined,
@@ -199,16 +200,6 @@ export function StatusPopover() {
   const projectDirCfg = createMemo(() => parse(cfg.projectDir))
   const claudeCfg = createMemo(() => claude(cfg.claude, sync.data.path.directory))
   const omo = createMemo(() => !!parse(cfg.omo))
-  const [rawSkills] = createResource(
-    () => (shown() ? sdk.directory : null),
-    async (dir) => {
-      if (!dir) return []
-      const list = await loadSkills(sdk)
-      console.debug("[status-popover] skills.ready", { dir, count: list.length })
-      return list
-    },
-  )
-
   createEffect(() => {
     const read = platform.readConfigFile
     const list = platform.listConfigFiles
@@ -273,9 +264,9 @@ export function StatusPopover() {
   const plugins = createMemo(() => (sync.data.config.plugin ?? []).map(item))
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
-  const skills = createMemo(() => rawSkills() ?? cachedSkills(sdk.directory) ?? [])
   const skillItems = createMemo(() =>
-    skills()
+    skills
+      .list()
       .map((entry) => skill(entry, global.data.project))
       .toSorted((a, b) => {
         const ar = a.scope === "global" ? 1 : 0
@@ -298,6 +289,7 @@ export function StatusPopover() {
     if (text !== "dialog.skill.empty") return text
     return "No skills loaded"
   })
+
   const overallHealthy = createMemo(() => {
     const serverHealthy = server.healthy() === true
     const anyMcpIssue = mcpNames().some((name) => {
@@ -365,8 +357,13 @@ export function StatusPopover() {
           aria-label={language.t("status.popover.ariaLabel")}
           class="tabs bg-background-strong rounded-xl overflow-hidden"
           data-component="tabs"
-          data-active="servers"
-          defaultValue="servers"
+          data-active={tab()}
+          value={tab()}
+          onChange={(value) => {
+            if (value === "servers" || value === "mcp" || value === "lsp" || value === "plugins" || value === "skills") {
+              setTab(value)
+            }
+          }}
           variant="alt"
         >
           <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
@@ -393,235 +390,179 @@ export function StatusPopover() {
           </Tabs.List>
 
           <Tabs.Content value="servers">
-            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-                <For each={sortedServers()}>
-                  {(url) => {
-                    const isActive = () => url === server.url
-                    const isDefault = () => url === store.defaultServerUrl
-                    const status = () => store.status[url]
-                    const isBlocked = () => status()?.healthy === false
-                    const [truncated, setTruncated] = createSignal(false)
-                    let nameRef: HTMLSpanElement | undefined
-                    let versionRef: HTMLSpanElement | undefined
-
-                    onMount(() => {
-                      const check = () => {
-                        const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
-                        const versionTruncated = versionRef ? versionRef.scrollWidth > versionRef.clientWidth : false
-                        setTruncated(nameTruncated || versionTruncated)
-                      }
-                      check()
-                      window.addEventListener("resize", check)
-                      onCleanup(() => window.removeEventListener("resize", check))
-                    })
-
-                    const tooltipValue = () => {
-                      const name = serverDisplayName(url)
-                      const version = status()?.version
-                      return (
-                        <span class="flex items-center gap-2">
-                          <span>{name}</span>
-                          <Show when={version}>
-                            <span class="text-text-invert-base">{version}</span>
-                          </Show>
-                        </span>
-                      )
-                    }
-
-                    return (
-                      <button
-                        type="button"
-                        class="status-list-item flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
-                        classList={{
-                          "cursor-not-allowed": isBlocked(),
-                        }}
-                        aria-disabled={isBlocked()}
-                        onClick={() => {
-                          if (isBlocked()) return
-                          navigate("/")
-                          queueMicrotask(() => server.setActive(key))
-                        }}
-                      >
-                        <ServerHealthIndicator health={health[key]} />
-                        <ServerRow
-                          conn={s}
-                          dimmed={isBlocked()}
-                          status={health[key]}
-                          class="flex items-center gap-2 w-full min-w-0"
-                          nameClass="text-14-regular text-text-base truncate"
-                          versionClass="text-12-regular text-text-weak truncate"
-                          badge={
-                            <Show when={key === defaultServer.key()}>
-                              <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
-                                {language.t("common.default")}
-                              </span>
-                            </Show>
-                          }
-                        >
-                          <div
-                            classList={{
-                              "size-1.5 rounded-full shrink-0": true,
-                              "bg-icon-success-base": status()?.healthy === true,
-                              "bg-icon-critical-base": status()?.healthy === false,
-                              "bg-border-weak-base": status() === undefined,
-                            }}
-                          />
-                          <span ref={nameRef} class="text-14-regular text-text-base truncate">
-                            {serverDisplayName(url)}
-                          </span>
-                          <Show when={status()?.version}>
-                            <span ref={versionRef} class="text-12-regular text-text-weak truncate">
-                              {status()?.version}
-                            </span>
-                          </Show>
-                          <Show when={isDefault()}>
-                            <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
-                              {language.t("common.default")}
-                            </span>
-                          </Show>
-                          <div class="flex-1" />
-                          <Show when={isActive()}>
-                            <Icon name="check" size="small" class="text-icon-weak shrink-0" />
-                          </Show>
-                        </button>
-                      </Tooltip>
-                    )
-                  }}
-                </For>
-
-                <Button
-                  variant="secondary"
-                  class="mt-3 self-start h-8 px-3 py-1.5"
-                  onClick={() => dialog.show(() => <DialogSelectServer />, refreshDefaultServerUrl)}
-                >
-                  {language.t("status.popover.action.manageServers")}
-                </Button>
-              </div>
-            </div>
-          </Tabs.Content>
-
-          <Tabs.Content value="mcp">
-            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-                <Show
-                  when={mcpItems().length > 0}
-                  fallback={
-                    <div class="text-14-regular text-text-base text-center my-auto">
-                      {language.t("dialog.mcp.empty")}
-                    </div>
-                  }
-                >
-                  <For each={mcpItems()}>
-                    {(entry) => {
-                      const status = () => entry.status?.status
-                      const enabled = () => status() === "connected"
+            <Show when={tab() === "servers"}>
+              <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+                <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                  <For each={sortedServers()}>
+                    {(s) => {
+                      const key = ServerConnection.key(s)
+                      const isBlocked = () => health[key]?.healthy === false
                       return (
                         <button
                           type="button"
-                          class="status-list-item flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md transition-colors text-left"
-                          onClick={() => {
-                            if (toggleMcp.isPending) return
-                            toggleMcp.mutate(entry.name)
+                          class="status-list-item flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
+                          classList={{
+                            "cursor-not-allowed": isBlocked(),
                           }}
-                          disabled={toggleMcp.isPending && toggleMcp.variables === entry.name}
+                          aria-disabled={isBlocked()}
+                          onClick={() => {
+                            if (isBlocked()) return
+                            navigate("/")
+                            queueMicrotask(() => server.setActive(key))
+                          }}
                         >
-                          <div
-                            classList={{
-                              "size-1.5 rounded-full shrink-0": true,
-                              "bg-icon-success-base": item.status === "connected",
-                              "bg-icon-critical-base": item.status === "failed",
-                              "bg-border-weak-base": item.status === "disabled",
-                              "bg-icon-warning-base":
-                                item.status === "needs_auth" || item.status === "needs_client_registration",
-                            }}
-                          />
-                          <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
-                            {entry.name}
-                            <Show when={entry.project}>
-                              <span class="text-text-weak"> {" | "}{entry.project}</span>
+                          <ServerHealthIndicator health={health[key]} />
+                          <ServerRow
+                            conn={s}
+                            dimmed={isBlocked()}
+                            status={health[key]}
+                            class="flex items-center gap-2 w-full min-w-0"
+                            nameClass="text-14-regular text-text-base truncate"
+                            versionClass="text-12-regular text-text-weak truncate"
+                            badge={
+                              <Show when={key === defaultServer.key()}>
+                                <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
+                                  {language.t("common.default")}
+                                </span>
+                              </Show>
+                            }
+                          >
+                            <div class="flex-1" />
+                            <Show when={server.current && key === ServerConnection.key(server.current)}>
+                              <Icon name="check" size="small" class="text-icon-weak shrink-0" />
                             </Show>
-                          </div>
-                          <div onClick={(event) => event.stopPropagation()}>
-                            <Switch
-                              checked={enabled()}
-                              disabled={toggleMcp.isPending && toggleMcp.variables === entry.name}
-                              onChange={() => {
-                                if (toggleMcp.isPending) return
-                                toggleMcp.mutate(entry.name)
-                              }}
-                            />
-                          </div>
+                          </ServerRow>
                         </button>
                       )
                     }}
                   </For>
-                </Show>
+
+                  <Button
+                    variant="secondary"
+                    class="mt-3 self-start h-8 px-3 py-1.5"
+                    onClick={() => {
+                      const run = ++dialogRun
+                      void import("./dialog-select-server").then((x) => {
+                        if (dialogDead || dialogRun !== run) return
+                        dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
+                      })
+                    }}
+                  >
+                    {language.t("status.popover.action.manageServers")}
+                  </Button>
+                </div>
               </div>
-            </div>
+            </Show>
+          </Tabs.Content>
+
+          <Tabs.Content value="mcp">
+            <Show when={tab() === "mcp"}>
+              <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+                <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                  <Show
+                    when={mcpNames().length > 0}
+                    fallback={
+                      <div class="text-14-regular text-text-base text-center my-auto">
+                        {language.t("dialog.mcp.empty")}
+                      </div>
+                    }
+                  >
+                    <For each={mcpItems()}>
+                      {(entry) => {
+                        const status = () => entry.status?.status
+                        const enabled = () => status() === "connected"
+                        return (
+                          <button
+                            type="button"
+                            class="status-list-item flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md transition-colors text-left"
+                            onClick={() => {
+                              if (toggleMcp.isPending) return
+                              toggleMcp.mutate(entry.name)
+                            }}
+                            disabled={toggleMcp.isPending && toggleMcp.variables === entry.name}
+                          >
+                            <div
+                              classList={{
+                                "size-1.5 rounded-full shrink-0": true,
+                                "bg-icon-success-base": status() === "connected",
+                                "bg-icon-critical-base": status() === "failed",
+                                "bg-border-weak-base": status() === "disabled",
+                                "bg-icon-warning-base":
+                                  status() === "needs_auth" || status() === "needs_client_registration",
+                              }}
+                            />
+                            <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
+                              {entry.name}
+                              <Show when={entry.project}>
+                                <span class="text-text-weak"> {" | "}{entry.project}</span>
+                              </Show>
+                            </div>
+                            <div onClick={(event) => event.stopPropagation()}>
+                              <Switch
+                                checked={enabled()}
+                                disabled={toggleMcp.isPending && toggleMcp.variables === entry.name}
+                                onChange={() => {
+                                  if (toggleMcp.isPending) return
+                                  toggleMcp.mutate(entry.name)
+                                }}
+                              />
+                            </div>
+                          </button>
+                        )
+                      }}
+                    </For>
+                  </Show>
+                </div>
+              </div>
+            </Show>
           </Tabs.Content>
 
           <Tabs.Content value="lsp">
-            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-                <Show
-                  when={lspItems().length > 0}
-                  fallback={
-                    <div class="text-14-regular text-text-base text-center my-auto">
-                      {language.t("dialog.lsp.empty")}
-                    </div>
-                  }
-                >
-                  <For each={lspItems()}>
-                    {(item) => (
-                      <div class="flex items-center gap-2 w-full px-2 py-1">
-                        <div
-                          classList={{
-                            "size-1.5 rounded-full shrink-0": true,
-                            "bg-icon-success-base": item.status === "connected",
-                            "bg-icon-critical-base": item.status === "error",
-                          }}
-                        />
-                        <span class="text-14-regular text-text-base truncate">{item.name || item.id}</span>
+            <Show when={tab() === "lsp"}>
+              <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+                <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                  <Show
+                    when={lspItems().length > 0}
+                    fallback={
+                      <div class="text-14-regular text-text-base text-center my-auto">
+                        {language.t("dialog.lsp.empty")}
                       </div>
-                    )}
-                  </For>
-                </Show>
+                    }
+                  >
+                    <For each={lspItems()}>
+                      {(item) => (
+                        <div class="flex items-center gap-2 w-full px-2 py-1">
+                          <div
+                            classList={{
+                              "size-1.5 rounded-full shrink-0": true,
+                              "bg-icon-success-base": item.status === "connected",
+                              "bg-icon-critical-base": item.status === "error",
+                            }}
+                          />
+                          <span class="text-14-regular text-text-base truncate">{item.name || item.id}</span>
+                        </div>
+                      )}
+                    </For>
+                  </Show>
+                </div>
               </div>
-            </div>
+            </Show>
           </Tabs.Content>
 
           <Tabs.Content value="plugins">
-            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-                <Show
-                  when={plugins().length > 0}
-                  fallback={
-                    <div class="text-14-regular text-text-base text-center my-auto">
-                      {(() => {
-                        const value = language.t("dialog.plugins.empty")
-                        const file = "opencode.json"
-                        const parts = value.split(file)
-                        if (parts.length === 1) return value
-                        return (
-                          <>
-                            {parts[0]}
-                            <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">{file}</code>
-                            {parts.slice(1).join(file)}
-                          </>
-                        )
-                      })()}
-                    </div>
-                  }
-                >
-                  <For each={plugins()}>
-                    {(plugin) => (
-                      <Tooltip
-                        class="w-full"
-                        value={<span class="font-mono text-12-regular whitespace-nowrap">{plugin.value}</span>}
-                        contentStyle={{ "max-width": "none" }}
-                      >
-                        <div class="status-list-item flex items-center gap-2 w-full px-2 py-1 rounded-md">
+            <Show when={tab() === "plugins"}>
+              <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+                <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                  <Show
+                    when={plugins().length > 0}
+                    fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
+                  >
+                    <For each={plugins()}>
+                      {(plugin) => (
+                        <div
+                          class="status-list-item flex items-center gap-2 w-full px-2 py-1 rounded-md"
+                          title={plugin.value}
+                        >
                           <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
                           <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
                             {plugin.name}
@@ -641,29 +582,28 @@ export function StatusPopover() {
                             }}
                           />
                         </div>
-                      </Tooltip>
-                    )}
-                  </For>
-                </Show>
+                      )}
+                    </For>
+                  </Show>
+                </div>
               </div>
-            </div>
+            </Show>
           </Tabs.Content>
 
           <Tabs.Content value="skills">
-            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-                <Show
-                  when={skillItems().length > 0}
-                  fallback={<div class="text-14-regular text-text-base text-center my-auto">{skillEmpty()}</div>}
-                >
-                  <For each={skillItems()}>
-                    {(entry) => (
-                      <Tooltip
-                        class="w-full"
-                        value={<span class="font-mono text-12-regular whitespace-nowrap">{entry.value}</span>}
-                        contentStyle={{ "max-width": "none" }}
-                      >
-                        <div class="status-list-item flex items-center gap-2 w-full px-2 py-1 rounded-md">
+            <Show when={tab() === "skills"}>
+              <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
+                <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                  <Show
+                    when={skillItems().length > 0}
+                    fallback={<div class="text-14-regular text-text-base text-center my-auto">{skillEmpty()}</div>}
+                  >
+                    <For each={skillItems()}>
+                      {(entry) => (
+                        <div
+                          class="status-list-item flex items-center gap-2 w-full px-2 py-1 rounded-md"
+                          title={entry.value}
+                        >
                           <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
                           <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
                             {entry.name}
@@ -684,12 +624,12 @@ export function StatusPopover() {
                             }}
                           />
                         </div>
-                      </Tooltip>
-                    )}
-                  </For>
-                </Show>
+                      )}
+                    </For>
+                  </Show>
+                </div>
               </div>
-            </div>
+            </Show>
           </Tabs.Content>
         </Tabs>
       </div>
