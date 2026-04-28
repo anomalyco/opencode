@@ -4,15 +4,15 @@ import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
-import { Log } from "../util"
-import { Process } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
+import { Process } from "@/util/process"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import z from "zod"
 import { Schema } from "effect"
 import type * as LSPServer from "./server"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { withTimeout } from "../util/timeout"
-import { Filesystem } from "../util"
+import { Filesystem } from "@/util/filesystem"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 const DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS = 5_000
@@ -693,3 +693,5 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
 
   return result
 }
+
+export * as LSPClient from "./client"

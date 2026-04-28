@@ -1,7 +1,7 @@
 import { Context, Layer, Schema, Effect } from "effect"
 import { SessionEntry } from "./session-entry"
 import { Struct } from "effect"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 
 export const ID = SessionID

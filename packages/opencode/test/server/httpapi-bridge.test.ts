@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
-import { Flag } from "../../src/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
-import { FilePaths } from "../../src/server/routes/instance/httpapi/file"
-import { Log } from "../../src/util"
+import { FileApi, FilePaths } from "../../src/server/routes/instance/httpapi/file"
+import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
+import { Server } from "../../src/server/server"
+import * as Log from "@opencode-ai/core/util/log"
+import { OpenApi } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
@@ -16,13 +17,47 @@ const original = {
   OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
 }
 
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
+const methods = ["get", "post", "put", "delete", "patch"] as const
 
 function app(input?: { password?: string; username?: string }) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
   Flag.OPENCODE_SERVER_PASSWORD = input?.password
   Flag.OPENCODE_SERVER_USERNAME = input?.username
-  return InstanceRoutes(websocket)
+  return Server.Default().app
+}
+
+function openApiRouteKeys(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], unknown>>> }) {
+  return Object.entries(spec.paths)
+    .flatMap(([path, item]) =>
+      methods.filter((method) => item[method]).map((method) => `${method.toUpperCase()} ${path}`),
+    )
+    .sort()
+}
+
+function openApiParameters(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }) {
+  return Object.fromEntries(
+    Object.entries(spec.paths).flatMap(([path, item]) =>
+      methods
+        .filter((method) => item[method])
+        .map((method) => [
+          `${method.toUpperCase()} ${path}`,
+          (item[method]?.parameters ?? [])
+            .map(parameterKey)
+            .filter((param) => param !== undefined)
+            .sort(),
+        ]),
+    ),
+  )
+}
+
+type Operation = {
+  parameters?: unknown[]
+}
+
+function parameterKey(param: unknown) {
+  if (!param || typeof param !== "object" || !("in" in param) || !("name" in param)) return
+  if (typeof param.in !== "string" || typeof param.name !== "string") return
+  return `${param.in}:${param.name}:${"required" in param && param.required === true}`
 }
 
 function authorization(username: string, password: string) {
@@ -45,7 +80,26 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-describe("HttpApi Hono bridge", () => {
+describe("HttpApi server", () => {
+  test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
+    const honoRoutes = openApiRouteKeys(await Server.openapi())
+    const effectRoutes = openApiRouteKeys(OpenApi.fromApi(PublicApi))
+
+    expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
+    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
+  })
+
+  test("matches generated OpenAPI route parameters", async () => {
+    const hono = openApiParameters(await Server.openapi())
+    const effect = openApiParameters(OpenApi.fromApi(PublicApi))
+
+    expect(
+      Object.keys(hono)
+        .filter((route) => JSON.stringify(hono[route]) !== JSON.stringify(effect[route]))
+        .map((route) => ({ route, hono: hono[route], effect: effect[route] })),
+    ).toEqual([])
+  })
+
   test("allows requests when auth is disabled", async () => {
     await using tmp = await tmpdir({ git: true })
     await Bun.write(`${tmp.path}/hello.txt`, "hello")

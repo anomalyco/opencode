@@ -1,11 +1,11 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
-import { Session } from "../session"
+import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { Effect, Schema } from "effect"
 
 export interface TaskPromptOps {

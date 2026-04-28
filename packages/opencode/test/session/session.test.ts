@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Session as SessionNs } from "../../src/session"
+import { Session as SessionNs } from "@/session/session"
 import { Bus } from "../../src/bus"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -54,6 +54,7 @@ describe("session.created event", () => {
         expect(receivedInfo?.id).toBe(info.id)
         expect(receivedInfo?.projectID).toBe(info.projectID)
         expect(receivedInfo?.directory).toBe(info.directory)
+        expect(receivedInfo?.path).toBe(info.path)
         expect(receivedInfo?.title).toBe(info.title)
 
         await remove(info.id)

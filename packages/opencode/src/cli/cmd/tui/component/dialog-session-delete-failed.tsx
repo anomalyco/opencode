@@ -42,6 +42,8 @@ export function DialogSessionDeleteFailed(props: {
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
       void confirm()
     }
     if (evt.name === "left" || evt.name === "up") {

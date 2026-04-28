@@ -4,7 +4,9 @@ import path from "node:path"
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import z from "zod"
+import { isRecord } from "@/util/record"
 import { createSimpleContext } from "./helper"
+import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -29,6 +31,7 @@ const PositionSchema = z.object({
 const EditorSelectionSchema = z.object({
   text: z.string(),
   filePath: z.string(),
+  source: z.enum(["websocket", "zed"]).optional(),
   selection: z.object({
     start: PositionSchema,
     end: PositionSchema,
@@ -90,6 +93,8 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       let reconnect: ReturnType<typeof setTimeout> | undefined
       let attempt = 0
       let requestID = 0
+      let zedSelection: Promise<void> | undefined
+      let lastZedSelectionKey: string | undefined
       const pending = new Map<number, string>()
 
       const send = (payload: JsonRpcMessage) => {
@@ -103,10 +108,18 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         send({ id: requestID, method, params })
       }
 
-      const scheduleReconnect = (delay: number) => {
+      const scheduleReconnect = () => {
         if (closed) return
         if (reconnect) clearTimeout(reconnect)
+        attempt += 1
+        const delay = Math.min(1000 * 2 ** (attempt - 1), 10_000)
         reconnect = setTimeout(connect, delay)
+      }
+
+      const scheduleZedPoll = () => {
+        if (closed) return
+        if (reconnect) clearTimeout(reconnect)
+        reconnect = setTimeout(connect, 1000)
       }
 
       const connect = () => {
@@ -114,8 +127,31 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
         const connection = resolveEditorConnection()
         if (!connection) {
-          setStore("status", "disabled")
-          scheduleReconnect(1000)
+          const dbPath = resolveZedDbPath()
+          if (!dbPath) {
+            setStore("status", "disabled")
+            scheduleReconnect()
+            return
+          }
+          zedSelection ??= resolveZedSelection(dbPath)
+            .then((result) => {
+              if (closed || socket) return
+              if (result.type === "unavailable") return
+              const selection = result.type === "selection" ? result.selection : undefined
+              const key = editorSelectionKey(selection)
+              if (key !== lastZedSelectionKey) {
+                lastZedSelectionKey = key
+                setStore("selection", selection)
+                setStore("status", selection ? "connected" : "disabled")
+              }
+            })
+            .catch(() => {
+              // Keep the last known Zed selection for transient polling failures.
+            })
+            .finally(() => {
+              zedSelection = undefined
+            })
+          scheduleZedPoll()
           return
         }
 
@@ -145,7 +181,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
           const selection =
             message.method === "selection_changed" ? EditorSelectionSchema.safeParse(message.params) : undefined
           if (selection?.success) {
-            setStore("selection", selection.data)
+            setStore("selection", { ...selection.data, source: "websocket" })
             return
           }
 
@@ -179,13 +215,11 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
           if (closed) return
 
           setStore("status", "connecting")
-          attempt += 1
-          const delay = Math.min(1000 * 2 ** (attempt - 1), 30000)
-          scheduleReconnect(delay)
+          scheduleReconnect()
         })
       }
 
-      scheduleReconnect(0)
+      connect()
 
       onCleanup(() => {
         closed = true
@@ -196,13 +230,16 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection())
+        return Boolean(resolveEditorConnection() || resolveZedDbPath())
       },
       connected() {
         return store.status === "connected"
       },
       selection() {
         return store.selection
+      },
+      clearSelection() {
+        setStore("selection", undefined)
       },
       onMention(listener: (mention: EditorMention) => void) {
         mentionListeners.add(listener)
@@ -252,12 +289,16 @@ function resolveEditorLockFile() {
   }
 
   const cwd = process.cwd()
+  // longest workspace folder that contains cwd; 0 if none match
+  const bestMatchLength = (lock: EditorLockFile) =>
+    Math.max(0, ...lock.workspaceFolders.map((folder) => pathContainsLength(folder, cwd)))
   const locks = entries
     .filter((entry) => entry.endsWith(".lock"))
     .map((entry) => readEditorLockFile(path.join(directory, entry)))
     .filter((entry): entry is EditorLockFile => Boolean(entry))
-    .sort((left, right) => scoreEditorLock(right, cwd) - scoreEditorLock(left, cwd))
-
+    .filter((entry) => bestMatchLength(entry) > 0)
+    // prefer locks with longer matching workspace folders, then more recent ones
+    .sort((left, right) => bestMatchLength(right) - bestMatchLength(left) || right.mtimeMs - left.mtimeMs)
   return locks[0]
 }
 
@@ -284,14 +325,22 @@ function readEditorLockFile(filePath: string): EditorLockFile | undefined {
   }
 }
 
-function scoreEditorLock(lock: EditorLockFile, cwd: string) {
-  const workspaceMatch = lock.workspaceFolders.some((folder) => pathContains(folder, cwd)) ? 1 : 0
-  return workspaceMatch * 1_000_000_000_000 + lock.mtimeMs
+function editorSelectionKey(selection: EditorSelection | undefined) {
+  if (!selection) return ""
+  return [
+    selection.filePath,
+    selection.selection.start.line,
+    selection.selection.start.character,
+    selection.selection.end.line,
+    selection.selection.end.character,
+    selection.text,
+  ].join("\0")
 }
 
-function pathContains(parent: string, child: string) {
-  const relative = path.relative(path.resolve(parent), path.resolve(child))
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+function pathContainsLength(parent: string, child: string) {
+  const resolved = path.resolve(parent)
+  const relative = path.relative(resolved, path.resolve(child))
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)) ? resolved.length : 0
 }
 
 function openEditorSocket(connection: EditorConnection) {
@@ -312,8 +361,4 @@ function parseMessage(value: unknown) {
   } catch {
     return
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
