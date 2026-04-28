@@ -28,9 +28,11 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, createEffect, on } from "solid-js"
+import { batch, createEffect, on, onCleanup } from "solid-js"
 import { Log } from "@/util/log"
 import { ConsoleState, emptyConsoleState, type ConsoleState as ConsoleStateType } from "@/config/console-state"
+
+const CODEX_QUOTA_REFRESH_INTERVAL = 60 * 1000
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -110,6 +112,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const event = useEvent()
     const project = useProject()
     const sdk = useSDK()
+    let codexQuotaSyncWorkspace: string | null | undefined
+
+    async function syncCodexQuota(workspace = project.workspace.current()) {
+      const syncWorkspace = workspace ?? null
+      if (codexQuotaSyncWorkspace === syncWorkspace) return
+      codexQuotaSyncWorkspace = syncWorkspace
+      try {
+        const result = await sdk.client.experimental.console.codexQuota({ workspace })
+        if (!result.data) return
+        if (workspace !== project.workspace.current()) return
+        setStore("console_state", "codexQuota", reconcile(result.data))
+      } finally {
+        if (codexQuotaSyncWorkspace === syncWorkspace) codexQuotaSyncWorkspace = undefined
+      }
+    }
 
     async function syncWorkspaces() {
       const workspace = project.workspace.current()
@@ -427,6 +444,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         })
         .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
+          void syncCodexQuota(workspace).catch(() => undefined)
           // non-blocking
           Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
@@ -465,6 +483,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         () => {
           fullSyncedSessions.clear()
           void bootstrap()
+        },
+      ),
+    )
+    createEffect(
+      on(
+        () => project.workspace.current(),
+        (workspace) => {
+          const interval = setInterval(() => {
+            void syncCodexQuota(workspace).catch(() => undefined)
+          }, CODEX_QUOTA_REFRESH_INTERVAL)
+          onCleanup(() => clearInterval(interval))
         },
       ),
     )

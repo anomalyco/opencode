@@ -105,7 +105,26 @@ function createFetch(log: Hit[]) {
         return json({ all: [], default: {}, connected: [] })
       }
       if (url.pathname === "/experimental/console") {
-        return json({})
+        return json({
+          consoleManagedProviders: [],
+          switchableOrgCount: 0,
+        })
+      }
+      if (url.pathname === "/experimental/console/codex-quota") {
+        const quotaCalls = log.filter(
+          (item) => item.path === "/experimental/console/codex-quota" && item.workspace === workspace,
+        ).length
+        return json({
+          fiveHour: {
+            remainingPercent: 60 + quotaCalls,
+            resetSeconds: 600,
+          },
+          weekly: {
+            remainingPercent: 14 + quotaCalls,
+            resetAt: 1700086400,
+          },
+          fetchedAt: 1700000000000 + quotaCalls * 1000,
+        })
       }
       if (url.pathname === "/agent") {
         return json([])
@@ -230,6 +249,50 @@ function Probe(props: {
 }
 
 describe("SyncProvider", () => {
+  test("hydrates and periodically refreshes codex quota without blocking console bootstrap", async () => {
+    const log: Hit[] = []
+    const refreshers: Array<() => void> = []
+    const originalSetInterval = globalThis.setInterval
+    globalThis.setInterval = ((handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 60 * 1000) {
+        refreshers.push(() => handler(...args))
+        return 0 as unknown as ReturnType<typeof setInterval>
+      }
+      return originalSetInterval(handler, timeout, ...args)
+    }) as typeof setInterval
+
+    try {
+      const { app, sync } = await mount(log)
+
+      try {
+        await wait(() => sync.status === "complete")
+        expect(log.some((item) => item.path === "/experimental/console")).toBe(true)
+        expect(log.some((item) => item.path === "/experimental/console/codex-quota")).toBe(true)
+        await wait(() => !!sync.data.console_state.codexQuota?.fiveHour)
+
+        expect(sync.data.console_state.codexQuota?.fiveHour).toEqual({
+          remainingPercent: 61,
+          resetSeconds: 600,
+        })
+        expect(sync.data.console_state.codexQuota?.weekly).toEqual({
+          remainingPercent: 15,
+          resetAt: 1700086400,
+        })
+        expect(sync.data.console_state.codexQuota?.fetchedAt).toBe(1700000001000)
+
+        expect(refreshers.length).toBeGreaterThan(0)
+        refreshers[0]()
+        await wait(() => log.filter((item) => item.path === "/experimental/console/codex-quota").length >= 2)
+        await wait(() => sync.data.console_state.codexQuota?.fiveHour?.remainingPercent === 62)
+        expect(sync.data.console_state.codexQuota?.fetchedAt).toBe(1700000002000)
+      } finally {
+        app.renderer.destroy()
+      }
+    } finally {
+      globalThis.setInterval = originalSetInterval
+    }
+  })
+
   test("re-runs bootstrap requests when the active workspace changes", async () => {
     const log: Hit[] = []
     const { app, project } = await mount(log)
