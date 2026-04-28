@@ -5,7 +5,7 @@ import { PtyID } from "../../src/pty/schema"
 import { Instance } from "../../src/project/instance"
 import { InstanceRoutes } from "../../src/server/routes/instance"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/pty"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
@@ -27,6 +27,22 @@ afterEach(async () => {
 })
 
 describe("pty HttpApi bridge", () => {
+  test("serves available shell list through experimental Effect routes", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const response = await app().request(PtyPaths.shells, { headers: { "x-opencode-directory": tmp.path } })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: expect.any(String),
+          name: expect.any(String),
+          acceptable: expect.any(Boolean),
+        }),
+      ]),
+    )
+  })
+
   testPty("serves PTY JSON routes through experimental Effect routes", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const headers = { "x-opencode-directory": tmp.path }
