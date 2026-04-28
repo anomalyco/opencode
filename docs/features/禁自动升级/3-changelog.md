@@ -6,7 +6,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 # 禁自动升级 — changelog
 
-**关联 commit**: `<待回填>`
+**关联 commit**: `592ed714e`
 **所在分支**: `feat/editable-file-viewer`
 **baseline tag**: 沿用线
 **触发原因**: user 担心 opencode 上游自动升级把 DeskFox 替换为官方版本,要求关闭所有自动升级入口和通道。详见 `1-spec.md` 触发原因段(Tauri shell 整壳替换 / sidecar CLI 自更新 / WSL install 三通道分析)。
