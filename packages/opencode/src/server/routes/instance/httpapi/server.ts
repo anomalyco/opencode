@@ -112,73 +112,87 @@ const runtime = HttpRouter.middleware()(
   Effect.succeed((effect) =>
     Effect.gen(function* () {
       const selected = ServerBackend.select()
-      yield* Effect.annotateCurrentSpan(
-        ServerBackend.attributes(ServerBackend.force(selected, "effect-httpapi")),
-      )
+      yield* Effect.annotateCurrentSpan(ServerBackend.attributes(ServerBackend.force(selected, "effect-httpapi")))
       return yield* effect
     }),
   ),
 ).layer
 
-const controlRoutes = HttpApiBuilder.layer(ControlApi).pipe(Layer.provide(controlHandlers))
-const globalRoutes = HttpApiBuilder.layer(GlobalApi).pipe(Layer.provide(globalHandlers))
+const rootApiRoutes = Layer.mergeAll(HttpApiBuilder.layer(ControlApi), HttpApiBuilder.layer(GlobalApi)).pipe(
+  Layer.provide([controlHandlers, globalHandlers]),
+)
 const instanceApiRoutes = Layer.mergeAll(
-  HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
-  HttpApiBuilder.layer(ExperimentalApi).pipe(Layer.provide(experimentalHandlers)),
-  HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),
-  HttpApiBuilder.layer(InstanceApi).pipe(Layer.provide(instanceHandlers)),
-  HttpApiBuilder.layer(McpApi).pipe(Layer.provide(mcpHandlers)),
-  HttpApiBuilder.layer(ProjectApi).pipe(Layer.provide(projectHandlers)),
-  HttpApiBuilder.layer(PtyApi).pipe(Layer.provide(ptyHandlers)),
-  HttpApiBuilder.layer(QuestionApi).pipe(Layer.provide(questionHandlers)),
-  HttpApiBuilder.layer(PermissionApi).pipe(Layer.provide(permissionHandlers)),
-  HttpApiBuilder.layer(ProviderApi).pipe(Layer.provide(providerHandlers)),
-  HttpApiBuilder.layer(SessionApi).pipe(Layer.provide(sessionHandlers)),
-  HttpApiBuilder.layer(SyncApi).pipe(Layer.provide(syncHandlers)),
-  HttpApiBuilder.layer(TuiApi).pipe(Layer.provide(tuiHandlers)),
-  HttpApiBuilder.layer(WorkspaceApi).pipe(Layer.provide(workspaceHandlers)),
+  HttpApiBuilder.layer(ConfigApi),
+  HttpApiBuilder.layer(ExperimentalApi),
+  HttpApiBuilder.layer(FileApi),
+  HttpApiBuilder.layer(InstanceApi),
+  HttpApiBuilder.layer(McpApi),
+  HttpApiBuilder.layer(ProjectApi),
+  HttpApiBuilder.layer(PtyApi),
+  HttpApiBuilder.layer(QuestionApi),
+  HttpApiBuilder.layer(PermissionApi),
+  HttpApiBuilder.layer(ProviderApi),
+  HttpApiBuilder.layer(SessionApi),
+  HttpApiBuilder.layer(SyncApi),
+  HttpApiBuilder.layer(TuiApi),
+  HttpApiBuilder.layer(WorkspaceApi),
+).pipe(
+  Layer.provide([
+    configHandlers,
+    experimentalHandlers,
+    fileHandlers,
+    instanceHandlers,
+    mcpHandlers,
+    projectHandlers,
+    ptyHandlers,
+    questionHandlers,
+    permissionHandlers,
+    providerHandlers,
+    sessionHandlers,
+    syncHandlers,
+    tuiHandlers,
+    workspaceHandlers,
+  ]),
 )
 
 const instanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute, instanceApiRoutes).pipe(
-  Layer.provide(authorizationLayer),
-  Layer.provide(instance),
+  Layer.provide([authorizationLayer, instance]),
 )
 
-export const routes = Layer.mergeAll(controlRoutes, globalRoutes, instanceRoutes)
-  .pipe(
-    Layer.provide(runtime),
-    Layer.provide(Account.defaultLayer),
-    Layer.provide(Agent.defaultLayer),
-    Layer.provide(Auth.defaultLayer),
-    Layer.provide(Command.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(File.defaultLayer),
-    Layer.provide(Format.defaultLayer),
-    Layer.provide(LSP.defaultLayer),
-    Layer.provide(Installation.defaultLayer),
-    Layer.provide(MCP.defaultLayer),
-    Layer.provide(Permission.defaultLayer),
-    Layer.provide(Project.defaultLayer),
-    Layer.provide(ProviderAuth.defaultLayer),
-    Layer.provide(Provider.defaultLayer),
-    Layer.provide(Pty.defaultLayer),
-    Layer.provide(Question.defaultLayer),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Session.defaultLayer),
-  )
-  .pipe(
-    Layer.provide(SessionRunState.defaultLayer),
-    Layer.provide(SessionStatus.defaultLayer),
-    Layer.provide(SessionSummary.defaultLayer),
-    Layer.provide(Skill.defaultLayer),
-    Layer.provide(Todo.defaultLayer),
-    Layer.provide(ToolRegistry.defaultLayer),
-    Layer.provide(Vcs.defaultLayer),
-    Layer.provide(Worktree.defaultLayer),
-    Layer.provide(Bus.layer),
-    Layer.provide(HttpServer.layerServices),
-    Layer.provideMerge(Observability.layer),
-  )
+export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
+  Layer.provide([
+    runtime,
+    Account.defaultLayer,
+    Agent.defaultLayer,
+    Auth.defaultLayer,
+    Command.defaultLayer,
+    Config.defaultLayer,
+    File.defaultLayer,
+    Format.defaultLayer,
+    LSP.defaultLayer,
+    Installation.defaultLayer,
+    MCP.defaultLayer,
+    Permission.defaultLayer,
+    Project.defaultLayer,
+    ProviderAuth.defaultLayer,
+    Provider.defaultLayer,
+    Pty.defaultLayer,
+    Question.defaultLayer,
+    Ripgrep.defaultLayer,
+    Session.defaultLayer,
+    SessionRunState.defaultLayer,
+    SessionStatus.defaultLayer,
+    SessionSummary.defaultLayer,
+    Skill.defaultLayer,
+    Todo.defaultLayer,
+    ToolRegistry.defaultLayer,
+    Vcs.defaultLayer,
+    Worktree.defaultLayer,
+    Bus.layer,
+    HttpServer.layerServices,
+  ]),
+  Layer.provideMerge(Observability.layer),
+)
 
 export const webHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {
