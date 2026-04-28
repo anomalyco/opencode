@@ -382,6 +382,13 @@ pub fn spawn_command(
             "OPENCODE_EXPERIMENTAL_FILEWATCHER".to_string(),
             "true".to_string(),
         ),
+        // FORK: 禁自动升级 — sidecar CLI 通道 B 双保险(2026-04-28)
+        // DeskFox 走 server 模式不进 TUI 路径,通道 B 触达概率近零;此 env 是永久守卫,即使
+        // 上游回流 TUI 路径调用 cli/upgrade.ts,守卫的 OPENCODE_DISABLE_AUTOUPDATE 也会阻断
+        (
+            "OPENCODE_DISABLE_AUTOUPDATE".to_string(),
+            "true".to_string(),
+        ),
         ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
         (
             "XDG_STATE_HOME".to_string(),
