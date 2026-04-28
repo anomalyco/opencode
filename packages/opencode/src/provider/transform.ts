@@ -5,7 +5,7 @@ import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Log } from "@/util"
+import { Log } from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "transform" })
 
