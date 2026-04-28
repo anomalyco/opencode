@@ -132,10 +132,40 @@ export const SessionMoveCommand = cmd({
       if (before.length === 0) return
       log.debug("session move parameters", { set })
       if (!args.dryRun) Database.use((db) => db.update(SessionTable).set(set).where(where).run())
-      console.log(args.format === "json" ? formatSessionJSON(before) : formatSessionTable(before))
+      await printSessions(before, args)
     })
   },
 })
+
+async function printSessions(sessions: Session.Info[], args: { format?: string; maxCount?: number }) {
+  let output: string
+  if (args.format === "json") {
+    output = formatSessionJSON(sessions)
+  } else {
+    output = formatSessionTable(sessions)
+  }
+  await paginate(output, { paginate: process.stdout.isTTY && !args.maxCount && args.format === "table" })
+}
+
+async function paginate(output: string, input?: { paginate?: boolean }) {
+  const shouldPaginate = input?.paginate ?? (process.stdout.isTTY && false)
+  if (!shouldPaginate) {
+    console.log(output)
+    return
+  }
+  const proc = Process.spawn(pagerCmd(), {
+    stdin: "pipe",
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+  if (!proc.stdin) {
+    console.log(output)
+    return
+  }
+  proc.stdin.write(output)
+  proc.stdin.end()
+  await proc.exited
+}
 
 export const SessionListCommand = cmd({
   command: "list",
@@ -162,33 +192,7 @@ export const SessionListCommand = cmd({
         return
       }
 
-      let output: string
-      if (args.format === "json") {
-        output = formatSessionJSON(sessions)
-      } else {
-        output = formatSessionTable(sessions)
-      }
-
-      const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
-
-      if (shouldPaginate) {
-        const proc = Process.spawn(pagerCmd(), {
-          stdin: "pipe",
-          stdout: "inherit",
-          stderr: "inherit",
-        })
-
-        if (!proc.stdin) {
-          console.log(output)
-          return
-        }
-
-        proc.stdin.write(output)
-        proc.stdin.end()
-        await proc.exited
-      } else {
-        console.log(output)
-      }
+      await printSessions(sessions, args)
     })
   },
 })
