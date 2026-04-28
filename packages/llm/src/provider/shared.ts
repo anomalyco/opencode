@@ -34,8 +34,8 @@ export interface ToolAccumulator {
  * - `encodeTarget(target)` produces the JSON string body for `jsonPost`.
  * - `decodeTarget(draft)` runs the Schema-driven `Draft → Target` decode
  *   inside an Effect, mapping parse errors to `InvalidRequestError` via
- *   `validateWith` so the result drops directly into `Adapter.define`'s
- *   `validate` field.
+ *   `validateWith` so the result drops directly into a protocol's `validate`
+ *   field.
  * - `decodeChunk(input)` decodes one streaming JSON chunk against the chunk
  *   schema. The default expects a `string` (the SSE data field); pass a
  *   custom decoder shape via `decodeChunkInput` for adapters whose framing
@@ -128,13 +128,6 @@ export const queryParams = (request: { readonly model: { readonly native?: Recor
   return value
 }
 
-export const withQuery = (url: string, params: Record<string, string> | undefined) => {
-  if (!params) return url
-  const result = new URL(url)
-  for (const [key, value] of Object.entries(params)) result.searchParams.set(key, value)
-  return result.toString()
-}
-
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
   return encodeJson(part.result.value)
@@ -156,16 +149,16 @@ const streamError = (adapter: string, message: string, cause: Cause.Cause<unknow
 }
 
 /**
- * Generic streaming-response decoder used by every adapter. Splits the
- * response stream into:
+ * Generic streaming-response decoder used by `Adapter.fromProtocol`. Splits
+ * the response stream into:
  *
  *   bytes → frames (caller-supplied) → chunk → (state, events)
  *
- * The `framing` step is the protocol-specific part — SSE adapters use the
- * `sseFraming` helper below; binary protocols (Bedrock event-stream)
- * supply their own byte-level decoder. Everything else (transport-error
- * normalization, schema decoding per chunk, stateful chunk → event mapping,
- * `onHalt` flush, terminal-error normalization) is shared.
+ * The `framing` step is the protocol-specific part — `Framing.sse` uses
+ * `sseFraming` below; binary protocols (Bedrock event-stream) supply their
+ * own byte-level decoder. Everything else (transport-error normalization,
+ * schema decoding per chunk, stateful chunk → event mapping, `onHalt` flush,
+ * terminal-error normalization) is shared.
  */
 export const framed = <Frame, Chunk, State, Event>(input: {
   readonly adapter: string
@@ -210,24 +203,6 @@ export const sseFraming = (
     Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]"),
     Stream.map((event) => event.data),
   )
-
-/**
- * SSE-specific convenience over `framed`. Identical surface as the original
- * `sse` helper; preserves the `decodeChunk: (data: string) => …` signature
- * so existing adapters don't need to know about `Frame`.
- */
-export const sse = <Chunk, State, Event>(input: {
-  readonly adapter: string
-  readonly response: HttpClientResponse.HttpClientResponse
-  readonly readError: string
-  readonly decodeChunk: (data: string) => Effect.Effect<Chunk, ProviderChunkError>
-  readonly initial: () => State
-  readonly process: (
-    state: State,
-    chunk: Chunk,
-  ) => Effect.Effect<readonly [State, ReadonlyArray<Event>], ProviderChunkError>
-  readonly onHalt?: (state: State) => ReadonlyArray<Event>
-}): Stream.Stream<Event, ProviderChunkError> => framed({ ...input, framing: sseFraming })
 
 /**
  * Canonical `InvalidRequestError` constructor. Lift one-line `const invalid =

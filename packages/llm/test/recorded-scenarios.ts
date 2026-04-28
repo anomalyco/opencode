@@ -3,8 +3,6 @@ import { Effect, Schema } from "effect"
 import { LLM, type LLMEvent, type LLMResponse, type ModelRef } from "../src"
 import { tool } from "../src/tool"
 
-export const helloPrompt = "Reply with exactly: Hello!"
-export const weatherPrompt = "Call get_weather with city exactly Paris."
 export const weatherToolName = "get_weather"
 
 export const weatherTool = LLM.toolDefinition({
@@ -40,7 +38,7 @@ export const textRequest = (input: {
     id: input.id,
     model: input.model,
     system: "You are concise.",
-    prompt: input.prompt ?? helloPrompt,
+    prompt: input.prompt ?? "Reply with exactly: Hello!",
     generation: { maxTokens: input.maxTokens ?? 20, temperature: 0 },
   })
 
@@ -53,7 +51,7 @@ export const weatherToolRequest = (input: {
     id: input.id,
     model: input.model,
     system: "Call tools exactly as requested.",
-    prompt: weatherPrompt,
+    prompt: "Call get_weather with city exactly Paris.",
     tools: [weatherTool],
     toolChoice: LLM.toolChoice(weatherTool),
     generation: { maxTokens: input.maxTokens ?? 80, temperature: 0 },
