@@ -203,6 +203,28 @@ export namespace Provider {
           options: ok ? {} : { apiKey: "public" },
         }
       }),
+      "mammouth-ai": Effect.fnUntraced(function* (input: Info) {
+        const envAll = Env.all()
+        const stored = yield* dep.auth(input.id)
+        const key = iife(() => {
+          const envKey = input.env.find((item) => envAll[item])
+          if (envKey) return envAll[envKey]
+          if (stored?.type === "api") return stored.key
+          return undefined
+        })
+
+        if (!key) {
+          for (const [id, model] of Object.entries(input.models)) {
+            if (model.cost.input === 0) continue
+            delete input.models[id]
+          }
+        }
+
+        return {
+          autoload: Object.keys(input.models).length > 0,
+          options: key ? { apiKey: key } : {},
+        }
+      }),
       openai: () =>
         Effect.succeed({
           autoload: false,

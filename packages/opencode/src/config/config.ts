@@ -1225,6 +1225,9 @@ export namespace Config {
             mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),
             mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.json"))),
             mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+            // mammouth-branded filenames — loaded last, take highest precedence
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "mammouth.json"))),
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "mammouth.jsonc"))),
           )
 
           const legacy = path.join(Global.Path.config, "config")
@@ -1342,7 +1345,7 @@ export namespace Config {
 
           for (const dir of unique(directories)) {
             if (dir.endsWith(".opencode") || dir === Flag.MAMMOUTH_CONFIG_DIR) {
-              for (const file of ["opencode.json", "opencode.jsonc"]) {
+              for (const file of ["opencode.json", "opencode.jsonc", "mammouth.json", "mammouth.jsonc"]) {
                 const source = path.join(dir, file)
                 log.debug(`loading config from ${source}`)
                 merge(source, yield* loadFile(source))

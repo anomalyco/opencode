@@ -204,7 +204,7 @@ export namespace ModelsDev {
     }
   }
 
-  const MAMMOUTH_PROVIDER: Provider = {
+  export const MAMMOUTH_PROVIDER: Provider = {
     id: "mammouth-ai",
     name: "Mammouth AI",
     api: `${MAMMOUTH_API_BASE}/v1`,
@@ -252,8 +252,11 @@ export namespace ModelsDev {
   })
 
   export async function get() {
-    const result = await Data()
-    return result as Record<string, Provider>
+    const result = (await Data()) as Record<string, Provider>
+    const provider = { ...MAMMOUTH_PROVIDER }
+    const models = await fetchMammouthModels()
+    provider.models = Object.fromEntries(models.map((m) => [m.id, m]))
+    return { ...result, [provider.id]: provider }
   }
 
   export async function refresh(force = false) {
