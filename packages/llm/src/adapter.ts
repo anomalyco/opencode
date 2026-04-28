@@ -1,9 +1,15 @@
 import { Effect, Stream } from "effect"
 import { HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import type { Auth } from "./auth"
+import { passthrough as authPassthrough } from "./auth"
+import type { Endpoint } from "./endpoint"
 import * as LLM from "./llm"
 import { RequestExecutor } from "./executor"
 import type { AnyPatch, Patch, PatchInput, PatchRegistry } from "./patch"
 import { context, emptyRegistry, plan, registry as makePatchRegistry, target as targetPatch } from "./patch"
+import type { Framing } from "./framing"
+import type { Protocol } from "./protocol"
+import { ProviderShared } from "./provider/shared"
 import type { LLMError, LLMEvent, LLMRequest, ModelRef, PatchTrace, PreparedRequest, ProtocolID } from "./schema"
 import { LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema } from "./schema"
 
@@ -125,6 +131,93 @@ export function compose<Draft, Target>(input: ComposeInput<Draft, Target>): Adap
     validate: input.validate ?? input.base.validate,
     toHttp: input.toHttp ?? input.base.toHttp,
     parse: input.parse ?? input.base.parse,
+  })
+}
+
+export interface FromProtocolInput<Draft, Target, Frame, Chunk, State> {
+  /** Adapter id used in registry lookup, error messages, and patch namespaces. */
+  readonly id: string
+  /** Provider id used to scope provider-specific adapters in the registry. */
+  readonly provider?: string
+  /** Semantic API contract — owns lowering, validation, encoding, and parsing. */
+  readonly protocol: Protocol<Draft, Target, Frame, Chunk, State>
+  /** Where the request is sent. */
+  readonly endpoint: Endpoint<Target>
+  /** Per-request transport authentication. Defaults to `Auth.passthrough`. */
+  readonly auth?: Auth
+  /** Stream framing — bytes -> frames before `protocol.decode`. */
+  readonly framing: Framing<Frame>
+  /** Static / per-request headers added before `auth` runs. */
+  readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
+  /** Provider patches that target this adapter (e.g. include-usage). */
+  readonly patches?: ReadonlyArray<Patch<Draft>>
+  /**
+   * Optional override for the adapter's protocol id. Defaults to
+   * `protocol.id`. Only set when an adapter intentionally registers under a
+   * different protocol than the wire it speaks (today: OpenAI-compatible Chat
+   * uses OpenAI Chat protocol but registers under `openai-compatible-chat`).
+   */
+  readonly protocolId?: ProtocolID
+}
+
+/**
+ * Build an `Adapter` by composing the four orthogonal pieces of a deployment:
+ *
+ * - `Protocol` — what is the API I'm speaking?
+ * - `Endpoint` — where do I send the request?
+ * - `Auth` — how do I authenticate it?
+ * - `Framing` — how do I cut the response stream into protocol frames?
+ *
+ * Plus optional `headers` and `patches` for cross-cutting deployment concerns
+ * (provider version pins, per-deployment quirks).
+ *
+ * This is the canonical adapter constructor. Reach for `define(...)` only
+ * when an adapter genuinely cannot fit the four-axis model.
+ */
+export function fromProtocol<Draft, Target, Frame, Chunk, State>(
+  input: FromProtocolInput<Draft, Target, Frame, Chunk, State>,
+): AdapterDefinition<Draft, Target> {
+  const auth = input.auth ?? authPassthrough
+  const protocol = input.protocol
+  const buildHeaders = input.headers ?? (() => ({}))
+
+  const toHttp = (target: Target, ctx: HttpContext) =>
+    Effect.gen(function* () {
+      const url = yield* input.endpoint({ request: ctx.request, target })
+      const body = protocol.encode(target)
+      const merged = { ...buildHeaders({ request: ctx.request }), ...ctx.request.model.headers }
+      const headers = yield* auth({
+        request: ctx.request,
+        method: "POST",
+        url: url.toString(),
+        body,
+        headers: merged,
+      })
+      return ProviderShared.jsonPost({ url: url.toString(), body, headers })
+    })
+
+  const parse = (response: HttpClientResponse.HttpClientResponse) =>
+    ProviderShared.framed({
+      adapter: input.id,
+      response,
+      readError: protocol.streamReadError,
+      framing: input.framing.frame,
+      decodeChunk: protocol.decode,
+      initial: protocol.initial,
+      process: protocol.process,
+      onHalt: protocol.onHalt,
+    })
+
+  return define({
+    id: input.id,
+    provider: input.provider,
+    protocol: input.protocolId ?? protocol.id,
+    patches: input.patches,
+    redact: protocol.redact,
+    prepare: protocol.prepare,
+    validate: protocol.validate,
+    toHttp,
+    parse,
   })
 }
 
