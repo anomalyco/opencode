@@ -20,7 +20,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer, type JSX } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -37,6 +37,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { formatCodexQuotaMetrics } from "./metrics"
 
 export type PromptProps = {
   sessionID?: string
@@ -91,6 +92,7 @@ export function Prompt(props: PromptProps) {
   const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
+  const terminal = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
   const list = createMemo(() => props.placeholders?.normal ?? [])
@@ -159,6 +161,14 @@ export function Prompt(props: PromptProps) {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
     }
+  })
+  const quota = createMemo(() => {
+    return formatCodexQuotaMetrics(sync.data.console_state.codexQuota, terminal().width)
+  })
+  const metrics = createMemo(() => {
+    const parts = [usage()?.context, quota(), usage()?.cost].filter((part): part is string => Boolean(part))
+    if (parts.length === 0) return
+    return parts.join(" · ")
   })
 
   const [store, setStore] = createStore<{
@@ -1231,10 +1241,10 @@ export function Prompt(props: PromptProps) {
               <Switch>
                 <Match when={store.mode === "normal"}>
                   <Switch>
-                    <Match when={usage()}>
+                    <Match when={metrics()}>
                       {(item) => (
                         <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+                          {item()}
                         </text>
                       )}
                     </Match>
