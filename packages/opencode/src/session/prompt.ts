@@ -1279,11 +1279,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         let step = 0
         const session = yield* sessions.get(sessionID)
 
+        // Cache conversation across prompt loop iterations to preserve prompt
+        // cache byte-identity. Full reload only on first iteration and after
+        // compaction/subtask/overflow. Tool-call continuation currently also
+        // reloads (model must see tool results); a future optimization can
+        // cache at the toModelMessages serialization layer.
+        let msgs: MessageV2.WithParts[] | undefined
+        let needsFullReload = true
+
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
           yield* slog.info("loop", { step })
 
-          let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
+          if (needsFullReload || !msgs) {
+            msgs = yield* MessageV2.filterCompactedEffect(sessionID)
+            needsFullReload = false
+          }
 
           let lastUser: MessageV2.User | undefined
           let lastAssistant: MessageV2.Assistant | undefined
@@ -1335,6 +1346,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
           if (task?.type === "subtask") {
             yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+            needsFullReload = true
             continue
           }
 
@@ -1347,6 +1359,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               overflow: task.overflow,
             })
             if (result === "stop") break
+            needsFullReload = true
             continue
           }
 
@@ -1356,6 +1369,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            needsFullReload = true
             continue
           }
 
@@ -1489,6 +1503,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 auto: true,
                 overflow: !handle.message.finish,
               })
+              needsFullReload = true
+            } else {
+              // Tool-call continuation: merge NEW messages from DB into the
+              // cached array. Existing messages keep their cached bytes
+              // (preserving prompt cache identity even though their tool
+              // parts transitioned pending→completed in the DB). Only
+              // genuinely new messages (the assistant's response with tool
+              // results) are appended.
+              const fresh = yield* MessageV2.filterCompactedEffect(sessionID)
+              const existing = new Map(msgs!.map((m) => [m.info.id, m]))
+              for (const msg of fresh) {
+                if (!existing.has(msg.info.id)) {
+                  msgs!.push(msg)
+                }
+              }
             }
             return "continue" as const
           }).pipe(Effect.ensuring(instruction.clear(handle.message.id)))
