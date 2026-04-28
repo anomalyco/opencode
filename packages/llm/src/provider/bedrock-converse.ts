@@ -2,9 +2,12 @@ import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { AwsV4Signer } from "aws4fetch"
 import { Effect, Option, Schema, Stream } from "effect"
-import { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
+import type { Auth } from "../auth"
+import { Endpoint } from "../endpoint"
+import type { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { Protocol } from "../protocol"
 import {
   Usage,
   type CacheHint,
@@ -294,11 +297,7 @@ const region = (request: LLMRequest) => {
   return "us-east-1"
 }
 
-const baseUrl = (request: LLMRequest) => {
-  const configured = request.model.baseURL
-  if (configured) return configured.replace(/\/+$/, "")
-  return `https://bedrock-runtime.${region(request)}.amazonaws.com`
-}
+const defaultBaseURL = (request: LLMRequest) => `https://bedrock-runtime.${region(request)}.amazonaws.com`
 
 const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   toolSpec: {
@@ -555,31 +554,35 @@ const signRequest = (input: {
       invalid(`Bedrock Converse SigV4 signing failed: ${error instanceof Error ? error.message : String(error)}`),
   })
 
-const toHttp = Effect.fn("BedrockConverse.toHttp")(function* (target: BedrockConverseTarget, request: LLMRequest) {
-  const url = `${baseUrl(request)}/model/${encodeURIComponent(target.modelId)}/converse-stream`
-  const body = encodeTarget(target)
-
-  if (isBearerAuth(request.model.headers)) {
-    return ProviderShared.jsonPost({ url, body, headers: request.model.headers })
-  }
-
-  const credentials = credentialsFromInput(request)
-  if (!credentials) {
-    return yield* invalid(
-      "Bedrock Converse requires either a Bearer API key in headers or AWS credentials in model.native.aws_credentials",
-    )
-  }
-  // SigV4 signs the request including `content-type`. The signing input must
-  // match what `jsonPost` ultimately sends, so set `content-type` here for
-  // signing — `jsonPost` then sets the same value (caller-supplied keys win
-  // on equal case) and the signature stays valid.
-  const headersForSigning: Record<string, string> = {
-    ...request.model.headers,
-    "content-type": "application/json",
-  }
-  const signed = yield* signRequest({ url, body, headers: headersForSigning, credentials })
-  return ProviderShared.jsonPost({ url, body, headers: { ...headersForSigning, ...signed } })
-})
+/**
+ * Bedrock auth. Bearer API key wins if `model.headers.authorization` is set;
+ * otherwise we sign the request with SigV4 using AWS credentials from
+ * `model.native.aws_credentials`. SigV4 must sign the exact bytes that get
+ * sent, so the `content-type: application/json` header is included in the
+ * signing input — `jsonPost` then sets the same value below and the signature
+ * stays valid.
+ */
+const auth: Auth = (input) =>
+  Effect.gen(function* () {
+    if (isBearerAuth(input.headers)) return input.headers
+    const credentials = credentialsFromInput(input.request)
+    if (!credentials) {
+      return yield* invalid(
+        "Bedrock Converse requires either a Bearer API key in headers or AWS credentials in model.native.aws_credentials",
+      )
+    }
+    const headersForSigning: Record<string, string> = {
+      ...input.headers,
+      "content-type": "application/json",
+    }
+    const signed = yield* signRequest({
+      url: input.url,
+      body: input.body,
+      headers: headersForSigning,
+      credentials,
+    })
+    return { ...headersForSigning, ...signed }
+  })
 
 const mapFinishReason = (reason: string): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence") return "stop"
@@ -781,11 +784,17 @@ const consumeFrames = (state: FrameBufferState, chunk: Uint8Array) =>
     return [cursor, out] as const
   })
 
-// AWS event-stream framing: byte stream → already-parsed chunk objects.
-// `mapAccumEffect` flattens the per-step `ReadonlyArray` so the downstream
-// stream sees one parsed object per emitted frame.
-const eventStreamFraming = (bytes: Stream.Stream<Uint8Array, ProviderChunkError>) =>
-  bytes.pipe(Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames))
+/**
+ * AWS event-stream framing for Bedrock Converse. Each frame is decoded by
+ * `@smithy/eventstream-codec` (length + header + payload + CRC) and rewrapped
+ * under its `:event-type` header so the chunk schema can match the JSON
+ * payload directly. Reusable for any AWS service that wraps JSON payloads in
+ * event-stream frames keyed by `:event-type`.
+ */
+const framing: Framing<object> = {
+  id: "aws-event-stream",
+  frame: (bytes) => bytes.pipe(Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames)),
+}
 
 // If a stream ends after `messageStop` but before `metadata` (rare but
 // possible on truncated transports), still surface a terminal finish.
@@ -794,26 +803,42 @@ const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
     ? [{ type: "request-finish", reason: mapFinishReason(state.pendingStopReason) }]
     : []
 
-const parseStream = (response: HttpClientResponse.HttpClientResponse) =>
-  ProviderShared.framed({
-    adapter: ADAPTER,
-    response,
-    readError: "Failed to read Bedrock Converse stream",
-    framing: eventStreamFraming,
-    decodeChunk,
-    initial: (): ParserState => ({ tools: {}, pendingStopReason: undefined }),
-    process: processChunk,
-    onHalt,
-  })
-
-export const adapter = Adapter.define<BedrockConverseDraft, BedrockConverseTarget>({
-  id: ADAPTER,
-  protocol: "bedrock-converse",
-  redact: (target) => target,
+/**
+ * The Bedrock Converse protocol — request lowering, target validation,
+ * body encoding, and the streaming-chunk state machine.
+ */
+export const protocol = Protocol.define<
+  BedrockConverseDraft,
+  BedrockConverseTarget,
+  object,
+  BedrockChunk,
+  ParserState
+>({
+  id: "bedrock-converse",
   prepare,
   validate: ProviderShared.validateWith(decodeTarget),
-  toHttp: (target, context) => toHttp(target, context.request),
-  parse: parseStream,
+  encode: encodeTarget,
+  redact: (target) => target,
+  decode: decodeChunk,
+  initial: () => ({ tools: {}, pendingStopReason: undefined }),
+  process: processChunk,
+  onHalt,
+  streamReadError: "Failed to read Bedrock Converse stream",
+})
+
+export const adapter = Adapter.fromProtocol({
+  id: ADAPTER,
+  provider: "bedrock",
+  protocol,
+  endpoint: Endpoint.baseURL({
+    // Bedrock's URL embeds the region in the host and the validated modelId
+    // in the path. We reach into the target after target patches so the URL
+    // matches the body that gets signed.
+    default: ({ request }) => defaultBaseURL(request),
+    path: ({ target }) => `/model/${encodeURIComponent(target.modelId)}/converse-stream`,
+  }),
+  auth,
+  framing,
 })
 
 export const model = (input: BedrockConverseModelInput) => {

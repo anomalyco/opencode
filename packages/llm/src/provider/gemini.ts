@@ -1,7 +1,9 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
+import { Endpoint } from "../endpoint"
+import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { Protocol } from "../protocol"
 import {
   Usage,
   type FinishReason,
@@ -146,8 +148,8 @@ const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
 
 const invalid = ProviderShared.invalidRequest
 
-const baseUrl = (request: LLMRequest) =>
-  ProviderShared.trimBaseUrl(request.model.baseURL ?? "https://generativelanguage.googleapis.com/v1beta")
+/** Default Gemini base URL. Overridden by `model.baseURL` when set. */
+const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 const mediaData = ProviderShared.mediaBytes
 
@@ -380,15 +382,6 @@ const prepare = Effect.fn("Gemini.prepare")(function* (request: LLMRequest) {
   }
 })
 
-const toHttp = (target: GeminiTarget, request: LLMRequest) =>
-  Effect.succeed(
-    ProviderShared.jsonPost({
-      url: `${baseUrl(request)}/models/${request.model.id}:streamGenerateContent?alt=sse`,
-      body: encodeTarget(target),
-      headers: request.model.headers,
-    }),
-  )
-
 const mapUsage = (usage: GeminiUsage | undefined) => {
   if (!usage) return undefined
   return new Usage({
@@ -458,25 +451,34 @@ const processChunk = (state: ParserState, chunk: GeminiChunk) => {
   }, events] as const)
 }
 
-const events = (response: HttpClientResponse.HttpClientResponse) =>
-  ProviderShared.sse({
-    adapter: ADAPTER,
-    response,
-    readError: "Failed to read Gemini stream",
-    decodeChunk,
-    initial: (): ParserState => ({ hasToolCalls: false, nextToolCallId: 0 }),
-    process: processChunk,
-    onHalt: finish,
-  })
-
-export const adapter = Adapter.define<GeminiDraft, GeminiTarget>({
-  id: ADAPTER,
-  protocol: "gemini",
-  redact: (target) => target,
+/**
+ * The Gemini protocol — request lowering, target validation, body encoding,
+ * and the streaming-chunk state machine. Used by Google AI Studio Gemini and
+ * (once registered) Vertex Gemini.
+ */
+export const protocol = Protocol.define<GeminiDraft, GeminiTarget, string, GeminiChunk, ParserState>({
+  id: "gemini",
   prepare,
   validate: ProviderShared.validateWith(decodeTarget),
-  toHttp: (target, context) => toHttp(target, context.request),
-  parse: events,
+  encode: encodeTarget,
+  redact: (target) => target,
+  decode: decodeChunk,
+  initial: () => ({ hasToolCalls: false, nextToolCallId: 0 }),
+  process: processChunk,
+  onHalt: finish,
+  streamReadError: "Failed to read Gemini stream",
+})
+
+export const adapter = Adapter.fromProtocol({
+  id: ADAPTER,
+  provider: "google",
+  protocol,
+  endpoint: Endpoint.baseURL({
+    default: DEFAULT_BASE_URL,
+    // Gemini's path embeds the model id and pins SSE framing at the URL level.
+    path: ({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`,
+  }),
+  framing: Framing.sse,
 })
 
 export const model = (input: GeminiModelInput) => {

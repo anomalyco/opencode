@@ -1,7 +1,9 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
+import { Endpoint } from "../endpoint"
+import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { Protocol } from "../protocol"
 import {
   Usage,
   type CacheHint,
@@ -198,7 +200,11 @@ const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
 
 const invalid = ProviderShared.invalidRequest
 
-const baseUrl = (request: LLMRequest) => ProviderShared.trimBaseUrl(request.model.baseURL ?? "https://api.anthropic.com/v1")
+/** Default Anthropic base URL. Overridden by `model.baseURL` when set. */
+const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
+
+/** Pinned API version sent on every request. */
+const ANTHROPIC_VERSION = "2023-06-01"
 
 const cacheControl = (cache: CacheHint | undefined) => cache?.type === "ephemeral" ? { type: "ephemeral" as const } : undefined
 
@@ -331,15 +337,6 @@ const prepare = Effect.fn("AnthropicMessages.prepare")(function* (request: LLMRe
     thinking: budget ? { type: "enabled" as const, budget_tokens: budget } : undefined,
   }
 })
-
-const toHttp = (target: AnthropicMessagesTarget, request: LLMRequest) =>
-  Effect.succeed(
-    ProviderShared.jsonPost({
-      url: `${baseUrl(request)}/messages`,
-      body: encodeTarget(target),
-      headers: { "anthropic-version": "2023-06-01", ...request.model.headers },
-    }),
-  )
 
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence" || reason === "pause_turn") return "stop"
@@ -499,24 +496,37 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
     return [state, []] as const
   })
 
-const events = (response: HttpClientResponse.HttpClientResponse) =>
-  ProviderShared.sse({
-    adapter: ADAPTER,
-    response,
-    readError: "Failed to read Anthropic Messages stream",
-    decodeChunk,
-    initial: (): ParserState => ({ tools: {} }),
-    process: processChunk,
-  })
-
-export const adapter = Adapter.define<AnthropicMessagesDraft, AnthropicMessagesTarget>({
-  id: ADAPTER,
-  protocol: "anthropic-messages",
-  redact: (target) => target,
+/**
+ * The Anthropic Messages protocol — request lowering, target validation,
+ * body encoding, and the streaming-chunk state machine. Used by native
+ * Anthropic Cloud and (once registered) Vertex Anthropic / Bedrock-hosted
+ * Anthropic passthrough.
+ */
+export const protocol = Protocol.define<
+  AnthropicMessagesDraft,
+  AnthropicMessagesTarget,
+  string,
+  AnthropicChunk,
+  ParserState
+>({
+  id: "anthropic-messages",
   prepare,
   validate: ProviderShared.validateWith(decodeTarget),
-  toHttp: (target, context) => toHttp(target, context.request),
-  parse: events,
+  encode: encodeTarget,
+  redact: (target) => target,
+  decode: decodeChunk,
+  initial: () => ({ tools: {} }),
+  process: processChunk,
+  streamReadError: "Failed to read Anthropic Messages stream",
+})
+
+export const adapter = Adapter.fromProtocol({
+  id: ADAPTER,
+  provider: "anthropic",
+  protocol,
+  endpoint: Endpoint.baseURL({ default: DEFAULT_BASE_URL, path: "/messages" }),
+  framing: Framing.sse,
+  headers: () => ({ "anthropic-version": ANTHROPIC_VERSION }),
 })
 
 export const model = (input: AnthropicMessagesModelInput) => {

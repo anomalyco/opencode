@@ -22,22 +22,24 @@ export interface EndpointInput<Target> {
 }
 
 /**
- * Build a URL from the model's `baseURL` (or a default) plus a fixed path.
+ * Build a URL from the model's `baseURL` (or a default) plus a path.
  * Honors `model.native.queryParams` so adapters that need request-level query
- * params (Azure `api-version`, Gemini `key`, etc.) do not have to thread them
- * through manually.
+ * params (Azure `api-version`, etc.) do not have to thread them through
+ * manually.
  *
- * `path` may be a string or a function of `(request, target) -> string` for
- * adapters whose URL embeds the model id, region, or another target field.
+ * Both `default` and `path` may be strings or functions of the
+ * `EndpointInput`, for adapters whose URL embeds the model id, region, or
+ * another target field.
  */
 export const baseURL = <Target>(input: {
-  readonly default?: string
+  readonly default?: string | ((input: EndpointInput<Target>) => string)
   readonly path: string | ((input: EndpointInput<Target>) => string)
   /** Error message used when neither `model.baseURL` nor `default` is set. */
   readonly required?: string
 }): Endpoint<Target> => (ctx) =>
   Effect.gen(function* () {
-    const base = ctx.request.model.baseURL ?? input.default
+    const fallback = typeof input.default === "function" ? input.default(ctx) : input.default
+    const base = ctx.request.model.baseURL ?? fallback
     if (!base) return yield* ProviderShared.invalidRequest(input.required ?? "Missing baseURL")
     const path = typeof input.path === "string" ? input.path : input.path(ctx)
     const url = new URL(`${ProviderShared.trimBaseUrl(base)}${path}`)

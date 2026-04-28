@@ -1,7 +1,9 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
+import { Endpoint } from "../endpoint"
+import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { Protocol } from "../protocol"
 import {
   Usage,
   type FinishReason,
@@ -139,7 +141,8 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-const baseUrl = (request: LLMRequest) => ProviderShared.trimBaseUrl(request.model.baseURL ?? "https://api.openai.com/v1")
+/** Default OpenAI Responses base URL. Overridden by `model.baseURL` when set. */
+const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   type: "function",
@@ -219,15 +222,6 @@ const prepare = Effect.fn("OpenAIResponses.prepare")(function* (request: LLMRequ
     top_p: request.generation.topP,
   }
 })
-
-const toHttp = (target: OpenAIResponsesTarget, request: LLMRequest) =>
-  Effect.succeed(
-    ProviderShared.jsonPost({
-      url: ProviderShared.withQuery(`${baseUrl(request)}/responses`, ProviderShared.queryParams(request)),
-      body: encodeTarget(target),
-      headers: request.model.headers,
-    }),
-  )
 
 const mapUsage = (usage: OpenAIResponsesUsage | undefined) => {
   if (!usage) return undefined
@@ -365,24 +359,35 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
     return [state, []] as const
   })
 
-const events = (response: HttpClientResponse.HttpClientResponse) =>
-  ProviderShared.sse({
-    adapter: ADAPTER,
-    response,
-    readError: "Failed to read OpenAI Responses stream",
-    decodeChunk,
-    initial: (): ParserState => ({ tools: {} }),
-    process: processChunk,
-  })
-
-export const adapter = Adapter.define<OpenAIResponsesDraft, OpenAIResponsesTarget>({
-  id: ADAPTER,
-  protocol: "openai-responses",
-  redact: (target) => target,
+/**
+ * The OpenAI Responses protocol — request lowering, target validation, body
+ * encoding, and the streaming-chunk state machine. Used by native OpenAI and
+ * (once registered) Azure OpenAI Responses.
+ */
+export const protocol = Protocol.define<
+  OpenAIResponsesDraft,
+  OpenAIResponsesTarget,
+  string,
+  OpenAIResponsesChunk,
+  ParserState
+>({
+  id: "openai-responses",
   prepare,
   validate: ProviderShared.validateWith(decodeTarget),
-  toHttp: (target, context) => toHttp(target, context.request),
-  parse: events,
+  encode: encodeTarget,
+  redact: (target) => target,
+  decode: decodeChunk,
+  initial: () => ({ tools: {} }),
+  process: processChunk,
+  streamReadError: "Failed to read OpenAI Responses stream",
+})
+
+export const adapter = Adapter.fromProtocol({
+  id: ADAPTER,
+  provider: "openai",
+  protocol,
+  endpoint: Endpoint.baseURL({ default: DEFAULT_BASE_URL, path: "/responses" }),
+  framing: Framing.sse,
 })
 
 export const model = (input: OpenAIResponsesModelInput) => {
