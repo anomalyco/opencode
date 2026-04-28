@@ -53,7 +53,12 @@ export function readCommentMetadata(value: unknown) {
   } satisfies PromptComment
 }
 
-export function formatCommentNote(input: { path: string; selection?: FileSelection; comment: string }) {
+export function formatCommentNote(input: {
+  path: string
+  selection?: FileSelection
+  comment: string
+  preview?: string
+}) {
   const start = input.selection ? Math.min(input.selection.startLine, input.selection.endLine) : undefined
   const end = input.selection ? Math.max(input.selection.startLine, input.selection.endLine) : undefined
   const range =
@@ -62,12 +67,15 @@ export function formatCommentNote(input: { path: string; selection?: FileSelecti
       : start === end
         ? `line ${start}`
         : `lines ${start} through ${end}`
-  return `The user made the following comment regarding ${range} of ${input.path}: ${input.comment}`
+  const head = `The user made the following comment regarding ${range} of ${input.path}: ${input.comment}`
+  const preview = input.preview?.trim()
+  if (!preview) return head
+  return `${head}\n\nSelected text:\n"""\n${preview}\n"""`
 }
 
 export function parseCommentNote(text: string) {
   const match = text.match(
-    /^The user made the following comment regarding (this file|line (\d+)|lines (\d+) through (\d+)) of (.+?): ([\s\S]+)$/,
+    /^The user made the following comment regarding (this file|line (\d+)|lines (\d+) through (\d+)) of (.+?): ([\s\S]+?)(?:\n\nSelected text:\n"""\n[\s\S]*?\n""")?$/,
   )
   if (!match) return
   const start = match[2] ? Number(match[2]) : match[3] ? Number(match[3]) : undefined
