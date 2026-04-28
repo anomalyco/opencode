@@ -769,6 +769,57 @@ describe("LLMNative.request", () => {
     })
   }))
 
+  it.effect("maps Azure native requests to OpenAI Responses by default", () => Effect.gen(function* () {
+    const mdl = model({
+      id: ModelID.make("gpt-5"),
+      providerID: ProviderID.make("azure"),
+      api: { id: "gpt-5-deployment", url: "", npm: "@ai-sdk/azure" },
+    })
+    const userID = MessageID.ascending()
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({
+        id: ProviderID.make("azure"),
+        key: "azure-key",
+        options: { resourceName: "opencode-test", apiVersion: "2025-04-01-preview" },
+      }, mdl),
+      model: mdl,
+      messages: [userMessage(mdl, userID, [textPart(userID, "Hello")])],
+    })
+
+    expect(request.model).toMatchObject({
+      id: "gpt-5-deployment",
+      provider: "azure",
+      protocol: "openai-responses",
+      baseURL: "https://opencode-test.openai.azure.com/openai/v1",
+      headers: { authorization: "Bearer azure-key" },
+      native: { queryParams: { "api-version": "2025-04-01-preview" } },
+    })
+  }))
+
+  it.effect("maps Azure useCompletionUrls native requests to OpenAI Chat", () => Effect.gen(function* () {
+    const mdl = model({
+      id: ModelID.make("gpt-4.1"),
+      providerID: ProviderID.make("azure"),
+      api: { id: "gpt-4-1-deployment", url: "", npm: "@ai-sdk/azure" },
+      options: { useCompletionUrls: true },
+    })
+    const userID = MessageID.ascending()
+    const request = yield* LLMNative.request({
+      provider: ProviderTest.info({ id: ProviderID.make("azure"), key: "azure-key", options: { resourceName: "opencode-test" } }, mdl),
+      model: mdl,
+      messages: [userMessage(mdl, userID, [textPart(userID, "Hello")])],
+    })
+
+    expect(request.model).toMatchObject({
+      id: "gpt-4-1-deployment",
+      provider: "azure",
+      protocol: "openai-chat",
+      baseURL: "https://opencode-test.openai.azure.com/openai/v1",
+      headers: { authorization: "Bearer azure-key" },
+      native: { queryParams: { "api-version": "v1" } },
+    })
+  }))
+
   it.effect("prepares Gemini text and tool request body", () => Effect.gen(function* () {
     const mdl = model({
       id: ModelID.make("gemini-2.5-flash"),
