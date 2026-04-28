@@ -26,6 +26,8 @@ import { createFileTreeStore } from "./file/tree-store"
 import { createSelectionStore } from "./file/selection-store"
 // FORK: 文件树剪切/复制板 (commit #3 of file-tree-dnd) 2026-04-27
 import { createClipboardStore } from "./file/clipboard-store"
+// FORK: 文件树撤销栈 (commit #4 of file-tree-dnd) 2026-04-28
+import { createUndoStack } from "./file/undo-stack"
 import { invalidateFromWatcher } from "./file/watcher"
 import {
   selectionFromLines,
@@ -92,6 +94,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     // FORK: 文件树剪切/复制板 store(commit #3 of file-tree-dnd)2026-04-27
     const clipboard = createClipboardStore()
+
+    // FORK: 文件树撤销栈(commit #4 of file-tree-dnd)2026-04-28
+    const undoStack = createUndoStack()
 
     const evictContent = (keep?: Set<string>) => {
       evictContentLru(keep, (target) => {
@@ -281,6 +286,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       selection,
       // FORK: 文件树剪切/复制板 store(commit #3 of file-tree-dnd)2026-04-27
       clipboard,
+      // FORK: 文件树撤销栈(commit #4 of file-tree-dnd)2026-04-28
+      undoStack,
       get,
       load,
       scrollTop,

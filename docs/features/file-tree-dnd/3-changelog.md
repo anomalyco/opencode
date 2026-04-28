@@ -59,7 +59,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ## Commit #3 — 剪切/粘贴/复制 + Tauri copy_path + 批量删除 + 多个 UX 修复
 
-**关联 commit**: `<待填>`
+**关联 commit**: `fe0994293`
 **实际改动**:
 - 新文件 `packages/app/src/context/file/clipboard-store.ts` (~60 行):`createClipboardStore()`(mode/paths/setCut/setCopy/clear/isCut/hasContent)
 - 新文件 `packages/app/src/hooks/use-file-tree-shortcuts.ts` (~85 行):全局 keydown 监听,触发条件 = `focus 在文件树` OR (`selection 非空` + `focus 不在可编辑控件`),支持 onCut/onCopy/onPaste/onUndo
@@ -102,11 +102,39 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 - 右键 OS-like:右键未选中行 → replace selection 为该行 ✅
 - 一次粘贴只触发一次(无 N 个 listener bug)✅
 
-## Commit #4 — Undo + 外部文件拖入
+## Commit #4 — Undo + 外部文件拖入(FileReader 路径) + tree-store 刷新 fix
 
 **关联 commit**: `<待填>`
-**实际改动**: 见 2-plan.md "Commit #4" 段
-**行数**: 待填
+**实际改动**:
+- 新文件 `packages/app/src/context/file/undo-stack.ts` (~50 行):`createUndoStack()` — push/pop/clear/size,容量 20。entry: `move`(pairs)/ `copy`(created)。pop 调用注入的 reverter,reverter 自己跑反向 rename / trash
+- `packages/app/src/context/file.tsx`(+5 行):createUndoStack + 挂到 `useFile().undoStack`
+- `packages/app/src/context/file/tree-store.ts`(+5 行,**关键 fix**):`force=true` 必须绕过 inflight check;原版本即便 force 也会等到旧 inflight 的 stale promise → 拖放后刷新拉到操作前的列表
+- `packages/desktop/src-tauri/src/text_file.rs`(+18 行):新 `write_binary_file_absolute_base64(path, base64)` 命令 — 解码 base64 → 校验 path 不存在 → fs::write,500MB 上限
+- `packages/desktop/src-tauri/src/lib.rs`(+1 行):注册新命令到 invoke_handler
+- `packages/app/src/components/file-tree.tsx`(~110 行):
+  - `handleMoveDrop` push undo `move` entry
+  - `pasteTo` push undo `move`/`copy` entry
+  - 新增 `handleExternalDrop(File[])` 走 FileReader → base64 → invoke `write_binary_file_absolute_base64`
+  - 新增 `readFileAsBase64(file)` helper
+  - 新增 `undoLast()`:从 undoStack pop,执行反向 rename/trash,刷新涉及目录
+  - 新增 Ctrl+Z handler 接入 useFileTreeShortcuts(只在 level 0 注册,与剪切粘贴一致避免 N 次触发)
+  - dropHandlers.onDragOver 加外部 OS files 接受(dataTransfer.types 含 "Files")
+  - dropHandlers.onDrop 优先处理 dataTransfer.files(走 FileReader 路径)
+- 新文件 `docs/features/file-tree-dnd/4-test-checklist.md`(~150 行):全套 32 条测试清单(A-G 七组),user 每次 build 对照
+
+**行数**: ~190 行 staged + 新文件(undo-stack 50 + 4-test-checklist 150) ≈ 390 行(<500,无 large-diff)
+
+**踩坑记录**:
+1. **tree-store force 不真 force**:`if (pending) return pending` 在 force=true 时仍执行,返回可能 stale 的旧 promise → 拖放后源父目录不刷新(用户报"文件夹内还显示已移走的文件,刷新页面也不消失")。fix:把 inflight 检查包进 `if (!opts?.force)`
+2. **Tauri webview 不暴露 file.path**:Windows WebView2 出于安全 OS 文件 drop 给 File 对象但 path=undefined。诊断 toast 验证后改走 FileReader → base64 → Tauri 写盘
+3. **第一版用 Tauri onDragDropEvent**:DPR 转换写好但实测仍不工作(原因未定位,可能 dragDropEnabled 默认行为变化或 capability 缺)。回退到纯 HTML5 + FileReader 方案,逻辑更简单可靠
+4. **HTML5 文件夹拖入限制**:dataTransfer.files 拖文件夹只给空 File 对象,不递归子项。v1 只支持文件,文件夹拖入跳过(已知限制)
+
+**验收(user 已手测通过 2026-04-28)**:
+- T8a-c Undo move/copy/连续 5 次撤销 ✅
+- T9a-c 外部 OS 文件拖到文件夹 / 多文件 / 拖到根 ✅
+- T9d 拖到 chat 输入框走 attachments ✅(没被文件树抢)
+- 已知限制 OS 文件夹拖入不支持(HTML5 限制)
 
 ## 总体 review 自检(commit #5 索引收尾时填)
 

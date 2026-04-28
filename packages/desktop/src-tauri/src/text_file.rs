@@ -74,3 +74,22 @@ pub fn read_binary_file_base64(root: String, path: String) -> Result<String, Str
         .map_err(|e| format!("read failed: {}: {}", full.display(), e))?;
     Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
 }
+
+// FORK: 文件树外部 OS 文件拖入(commit #4 of file-tree-dnd)— webview File 无 path,
+// 前端走 FileReader → base64 → 此命令写盘(absolute path,会先校验不存在)2026-04-28
+#[tauri::command]
+#[specta::specta]
+pub fn write_binary_file_absolute_base64(path: String, base64_content: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&base64_content)
+        .map_err(|e| format!("base64 decode failed: {}", e))?;
+    if bytes.len() > MAX_BINARY_READ_BYTES as usize {
+        return Err(format!("file too large: {} bytes", bytes.len()));
+    }
+    let p = std::path::Path::new(&path);
+    if p.exists() {
+        return Err(format!("already_exists: {}", path));
+    }
+    std::fs::write(&path, bytes).map_err(|e| format!("write failed: {}: {}", path, e))
+}

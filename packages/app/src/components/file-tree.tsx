@@ -28,6 +28,7 @@ import {
   Match,
   on,
   onCleanup,
+  onMount,
   Show,
   splitProps,
   Switch,
@@ -411,13 +412,17 @@ export default function FileTree(props: {
     if (valid.length === 0) return
 
     const errors: string[] = []
+    const movedPairs: { from: string; to: string }[] = []
+    const created: string[] = []
     for (const src of valid) {
       try {
         const target = await computeAvailableTarget(targetDirAbs, basename(src))
         if (mode === "cut") {
           await invoke("rename_path", { from: src, to: target })
+          movedPairs.push({ from: src, to: target })
         } else {
           await invoke("copy_path", { from: src, to: target })
+          created.push(target)
         }
       } catch (e) {
         errors.push(`${basename(src)}: ${e instanceof Error ? e.message : String(e)}`)
@@ -433,6 +438,10 @@ export default function FileTree(props: {
       }
     }
     await Promise.all([...refreshTargets].map((r) => file.tree.refresh(r)))
+
+    // FORK: push undo 栈(commit #4 of file-tree-dnd)2026-04-28
+    if (movedPairs.length > 0) file.undoStack.push({ kind: "move", pairs: movedPairs })
+    if (created.length > 0) file.undoStack.push({ kind: "copy", created })
 
     // cut 用完即弃,copy 保留供多次粘贴
     if (mode === "cut") clipboard.clear()
@@ -481,17 +490,77 @@ export default function FileTree(props: {
     return children.find((n) => n.absolute === abs)
   }
 
-  // 全局快捷键:文件树聚焦时 OR(selection 非空 + 焦点不在可编辑控件)时触发 Ctrl+X/C/V/Z
-  // 只在 level 0(根 FileTree)注册 — FileTree 是递归组件,每层都注册会导致 N 个 listener,
-  // 一次 keydown 触发 N 次粘贴(踩过坑:文件被自动 -1 -2 ... 多次创建,从第二次起 already_exists 报错)
+  // FORK: Ctrl+Z 撤销最近一次 move/copy(commit #4 of file-tree-dnd)2026-04-28
+  const undoLast = async () => {
+    const result = await file.undoStack.pop({
+      reverseMove: async (pairs) => {
+        const refreshAbs = new Set<string>()
+        const errors: string[] = []
+        // 反向 rename:to → from
+        for (const { from, to } of pairs) {
+          try {
+            await invoke("rename_path", { from: to, to: from })
+            // 收集需要刷新的源 + 目标父目录(基于 to/from 的 dirname)
+            const toParent = to.replace(/[/\\][^/\\]+$/, "")
+            const fromParent = from.replace(/[/\\][^/\\]+$/, "")
+            refreshAbs.add(toParent)
+            refreshAbs.add(fromParent)
+          } catch (e) {
+            errors.push(`${basename(to)}: ${e instanceof Error ? e.message : String(e)}`)
+          }
+        }
+        if (errors.length > 0) {
+          showToast({
+            variant: "error",
+            title: "撤销失败(部分)",
+            description: errors[0],
+          })
+        }
+        return { refreshAbs: [...refreshAbs] }
+      },
+      reverseCopy: async (created) => {
+        const refreshAbs = new Set<string>()
+        const errors: string[] = []
+        for (const path of created) {
+          try {
+            await invoke("trash_path", { path })
+            const parent = path.replace(/[/\\][^/\\]+$/, "")
+            refreshAbs.add(parent)
+          } catch (e) {
+            errors.push(`${basename(path)}: ${e instanceof Error ? e.message : String(e)}`)
+          }
+        }
+        if (errors.length > 0) {
+          showToast({
+            variant: "error",
+            title: "撤销失败(部分)",
+            description: errors[0],
+          })
+        }
+        return { refreshAbs: [...refreshAbs] }
+      },
+    })
+    if (!result) return // 栈空
+    // 刷新涉及的目录(rel)
+    const refreshRels = new Set<string>()
+    for (const abs of result.refreshAbs) {
+      const rel = absoluteToRelative(abs, sdk.directory)
+      if (rel !== null) refreshRels.add(rel)
+    }
+    await Promise.all([...refreshRels].map((r) => file.tree.refresh(r)))
+  }
+
+  // 全局快捷键:只在 level 0(根 FileTree)注册 — 递归组件每层注册会让 keydown 触发 N 次
   if (level === 0) {
     useFileTreeShortcuts({
       onCut: () => cutFor(null),
       onCopy: () => copyFor(null),
       onPaste: pasteSmart,
+      onUndo: undoLast,
       hasSelection: () => selection.paths().length > 0,
-      // onUndo 在 commit #4 接入
     })
+
+    // (外部 OS 文件 drop 走 dropHandlers 的 HTML5 路径 — Tauri webview 在 Windows 上 File 对象的非标准 path 字段可用,见 file-tree-dnd.ts parseExternalFilePaths)
   }
   // FORK-END
 
@@ -558,19 +627,21 @@ export default function FileTree(props: {
   }
   onCleanup(cancelSpringTimer)
 
-  /** 真正执行拖放移动:多源循环 rename + 错误聚合 + 刷新源父目录与目标 */
+  /** 真正执行拖放移动:多源循环 rename + push undo + 错误聚合 + 刷新源父目录与目标 */
   const handleMoveDrop = async (targetAbs: string, targetRel: string) => {
     const sources = draggingPaths()
-    if (sources.length === 0) return // 非 in-tree 拖动(commit #4 处理外部)
+    if (sources.length === 0) return // 非 in-tree 拖动 — commit #4 处理外部 OS 文件 drop 见 handleExternalDrop
 
     const valid = sources.filter((s) => isValidMoveTarget(s, { absolute: targetAbs, type: "directory" }))
     if (valid.length === 0) return // 全部无效(拖父进子 / 拖到自身 / 已在目标),静默 no-op
 
     const errors: string[] = []
+    const movedPairs: { from: string; to: string }[] = []
     for (const src of valid) {
       try {
         const targetPath = await computeAvailableTarget(targetAbs, basename(src))
         await invoke("rename_path", { from: src, to: targetPath })
+        movedPairs.push({ from: src, to: targetPath })
       } catch (e) {
         errors.push(`${basename(src)}: ${e instanceof Error ? e.message : String(e)}`)
       }
@@ -584,6 +655,11 @@ export default function FileTree(props: {
     }
     await Promise.all([...refreshTargets].map((r) => file.tree.refresh(r)))
 
+    // FORK: 入 undo 栈(commit #4 of file-tree-dnd)— 至少有一对成功才 push 2026-04-28
+    if (movedPairs.length > 0) {
+      file.undoStack.push({ kind: "move", pairs: movedPairs })
+    }
+
     if (errors.length > 0) {
       showToast({
         variant: "error",
@@ -593,22 +669,74 @@ export default function FileTree(props: {
     }
   }
 
+  /** OS 文件 drop(从 Windows Explorer 拖入)— 走 FileReader → base64 → Tauri 写盘
+   *  Tauri webview 在 Windows 上不暴露 file.path,只能用文件内容路径
+   *  注意:HTML5 dataTransfer.files 拖文件夹只给顶层 File 对象(无内容),不支持文件夹递归 — v1 跳过
+   *  (commit #4 of file-tree-dnd)2026-04-28 */
+  const handleExternalDrop = async (targetAbs: string, targetRel: string, files: ReadonlyArray<File>) => {
+    if (files.length === 0) return
+    const errors: string[] = []
+    const created: string[] = []
+    for (const file of files) {
+      try {
+        // 跳过文件夹(HTML5 拖文件夹只给空 File 对象,size=0 type="")
+        if (file.size === 0 && file.type === "") {
+          // 可能是空文件,可能是文件夹 — 保守起见仍尝试写空文件
+        }
+        const target = await computeAvailableTarget(targetAbs, file.name)
+        const base64 = await readFileAsBase64(file)
+        await invoke("write_binary_file_absolute_base64", { path: target, base64Content: base64 })
+        created.push(target)
+      } catch (e) {
+        errors.push(`${file.name}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    await file.tree.refresh(targetRel)
+    if (created.length > 0) {
+      file.undoStack.push({ kind: "copy", created })
+    }
+    if (errors.length > 0) {
+      showToast({
+        variant: "error",
+        title: errors.length === 1 ? "复制失败" : `${errors.length} 项复制失败`,
+        description: errors[0],
+      })
+    }
+  }
+
+  /** 把 File 读成 base64 字符串(去掉 data URL 前缀) */
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result
+        if (typeof result !== "string") return reject(new Error("FileReader returned non-string"))
+        const idx = result.indexOf(",")
+        resolve(idx >= 0 ? result.slice(idx + 1) : result)
+      }
+      reader.onerror = () => reject(reader.error ?? new Error("FileReader error"))
+      reader.readAsDataURL(file)
+    })
+  }
+
   /** 给文件夹行(level > 0)和树根(level 0 空白区)绑 drop handlers */
   const dropHandlers = (targetAbs: string, targetRel: string) => ({
     onDragOver: (event: DragEvent) => {
-      if (!isDragging()) return // 非 in-tree 拖动放行(commit #4 让 Tauri event 接管外部)
+      const inTree = isDragging()
+      // FORK: 外部 OS 文件拖入(从 Windows Explorer 等)— dataTransfer.types 含 "Files"(commit #4)2026-04-28
+      const externalFiles = event.dataTransfer?.types.includes("Files") ?? false
+      if (!inTree && !externalFiles) return
       event.preventDefault()
       event.stopPropagation()
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "move"
+      if (event.dataTransfer) event.dataTransfer.dropEffect = externalFiles ? "copy" : "move"
 
       // 仅在 target 真切换时重置 timer + 视觉 — 否则同一行的连续 dragover 会反复重置
-      // 注意:HTML5 dragleave 在子元素间移动时会假触发,不能用它来重置 timer
       if (dropTargetPath() === targetAbs) return
       cancelSpringTimer()
       setDropTargetPath(targetAbs)
 
       // spring-load:折叠或从未加载的目录 hover 600ms 自动展开(state undefined 也算"未展开")
-      if (targetRel !== props.path /* 跳过自己 FileTree 的根 */) {
+      if (targetRel !== props.path) {
         const state = file.tree.state(targetRel)
         if (!state?.expanded) {
           springTimer = setTimeout(() => {
@@ -618,11 +746,16 @@ export default function FileTree(props: {
         }
       }
     },
-    // 不在 dragleave 清 timer 或视觉 — 留给 onDragOver(target 切换时)/ onDrop / onDragEnd 处理
     onDrop: (event: DragEvent) => {
       event.preventDefault()
       event.stopPropagation()
       cancelSpringTimer()
+      // FORK: 外部 OS 文件 — Tauri webview 不暴露 file.path,直接拿 dataTransfer.files 走 FileReader 2026-04-28
+      const files = event.dataTransfer?.files
+      if (files && files.length > 0) {
+        void handleExternalDrop(targetAbs, targetRel, Array.from(files)).finally(() => resetDragState())
+        return
+      }
       void handleMoveDrop(targetAbs, targetRel).finally(() => resetDragState())
     },
   })
@@ -945,6 +1078,9 @@ export default function FileTree(props: {
                         dropTargetPath() === node.absolute,
                     }}
                     data-scope="filetree"
+                    // FORK: 给 Tauri onDragDropEvent 找 target 用(commit #4)2026-04-28
+                    data-folder-abs={node.absolute}
+                    data-folder-rel={node.path}
                     forceMount={false}
                     open={expanded()}
                     onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
@@ -1092,6 +1228,9 @@ export default function FileTree(props: {
       <ContextMenu.Trigger
         as="div"
         data-component="filetree"
+        // FORK: 给 Tauri onDragDropEvent 找 root target 用(commit #4)2026-04-28
+        data-tree-root-abs={sdk.directory}
+        data-tree-root-rel={props.path}
         classList={{
           [bodyClass]: true,
           // 拖动时整个根区域淡蓝背景提示可 drop

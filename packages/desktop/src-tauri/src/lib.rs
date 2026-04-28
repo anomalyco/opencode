@@ -526,7 +526,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             copy_path,           // FORK: 文件树复制粘贴 2026-04-27
             text_file::write_text_file,
             text_file::get_file_mtime,
-            text_file::read_binary_file_base64
+            text_file::read_binary_file_base64,
+            text_file::write_binary_file_absolute_base64 // FORK: 文件树外部 OS 文件拖入 2026-04-28
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
