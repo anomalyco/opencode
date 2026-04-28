@@ -1,10 +1,9 @@
-import { Effect, Stream } from "effect"
 import { Adapter } from "../adapter"
+import { Endpoint } from "../endpoint"
+import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
-import { ProviderChunkError, type LLMError, type LLMRequest } from "../schema"
-import { OpenAIChat, type OpenAIChatTarget } from "./openai-chat"
+import { OpenAIChat } from "./openai-chat"
 import { families, type ProviderFamily } from "./openai-compatible-family"
-import { ProviderShared } from "./shared"
 
 const ADAPTER = "openai-compatible-chat"
 
@@ -19,42 +18,24 @@ export type ProviderFamilyModelInput = Omit<OpenAICompatibleChatModelInput, "pro
   readonly baseURL?: string
 }
 
-const invalid = ProviderShared.invalidRequest
-
-const completionUrl = (request: LLMRequest) => {
-  if (!request.model.baseURL) return undefined
-  return ProviderShared.withQuery(
-    `${ProviderShared.trimBaseUrl(request.model.baseURL)}/chat/completions`,
-    ProviderShared.queryParams(request),
-  )
-}
-
-const toHttp = (target: OpenAIChatTarget, request: LLMRequest) =>
-  Effect.gen(function* () {
-    const url = completionUrl(request)
-    if (!url) return yield* invalid("OpenAI-compatible Chat requires a baseURL")
-    return ProviderShared.jsonPost({
-      url,
-      body: ProviderShared.encodeJson(target),
-      headers: request.model.headers,
-    })
-  })
-
-const mapParseError = (error: LLMError) => {
-  if (!(error instanceof ProviderChunkError)) return error
-  return new ProviderChunkError({
-    adapter: ADAPTER,
-    message: error.message.replace("OpenAI Chat", "OpenAI-compatible Chat"),
-    raw: error.raw,
-  })
-}
-
-export const adapter = Adapter.compose<OpenAIChatTarget, OpenAIChatTarget>({
+/**
+ * Adapter for non-OpenAI providers that expose an OpenAI Chat-compatible
+ * `/chat/completions` endpoint. Reuses `OpenAIChat.protocol` end-to-end and
+ * only overrides:
+ *
+ * - the registered protocol id (`openai-compatible-chat`) so providers can be
+ *   resolved per-family without colliding with native OpenAI;
+ * - the endpoint, which requires `model.baseURL` (no provider default).
+ */
+export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
-  base: OpenAIChat.adapter,
-  protocol: "openai-compatible-chat",
-  toHttp: (target, context) => toHttp(target, context.request),
-  parse: (response) => OpenAIChat.adapter.parse(response).pipe(Stream.mapError(mapParseError)),
+  protocol: OpenAIChat.protocol,
+  protocolId: "openai-compatible-chat",
+  endpoint: Endpoint.baseURL({
+    path: "/chat/completions",
+    required: "OpenAI-compatible Chat requires a baseURL",
+  }),
+  framing: Framing.sse,
 })
 
 export const model = (input: OpenAICompatibleChatModelInput) => {

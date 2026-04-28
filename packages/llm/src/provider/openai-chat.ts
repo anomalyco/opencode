@@ -1,7 +1,9 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
 import { Adapter } from "../adapter"
+import { Endpoint } from "../endpoint"
+import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
+import { Protocol } from "../protocol"
 import {
   Usage,
   type FinishReason,
@@ -152,7 +154,8 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-const baseUrl = (request: LLMRequest) => ProviderShared.trimBaseUrl(request.model.baseURL ?? "https://api.openai.com/v1")
+/** Default OpenAI Chat base URL. Overridden by `model.baseURL` when set. */
+const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
   type: "function",
@@ -242,15 +245,6 @@ const prepare = Effect.fn("OpenAIChat.prepare")(function* (request: LLMRequest) 
   }
 })
 
-const toHttp = (target: OpenAIChatTarget, request: LLMRequest) =>
-  Effect.succeed(
-    ProviderShared.jsonPost({
-      url: ProviderShared.withQuery(`${baseUrl(request)}/chat/completions`, ProviderShared.queryParams(request)),
-      body: encodeTarget(target),
-      headers: request.model.headers,
-    }),
-  )
-
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "stop") return "stop"
   if (reason === "length") return "length"
@@ -333,25 +327,37 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   ]
 }
 
-const events = (response: HttpClientResponse.HttpClientResponse) =>
-  ProviderShared.sse({
-    adapter: ADAPTER,
-    response,
-    readError: "Failed to read OpenAI Chat stream",
-    decodeChunk,
-    initial: (): ParserState => ({ tools: {}, toolCalls: [] }),
-    process: processChunk,
-    onHalt: finishEvents,
-  })
-
-export const adapter = Adapter.define<OpenAIChatDraft, OpenAIChatTarget>({
-  id: ADAPTER,
-  protocol: "openai-chat",
-  redact: (target) => target,
+/**
+ * The OpenAI Chat protocol — request lowering, target validation, body
+ * encoding, and the streaming-chunk state machine. Reused by every adapter
+ * that speaks OpenAI Chat over HTTP+SSE: native OpenAI, DeepSeek, TogetherAI,
+ * Cerebras, Baseten, Fireworks, DeepInfra, and (once added) Azure OpenAI Chat.
+ */
+export const protocol = Protocol.define<
+  OpenAIChatDraft,
+  OpenAIChatTarget,
+  string,
+  OpenAIChatChunk,
+  ParserState
+>({
+  id: "openai-chat",
   prepare,
   validate: ProviderShared.validateWith(decodeTarget),
-  toHttp: (target, context) => toHttp(target, context.request),
-  parse: events,
+  encode: encodeTarget,
+  redact: (target) => target,
+  decode: decodeChunk,
+  initial: () => ({ tools: {}, toolCalls: [] }),
+  process: processChunk,
+  onHalt: finishEvents,
+  streamReadError: "Failed to read OpenAI Chat stream",
+})
+
+export const adapter = Adapter.fromProtocol({
+  id: ADAPTER,
+  provider: "openai",
+  protocol,
+  endpoint: Endpoint.baseURL({ default: DEFAULT_BASE_URL, path: "/chat/completions" }),
+  framing: Framing.sse,
 })
 
 export const model = (input: OpenAIChatModelInput) => {
