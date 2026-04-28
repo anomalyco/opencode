@@ -16,6 +16,8 @@
     "mirror:upstream": "bun script/upstream.ts mirror",
     "plan:upstream": "bun script/upstream.ts plan",
     "sync:upstream": "bun script/upstream.ts sync",
+    "rebrand": "bun script/rebrand.ts",
+    "rebrand:check": "bun script/rebrand.ts --check",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"
