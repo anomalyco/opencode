@@ -9,8 +9,10 @@ import { Project } from "../../project/project"
 import { MCP } from "../../mcp"
 import { Session } from "../../session"
 import { Config } from "../../config/config"
-import { ConsoleState } from "../../config/console-state"
+import { CodexQuotaSnapshot, ConsoleState } from "../../config/console-state"
 import { Account, AccountID, OrgID } from "../../account"
+import { Auth } from "../../auth"
+import { getCodexQuotaSnapshot } from "../../plugin/codex"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -60,6 +62,31 @@ export const ExperimentalRoutes = lazy(() =>
           ...consoleState,
           switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
         })
+      },
+    )
+    .get(
+      "/console/codex-quota",
+      describeRoute({
+        summary: "Get Codex quota snapshot",
+        description: "Get the current Codex quota snapshot for the active OpenAI OAuth account.",
+        operationId: "experimental.console.codexQuota",
+        responses: {
+          200: {
+            description: "Codex quota snapshot",
+            content: {
+              "application/json": {
+                schema: resolver(CodexQuotaSnapshot),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const quota = await getCodexQuotaSnapshot({
+          getAuth: () => Auth.get("openai"),
+          setAuth: (auth) => Auth.set("openai", auth),
+        })
+        return c.json(quota ? { ...quota, fetchedAt: Date.now() } : {})
       },
     )
     .get(
