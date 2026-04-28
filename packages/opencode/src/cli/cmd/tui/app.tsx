@@ -728,6 +728,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
+      title: kv.get("file_context_enabled", true) ? "Disable file context" : "Enable file context",
+      value: "app.toggle.file_context",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("file_context_enabled", !kv.get("file_context_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
       title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
       value: "app.toggle.diffwrap",
       category: "System",

@@ -127,7 +127,7 @@ export const layer = Layer.effect(
                 Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
               }
             : undefined,
-          fetch: async (...args) => (await Server.Default()).app.fetch(...args),
+          fetch: async (...args) => Server.Default().app.fetch(...args),
         })
         const cfg = yield* config.get()
         const input: PluginInput = {

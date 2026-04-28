@@ -3,7 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { useMutation } from "@tanstack/solid-query"
+import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -15,6 +15,7 @@ import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
+import { loadMcpQuery } from "@/context/global-sync"
 
 const pollMs = 10_000
 
@@ -137,14 +138,14 @@ const useMcpToggleMutation = () => {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+  const queryClient = useQueryClient()
 
   return useMutation(() => ({
     mutationFn: async (name: string) => {
       const status = sync.data.mcp[name]
       await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
-      const result = await sdk.client.mcp.status()
-      if (result.data) sync.set("mcp", result.data)
     },
+    onSuccess: () => queryClient.refetchQueries({ queryKey: loadMcpQuery(sync.directory).queryKey }),
     onError: (err) => {
       showToast({
         variant: "error",
@@ -162,14 +163,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
-  const sdk = useSDK()
-
-  const [load, setLoad] = createStore({
-    lspDone: false,
-    lspLoading: false,
-    mcpDone: false,
-    mcpLoading: false,
-  })
 
   const fail = (err: unknown) => {
     showToast({
@@ -181,40 +174,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
 
   createEffect(() => {
     if (!props.shown()) return
-
-    if (!sync.data.mcp_ready && !load.mcpDone && !load.mcpLoading) {
-      setLoad("mcpLoading", true)
-      void sdk.client.mcp
-        .status()
-        .then((result) => {
-          sync.set("mcp", result.data ?? {})
-          sync.set("mcp_ready", true)
-        })
-        .catch((err) => {
-          setLoad("mcpDone", true)
-          fail(err)
-        })
-        .finally(() => {
-          setLoad("mcpLoading", false)
-        })
-    }
-
-    if (!sync.data.lsp_ready && !load.lspDone && !load.lspLoading) {
-      setLoad("lspLoading", true)
-      void sdk.client.lsp
-        .status()
-        .then((result) => {
-          sync.set("lsp", result.data ?? [])
-          sync.set("lsp_ready", true)
-        })
-        .catch((err) => {
-          setLoad("lspDone", true)
-          fail(err)
-        })
-        .finally(() => {
-          setLoad("lspLoading", false)
-        })
-    }
   })
 
   let dialogRun = 0
