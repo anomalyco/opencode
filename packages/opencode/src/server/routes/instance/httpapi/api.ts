@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { HttpApi } from "effect/unstable/httpapi"
 import { BusEvent } from "@/bus/bus-event"
 import { SyncEvent } from "@/sync"
+import { AutomationApi } from "./groups/automation"
 import { ConfigApi } from "./groups/config"
 import { ControlApi } from "./groups/control"
 import { EventApi } from "./groups/event"
@@ -34,6 +35,7 @@ export const RootHttpApi = HttpApi.make("opencode-root")
   .middleware(Authorization)
 
 export const InstanceHttpApi = HttpApi.make("opencode-instance")
+  .addHttpApi(AutomationApi)
   .addHttpApi(ConfigApi)
   .addHttpApi(ExperimentalApi)
   .addHttpApi(FileApi)

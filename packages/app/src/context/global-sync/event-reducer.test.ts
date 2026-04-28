@@ -134,6 +134,28 @@ describe("applyGlobalEvent", () => {
 })
 
 describe("applyDirectoryEvent", () => {
+  test("removes session status entries when sessions return to idle", () => {
+    const [store, setStore] = createStore(
+      baseState({
+        session_status: { ses_1: { type: "busy" } },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "session.status",
+        properties: { sessionID: "ses_1", status: { type: "idle" } },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session_status.ses_1).toBeUndefined()
+  })
+
   test("inserts root sessions in sorted order and updates sessionTotal", () => {
     const [store, setStore] = createStore(
       baseState({

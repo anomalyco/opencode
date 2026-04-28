@@ -48,6 +48,7 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
+const Automations = lazy(() => import("@/pages/automations"))
 const Session = lazy(() => import("@/pages/session"))
 
 const SessionRoute = Object.assign(
@@ -58,6 +59,9 @@ const SessionRoute = Object.assign(
   ),
   { preload: Session.preload },
 )
+
+const SessionIndexRoute = () => <Navigate href="session" />
+const AutomationsRoute = () => <Automations />
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
@@ -312,7 +316,8 @@ export function AppInterface(props: {
                 >
                   <Route path="/" component={HomeRoute} />
                   <Route path="/:dir" component={DirectoryLayout}>
-                    <Route path="/" component={() => <Navigate href="session" />} />
+                    <Route path="/" component={SessionIndexRoute} />
+                    <Route path="/automations" component={AutomationsRoute} />
                     <Route path="/session/:id?" component={SessionRoute} />
                   </Route>
                 </Dynamic>

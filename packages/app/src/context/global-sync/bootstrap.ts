@@ -233,7 +233,10 @@ export async function bootstrapDirectory(input: {
           .then((data) => input.setStore("agent", data)),
       () =>
         retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
-      () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
+      () =>
+        retry(() =>
+          input.sdk.session.status().then((x) => input.setStore("session_status", reconcile(x.data ?? {}))),
+        ),
       !seededProject &&
         (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
       !seededPath &&

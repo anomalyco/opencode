@@ -179,6 +179,15 @@ export function applyDirectoryEvent(input: {
     }
     case "session.status": {
       const props = event.properties as { sessionID: string; status: SessionStatus }
+      if (props.status.type === "idle") {
+        input.setStore(
+          "session_status",
+          produce((draft) => {
+            delete draft[props.sessionID]
+          }),
+        )
+        break
+      }
       input.setStore("session_status", props.sessionID, reconcile(props.status))
       break
     }

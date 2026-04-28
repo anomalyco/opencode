@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
+import { BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 
@@ -25,6 +25,7 @@ type Deps = {
   killSidecar: () => Promise<void> | void
   awaitInitialization: (sendStep: (step: InitStep) => void) => Promise<ServerReadyData>
   getWindowConfig: () => Promise<WindowConfig> | WindowConfig
+  relaunch: () => void
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
   getDefaultServerUrl: () => Promise<string | null> | string | null
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
@@ -191,8 +192,7 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   ipcMain.on("relaunch", () => {
-    app.relaunch()
-    app.exit(0)
+    deps.relaunch()
   })
 
   ipcMain.handle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())

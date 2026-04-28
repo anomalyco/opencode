@@ -1,3 +1,4 @@
+import { Automation } from "@/automation/automation"
 import { Config } from "@/config/config"
 import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
 import { EffectBridge } from "@/effect/bridge"
@@ -76,6 +77,11 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return { healthy: true as const, version: InstallationVersion }
     })
 
+    const automationRunning = Effect.fn("GlobalHttpApi.automationRunning")(function* () {
+      const runs = Automation.listLiveRuns()
+      return { count: runs.length, runs }
+    })
+
     const event = Effect.fn("GlobalHttpApi.event")(function* () {
       return eventResponse()
     })
@@ -148,6 +154,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
 
     return handlers
       .handle("health", health)
+      .handle("automationRunning", automationRunning)
       .handleRaw("event", event)
       .handle("configGet", configGet)
       .handle("configUpdate", configUpdate)

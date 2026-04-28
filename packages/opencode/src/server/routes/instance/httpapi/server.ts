@@ -13,6 +13,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
+import { Automation } from "@/automation/automation"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { Command } from "@/command"
@@ -62,6 +63,7 @@ import { PublicApi } from "./public"
 import { authorizationLayer, authorizationRouterMiddleware, v2AuthorizationLayer } from "./middleware/authorization"
 import { EventApi } from "./groups/event"
 import { eventHandlers } from "./handlers/event"
+import { automationHandlers } from "./handlers/automation"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
 import { experimentalHandlers } from "./handlers/experimental"
@@ -123,6 +125,7 @@ const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
 )
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
+    automationHandlers,
     configHandlers,
     experimentalHandlers,
     fileHandlers,
@@ -194,6 +197,7 @@ export function createRoutes(
       Account.defaultLayer,
       Agent.defaultLayer,
       Auth.defaultLayer,
+      Automation.defaultLayer,
       Command.defaultLayer,
       Config.defaultLayer,
       File.defaultLayer,

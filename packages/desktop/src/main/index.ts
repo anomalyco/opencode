@@ -6,8 +6,8 @@ import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
-import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import type { Event, MessageBoxOptions } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
 
 import contextMenu from "electron-context-menu"
 
@@ -56,6 +56,20 @@ let logger: ReturnType<typeof initLogging>
 let mainWindow: BrowserWindow | null = null
 let server: SidecarListener | null = null
 
+type QuitIntent = "quit" | "relaunch"
+type RunningAutomationRun = {
+  id: string
+  automationID: string
+  projectID: string
+  directory: string
+  title: string
+  status: "queued" | "preparing" | "running"
+}
+
+let quitConfirmed = false
+let quitPromptOpen = false
+let quitIntent: QuitIntent = "quit"
+
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
@@ -87,6 +101,21 @@ async function killSidecar() {
   const current = server
   server = null
   await current.stop()
+}
+
+function requestQuit(intent: QuitIntent = "quit") {
+  quitIntent = intent
+  app.quit()
+}
+
+function finishQuit() {
+  quitConfirmed = true
+  if (quitIntent === "relaunch") app.relaunch()
+  app.quit()
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function ensureLoopbackNoProxy() {
@@ -171,6 +200,9 @@ const main = Effect.gen(function* () {
 
   preferAppEnv(app.getPath("userData"))
 
+  const serverReady = Deferred.makeUnsafe<ServerReadyData>()
+  const loadingComplete = Deferred.makeUnsafe<void>()
+
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
     if (urls.length) {
@@ -189,8 +221,14 @@ const main = Effect.gen(function* () {
     emitDeepLinks([url])
   })
 
-  app.on("before-quit", () => {
-    void killSidecar()
+  app.on("before-quit", (event) => {
+    if (quitConfirmed) {
+      void killSidecar()
+      return
+    }
+
+    event.preventDefault()
+    void confirmQuitWithRunningAutomations(serverReady)
   })
 
   app.on("will-quit", () => {
@@ -218,9 +256,6 @@ const main = Effect.gen(function* () {
     })
   }
 
-  const serverReady = Deferred.makeUnsafe<ServerReadyData>()
-  const loadingComplete = Deferred.makeUnsafe<void>()
-
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
     awaitInitialization: Effect.fnUntraced(
@@ -240,6 +275,7 @@ const main = Effect.gen(function* () {
       (e) => Effect.runPromise(e),
     ),
     getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED }),
+    relaunch: () => requestQuit("relaunch"),
     consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
     getDefaultServerUrl: () => getDefaultServerUrl(),
     setDefaultServerUrl: (url) => setDefaultServerUrl(url),
@@ -382,10 +418,7 @@ const main = Effect.gen(function* () {
         void checkForUpdates(true, killSidecar)
       },
       relaunch: () => {
-        void killSidecar().finally(() => {
-          app.relaunch()
-          app.exit(0)
-        })
+        requestQuit("relaunch")
       },
     })
   }
@@ -394,3 +427,100 @@ const main = Effect.gen(function* () {
 })
 
 Effect.runFork(main)
+
+async function confirmQuitWithRunningAutomations(serverReady: Deferred.Deferred<ServerReadyData>) {
+  if (quitPromptOpen) return
+  quitPromptOpen = true
+  try {
+    const running = await listRunningAutomationRuns(serverReady)
+    if (running.length === 0) {
+      finishQuit()
+      return
+    }
+
+    const intent = quitIntent
+    const action = intent === "relaunch" ? "Restart OpenCode" : "Quit OpenCode"
+    const verb = intent === "relaunch" ? "Restarting" : "Quitting"
+    const examples = running
+      .slice(0, 5)
+      .map((run) => `- ${run.title} (${run.status})`)
+      .join("\n")
+    const more = running.length > 5 ? `\n- ${running.length - 5} more` : ""
+    const result = await showQuitAutomationDialog({
+      type: "warning",
+      title: `${action}?`,
+      message: running.length === 1 ? "1 automation is running" : `${running.length} automations are running`,
+      detail: [
+        `${verb} OpenCode stops the local server, so running automations will be interrupted immediately.`,
+        "No scheduled automation work continues while the app is closed. Interrupted runs are marked failed when the project opens again.",
+        "",
+        `${examples}${more}`,
+      ].join("\n"),
+      buttons: ["Keep Open", action],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    })
+
+    if (result.response === 1) {
+      finishQuit()
+      return
+    }
+
+    quitIntent = "quit"
+  } finally {
+    quitPromptOpen = false
+  }
+}
+
+async function showQuitAutomationDialog(options: MessageBoxOptions) {
+  if (mainWindow && !mainWindow.isDestroyed()) return dialog.showMessageBox(mainWindow, options)
+  return dialog.showMessageBox(options)
+}
+
+async function listRunningAutomationRuns(
+  serverReady: Deferred.Deferred<ServerReadyData>,
+): Promise<RunningAutomationRun[]> {
+  if (!server) return []
+  const ready = await Promise.race([
+    Effect.runPromise(Deferred.await(serverReady)),
+    delay(1_000).then(() => undefined as ServerReadyData | undefined),
+  ])
+  if (!ready) return []
+
+  const headers: Record<string, string> = {}
+  if (ready.password) {
+    headers.authorization = `Basic ${Buffer.from(`${ready.username ?? "opencode"}:${ready.password}`).toString("base64")}`
+  }
+
+  try {
+    const response = await fetch(new URL("/global/automation/running", ready.url), {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(2_000),
+    })
+    if (!response.ok) {
+      logger.log("running automation quit check failed", { status: response.status })
+      return []
+    }
+    const data = (await response.json()) as { runs?: unknown }
+    if (!Array.isArray(data.runs)) return []
+    return data.runs.filter(isRunningAutomationRun)
+  } catch (error) {
+    logger.error("running automation quit check failed", error)
+    return []
+  }
+}
+
+function isRunningAutomationRun(input: unknown): input is RunningAutomationRun {
+  if (!input || typeof input !== "object") return false
+  const run = input as Partial<RunningAutomationRun>
+  return (
+    typeof run.id === "string" &&
+    typeof run.automationID === "string" &&
+    typeof run.projectID === "string" &&
+    typeof run.directory === "string" &&
+    typeof run.title === "string" &&
+    (run.status === "queued" || run.status === "preparing" || run.status === "running")
+  )
+}

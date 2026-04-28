@@ -1,6 +1,9 @@
 import { randomBytes } from "crypto"
 
 const prefixes = {
+  automation: "aut",
+  automationRun: "arn",
+  automationFinding: "afn",
   job: "job",
   event: "evt",
   session: "ses",

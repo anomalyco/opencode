@@ -1,5 +1,7 @@
+import { AutomationID, AutomationRunID } from "@/automation/schema"
 import { Config } from "@/config/config"
 import { BusEvent } from "@/bus/bus-event"
+import { ProjectID } from "@/project/schema"
 import { SyncEvent } from "@/sync"
 import "@/server/event"
 import { Schema } from "effect"
@@ -33,8 +35,23 @@ const GlobalUpgradeResult = Schema.Union([
   }),
 ])
 
+const LiveAutomationRun = Schema.Struct({
+  id: AutomationRunID,
+  automationID: AutomationID,
+  projectID: ProjectID,
+  directory: Schema.String,
+  title: Schema.String,
+  status: Schema.Literals(["queued", "preparing", "running"]),
+}).annotate({ identifier: "LiveAutomationRun" })
+
+const GlobalAutomationRunning = Schema.Struct({
+  count: Schema.Number,
+  runs: Schema.Array(LiveAutomationRun),
+})
+
 export const GlobalPaths = {
   health: "/global/health",
+  automationRunning: "/global/automation/running",
   event: "/global/event",
   config: "/global/config",
   dispose: "/global/dispose",
@@ -51,6 +68,15 @@ export const GlobalApi = HttpApi.make("global").add(
           identifier: "global.health",
           summary: "Get health",
           description: "Get health information about the OpenCode server.",
+        }),
+      ),
+      HttpApiEndpoint.get("automationRunning", GlobalPaths.automationRunning, {
+        success: described(GlobalAutomationRunning, "Running automation runs"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.automation.running",
+          summary: "List running automation runs",
+          description: "List automation runs that are currently executing in this OpenCode process.",
         }),
       ),
       HttpApiEndpoint.get("event", GlobalPaths.event, {

@@ -6,6 +6,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
+import { Automation } from "@/automation/automation"
 import { Config } from "@/config/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@/file/ripgrep"
@@ -65,6 +66,7 @@ export const AppLayer = Layer.mergeAll(
   Bus.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
+  Automation.defaultLayer,
   Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
