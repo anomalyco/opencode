@@ -9,38 +9,46 @@ export type SkillInfo = {
 
 const cache = new Map<string, SkillInfo[]>()
 const wait = new Map<string, Promise<SkillInfo[]>>()
+const client = new WeakMap<object, number>()
+let next = 0
 
-export function cachedSkills(dir: string) {
-  return cache.get(dir)
+function cid(value: object) {
+  const hit = client.get(value)
+  if (hit !== undefined) return hit
+  const id = ++next
+  client.set(value, id)
+  return id
+}
+
+function key(sdk: ReturnType<typeof useSDK>) {
+  return `${sdk.directory}\n${cid(sdk.client)}`
+}
+
+export function cachedSkills(sdk: ReturnType<typeof useSDK>) {
+  return cache.get(key(sdk))
 }
 
 export async function loadSkills(sdk: ReturnType<typeof useSDK>) {
-  const dir = sdk.directory
-  const hit = cache.get(dir)
+  const id = key(sdk)
+  const hit = cache.get(id)
   if (hit) return hit
 
-  const task = wait.get(dir)
+  const task = wait.get(id)
   if (task) return task
 
-  console.debug("[skills] load.start", { dir })
   const job = sdk.client.app
     .skills({}, { throwOnError: true })
     .then((resp) => {
       const list = resp.data ?? []
-      console.debug("[skills] load.done", { dir, count: list.length })
-      cache.set(dir, list)
-      wait.delete(dir)
+      cache.set(id, list)
+      wait.delete(id)
       return list
     })
     .catch((err) => {
-      console.debug("[skills] load.fail", {
-        dir,
-        err: err instanceof Error ? err.message : String(err),
-      })
-      wait.delete(dir)
+      wait.delete(id)
       throw err
     })
 
-  wait.set(dir, job)
+  wait.set(id, job)
   return job
 }
