@@ -60,3 +60,16 @@ Copy-Item -Force (Join-Path $envAssets "128x128@2x.png")   (Join-Path $tauriEnvD
 Copy-Item -Force $icoOut                                   (Join-Path $tauriEnvDir "icon.ico")
 
 Write-Output "applied DeskFox ${Env} icons → $tauriEnvDir"
+
+# 3. 同步覆盖 src-tauri/icons/dev/icon.ico
+#    Tauri 2.10.1 winres 嵌入 exe 的 .ico 实际**只读** icons/dev/icon.ico(即 base config
+#    `tauri.conf.json` bundle.icon 数组里的 ico path),完全无视 --config 里 prod.json
+#    的 bundle.icon override。验证方法:把 dev/icon.ico 换成 prod ico 重 build,exe 嵌入
+#    确实变了。
+#    不修则:任何非 dev env build 出来的 exe,桌面快捷方式 / 任务栏图标都是 dev/ 那份。
+#    详见 docs/features/icon-pipeline-deep-fix/(待写)。
+if ($Env -ne "dev") {
+    $devIcoPath = Join-Path $repoRoot "packages/desktop/src-tauri/icons/dev/icon.ico"
+    Copy-Item -Force $icoOut $devIcoPath
+    Write-Output "also synced → $devIcoPath (winres base path)"
+}
