@@ -50,14 +50,41 @@ function openApiParameters(spec: { paths: Record<string, Partial<Record<(typeof 
   )
 }
 
+function openApiRequestBodies(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }) {
+  return Object.fromEntries(
+    Object.entries(spec.paths).flatMap(([path, item]) =>
+      methods
+        .filter((method) => item[method])
+        .map((method) => [`${method.toUpperCase()} ${path}`, requestBodyKey(item[method]?.requestBody)]),
+    ),
+  )
+}
+
 type Operation = {
   parameters?: unknown[]
+  requestBody?: unknown
+}
+
+type RequestBody = {
+  content?: Record<string, { schema?: { $ref?: string; type?: string } }>
+  required?: boolean
 }
 
 function parameterKey(param: unknown) {
   if (!param || typeof param !== "object" || !("in" in param) || !("name" in param)) return
   if (typeof param.in !== "string" || typeof param.name !== "string") return
   return `${param.in}:${param.name}:${"required" in param && param.required === true}`
+}
+
+function requestBodyKey(body: unknown) {
+  if (!body || typeof body !== "object" || !("content" in body)) return ""
+  const requestBody = body as RequestBody
+  return JSON.stringify({
+    required: requestBody.required === true,
+    content: Object.entries(requestBody.content ?? {})
+      .map(([type, value]) => [type, value.schema?.$ref ?? value.schema?.type ?? "inline"])
+      .sort(),
+  })
 }
 
 function authorization(username: string, password: string) {
@@ -96,6 +123,17 @@ describe("HttpApi server", () => {
     expect(
       Object.keys(hono)
         .filter((route) => JSON.stringify(hono[route]) !== JSON.stringify(effect[route]))
+        .map((route) => ({ route, hono: hono[route], effect: effect[route] })),
+    ).toEqual([])
+  })
+
+  test("matches generated OpenAPI request body shape", async () => {
+    const hono = openApiRequestBodies(await Server.openapi())
+    const effect = openApiRequestBodies(OpenApi.fromApi(PublicApi))
+
+    expect(
+      Object.keys(hono)
+        .filter((route) => hono[route] !== effect[route])
         .map((route) => ({ route, hono: hono[route], effect: effect[route] })),
     ).toEqual([])
   })
