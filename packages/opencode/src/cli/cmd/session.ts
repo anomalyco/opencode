@@ -17,7 +17,7 @@ import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
 import { AppRuntime } from "@/effect/app-runtime"
-import { existsSync, readFileSync } from "fs"
+import { stat, readFile } from "fs/promises"
 
 const log = Log.create({ service: "command-session" })
 
@@ -159,41 +159,50 @@ export const SessionMoveCommand = cmd({
   },
 })
 
-async function resolveProjectId(dir: string): Promise<string | undefined> {
-  const gitText = async (args: string[]) => {
-    const proc = Bun.spawn(["git", ...args], { cwd: dir, stdout: "pipe", stderr: "pipe" })
-    const exitCode = await proc.exited
-    if (exitCode !== 0) return undefined
-    return await new Response(proc.stdout).text().then((t) => t.trim())
+async function resolveDir(dir: string): Promise<DirResult> {
+  let st
+  try {
+    st = await stat(dir)
+  } catch (e) {
+    if (e instanceof Error && "code" in e && typeof e.code === "string") {
+      if (e.code === "ENOENT") return { reason: "directory does not exist" }
+      if (e.code === "EACCES") return { reason: "permission denied" }
+      if (e.code === "ENOTDIR") return { reason: "not a directory" }
+    }
+    return { reason: "cannot access directory" }
   }
-  const commonDir = await gitText(["rev-parse", "--git-common-dir"])
+  if (!st.isDirectory()) return { reason: "path is not a directory" }
+  const gitText = (args: string[]) => Process.text(["git", ...args], { cwd: dir, nothrow: true })
+  const commonDir = (await gitText(["rev-parse", "--git-common-dir"])).text.trim()
   if (commonDir) {
     const cached = path.join(commonDir, "opencode")
-    if (existsSync(cached)) return readFileSync(cached, "utf-8").trim()
+    try {
+      return { projectID: (await readFile(cached, "utf-8")).trim() }
+    } catch {}
   }
-  const revList = await gitText(["rev-list", "--max-parents=0", "HEAD"])
-  if (!revList) return undefined
-  return revList
-    .split("\n")
-    .filter(Boolean)
-    .map((x) => x.trim())
-    .toSorted()[0]
+  const revList = (await gitText(["rev-list", "--max-parents=0", "HEAD"])).text.trim()
+  if (!revList) return { projectID: "global" }
+  return {
+    projectID:
+      revList
+        .split("\n")
+        .filter(Boolean)
+        .map((x) => x.trim())
+        .toSorted()[0] ?? "global",
+  }
 }
 
-async function checkDetached(
-  dir: string,
-  sessions: Session.Info[],
-): Promise<(Session.Info & { detachReason: string })[]> {
-  if (!existsSync(dir)) return sessions.map((s) => ({ ...s, detachReason: "directory does not exist" }))
-  const stat = Filesystem.stat(dir)
-  if (!stat?.isDirectory()) return sessions.map((s) => ({ ...s, detachReason: "path is not a directory" }))
-  const correctId = (await resolveProjectId(dir)) ?? "global"
-  return sessions
-    .filter((s) => s.projectID !== correctId)
-    .map((s) => ({
-      ...s,
-      detachReason: `project_id ${s.projectID} != expected ${correctId}`,
-    }))
+type DirResult = { reason: string } | { projectID: string }
+
+function createMemo<T, U>(fn: (arg: T) => Promise<U>): (arg: T) => Promise<U> {
+  const cache = new Map<T, Promise<U>>()
+  return (arg: T) => {
+    let promise = cache.get(arg)
+    if (promise) return promise
+    promise = fn(arg)
+    cache.set(arg, promise)
+    return promise
+  }
 }
 
 export const SessionDetachedCommand = cmd({
@@ -209,15 +218,24 @@ export const SessionDetachedCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       const sessions = Database.use((db) => db.select().from(SessionTable).all()).map(Session.fromRow)
-      const byDir = new Map<string, Session.Info[]>()
+      const memoResolve = createMemo(resolveDir)
+      const dirResults = new Map(
+        await Promise.all(
+          [...new Set(sessions.map((s) => s.directory))].map(async (dir) => [dir, await memoResolve(dir)] as const),
+        ),
+      )
+      const detached: (Session.Info & { detachReason: string })[] = []
       for (const s of sessions) {
-        const list = byDir.get(s.directory) ?? []
-        list.push(s)
-        byDir.set(s.directory, list)
+        const result = dirResults.get(s.directory)!
+        if ("reason" in result) {
+          detached.push({ ...s, detachReason: result.reason })
+        } else if (s.projectID !== result.projectID) {
+          detached.push({
+            ...s,
+            detachReason: `project_id ${s.projectID} != expected ${result.projectID}`,
+          })
+        }
       }
-      const detached = (
-        await Promise.all([...byDir].map(([dir, dirSessions]) => checkDetached(dir, dirSessions)))
-      ).flat()
       if (detached.length === 0) return
       if (args.format === "json") {
         const jsonData = detached.map((s) => ({
