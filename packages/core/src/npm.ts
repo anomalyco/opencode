@@ -112,22 +112,39 @@ export const layer = Layer.effect(
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
-      const name = (() => {
+      const npaName = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg).name ?? undefined
         } catch {
-          return pkg
+          return undefined
         }
       })()
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      if (yield* afs.existsSafe(dir)) {
+        // For non-registry specs (remote tarball URLs, git+https://, github:
+        // shorthand, file: paths), npa(pkg).name returns undefined — only
+        // registry packages have inferable names from the spec alone. Read
+        // the install-root package.json (written by Arborist on the initial
+        // install) to recover the actual installed package name from its
+        // first dependency entry, matching what the fresh-install path
+        // computes from the arborist tree below.
+        const cachedPkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.option)
+        if (Option.isSome(cachedPkg)) {
+          const deps = (cachedPkg.value as { dependencies?: Record<string, unknown> })?.dependencies
+          const first = deps && Object.keys(deps)[0]
+          if (first) {
+            return resolveEntryPoint(first, path.join(dir, "node_modules", first))
+          }
+        }
+        // Cache directory exists but is empty / has no installable package.json —
+        // fall through to the Arborist install path below.
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const fallbackName = npaName ?? pkg
+        const result = resolveEntryPoint(fallbackName, path.join(dir, "node_modules", fallbackName))
         if (Option.isSome(result.entrypoint)) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
