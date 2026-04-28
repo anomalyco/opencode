@@ -360,9 +360,43 @@
   width: 100%;
   border: 1px solid var(--border-weak-base);
   border-radius: 6px;
-  background: transparent;
+  background: var(--background-base);
   position: relative;
   overflow: hidden;
+
+  [data-component="markdown"] {
+    width: 100%;
+    min-width: 0;
+
+    pre {
+      margin: 0;
+      padding: 0;
+      background-color: transparent !important;
+      border: none !important;
+    }
+
+    .shiki {
+      padding: 12px;
+      border: none;
+      border-radius: 0;
+      background-color: transparent !important;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .shiki code {
+      font-family: var(--font-family-mono);
+      font-feature-settings: var(--font-family-mono--font-feature-settings);
+      font-size: 13px;
+      line-height: var(--line-height-large);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  [data-slot="markdown-copy-button"] {
+    display: none !important;
+  }
 
   [data-slot="bash-copy"] {
     position: absolute;
@@ -371,6 +405,7 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s ease;
+    z-index: 10;
   }
 
   &:hover [data-slot="bash-copy"],
@@ -400,19 +435,6 @@
     }
   }
 
-  [data-slot="bash-pre"] {
-    margin: 0;
-    padding: 12px;
-  }
-
-  [data-slot="bash-pre"] code {
-    font-family: var(--font-family-mono);
-    font-feature-settings: var(--font-family-mono--font-feature-settings);
-    font-size: 13px;
-    line-height: var(--line-height-large);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
 }
 
 [data-component="edit-trigger"],

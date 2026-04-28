@@ -1838,9 +1838,7 @@ ToolRegistry.register({
             </Tooltip>
           </div>
           <div data-slot="bash-scroll" data-scrollable>
-            <pre data-slot="bash-pre">
-              <code>{text()}</code>
-            </pre>
+            <Markdown text={"~~~~~~~bash\n" + text() + "\n~~~~~~~"} />
           </div>
         </div>
       </BasicTool>
