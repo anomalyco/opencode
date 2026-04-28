@@ -35,6 +35,7 @@ export type FollowupDraft = {
   model: { providerID: string; modelID: string }
   variant?: string
   isSteer?: boolean
+  followupMode?: string
 }
 
 type FollowupSendInput = {
@@ -58,7 +59,8 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
   const setBusy = () => {
     if (!input.optimisticBusy) return
-    setStore("session_status", input.draft.sessionID, { type: input.draft.isSteer ? "steer" : "busy" })
+    const type = input.draft.isSteer ? "steer" : input.draft.followupMode === "wrap" ? "wrap" : "busy"
+    setStore("session_status", input.draft.sessionID, { type })
   }
 
   const setIdle = () => {
