@@ -518,7 +518,6 @@ export const protocol = Protocol.define<
 
 export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
-  provider: "anthropic",
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.anthropic.com/v1", path: "/messages" }),
   framing: Framing.sse,

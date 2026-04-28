@@ -383,7 +383,6 @@ export const protocol = Protocol.define<
 
 export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
-  provider: "openai",
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/responses" }),
   framing: Framing.sse,

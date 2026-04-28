@@ -828,7 +828,6 @@ export const protocol = Protocol.define<
 
 export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
-  provider: "bedrock",
   protocol,
   endpoint: Endpoint.baseURL({
     // Bedrock's URL embeds the region in the host and the validated modelId

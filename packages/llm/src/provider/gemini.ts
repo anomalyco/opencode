@@ -470,7 +470,6 @@ export const protocol = Protocol.define<GeminiDraft, GeminiTarget, string, Gemin
 
 export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
-  provider: "google",
   protocol,
   endpoint: Endpoint.baseURL({
     default: "https://generativelanguage.googleapis.com/v1beta",
