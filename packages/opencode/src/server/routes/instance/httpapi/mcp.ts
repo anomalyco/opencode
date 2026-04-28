@@ -1,6 +1,7 @@
 import { MCP } from "@/mcp"
 import { ConfigMCP } from "@/config/mcp"
 import { Effect, Layer, Schema } from "effect"
+import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -20,6 +21,10 @@ const AuthCallbackPayload = Schema.Struct({
 const AuthRemoveResponse = Schema.Struct({
   success: Schema.Literal(true),
 }).annotate({ identifier: "McpAuthRemoveResponse" })
+
+function unsupportedOAuth(name: string) {
+  return HttpServerResponse.jsonUnsafe({ error: `MCP server ${name} does not support OAuth` }, { status: 400 })
+}
 
 export const McpPaths = {
   status: "/mcp",
@@ -149,7 +154,7 @@ export const mcpHandlers = Layer.unwrap(
     })
 
     const authStart = Effect.fn("McpHttpApi.authStart")(function* (ctx: { params: { name: string } }) {
-      if (!(yield* mcp.supportsOAuth(ctx.params.name))) return yield* new HttpApiError.BadRequest({})
+      if (!(yield* mcp.supportsOAuth(ctx.params.name))) return unsupportedOAuth(ctx.params.name)
       return yield* mcp.startAuth(ctx.params.name)
     })
 
@@ -161,7 +166,7 @@ export const mcpHandlers = Layer.unwrap(
     })
 
     const authAuthenticate = Effect.fn("McpHttpApi.authAuthenticate")(function* (ctx: { params: { name: string } }) {
-      if (!(yield* mcp.supportsOAuth(ctx.params.name))) return yield* new HttpApiError.BadRequest({})
+      if (!(yield* mcp.supportsOAuth(ctx.params.name))) return unsupportedOAuth(ctx.params.name)
       return yield* mcp.authenticate(ctx.params.name)
     })
 
