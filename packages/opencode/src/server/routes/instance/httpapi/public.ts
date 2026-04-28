@@ -49,6 +49,8 @@ type OpenApiSchema = {
   anyOf?: OpenApiSchema[]
   enum?: string[]
   items?: OpenApiSchema
+  maximum?: number
+  minimum?: number
   oneOf?: OpenApiSchema[]
   prefixItems?: OpenApiSchema[]
   properties?: Record<string, OpenApiSchema>
@@ -71,10 +73,16 @@ const InstanceQueryParameters = [
 ] satisfies OpenApiParameter[]
 
 const LegacyBodyRefParameters = new Set(["Auth", "Config", "Part", "WorktreeRemoveInput", "WorktreeResetInput"])
+const FiniteNumberValues = new Set(["Infinity", "-Infinity", "NaN"])
+const QueryNumberParameters = new Set(["start", "cursor", "limit", "method"])
+const QueryBooleanParameters = new Set(["roots", "archived"])
+const QueryParameterSchemas = {
+  "GET /find/file limit": { type: "integer", minimum: 1, maximum: 200 },
+  "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+} satisfies Record<string, OpenApiSchema>
 
 function matchLegacyOpenApi(input: Record<string, unknown>) {
   const spec = input as OpenApiSpec
-  if (spec.components?.schemas && !spec.components.schemas.Event) spec.components.schemas.Event = {}
   for (const [path, item] of Object.entries(spec.paths ?? {})) {
     const isInstanceRoute = !path.startsWith("/global/") && !path.startsWith("/auth/")
     for (const method of ["get", "post", "put", "delete", "patch"] as const) {
@@ -126,7 +134,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           description: "Event stream",
           content: {
             "text/event-stream": {
-              schema: { $ref: path === "/event" ? "#/components/schemas/Event" : "#/components/schemas/GlobalEvent" },
+              schema: path === "/event" ? {} : { $ref: "#/components/schemas/GlobalEvent" },
             },
           },
         }
@@ -138,7 +146,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           (param) => param.in !== "query" || (param.name !== "directory" && param.name !== "workspace"),
         ),
       ]
-      for (const param of operation.parameters) normalizeParameter(param)
+      for (const param of operation.parameters) normalizeParameter(param, `${method.toUpperCase()} ${path}`)
     }
   }
   return input
@@ -177,16 +185,21 @@ function flattenOptions(options: OpenApiSchema[] | undefined): OpenApiSchema[] |
 
 function isFiniteNumberOption(schema: OpenApiSchema) {
   if (schema.type === "number") return true
-  return schema.type === "string" && schema.enum?.every((value) => ["Infinity", "-Infinity", "NaN"].includes(value)) === true
+  return schema.type === "string" && schema.enum?.every((value) => FiniteNumberValues.has(value)) === true
 }
 
-function normalizeParameter(param: OpenApiParameter) {
+function normalizeParameter(param: OpenApiParameter, route: string) {
   if (param.in !== "query" || !param.schema || typeof param.schema !== "object") return
-  if (["start", "cursor", "limit", "method"].includes(param.name)) {
+  const override = QueryParameterSchemas[`${route} ${param.name}` as keyof typeof QueryParameterSchemas]
+  if (override) {
+    param.schema = override
+    return
+  }
+  if (QueryNumberParameters.has(param.name)) {
     param.schema = { type: "number" }
     return
   }
-  if (["roots", "archived"].includes(param.name)) {
+  if (QueryBooleanParameters.has(param.name)) {
     param.schema = {
       anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
     }

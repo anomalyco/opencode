@@ -18,6 +18,11 @@ const original = {
 }
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
+let effectSpec: ReturnType<typeof OpenApi.fromApi> | undefined
+
+function effectOpenApi() {
+  return (effectSpec ??= OpenApi.fromApi(PublicApi))
+}
 
 function app(input?: { password?: string; username?: string }) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
@@ -87,7 +92,7 @@ function parameterSchema(input: {
     (param) => !!param && typeof param === "object" && "name" in param && param.name === input.name,
   )
   if (!param || typeof param !== "object" || !("schema" in param)) return
-  return JSON.stringify(param.schema)
+  return param.schema
 }
 
 function requestBodyKey(body: unknown) {
@@ -141,7 +146,7 @@ afterEach(async () => {
 describe("HttpApi server", () => {
   test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
     const honoRoutes = openApiRouteKeys(await Server.openapi())
-    const effectRoutes = openApiRouteKeys(OpenApi.fromApi(PublicApi))
+    const effectRoutes = openApiRouteKeys(effectOpenApi())
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
     expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
@@ -149,7 +154,7 @@ describe("HttpApi server", () => {
 
   test("matches generated OpenAPI route parameters", async () => {
     const hono = openApiParameters(await Server.openapi())
-    const effect = openApiParameters(OpenApi.fromApi(PublicApi))
+    const effect = openApiParameters(effectOpenApi())
 
     expect(
       Object.keys(hono)
@@ -160,7 +165,7 @@ describe("HttpApi server", () => {
 
   test("matches generated OpenAPI request body shape", async () => {
     const hono = openApiRequestBodies(await Server.openapi())
-    const effect = openApiRequestBodies(OpenApi.fromApi(PublicApi))
+    const effect = openApiRequestBodies(effectOpenApi())
 
     expect(
       Object.keys(hono)
@@ -170,21 +175,28 @@ describe("HttpApi server", () => {
   })
 
   test("matches SDK-affecting query parameter schemas", async () => {
-    const effect = OpenApi.fromApi(PublicApi)
+    const effect = effectOpenApi()
 
-    expect(parameterSchema({ spec: effect, path: "/session", method: "get", name: "roots" })).toEqual(
-      JSON.stringify({ anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }] }),
-    )
-    expect(parameterSchema({ spec: effect, path: "/session", method: "get", name: "start" })).toEqual(
-      JSON.stringify({ type: "number" }),
-    )
-    expect(parameterSchema({ spec: effect, path: "/find/file", method: "get", name: "limit" })).toEqual(
-      JSON.stringify({ type: "number" }),
-    )
+    expect(parameterSchema({ spec: effect, path: "/session", method: "get", name: "roots" })).toEqual({
+      anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
+    })
+    expect(parameterSchema({ spec: effect, path: "/session", method: "get", name: "start" })).toEqual({
+      type: "number",
+    })
+    expect(parameterSchema({ spec: effect, path: "/find/file", method: "get", name: "limit" })).toEqual({
+      type: "integer",
+      minimum: 1,
+      maximum: 200,
+    })
+    expect(parameterSchema({ spec: effect, path: "/session/{sessionID}/message", method: "get", name: "limit" })).toEqual({
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    })
   })
 
   test("documents event routes as server-sent events", () => {
-    const effect = OpenApi.fromApi(PublicApi)
+    const effect = effectOpenApi()
 
     expect(responseContentTypes({ spec: effect, path: "/event", method: "get", status: "200" })).toEqual([
       "text/event-stream",
