@@ -445,6 +445,22 @@ export function FileTabContent(props: { tab: string }) {
       { defer: true },
     ),
   )
+  // FORK: dirty 状态同步给 file context,让 watcher reload 守卫(查看器-自动刷新)2026-04-28
+  createEffect(
+    on(
+      () => ({ p: path(), d: dirty() }),
+      (curr, prev) => {
+        if (prev?.p && prev.p !== curr.p) {
+          file.markDirty(prev.p, false)
+        }
+        if (curr.p) file.markDirty(curr.p, curr.d)
+      },
+    ),
+  )
+  onCleanup(() => {
+    const p = path()
+    if (p) file.markDirty(p, false)
+  })
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null

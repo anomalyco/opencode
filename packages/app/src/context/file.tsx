@@ -215,6 +215,42 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         () => [],
       )
 
+    // FORK: 编辑态 dirty 守卫,防止 AI/外部写文件覆盖用户未保存草稿(查看器-自动刷新)2026-04-28
+    const dirtyPaths = new Set<string>()
+    const markDirty = (input: string, dirty: boolean) => {
+      const file = path.normalize(input)
+      if (!file) return
+      if (dirty) dirtyPaths.add(file)
+      else dirtyPaths.delete(file)
+    }
+    const isDirty = (input: string) => {
+      const file = path.normalize(input)
+      if (!file) return false
+      return dirtyPaths.has(file)
+    }
+    // 同一次 AI 写会触发多事件(file.edited + 显式 file.watcher.updated + parcel/watcher OS 监听 + 可能的 format pass),
+    // 且 2 秒内可能有多次连续 edit。按 path + 时间窗去重,避免 toast 洪泛。
+    const dirtyConflictWindowMs = 2000
+    const recentDirtyConflicts = new Map<string, number>()
+    const notifyDirtyConflict = (file: string) => {
+      const now = Date.now()
+      const last = recentDirtyConflicts.get(file)
+      if (last !== undefined && now - last < dirtyConflictWindowMs) return
+      recentDirtyConflicts.set(file, now)
+      // 顺手收割过期项,Map 不会无限长
+      if (recentDirtyConflicts.size > 32) {
+        for (const [p, t] of recentDirtyConflicts) {
+          if (now - t >= dirtyConflictWindowMs) recentDirtyConflicts.delete(p)
+        }
+      }
+      showToast({
+        variant: "default",
+        icon: "warning",
+        title: language.t("toast.file.dirtyConflict.title"),
+        description: language.t("toast.file.dirtyConflict.description"),
+      })
+    }
+
     const stop = sdk.event.listen((e) => {
       invalidateFromWatcher(e.details, {
         normalize: path.normalize,
@@ -223,6 +259,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         loadFile: (file) => {
           void load(file, { force: true })
         },
+        // FORK: 编辑态守卫(查看器-自动刷新)2026-04-28
+        // path 在 invalidateFromWatcher 内已 normalize,这里直接查表
+        isDirty: (file) => dirtyPaths.has(file),
+        notifyDirtyConflict,
         node: tree.node,
         isDirLoaded: tree.isLoaded,
         refreshDir: (dir) => {
@@ -290,6 +330,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       undoStack,
       get,
       load,
+      // FORK: 编辑态 dirty 守卫(查看器-自动刷新)2026-04-28
+      markDirty,
+      isDirty,
       scrollTop,
       scrollLeft,
       setScrollTop,

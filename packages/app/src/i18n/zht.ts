@@ -432,6 +432,8 @@ export const dict = {
   "toast.file.loadFailed.title": "載入檔案失敗",
 
   "toast.file.listFailed.title": "列出檔案失敗",
+  "toast.file.dirtyConflict.title": "AI 修改了此檔案",
+  "toast.file.dirtyConflict.description": "你的草稿已保留。儲存時會讓你選擇是否覆寫磁碟版本。",
   "toast.context.noLineSelection.title": "未選取行",
   "toast.context.noLineSelection.description": "請先在檔案分頁中選取行範圍。",
   "toast.session.share.copyFailed.title": "無法複製連結到剪貼簿",
