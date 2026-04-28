@@ -70,6 +70,28 @@ You can select a theme by bringing up the theme select with the `/theme` command
 }
 ```
 
+### Auto-selecting a theme based on the active model or provider
+
+You can automatically change the TUI theme based on the currently selected model or provider. This is configured in `opencode.json`. When a model is selected, OpenCode will look for a theme in this order: `model theme` → `provider theme` → `tui theme` → `default opencode theme`.
+
+```json title="opencode.json" {6,11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {},
+      "theme": "light",
+      "models": {
+        "claude-sonnet-4-5": {
+          "limit": { "context": 200000, "output": 8192 },
+          "theme": "tokyonight"
+        }
+      }
+    }
+  }
+}
+```
+
 ---
 
 ## Custom themes
