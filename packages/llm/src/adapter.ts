@@ -189,17 +189,17 @@ export function fromProtocol<Draft, Target, Frame, Chunk, State>(
 
   const toHttp = (target: Target, ctx: HttpContext) =>
     Effect.gen(function* () {
-      const url = yield* input.endpoint({ request: ctx.request, target })
+      const url = (yield* input.endpoint({ request: ctx.request, target })).toString()
       const body = protocol.encode(target)
       const merged = { ...buildHeaders({ request: ctx.request }), ...ctx.request.model.headers }
       const headers = yield* auth({
         request: ctx.request,
         method: "POST",
-        url: url.toString(),
+        url,
         body,
         headers: merged,
       })
-      return ProviderShared.jsonPost({ url: url.toString(), body, headers })
+      return ProviderShared.jsonPost({ url, body, headers })
     })
 
   const parse = (response: HttpClientResponse.HttpClientResponse) =>
