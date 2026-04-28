@@ -11,7 +11,6 @@ export type OpenAICompatibleChatModelInput = Omit<ModelInput, "protocol" | "head
   readonly baseURL: string
   readonly apiKey?: string
   readonly headers?: Record<string, string>
-  readonly queryParams?: Record<string, string>
 }
 
 export type ProviderFamilyModelInput = Omit<OpenAICompatibleChatModelInput, "provider" | "baseURL"> & {
