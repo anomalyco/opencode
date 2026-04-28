@@ -3,22 +3,24 @@ import type { ConsoleState } from "@/config/console-state"
 type CodexQuotaSnapshot = NonNullable<ConsoleState["codexQuota"]>
 type CodexQuotaWindow = NonNullable<CodexQuotaSnapshot["fiveHour"]>
 
-type CodexQuotaTimestampMode = "full" | "short"
-
 type CodexQuotaLayout = {
   barWidth?: number
-  timestamp?: CodexQuotaTimestampMode
+  timestamp?: boolean
 }
 
-export function formatCodexQuotaFetchedAt(timestamp: number, mode: CodexQuotaTimestampMode = "full") {
+export function formatCodexQuotaFetchedAt(timestamp: number, now = Date.now()) {
   const date = new Date(timestamp)
   if (Number.isNaN(date.valueOf())) return
 
   const pad = (value: number) => value.toString().padStart(2, "0")
   const time = `${pad(date.getHours())}h${pad(date.getMinutes())}m${pad(date.getSeconds())}s`
-  if (mode === "short") return time
+  const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const nowDate = new Date(now)
+  const nowStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime()
+  const daysAgo = Math.max(0, Math.floor((nowStart - dateStart) / 86_400_000))
+  const day = daysAgo === 0 ? "today" : daysAgo === 1 ? "yesterday" : `${daysAgo}d ago`
 
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${time}`
+  return `${day}@${time}`
 }
 
 export function clampPercent(value: number) {
@@ -39,20 +41,21 @@ function formatQuotaWindow(label: "5h" | "wk", item: CodexQuotaWindow, barWidth?
 }
 
 function codexQuotaLayout(width: number): CodexQuotaLayout {
-  if (width >= 200) return { barWidth: 10, timestamp: "full" }
-  if (width >= 120) return { barWidth: 5, timestamp: "short" }
-  if (width >= 90) return { timestamp: "short" }
+  if (width >= 200) return { barWidth: 10, timestamp: true }
+  if (width >= 120) return { barWidth: 5, timestamp: true }
+  if (width >= 90) return { timestamp: true }
   return {}
 }
 
-export function formatCodexQuotaMetrics(item: CodexQuotaSnapshot | undefined, terminalWidth: number) {
+export function formatCodexQuotaMetrics(item: CodexQuotaSnapshot | undefined, terminalWidth: number, now = Date.now()) {
   if (!item?.fiveHour && !item?.weekly) return
 
   const layout = codexQuotaLayout(terminalWidth)
+  const fetchedAt = item.fetchedAt !== undefined && layout.timestamp ? formatCodexQuotaFetchedAt(item.fetchedAt, now) : undefined
   const parts = [
     item.fiveHour ? formatQuotaWindow("5h", item.fiveHour, layout.barWidth) : undefined,
     item.weekly ? formatQuotaWindow("wk", item.weekly, layout.barWidth) : undefined,
-    item.fetchedAt && layout.timestamp ? `⟳${formatCodexQuotaFetchedAt(item.fetchedAt, layout.timestamp)}` : undefined,
+    fetchedAt ? `⟳ ${fetchedAt}` : undefined,
   ].filter((part): part is string => Boolean(part))
 
   if (parts.length === 0) return

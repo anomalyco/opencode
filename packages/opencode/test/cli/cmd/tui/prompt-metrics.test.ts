@@ -6,6 +6,7 @@ import {
 } from "../../../../src/cli/cmd/tui/component/prompt/metrics"
 
 const fetchedAt = new Date(2026, 3, 28, 17, 38, 30).getTime()
+const sameDay = new Date(2026, 3, 28, 20, 0, 0).getTime()
 
 describe("prompt metrics", () => {
   test("formats codex quota with full bars on wide terminals", () => {
@@ -17,8 +18,9 @@ describe("prompt metrics", () => {
           fetchedAt,
         },
         200,
+        sameDay,
       ),
-    ).toBe("codex 5h █████████░ 90% · wk ██████████ 95% · ⟳2026-04-28T17h38m30s")
+    ).toBe("codex 5h █████████░ 90% · wk ██████████ 95% · ⟳ today@17h38m30s")
   })
 
   test("formats codex quota with compact bars on medium terminals", () => {
@@ -30,8 +32,9 @@ describe("prompt metrics", () => {
           fetchedAt,
         },
         120,
+        sameDay,
       ),
-    ).toBe("codex 5h █████ 90% · wk █████ 95% · ⟳17h38m30s")
+    ).toBe("codex 5h █████ 90% · wk █████ 95% · ⟳ today@17h38m30s")
   })
 
   test("falls back to percentages as terminal width tightens", () => {
@@ -41,8 +44,8 @@ describe("prompt metrics", () => {
       fetchedAt,
     }
 
-    expect(formatCodexQuotaMetrics(quota, 90)).toBe("codex 5h 90% · wk 95% · ⟳17h38m30s")
-    expect(formatCodexQuotaMetrics(quota, 89)).toBe("codex 5h 90% · wk 95%")
+    expect(formatCodexQuotaMetrics(quota, 90, sameDay)).toBe("codex 5h 90% · wk 95% · ⟳ today@17h38m30s")
+    expect(formatCodexQuotaMetrics(quota, 89, sameDay)).toBe("codex 5h 90% · wk 95%")
   })
 
   test("rounds and clamps quota bar percentages", () => {
@@ -52,8 +55,15 @@ describe("prompt metrics", () => {
   })
 
   test("formats refresh timestamps and drops invalid values", () => {
-    expect(formatCodexQuotaFetchedAt(fetchedAt)).toBe("2026-04-28T17h38m30s")
-    expect(formatCodexQuotaFetchedAt(fetchedAt, "short")).toBe("17h38m30s")
+    expect(formatCodexQuotaFetchedAt(fetchedAt, new Date(2026, 3, 28, 20, 0, 0).getTime())).toBe(
+      "today@17h38m30s",
+    )
+    expect(formatCodexQuotaFetchedAt(fetchedAt, new Date(2026, 3, 29, 20, 0, 0).getTime())).toBe(
+      "yesterday@17h38m30s",
+    )
+    expect(formatCodexQuotaFetchedAt(fetchedAt, new Date(2026, 3, 30, 20, 0, 0).getTime())).toBe(
+      "2d ago@17h38m30s",
+    )
 
     expect(
       formatCodexQuotaMetrics(
@@ -62,6 +72,7 @@ describe("prompt metrics", () => {
           fetchedAt: Number.NaN,
         },
         120,
+        sameDay,
       ),
     ).toBe("codex 5h ████░ 88%")
   })
