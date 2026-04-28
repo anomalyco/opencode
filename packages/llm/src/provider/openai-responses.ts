@@ -223,7 +223,7 @@ const prepare = Effect.fn("OpenAIResponses.prepare")(function* (request: LLMRequ
 const toHttp = (target: OpenAIResponsesTarget, request: LLMRequest) =>
   Effect.succeed(
     ProviderShared.jsonPost({
-      url: `${baseUrl(request)}/responses`,
+      url: ProviderShared.withQuery(`${baseUrl(request)}/responses`, ProviderShared.queryParams(request)),
       body: encodeTarget(target),
       headers: request.model.headers,
     }),

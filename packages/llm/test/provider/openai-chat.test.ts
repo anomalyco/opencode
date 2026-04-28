@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
+import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, ProviderRequestError } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { OpenAIChat } from "../../src/provider/openai-chat"
 import { testEffect } from "../lib/effect"
-import { fixedResponse, truncatedStream } from "../lib/http"
+import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
@@ -57,6 +58,24 @@ describe("OpenAI Chat adapter", () => {
         temperature: 0,
       })
       expect(prepared.patchTrace.map((item) => item.id)).toEqual(["target.openai-chat.include-usage"])
+    }),
+  )
+
+  it.effect("adds native query params to the Chat Completions URL", () =>
+    Effect.gen(function* () {
+      yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
+        .generate(LLM.updateRequest(request, { model: LLM.model({ ...model, native: { queryParams: { "api-version": "v1" } } }) }))
+        .pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(web.url).toBe("https://api.openai.test/v1/chat/completions?api-version=v1")
+                return input.respond(sseEvents(deltaChunk({}, "stop")), { headers: { "content-type": "text/event-stream" } })
+              }),
+            ),
+          ),
+        )
     }),
   )
 

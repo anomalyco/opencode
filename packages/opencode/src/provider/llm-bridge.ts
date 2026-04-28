@@ -1,6 +1,7 @@
 import {
   AmazonBedrock,
   Anthropic,
+  Azure,
   GitHubCopilot,
   Google,
   LLM,
@@ -27,6 +28,7 @@ type Input = {
 const PROVIDERS: Record<string, ProviderResolverShape> = {
   "@ai-sdk/amazon-bedrock": AmazonBedrock.resolver,
   "@ai-sdk/anthropic": Anthropic.resolver,
+  "@ai-sdk/azure": Azure.resolver,
   "@ai-sdk/baseten": OpenAICompatibleFamily.resolver,
   "@ai-sdk/cerebras": OpenAICompatibleFamily.resolver,
   "@ai-sdk/deepinfra": OpenAICompatibleFamily.resolver,
@@ -144,6 +146,7 @@ export const toModelRef = (input: Input): ModelRef | undefined => {
       opencodeProviderID: input.provider.id,
       opencodeModelID: input.model.id,
       npm: input.model.api.npm,
+      ...(resolution.queryParams ? { queryParams: resolution.queryParams } : {}),
     },
   })
 }

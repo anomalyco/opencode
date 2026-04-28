@@ -119,6 +119,22 @@ export const mediaBytes = (part: MediaPart) =>
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
+const isStringRecord = (value: unknown): value is Record<string, string> =>
+  isRecord(value) && Object.values(value).every((item) => typeof item === "string")
+
+export const queryParams = (request: { readonly model: { readonly native?: Record<string, unknown> } }) => {
+  const value = request.model.native?.queryParams
+  if (!isStringRecord(value)) return undefined
+  return value
+}
+
+export const withQuery = (url: string, params: Record<string, string> | undefined) => {
+  if (!params) return url
+  const result = new URL(url)
+  for (const [key, value] of Object.entries(params)) result.searchParams.set(key, value)
+  return result.toString()
+}
+
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
   return encodeJson(part.result.value)

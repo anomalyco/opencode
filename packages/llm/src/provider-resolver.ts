@@ -9,6 +9,7 @@ export interface ProviderResolution {
   readonly protocol: Protocol
   readonly baseURL?: string
   readonly auth: ProviderAuth
+  readonly queryParams?: Record<string, string>
   readonly capabilities?: CapabilitiesInput
 }
 
@@ -30,8 +31,8 @@ export const make = (
 ): ProviderResolution => ({
   provider: ProviderID.make(provider),
   protocol,
-  auth: options.auth ?? "bearer",
   ...options,
+  auth: options.auth ?? "bearer",
 })
 
 export const define = (input: ProviderResolver): ProviderResolver => input

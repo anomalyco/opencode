@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { GitHubCopilot, OpenAI, OpenAICompatibleFamily, ProviderResolver } from "../src"
+import { Azure, GitHubCopilot, OpenAI, OpenAICompatibleFamily, ProviderResolver } from "../src"
 
 describe("provider resolver", () => {
   test("fixed providers resolve protocol and auth defaults", () => {
@@ -29,6 +29,23 @@ describe("provider resolver", () => {
       protocol: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
       auth: "bearer",
+    })
+  })
+
+  test("Azure resolves resource URLs and API-version query params", () => {
+    expect(
+      Azure.resolver.resolve(
+        ProviderResolver.input("gpt-5", "azure", { resourceName: "opencode-test", apiVersion: "2025-04-01-preview" }),
+      ),
+    ).toMatchObject({
+      provider: "azure",
+      protocol: "openai-responses",
+      baseURL: "https://opencode-test.openai.azure.com/openai/v1",
+      queryParams: { "api-version": "2025-04-01-preview" },
+    })
+    expect(Azure.resolver.resolve(ProviderResolver.input("gpt-4.1", "azure", { useCompletionUrls: true }))).toMatchObject({
+      protocol: "openai-chat",
+      queryParams: { "api-version": "v1" },
     })
   })
 })

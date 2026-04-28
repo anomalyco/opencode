@@ -21,20 +21,12 @@ export type ProviderFamilyModelInput = Omit<OpenAICompatibleChatModelInput, "pro
 
 const invalid = ProviderShared.invalidRequest
 
-const isStringRecord = (value: unknown): value is Record<string, string> =>
-  typeof value === "object" && value !== null && !Array.isArray(value) && Object.values(value).every((item) => typeof item === "string")
-
-const queryParams = (request: LLMRequest) => {
-  const value = request.model.native?.queryParams
-  if (!isStringRecord(value)) return undefined
-  return value
-}
-
 const completionUrl = (request: LLMRequest) => {
   if (!request.model.baseURL) return undefined
-  const url = new URL(`${ProviderShared.trimBaseUrl(request.model.baseURL)}/chat/completions`)
-  for (const [key, value] of Object.entries(queryParams(request) ?? {})) url.searchParams.set(key, value)
-  return url.toString()
+  return ProviderShared.withQuery(
+    `${ProviderShared.trimBaseUrl(request.model.baseURL)}/chat/completions`,
+    ProviderShared.queryParams(request),
+  )
 }
 
 const toHttp = (target: OpenAIChatTarget, request: LLMRequest) =>

@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, ProviderRequestError } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { OpenAIResponses } from "../../src/provider/openai-responses"
 import { testEffect } from "../lib/effect"
-import { fixedResponse } from "../lib/http"
+import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
 const model = OpenAIResponses.model({
@@ -38,6 +39,26 @@ describe("OpenAI Responses adapter", () => {
         max_output_tokens: 20,
         temperature: 0,
       })
+    }),
+  )
+
+  it.effect("adds native query params to the Responses URL", () =>
+    Effect.gen(function* () {
+      yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] })
+        .generate(LLM.updateRequest(request, { model: LLM.model({ ...model, native: { queryParams: { "api-version": "v1" } } }) }))
+        .pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(web.url).toBe("https://api.openai.test/v1/responses?api-version=v1")
+                return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                  headers: { "content-type": "text/event-stream" },
+                })
+              }),
+            ),
+          ),
+        )
     }),
   )
 

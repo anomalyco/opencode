@@ -245,7 +245,7 @@ const prepare = Effect.fn("OpenAIChat.prepare")(function* (request: LLMRequest) 
 const toHttp = (target: OpenAIChatTarget, request: LLMRequest) =>
   Effect.succeed(
     ProviderShared.jsonPost({
-      url: `${baseUrl(request)}/chat/completions`,
+      url: ProviderShared.withQuery(`${baseUrl(request)}/chat/completions`, ProviderShared.queryParams(request)),
       body: encodeTarget(target),
       headers: request.model.headers,
     }),

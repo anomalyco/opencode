@@ -106,7 +106,7 @@ describe("ProviderLLMBridge", () => {
     })
   })
 
-  test("maps GitHub Copilot through its provider route", () => {
+  test("maps GitHub Copilot through its provider resolver", () => {
     const ref = ProviderLLMBridge.toModelRef({
       provider: provider({ id: ProviderID.make("github-copilot"), key: "copilot-key" }),
       model: model({ id: "gpt-5", providerID: "github-copilot", npm: "@ai-sdk/github-copilot" }),
@@ -116,6 +116,39 @@ describe("ProviderLLMBridge", () => {
       provider: "github-copilot",
       protocol: "openai-responses",
       headers: { authorization: "Bearer copilot-key" },
+    })
+  })
+
+  test("maps Azure to Responses with resource URL and api-version query", () => {
+    const ref = ProviderLLMBridge.toModelRef({
+      provider: provider({
+        id: ProviderID.make("azure"),
+        key: "azure-key",
+        options: { resourceName: "opencode-test", apiVersion: "2025-04-01-preview" },
+      }),
+      model: model({ id: "gpt-5", providerID: "azure", npm: "@ai-sdk/azure" }),
+    })
+
+    expect(ref).toMatchObject({
+      provider: "azure",
+      protocol: "openai-responses",
+      baseURL: "https://opencode-test.openai.azure.com/openai/v1",
+      headers: { authorization: "Bearer azure-key" },
+      native: { queryParams: { "api-version": "2025-04-01-preview" } },
+    })
+  })
+
+  test("maps Azure completion URL opt-in to Chat Completions", () => {
+    const ref = ProviderLLMBridge.toModelRef({
+      provider: provider({ id: ProviderID.make("azure"), key: "azure-key", options: { resourceName: "opencode-test" } }),
+      model: model({ id: "gpt-4.1", providerID: "azure", npm: "@ai-sdk/azure", options: { useCompletionUrls: true } }),
+    })
+
+    expect(ref).toMatchObject({
+      provider: "azure",
+      protocol: "openai-chat",
+      baseURL: "https://opencode-test.openai.azure.com/openai/v1",
+      native: { queryParams: { "api-version": "v1" } },
     })
   })
 
@@ -170,7 +203,6 @@ describe("ProviderLLMBridge", () => {
   test("leaves undecided provider packages unmapped", () => {
     const unsupported = [
       ["mistral", "mistral-large", "@ai-sdk/mistral"],
-      ["azure", "gpt-4.1", "@ai-sdk/azure"],
     ] as const
 
     expect(
