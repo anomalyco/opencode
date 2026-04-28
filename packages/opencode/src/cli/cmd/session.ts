@@ -194,17 +194,6 @@ async function resolveDir(dir: string): Promise<DirResult> {
 
 type DirResult = { reason: string } | { projectID: string }
 
-function createMemo<T, U>(fn: (arg: T) => Promise<U>): (arg: T) => Promise<U> {
-  const cache = new Map<T, Promise<U>>()
-  return (arg: T) => {
-    let promise = cache.get(arg)
-    if (promise) return promise
-    promise = fn(arg)
-    cache.set(arg, promise)
-    return promise
-  }
-}
-
 export const SessionDetachedCommand = cmd({
   command: "detached",
   describe: "find sessions with missing directories or mismatched project IDs",
@@ -218,24 +207,24 @@ export const SessionDetachedCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       const sessions = Database.use((db) => db.select().from(SessionTable).all()).map(Session.fromRow)
-      const memoResolve = createMemo(resolveDir)
-      const dirResults = new Map(
-        await Promise.all(
-          [...new Set(sessions.map((s) => s.directory))].map(async (dir) => [dir, await memoResolve(dir)] as const),
-        ),
-      )
-      const detached: (Session.Info & { detachReason: string })[] = []
-      for (const s of sessions) {
-        const result = dirResults.get(s.directory)!
-        if ("reason" in result) {
-          detached.push({ ...s, detachReason: result.reason })
-        } else if (s.projectID !== result.projectID) {
-          detached.push({
-            ...s,
-            detachReason: `project_id ${s.projectID} != expected ${result.projectID}`,
-          })
-        }
+      const cache = new Map<string, Promise<DirResult>>()
+      const resolve = (dir: string) => {
+        let promise = cache.get(dir)
+        if (promise) return promise
+        promise = resolveDir(dir)
+        cache.set(dir, promise)
+        return promise
       }
+      const checks = sessions.map(async (s) => {
+        const result = await resolve(s.directory)
+        if ("reason" in result) return { ...s, detachReason: result.reason }
+        if (s.projectID !== result.projectID)
+          return { ...s, detachReason: `project_id ${s.projectID} != expected ${result.projectID}` }
+        return undefined
+      })
+      const detached = (await Promise.all(checks)).filter(
+        (s): s is Session.Info & { detachReason: string } => s !== undefined,
+      )
       if (detached.length === 0) return
       if (args.format === "json") {
         const jsonData = detached.map((s) => ({
