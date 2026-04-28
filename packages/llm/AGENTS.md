@@ -178,6 +178,14 @@ recorded.effect("streams text", () =>
 
 Replay is the default. `RECORD=true` records fresh cassettes and requires the listed env vars. Cassettes are written as pretty-printed JSON so multi-interaction diffs stay reviewable.
 
+Pass `provider`, `protocol`, and optional `tags` to `recordedTests(...)` / `recorded.effect.with(...)` so cassettes carry searchable metadata. Use recorded-test filters to replay or record a narrow subset without rewriting a whole file:
+
+- `RECORDED_PROVIDER=openai` matches tests tagged with `provider:openai`; comma-separated values are allowed.
+- `RECORDED_TAGS=tool` requires all listed tags to be present, e.g. `RECORDED_TAGS=provider:togetherai,tool`.
+- `RECORDED_TEST="streams text"` matches by test name, kebab-case test id, or cassette path.
+
+Filters apply in replay and record mode. Combine them with `RECORD=true` when refreshing only one provider or scenario.
+
 **Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` in `@opencode-ai/http-recorder` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON adapters omit the field and decode as text.
 
 **Matching strategies.** Replay defaults to structural matching, which finds an interaction by comparing method, URL, allow-listed headers, and the canonical JSON body. This is the right choice for tool loops because each round's request differs (the message history grows). For scenarios where successive requests are byte-identical and expect different responses (retries, polling), pass `dispatch: "sequential"` in `RecordReplayOptions` — replay then walks the cassette in record order via an internal cursor. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.

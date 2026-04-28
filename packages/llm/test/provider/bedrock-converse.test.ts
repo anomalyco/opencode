@@ -485,6 +485,8 @@ const recordedModel = () =>
 
 const recorded = recordedTests({
   prefix: "bedrock-converse",
+  provider: "amazon-bedrock",
+  protocol: "bedrock-converse",
   requires: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
 })
 
@@ -507,7 +509,7 @@ describe("Bedrock Converse recorded", () => {
     }),
   )
 
-  recorded.effect("streams a tool call", () =>
+  recorded.effect.with("streams a tool call", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
       const llm = LLMClient.make({ adapters: [BedrockConverse.adapter] })
       const response = yield* llm.generate(

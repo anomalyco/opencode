@@ -41,7 +41,12 @@ const toolRequest = LLM.request({
   generation: { maxTokens: 80, temperature: 0 },
 })
 
-const recorded = recordedTests({ prefix: "gemini", requires: ["GOOGLE_GENERATIVE_AI_API_KEY"] })
+const recorded = recordedTests({
+  prefix: "gemini",
+  provider: "google",
+  protocol: "gemini",
+  requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
+})
 const gemini = LLMClient.make({ adapters: [Gemini.adapter] })
 
 describe("Gemini recorded", () => {
@@ -55,7 +60,7 @@ describe("Gemini recorded", () => {
     }),
   )
 
-  recorded.effect("streams tool call", () =>
+  recorded.effect.with("streams tool call", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
       const response = yield* gemini.generate(toolRequest)
 

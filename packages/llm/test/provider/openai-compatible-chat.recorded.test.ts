@@ -54,11 +54,11 @@ const togetherToolRequest = LLM.request({
   generation: { maxTokens: 80, temperature: 0 },
 })
 
-const recorded = recordedTests({ prefix: "openai-compatible-chat" })
+const recorded = recordedTests({ prefix: "openai-compatible-chat", protocol: "openai-compatible-chat" })
 const llm = LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] })
 
 describe("OpenAI-compatible Chat recorded", () => {
-  recorded.effect.with("deepseek streams text", { requires: ["DEEPSEEK_API_KEY"] }, () =>
+  recorded.effect.with("deepseek streams text", { provider: "deepseek", requires: ["DEEPSEEK_API_KEY"] }, () =>
     Effect.gen(function* () {
       const response = yield* llm.generate(deepseekRequest)
 
@@ -67,7 +67,7 @@ describe("OpenAI-compatible Chat recorded", () => {
     }),
   )
 
-  recorded.effect.with("togetherai streams text", { requires: ["TOGETHER_AI_API_KEY"] }, () =>
+  recorded.effect.with("togetherai streams text", { provider: "togetherai", requires: ["TOGETHER_AI_API_KEY"] }, () =>
     Effect.gen(function* () {
       const response = yield* llm.generate(togetherRequest)
 
@@ -76,7 +76,7 @@ describe("OpenAI-compatible Chat recorded", () => {
     }),
   )
 
-  recorded.effect.with("togetherai streams tool call", { requires: ["TOGETHER_AI_API_KEY"] }, () =>
+  recorded.effect.with("togetherai streams tool call", { provider: "togetherai", requires: ["TOGETHER_AI_API_KEY"], tags: ["tool"] }, () =>
     Effect.gen(function* () {
       const response = yield* llm.generate(togetherToolRequest)
 

@@ -38,11 +38,16 @@ const request = LLM.request({
   generation: { maxTokens: 80, temperature: 0 },
 })
 
-const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
+const recorded = recordedTests({
+  prefix: "openai-chat",
+  provider: "openai",
+  protocol: "openai-chat",
+  requires: ["OPENAI_API_KEY"],
+})
 const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
 
 describe("OpenAI Chat tool-loop recorded", () => {
-  recorded.effect("drives a tool loop end-to-end", () =>
+  recorded.effect.with("drives a tool loop end-to-end", { tags: ["tool", "tool-loop"] }, () =>
     Effect.gen(function* () {
       const events = Array.from(
         yield* ToolRuntime.run(openai, { request, tools: { get_weather } }).pipe(Stream.runCollect),

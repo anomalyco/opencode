@@ -43,6 +43,8 @@ const toolRequest = LLM.request({
 
 const recorded = recordedTests({
   prefix: "anthropic-messages",
+  provider: "anthropic",
+  protocol: "anthropic-messages",
   requires: ["ANTHROPIC_API_KEY"],
   options: { requestHeaders: ["content-type", "anthropic-version"] },
 })
@@ -59,7 +61,7 @@ describe("Anthropic Messages recorded", () => {
     }),
   )
 
-  recorded.effect("streams tool call", () =>
+  recorded.effect.with("streams tool call", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
       const response = yield* anthropic.generate(toolRequest)
 

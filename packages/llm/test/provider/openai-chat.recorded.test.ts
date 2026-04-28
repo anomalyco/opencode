@@ -57,7 +57,12 @@ const toolResultRequest = LLM.request({
 // Cassettes are deterministic — assert exact stream contents instead of fuzzy
 // `length > 0` checks so adapter parsing regressions surface immediately.
 // Re-record (`RECORD=true`) only when intentionally refreshing a cassette.
-const recorded = recordedTests({ prefix: "openai-chat", requires: ["OPENAI_API_KEY"] })
+const recorded = recordedTests({
+  prefix: "openai-chat",
+  provider: "openai",
+  protocol: "openai-chat",
+  requires: ["OPENAI_API_KEY"],
+})
 const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
 const openaiWithUsage = LLMClient.make({ adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])] })
 
@@ -83,7 +88,7 @@ describe("OpenAI Chat recorded", () => {
     }),
   )
 
-  recorded.effect("streams tool call", () =>
+  recorded.effect.with("streams tool call", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
       const response = yield* openai.generate(toolRequest)
 
@@ -97,7 +102,7 @@ describe("OpenAI Chat recorded", () => {
     }),
   )
 
-  recorded.effect("continues after tool result", () =>
+  recorded.effect.with("continues after tool result", { tags: ["tool"] }, () =>
     Effect.gen(function* () {
       const response = yield* openaiWithUsage.generate(toolResultRequest)
 
