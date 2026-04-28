@@ -1,5 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "DeskFox",
-  "mainBinaryName": "DeskFox"
+  "mainBinaryName": "DeskFox",
+  "bundle": {
+    "icon": [
+      "icons/prod/32x32.png",
+      "icons/prod/128x128.png",
+      "icons/prod/128x128@2x.png",
+      "icons/prod/icon.ico"
+    ]
+  }
 }

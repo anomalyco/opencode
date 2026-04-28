@@ -34,15 +34,20 @@ if (-not (Test-Path $envAssets)) {
     throw "branding assets not found for env=${Env}: $envAssets"
 }
 
-# 1. 现场生成 icon.ico(三尺寸 16/32/48,源在 ico-source/ 下)
+# 1. 现场生成多分辨率 icon.ico
+#    扫 ico-source/ 下所有 <size>.png(文件名即尺寸,如 16.png / 256.png),按尺寸升序拼进 ico
+#    Windows 桌面图标渲染默认 48px,需要至少 16/32/48/256 多档,缺大尺寸会被强制缩放或回退默认
 $icoOut = Join-Path $envAssets "icon.ico"
-$png16 = Join-Path $envIcoSrc "16.png"
-$png32 = Join-Path $envIcoSrc "32.png"
-$png48 = Join-Path $envIcoSrc "48.png"
+$pngs = Get-ChildItem -Path $envIcoSrc -Filter "*.png" |
+    Where-Object { $_.BaseName -match '^\d+$' } |
+    Sort-Object @{ Expression = { [int]$_.BaseName } }
+if ($pngs.Count -eq 0) {
+    throw "no PNGs in $envIcoSrc (expected files like 16.png, 32.png, 256.png)"
+}
 
 Push-Location $repoRoot
 try {
-    bun packages/branding/scripts/png-to-ico.ts $icoOut $png16 $png32 $png48
+    bun packages/branding/scripts/png-to-ico.ts $icoOut @($pngs.FullName)
     if ($LASTEXITCODE -ne 0) { throw "png-to-ico.ts failed for env=${Env}" }
 } finally {
     Pop-Location
