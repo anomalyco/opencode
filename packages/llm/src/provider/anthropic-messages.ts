@@ -200,11 +200,7 @@ const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
 
 const invalid = ProviderShared.invalidRequest
 
-/** Default Anthropic base URL. Overridden by `model.baseURL` when set. */
-const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 
-/** Pinned API version sent on every request. */
-const ANTHROPIC_VERSION = "2023-06-01"
 
 const cacheControl = (cache: CacheHint | undefined) => cache?.type === "ephemeral" ? { type: "ephemeral" as const } : undefined
 
@@ -524,9 +520,9 @@ export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
   provider: "anthropic",
   protocol,
-  endpoint: Endpoint.baseURL({ default: DEFAULT_BASE_URL, path: "/messages" }),
+  endpoint: Endpoint.baseURL({ default: "https://api.anthropic.com/v1", path: "/messages" }),
   framing: Framing.sse,
-  headers: () => ({ "anthropic-version": ANTHROPIC_VERSION }),
+  headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 
 export const model = (input: AnthropicMessagesModelInput) => {

@@ -141,8 +141,7 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-/** Default OpenAI Responses base URL. Overridden by `model.baseURL` when set. */
-const DEFAULT_BASE_URL = "https://api.openai.com/v1"
+
 
 const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   type: "function",
@@ -386,7 +385,7 @@ export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
   provider: "openai",
   protocol,
-  endpoint: Endpoint.baseURL({ default: DEFAULT_BASE_URL, path: "/responses" }),
+  endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/responses" }),
   framing: Framing.sse,
 })
 

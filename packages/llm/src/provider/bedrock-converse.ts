@@ -297,7 +297,7 @@ const region = (request: LLMRequest) => {
   return "us-east-1"
 }
 
-const defaultBaseURL = (request: LLMRequest) => `https://bedrock-runtime.${region(request)}.amazonaws.com`
+
 
 const lowerTool = (tool: ToolDefinition): BedrockTool => ({
   toolSpec: {
@@ -834,7 +834,7 @@ export const adapter = Adapter.fromProtocol({
     // Bedrock's URL embeds the region in the host and the validated modelId
     // in the path. We reach into the target after target patches so the URL
     // matches the body that gets signed.
-    default: ({ request }) => defaultBaseURL(request),
+    default: ({ request }) => `https://bedrock-runtime.${region(request)}.amazonaws.com`,
     path: ({ target }) => `/model/${encodeURIComponent(target.modelId)}/converse-stream`,
   }),
   auth,

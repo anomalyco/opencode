@@ -148,8 +148,7 @@ const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
 
 const invalid = ProviderShared.invalidRequest
 
-/** Default Gemini base URL. Overridden by `model.baseURL` when set. */
-const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
 
 const mediaData = ProviderShared.mediaBytes
 
@@ -474,7 +473,7 @@ export const adapter = Adapter.fromProtocol({
   provider: "google",
   protocol,
   endpoint: Endpoint.baseURL({
-    default: DEFAULT_BASE_URL,
+    default: "https://generativelanguage.googleapis.com/v1beta",
     // Gemini's path embeds the model id and pins SSE framing at the URL level.
     path: ({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`,
   }),
