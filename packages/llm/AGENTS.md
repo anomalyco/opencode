@@ -37,36 +37,79 @@ Use `LLMClient.make(...).stream(request)` when callers want incremental `LLMEven
 
 ### Adapters
 
-Adapters are provider/protocol boundaries. They own provider-native schemas and conversion logic. For example, `OpenAIChat.adapter` owns the OpenAI Chat target schema, OpenAI SSE chunk schema, message lowering, tool-call parsing, usage mapping, and finish-reason mapping.
+An adapter is the registered, runnable composition of four orthogonal pieces:
 
-Adapters should stay boring and typed:
+- **`Protocol`** (`src/protocol.ts`) — semantic API contract. Owns request lowering, target validation, body encoding, and the streaming chunk-to-event state machine. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Endpoint`** (`src/endpoint.ts`) — URL construction. Receives the request and the validated target so it can read `model.id`, `model.baseURL`, `model.native.queryParams`, and any target field that influences the URL (e.g. Bedrock's `modelId` segment). Reach for `Endpoint.baseURL({ default, path })` before hand-rolling a URL.
+- **`Auth`** (`src/auth.ts`) — per-request transport authentication. Most adapters use `Auth.passthrough`: their auth header is statically baked into `model.headers` by their `model()` constructor. Adapters that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
+- **`Framing`** (`src/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
 
-- `prepare` lowers common `LLMRequest` into a provider draft.
-- target patches mutate that draft before validation.
-- `validate` validates the final provider target with Schema.
-- `toHttp` creates the `HttpClientRequest`.
-- `parse` decodes provider chunks into `LLMEvent`s. The shared `ProviderShared.framed` helper handles transport-error mapping, chunk decoding, and stateful chunk-to-event raising; adapters supply a `framing` step (bytes → frames), a `decodeChunk`, and a `process` callback that produces events.
+Compose them via `Adapter.fromProtocol(...)`:
 
-The transport is HTTP today, with two framing dialects:
+```ts
+export const adapter = Adapter.fromProtocol({
+  id: "openai-chat",
+  provider: "openai",
+  protocol: OpenAIChat.protocol,
+  endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/chat/completions" }),
+  framing: Framing.sse,
+})
+```
 
-- **SSE** for OpenAI Chat / OpenAI Responses / Anthropic Messages / Gemini / OpenAI-compatible Chat. Use `ProviderShared.sse(...)` — a thin wrapper around `framed` with `sseFraming` (decode bytes → `Sse.decode` → drop `[DONE]` and Retry control events).
-- **AWS event stream** for Bedrock Converse. Bedrock supplies its own `eventStreamFraming` step that runs `@smithy/eventstream-codec` against a cursor-based byte buffer.
+The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Adapter.fromProtocol(...)` call instead of a 300-400 line adapter clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
-When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), it should land as a sibling adapter with a `toWs` (or analogous) producer + a `parse` that reads frames from that transport — not by leaking transport details into core types. The `framed` helper's `framing` parameter is the seam for new wire formats; the rest of the stream pipeline (terminal-error normalization, `mapAccumEffect` state, `onHalt` fallback) is already shared.
+Reach for the lower-level `Adapter.define(...)` only when an adapter genuinely cannot fit the four-axis model. New adapters should always start with `Adapter.fromProtocol(...)` and prove they need otherwise.
+
+When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), the seam is `Framing` plus a parallel `Endpoint` / `Auth` interpretation — not a fork of the adapter contract.
+
+### Folder layout
+
+```
+packages/llm/src/
+  schema.ts             // LLMRequest, LLMEvent, errors — canonical Schema model
+  llm.ts                // request constructors and convenience helpers
+  adapter.ts            // Adapter.fromProtocol + LLMClient.make
+  executor.ts           // RequestExecutor service + transport error mapping
+  patch.ts              // Patch system (request/prompt/tool-schema/target/stream)
+
+  protocol.ts           // Protocol type + Protocol.define
+  endpoint.ts           // Endpoint type + Endpoint.baseURL
+  auth.ts               // Auth type + Auth.passthrough
+  framing.ts            // Framing type + Framing.sse
+
+  provider/
+    shared.ts           // ProviderShared toolkit used inside protocol impls
+    patch.ts            // ProviderPatch helpers (defaults, capability gates)
+    openai-chat.ts      // protocol + adapter (compose OpenAIChat.protocol)
+    openai-responses.ts
+    anthropic-messages.ts
+    gemini.ts
+    bedrock-converse.ts
+    openai-compatible-chat.ts  // adapter that reuses OpenAIChat.protocol
+    openai-compatible-family.ts // family lookups (deepseek, togetherai, ...)
+    azure.ts / amazon-bedrock.ts / google.ts / ...  // ProviderResolver entries
+
+  provider-resolver.ts  // OpenCode-bridge resolver layer
+  tool.ts               // typed tool() helper
+  tool-runtime.ts       // ToolRuntime.run with full tool-loop type safety
+```
+
+The dependency arrow points down: `provider/*.ts` files import `protocol`, `endpoint`, `auth`, `framing` and never the other direction. Lower-level modules know nothing about specific providers.
 
 ### Shared adapter helpers
 
-`ProviderShared` exports a small toolkit so adapters can stay focused on provider-native shapes:
+`ProviderShared` exports a small toolkit used inside protocol implementations to keep them focused on provider-native shapes:
 
-- `framed({ adapter, response, readError, framing, decodeChunk, initial, process, onHalt? })` — the canonical streaming pipeline. Reach for it before hand-rolling a `Stream` chain.
-- `sse({ ... })` — convenience wrapper for SSE adapters. Identical shape to `framed` minus the `framing` field.
-- `sseFraming` — the SSE-specific framing step, exposed in case an adapter wants to wrap or compose it.
-- `joinText(parts)` — joins an array of `TextPart` (or anything with a `.text`) with newlines. Use this anywhere an adapter flattens text content into a single string for a provider field.
+- `framed({ adapter, response, readError, framing, decodeChunk, initial, process, onHalt? })` — the canonical streaming pipeline used by `Adapter.fromProtocol(...)`. You rarely call this directly anymore.
+- `sseFraming` — the SSE-specific framing step. Already wired through `Framing.sse`; reach for it directly only when wrapping or composing.
+- `joinText(parts)` — joins an array of `TextPart` (or anything with a `.text`) with newlines. Use this anywhere a protocol flattens text content into a single string for a provider field.
 - `parseToolInput(adapter, name, raw)` — Schema-decodes a tool-call argument string with the canonical "Invalid JSON input for `<adapter>` tool call `<name>`" error message. Treats empty input as `{}`. Use this in `finishToolCall` / `finalizeToolCalls`; do not roll a fresh `parseJson` callsite.
 - `parseJson(adapter, raw, message)` — generic JSON-via-Schema decode for non-tool payloads.
 - `chunkError(adapter, message, ...)` — typed `ProviderChunkError` constructor for stream-time failures.
+- `validateWith(decoder)` — lifts a Schema decode effect into the protocol's `validate` shape, mapping parse errors to `InvalidRequestError`.
+- `codecs({ adapter, draft, target, chunk, chunkErrorMessage })` — the encode/decode bundle each protocol needs (request body encode, draft → target validate, chunk decode).
 
-If you find yourself copying a 3-to-5-line snippet between two adapters, lift it into `ProviderShared` next to these helpers rather than duplicating.
+If you find yourself copying a 3-to-5-line snippet between two protocols, lift it into `ProviderShared` next to these helpers rather than duplicating.
 
 ### Patches
 
