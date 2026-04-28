@@ -231,7 +231,12 @@ function createGlobalSync() {
     }
 
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
-    const promise = queryClient
+    const timeout = new Promise<void>((_, reject) => {
+      setTimeout(() => reject(new Error("loadSessions timeout")), 30_000)
+    })
+
+    const promise = Promise.race([
+      queryClient
       .fetchQuery({
         ...loadSessionsQuery(key),
         queryFn: () =>
@@ -275,8 +280,9 @@ function createGlobalSync() {
               })
             })
             .then(() => null),
-      })
-      .then(() => {})
+      }),
+      timeout,
+    ]).then(() => {})
 
     sessionLoads.set(key, promise)
     void promise.finally(() => {
