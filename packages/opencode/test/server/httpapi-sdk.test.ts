@@ -8,22 +8,33 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session as SessionNs } from "@/session/session"
+import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
+const original = {
+  OPENCODE_EXPERIMENTAL_HTTPAPI: Flag.OPENCODE_EXPERIMENTAL_HTTPAPI,
+  OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
+  OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
+}
 type Backend = "legacy" | "httpapi"
 type Sdk = ReturnType<typeof createOpencodeClient>
 type SdkResult = { response: Response; data?: unknown; error?: unknown }
 
-function app(backend: Backend) {
+function app(backend: Backend, input?: { password?: string; username?: string }) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = backend === "httpapi"
+  Flag.OPENCODE_SERVER_PASSWORD = input?.password
+  Flag.OPENCODE_SERVER_USERNAME = input?.username
   return backend === "httpapi" ? Server.Default().app : Server.Legacy().app
 }
 
-function client(backend: Backend, directory?: string) {
-  const serverApp = app(backend)
+function client(
+  backend: Backend,
+  directory?: string,
+  input?: { password?: string; username?: string; headers?: Record<string, string> },
+) {
+  const serverApp = app(backend, input)
   const fetch = Object.assign(
     async (request: RequestInfo | URL, init?: RequestInit) =>
       await serverApp.fetch(request instanceof Request ? request : new Request(request, init)),
@@ -32,8 +43,46 @@ function client(backend: Backend, directory?: string) {
   return createOpencodeClient({
     baseUrl: "http://localhost",
     directory,
+    headers: input?.headers,
     fetch,
   })
+}
+
+function authorization(username: string, password: string) {
+  return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+}
+
+function providerConfig(url: string) {
+  return {
+    formatter: false,
+    lsp: false,
+    provider: {
+      test: {
+        name: "Test",
+        id: "test",
+        env: [],
+        npm: "@ai-sdk/openai-compatible",
+        models: {
+          "test-model": {
+            id: "test-model",
+            name: "Test Model",
+            attachment: false,
+            reasoning: false,
+            temperature: false,
+            tool_call: true,
+            release_date: "2025-01-01",
+            limit: { context: 100000, output: 10000 },
+            cost: { input: 0, output: 0 },
+            options: {},
+          },
+        },
+        options: {
+          apiKey: "test-key",
+          baseURL: url,
+        },
+      },
+    },
+  }
 }
 
 async function expectStatus(result: Promise<{ response: Response }>, status: number) {
@@ -128,8 +177,26 @@ async function withTmp<T>(backend: Backend, fn: (input: { sdk: Sdk; directory: s
   return fn({ sdk: client(backend, tmp.path), directory: tmp.path })
 }
 
+async function withFakeLlm<T>(
+  backend: Backend,
+  fn: (input: { sdk: Sdk; directory: string; llm: TestLLMServer["Service"] }) => Promise<T>,
+) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir({ git: true, config: providerConfig(llm.url) })),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      return yield* Effect.promise(() => fn({ sdk: client(backend, tmp.path), directory: tmp.path, llm }))
+    }).pipe(Effect.scoped, Effect.provide(TestLLMServer.layer)),
+  )
+}
+
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
+  Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
+  Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
   await Instance.disposeAll()
   await resetDatabase()
 })
@@ -197,6 +264,63 @@ describe("HttpApi SDK", () => {
         log: log.data,
       }
     })
+  })
+
+  test("matches generated SDK global event stream across backends", async () => {
+    await compareBackends(async (backend) => {
+      const events = await client(backend).global.event({ signal: AbortSignal.timeout(1_000) })
+      try {
+        const first = await events.stream.next()
+        return {
+          type: record(record(first.value).payload).type,
+        }
+      } finally {
+        await events.stream.return(undefined)
+      }
+    })
+  })
+
+  test("matches generated SDK instance event stream across backends", async () => {
+    await compareBackends((backend) =>
+      withTmp(backend, async ({ sdk }) => {
+        const events = await sdk.event.subscribe(undefined, { signal: AbortSignal.timeout(1_000) })
+        try {
+          const first = await events.stream.next()
+          return {
+            type: record(record(first.value).payload).type,
+          }
+        } finally {
+          await events.stream.return(undefined)
+        }
+      }),
+    )
+  })
+
+  test("matches generated SDK basic auth behavior across backends", async () => {
+    await compareBackends((backend) =>
+      withTmp(backend, async ({ directory }) => {
+        const missing = await capture(
+          client(backend, directory, { password: "secret" }).file.read({ path: "hello.txt" }),
+        )
+        const bad = await capture(
+          client(backend, directory, {
+            password: "secret",
+            headers: { authorization: authorization("opencode", "wrong") },
+          }).file.read({ path: "hello.txt" }),
+        )
+        const good = await capture(
+          client(backend, directory, {
+            password: "secret",
+            headers: { authorization: authorization("opencode", "secret") },
+          }).file.read({ path: "hello.txt" }),
+        )
+
+        return {
+          statuses: statuses({ missing, bad, good }),
+          content: record(good.data).content,
+        }
+      }),
+    )
   })
 
   test("matches generated SDK instance read routes across backends", async () => {
@@ -351,6 +475,77 @@ describe("HttpApi SDK", () => {
           initialText: firstPartText(message.data),
           updatedText: firstPartText(updated.data),
           partCountAfterDelete: array(record(withoutPart.data).parts).length,
+        }
+      }),
+    )
+  })
+
+  test("matches generated SDK prompt no-reply routes across backends", async () => {
+    await compareBackends((backend) =>
+      withTmp(backend, async ({ sdk }) => {
+        const session = await capture(sdk.session.create({ title: "prompt" }))
+        const sessionID = String(record(session.data).id)
+        const prompt = await capture(
+          sdk.session.prompt({
+            sessionID,
+            agent: "build",
+            noReply: true,
+            parts: [{ type: "text", text: "hello" }],
+          }),
+        )
+        const asyncPrompt = await capture(
+          sdk.session.promptAsync({
+            sessionID,
+            agent: "build",
+            noReply: true,
+            parts: [{ type: "text", text: "async hello" }],
+          }),
+        )
+        const messages = await capture(sdk.session.messages({ sessionID }))
+
+        return {
+          statuses: statuses({ session, prompt, asyncPrompt, messages }),
+          promptRole: record(record(prompt.data).info).role,
+          messageCount: array(messages.data).length,
+          messageTexts: array(messages.data)
+            .flatMap((item) => array(record(item).parts))
+            .map((part) => record(part).text)
+            .filter((text): text is string => typeof text === "string")
+            .sort(),
+        }
+      }),
+    )
+  })
+
+  test("matches generated SDK prompt streaming through fake LLM across backends", async () => {
+    await compareBackends((backend) =>
+      withFakeLlm(backend, async ({ sdk, llm }) => {
+        await Effect.runPromise(llm.text("fake world", { usage: { input: 11, output: 7 } }))
+        const session = await capture(
+          sdk.session.create({
+            title: "llm prompt",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          }),
+        )
+        const sessionID = String(record(session.data).id)
+        const prompt = await capture(
+          sdk.session.prompt({
+            sessionID,
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "hello llm" }],
+          }),
+        )
+        const messages = await capture(sdk.session.messages({ sessionID }))
+        const inputs = await Effect.runPromise(llm.inputs)
+
+        return {
+          statuses: statuses({ session, prompt, messages }),
+          calls: inputs.length,
+          requestedModel: inputs[0]?.model,
+          responseText: JSON.stringify(prompt.data).includes("fake world"),
+          persistedText: JSON.stringify(messages.data).includes("fake world"),
+          userText: JSON.stringify(messages.data).includes("hello llm"),
         }
       }),
     )
