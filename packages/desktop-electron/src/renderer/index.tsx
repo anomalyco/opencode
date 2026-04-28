@@ -268,8 +268,7 @@ render(() => {
 
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
-  // Fetch sidecar credentials (available immediately, before health check)
-  const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
+  const [launchServer] = createResource(() => window.api.awaitInitialization(() => undefined))
 
   const [defaultServer] = createResource(() =>
     platform.getDefaultServer?.().then((url) => {
@@ -279,8 +278,18 @@ render(() => {
   const [locale] = createResource(loadLocale)
 
   const servers = () => {
-    const data = sidecar()
+    const data = launchServer()
     if (!data) return []
+    if (data.source === "remote") {
+      return [
+        {
+          type: "http",
+          http: {
+            url: data.url,
+          },
+        },
+      ] as ServerConnection.Any[]
+    }
     const server: ServerConnection.Sidecar = {
       displayName: "Local Server",
       type: "sidecar",
@@ -333,7 +342,7 @@ render(() => {
         <Show
           when={
             !defaultServer.loading &&
-            !sidecar.loading &&
+            !launchServer.loading &&
             !windowConfig.loading &&
             !windowCount.loading &&
             !locale.loading
@@ -342,7 +351,11 @@ render(() => {
           {(_) => {
             return (
               <AppInterface
-                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+                defaultServer={
+                  launchServer.latest?.source === "remote"
+                    ? ServerConnection.Key.make(launchServer.latest.url)
+                    : (defaultServer.latest ?? ServerConnection.Key.make("sidecar"))
+                }
                 servers={servers()}
                 router={MemoryRouter}
               >

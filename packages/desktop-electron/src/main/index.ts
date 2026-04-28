@@ -4,6 +4,7 @@ import { existsSync } from "node:fs"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { parseArgs } from "node:util"
 import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
@@ -63,6 +64,7 @@ const pendingDeepLinks: string[] = []
 
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
+const remoteServerUrl = getRemoteServerUrl()
 
 logger.log("app starting", {
   version: app.getVersion(),
@@ -138,6 +140,25 @@ function setInitStep(step: InitStep) {
 }
 
 async function initialize() {
+  const overlay = remoteServerUrl ? initializeRemoteServer(remoteServerUrl) : await initializeSidecarServer()
+  mainWindow = createMainWindow()
+  wireMenu()
+  overlay?.close()
+}
+
+function initializeRemoteServer(url: string) {
+  logger.log("using remote server", { url })
+  serverReady.resolve({
+    url,
+    username: null,
+    password: null,
+    source: "remote",
+  })
+  setInitStep({ phase: "done" })
+  return null
+}
+
+async function initializeSidecarServer() {
   const needsMigration = !sqliteFileExists()
   const sqliteDone = needsMigration ? defer<void>() : undefined
   let overlay: BrowserWindow | null = null
@@ -181,6 +202,7 @@ async function initialize() {
       url,
       username: "opencode",
       password,
+      source: "sidecar",
     })
 
     await Promise.race([
@@ -210,10 +232,7 @@ async function initialize() {
     await loadingComplete.promise
   }
 
-  mainWindow = createMainWindow()
-  wireMenu()
-
-  overlay?.close()
+  return overlay
 }
 
 function wireMenu() {
@@ -290,6 +309,34 @@ function ensureLoopbackNoProxy() {
 
   upsert("NO_PROXY")
   upsert("no_proxy")
+}
+
+function getRemoteServerUrl() {
+  const parsed = parseLaunchArgs().values["server-url"]
+  const value = typeof parsed === "string" ? parsed : process.env.OPENCODE_DESKTOP_SERVER_URL
+  if (!value) return
+
+  try {
+    const url = new URL(value)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return
+    url.pathname = url.pathname.replace(/\/+$/, "")
+    return url.toString().replace(/\/$/, "")
+  } catch {
+    logger.warn("ignoring invalid --server-url", { value })
+  }
+}
+
+function parseLaunchArgs() {
+  return parseArgs({
+    args: process.argv.slice(1),
+    options: {
+      "server-url": {
+        type: "string",
+      },
+    },
+    strict: false,
+    allowPositionals: true,
+  })
 }
 
 async function getSidecarPort() {

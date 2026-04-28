@@ -110,6 +110,7 @@ export function createMainWindow() {
     const { responseHeaders = {} } = details
     upsertKeyValue(responseHeaders, "Access-Control-Allow-Origin", ["*"])
     upsertKeyValue(responseHeaders, "Access-Control-Allow-Headers", ["*"])
+    upsertKeyValue(responseHeaders, "Access-Control-Allow-Methods", ["GET, POST, PUT, PATCH, DELETE, OPTIONS"])
     callback({ responseHeaders })
   })
 

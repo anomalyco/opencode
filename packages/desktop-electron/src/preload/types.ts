@@ -4,6 +4,7 @@ export type ServerReadyData = {
   url: string
   username: string | null
   password: string | null
+  source: "sidecar" | "remote"
 }
 
 export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" }
