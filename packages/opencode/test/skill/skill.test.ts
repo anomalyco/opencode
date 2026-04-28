@@ -142,6 +142,65 @@ description: Second test skill.
     ),
   )
 
+  it.live("refresh reloads changed skills", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const first = path.join(dir, ".opencode", "skill", "refresh-one", "SKILL.md")
+          yield* Effect.promise(() =>
+            Bun.write(
+              first,
+              `---
+name: refresh-one
+description: Before refresh.
+---
+
+# Refresh One
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          expect((yield* skill.all()).find((x) => x.name === "refresh-one")?.description).toBe("Before refresh.")
+
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                first,
+                `---
+name: refresh-one
+description: After refresh.
+---
+
+# Refresh One Updated
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skill", "refresh-two", "SKILL.md"),
+                `---
+name: refresh-two
+description: Added during refresh.
+---
+
+# Refresh Two
+`,
+              ),
+            ]),
+          )
+
+          const refreshed = yield* skill.refresh()
+          expect(refreshed.find((x) => x.name === "refresh-one")?.description).toBe("After refresh.")
+          expect(refreshed.find((x) => x.name === "refresh-two")?.description).toBe("Added during refresh.")
+
+          yield* Effect.promise(() => fs.rm(path.dirname(first), { recursive: true, force: true }))
+          const afterRemove = yield* skill.refresh()
+          expect(afterRemove.find((x) => x.name === "refresh-one")).toBeUndefined()
+          expect(afterRemove.find((x) => x.name === "refresh-two")).toBeDefined()
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("skips skills with missing frontmatter", () =>
     provideTmpdirInstance(
       (dir) =>

@@ -659,6 +659,13 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.title": "Показывать индикатор прогресса сессии",
   "settings.general.row.showSessionProgressBar.description":
     "Показывать анимированный индикатор прогресса вверху сессии, когда агент работает",
+  "settings.general.skills.refresh.title": "Скиллы",
+  "settings.general.skills.refresh.description":
+    "Пересканировать папки скиллов и загрузить изменённые инструкции без перезапуска сервера.",
+  "settings.general.skills.refresh.action": "Обновить скиллы",
+  "settings.general.skills.refresh.action.refreshing": "Обновление...",
+  "settings.general.skills.toast.refreshed.title": "Скиллы обновлены",
+  "settings.general.skills.toast.refreshed.description": "{{count}} скиллов доступно для этого workspace.",
   "settings.general.row.wayland.title": "Использовать нативный Wayland",
   "settings.general.row.wayland.description": "Отключить X11 fallback на Wayland. Требуется перезапуск.",
   "settings.general.row.wayland.tooltip":

@@ -7,6 +7,7 @@ import type {
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
+  AppRefreshSkillsResponses,
   AppSkillsResponses,
   Auth as Auth3,
   AuthRemoveErrors,
@@ -683,6 +684,36 @@ export class App extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<AppSkillsResponses, unknown, ThrowOnError>({
       url: "/skill",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Refresh skills
+   *
+   * Rescan and reload all available skills without restarting the OpenCode server.
+   */
+  public refreshSkills<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AppRefreshSkillsResponses, unknown, ThrowOnError>({
+      url: "/skill/refresh",
       ...options,
       ...params,
     })

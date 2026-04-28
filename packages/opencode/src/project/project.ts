@@ -274,6 +274,10 @@ export const layer: Layer.Layer<
         vcs: data.vcs,
         time: { ...existing.time, updated: Date.now() },
       }
+      const previousWorktree = existing.worktree
+      const canonicalWorktreeChanged =
+        previousWorktree !== result.worktree &&
+        AppFileSystem.resolve(previousWorktree) === AppFileSystem.resolve(result.worktree)
       if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
         result.sandboxes.push(data.sandbox)
       result.sandboxes = yield* Effect.forEach(
@@ -322,11 +326,26 @@ export const layer: Layer.Layer<
       )
 
       if (data.id !== ProjectID.global) {
+        const roots = canonicalWorktreeChanged ? [data.worktree, previousWorktree] : [data.worktree]
+        for (const directory of roots) {
+          yield* db((d) =>
+            d
+              .update(SessionTable)
+              .set({ project_id: data.id })
+              .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, directory)))
+              .run(),
+          )
+        }
+      }
+
+      if (canonicalWorktreeChanged) {
+        // Keep existing sessions visible after path canonicalization (for example
+        // when a workspace was previously opened through an alias path).
         yield* db((d) =>
           d
             .update(SessionTable)
-            .set({ project_id: data.id })
-            .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+            .set({ directory: result.worktree })
+            .where(and(eq(SessionTable.project_id, data.id), eq(SessionTable.directory, previousWorktree)))
             .run(),
         )
       }

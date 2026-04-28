@@ -5643,6 +5643,30 @@ export type AppSkillsResponses = {
 
 export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
 
+export type AppRefreshSkillsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill/refresh"
+}
+
+export type AppRefreshSkillsResponses = {
+  /**
+   * List of refreshed skills
+   */
+  200: Array<{
+    name: string
+    description: string
+    location: string
+    content: string
+  }>
+}
+
+export type AppRefreshSkillsResponse = AppRefreshSkillsResponses[keyof AppRefreshSkillsResponses]
+
 export type LspStatusData = {
   body?: never
   path?: never

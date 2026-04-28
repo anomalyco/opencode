@@ -222,7 +222,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     return language.t("common.requestFailed")
   }
 
-  const abort = async () => {
+  const abort = async (options?: { pauseQueue?: boolean }) => {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
 
@@ -230,7 +230,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const [, setStore] = globalSync.child(sdk.directory)
     setStore("todo", sessionID, [])
 
-    input.onAbort?.()
+    if (options?.pauseQueue !== false) input.onAbort?.()
 
     const queued = pending.get(sessionID)
     if (queued) {
@@ -286,7 +286,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     })
   }
 
-  const handleSubmit = async (event: Event) => {
+  const handleSubmit = async (event: Event, options?: { queue?: boolean }) => {
     event.preventDefault()
 
     const currentPrompt = prompt.current()
@@ -424,7 +424,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
+    if (!isNewSession && mode === "normal" && input.shouldQueue?.() && options?.queue !== false) {
       input.onQueue?.(draft)
       clearContext()
       clearInput()

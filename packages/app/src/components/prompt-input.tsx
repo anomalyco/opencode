@@ -293,20 +293,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const stopping = createMemo(() => working() && blank())
   const tip = () => {
     if (stopping()) {
-      return (
-        <div class="flex items-center gap-2">
-          <span>{language.t("prompt.action.stop")}</span>
-          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
-        </div>
-      )
+      return <span>{language.t("prompt.action.stop")}</span>
     }
 
-    return (
-      <div class="flex items-center gap-2">
-        <span>{language.t("prompt.action.send")}</span>
-        <Icon name="enter" size="small" class="text-icon-base" />
-      </div>
-    )
+    return <span>{language.t("prompt.action.send")}</span>
   }
 
   const contextItems = createMemo(() => {
@@ -1180,6 +1170,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
 
+    if (ctrl && event.key === "Enter") {
+      event.preventDefault()
+      if (event.repeat) return
+      if (working()) {
+        if (blank()) {
+          void abort()
+          return
+        }
+        void abort({ pauseQueue: false }).then(() => handleSubmit(event, { queue: false }))
+        return
+      }
+      void handleSubmit(event, { queue: false })
+      return
+    }
+
     if (store.popover) {
       if (event.key === "Tab") {
         selectPopoverActive()
@@ -1237,18 +1242,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       if (event.repeat) return
-      if (
-        working() &&
-        prompt
-          .current()
-          .map((part) => ("content" in part ? part.content : ""))
-          .join("")
-          .trim().length === 0 &&
-        imageAttachments().length === 0 &&
-        commentCount() === 0
-      ) {
-        return
-      }
+      if (working() && blank()) return
       void handleSubmit(event)
     }
   }

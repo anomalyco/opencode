@@ -363,6 +363,11 @@ function createGlobalSync() {
         reasons: input.reasons,
       })
       try {
+        if (input.reasons.includes("server-connected") || input.reasons.includes("global-disposed")) {
+          // A restarted server may now return a different root-session list.
+          // Drop the in-memory session list cache so recovery refetches it.
+          sessionMeta.clear()
+        }
         await bootstrap()
         const directories = Object.keys(children.children)
         if (directories.length === 0) return

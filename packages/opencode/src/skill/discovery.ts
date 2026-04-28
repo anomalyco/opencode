@@ -19,7 +19,7 @@ class Index extends Schema.Class<Index>("Index")({
 }) {}
 
 export interface Interface {
-  readonly pull: (url: string) => Effect.Effect<string[]>
+  readonly pull: (url: string, opts?: { refresh?: boolean }) => Effect.Effect<string[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SkillDiscovery") {}
@@ -34,8 +34,8 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Path.Pat
       const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
       const cache = path.join(Global.Path.cache, "skills")
 
-      const download = Effect.fn("Discovery.download")(function* (url: string, dest: string) {
-        if (yield* fs.exists(dest).pipe(Effect.orDie)) return true
+      const download = Effect.fn("Discovery.download")(function* (url: string, dest: string, opts?: { refresh?: boolean }) {
+        if (!opts?.refresh && (yield* fs.exists(dest).pipe(Effect.orDie))) return true
 
         return yield* HttpClientRequest.get(url).pipe(
           http.execute,
@@ -51,7 +51,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Path.Pat
         )
       })
 
-      const pull = Effect.fn("Discovery.pull")(function* (url: string) {
+      const pull = Effect.fn("Discovery.pull")(function* (url: string, opts?: { refresh?: boolean }) {
         const base = url.endsWith("/") ? url : `${url}/`
         const index = new URL("index.json", base).href
         const host = base.slice(0, -1)
@@ -88,7 +88,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Path.Pat
 
               yield* Effect.forEach(
                 skill.files,
-                (file) => download(new URL(file, `${host}/${skill.name}/`).href, path.join(root, file)),
+                (file) => download(new URL(file, `${host}/${skill.name}/`).href, path.join(root, file), opts),
                 {
                   concurrency: fileConcurrency,
                 },

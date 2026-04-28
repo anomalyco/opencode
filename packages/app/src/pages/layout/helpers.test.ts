@@ -199,6 +199,26 @@ describe("layout workspace helpers", () => {
     expect(result?.id).toBe("root")
   })
 
+  test("keeps loaded root sessions visible when path metadata is unavailable", () => {
+    const result = latestRootSession(
+      [
+        {
+          path: { directory: "" },
+          session: [
+            session({
+              id: "root",
+              directory: "/workspace",
+              time: { created: 30, updated: 30, archived: undefined },
+            }),
+          ],
+        },
+      ],
+      120_000,
+    )
+
+    expect(result?.id).toBe("root")
+  })
+
   test("finds the direct child on the active session path", () => {
     const list = [
       session({ id: "root", directory: "/workspace" }),

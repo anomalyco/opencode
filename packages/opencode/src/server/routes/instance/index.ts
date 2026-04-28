@@ -249,6 +249,33 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           return yield* skill.all()
         }),
     )
+    .post(
+      "/skill/refresh",
+      describeRoute({
+        summary: "Refresh skills",
+        description: "Rescan and reload all available skills without restarting the OpenCode server.",
+        operationId: "app.refreshSkills",
+        responses: {
+          200: {
+            description: "List of refreshed skills",
+            content: {
+              "application/json": {
+                schema: resolver(Skill.Info.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) =>
+        jsonRequest("InstanceRoutes.skill.refresh", c, function* () {
+          const skill = yield* Skill.Service
+          const agent = yield* Agent.Service
+          const command = yield* Command.Service
+          const list = yield* skill.refresh()
+          yield* Effect.all([agent.refresh(), command.refresh()], { concurrency: 2, discard: true })
+          return list
+        }),
+    )
     .get(
       "/lsp",
       describeRoute({

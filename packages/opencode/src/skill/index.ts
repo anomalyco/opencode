@@ -69,6 +69,7 @@ export interface Interface {
   readonly all: () => Effect.Effect<Info[]>
   readonly dirs: () => Effect.Effect<string[]>
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  readonly refresh: () => Effect.Effect<Info[]>
 }
 
 const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.Interface) {
@@ -147,6 +148,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   fsys: AppFileSystem.Interface,
   directory: string,
   worktree: string,
+  opts?: { refresh?: boolean },
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
 
@@ -184,7 +186,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   }
 
   for (const url of cfg.skills?.urls ?? []) {
-    const pulledDirs = yield* discovery.pull(url)
+    const pulledDirs = yield* discovery.pull(url, { refresh: opts?.refresh })
     for (const dir of pulledDirs) {
       yield* scan(state, dir, SKILL_PATTERN)
     }
@@ -214,16 +216,18 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const bus = yield* Bus.Service
     const fsys = yield* AppFileSystem.Service
-    const discovered = yield* InstanceState.make(
-      Effect.fn("Skill.discovery")(function* (ctx) {
-        return yield* discoverSkills(config, discovery, fsys, ctx.directory, ctx.worktree)
-      }),
-    )
+    const loadState = Effect.fn("Skill.state.load")(function* (
+      ctx: { directory: string; worktree: string },
+      opts?: { refresh?: boolean },
+    ) {
+      const discovered = yield* discoverSkills(config, discovery, fsys, ctx.directory, ctx.worktree, opts)
+      const s: State = { skills: {}, dirs: new Set(discovered.dirs) }
+      yield* loadSkills(s, discovered, bus)
+      return s
+    })
     const state = yield* InstanceState.make(
       Effect.fn("Skill.state")(function* (ctx) {
-        const s: State = { skills: {}, dirs: new Set() }
-        yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
-        return s
+        return yield* loadState(ctx)
       }),
     )
 
@@ -238,7 +242,7 @@ export const layer = Layer.effect(
     })
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
-      return (yield* InstanceState.get(discovered)).dirs
+      return Array.from((yield* InstanceState.get(state)).dirs)
     })
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
@@ -248,7 +252,15 @@ export const layer = Layer.effect(
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })
 
-    return Service.of({ get, all, dirs, available })
+    const refresh = Effect.fn("Skill.refresh")(function* () {
+      const s = yield* InstanceState.get(state)
+      const next = yield* loadState(yield* InstanceState.context, { refresh: true })
+      s.skills = next.skills
+      s.dirs = next.dirs
+      return Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+    })
+
+    return Service.of({ get, all, dirs, available, refresh })
   }),
 )
 

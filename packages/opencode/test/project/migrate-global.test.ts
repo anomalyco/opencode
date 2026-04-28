@@ -7,6 +7,7 @@ import { ProjectID } from "../../src/project/schema"
 import { SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util"
 import { $ } from "bun"
+import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Effect } from "effect"
 
@@ -147,5 +148,24 @@ describe("migrateFromGlobal", () => {
     expect(row).toBeDefined()
     // Should remain under "global" — not stolen
     expect(row!.project_id).toBe(ProjectID.global)
+  })
+
+  test("repairs session directories when the project worktree path is canonicalized", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path))
+    const id = uid()
+    const alias = `${tmp.path}${path.sep}.`
+
+    Database.use((db) =>
+      db.update(ProjectTable).set({ worktree: alias }).where(eq(ProjectTable.id, project.id)).run(),
+    )
+    seed({ id, dir: alias, project: project.id })
+
+    await run((svc) => svc.fromDirectory(tmp.path))
+
+    const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+    expect(row).toBeDefined()
+    expect(row!.project_id).toBe(project.id)
+    expect(row!.directory).toBe(tmp.path)
   })
 })

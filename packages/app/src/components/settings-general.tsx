@@ -1,4 +1,4 @@
-import { Component, For, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, For, Show, batch, createMemo, createResource, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -13,6 +13,7 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { usePush } from "@/context/push"
+import { useSDK } from "@/context/sdk"
 import {
   monoDefault,
   monoFontFamily,
@@ -25,6 +26,8 @@ import {
   terminalInput,
   useSettings,
 } from "@/context/settings"
+import { useSync } from "@/context/sync"
+import { normalizeAgentList } from "@/context/global-sync/utils"
 import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
@@ -74,8 +77,10 @@ export const SettingsGeneral: Component = () => {
   const permission = usePermission()
   const platform = usePlatform()
   const push = usePush()
+  const sdk = useSDK()
   const params = useParams()
   const settings = useSettings()
+  const sync = useSync()
 
   onMount(() => {
     void theme.loadThemes()
@@ -89,6 +94,7 @@ export const SettingsGeneral: Component = () => {
     pushSavingID: undefined as string | undefined,
     pushTesting: false,
     pushUnsubscribing: false,
+    refreshingSkills: false,
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
@@ -391,6 +397,31 @@ export const SettingsGeneral: Component = () => {
       .finally(() => setStore("checking", false))
   }
 
+  const refreshSkills = async () => {
+    setStore("refreshingSkills", true)
+    try {
+      const skills = await sdk.client.app.refreshSkills()
+      const [agents, commands] = await Promise.all([sdk.client.app.agents(), sdk.client.command.list()])
+      batch(() => {
+        sync.set("agent", normalizeAgentList(agents.data))
+        sync.set("command", commands.data ?? [])
+      })
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("settings.general.skills.toast.refreshed.title"),
+        description: language.t("settings.general.skills.toast.refreshed.description", {
+          count: skills.data?.length ?? 0,
+        }),
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast({ title: language.t("common.requestFailed"), description: message })
+    } finally {
+      setStore("refreshingSkills", false)
+    }
+  }
+
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
   const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
@@ -469,6 +500,22 @@ export const SettingsGeneral: Component = () => {
           <div data-action="settings-auto-accept-permissions">
             <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
           </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.skills.refresh.title")}
+          description={language.t("settings.general.skills.refresh.description")}
+        >
+          <Button
+            size="small"
+            variant="secondary"
+            disabled={store.refreshingSkills}
+            onClick={() => void refreshSkills()}
+          >
+            {store.refreshingSkills
+              ? language.t("settings.general.skills.refresh.action.refreshing")
+              : language.t("settings.general.skills.refresh.action")}
+          </Button>
         </SettingsRow>
 
         <SettingsRow

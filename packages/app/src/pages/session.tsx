@@ -38,7 +38,6 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
-import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
@@ -329,7 +328,6 @@ export default function Page() {
   const dialog = useDialog()
   const language = useLanguage()
   const sdk = useSDK()
-  const settings = useSettings()
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
@@ -1584,7 +1582,7 @@ export default function Page() {
   const queueEnabled = createMemo(() => {
     const id = params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
+    return busy(id) && !composer.blocked() && !isChildSession()
   })
 
   const followupText = (item: FollowupDraft) => {

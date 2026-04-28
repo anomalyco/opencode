@@ -765,6 +765,13 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
   "settings.general.row.showSessionProgressBar.description":
     "Display the animated progress bar at the top of the session when the agent is working",
+  "settings.general.skills.refresh.title": "Skills",
+  "settings.general.skills.refresh.description":
+    "Rescan skill folders and reload changed skill instructions without restarting the server.",
+  "settings.general.skills.refresh.action": "Refresh skills",
+  "settings.general.skills.refresh.action.refreshing": "Refreshing...",
+  "settings.general.skills.toast.refreshed.title": "Skills refreshed",
+  "settings.general.skills.toast.refreshed.description": "{{count}} skills available for this workspace.",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
