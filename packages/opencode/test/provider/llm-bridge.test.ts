@@ -47,7 +47,7 @@ describe("ProviderLLMBridge", () => {
       id: "gpt-5",
       provider: "openai",
       protocol: "openai-responses",
-      headers: { authorization: "Bearer openai-key" },
+      apiKey: "openai-key",
       limits: { context: 128_000, output: 32_000 },
     })
     expect(ref?.capabilities.reasoning.efforts).toEqual(["high"])
@@ -65,8 +65,8 @@ describe("ProviderLLMBridge", () => {
 
     expect(ref).toMatchObject({
       protocol: "anthropic-messages",
+      apiKey: "anthropic-key",
       headers: {
-        "x-api-key": "anthropic-key",
         "anthropic-beta": "fine-grained-tool-streaming-2025-05-14",
       },
     })
@@ -81,7 +81,7 @@ describe("ProviderLLMBridge", () => {
 
     expect(ref).toMatchObject({
       protocol: "gemini",
-      headers: { "x-goog-api-key": "google-key" },
+      apiKey: "google-key",
     })
     expect(ref?.capabilities.tools.streamingInput).toBe(false)
   })
@@ -102,7 +102,7 @@ describe("ProviderLLMBridge", () => {
       provider: "togetherai",
       protocol: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
-      headers: { authorization: "Bearer together-key" },
+      apiKey: "together-key",
     })
   })
 
@@ -115,7 +115,7 @@ describe("ProviderLLMBridge", () => {
     expect(ref).toMatchObject({
       provider: "github-copilot",
       protocol: "openai-responses",
-      headers: { authorization: "Bearer copilot-key" },
+      apiKey: "copilot-key",
     })
   })
 
@@ -133,7 +133,7 @@ describe("ProviderLLMBridge", () => {
       provider: "azure",
       protocol: "openai-responses",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
-      headers: { authorization: "Bearer azure-key" },
+      apiKey: "azure-key",
       native: { queryParams: { "api-version": "2025-04-01-preview" } },
     })
   })
@@ -173,8 +173,8 @@ describe("ProviderLLMBridge", () => {
     expect(ref).toMatchObject({
       protocol: "openai-compatible-chat",
       baseURL: "https://custom.cerebras.test/v1",
+      apiKey: "cerebras-key",
       headers: {
-        authorization: "Bearer cerebras-key",
         "X-Cerebras-3rd-Party-Integration": "opencode",
         "x-model-header": "1",
       },
@@ -193,7 +193,7 @@ describe("ProviderLLMBridge", () => {
 
     expect(ref).toMatchObject({
       protocol: "bedrock-converse",
-      headers: { authorization: "Bearer bedrock-bearer-key" },
+      apiKey: "bedrock-bearer-key",
     })
     // Bedrock Converse supports both prompt-level and positional content-block
     // cache markers (cachePoint blocks landed in 9d7d518ac).

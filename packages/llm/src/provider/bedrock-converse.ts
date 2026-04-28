@@ -524,11 +524,6 @@ const credentialsFromInput = (request: LLMRequest): BedrockCredentials | undefin
     Option.getOrUndefined,
   )
 
-const isBearerAuth = (headers: Record<string, string> | undefined) => {
-  const auth = headers?.authorization ?? headers?.Authorization
-  return typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")
-}
-
 const signRequest = (input: {
   readonly url: string
   readonly body: string
@@ -555,8 +550,8 @@ const signRequest = (input: {
   })
 
 /**
- * Bedrock auth. Bearer API key wins if `model.headers.authorization` is set;
- * otherwise we sign the request with SigV4 using AWS credentials from
+ * Bedrock auth. `model.apiKey` (Bedrock's newer Bearer API key auth) wins if
+ * set; otherwise we sign the request with SigV4 using AWS credentials from
  * `model.native.aws_credentials`. SigV4 must sign the exact bytes that get
  * sent, so the `content-type: application/json` header is included in the
  * signing input — `jsonPost` then sets the same value below and the signature
@@ -564,11 +559,12 @@ const signRequest = (input: {
  */
 const auth: Auth = (input) =>
   Effect.gen(function* () {
-    if (isBearerAuth(input.headers)) return input.headers
+    const apiKey = input.request.model.apiKey
+    if (apiKey) return { ...input.headers, authorization: `Bearer ${apiKey}` }
     const credentials = credentialsFromInput(input.request)
     if (!credentials) {
       return yield* invalid(
-        "Bedrock Converse requires either a Bearer API key in headers or AWS credentials in model.native.aws_credentials",
+        "Bedrock Converse requires either model.apiKey or AWS credentials in model.native.aws_credentials",
       )
     }
     const headersForSigning: Record<string, string> = {
@@ -841,13 +837,11 @@ export const adapter = Adapter.fromProtocol({
 })
 
 export const model = (input: BedrockConverseModelInput) => {
-  const { apiKey, credentials, headers, ...rest } = input
-  const authHeaders = apiKey ? { ...headers, authorization: `Bearer ${apiKey}` } : headers
+  const { credentials, ...rest } = input
   return llmModel({
     ...rest,
     provider: "bedrock",
     protocol: "bedrock-converse",
-    headers: authHeaders,
     capabilities:
       input.capabilities ??
       capabilities({

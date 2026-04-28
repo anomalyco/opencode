@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Adapter } from "../adapter"
+import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -476,16 +477,15 @@ export const adapter = Adapter.fromProtocol({
     // Gemini's path embeds the model id and pins SSE framing at the URL level.
     path: ({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`,
   }),
+  auth: Auth.apiKeyHeader("x-goog-api-key"),
   framing: Framing.sse,
 })
 
-export const model = (input: GeminiModelInput) => {
-  const { apiKey, headers, ...rest } = input
-  return llmModel({
-    ...rest,
+export const model = (input: GeminiModelInput) =>
+  llmModel({
+    ...input,
     provider: "google",
     protocol: "gemini",
-    headers: apiKey ? { ...headers, "x-goog-api-key": apiKey } : headers,
     capabilities: input.capabilities ?? capabilities({
       input: { image: true, audio: true, video: true, pdf: true },
       output: { reasoning: true },
@@ -493,6 +493,5 @@ export const model = (input: GeminiModelInput) => {
       reasoning: { efforts: ["minimal", "low", "medium", "high", "xhigh", "max"] },
     }),
   })
-}
 
 export * as Gemini from "./gemini"

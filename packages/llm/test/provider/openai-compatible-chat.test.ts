@@ -66,7 +66,7 @@ describe("OpenAI-compatible Chat adapter", () => {
         provider: "deepseek",
         protocol: "openai-compatible-chat",
         baseURL: "https://api.deepseek.test/v1/",
-        headers: { authorization: "Bearer test-key" },
+        apiKey: "test-key",
         native: { queryParams: { "api-version": "2026-01-01" } },
       })
       expect(prepared.target).toEqual({
@@ -94,7 +94,7 @@ describe("OpenAI-compatible Chat adapter", () => {
             provider: String(model.provider),
             protocol: model.protocol,
             baseURL: model.baseURL,
-            headers: model.headers,
+            apiKey: model.apiKey,
             native: model.native,
           }
         }),
@@ -104,7 +104,7 @@ describe("OpenAI-compatible Chat adapter", () => {
           provider,
           protocol: "openai-compatible-chat",
           baseURL,
-          headers: { authorization: "Bearer test-key" },
+          apiKey: "test-key",
           native: { openaiCompatibleProvider: provider },
         })),
       )

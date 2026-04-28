@@ -67,20 +67,13 @@ const baseURL = (input: Input, resolution: ProviderResolution, options: Record<s
   return resolution.baseURL
 }
 
-const authHeader = (auth: ProviderAuth, apiKey: string | undefined): Record<string, string> => {
-  if (!apiKey) return {}
-  if (auth === "none") return {}
-  if (auth === "anthropic-api-key") return { "x-api-key": apiKey }
-  if (auth === "google-api-key") return { "x-goog-api-key": apiKey }
-  return { authorization: `Bearer ${apiKey}` }
+const apiKey = (input: Input, resolution: ProviderResolution, options: Record<string, unknown>) => {
+  if (resolution.auth === "none") return undefined
+  return stringOption(options, "apiKey") ?? input.provider.key
 }
 
-const headers = (input: Input, resolution: ProviderResolution, options: Record<string, unknown>) => {
-  const result = {
-    ...authHeader(resolution.auth, stringOption(options, "apiKey") ?? input.provider.key),
-    ...recordOption(options, "headers"),
-    ...input.model.headers,
-  }
+const headers = (input: Input, options: Record<string, unknown>) => {
+  const result = { ...recordOption(options, "headers"), ...input.model.headers }
   return Object.keys(result).length === 0 ? undefined : result
 }
 
@@ -139,7 +132,8 @@ export const toModelRef = (input: Input): ModelRef | undefined => {
     provider: resolution.provider,
     protocol: resolution.protocol,
     baseURL: baseURL(input, resolution, options),
-    headers: headers(input, resolution, options),
+    apiKey: apiKey(input, resolution, options),
+    headers: headers(input, options),
     capabilities: capabilities(input, resolution),
     limits: LLM.limits({ context: input.model.limit.context, output: input.model.limit.output }),
     native: {

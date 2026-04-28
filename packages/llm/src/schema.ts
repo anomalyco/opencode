@@ -77,6 +77,12 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
   provider: ProviderID,
   protocol: ProtocolID,
   baseURL: Schema.optional(Schema.String),
+  /**
+   * Auth secret read by `Auth.bearer` / `Auth.apiKeyHeader` at request time.
+   * Lives here so authentication is not baked into `headers` at construction
+   * time and the `Auth` axis can actually do its job per request.
+   */
+  apiKey: Schema.optional(Schema.String),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   capabilities: ModelCapabilities,
   limits: ModelLimits,

@@ -1,4 +1,5 @@
 import { Adapter } from "../adapter"
+import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -35,19 +36,15 @@ export const adapter = Adapter.fromProtocol({
     path: "/chat/completions",
     required: "OpenAI-compatible Chat requires a baseURL",
   }),
+  auth: Auth.bearer,
   framing: Framing.sse,
 })
 
 export const model = (input: OpenAICompatibleChatModelInput) => {
-  const { apiKey, headers, queryParams, native, ...rest } = input
+  const { queryParams, native, ...rest } = input
   return llmModel({
     ...rest,
     protocol: "openai-compatible-chat",
-    // Match the precedence used by every other adapter: when an `apiKey` is
-    // supplied, its `Authorization: Bearer ...` wins over caller-provided
-    // headers. Callers who want to override auth should omit `apiKey` and set
-    // the header themselves.
-    headers: apiKey ? { ...headers, authorization: `Bearer ${apiKey}` } : headers,
     native: queryParams ? { ...native, queryParams } : native,
     capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
   })

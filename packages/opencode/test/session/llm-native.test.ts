@@ -146,7 +146,7 @@ describe("LLMNative.request", () => {
         id: "gpt-5",
         provider: "openai",
         protocol: "openai-responses",
-        headers: { authorization: "Bearer openai-key" },
+        apiKey: "openai-key",
       },
       system: [{ type: "text", text: "You are concise." }],
       generation: { maxTokens: 123, temperature: 0.2, topP: 0.9 },
@@ -659,7 +659,7 @@ describe("LLMNative.request", () => {
     expect(request.model).toMatchObject({
       provider: "anthropic",
       protocol: "anthropic-messages",
-      headers: { "x-api-key": "anthropic-key" },
+      apiKey: "anthropic-key",
     })
     expect(prepared.target).toMatchObject({
       model: "claude-sonnet-4-5",
@@ -729,7 +729,7 @@ describe("LLMNative.request", () => {
       provider: "togetherai",
       protocol: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
-      headers: { authorization: "Bearer together-key" },
+      apiKey: "together-key",
     })
     expect(prepared.target).toMatchObject({
       model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
@@ -791,7 +791,7 @@ describe("LLMNative.request", () => {
       provider: "azure",
       protocol: "openai-responses",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
-      headers: { authorization: "Bearer azure-key" },
+      apiKey: "azure-key",
       native: { queryParams: { "api-version": "2025-04-01-preview" } },
     })
   }))
@@ -815,7 +815,7 @@ describe("LLMNative.request", () => {
       provider: "azure",
       protocol: "openai-chat",
       baseURL: "https://opencode-test.openai.azure.com/openai/v1",
-      headers: { authorization: "Bearer azure-key" },
+      apiKey: "azure-key",
       native: { queryParams: { "api-version": "v1" } },
     })
   }))
@@ -859,7 +859,7 @@ describe("LLMNative.request", () => {
       provider: "google",
       protocol: "gemini",
       baseURL: "https://generativelanguage.googleapis.com/v1beta",
-      headers: { "x-goog-api-key": "google-key" },
+      apiKey: "google-key",
     })
     expect(prepared.target).toMatchObject({
       systemInstruction: { parts: [{ text: "You are concise." }] },

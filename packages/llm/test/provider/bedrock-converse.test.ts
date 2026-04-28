@@ -259,7 +259,7 @@ describe("Bedrock Converse adapter", () => {
         .generate(LLM.updateRequest(baseRequest, { model: unsignedModel }))
         .pipe(Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))), Effect.flip)
 
-      expect(error.message).toContain("Bedrock Converse requires either a Bearer API key")
+      expect(error.message).toContain("Bedrock Converse requires either model.apiKey")
     }),
   )
 

@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Adapter } from "../adapter"
+import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -520,17 +521,16 @@ export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.anthropic.com/v1", path: "/messages" }),
+  auth: Auth.apiKeyHeader("x-api-key"),
   framing: Framing.sse,
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 
-export const model = (input: AnthropicMessagesModelInput) => {
-  const { apiKey, headers, ...rest } = input
-  return llmModel({
-    ...rest,
+export const model = (input: AnthropicMessagesModelInput) =>
+  llmModel({
+    ...input,
     provider: "anthropic",
     protocol: "anthropic-messages",
-    headers: apiKey ? { ...headers, "x-api-key": apiKey } : headers,
     capabilities: input.capabilities ?? capabilities({
       output: { reasoning: true },
       tools: { calls: true, streamingInput: true },
@@ -538,6 +538,5 @@ export const model = (input: AnthropicMessagesModelInput) => {
       reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], summaries: false, encryptedContent: true },
     }),
   })
-}
 
 export * as AnthropicMessages from "./anthropic-messages"
