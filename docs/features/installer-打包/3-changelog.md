@@ -28,13 +28,12 @@ DeskFox 打成 Windows installer 走 Inno Setup 6 路线(Tauri NSIS 因 SignTool
 
 ## commit 列表
 
-(待 commit 后回填 hash)
+| commit | 简述 |
+|---|---|
+| `1523ea963` | `fix(branding): icon pipeline 修` — apply-icons.ps1 改 glob、prod.json 加 bundle.icon override、ico-source/{64,128,256}.png 加、骗人的 48.png 删 |
+| `0236481cb` | `feat(installer): DeskFox Inno Setup 打包 + 简中语言包` — DeskFox.iss + ChineseSimplified.isl + .gitignore + 三文档 + INDEX/改动日志 索引 |
 
-可分两笔走,各自独立可 revert:
-- **icon-pipeline-fix**:apply-icons.ps1 + prod.json + ico-source/ 调整 — 修底层 bug
-- **installer-打包**:DeskFox.iss + ChineseSimplified.isl + .gitignore — 打包能力新增
-
-或合一笔(两件事同源,都为打可分发包),由 user 定。
+两笔分开,各自独立可 revert(走方案 A,理由见 1-spec/2-plan)。
 
 ## 验收结果
 
