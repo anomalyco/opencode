@@ -21,7 +21,7 @@ import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Effect, Layer, Schema, Struct } from "effect"
+import { Effect, Layer, Schema, SchemaGetter, Struct } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import {
@@ -37,9 +37,15 @@ import { Authorization } from "./auth"
 
 const log = Log.create({ service: "server" })
 const root = "/session"
+const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
+  }),
+)
 const ListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
-  roots: Schema.optional(Schema.String),
+  roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
@@ -87,10 +93,6 @@ const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields
 const PermissionResponsePayload = Schema.Struct({
   response: Permission.Reply,
 }).annotate({ identifier: "SessionPermissionResponseInput" })
-
-function legacyQueryBoolean(value: string | undefined) {
-  return value ? true : undefined
-}
 
 export const SessionPaths = {
   list: root,
@@ -440,7 +442,7 @@ export const sessionHandlers = Layer.unwrap(
         Array.from(
           Session.list({
             directory: ctx.query.directory,
-            roots: legacyQueryBoolean(ctx.query.roots),
+            roots: ctx.query.roots,
             start: ctx.query.start,
             search: ctx.query.search,
             limit: ctx.query.limit,

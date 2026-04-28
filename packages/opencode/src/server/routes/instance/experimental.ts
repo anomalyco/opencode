@@ -37,6 +37,8 @@ const ConsoleSwitchBody = z.object({
   orgID: z.string(),
 })
 
+const QueryBoolean = z.enum(["true", "false"]).transform((value) => value === "true")
+
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
     .get(
@@ -346,7 +348,7 @@ export const ExperimentalRoutes = lazy(() =>
         "query",
         z.object({
           directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
-          roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
+          roots: QueryBoolean.optional().meta({ description: "Only return root sessions (no parentID)" }),
           start: z.coerce
             .number()
             .optional()
@@ -357,7 +359,7 @@ export const ExperimentalRoutes = lazy(() =>
             .meta({ description: "Return sessions updated before this timestamp (milliseconds since epoch)" }),
           search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
           limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
-          archived: z.coerce.boolean().optional().meta({ description: "Include archived sessions (default false)" }),
+          archived: QueryBoolean.optional().meta({ description: "Include archived sessions (default false)" }),
         }),
       ),
       async (c) => {

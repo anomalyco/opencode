@@ -30,6 +30,8 @@ import { jsonRequest, runRequest } from "./trace"
 
 const log = Log.create({ service: "server" })
 
+const QueryBoolean = z.enum(["true", "false"]).transform((value) => value === "true")
+
 export const SessionRoutes = lazy(() =>
   new Hono()
     .get(
@@ -53,7 +55,7 @@ export const SessionRoutes = lazy(() =>
         "query",
         z.object({
           directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
-          roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
+          roots: QueryBoolean.optional().meta({ description: "Only return root sessions (no parentID)" }),
           start: z.coerce
             .number()
             .optional()

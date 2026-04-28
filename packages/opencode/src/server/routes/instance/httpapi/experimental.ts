@@ -10,7 +10,7 @@ import { Session } from "@/session/session"
 import { ToolRegistry } from "@/tool/registry"
 import * as EffectZod from "@/util/effect-zod"
 import { Worktree } from "@/worktree"
-import { Effect, Layer, Option, Schema } from "effect"
+import { Effect, Layer, Option, Schema, SchemaGetter } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
@@ -51,20 +51,22 @@ const ToolListQuery = Schema.Struct({
   model: ModelID,
 })
 
+const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
+  }),
+)
 const WorktreeList = Schema.Array(Schema.String).annotate({ identifier: "WorktreeList" })
 const SessionListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
-  roots: Schema.optional(Schema.String),
+  roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   cursor: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
-  archived: Schema.optional(Schema.String),
+  archived: Schema.optional(QueryBoolean),
 })
-
-function legacyQueryBoolean(value: string | undefined) {
-  return value ? true : undefined
-}
 
 export const ExperimentalPaths = {
   console: "/experimental/console",
@@ -311,12 +313,12 @@ export const experimentalHandlers = Layer.unwrap(
       const sessions = Array.from(
         Session.listGlobal({
           directory: ctx.query.directory,
-          roots: legacyQueryBoolean(ctx.query.roots),
+          roots: ctx.query.roots,
           start: ctx.query.start,
           cursor: ctx.query.cursor,
           search: ctx.query.search,
           limit: limit + 1,
-          archived: legacyQueryBoolean(ctx.query.archived),
+          archived: ctx.query.archived,
         }),
       )
       const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
