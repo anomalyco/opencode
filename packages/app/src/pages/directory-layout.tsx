@@ -1,17 +1,20 @@
-import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
-import { createStore } from "solid-js/store"
-import { useNavigate, useParams } from "@solidjs/router"
+import { DataProvider } from "@opencode-ai/ui/context"
+import { showToast } from "@opencode-ai/ui/toast"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
+import { Portal } from "solid-js/web"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { useLanguage } from "@/context/language"
+import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
+import { SkillsProvider } from "@/context/skills"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
 
 import { DataProvider } from "@opencode-ai/ui/context"
 import { decode64 } from "@/utils/base64"
-import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, createResource, type ParentProps, Show } from "solid-js"
-import { useLanguage } from "@/context/language"
+import { StatusPopover } from "@/components/status-popover"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const params = useParams()
@@ -43,13 +46,20 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   )
 }
 
-function DirectoryProviders(props: ParentProps<{ directory: string }>) {
+function ProjectStatusPortal() {
+  const language = useLanguage()
+  const mount = createMemo(() => document.getElementById("opencode-titlebar-center-project"))
+
   return (
-    <SDKProvider directory={() => props.directory}>
-      <SyncProvider>
-        <DirectoryDataProvider directory={props.directory}>{props.children}</DirectoryDataProvider>
-      </SyncProvider>
-    </SDKProvider>
+    <Show when={mount()}>
+      {(node) => (
+        <Portal mount={node()}>
+          <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
+            <StatusPopover />
+          </Tooltip>
+        </Portal>
+      )}
+    </Show>
   )
 }
 
@@ -74,8 +84,17 @@ export default function Layout(props: ParentProps) {
   })
 
   return (
-    <Show when={directory()}>
-      <DirectoryProviders directory={directory()}>{props.children}</DirectoryProviders>
+    <Show when={resolved()} keyed>
+      {(resolved) => (
+        <SDKProvider directory={() => resolved}>
+          <SyncProvider>
+            <SkillsProvider>
+              <ProjectStatusPortal />
+              <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+            </SkillsProvider>
+          </SyncProvider>
+        </SDKProvider>
+      )}
     </Show>
   )
 }

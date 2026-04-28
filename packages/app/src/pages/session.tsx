@@ -1593,6 +1593,7 @@ export default function Page() {
   const jumpThreshold = (el: HTMLDivElement) => Math.max(400, el.clientHeight)
 
   const updateScrollState = (el: HTMLDivElement) => {
+    if (!el.isConnected || el.clientHeight <= 0 || el.scrollHeight <= 0) return
     const top = clamp(el)
     const max = el.scrollHeight - el.clientHeight
     const distance = max - el.scrollTop
@@ -1629,6 +1630,7 @@ export default function Page() {
 
       const el = scroller
       if (!el) return
+      if (el.clientHeight <= 0 || el.scrollHeight <= 0) return
       if (el.scrollHeight > el.clientHeight + 1) return
       if (!historyMore()) return
 
@@ -1713,6 +1715,15 @@ export default function Page() {
     scroller = el
     autoScroll.scrollRef(el)
     if (!el) return
+    let prevTop = el.scrollTop
+    const onScroll = () => {
+      const nextTop = el.scrollTop
+      prevTop = nextTop
+    }
+    el.addEventListener("scroll", onScroll, { passive: true })
+    onCleanup(() => {
+      el.removeEventListener("scroll", onScroll)
+    })
     scheduleScrollState(el)
     fill()
   }

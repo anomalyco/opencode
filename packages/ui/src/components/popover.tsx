@@ -114,6 +114,9 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
           [local.class ?? ""]: !!local.class,
         }}
         style={local.style}
+        onOpenAutoFocus={(event: Event) => {
+          event.preventDefault()
+        }}
         onCloseAutoFocus={(event: Event) => {
           if (state.dismiss === "outside") event.preventDefault()
           setState("dismiss", null)

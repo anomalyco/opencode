@@ -178,9 +178,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   }
 
   const drag = (e: MouseEvent) => {
+    const blocked = interactive(e.target)
     if (platform.platform !== "desktop") return
     if (e.buttons !== 1) return
-    if (interactive(e.target)) return
+    if (blocked) return
 
     const win = getWin()
     if (!win?.startDragging) return
@@ -638,8 +639,31 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               </Show>
             </div>
           </div>
-        </Match>
-      </Switch>
+        </div>
+        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+      </div>
+
+      <div class="min-w-0 flex items-center justify-center pointer-events-none">
+        <div class="pointer-events-auto min-w-0 flex items-center justify-center gap-2 w-fit max-w-full">
+          <div id="opencode-titlebar-center" class="min-w-0 flex justify-center w-fit max-w-full" />
+          <div id="opencode-titlebar-center-project" class="hidden md:flex shrink-0" />
+        </div>
+      </div>
+
+      <div
+        classList={{
+          "flex items-center min-w-0 justify-end": true,
+          "pr-2": !windows(),
+        }}
+        data-tauri-drag-region
+        onMouseDown={drag}
+      >
+        <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
+        <Show when={windows()}>
+          {!tauriApi() && <div class="w-36 shrink-0" />}
+          <div data-tauri-decorum-tb class="flex flex-row" />
+        </Show>
+      </div>
     </header>
   )
 }

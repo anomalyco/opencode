@@ -417,6 +417,14 @@ export function MessageTimeline(props: {
         bottom: 0,
       }
     }
+    if (root.clientHeight <= 0 || root.scrollHeight <= 0) {
+      return {
+        start: 0,
+        end: ids.length,
+        top: 0,
+        bottom: 0,
+      }
+    }
 
     if (props.live) {
       return tailWindow(ids, root)
@@ -513,11 +521,12 @@ export function MessageTimeline(props: {
 
     setWindowed(next)
     const adjustVersion = ++windowAdjustVersion
-    if ((props.live || props.scroll.bottom) && !props.currentMessageId) {
+    if (((isWorking() && props.live) || props.scroll.bottom) && !props.currentMessageId) {
       requestAnimationFrame(() => {
         if (adjustVersion !== windowAdjustVersion) return
         const root = viewport
         if (!root) return
+        if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
         const prevTop = root.scrollTop
         root.scrollTop = root.scrollHeight
         const after = snap(root)
