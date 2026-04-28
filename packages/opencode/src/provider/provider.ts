@@ -19,6 +19,7 @@ import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Agent as UndiciAgent, fetch as undiciFetch } from "undici"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -34,6 +35,10 @@ import { ProviderError } from "./error"
 import { LiteLLM } from "./litellm"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
+
+// Some LiteLLM deployments sit behind proxies (NGINX ingress, Azure App Gateway)
+// that buffer SSE on HTTP/1.1 but stream correctly on HTTP/2.
+const litellmDispatcher = new UndiciAgent({ allowH2: true })
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -922,6 +927,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           baseURL,
           apiKey,
           litellmProxy: true,
+          fetch: (input: any, init?: any) =>
+            undiciFetch(typeof input === "string" ? input : (input as Request).url, {
+              ...init,
+              dispatcher: litellmDispatcher,
+            }) as unknown as Promise<Response>,
           ...(Object.keys(customHeaders).length > 0 ? { headers: customHeaders } : {}),
         },
       }
