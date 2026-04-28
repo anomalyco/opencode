@@ -3,7 +3,7 @@ import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { AwsV4Signer } from "aws4fetch"
 import { Effect, Option, Schema, Stream } from "effect"
 import { Adapter } from "../adapter"
-import type { Auth } from "../auth"
+import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import type { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -557,28 +557,20 @@ const signRequest = (input: {
  * signing input — `jsonPost` then sets the same value below and the signature
  * stays valid.
  */
-const auth: Auth = (input) =>
-  Effect.gen(function* () {
-    const apiKey = input.request.model.apiKey
-    if (apiKey) return { ...input.headers, authorization: `Bearer ${apiKey}` }
+const auth: Auth = (input) => {
+  if (input.request.model.apiKey) return Auth.bearer(input)
+  return Effect.gen(function* () {
     const credentials = credentialsFromInput(input.request)
     if (!credentials) {
       return yield* invalid(
         "Bedrock Converse requires either model.apiKey or AWS credentials in model.native.aws_credentials",
       )
     }
-    const headersForSigning: Record<string, string> = {
-      ...input.headers,
-      "content-type": "application/json",
-    }
-    const signed = yield* signRequest({
-      url: input.url,
-      body: input.body,
-      headers: headersForSigning,
-      credentials,
-    })
+    const headersForSigning = { ...input.headers, "content-type": "application/json" }
+    const signed = yield* signRequest({ url: input.url, body: input.body, headers: headersForSigning, credentials })
     return { ...headersForSigning, ...signed }
   })
+}
 
 const mapFinishReason = (reason: string): FinishReason => {
   if (reason === "end_turn" || reason === "stop_sequence") return "stop"
