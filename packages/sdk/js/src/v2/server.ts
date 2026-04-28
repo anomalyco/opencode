@@ -5,6 +5,7 @@ import { stop, bindAbort } from "../process.js"
 export type ServerOptions = {
   hostname?: string
   port?: number
+  cors?: string | string[]
   signal?: AbortSignal
   timeout?: number
   config?: Config
@@ -31,6 +32,10 @@ export async function createOpencodeServer(options?: ServerOptions) {
 
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
+  if (options.cors) {
+    const origins = Array.isArray(options.cors) ? options.cors : [options.cors]
+    for (const origin of origins) args.push(`--cors=${origin}`)
+  }
 
   const proc = launch(`opencode`, args, {
     env: {
