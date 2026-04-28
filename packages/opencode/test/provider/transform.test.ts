@@ -3358,9 +3358,10 @@ describe("ProviderTransform.message - mergeTextParts for text-only models", () =
     expect(result).toHaveLength(1)
     // Image is unsupported → converted to error text → merged with original text into one part
     expect(result[0].content).toHaveLength(1)
-    expect(result[0].content[0].type).toBe("text")
-    expect(result[0].content[0].text).toContain("Analyze this school page")
-    expect(result[0].content[0].text).toContain("ERROR")
+    const part = result[0].content[0] as any
+    expect(part.type).toBe("text")
+    expect(part.text).toContain("Analyze this school page")
+    expect(part.text).toContain("ERROR")
   })
 
   test("does not merge when model supports images (multimodal)", () => {
