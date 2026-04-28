@@ -3,17 +3,13 @@
 import {
   ACCEPTED_FILE_EXTENSIONS,
   filePickerFilters,
-  AppBaseProviders,
-  AppInterface,
-  handleNotificationClick,
-  loadLocaleDict,
-  normalizeLocale,
-  type Locale,
-  type Platform,
-  PlatformProvider,
-  ServerConnection,
-  useCommand,
-} from "@opencode-ai/app"
+} from "../../app/src"
+import { AppBaseProviders, AppInterface } from "../../app/src/app"
+import { type Locale, loadLocaleDict, normalizeLocale } from "../../app/src/context/language"
+import { type Platform, PlatformProvider } from "../../app/src/context/platform"
+import { ServerConnection } from "../../app/src/context/server"
+import { useCommand } from "../../app/src/context/command"
+import { handleNotificationClick } from "../../app/src/utils/notification-click"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { getCurrentWebview } from "@tauri-apps/api/webview"
@@ -85,6 +81,35 @@ const [genericagentTick, setGenericagentTick] = createSignal(0)
 
 type StartupPhase = "launch" | "backend" | "project" | "session" | "ready"
 const startupReadyEvent = "opencode:startup-interactive"
+type HermesConfig = {
+  enabled: boolean
+  pythonExecutable?: string
+  hermesDir?: string
+  hermesHome?: string
+}
+type HermesTest = {
+  ok: boolean
+  logs: string[]
+}
+type GenericagentConfig = {
+  enabled: boolean
+  pythonExecutable?: string
+  genericAgentDir?: string
+}
+type GenericagentTest = {
+  ok: boolean
+  logs: string[]
+}
+type DesktopPlatform = Platform & {
+  getHermesConfig: () => Promise<HermesConfig>
+  setHermesConfig: (config: HermesConfig) => Promise<void> | void
+  testHermesConfig: (config: HermesConfig) => Promise<HermesTest>
+  abortHermesTest: () => Promise<boolean>
+  getGenericagentConfig: () => Promise<GenericagentConfig>
+  setGenericagentConfig: (config: GenericagentConfig) => Promise<void> | void
+  testGenericagentConfig: (config: GenericagentConfig) => Promise<GenericagentTest>
+  abortGenericagentTest: () => Promise<boolean>
+}
 
 function startupShell() {
   if (location.pathname === "/loading") return
@@ -298,7 +323,7 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
-const createPlatform = (): Platform => {
+const createPlatform = (): DesktopPlatform => {
   const wslHome = async () => {
     if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
     return commands.wslPath("~", "windows").catch(() => undefined)
@@ -719,7 +744,7 @@ const createPlatform = (): Platform => {
       }
     },
 
-    setHermesConfig: async (config) => {
+    setHermesConfig: async (config: HermesConfig) => {
       console.debug("[desktop] set hermes config", {
         enabled: config.enabled,
         python: config.pythonExecutable ?? null,
@@ -736,7 +761,7 @@ const createPlatform = (): Platform => {
       setHermesTick((x) => x + 1)
     },
 
-    testHermesConfig: async (config) => {
+    testHermesConfig: async (config: HermesConfig) => {
       console.debug("[desktop] test hermes config", {
         enabled: config.enabled,
         python: config.pythonExecutable ?? null,
@@ -769,7 +794,7 @@ const createPlatform = (): Platform => {
       }
     },
 
-    setGenericagentConfig: async (config) => {
+    setGenericagentConfig: async (config: GenericagentConfig) => {
       await commands.setGenericagentConfig({
         enabled: config.enabled,
         pythonExecutable: config.pythonExecutable ?? null,
@@ -779,7 +804,7 @@ const createPlatform = (): Platform => {
       setGenericagentTick((x) => x + 1)
     },
 
-    testGenericagentConfig: async (config) => {
+    testGenericagentConfig: async (config: GenericagentConfig) => {
       const next = await commands.testGenericagentServer({
         enabled: config.enabled,
         pythonExecutable: config.pythonExecutable ?? null,
@@ -915,47 +940,47 @@ render(() => {
       })
     }
 
-    const claw = openclaw()
-    if (claw) {
-      list.push({
-        displayName: t("desktop.server.openclaw"),
-        integration: "openclaw",
-        type: "http",
-        http: {
-          url: claw.url,
-          username: claw.username ?? undefined,
-          password: claw.password ?? undefined,
-        },
-      })
-    }
+	    const claw = openclaw()
+	    if (claw) {
+	      list.push({
+	        displayName: t("desktop.server.openclaw"),
+	        integration: "openclaw",
+	        type: "http",
+	        http: {
+	          url: claw.url,
+	          username: claw.username ?? undefined,
+	          password: claw.password ?? undefined,
+	        },
+	      } as unknown as ServerConnection.Any)
+	    }
 
-    const hm = hermes()
-    if (hm) {
-      list.push({
-        displayName: t("desktop.server.hermes"),
-        integration: "hermes",
-        type: "http",
-        http: {
-          url: hm.url,
-          username: hm.username ?? undefined,
-          password: hm.password ?? undefined,
-        },
-      })
-    }
+	    const hm = hermes()
+	    if (hm) {
+	      list.push({
+	        displayName: t("desktop.server.hermes"),
+	        integration: "hermes",
+	        type: "http",
+	        http: {
+	          url: hm.url,
+	          username: hm.username ?? undefined,
+	          password: hm.password ?? undefined,
+	        },
+	      } as unknown as ServerConnection.Any)
+	    }
 
-    const ga = genericagent()
-    if (ga) {
-      list.push({
-        displayName: t("desktop.server.genericagent"),
-        integration: "genericagent",
-        type: "http",
-        http: {
-          url: ga.url,
-          username: ga.username ?? undefined,
-          password: ga.password ?? undefined,
-        },
-      })
-    }
+	    const ga = genericagent()
+	    if (ga) {
+	      list.push({
+	        displayName: t("desktop.server.genericagent"),
+	        integration: "genericagent",
+	        type: "http",
+	        http: {
+	          url: ga.url,
+	          username: ga.username ?? undefined,
+	          password: ga.password ?? undefined,
+	        },
+	      } as unknown as ServerConnection.Any)
+	    }
 
     return list
   }
