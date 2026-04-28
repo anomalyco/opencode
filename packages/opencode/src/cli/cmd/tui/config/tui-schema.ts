@@ -52,6 +52,10 @@ export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
 
+export const ShowToolOutput = Schema.Array(Schema.String).annotate({
+  description: "Tool names whose output should always be shown in the TUI",
+})
+
 export const Attention = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   notifications: Schema.optional(Schema.Boolean),
@@ -74,5 +78,6 @@ export const TuiInfo = Schema.Struct({
   }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  show_tool_output: Schema.optional(ShowToolOutput),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })

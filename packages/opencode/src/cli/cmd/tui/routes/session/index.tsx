@@ -1640,33 +1640,39 @@ function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
   const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
-  const [expanded, setExpanded] = createSignal(false)
+  const configuredOutput = createMemo(() => ctx.tui.show_tool_output?.includes(props.tool) ?? false)
+  const [expanded, setExpanded] = createSignal<boolean | undefined>()
+  const isExpanded = createMemo(() => expanded() ?? configuredOutput())
+  const title = createMemo(() => {
+    if ("title" in props.part.state && props.part.state.title) return props.part.state.title
+    return `${props.tool} ${input(props.input)}`
+  })
   const lines = createMemo(() => output().split("\n"))
   const maxLines = 3
   const overflow = createMemo(() => lines().length > maxLines)
   const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output()
+    if (isExpanded() || !overflow()) return output()
     return [...lines().slice(0, maxLines), "…"].join("\n")
   })
 
   return (
     <Show
-      when={props.output && ctx.showGenericToolOutput()}
+      when={props.output && (ctx.showGenericToolOutput() || configuredOutput())}
       fallback={
         <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
-          {props.tool} {input(props.input)}
+          {title()}
         </InlineTool>
       }
     >
       <BlockTool
-        title={`# ${props.tool} ${input(props.input)}`}
+        title={`# ${title()}`}
         part={props.part}
-        onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+        onClick={overflow() ? () => setExpanded((prev) => !(prev ?? configuredOutput())) : undefined}
       >
         <box gap={1}>
           <text fg={theme.text}>{limited()}</text>
           <Show when={overflow()}>
-            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            <text fg={theme.textMuted}>{isExpanded() ? "Click to collapse" : "Click to expand"}</text>
           </Show>
         </box>
       </BlockTool>
