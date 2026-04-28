@@ -1,11 +1,10 @@
-import { BrowserWindow, Menu, shell } from "electron"
+import { Menu, shell } from "electron"
 
 import { UPDATER_ENABLED } from "./constants"
 import { createMainWindow } from "./windows"
 
 type Deps = {
   trigger: (id: string) => void
-  installCli: () => void
   checkForUpdates: () => void
   reload: () => void
   relaunch: () => void
@@ -23,10 +22,6 @@ export function createMenu(deps: Deps) {
           label: "Check for Updates...",
           enabled: UPDATER_ENABLED,
           click: () => deps.checkForUpdates(),
-        },
-        {
-          label: "Install CLI...",
-          click: () => deps.installCli(),
         },
         {
           label: "Reload Webview",
@@ -77,27 +72,46 @@ export function createMenu(deps: Deps) {
         { label: "Toggle Terminal", accelerator: "Ctrl+`", click: () => deps.trigger("terminal.toggle") },
         { label: "Toggle File Tree", click: () => deps.trigger("fileTree.toggle") },
         { type: "separator" },
-        { label: "Back", click: () => deps.trigger("common.goBack") },
-        { label: "Forward", click: () => deps.trigger("common.goForward") },
+        { role: "reload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "Go",
+      submenu: [
+        { label: "Back", accelerator: "Cmd+[", click: () => deps.trigger("common.goBack") },
+        { label: "Forward", accelerator: "Cmd+]", click: () => deps.trigger("common.goForward") },
         { type: "separator" },
         {
           label: "Previous Session",
-          accelerator: "Option+ArrowUp",
+          accelerator: "Option+Up",
           click: () => deps.trigger("session.previous"),
         },
         {
           label: "Next Session",
-          accelerator: "Option+ArrowDown",
+          accelerator: "Option+Down",
           click: () => deps.trigger("session.next"),
         },
         { type: "separator" },
         {
-          label: "Toggle Developer Tools",
-          accelerator: "Alt+Cmd+I",
-          click: () => BrowserWindow.getFocusedWindow()?.webContents.toggleDevTools(),
+          label: "Previous Project",
+          accelerator: "Cmd+Option+Up",
+          click: () => deps.trigger("project.previous"),
+        },
+        {
+          label: "Next Project",
+          accelerator: "Cmd+Option+Down",
+          click: () => deps.trigger("project.next"),
         },
       ],
     },
+    { role: "windowMenu" },
     {
       label: "Help",
       submenu: [

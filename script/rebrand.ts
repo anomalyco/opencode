@@ -67,12 +67,9 @@ const RULES: Rule[] = [
     find: "      renderer.setTerminalTitle(`OC | ${title}`)",
     replace: "      renderer.setTerminalTitle(`securecode | ${title}`)",
   },
-  {
-    file: "packages/opencode/src/cli/cmd/tui/app.tsx",
-    find: "      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,",
-    replace:
-      "      message: `securecode v${evt.properties.version} is available. Run 'securecode upgrade' to update manually.`,",
-  },
+  // app.tsx の "OpenCode v... Run 'opencode upgrade' to update manually" toast は
+  // upstream v1.4.x で完全書き換え (`A new release v... Would you like to update now?`)。
+  // branding 対象行ごと消えたためルールも削除。
 
   {
     file: "packages/opencode/src/cli/cmd/tui/attach.ts",
@@ -81,97 +78,97 @@ const RULES: Rule[] = [
   },
 
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Run {highlight}/share{/highlight} to create a public link to your conversation at opencode.ai",`,
     replace: `  "Run {highlight}/share{/highlight} to create a public link to your conversation",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Create {highlight}opencode.json{/highlight} for server settings and {highlight}tui.json{/highlight} for TUI settings",`,
     replace: `  "Create {highlight}securecode.json{/highlight} (or {highlight}opencode.json{/highlight}) for server settings and {highlight}tui.json{/highlight} for TUI settings",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Place TUI settings in {highlight}~/.config/opencode/tui.json{/highlight} for global config",`,
     replace: `  "Place TUI settings in {highlight}~/.config/securecode/tui.json{/highlight} for global config",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "OpenCode auto-handles OAuth for remote MCP servers requiring auth",`,
     replace: `  "SecureCode auto-handles OAuth for remote MCP servers requiring auth",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "OpenCode auto-formats files using prettier, gofmt, ruff, and more",`,
     replace: `  "SecureCode auto-formats files using prettier, gofmt, ruff, and more",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "OpenCode uses LSP servers for intelligent code analysis",`,
     replace: `  "SecureCode uses LSP servers for intelligent code analysis",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Create a plugin to prevent OpenCode from reading sensitive files",`,
     replace: `  "Create a plugin to prevent SecureCode from reading sensitive files",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Run {highlight}docker run -it --rm ghcr.io/anomalyco/opencode{/highlight} for containerized use",`,
     replace: `  "Run {highlight}docker run -it --rm ghcr.io/acompany-develop/securecode{/highlight} for containerized use",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Use {highlight}/connect{/highlight} with OpenCode Zen for curated, tested models",`,
     replace: `  "Use {highlight}/connect{/highlight} with SecureCode for curated, tested models",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Use {highlight}opencode run{/highlight} for non-interactive scripting",`,
     replace: `  "Use {highlight}securecode run{/highlight} for non-interactive scripting",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Use {highlight}opencode --continue{/highlight} to resume the last session",`,
     replace: `  "Use {highlight}securecode --continue{/highlight} to resume the last session",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Use {highlight}opencode run -f file.ts{/highlight} to attach files via CLI",`,
     replace: `  "Use {highlight}securecode run -f file.ts{/highlight} to attach files via CLI",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Run {highlight}opencode serve{/highlight} for headless API access to OpenCode",`,
     replace: `  "Run {highlight}securecode serve{/highlight} for headless API access to securecode",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Use {highlight}opencode run --attach{/highlight} to connect to a running server",`,
     replace: `  "Use {highlight}securecode run --attach{/highlight} to connect to a running server",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Run {highlight}opencode upgrade{/highlight} to update to the latest version",`,
     replace: `  "Run {highlight}securecode upgrade{/highlight} to update to the latest version",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Run {highlight}opencode auth list{/highlight} to see all configured providers",`,
     replace: `  "Run {highlight}securecode auth list{/highlight} to see all configured providers",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Run {highlight}opencode agent create{/highlight} for guided agent creation",`,
     replace: `  "Run {highlight}securecode agent create{/highlight} for guided agent creation",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Run {highlight}opencode github install{/highlight} to set up the GitHub workflow",`,
     replace: `  "Run {highlight}securecode github install{/highlight} to set up the GitHub workflow",`,
   },
   {
-    file: "packages/opencode/src/cli/cmd/tui/component/tips.tsx",
+    file: "packages/opencode/src/cli/cmd/tui/feature-plugins/home/tips-view.tsx",
     find: `  "Run {highlight}opencode debug config{/highlight} to troubleshoot configuration",`,
     replace: `  "Run {highlight}securecode debug config{/highlight} to troubleshoot configuration",`,
   },

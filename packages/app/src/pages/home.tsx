@@ -3,7 +3,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/shared/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
@@ -138,6 +138,14 @@ export default function Home() {
                 <div class="text-14-medium text-white">セキュアワークスペースを開いて開始</div>
                 <div class="text-12-regular text-white/60">リポジトリを選ぶと、SecureCode ルートでそのまま操作できます</div>
               </div>
+              <Button class="mt-1 border border-white/12 bg-[#17395a]/70 px-3 text-white hover:bg-[#153451]" onClick={chooseProject}>
+                {language.t("command.project.open")}
+              </Button>
+            </div>
+          </Match>
+          <Match when={!sync.ready}>
+            <div class="mt-28 mx-auto flex flex-col items-center gap-3">
+              <div class="text-12-regular text-white/60">{language.t("common.loading")}</div>
               <Button class="mt-1 border border-white/12 bg-[#17395a]/70 px-3 text-white hover:bg-[#153451]" onClick={chooseProject}>
                 {language.t("command.project.open")}
               </Button>

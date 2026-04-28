@@ -355,7 +355,6 @@ export default function Share(props: {
                           if (x.type === "patch") return false
                           if (x.type === "step-finish") return false
                           if (x.type === "text" && x.synthetic === true) return false
-                          if (x.type === "tool" && x.tool === "todoread") return false
                           if (x.type === "text" && !x.text) return false
                           if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))
                             return false
@@ -367,21 +366,13 @@ export default function Share(props: {
                         <Suspense>
                           <For each={filteredParts()}>
                             {(part, partIndex) => {
-                              const last = createMemo(
-                                () =>
-                                  data().messages.length === msgIndex() + 1 &&
-                                  filteredParts().length === partIndex() + 1,
-                              )
+                              const last = () =>
+                                data().messages.length === msgIndex() + 1 && filteredParts().length === partIndex() + 1
 
                               onMount(() => {
                                 const hash = window.location.hash.slice(1)
                                 // Wait till all parts are loaded
-                                if (
-                                  hash !== "" &&
-                                  !hasScrolledToAnchor &&
-                                  filteredParts().length === partIndex() + 1 &&
-                                  data().messages.length === msgIndex() + 1
-                                ) {
+                                if (hash !== "" && !hasScrolledToAnchor && last()) {
                                   hasScrolledToAnchor = true
                                   scrollToAnchor(hash)
                                 }

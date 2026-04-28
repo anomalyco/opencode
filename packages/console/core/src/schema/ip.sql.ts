@@ -20,3 +20,23 @@ export const IpRateLimitTable = mysqlTable(
   },
   (table) => [primaryKey({ columns: [table.ip, table.interval] })],
 )
+
+export const KeyRateLimitTable = mysqlTable(
+  "key_rate_limit",
+  {
+    key: varchar("key", { length: 255 }).notNull(),
+    interval: varchar("interval", { length: 40 }).notNull(),
+    count: int("count").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.key, table.interval] })],
+)
+
+export const ModelRateLimitTable = mysqlTable(
+  "model_rate_limit",
+  {
+    key: varchar("key", { length: 255 }).notNull(),
+    interval: varchar("interval", { length: 40 }).notNull(),
+    count: int("count").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.key, table.interval] })],
+)

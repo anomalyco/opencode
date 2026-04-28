@@ -1,12 +1,13 @@
 import { UI } from "../ui"
 import { cmd } from "./cmd"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Git } from "@/git"
 import { Instance } from "@/project/instance"
-import { Process } from "@/util/process"
-import { git } from "@/util/git"
+import { Process } from "@/util"
 
 export const PrCommand = cmd({
   command: "pr <number>",
-  describe: "fetch and checkout a GitHub PR branch, then run securecode",
+  describe: "fetch and checkout a GitHub PR branch, then run opencode",
   builder: (yargs) =>
     yargs.positional("number", {
       type: "number",
@@ -67,31 +68,40 @@ export const PrCommand = cmd({
               const remoteName = forkOwner
 
               // Check if remote already exists
-              const remotes = (await git(["remote"], { cwd: Instance.worktree })).text().trim()
+              const remotes = await AppRuntime.runPromise(
+                Git.Service.use((git) => git.run(["remote"], { cwd: Instance.worktree })),
+              ).then((x) => x.text().trim())
               if (!remotes.split("\n").includes(remoteName)) {
-                await git(["remote", "add", remoteName, `https://github.com/${forkOwner}/${forkName}.git`], {
-                  cwd: Instance.worktree,
-                })
+                await AppRuntime.runPromise(
+                  Git.Service.use((git) =>
+                    git.run(["remote", "add", remoteName, `https://github.com/${forkOwner}/${forkName}.git`], {
+                      cwd: Instance.worktree,
+                    }),
+                  ),
+                )
                 UI.println(`Added fork remote: ${remoteName}`)
               }
 
               // Set upstream to the fork so pushes go there
               const headRefName = prInfo.headRefName
-              await git(["branch", `--set-upstream-to=${remoteName}/${headRefName}`, localBranchName], {
-                cwd: Instance.worktree,
-              })
+              await AppRuntime.runPromise(
+                Git.Service.use((git) =>
+                  git.run(["branch", `--set-upstream-to=${remoteName}/${headRefName}`, localBranchName], {
+                    cwd: Instance.worktree,
+                  }),
+                ),
+              )
             }
 
-            // Check for session link in PR body
+            // Check for opencode session link in PR body
             if (prInfo && prInfo.body) {
               const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
               if (sessionMatch) {
                 const sessionUrl = sessionMatch[0]
-                const bin = Bun.which("securecode") ? "securecode" : "opencode"
-                UI.println(`Found securecode session: ${sessionUrl}`)
+                UI.println(`Found opencode session: ${sessionUrl}`)
                 UI.println(`Importing session...`)
 
-                const importResult = await Process.text([bin, "import", sessionUrl], {
+                const importResult = await Process.text(["opencode", "import", sessionUrl], {
                   nothrow: true,
                 })
                 if (importResult.code === 0) {
@@ -110,25 +120,18 @@ export const PrCommand = cmd({
 
         UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
         UI.println()
-        UI.println("Starting securecode...")
+        UI.println("Starting opencode...")
         UI.println()
 
-        // Launch securecode TUI with session ID if available
-        const { spawn } = await import("child_process")
-        const bin = Bun.which("securecode") ? "securecode" : "opencode"
-        const cliArgs = sessionId ? ["-s", sessionId] : []
-        const proc = spawn(bin, cliArgs, {
-          stdio: "inherit",
+        const opencodeArgs = sessionId ? ["-s", sessionId] : []
+        const opencodeProcess = Process.spawn(["opencode", ...opencodeArgs], {
+          stdin: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
           cwd: process.cwd(),
         })
-
-        await new Promise<void>((resolve, reject) => {
-          proc.on("exit", (code) => {
-            if (code === 0) resolve()
-            else reject(new Error(`${bin} exited with code ${code}`))
-          })
-          proc.on("error", reject)
-        })
+        const code = await opencodeProcess.exited
+        if (code !== 0) throw new Error(`opencode exited with code ${code}`)
       },
     })
   },

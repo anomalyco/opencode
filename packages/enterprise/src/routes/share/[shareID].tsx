@@ -1,4 +1,4 @@
-import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
+import { Message, Model, Part, Session, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
@@ -10,9 +10,9 @@ import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { iife } from "@opencode-ai/util/iife"
-import { Binary } from "@opencode-ai/util/binary"
-import { NamedError } from "@opencode-ai/util/error"
+import { iife } from "@opencode-ai/shared/util/iife"
+import { Binary } from "@opencode-ai/shared/util/binary"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
 import z from "zod"
@@ -51,7 +51,7 @@ const getData = query(async (shareID) => {
     shareID: string
     session: Session[]
     session_diff: {
-      [sessionID: string]: FileDiff[]
+      [sessionID: string]: SnapshotFileDiff[]
     }
     session_status: {
       [sessionID: string]: SessionStatus

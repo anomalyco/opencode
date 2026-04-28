@@ -1,4 +1,15 @@
-import { bigint, boolean, index, int, json, mysqlEnum, mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
+import {
+  bigint,
+  boolean,
+  index,
+  int,
+  json,
+  mysqlEnum,
+  mysqlTable,
+  primaryKey,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/mysql-core"
 import { timestamps, ulid, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
 
@@ -88,6 +99,7 @@ export const PaymentTable = mysqlTable(
     enrichment: json("enrichment").$type<
       | {
           type: "subscription" | "lite"
+          currency?: "inr"
           couponID?: string
         }
       | {
@@ -119,4 +131,15 @@ export const UsageTable = mysqlTable(
     }>(),
   },
   (table) => [...workspaceIndexes(table), index("usage_time_created").on(table.workspaceID, table.timeCreated)],
+)
+
+export const CouponType = ["BUILDATHON", "GOFREEMONTH"] as const
+export const CouponTable = mysqlTable(
+  "coupon",
+  {
+    email: varchar("email", { length: 255 }),
+    type: mysqlEnum("type", CouponType).notNull(),
+    timeRedeemed: utc("time_redeemed"),
+  },
+  (table) => [primaryKey({ columns: [table.email, table.type] })],
 )
