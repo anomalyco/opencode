@@ -52,7 +52,12 @@ const FILES = [
   "**/.nyc_output/**",
 ]
 
-export const PATTERNS = [...FILES, ...FOLDERS]
+export const PATTERNS = [
+  ...FILES,
+  ...Array.from(FOLDERS),
+  ...Array.from(FOLDERS).map((f) => `**/${f}`),
+  ...Array.from(FOLDERS).map((f) => `**/${f}/**`),
+]
 
 export function match(
   filepath: string,

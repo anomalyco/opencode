@@ -16,6 +16,7 @@ import { Config } from "@/config/config"
 import { FileIgnore } from "./ignore"
 import { Protected } from "./protected"
 import * as Log from "@opencode-ai/core/util/log"
+import * as os from "os"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -120,6 +121,13 @@ export const layer = Layer.effect(
 
           const cfg = yield* config.get()
           const cfgIgnores = cfg.watcher?.ignore ?? []
+
+          const isHome = Instance.directory === os.homedir()
+          const isRoot = Instance.directory === "/"
+          if (isHome || isRoot) {
+            log.info("skipping watcher for home/root directory", { directory: Instance.directory })
+            return
+          }
 
           if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
             yield* subscribe(Instance.directory, [
