@@ -41,7 +41,7 @@ const AgentSchema = Schema.StructWithRest(
     }),
     options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
     color: Schema.optional(Color).annotate({
-      description: "Hex color code (e.g., #FF5733) or theme color (e.g., primary)",
+      description: "Hex color code (e.g., #FF5733), theme color (e.g., primary) or other valid CSS colors (e.g., red)",
     }),
     steps: Schema.optional(PositiveInt).annotate({
       description: "Maximum number of agentic iterations before forcing text-only response",
