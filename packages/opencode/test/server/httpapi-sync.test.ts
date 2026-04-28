@@ -16,7 +16,7 @@ const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
 function app(httpapi = true) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpapi
-  return Server.Default().app
+  return httpapi ? Server.Default().app : Server.Legacy().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {

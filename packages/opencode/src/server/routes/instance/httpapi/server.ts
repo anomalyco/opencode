@@ -55,6 +55,7 @@ import { TuiApi, tuiHandlers } from "./tui"
 import { WorkspaceApi, workspaceHandlers } from "./workspace"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import * as ServerRuntime from "@/server/runtime"
 
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
@@ -99,6 +100,18 @@ const instance = HttpRouter.middleware()(
   }),
 ).layer
 
+const runtime = HttpRouter.middleware()(
+  Effect.succeed((effect) =>
+    Effect.gen(function* () {
+      const selected = ServerRuntime.select()
+      yield* Effect.annotateCurrentSpan(
+        ServerRuntime.attributes(ServerRuntime.force(selected, "effect-httpapi")),
+      )
+      return yield* effect
+    }),
+  ),
+).layer
+
 const controlRoutes = HttpApiBuilder.layer(ControlApi).pipe(Layer.provide(controlHandlers))
 const globalRoutes = HttpApiBuilder.layer(GlobalApi).pipe(Layer.provide(globalHandlers))
 const instanceApiRoutes = Layer.mergeAll(
@@ -125,6 +138,7 @@ const instanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute, instanceApiRo
 
 export const routes = Layer.mergeAll(controlRoutes, globalRoutes, instanceRoutes)
   .pipe(
+    Layer.provide(runtime),
     Layer.provide(Account.defaultLayer),
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Auth.defaultLayer),
