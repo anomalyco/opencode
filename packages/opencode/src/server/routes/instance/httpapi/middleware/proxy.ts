@@ -19,13 +19,13 @@ function requestBody(request: HttpServerRequest.HttpServerRequest) {
 export function websocket(
   request: HttpServerRequest.HttpServerRequest,
   target: string | URL,
-): Effect.Effect<HttpServerResponse.HttpServerResponse> {
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, Socket.WebSocketConstructor> {
   return Effect.scoped(
     Effect.gen(function* () {
       const inbound = yield* Effect.orDie(request.upgrade)
       const outbound = yield* Socket.makeWebSocket(ProxyUtil.websocketTargetURL(target), {
         protocols: ProxyUtil.websocketProtocols(request.headers),
-      }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
+      })
       const writeInbound = yield* inbound.writer
       const writeOutbound = yield* outbound.writer
 
@@ -36,7 +36,6 @@ export function websocket(
             writeInbound(new Socket.CloseEvent(reason.code, reason.closeReason)).pipe(Effect.catch(() => Effect.void)),
           ),
           Effect.catch(() => writeInbound(new Socket.CloseEvent(1011, "proxy error")).pipe(Effect.catch(() => Effect.void))),
-          Effect.orDie,
           Effect.forkScoped,
         )
 
@@ -47,10 +46,9 @@ export function websocket(
         .pipe(
           Effect.catch(() => Effect.void),
           Effect.ensuring(writeOutbound(new Socket.CloseEvent()).pipe(Effect.catch(() => Effect.void))),
-          Effect.orDie,
         )
       return HttpServerResponse.empty()
-    }),
+    }).pipe(Effect.orDie),
   )
 }
 

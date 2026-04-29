@@ -11,6 +11,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
+import * as Socket from "effect/unstable/socket/Socket"
 
 type RemoteTarget = Extract<Target, { type: "remote" }>
 
@@ -95,7 +96,7 @@ function proxyRemote(
   workspace: Workspace.Info,
   target: RemoteTarget,
   url: URL,
-): Effect.Effect<HttpServerResponse.HttpServerResponse> {
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, Socket.WebSocketConstructor> {
   return Effect.gen(function* () {
     const syncing = yield* Effect.promise(() => Workspace.isSyncing(workspace.id))
     if (!syncing) {
@@ -151,7 +152,7 @@ function planRequest(
 function routeWorkspace<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
   plan: RequestPlan,
-): Effect.Effect<HttpServerResponse.HttpServerResponse, E> {
+): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Socket.WebSocketConstructor> {
   return RequestPlan.$match(plan, {
     MissingWorkspace: ({ workspaceID }) => Effect.succeed(missingWorkspaceResponse(workspaceID)),
     Remote: ({ request, workspace, target, url }) => proxyRemote(request, workspace, target, url),
@@ -166,20 +167,26 @@ function routeWorkspaceRequest<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
   request: HttpServerRequest.HttpServerRequest,
   sessionWorkspaceID?: WorkspaceID,
-): Effect.Effect<HttpServerResponse.HttpServerResponse, E> {
+): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Socket.WebSocketConstructor> {
   return Effect.flatMap(planRequest(request, sessionWorkspaceID), (plan) => routeWorkspace(effect, plan))
 }
 
 function routeHttpApiWorkspace<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
-): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Session.Service | HttpServerRequest.HttpServerRequest> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  E,
+  Session.Service | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const sessionID = getWorkspaceRouteSessionID(requestURL(request))
     const session = sessionID
       ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(Effect.catchDefect(() => Effect.void))
       : undefined
-    return yield* routeWorkspaceRequest(effect, request, session?.workspaceID)
+    return yield* routeWorkspaceRequest(effect, request, session?.workspaceID).pipe(
+      Effect.provide(Socket.layerWebSocketConstructorGlobal),
+    )
   })
 }
 
@@ -191,6 +198,6 @@ export const workspaceRoutingLayer = Layer.succeed(
 export const workspaceRouterMiddleware = HttpRouter.middleware<{ provides: WorkspaceRouteContext }>()((effect) =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
-    return yield* routeWorkspaceRequest(effect, request)
+    return yield* routeWorkspaceRequest(effect, request).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
   }),
 )
