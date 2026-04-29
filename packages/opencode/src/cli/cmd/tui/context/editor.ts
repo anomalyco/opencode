@@ -272,6 +272,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         return store.server
       },
       reconnect(directory?: string) {
+        setStore("selection", undefined)
         reconnectWithDirectory(directory)
       },
     }
