@@ -41,8 +41,8 @@ const MessageFile = Schema.Struct({
 })
 
 const DiffFile = Schema.Struct({
-  additions: Schema.Number,
-  deletions: Schema.Number,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
 })
 
 const SummaryFile = Schema.Struct({

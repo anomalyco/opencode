@@ -132,9 +132,9 @@ function sessionPath(worktree: string, cwd: string) {
 }
 
 const Summary = Schema.Struct({
-  additions: Schema.Number,
-  deletions: Schema.Number,
-  files: Schema.Number,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  files: Schema.Finite,
   diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
 })
 
@@ -143,10 +143,10 @@ const Share = Schema.Struct({
 })
 
 const Time = Schema.Struct({
-  created: Schema.Number,
-  updated: Schema.Number,
-  compacting: optionalOmitUndefined(Schema.Number),
-  archived: optionalOmitUndefined(Schema.Number),
+  created: Schema.Finite,
+  updated: Schema.Finite,
+  compacting: optionalOmitUndefined(Schema.Finite),
+  archived: optionalOmitUndefined(Schema.Finite),
 })
 
 const Revert = Schema.Struct({
@@ -215,7 +215,7 @@ export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema
 )
 export const SetArchivedInput = Schema.Struct({
   sessionID: SessionID,
-  time: Schema.optional(Schema.Number),
+  time: Schema.optional(Schema.Finite),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
@@ -228,7 +228,7 @@ export const SetRevertInput = Schema.Struct({
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export const MessagesInput = Schema.Struct({
   sessionID: SessionID,
-  limit: Schema.optional(Schema.Number),
+  limit: Schema.optional(Schema.Finite),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 
 const CreatedEventSchema = Schema.Struct({
@@ -241,10 +241,10 @@ const UpdatedShare = Schema.Struct({
 })
 
 const UpdatedTime = Schema.Struct({
-  created: Schema.optional(Schema.NullOr(Schema.Number)),
-  updated: Schema.optional(Schema.NullOr(Schema.Number)),
-  compacting: Schema.optional(Schema.NullOr(Schema.Number)),
-  archived: Schema.optional(Schema.NullOr(Schema.Number)),
+  created: Schema.optional(Schema.NullOr(Schema.Finite)),
+  updated: Schema.optional(Schema.NullOr(Schema.Finite)),
+  compacting: Schema.optional(Schema.NullOr(Schema.Finite)),
+  archived: Schema.optional(Schema.NullOr(Schema.Finite)),
 })
 
 const UpdatedInfo = Schema.Struct({

@@ -42,7 +42,7 @@ export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {}
 export const AbortedError = namedSchemaError("MessageAbortedError", { message: Schema.String })
 export const StructuredOutputError = namedSchemaError("StructuredOutputError", {
   message: Schema.String,
-  retries: Schema.Number,
+  retries: Schema.Finite,
 })
 export const AuthError = namedSchemaError("ProviderAuthError", {
   providerID: Schema.String,
@@ -50,7 +50,7 @@ export const AuthError = namedSchemaError("ProviderAuthError", {
 })
 export const APIError = namedSchemaError("APIError", {
   message: Schema.String,
-  statusCode: Schema.optional(Schema.Number),
+  statusCode: Schema.optional(Schema.Finite),
   isRetryable: Schema.Boolean,
   responseHeaders: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   responseBody: Schema.optional(Schema.String),
@@ -116,8 +116,8 @@ export const TextPart = Schema.Struct({
   ignored: Schema.optional(Schema.Boolean),
   time: Schema.optional(
     Schema.Struct({
-      start: Schema.Number,
-      end: Schema.optional(Schema.Number),
+      start: Schema.Finite,
+      end: Schema.optional(Schema.Finite),
     }),
   ),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
@@ -132,8 +132,8 @@ export const ReasoningPart = Schema.Struct({
   text: Schema.String,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
   time: Schema.Struct({
-    start: Schema.Number,
-    end: Schema.optional(Schema.Number),
+    start: Schema.Finite,
+    end: Schema.optional(Schema.Finite),
   }),
 })
   .annotate({ identifier: "ReasoningPart" })
@@ -242,11 +242,11 @@ export type SubtaskPart = Types.DeepMutable<Schema.Schema.Type<typeof SubtaskPar
 export const RetryPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("retry"),
-  attempt: Schema.Number,
+  attempt: Schema.Finite,
   // APIError is still NamedError-based Zod; bridge via ZodOverride until errors migrate.
   error: Schema.Any.annotate({ [ZodOverride]: APIError.Schema }),
   time: Schema.Struct({
-    created: Schema.Number,
+    created: Schema.Finite,
   }),
 })
   .annotate({ identifier: "RetryPart" })
@@ -269,15 +269,15 @@ export const StepFinishPart = Schema.Struct({
   type: Schema.Literal("step-finish"),
   reason: Schema.String,
   snapshot: Schema.optional(Schema.String),
-  cost: Schema.Number,
+  cost: Schema.Finite,
   tokens: Schema.Struct({
-    total: Schema.optional(Schema.Number),
-    input: Schema.Number,
-    output: Schema.Number,
-    reasoning: Schema.Number,
+    total: Schema.optional(Schema.Finite),
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
     cache: Schema.Struct({
-      read: Schema.Number,
-      write: Schema.Number,
+      read: Schema.Finite,
+      write: Schema.Finite,
     }),
   }),
 })
@@ -300,7 +300,7 @@ export const ToolStateRunning = Schema.Struct({
   title: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
   time: Schema.Struct({
-    start: Schema.Number,
+    start: Schema.Finite,
   }),
 })
   .annotate({ identifier: "ToolStateRunning" })
@@ -314,9 +314,9 @@ export const ToolStateCompleted = Schema.Struct({
   title: Schema.String,
   metadata: Schema.Record(Schema.String, Schema.Any),
   time: Schema.Struct({
-    start: Schema.Number,
-    end: Schema.Number,
-    compacted: Schema.optional(Schema.Number),
+    start: Schema.Finite,
+    end: Schema.Finite,
+    compacted: Schema.optional(Schema.Finite),
   }),
   attachments: Schema.optional(Schema.Array(FilePart)),
 })
@@ -336,8 +336,8 @@ export const ToolStateError = Schema.Struct({
   error: Schema.String,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
   time: Schema.Struct({
-    start: Schema.Number,
-    end: Schema.Number,
+    start: Schema.Finite,
+    end: Schema.Finite,
   }),
 })
   .annotate({ identifier: "ToolStateError" })
@@ -380,7 +380,7 @@ export const User = Schema.Struct({
   ...messageBase,
   role: Schema.Literal("user"),
   time: Schema.Struct({
-    created: Schema.Number,
+    created: Schema.Finite,
   }),
   format: Schema.optional(_Format),
   summary: Schema.optional(
@@ -477,8 +477,8 @@ export const TextPartInput = Schema.Struct({
   ignored: Schema.optional(Schema.Boolean),
   time: Schema.optional(
     Schema.Struct({
-      start: Schema.Number,
-      end: Schema.optional(Schema.Number),
+      start: Schema.Finite,
+      end: Schema.optional(Schema.Finite),
     }),
   ),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
@@ -537,8 +537,8 @@ export const Assistant = Schema.Struct({
   ...messageBase,
   role: Schema.Literal("assistant"),
   time: Schema.Struct({
-    created: Schema.Number,
-    completed: Schema.optional(Schema.Number),
+    created: Schema.Finite,
+    completed: Schema.optional(Schema.Finite),
   }),
   error: Schema.optional(Schema.Any.annotate({ [ZodOverride]: AssistantErrorZod })),
   parentID: MessageID,
@@ -554,15 +554,15 @@ export const Assistant = Schema.Struct({
     root: Schema.String,
   }),
   summary: Schema.optional(Schema.Boolean),
-  cost: Schema.Number,
+  cost: Schema.Finite,
   tokens: Schema.Struct({
-    total: Schema.optional(Schema.Number),
-    input: Schema.Number,
-    output: Schema.Number,
-    reasoning: Schema.Number,
+    total: Schema.optional(Schema.Finite),
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
     cache: Schema.Struct({
-      read: Schema.Number,
-      write: Schema.Number,
+      read: Schema.Finite,
+      write: Schema.Finite,
     }),
   }),
   structured: Schema.optional(Schema.Any),
@@ -594,7 +594,7 @@ const RemovedEventSchema = Schema.Struct({
 const PartUpdatedEventSchema = Schema.Struct({
   sessionID: SessionID,
   part: _Part,
-  time: Schema.Number,
+  time: Schema.Finite,
 })
 
 const PartRemovedEventSchema = Schema.Struct({
@@ -651,7 +651,7 @@ export type WithParts = {
 
 const Cursor = Schema.Struct({
   id: MessageID,
-  time: Schema.Number,
+  time: Schema.Finite,
 })
 type Cursor = typeof Cursor.Type
 

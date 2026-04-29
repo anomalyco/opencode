@@ -38,7 +38,7 @@ export const TuiEvent = {
       title: Schema.optional(Schema.String),
       message: Schema.String,
       variant: Schema.Literals(["info", "success", "warning", "error"]),
-      duration: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOAST_DURATION))).annotate({
+      duration: Schema.Finite.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOAST_DURATION))).annotate({
         description: "Duration in milliseconds",
       }),
     }),

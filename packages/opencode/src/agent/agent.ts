@@ -31,8 +31,8 @@ export const Info = Schema.Struct({
   mode: Schema.Literals(["subagent", "primary", "all"]),
   native: Schema.optional(Schema.Boolean),
   hidden: Schema.optional(Schema.Boolean),
-  topP: Schema.optional(Schema.Number),
-  temperature: Schema.optional(Schema.Number),
+  topP: Schema.optional(Schema.Finite),
+  temperature: Schema.optional(Schema.Finite),
   color: Schema.optional(Schema.String),
   permission: Permission.Ruleset,
   model: Schema.optional(
@@ -44,7 +44,7 @@ export const Info = Schema.Struct({
   variant: Schema.optional(Schema.String),
   prompt: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Unknown),
-  steps: Schema.optional(Schema.Number),
+  steps: Schema.optional(Schema.Finite),
 })
   .annotate({ identifier: "Agent" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))

@@ -22,8 +22,8 @@ export type Patch = typeof Patch.Type
 export const FileDiff = Schema.Struct({
   file: Schema.String,
   patch: Schema.String,
-  additions: Schema.Number,
-  deletions: Schema.Number,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
 })
   .annotate({ identifier: "SnapshotFileDiff" })

@@ -23,8 +23,8 @@ export const Event = {
 }
 
 const Position = Schema.Struct({
-  line: Schema.Number,
-  character: Schema.Number,
+  line: Schema.Finite,
+  character: Schema.Finite,
 })
 
 export const Range = Schema.Struct({

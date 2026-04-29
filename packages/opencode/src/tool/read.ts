@@ -25,10 +25,10 @@ const SAMPLE_BYTES = 4096
 // unchanged; purely CLI-facing uses must now send numbers rather than strings.
 export const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "The absolute path to the file or directory to read" }),
-  offset: Schema.optional(Schema.Number).annotate({
+  offset: Schema.optional(Schema.Finite).annotate({
     description: "The line number to start reading from (1-indexed)",
   }),
-  limit: Schema.optional(Schema.Number).annotate({
+  limit: Schema.optional(Schema.Finite).annotate({
     description: "The maximum number of lines to read (defaults to 2000)",
   }),
 })

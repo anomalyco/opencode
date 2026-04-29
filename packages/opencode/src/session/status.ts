@@ -13,9 +13,9 @@ export const Info = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("retry"),
-    attempt: Schema.Number,
+    attempt: Schema.Finite,
     message: Schema.String,
-    next: Schema.Number,
+    next: Schema.Finite,
   }),
   Schema.Struct({
     type: Schema.Literal("busy"),

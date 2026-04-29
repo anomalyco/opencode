@@ -35,9 +35,9 @@ const ProjectCommands = Schema.Struct({
 })
 
 const ProjectTime = Schema.Struct({
-  created: Schema.Number,
-  updated: Schema.Number,
-  initialized: Schema.optional(Schema.Number),
+  created: Schema.Finite,
+  updated: Schema.Finite,
+  initialized: Schema.optional(Schema.Finite),
 })
 
 export const Info = Schema.Struct({
