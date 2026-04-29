@@ -1,8 +1,9 @@
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
-import { Effect, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./auth"
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "../auth"
+import { InstanceContextMiddleware } from "../instance-context"
 
 const root = "/permission"
 
@@ -37,6 +38,7 @@ export const PermissionApi = HttpApi.make("permission")
           description: "Experimental HttpApi permission routes.",
         }),
       )
+      .middleware(InstanceContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
@@ -46,27 +48,3 @@ export const PermissionApi = HttpApi.make("permission")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-
-export const permissionHandlers = HttpApiBuilder.group(PermissionApi, "permission", (handlers) =>
-  Effect.gen(function* () {
-    const svc = yield* Permission.Service
-
-    const list = Effect.fn("PermissionHttpApi.list")(function* () {
-      return yield* svc.list()
-    })
-
-    const reply = Effect.fn("PermissionHttpApi.reply")(function* (ctx: {
-      params: { requestID: PermissionID }
-      payload: Permission.ReplyBody
-    }) {
-      yield* svc.reply({
-        requestID: ctx.params.requestID,
-        reply: ctx.payload.reply,
-        message: ctx.payload.message,
-      })
-      return true
-    })
-
-    return handlers.handle("list", list).handle("reply", reply)
-  }),
-)

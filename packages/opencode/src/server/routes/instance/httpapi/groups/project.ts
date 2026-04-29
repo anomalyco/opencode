@@ -1,12 +1,9 @@
-import * as InstanceState from "@/effect/instance-state"
-import { AppRuntime } from "@/effect/app-runtime"
 import { Project } from "@/project/project"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { ProjectID } from "@/project/schema"
-import { Effect, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./auth"
-import { markInstanceForReload } from "./lifecycle"
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "../auth"
+import { InstanceContextMiddleware } from "../instance-context"
 
 const root = "/project"
 
@@ -59,6 +56,7 @@ export const ProjectApi = HttpApi.make("project")
           description: "Experimental HttpApi project routes.",
         }),
       )
+      .middleware(InstanceContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
@@ -68,40 +66,3 @@ export const ProjectApi = HttpApi.make("project")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-
-export const projectHandlers = HttpApiBuilder.group(ProjectApi, "project", (handlers) =>
-  Effect.gen(function* () {
-    const svc = yield* Project.Service
-
-    const list = Effect.fn("ProjectHttpApi.list")(function* () {
-      return yield* svc.list()
-    })
-
-    const current = Effect.fn("ProjectHttpApi.current")(function* () {
-      return (yield* InstanceState.context).project
-    })
-
-    const initGit = Effect.fn("ProjectHttpApi.initGit")(function* () {
-      const ctx = yield* InstanceState.context
-      const next = yield* svc.initGit({ directory: ctx.directory, project: ctx.project })
-      if (next.id === ctx.project.id && next.vcs === ctx.project.vcs && next.worktree === ctx.project.worktree)
-        return next
-      yield* markInstanceForReload(ctx, {
-        directory: ctx.directory,
-        worktree: ctx.directory,
-        project: next,
-        init: () => AppRuntime.runPromise(InstanceBootstrap),
-      })
-      return next
-    })
-
-    const update = Effect.fn("ProjectHttpApi.update")(function* (ctx: {
-      params: { projectID: ProjectID }
-      payload: Project.UpdatePayload
-    }) {
-      return yield* svc.update({ ...ctx.payload, projectID: ctx.params.projectID })
-    })
-
-    return handlers.handle("list", list).handle("current", current).handle("initGit", initGit).handle("update", update)
-  }),
-)

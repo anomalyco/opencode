@@ -1,10 +1,8 @@
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
-import * as InstanceState from "@/effect/instance-state"
-import { Effect } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./auth"
-import { markInstanceForDisposal } from "./lifecycle"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "../auth"
+import { InstanceContextMiddleware } from "../instance-context"
 
 const root = "/config"
 
@@ -47,6 +45,7 @@ export const ConfigApi = HttpApi.make("config")
           description: "Experimental HttpApi config routes.",
         }),
       )
+      .middleware(InstanceContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
@@ -56,30 +55,3 @@ export const ConfigApi = HttpApi.make("config")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-
-export const configHandlers = HttpApiBuilder.group(ConfigApi, "config", (handlers) =>
-  Effect.gen(function* () {
-    const providerSvc = yield* Provider.Service
-    const configSvc = yield* Config.Service
-
-    const get = Effect.fn("ConfigHttpApi.get")(function* () {
-      return yield* configSvc.get()
-    })
-
-    const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
-      yield* configSvc.update(ctx.payload, { dispose: false })
-      yield* markInstanceForDisposal(yield* InstanceState.context)
-      return ctx.payload
-    })
-
-    const providers = Effect.fn("ConfigHttpApi.providers")(function* () {
-      const providers = yield* providerSvc.list()
-      return {
-        providers: Object.values(providers),
-        default: Provider.defaultModelIDs(providers),
-      }
-    })
-
-    return handlers.handle("get", get).handle("update", update).handle("providers", providers)
-  }),
-)
