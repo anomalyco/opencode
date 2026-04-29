@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Effect } from "effect"
@@ -14,6 +14,7 @@ import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
+import { WorkspaceRef } from "../../src/effect/instance-ref"
 
 void Log.init({ print: false })
 
@@ -27,8 +28,13 @@ function request(path: string, directory: string, init: RequestInit = {}) {
   return Server.Default().app.request(path, { ...init, headers })
 }
 
-function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
-  return Effect.runPromise(fx.pipe(Effect.provide(Session.defaultLayer)))
+function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>, workspaceID?: Workspace.Info["id"]) {
+  return Effect.runPromise(
+    fx.pipe(
+      workspaceID ? Effect.provideService(WorkspaceRef, workspaceID) : (effect) => effect,
+      Effect.provide(Session.defaultLayer),
+    ),
+  )
 }
 
 function localAdaptor(directory: string): WorkspaceAdaptor {
@@ -55,7 +61,7 @@ function localAdaptor(directory: string): WorkspaceAdaptor {
   }
 }
 
-function remoteAdaptor(directory: string, url: string): WorkspaceAdaptor {
+function remoteAdaptor(directory: string, url: string, headers?: HeadersInit): WorkspaceAdaptor {
   return {
     name: "Remote Test",
     description: "Create a remote test workspace",
@@ -74,18 +80,49 @@ function remoteAdaptor(directory: string, url: string): WorkspaceAdaptor {
       return {
         type: "remote" as const,
         url,
+        headers,
       }
     },
   }
 }
 
-function eventStreamResponse() {
-  return new Response(new ReadableStream({ start() {} }), {
-    status: 200,
-    headers: {
-      "content-type": "text/event-stream",
+type ProxiedRequest = {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body: string
+}
+
+function listenRemoteHttp(handler: (request: ProxiedRequest) => Response | Promise<Response>) {
+  return Bun.serve({
+    port: 0,
+    async fetch(request) {
+      return handler({
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers.entries()),
+        body: await request.text(),
+      })
     },
   })
+}
+
+function eventStreamResponse() {
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode('data: {"payload":{"type":"server.connected","properties":{}}}\n\n'),
+        )
+      },
+    }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream",
+      },
+    },
+  )
 }
 
 afterEach(async () => {
@@ -97,6 +134,8 @@ afterEach(async () => {
 })
 
 describe("workspace HttpApi", () => {
+  test.todo("proxies remote workspace websocket through real Effect listener", () => {})
+
   test("serves read endpoints", async () => {
     await using tmp = await tmpdir({ git: true })
 
@@ -191,25 +230,33 @@ describe("workspace HttpApi", () => {
     }
   })
 
-  test("proxies remote workspace HTTP requests", async () => {
+  test("proxies remote workspace HTTP requests with sanitized forwarding", async () => {
     Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     await using tmp = await tmpdir({ git: true })
-    const proxied: string[] = []
-    const rawFetch = globalThis.fetch
-    spyOn(globalThis, "fetch").mockImplementation(
-      Object.assign(
-        async (input: URL | RequestInfo, init?: BunFetchRequestInit | RequestInit) => {
-          const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url)
-          if (url.pathname === "/base/global/event") return eventStreamResponse()
-          if (url.pathname === "/base/sync/history") return Response.json([])
-          proxied.push(url.toString())
-          return Response.json({ proxied: true, path: url.pathname, workspace: url.searchParams.get("workspace") })
-        },
+    const proxied: ProxiedRequest[] = []
+    const remote = listenRemoteHttp((request) => {
+      proxied.push(request)
+      const url = new URL(request.url)
+      if (url.pathname === "/base/global/event") return eventStreamResponse()
+      if (url.pathname === "/base/sync/history") return Response.json([])
+      return new Response(
+        JSON.stringify({
+          proxied: true,
+          path: url.pathname,
+          keep: url.searchParams.get("keep"),
+          workspace: url.searchParams.get("workspace"),
+        }),
         {
-          preconnect: rawFetch.preconnect?.bind(rawFetch),
+          status: 201,
+          statusText: "Created",
+          headers: {
+            "content-length": "999",
+            "content-type": "application/json",
+            "x-remote": "yes",
+          },
         },
-      ) as typeof globalThis.fetch,
-    )
+      )
+    })
 
     const workspace = await Instance.provide({
       directory: tmp.path,
@@ -217,7 +264,9 @@ describe("workspace HttpApi", () => {
         registerAdaptor(
           Instance.project.id,
           "remote-target",
-          remoteAdaptor(path.join(tmp.path, ".remote"), "https://remote.test/base"),
+          remoteAdaptor(path.join(tmp.path, ".remote"), `http://127.0.0.1:${remote.port}/base`, {
+            "x-target-auth": "secret",
+          }),
         )
         return Workspace.create({
           type: "remote-target",
@@ -228,16 +277,101 @@ describe("workspace HttpApi", () => {
       },
     })
 
-    const url = new URL(`http://localhost${InstancePaths.path}`)
+    const url = new URL("http://localhost/config")
     url.searchParams.set("workspace", workspace.id)
+    url.searchParams.set("keep", "yes")
 
     try {
-      const response = await request(url.toString(), tmp.path)
+      const response = await request(url.toString(), tmp.path, {
+        method: "PATCH",
+        headers: {
+          "accept-encoding": "br",
+          "content-type": "application/json",
+          "x-opencode-workspace": "internal",
+        },
+        body: JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      })
 
-      expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({ proxied: true, path: "/base/path", workspace: null })
-      expect(proxied).toEqual(["https://remote.test/base/path"])
+      const responseBody = await response.text()
+      expect({ status: response.status, body: responseBody }).toMatchObject({ status: 201 })
+      expect(response.headers.get("content-length")).toBeNull()
+      expect(response.headers.get("x-remote")).toBe("yes")
+      expect(JSON.parse(responseBody)).toEqual({ proxied: true, path: "/base/config", keep: "yes", workspace: null })
+      const forwarded = proxied.filter((item) => new URL(item.url).pathname === "/base/config")
+      expect(forwarded).toEqual([
+        {
+          url: `http://127.0.0.1:${remote.port}/base/config?keep=yes`,
+          method: "PATCH",
+          headers: expect.objectContaining({
+            "content-type": "application/json",
+            "x-target-auth": "secret",
+          }),
+          body: JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+        },
+      ])
+      expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-directory")
+      expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-workspace")
     } finally {
+      remote.stop(true)
+      await Workspace.remove(workspace.id)
+    }
+  })
+
+  test("proxies remote workspace requests selected from session ownership", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+    await using tmp = await tmpdir({ git: true })
+    const proxied: ProxiedRequest[] = []
+    const remote = listenRemoteHttp((request) => {
+      proxied.push(request)
+      const url = new URL(request.url)
+      if (url.pathname === "/base/global/event") return eventStreamResponse()
+      if (url.pathname === "/base/sync/history") return Response.json([])
+      return Response.json({ proxied: true, path: new URL(request.url).pathname })
+    })
+
+    const workspace = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        registerAdaptor(
+          Instance.project.id,
+          "remote-session-target",
+          remoteAdaptor(path.join(tmp.path, ".remote-session"), `http://127.0.0.1:${remote.port}/base`),
+        )
+        return Workspace.create({
+          type: "remote-session-target",
+          branch: null,
+          extra: null,
+          projectID: Instance.project.id,
+        })
+      },
+    })
+    const session = await Instance.provide({
+      directory: tmp.path,
+      fn: async () =>
+        runSession(
+          Session.Service.use((svc) => svc.create()),
+          workspace.id,
+        ),
+    })
+
+    try {
+      const response = await request(`http://localhost/session/${session.id}/message`, tmp.path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parts: [{ type: "text", text: "hello" }] }),
+      })
+
+      const responseBody = await response.text()
+      expect({ status: response.status, body: responseBody }).toMatchObject({ status: 200 })
+      expect(JSON.parse(responseBody)).toEqual({ proxied: true, path: `/base/session/${session.id}/message` })
+      expect(proxied.filter((item) => new URL(item.url).pathname === `/base/session/${session.id}/message`)).toEqual([
+        expect.objectContaining({
+          url: `http://127.0.0.1:${remote.port}/base/session/${session.id}/message`,
+          method: "POST",
+        }),
+      ])
+    } finally {
+      remote.stop(true)
       await Workspace.remove(workspace.id)
     }
   })

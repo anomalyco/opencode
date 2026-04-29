@@ -796,8 +796,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "ดึงเนื้อหาจาก URL",
   "settings.permissions.tool.websearch.title": "ค้นหาเว็บ",
   "settings.permissions.tool.websearch.description": "ค้นหาบนเว็บ",
-  "settings.permissions.tool.codesearch.title": "ค้นหาโค้ด",
-  "settings.permissions.tool.codesearch.description": "ค้นหาโค้ดบนเว็บ",
   "settings.permissions.tool.external_directory.title": "ไดเรกทอรีภายนอก",
   "settings.permissions.tool.external_directory.description": "เข้าถึงไฟล์นอกไดเรกทอรีโปรเจกต์",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",

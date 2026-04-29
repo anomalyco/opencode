@@ -13,8 +13,9 @@ import { Snapshot } from "@/snapshot"
 import { NonNegativeInt } from "@/util/schema"
 import { Schema, SchemaGetter, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "../auth"
-import { InstanceContextMiddleware } from "../instance-context"
+import { Authorization } from "../middleware/authorization"
+import { InstanceContextMiddleware } from "../middleware/instance-context"
+import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/session"
@@ -417,6 +418,7 @@ export const SessionApi = HttpApi.make("session")
         }),
       )
       .middleware(InstanceContextMiddleware)
+      .middleware(WorkspaceRoutingMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

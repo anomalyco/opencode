@@ -11231,9 +11231,6 @@
               "websearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
-              "codesearch": {
-                "$ref": "#/components/schemas/PermissionActionConfig"
-              },
               "lsp": {
                 "$ref": "#/components/schemas/PermissionRuleConfig"
               },

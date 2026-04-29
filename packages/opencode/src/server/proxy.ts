@@ -4,50 +4,11 @@ import * as Log from "@opencode-ai/core/util/log"
 import * as Fence from "./fence"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
-
-const hop = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "proxy-connection",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "host",
-])
+import { ProxyUtil } from "./proxy-util"
+import { Effect, Stream } from "effect"
+import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
 
 type Msg = string | ArrayBuffer | Uint8Array
-
-function headers(req: Request, extra?: HeadersInit) {
-  const out = new Headers(req.headers)
-  for (const key of hop) out.delete(key)
-  out.delete("accept-encoding")
-  out.delete("x-opencode-directory")
-  out.delete("x-opencode-workspace")
-  if (!extra) return out
-  for (const [key, value] of new Headers(extra).entries()) {
-    out.set(key, value)
-  }
-  return out
-}
-
-export function websocketProtocols(req: Request) {
-  const value = req.headers.get("sec-websocket-protocol")
-  if (!value) return []
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-export function websocketTargetURL(url: string | URL) {
-  const next = new URL(url)
-  if (next.protocol === "http:") next.protocol = "ws:"
-  if (next.protocol === "https:") next.protocol = "wss:"
-  return next.toString()
-}
 
 function send(ws: { send(data: string | ArrayBuffer | Uint8Array): void }, data: any) {
   if (data instanceof Blob) {
@@ -69,7 +30,7 @@ const app = (upgrade: UpgradeWebSocket) =>
             ws.close(1011, "missing proxy target")
             return
           }
-          remote = new WebSocket(url, websocketProtocols(c.req.raw))
+          remote = new WebSocket(url, ProxyUtil.websocketProtocols(c.req.raw))
           remote.binaryType = "arraybuffer"
           remote.onopen = () => {
             for (const item of queue) remote?.send(item)
@@ -103,40 +64,57 @@ const app = (upgrade: UpgradeWebSocket) =>
 
 const log = Log.create({ service: "server-proxy" })
 
-export async function http(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
+function statusText(response: unknown) {
+  return (response as { source?: Response }).source?.statusText
+}
+
+export function httpEffect(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
   if (!Workspace.isSyncing(workspaceID)) {
-    return new Response(`broken sync connection for workspace: ${workspaceID}`, {
-      status: 503,
-      headers: {
-        "content-type": "text/plain; charset=utf-8",
-      },
-    })
+    return Effect.succeed(
+      new Response(`broken sync connection for workspace: ${workspaceID}`, {
+        status: 503,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+        },
+      }),
+    )
   }
 
-  return fetch(
-    new Request(url, {
-      method: req.method,
-      headers: headers(req, extra),
-      body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body,
-      redirect: "manual",
-      signal: req.signal,
-    }),
-  ).then((res) => {
-    const sync = Fence.parse(res.headers)
-    const next = new Headers(res.headers)
+  return Effect.gen(function* () {
+    const response = yield* HttpClient.execute(
+      HttpClientRequest.make(req.method as never)(url, {
+        headers: ProxyUtil.headers(req, extra),
+        body:
+          req.method === "GET" || req.method === "HEAD"
+            ? HttpBody.empty
+            : HttpBody.raw(req.body, {
+                contentType: req.headers.get("content-type") ?? undefined,
+                contentLength: req.headers.get("content-length")
+                  ? Number(req.headers.get("content-length"))
+                  : undefined,
+              }),
+      }),
+    )
+    const next = new Headers(response.headers as HeadersInit)
+    const sync = Fence.parse(next)
     next.delete("content-encoding")
     next.delete("content-length")
 
-    const done = sync ? Fence.wait(workspaceID, sync, req.signal) : Promise.resolve()
-
-    return done.then(async () => {
-      return new Response(res.body, {
-        status: res.status,
-        statusText: res.statusText,
-        headers: next,
-      })
+    if (sync) yield* Effect.promise(() => Fence.wait(workspaceID, sync, req.signal))
+    const body = yield* Stream.toReadableStreamEffect(response.stream.pipe(Stream.catchCause(() => Stream.empty)))
+    return new Response(body, {
+      status: response.status,
+      statusText: statusText(response),
+      headers: next,
     })
-  })
+  }).pipe(
+    Effect.provide(FetchHttpClient.layer),
+    Effect.catch(() => Effect.succeed(new Response(null, { status: 500 }))),
+  )
+}
+
+export function http(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
+  return Effect.runPromise(httpEffect(url, extra, req, workspaceID))
 }
 
 export function websocket(
@@ -150,7 +128,7 @@ export function websocket(
   proxy.pathname = "/__workspace_ws"
   proxy.search = ""
   const next = new Headers(req.headers)
-  next.set("x-opencode-proxy-url", websocketTargetURL(target))
+  next.set("x-opencode-proxy-url", ProxyUtil.websocketTargetURL(target))
   for (const [key, value] of new Headers(extra).entries()) {
     next.set(key, value)
   }

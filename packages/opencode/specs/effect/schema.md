@@ -286,7 +286,6 @@ emitted JSON Schema must stay byte-identical.
 
 - [x] `src/tool/apply_patch.ts`
 - [x] `src/tool/bash.ts`
-- [x] `src/tool/codesearch.ts`
 - [x] `src/tool/edit.ts`
 - [x] `src/tool/glob.ts`
 - [x] `src/tool/grep.ts`
