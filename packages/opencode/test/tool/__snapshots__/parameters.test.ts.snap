@@ -60,29 +60,6 @@ Output: Creates directory 'foo'"
 }
 `;
 
-exports[`tool parameters JSON Schema (wire shape) codesearch 1`] = `
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "properties": {
-    "query": {
-      "description": "Search query to find relevant context for APIs, Libraries, and SDKs. For example, 'React useState hook examples', 'Python pandas dataframe filtering', 'Express.js middleware', 'Next js partial prerendering configuration'",
-      "type": "string",
-    },
-    "tokensNum": {
-      "default": 5000,
-      "description": "Number of tokens to return (1000-50000). Default is 5000 tokens. Adjust this value based on how much context you need - use lower values for focused queries and higher values for comprehensive documentation.",
-      "maximum": 50000,
-      "minimum": 1000,
-      "type": "integer",
-    },
-  },
-  "required": [
-    "query",
-  ],
-  "type": "object",
-}
-`;
-
 exports[`tool parameters JSON Schema (wire shape) edit 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",

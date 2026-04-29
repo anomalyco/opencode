@@ -807,8 +807,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Hent innhold fra en URL",
   "settings.permissions.tool.websearch.title": "Websøk",
   "settings.permissions.tool.websearch.description": "Søk på nettet",
-  "settings.permissions.tool.codesearch.title": "Kodesøk",
-  "settings.permissions.tool.codesearch.description": "Søk etter kode på nettet",
   "settings.permissions.tool.external_directory.title": "Ekstern mappe",
   "settings.permissions.tool.external_directory.description": "Få tilgang til filer utenfor prosjektmappen",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
