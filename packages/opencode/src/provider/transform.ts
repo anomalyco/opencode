@@ -45,6 +45,21 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+// Returns the providerOptions key that the AI SDK expects for the given model.
+// Note: @ai-sdk/openai-compatible's getOpenAIMetadata() hardcodes "openaiCompatible"
+// as the providerOptions key (see node_modules/@ai-sdk/openai-compatible/dist/index.mjs),
+// so we must use that key regardless of the provider's instantiated name.
+function providerOptionsKey(model: Provider.Model): string {
+  // @ai-sdk/openai-compatible's getOpenAIMetadata() hardcodes "openaiCompatible"
+  // as the providerOptions key for reasoning content. Any provider wrapping
+  // openai-compatible (e.g., @openrouter/ai-sdk-provider) inherits this behavior.
+  const npm = model.api.npm
+  if (npm === "@ai-sdk/openai-compatible" || npm === "@openrouter/ai-sdk-provider") {
+    return "openaiCompatible"
+  }
+  return sdkKey(npm) ?? "openaiCompatible"
+}
+
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
@@ -196,30 +211,29 @@ function normalizeMessages(
     return result
   }
 
-  // Deepseek requires all assistant messages to have reasoning on them
-  if (model.api.id.includes("deepseek")) {
-    msgs = msgs.map((msg) => {
-      if (msg.role !== "assistant") return msg
-      if (Array.isArray(msg.content)) {
-        if (msg.content.some((part) => part.type === "reasoning")) return msg
-        return { ...msg, content: [...msg.content, { type: "reasoning", text: "" }] }
-      }
-      return {
-        ...msg,
-        content: [
-          ...(msg.content ? [{ type: "text" as const, text: msg.content }] : []),
-          { type: "reasoning" as const, text: "" },
-        ],
-      }
-    })
-  }
+  // Detect whether the model uses reasoning/thinking and determine the
+  // providerOptions key/field for reasoning_content. For models without
+  // interleaved configured (e.g., DeepSeek via @ai-sdk/openai-compatible),
+  // default to the OpenAI-compatible reasoning_content field.
+  const interleaved = model.capabilities.interleaved
+  const isInterleaved = typeof interleaved === "object" && interleaved.field
+  const field = isInterleaved ? interleaved.field : "reasoning_content"
+  const key = providerOptionsKey(model)
 
-  if (
-    typeof model.capabilities.interleaved === "object" &&
-    model.capabilities.interleaved.field &&
-    model.api.npm !== "@openrouter/ai-sdk-provider"
-  ) {
-    const field = model.capabilities.interleaved.field
+  // Check if we need to handle reasoning parts:
+  // - interleaved explicitly configured, OR
+  // - model has reasoning capability, OR
+  // - messages already contain reasoning parts (from DB replay)
+  const hasReasoningContent =
+    isInterleaved ||
+    model.capabilities.reasoning ||
+    msgs.some((msg) =>
+      msg.role === "assistant" &&
+      Array.isArray(msg.content) &&
+      msg.content.some((part: any) => part.type === "reasoning"),
+    )
+
+  if (hasReasoningContent) {
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
@@ -228,17 +242,32 @@ function normalizeMessages(
         // Filter out reasoning parts from content
         const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-        // Include reasoning_content | reasoning_details directly on the message for all assistant messages.
-        // Always set the field even when empty — some providers (e.g. DeepSeek) may return empty
-        // reasoning_content which still needs to be sent back in subsequent requests.
+        // DeepSeek reasoning API requires ALL assistant messages in the conversation
+        // history to carry reasoning_content (even empty string). Old DB-replayed
+        // messages may have no reasoning parts at all — inject empty string for those.
         return {
           ...msg,
           content: filteredContent,
           providerOptions: {
             ...msg.providerOptions,
-            openaiCompatible: {
-              ...msg.providerOptions?.openaiCompatible,
-              [field]: reasoningText,
+            [key]: {
+              ...msg.providerOptions?.[key],
+              [field]: reasoningText || "",
+            },
+          },
+        }
+      }
+
+      // Also handle string-content assistant messages (old DB format).
+      // Inject empty reasoning_content to satisfy DeepSeek API requirement.
+      if (msg.role === "assistant" && typeof msg.content === "string") {
+        return {
+          ...msg,
+          providerOptions: {
+            ...msg.providerOptions,
+            [key]: {
+              ...msg.providerOptions?.[key],
+              [field]: "",
             },
           },
         }
@@ -255,6 +284,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
   const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
   const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
+  const key = providerOptionsKey(model)
   const providerOptions = {
     anthropic: {
       cacheControl: { type: "ephemeral" },
@@ -265,7 +295,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
     bedrock: {
       cachePoint: { type: "default" },
     },
-    openaiCompatible: {
+    [key]: {
       cache_control: { type: "ephemeral" },
     },
     copilot: {
@@ -443,10 +473,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   const id = model.id.toLowerCase()
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   if (
-    id.includes("deepseek-chat") ||
-    id.includes("deepseek-reasoner") ||
-    id.includes("deepseek-r1") ||
-    id.includes("deepseek-v3") ||
+    id.includes("deepseek") ||
     id.includes("minimax") ||
     id.includes("glm") ||
     id.includes("kimi") ||
