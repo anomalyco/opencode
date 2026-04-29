@@ -8,10 +8,9 @@ export const ServeCommand = effectCmd({
   command: "serve",
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
-  // Server loads instances per-request via x-opencode-directory header — no
-  // need for an ambient project InstanceContext at startup.
   instance: false,
   handler: Effect.fn("Cli.serve")(function* (args) {
+    process.env.OPENCODE_EXPERIMENTAL_FILEWATCHER = "true"
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
