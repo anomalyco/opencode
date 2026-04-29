@@ -207,15 +207,87 @@ See commit `e95356aec` for the full diff of these changes.
 13. Working directory display in footer fallback
 14. Mode toggle hint in footer hints area
 
+**Double left border** — upstream only has a single border. Add the execution mode inner border using a **row layout** (not nested borders — see below):
+
+```tsx
+<box border={["left"]} borderColor={borderHighlight()} customBorderChars={{...SplitBorder.customBorderChars, bottomLeft: "╹"}}>
+  <box flexDirection="row">
+    <box
+      width={1}
+      alignSelf="stretch"
+      border={["left"]}
+      borderColor={modePrefixColor()}
+      customBorderChars={{ ...SplitBorder.customBorderChars }}
+    />
+    <box paddingLeft={2} paddingRight={2} paddingTop={1} flexShrink={0} backgroundColor={theme.backgroundElement} flexGrow={1}>
+      {/* textarea + footer */}
+    </box>
+  </box>
+</box>
+```
+
+> **Why row layout?** Nesting `border={["left"]}` boxes causes the inner border to appear 1–2 rows shorter than the outer because Yoga sizes each box independently. Using `width={1}` + `alignSelf="stretch"` in a row container guarantees both bars span identical rows.
+
 ---
 
-### 11. `bun.lock`
+### 12. `packages/opencode/src/config/keybinds.ts`
+
+**Pattern**: Upstream may reassign `agent_cycle` to `tab`. Lash remaps Tab to shell autocomplete.
+
+**Resolution**: Ensure `agent_cycle` is on `shift+tab`, NOT `tab`:
+
+```typescript
+agent_cycle: keybind("shift+tab", "Next agent"),
+agent_cycle_reverse: keybind("none", "Previous agent"),
+```
+
+Tab is handled in `onKeyDown` in `prompt/index.tsx` via `handleShellTabCompletion()`.
+
+---
+
+### 13. `bun.lock`
 
 **Resolution**: Always regenerate after resolving all `package.json` conflicts:
 ```bash
 bun install
 git add bun.lock
 ```
+
+---
+
+## Post-Merge QA Checklist
+
+Run through this visually after every merge commit, before closing the sync issue.
+
+### Prompt border
+- [ ] Two left border bars visible: outer bar = agent color, inner bar = execution mode color
+- [ ] Both bars are the **same height** — no gap at top or bottom of the inner bar
+- [ ] Outer bar shows a `╹` connector at the bottom join
+
+### Keybinds
+- [ ] **Tab** → triggers shell autocomplete (shows completions or cycles them)
+- [ ] **Shift+Tab** → cycles agents (Build → Plan → …)
+- [ ] **Ctrl+Space** → cycles execution modes (agent → shell → auto)
+- [ ] **Enter** → submits prompt; **Shift+Enter** → inserts newline
+
+### Execution mode indicator
+- [ ] Footer shows mode name in execution mode color (e.g. `ctrl+space agent`)
+- [ ] Switching modes updates both the inner border color and the footer label
+
+### Shell mode
+- [ ] Typing `!` at start of prompt switches to shell mode (blue border)
+- [ ] Pressing Escape from shell mode returns to normal mode
+- [ ] Running a command in shell mode updates the working directory in the footer
+
+### Working directory
+- [ ] Footer left side shows shortened cwd (e.g. `~/repo/lash`)
+- [ ] Running `cd <dir>` in shell mode updates the displayed cwd
+
+### Typecheck
+```bash
+cd packages/opencode && bun run typecheck
+```
+Zero errors required before closing the sync issue.
 
 ---
 
@@ -234,6 +306,8 @@ These features must always be preserved through upstream merges:
 | `determineRouting()` | `plugin/tui-integration/hooks.ts` | Shell vs agent routing |
 | `cwd sentinel` in bash | `src/session/prompt.ts` | Cwd tracking after cd |
 | `mode_toggle` keybind | `src/config/config.ts` | ctrl+space default |
+| `agent_cycle` keybind | `src/config/keybinds.ts` | shift+tab (NOT tab) |
+| Double left border | `component/prompt/index.tsx` | Row layout, not nested |
 | `EventCwdUpdated` | `sdk/js/src/v2/gen/types.gen.ts` | SDK type for cwd event |
 | cwd in `path.*` field | `src/session/prompt.ts` | Shows cwd in messages |
 
@@ -282,3 +356,4 @@ For conflict-free or simple merges, this can be fully automated. Conflicted merg
 | Date | Upstream commits merged | Conflicts | Notes |
 |------|------------------------|-----------|-------|
 | 2026-04-02 | 673 (cf7ca9b2f → 92e820fdc) | 28 files | Major Effect rewrite of prompt.ts |
+| 2026-04-28 | (QA only — no new merge) | — | LAC-163: found 3 regressions post-merge: missing double border, wrong Tab keybind, border height mismatch. Fixed in commits bde00fa30, 85faf49fc, 9d7ac27c1. Added this QA checklist. |
