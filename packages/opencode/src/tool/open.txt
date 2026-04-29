@@ -1,0 +1,24 @@
+Open a local file, folder, or http(s) URL in the OS default handler.
+
+Use this when you want to surface a result to the user - for example after an autonomous build/run finishes, opening the rebuilt installer in Explorer, opening a generated HTML report in the browser, or opening a log directory so the user can browse run history.
+
+Parameters:
+- `target` (required): an http(s) URL, a file:// URL, or a local path. Relative paths resolve from the current project directory. Must point to something that already exists (for local paths) or be a syntactically valid URL.
+- `reason` (optional): one short sentence shown to the user explaining why this is being opened. Helps when the agent is running unattended.
+- `reveal_in_folder` (optional, default false): when true and the target is an existing local file, open the parent folder with the file selected (Windows: `explorer /select,`, macOS: `open -R`, Linux: opens parent folder).
+
+Behavior:
+- Cross-platform: Windows uses `rundll32.exe url.dll,FileProtocolHandler` for files/URLs and `explorer.exe` for folders/reveal; macOS uses `open`; Linux uses `xdg-open`.
+- Best-effort and non-blocking: the tool returns as soon as the launcher is started, not when the user closes the opened app. Returns metadata.delivered=false if the launcher exits non-zero.
+- Refuses unsupported URL schemes (anything other than http, https, file) and refuses local paths that do not exist. This is a safety net against accidental command-injection-shaped inputs.
+- Returns quickly (under a few seconds in the typical case).
+
+Examples:
+- Open the installer folder: `{ "target": "C:\\Users\\User\\Downloads\\582.28-desktop-win10-win11-64bit-international-dch-whql.exe", "reveal_in_folder": true, "reason": "show user the downloaded driver" }`
+- Open a built HTML report: `{ "target": "build/report.html", "reason": "render coverage report" }`
+- Open a project URL: `{ "target": "https://opencode.ai", "reason": "open release notes" }`
+
+Do NOT use this tool to:
+- Run executables headlessly. Use the `bash` tool for that.
+- Launch interactive installers or wizards mid-task without telling the user - `open` is for surfacing results to a human.
+- Open arbitrary URLs from untrusted input. Validate the URL is one you constructed or that the user supplied.

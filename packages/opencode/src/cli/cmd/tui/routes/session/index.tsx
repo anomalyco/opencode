@@ -46,6 +46,7 @@ import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { CodeSearchTool } from "@/tool/codesearch"
 import type { WebSearchTool } from "@/tool/websearch"
+import type { OpenTool } from "@/tool/open"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
@@ -1592,6 +1593,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "skill"}>
           <Skill {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "open"}>
+          <Open {...toolprops} />
+        </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
         </Match>
@@ -2222,6 +2226,27 @@ function Skill(props: ToolProps<typeof SkillTool>) {
   return (
     <InlineTool icon="→" pending="Loading skill..." complete={props.input.name} part={props.part}>
       Skill "{props.input.name}"
+    </InlineTool>
+  )
+}
+
+function Open(props: ToolProps<typeof OpenTool>) {
+  const isRunning = createMemo(() => props.part.state.status === "running")
+  const target = createMemo(() => props.input.target ?? "")
+  const kind = createMemo(() => props.metadata.kind ?? "target")
+  const reveal = createMemo(() => props.input.reveal_in_folder ?? props.metadata.reveal_in_folder)
+  const delivered = createMemo(() => props.metadata.delivered)
+  const label = createMemo(() => {
+    const t = String(target())
+    if (kind() === "url") return t.length > 60 ? t.slice(0, 57) + "..." : t
+    return path.basename(t)
+  })
+
+  return (
+    <InlineTool icon="⤢" pending="Opening..." spinner={isRunning()} complete={!isRunning()} part={props.part}>
+      <Show when={delivered() === false} fallback={<>Open {kind()} {label()}{reveal() ? " (reveal)" : ""}</>}>
+        Open {kind()} {label()} (failed)
+      </Show>
     </InlineTool>
   )
 }
