@@ -4,7 +4,7 @@ import {
   shouldAttachShareAuthHeaders,
   transformShareData,
   type ShareData,
-} from "../../src/cli/cmd/import"
+} from "../../src/cli/cmd/import/util"
 
 // parseShareUrl tests
 test("parses valid share URLs", () => {
