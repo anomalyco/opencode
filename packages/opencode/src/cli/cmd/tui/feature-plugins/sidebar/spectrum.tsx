@@ -125,13 +125,15 @@ function SpectrumWidget(props: { api: TuiPluginApi; onLevel?: (level: number) =>
   return (
     <box>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme().text} bold>♪ Audio</text>
+        <text fg={theme().text}>
+          <b>♪ Audio</b>
+        </text>
         <text fg={statusColor()}>
           {source() === "cava" ? "● CAVA" : "○ sim"}
         </text>
       </box>
       {specRows().map((row, i) => (
-        <text key={i} fg={theme().accent} fontFamily="monospace">{row}</text>
+        <text fg={theme().accent}>{row}</text>
       ))}
       <text fg={theme().accent}>{barChars()}</text>
       <text fg={theme().textMuted}>level: {levelPct()}%</text>

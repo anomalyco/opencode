@@ -258,7 +258,9 @@ function PetWidget(props: { api: TuiPluginApi; session_id: string; audioLevel?: 
   return (
     <box>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme().text} bold>Pet</text>
+        <text fg={theme().text}>
+          <b>Pet</b>
+        </text>
         <text fg={weatherColor()}>{weather() === "sunny" ? "☀️" : weather() === "rain" ? "🌧️" : "☁️"}</text>
       </box>
       

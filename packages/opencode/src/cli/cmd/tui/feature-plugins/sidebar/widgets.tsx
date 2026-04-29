@@ -29,7 +29,9 @@ function ClockWidget(props: { api: TuiPluginApi }) {
   return (
     <box>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme().text} bold>Time</text>
+        <text fg={theme().text}>
+          <b>Time</b>
+        </text>
       </box>
       <text fg={theme().text}>{timeStr()}</text>
       <text fg={theme().textMuted}>{dateStr()}</text>
@@ -66,7 +68,9 @@ function SessionStatsWidget(props: { api: TuiPluginApi; session_id: string }) {
   return (
     <box>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme().text} bold>Stats</text>
+        <text fg={theme().text}>
+          <b>Stats</b>
+        </text>
       </box>
       <text fg={theme().textMuted}>Sessions: {sessionCount()}</text>
       <text fg={theme().textMuted}>Messages: {msgCount()}</text>
@@ -92,7 +96,9 @@ function WelcomeBanner(props: { api: TuiPluginApi }) {
 
   return (
     <box gap={1}>
-      <text fg={theme().accent} bold>🐱 Terminal Pet Companion</text>
+      <text fg={theme().accent}>
+        <b>🐱 Terminal Pet Companion</b>
+      </text>
       <text fg={theme().textMuted}>Sessions: {sessionCount()} | Tab to switch modes</text>
     </box>
   )
