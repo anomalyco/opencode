@@ -14,7 +14,6 @@ import { Process } from "../../util"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
-import { AppRuntime } from "@/effect/app-runtime"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]

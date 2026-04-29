@@ -45,6 +45,8 @@ import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 
+export * as Config from "./config"
+
 const log = Log.create({ service: "config" })
 
 // Custom merge function that concatenates array fields instead of replacing them
