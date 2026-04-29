@@ -1,5 +1,6 @@
 import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdaptorEntry } from "@/control-plane/types"
+import { NonNegativeInt } from "@/util/schema"
 import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
@@ -15,7 +16,7 @@ export const SessionRestorePayload = Schema.Struct(
   identifier: "WorkspaceSessionRestoreInput",
 })
 export const SessionRestoreResponse = Schema.Struct({
-  total: Schema.Finite,
+  total: NonNegativeInt,
 }).annotate({ identifier: "WorkspaceSessionRestoreResponse" })
 
 export const WorkspacePaths = {

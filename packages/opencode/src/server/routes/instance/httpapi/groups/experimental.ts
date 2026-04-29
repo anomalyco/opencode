@@ -3,6 +3,7 @@ import { MCP } from "@/mcp"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { Session } from "@/session/session"
 import { Worktree } from "@/worktree"
+import { NonNegativeInt } from "@/util/schema"
 import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
@@ -11,7 +12,7 @@ import { InstanceContextMiddleware } from "../instance-context"
 const ConsoleStateResponse = Schema.Struct({
   consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
   activeOrgName: Schema.optionalKey(Schema.String),
-  switchableOrgCount: Schema.Finite,
+  switchableOrgCount: NonNegativeInt,
 }).annotate({ identifier: "ConsoleState" })
 
 const ConsoleOrgOption = Schema.Struct({

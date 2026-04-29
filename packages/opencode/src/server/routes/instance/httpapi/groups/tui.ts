@@ -10,12 +10,11 @@ export const TuiRequestPayload = Schema.Struct({
   path: Schema.String,
   body: Schema.Unknown,
 }).annotate({ identifier: "TuiRequest" })
-export const TuiPublishPayload = Schema.Union([
-  Schema.Struct({ type: Schema.Literal(TuiEvent.PromptAppend.type), properties: TuiEvent.PromptAppend.properties }).annotate({ identifier: "EventTuiPromptAppend" }),
-  Schema.Struct({ type: Schema.Literal(TuiEvent.CommandExecute.type), properties: TuiEvent.CommandExecute.properties }).annotate({ identifier: "EventTuiCommandExecute" }),
-  Schema.Struct({ type: Schema.Literal(TuiEvent.ToastShow.type), properties: TuiEvent.ToastShow.properties }).annotate({ identifier: "EventTuiToastShow" }),
-  Schema.Struct({ type: Schema.Literal(TuiEvent.SessionSelect.type), properties: TuiEvent.SessionSelect.properties }).annotate({ identifier: "EventTuiSessionSelect" }),
-]).annotate({ identifier: "TuiEventInput" })
+const EventTuiPromptAppend = Schema.Struct({ type: Schema.Literal(TuiEvent.PromptAppend.type), properties: TuiEvent.PromptAppend.properties }).annotate({ identifier: "EventTuiPromptAppend" })
+const EventTuiCommandExecute = Schema.Struct({ type: Schema.Literal(TuiEvent.CommandExecute.type), properties: TuiEvent.CommandExecute.properties }).annotate({ identifier: "EventTuiCommandExecute" })
+const EventTuiToastShow = Schema.Struct({ type: Schema.Literal(TuiEvent.ToastShow.type), properties: TuiEvent.ToastShow.properties }).annotate({ identifier: "EventTuiToastShow" })
+const EventTuiSessionSelect = Schema.Struct({ type: Schema.Literal(TuiEvent.SessionSelect.type), properties: TuiEvent.SessionSelect.properties }).annotate({ identifier: "EventTuiSessionSelect" })
+export const TuiPublishPayload = Schema.Union([EventTuiPromptAppend, EventTuiCommandExecute, EventTuiToastShow, EventTuiSessionSelect]).annotate({ identifier: "TuiEventInput" })
 
 export const TuiPaths = {
   appendPrompt: `${root}/append-prompt`,

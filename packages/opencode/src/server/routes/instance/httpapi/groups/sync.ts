@@ -23,7 +23,7 @@ export const HistoryPayload = Schema.Record(Schema.String, NonNegativeInt)
 export const HistoryEvent = Schema.Struct({
   id: Schema.String,
   aggregate_id: Schema.String,
-  seq: Schema.Finite,
+  seq: NonNegativeInt,
   type: Schema.String,
   data: Schema.Record(Schema.String, Schema.Unknown),
 }).annotate({ identifier: "SyncHistoryEvent" })
