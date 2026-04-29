@@ -15,6 +15,7 @@
   OPENCODE_PARSERS_DIR          - tree-sitter 解析器目录（默认: 同目录 parsers\）
   OPENCODE_DISABLE_AUTOUPDATE   - 禁用自动更新（已设为 true）
   OPENCODE_DISABLE_MODELS_FETCH - 禁止从 models.dev 拉取模型数据 (已设为 true)
+  OPENCODE_DISABLE_LSP_DOWNLOAD - 禁止 LSP 工具下载 (已设为 true)
   OPENCODE_CONFIG_DIR           - 额外配置目录
   ENTERPRISE_API_KEY            - 内网 LLM 服务 API Key
 
@@ -28,6 +29,6 @@ config/                - 配置模板目录
 日志
 --------------------
 日志文件写入位置：
-- **Windows**: 按 WIN+R 并粘贴 %USERPROFILE%\.local\share\opencode\log
+**Windows**: 按 WIN+R 并粘贴 %USERPROFILE%\.local\share\opencode\log
 
 日志文件以时间戳命名（例如 2025-01-09T123456.log），并保留最近的 10 个日志文件。
