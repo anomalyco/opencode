@@ -8,17 +8,17 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
-import { Config } from "../../src/config"
-import { LSP } from "../../src/lsp"
+import { Config } from "@/config/config"
+import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
-import { Provider as ProviderSvc } from "../../src/provider"
+import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
-import { Session } from "../../src/session"
+import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -35,9 +35,9 @@ import { Skill } from "../../src/skill"
 import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
-import { ToolRegistry } from "../../src/tool"
-import { Truncate } from "../../src/tool"
-import { Log } from "../../src/util"
+import { ToolRegistry } from "@/tool/registry"
+import { Truncate } from "@/tool/truncate"
+import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
@@ -316,9 +316,11 @@ const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref) =>
   })
 
 const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
+  const config = yield* Config.Service
   const prompt = yield* SessionPrompt.Service
   const run = yield* SessionRunState.Service
   const sessions = yield* Session.Service
+  yield* config.get()
   const chat = yield* sessions.create(input ?? { title: "Pinned" })
   return { prompt, run, sessions, chat }
 })
@@ -1078,6 +1080,32 @@ unix("shell completes a fast command on the preferred shell", () =>
   ),
 )
 
+unix(
+  "shell uses configured shell over env shell",
+  () =>
+    withSh(() =>
+      provideTmpdirInstance(
+        (_dir) =>
+          Effect.gen(function* () {
+            if (!Bun.which("bash")) return
+
+            const { prompt, chat } = yield* boot()
+            const result = yield* prompt.shell({
+              sessionID: chat.id,
+              agent: "build",
+              command: "[[ 1 -eq 1 ]] && printf configured",
+            })
+
+            const tool = completedTool(result.parts)
+            if (!tool) return
+            expect(tool.state.output).toContain("configured")
+          }),
+        { git: true, config: { ...cfg, shell: "bash" } },
+      ),
+    ),
+  30_000,
+)
+
 unix("shell commands can change directory after startup", () =>
   provideTmpdirInstance(
     (dir) =>
@@ -1264,6 +1292,45 @@ it.live(
 )
 
 unix(
+  "command ! expansion uses configured shell over env shell",
+  () =>
+    withSh(() =>
+      provideTmpdirServer(
+        ({ llm }) =>
+          Effect.gen(function* () {
+            if (!Bun.which("bash")) return
+
+            const { prompt, chat } = yield* boot()
+            yield* llm.text("done")
+
+            const result = yield* prompt.command({
+              sessionID: chat.id,
+              command: "probe",
+              arguments: "",
+            })
+
+            expect(result.info.role).toBe("assistant")
+            const inputs = yield* llm.inputs
+            expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("configured")
+          }),
+        {
+          git: true,
+          config: (url) => ({
+            ...providerCfg(url),
+            shell: "bash",
+            command: {
+              probe: {
+                template: "Probe: !`[[ 1 -eq 1 ]] && printf configured`",
+              },
+            },
+          }),
+        },
+      ),
+    ),
+  30_000,
+)
+
+unix(
   "cancel interrupts shell and resolves cleanly",
   () =>
     withSh(() =>
@@ -1403,6 +1470,10 @@ unix(
 
           const exit = yield* Fiber.await(loop)
           expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) {
+            const tool = completedTool(exit.value.parts)
+            expect(tool?.state.output).toContain("User aborted the command")
+          }
 
           yield* Fiber.await(sh)
         }),

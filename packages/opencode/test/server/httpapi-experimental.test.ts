@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
+import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
-import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/experimental"
-import { Database } from "../../src/storage"
-import { Log } from "../../src/util"
+import { Server } from "../../src/server/server"
+import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
+import { Session } from "@/session/session"
+import { Database } from "@/storage/db"
+import * as Log from "@opencode-ai/core/util/log"
 import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
@@ -14,12 +15,19 @@ import { tmpdir } from "../fixture/fixture"
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 const testWorktreeMutations = process.platform === "win32" ? test.skip : test
 
 function app() {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return InstanceRoutes(websocket)
+  return Server.Default().app
+}
+
+function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
+  return Effect.runPromise(fx.pipe(Effect.provide(Session.defaultLayer)))
+}
+
+function createSession(input?: Session.CreateInput) {
+  return runSession(Session.Service.use((svc) => svc.create(input)))
 }
 
 async function waitReady(directory: string) {
@@ -124,6 +132,43 @@ describe("experimental HttpApi", () => {
 
     expect(switched.status).toBe(200)
     expect(await switched.json()).toBe(true)
+  })
+
+  test("serves global session list through Hono bridge", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+
+    const first = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => createSession({ title: "page-one" }),
+    })
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const second = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => createSession({ title: "page-two" }),
+    })
+
+    const headers = { "x-opencode-directory": tmp.path }
+    const page = await app().request(
+      `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.path, limit: "1" })}`,
+      { headers },
+    )
+    expect(page.status).toBe(200)
+    expect(page.headers.get("x-next-cursor")).toBeTruthy()
+
+    const body = (await page.json()) as Session.GlobalInfo[]
+    expect(body.map((session) => session.id)).toEqual([second.id])
+    expect(body[0].project?.id).toBe(second.projectID)
+
+    const next = await app().request(
+      `${ExperimentalPaths.session}?${new URLSearchParams({
+        directory: tmp.path,
+        limit: "10",
+        cursor: body[0].time.updated.toString(),
+      })}`,
+      { headers },
+    )
+    expect(next.status).toBe(200)
+    expect(((await next.json()) as Session.GlobalInfo[]).map((session) => session.id)).toContain(first.id)
   })
 
   testWorktreeMutations("serves worktree mutations through Hono bridge", async () => {

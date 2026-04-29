@@ -5,7 +5,9 @@ import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import z from "zod"
-import { Database, eq, asc } from "../storage"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
+import { asc } from "drizzle-orm"
 import { TodoTable } from "./session.sql"
 
 export const Info = Schema.Struct({

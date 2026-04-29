@@ -84,31 +84,32 @@ OpenCode Goには以下の制限が含まれています：
 
 以下の表は、一般的なGoの利用パターンに基づいた推定リクエスト数を示しています：
 
-| Model             | 5時間あたりのリクエスト数 | 週間リクエスト数 | 月間リクエスト数 |
-| ----------------- | ------------------------- | ---------------- | ---------------- |
-| GLM-5.1           | 880                       | 2,150            | 4,300            |
-| GLM-5             | 1,150                     | 2,880            | 5,750            |
-| Kimi K2.5         | 1,850                     | 4,630            | 9,250            |
-| Kimi K2.6         | 1,150                     | 2,880            | 5,750            |
-| MiMo-V2-Pro       | 1,290                     | 3,225            | 6,450            |
-| MiMo-V2-Omni      | 2,150                     | 5,450            | 10,900           |
-| MiMo-V2.5-Pro     | 1,290                     | 3,225            | 6,450            |
-| MiMo-V2.5         | 2,150                     | 5,450            | 10,900           |
-| MiniMax M2.7      | 3,400                     | 8,500            | 17,000           |
-| MiniMax M2.5      | 6,300                     | 15,900           | 31,800           |
-| Qwen3.6 Plus      | 3,300                     | 8,200            | 16,300           |
-| Qwen3.5 Plus      | 10,200                    | 25,200           | 50,500           |
-| DeepSeek V4 Pro   | 1,300                     | 3,250            | 6,500            |
-| DeepSeek V4 Flash | 7,450                     | 18,600           | 37,300           |
+| Model              | 5時間あたりのリクエスト数 | 週間リクエスト数 | 月間リクエスト数 |
+| ------------------ | ------------------------- | ---------------- | ---------------- |
+| GLM-5.1            | 880                       | 2,150            | 4,300            |
+| GLM-5              | 1,150                     | 2,880            | 5,750            |
+| Kimi K2.5          | 1,850                     | 4,630            | 9,250            |
+| Kimi K2.6          | 1,150                     | 2,880            | 5,750            |
+| MiMo-V2-Pro        | 1,290                     | 3,225            | 6,450            |
+| MiMo-V2-Omni       | 2,150                     | 5,450            | 10,900           |
+| MiMo-V2.5-Pro      | 1,290                     | 3,225            | 6,450            |
+| MiMo-V2.5 (≤ 256K) | 2,150                     | 5,450            | 10,900           |
+| MiniMax M2.7       | 3,400                     | 8,500            | 17,000           |
+| MiniMax M2.5       | 6,300                     | 15,900           | 31,800           |
+| Qwen3.6 Plus       | 3,300                     | 8,200            | 16,300           |
+| Qwen3.5 Plus       | 10,200                    | 25,200           | 50,500           |
+| DeepSeek V4 Pro    | 3,450                     | 8,550            | 17,150           |
+| DeepSeek V4 Flash  | 31,650                    | 79,050           | 158,150          |
 
 推定値は、観測された平均的なリクエストパターンに基づいています：
 
 - GLM-5/5.1 — リクエストあたり 入力 700トークン、キャッシュ 52,000トークン、出力 150トークン
 - Kimi K2.5/K2.6 — リクエストあたり 入力 870トークン、キャッシュ 55,000トークン、出力 200トークン
-- DeepSeek V4 Pro/Flash — 700 input, 52,000 cached, 150 output tokens per request
+- DeepSeek V4 Pro — リクエストあたり 入力 750トークン、キャッシュ 82,000トークン、出力 290トークン
+- DeepSeek V4 Flash — リクエストあたり 入力 790トークン、キャッシュ 68,000トークン、出力 280トークン
 - MiniMax M2.7/M2.5 — リクエストあたり 入力 300トークン、キャッシュ 55,000トークン、出力 125トークン
-- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
-- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- Qwen3.5 Plus — リクエストあたり 入力 410トークン、キャッシュ 47,000トークン、出力 140トークン
+- Qwen3.6 Plus — リクエストあたり 入力 500トークン、キャッシュ 57,000トークン、出力 190トークン
 - MiMo-V2-Pro — リクエストあたり 入力 350トークン、キャッシュ 41,000トークン、出力 250トークン
 - MiMo-V2-Omni — リクエストあたり 入力 1000トークン、キャッシュ 60,000トークン、出力 140トークン
 - MiMo-V2.5-Pro — リクエストあたり 入力 350トークン、キャッシュ 41,000トークン、出力 250トークン
@@ -140,8 +141,8 @@ Zen残高にクレジットがある場合は、コンソールで**Use balance*
 | GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2-Pro       | mimo-v2-pro       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2-Omni      | mimo-v2-omni      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -152,6 +153,16 @@ Zen残高にクレジットがある場合は、コンソールで**Use balance*
 | Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 
 OpenCode設定の[model id](/docs/config/#models)は、`opencode-go/<model-id>`という形式を使用します。たとえば、Kimi K2.6の場合は、設定で`opencode-go/kimi-k2.6`を使用します。
+
+---
+
+### モデル
+
+利用可能なモデルとそのメタデータの完全な一覧は、次から取得できます。
+
+```
+https://opencode.ai/zen/go/v1/models
+```
 
 ---
 

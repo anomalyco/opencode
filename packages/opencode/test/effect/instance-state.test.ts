@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
 import { Deferred, Duration, Effect, Exit, Fiber, Layer, ManagedRuntime, Context } from "effect"
-import { InstanceState } from "../../src/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
