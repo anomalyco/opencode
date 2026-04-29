@@ -209,15 +209,9 @@ const makeClient = (options: ClientOptions): LLMClient => {
     options.adapters.map((source) => [source.runtime.protocol, source.runtime] as const),
   )
 
-  const resolveAdapter = (request: LLMRequest) =>
-    Effect.gen(function* () {
-      const adapter = adapters.get(request.model.protocol)
-      if (!adapter) return yield* noAdapter(request.model)
-      return adapter
-    })
-
   const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-    const adapter = yield* resolveAdapter(request)
+    const adapter = adapters.get(request.model.protocol)
+    if (!adapter) return yield* noAdapter(request.model)
 
     const requestPlan = plan({
       phase: "request",
