@@ -7,21 +7,23 @@ import { Session } from "@/session/session"
 import { HttpApiProxy, sourceRequest } from "./proxy"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/workspace"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Context, Effect, Layer } from "effect"
+import { Context, Data, Effect, Layer } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 
 type RemoteTarget = Extract<Target, { type: "remote" }>
-type RequestPlan =
-  | { readonly type: "missing-workspace"; readonly workspaceID: WorkspaceID }
-  | { readonly type: "local"; readonly directory: string; readonly workspaceID?: WorkspaceID }
-  | {
-      readonly type: "remote"
-      readonly request: HttpServerRequest.HttpServerRequest
-      readonly workspace: Workspace.Info
-      readonly target: RemoteTarget
-      readonly url: URL
-    }
+
+type RequestPlan = Data.TaggedEnum<{
+  MissingWorkspace: { readonly workspaceID: WorkspaceID }
+  Local: { readonly directory: string; readonly workspaceID?: WorkspaceID }
+  Remote: {
+    readonly request: HttpServerRequest.HttpServerRequest
+    readonly workspace: Workspace.Info
+    readonly target: RemoteTarget
+    readonly url: URL
+  }
+}>
+const RequestPlan = Data.taggedEnum<RequestPlan>()
 
 export class WorkspaceRouteContext extends Context.Service<WorkspaceRouteContext, {
   readonly directory: string
@@ -110,20 +112,8 @@ function planWorkspaceRequest(
 ): Effect.Effect<RequestPlan> {
   return Effect.gen(function* () {
     const target = yield* resolveTarget(workspace)
-    if (target.type === "remote") {
-      return {
-        type: "remote",
-        request,
-        workspace,
-        target,
-        url,
-      } satisfies RequestPlan
-    }
-    return {
-      type: "local",
-      directory: target.directory,
-      workspaceID: workspace.id,
-    } satisfies RequestPlan
+    if (target.type === "remote") return RequestPlan.Remote({ request, workspace, target, url })
+    return RequestPlan.Local({ directory: target.directory, workspaceID: workspace.id })
   })
 }
 
@@ -138,18 +128,14 @@ function planRequest(
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 
     if (workspaceID && workspace === undefined && !envWorkspaceID) {
-      return { type: "missing-workspace", workspaceID } satisfies RequestPlan
+      return RequestPlan.MissingWorkspace({ workspaceID })
     }
 
     if (workspace !== undefined && !envWorkspaceID && !shouldStayOnControlPlane(request, url)) {
       return yield* planWorkspaceRequest(request, url, workspace)
     }
 
-    return {
-      type: "local",
-      directory: defaultDirectory(request, url),
-      workspaceID: envWorkspaceID ?? workspaceID,
-    } satisfies RequestPlan
+    return RequestPlan.Local({ directory: defaultDirectory(request, url), workspaceID: envWorkspaceID ?? workspaceID })
   })
 }
 
@@ -157,20 +143,13 @@ function routeWorkspace<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
   plan: RequestPlan,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E> {
-  return Effect.gen(function* () {
-    switch (plan.type) {
-      case "missing-workspace":
-        return missingWorkspaceResponse(plan.workspaceID)
-      case "remote":
-        return yield* proxyRemote(plan.request, plan.workspace, plan.target, plan.url)
-      case "local":
-        return yield* effect.pipe(
-          Effect.provideService(WorkspaceRouteContext, WorkspaceRouteContext.of({
-            directory: plan.directory,
-            workspaceID: plan.workspaceID,
-          })),
-        )
-    }
+  return RequestPlan.$match(plan, {
+    MissingWorkspace: ({ workspaceID }) => Effect.succeed(missingWorkspaceResponse(workspaceID)),
+    Remote: ({ request, workspace, target, url }) => proxyRemote(request, workspace, target, url),
+    Local: ({ directory, workspaceID }) =>
+      effect.pipe(
+        Effect.provideService(WorkspaceRouteContext, WorkspaceRouteContext.of({ directory, workspaceID })),
+      ),
   })
 }
 

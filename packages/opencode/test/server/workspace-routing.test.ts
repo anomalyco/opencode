@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { isLocalWorkspaceRoute, getWorkspaceRouteSessionID, workspaceProxyURL } from "../../src/server/workspace"
+import { SessionID } from "../../src/session/schema"
 
 describe("isLocalWorkspaceRoute", () => {
   test("GET /session is local", () => {
@@ -28,12 +29,12 @@ describe("isLocalWorkspaceRoute", () => {
 describe("getWorkspaceRouteSessionID", () => {
   test("extracts session ID from path", () => {
     const url = new URL("http://localhost/session/ses_abc123/message")
-    expect(getWorkspaceRouteSessionID(url)).toBe("ses_abc123")
+    expect(getWorkspaceRouteSessionID(url)).toBe(SessionID.make("ses_abc123"))
   })
 
   test("extracts session ID without trailing path", () => {
     const url = new URL("http://localhost/session/ses_xyz")
-    expect(getWorkspaceRouteSessionID(url)).toBe("ses_xyz")
+    expect(getWorkspaceRouteSessionID(url)).toBe(SessionID.make("ses_xyz"))
   })
 
   test("returns null for /session/status", () => {
