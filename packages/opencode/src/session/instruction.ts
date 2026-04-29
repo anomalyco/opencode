@@ -2,13 +2,13 @@ import os from "os"
 import path from "path"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { Config } from "@/config"
-import { InstanceState } from "@/effect"
+import { Config } from "@/config/config"
+import { InstanceState } from "@/effect/instance-state"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
@@ -122,6 +122,13 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
         const ctx = yield* InstanceState.context
         const paths = new Set<string>()
 
+        for (const file of globalFiles()) {
+          if (yield* fs.existsSafe(file)) {
+            paths.add(path.resolve(file))
+            break
+          }
+        }
+
         // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of FILES) {
@@ -130,13 +137,6 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Config.S
               matches.forEach((item) => paths.add(path.resolve(item)))
               break
             }
-          }
-        }
-
-        for (const file of globalFiles()) {
-          if (yield* fs.existsSafe(file)) {
-            paths.add(path.resolve(file))
-            break
           }
         }
 

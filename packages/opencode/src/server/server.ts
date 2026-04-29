@@ -2,7 +2,7 @@ import { generateSpecs } from "hono-openapi"
 import { Hono } from "hono"
 import { adapter } from "#hono"
 import { lazy } from "@/util/lazy"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { WorkspaceID } from "@/control-plane/schema"
 import { MDNS } from "./mdns"
@@ -17,8 +17,7 @@ import { WorkspaceRouterMiddleware } from "./workspace"
 import { InstanceMiddleware } from "./routes/instance/middleware"
 import { WorkspaceRoutes } from "./routes/control/workspace"
 import { ExperimentalHttpApiServer } from "./routes/instance/httpapi/server"
-import { WorkspacePaths } from "./routes/instance/httpapi/workspace"
-import { Context } from "effect"
+import * as ServerBackend from "./backend"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -34,13 +33,70 @@ export type Listener = {
   stop: (close?: boolean) => Promise<void>
 }
 
-export const Default = lazy(() => create({}))
+type ServerApp = {
+  fetch(request: Request): Response | Promise<Response>
+  request(input: string | URL | Request, init?: RequestInit): Response | Promise<Response>
+}
+
+const DefaultHono = lazy(() =>
+  withBackend({ backend: "hono", reason: "stable" }, createHono({}, { backend: "hono", reason: "stable" })),
+)
+const DefaultHttpApi = lazy(() => createDefaultHttpApi())
+
+function select() {
+  return ServerBackend.select()
+}
+
+export const backend = select
+
+export const Default = () => {
+  const selected = select()
+  return selected.backend === "effect-httpapi" ? DefaultHttpApi() : DefaultHono()
+}
 
 function create(opts: { cors?: string[] }) {
+  const selected = select()
+  return selected.backend === "effect-httpapi"
+    ? withBackend(selected, createHttpApi())
+    : withBackend(selected, createHono(opts, selected))
+}
+
+export function Legacy(opts: { cors?: string[] } = {}) {
+  return withBackend({ backend: "hono", reason: "explicit" }, createHono(opts, { backend: "hono", reason: "explicit" }))
+}
+
+function createDefaultHttpApi() {
+  return withBackend(select(), createHttpApi())
+}
+
+function withBackend<T extends { app: ServerApp; runtime: unknown }>(selection: ServerBackend.Selection, built: T) {
+  log.info("server backend selected", ServerBackend.attributes(selection))
+  return built
+}
+
+function createHttpApi() {
+  const handler = ExperimentalHttpApiServer.webHandler().handler
+  const app: ServerApp = {
+    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
+    request(input, init) {
+      return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
+    },
+  }
+  return {
+    app,
+    runtime: adapter.createFetch(app),
+  }
+}
+
+function createHono(
+  opts: { cors?: string[] },
+  selection: ServerBackend.Selection = ServerBackend.force(select(), "hono"),
+) {
+  const backendAttributes = ServerBackend.attributes(selection)
   const app = new Hono()
     .onError(ErrorMiddleware)
     .use(AuthMiddleware)
-    .use(LoggerMiddleware)
+    .use(LoggerMiddleware(backendAttributes))
     .use(CompressionMiddleware)
     .use(CorsMiddleware(opts))
     .route("/global", GlobalRoutes())
@@ -62,16 +118,6 @@ function create(opts: { cors?: string[] }) {
     .use(InstanceMiddleware())
     .route("/experimental/workspace", WorkspaceRoutes())
     .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket))
-  if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
-    const handler = ExperimentalHttpApiServer.webHandler().handler
-    const context = Context.empty() as Context.Context<unknown>
-    workspaceApp.get(WorkspacePaths.adaptors, (c) => handler(c.req.raw, context))
-    workspaceApp.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
-    workspaceApp.post(WorkspacePaths.list, (c) => handler(c.req.raw, context))
-    workspaceApp.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
-    workspaceApp.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
-    workspaceApp.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
-  }
   workspaceApp.route("/", workspaceLegacyApp)
 
   return {
@@ -89,7 +135,7 @@ export async function openapi() {
   // hono-openapi can see describeRoute metadata (`.route()` wraps
   // handlers when the sub-app has a custom errorHandler, which
   // strips the metadata symbol).
-  const { app } = create({})
+  const { app } = createHono({})
   const result = await generateSpecs(app, {
     documentation: {
       info: {

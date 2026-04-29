@@ -8,15 +8,15 @@ import { withStatics } from "@/util/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "@/permission"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Config } from "../config"
-import { ConfigMarkdown } from "../config"
+import { Config } from "@/config/config"
+import { ConfigMarkdown } from "@/config/markdown"
 import { Glob } from "@opencode-ai/core/util/glob"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
 
 const log = Log.create({ service: "skill" })
@@ -83,7 +83,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
           : `Failed to parse skill ${match}`
-        const { Session } = yield* Effect.promise(() => import("@/session"))
+        const { Session } = yield* Effect.promise(() => import("@/session/session"))
         yield* bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
         log.error("failed to load skill", { skill: match, err })
         return undefined

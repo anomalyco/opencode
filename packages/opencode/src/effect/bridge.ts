@@ -2,7 +2,7 @@ import { Effect, Fiber } from "effect"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Instance, type InstanceContext } from "@/project/instance"
 import type { WorkspaceID } from "@/control-plane/schema"
-import { LocalContext } from "@/util"
+import { LocalContext } from "@/util/local-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { attachWith } from "./run-service"
 
@@ -46,3 +46,5 @@ export function make(): Effect.Effect<Shape> {
     } satisfies Shape
   })
 }
+
+export * as EffectBridge from "./bridge"

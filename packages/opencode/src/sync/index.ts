@@ -1,5 +1,6 @@
 import z from "zod"
-import { Database, eq } from "@/storage"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
@@ -290,6 +291,22 @@ export function payloads() {
           ref: `SyncEvent.${def.type}`,
         })
     })
+    .toArray()
+}
+
+export function effectPayloads() {
+  return registry
+    .entries()
+    .map(([type, def]) =>
+      EffectSchema.Struct({
+        type: EffectSchema.Literal("sync"),
+        name: EffectSchema.Literal(type),
+        id: EffectSchema.String,
+        seq: EffectSchema.Finite,
+        aggregateID: EffectSchema.Literal(def.aggregate),
+        data: def.schema,
+      }).annotate({ identifier: `SyncEvent.${type}` }),
+    )
     .toArray()
 }
 

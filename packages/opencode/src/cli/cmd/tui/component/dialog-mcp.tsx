@@ -4,7 +4,7 @@ import { useSync } from "@tui/context/sync"
 import { map, pipe, entries, sortBy } from "remeda"
 import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useTheme } from "../context/theme"
-import { Keybind } from "@/util"
+import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 

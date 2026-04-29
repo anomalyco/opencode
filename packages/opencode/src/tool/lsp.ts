@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import path from "path"
-import { LSP } from "../lsp"
+import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"
 import { pathToFileURL } from "url"
@@ -23,12 +23,12 @@ const operations = [
 export const Parameters = Schema.Struct({
   operation: Schema.Literals(operations).annotate({ description: "The LSP operation to perform" }),
   filePath: Schema.String.annotate({ description: "The absolute or relative path to the file" }),
-  line: Schema.Number.check(Schema.isInt())
-    .check(Schema.isGreaterThanOrEqualTo(1))
-    .annotate({ description: "The line number (1-based, as shown in editors)" }),
-  character: Schema.Number.check(Schema.isInt())
-    .check(Schema.isGreaterThanOrEqualTo(1))
-    .annotate({ description: "The character offset (1-based, as shown in editors)" }),
+  line: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+    description: "The line number (1-based, as shown in editors)",
+  }),
+  character: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+    description: "The character offset (1-based, as shown in editors)",
+  }),
   query: Schema.optional(Schema.String).annotate({
     description: "Search query for workspaceSymbol. Empty string requests all symbols.",
   }),
