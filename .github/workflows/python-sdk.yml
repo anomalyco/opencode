@@ -1,0 +1,78 @@
+name: python-sdk
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "packages/sdk/python/**"
+      - "packages/sdk/openapi.json"
+      - ".github/workflows/python-sdk.yml"
+  pull_request:
+    paths:
+      - "packages/sdk/python/**"
+      - "packages/sdk/openapi.json"
+      - ".github/workflows/python-sdk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (py${{ matrix.python }})
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/sdk/python
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: packages/sdk/python/pyproject.toml
+
+      - name: Install Python SDK with dev extras
+        run: pip install -e .[dev]
+
+      - name: Verify SDK is regenerated cleanly
+        run: python scripts/generate.py --check
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Provide opencode binary on PATH
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          OPENCODE_DIR="$GITHUB_WORKSPACE/packages/opencode"
+          cat > "$HOME/.local/bin/opencode" <<EOF
+          #!/usr/bin/env bash
+          exec bun run --cwd "$OPENCODE_DIR" --conditions=browser src/index.ts "\$@"
+          EOF
+          chmod +x "$HOME/.local/bin/opencode"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run pytest (unit + smoke)
+        env:
+          OPENCODE_DISABLE_SHARE: "true"
+        run: pytest tests -v --timeout=120
+
+      - name: Build distribution
+        run: |
+          pip install build
+          python -m build
+          ls dist

@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opencode-ai"
+version = "0.0.0"
+description = "The Python SDK for the opencode API"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "opencode" }]
+keywords = ["opencode", "sdk", "ai", "agent", "coding"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "httpx>=0.23.0,<1",
+  "attrs>=22.2.0",
+  "python-dateutil>=2.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "openapi-python-client>=0.28,<1",
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "pytest-timeout>=2.3",
+  "ruff>=0.6",
+]
+
+[project.urls]
+Homepage = "https://opencode.ai"
+Repository = "https://github.com/anomalyco/opencode"
+Issues = "https://github.com/anomalyco/opencode/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opencode_ai"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/opencode_ai",
+  "README.md",
+  "openapi-python-client.yaml",
+  "scripts/generate.py",
+]
+
+[tool.ruff]
+line-length = 120
+# Generated client code follows openapi-python-client's own style — we only lint
+# hand-written code. Regeneration is verified separately by scripts/generate.py --check.
+extend-exclude = [
+  "src/opencode_ai/api",
+  "src/opencode_ai/models",
+  "src/opencode_ai/client.py",
+  "src/opencode_ai/errors.py",
+  "src/opencode_ai/types.py",
+]
+
+[tool.ruff.lint]
+select = ["F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+timeout = 60

@@ -1,0 +1,9 @@
+project_name_override: opencode-ai
+package_name_override: opencode_ai
+package_version_override: 0.0.0
+use_path_prefixes_for_title_model_names: false
+field_constraints: true
+http_timeout: 30
+post_hooks:
+  - "ruff check --select I --fix ."
+  - "ruff format ."
