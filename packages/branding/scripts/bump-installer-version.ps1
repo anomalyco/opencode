@@ -1,4 +1,4 @@
-# [fork-only] DeskFox installer version bump
+﻿# [fork-only] DeskFox installer version bump
 #
 # Rule: YYYY.M.D.N (Year.Month.Day.Nth-of-day, N starts from 1)
 # Per-platform counter: Windows and macOS each maintain their own N sequence,
