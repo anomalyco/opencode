@@ -4,7 +4,7 @@ import { AppRuntime } from "../../effect/app-runtime"
 import { resolveLocale, t } from "../../i18n"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "../../flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { bootstrap } from "../bootstrap"
 
 export function serveWarning(locale: ReturnType<typeof resolveLocale>) {

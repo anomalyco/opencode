@@ -9,7 +9,7 @@ import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { useI18n } from "../context/i18n"
-import { TuiPluginRuntime } from "../plugin"
+import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
 let once = false
 
