@@ -18,3 +18,4 @@
 | [build-pipeline-sidecar-fix](./build-pipeline-sidecar-fix/) | done | Windows build-deskfox.ps1 加 sidecar 自动 build 步骤 — 时间戳判断 + non-baseline 优先(绕 clash 代理下 bun-baseline 下载失败) |
 | [plugin-cwd-channel](./plugin-cwd-channel/) | done | opencode 加 _opencode providerOptions namespace 暴露 cwd 给 spawn-based plugin(R4 第 3 笔本季特批,不扣下季度配额) |
 | [installer-versioning](./installer-versioning/) | done | installer 版本号规则 YYYY.M.D.N(年.月.日.当天第几版)+ bump 脚本 + pack-installer 一键脚本 + docs/installer-versions.md 版本日志 |
+| [md-viewer-typography](./md-viewer-typography/) | done | 文件查看器看 .md 时排版升级 — 标题阶梯(字号+加粗双轨,h1/h2=700,h3-h6=600)/ 行内代码芯片 / 引用块底色 / HR 显形 / 表头底色,scoped 在 data-context="file-viewer" 下,聊天侧零影响 |

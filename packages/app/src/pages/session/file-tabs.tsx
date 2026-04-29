@@ -811,7 +811,12 @@ export function FileTabContent(props: { tab: string }) {
   })
 
   const renderMarkdown = (source: string) => (
-    <div class="relative pb-40 px-6 py-4 select-text" onContextMenu={handleSelectionContextMenu}>
+    // FORK: data-context scope 让 markdown.css 单独定制文件查看器排版,不影响聊天 2026-04-29
+    <div
+      data-context="file-viewer"
+      class="relative pb-40 px-6 py-4 select-text"
+      onContextMenu={handleSelectionContextMenu}
+    >
       <Markdown text={source} cacheKey={cacheKey()} />
     </div>
   )
