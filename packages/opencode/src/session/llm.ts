@@ -360,7 +360,18 @@ const live: Layer.Layer<
         temperature: params.temperature,
         topP: params.topP,
         topK: params.topK,
-        providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+        // FORK-BEGIN: plugin-cwd-channel — 把 session 工作目录暴露给 spawn-based plugin
+        // 通用 _opencode namespace 设计:任何 spawn-based plugin(claude-code/codex/gemini/aider)
+        // 都能从 options.providerOptions._opencode.cwd 取项目目录,无需 plugin 各自定义协议
+        // 详见 docs/features/plugin-cwd-channel/3-changelog.md
+        providerOptions: {
+          ...ProviderTransform.providerOptions(input.model, params.options),
+          _opencode: {
+            cwd: Instance.directory,
+            project: Instance.project.id,
+          },
+        },
+        // FORK-END
         activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
         tools,
         toolChoice: input.toolChoice,
