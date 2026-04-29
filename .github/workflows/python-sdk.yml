@@ -29,7 +29,6 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: packages/sdk/python
 
     steps:
       - name: Checkout
@@ -46,16 +45,20 @@ jobs:
           cache-dependency-path: packages/sdk/python/pyproject.toml
 
       - name: Install Python SDK with dev extras
+        working-directory: packages/sdk/python
         run: pip install -e .[dev]
 
       - name: Verify SDK is regenerated cleanly
+        working-directory: packages/sdk/python
         run: python scripts/generate.py --check
 
       - name: Lint
-        run: ruff check src tests
+        working-directory: packages/sdk/python
+        run: |
+          ruff check src tests scripts examples
+          ruff format --check src tests scripts examples
 
       - name: Provide opencode binary on PATH
-        working-directory: ${{ github.workspace }}
         run: |
           mkdir -p "$HOME/.local/bin"
           OPENCODE_DIR="$GITHUB_WORKSPACE/packages/opencode"
@@ -67,11 +70,13 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run pytest (unit + smoke)
+        working-directory: packages/sdk/python
         env:
           OPENCODE_DISABLE_SHARE: "true"
         run: pytest tests -v --timeout=120
 
       - name: Build distribution
+        working-directory: packages/sdk/python
         run: |
           pip install build
           python -m build

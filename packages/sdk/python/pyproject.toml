@@ -30,12 +30,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Tools used to regenerate and lint the SDK. The generator and formatter are
+# pinned to exact versions so CI's `scripts/generate.py --check` is deterministic;
+# bump these together with a regen commit.
 dev = [
-  "openapi-python-client>=0.28,<1",
+  "openapi-python-client==0.28.3",
+  "ruff==0.15.12",
   "pytest>=8",
   "pytest-asyncio>=0.23",
   "pytest-timeout>=2.3",
-  "ruff>=0.6",
 ]
 
 [project.urls]
