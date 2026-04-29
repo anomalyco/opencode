@@ -1,11 +1,10 @@
 import { afterEach, describe, expect } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
+import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -18,11 +17,10 @@ import { it } from "../lib/effect"
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
 function app() {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return InstanceRoutes(websocket)
+  return Server.Default().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {

@@ -1,10 +1,9 @@
 import { afterEach, describe, expect } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
 import { Effect, FileSystem, Layer, Path } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
+import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { provideInstance } from "../fixture/fixture"
@@ -13,7 +12,6 @@ import { testEffect } from "../lib/effect"
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 const it = testEffect(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))
 const providerID = "test-oauth-parity"
 const oauthURL = "https://example.com/oauth"
@@ -21,11 +19,11 @@ const oauthInstructions = "Finish OAuth"
 
 function app(experimental: boolean) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return InstanceRoutes(websocket)
+  return Server.Default().app
 }
 
 function requestAuthorize(input: {
-  app: ReturnType<typeof InstanceRoutes>
+  app: ReturnType<typeof app>
   providerID: string
   method: number
   headers: HeadersInit

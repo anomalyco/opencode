@@ -1,6 +1,6 @@
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -47,7 +47,7 @@ export const PermissionApi = HttpApi.make("permission")
     }),
   )
 
-export const permissionHandlers = Layer.unwrap(
+export const permissionHandlers = HttpApiBuilder.group(PermissionApi, "permission", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* Permission.Service
 
@@ -67,8 +67,6 @@ export const permissionHandlers = Layer.unwrap(
       return true
     })
 
-    return HttpApiBuilder.group(PermissionApi, "permission", (handlers) =>
-      handlers.handle("list", list).handle("reply", reply),
-    )
+    return handlers.handle("list", list).handle("reply", reply)
   }),
-).pipe(Layer.provide(Permission.defaultLayer))
+)

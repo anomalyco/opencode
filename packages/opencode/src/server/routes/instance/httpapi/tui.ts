@@ -4,7 +4,7 @@ import { SessionID } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
 import * as Database from "@/storage/db"
 import { eq } from "drizzle-orm"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { nextTuiRequest, submitTuiResponse } from "../tui"
 import { Authorization } from "./auth"
@@ -61,6 +61,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("appendPrompt", TuiPaths.appendPrompt, {
           payload: TuiEvent.PromptAppend.properties,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.appendPrompt",
@@ -113,6 +114,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("executeCommand", TuiPaths.executeCommand, {
           payload: CommandPayload,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.executeCommand",
@@ -133,6 +135,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("publish", TuiPaths.publish, {
           payload: TuiPublishPayload,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.publish",
@@ -143,7 +146,7 @@ export const TuiApi = HttpApi.make("tui")
         HttpApiEndpoint.post("selectSession", TuiPaths.selectSession, {
           payload: TuiEvent.SessionSelect.properties,
           success: Schema.Boolean,
-          error: HttpApiError.NotFound,
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tui.selectSession",
@@ -180,7 +183,7 @@ export const TuiApi = HttpApi.make("tui")
     }),
   )
 
-export const tuiHandlers = Layer.unwrap(
+export const tuiHandlers = HttpApiBuilder.group(TuiApi, "tui", (handlers) =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const publishCommand = (command: typeof TuiEvent.CommandExecute.properties.Type.command) =>
@@ -270,21 +273,19 @@ export const tuiHandlers = Layer.unwrap(
       return true
     })
 
-    return HttpApiBuilder.group(TuiApi, "tui", (handlers) =>
-      handlers
-        .handle("appendPrompt", appendPrompt)
-        .handle("openHelp", openHelp)
-        .handle("openSessions", openSessions)
-        .handle("openThemes", openThemes)
-        .handle("openModels", openModels)
-        .handle("submitPrompt", submitPrompt)
-        .handle("clearPrompt", clearPrompt)
-        .handle("executeCommand", executeCommand)
-        .handle("showToast", showToast)
-        .handle("publish", publish)
-        .handle("selectSession", selectSession)
-        .handle("controlNext", controlNext)
-        .handle("controlResponse", controlResponse),
-    )
+    return handlers
+      .handle("appendPrompt", appendPrompt)
+      .handle("openHelp", openHelp)
+      .handle("openSessions", openSessions)
+      .handle("openThemes", openThemes)
+      .handle("openModels", openModels)
+      .handle("submitPrompt", submitPrompt)
+      .handle("clearPrompt", clearPrompt)
+      .handle("executeCommand", executeCommand)
+      .handle("showToast", showToast)
+      .handle("publish", publish)
+      .handle("selectSession", selectSession)
+      .handle("controlNext", controlNext)
+      .handle("controlResponse", controlResponse)
   }),
 )
