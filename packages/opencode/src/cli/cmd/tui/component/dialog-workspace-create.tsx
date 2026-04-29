@@ -73,6 +73,7 @@ export async function restoreWorkspaceSession(input: {
   sync: ReturnType<typeof useSync>
   project: ReturnType<typeof useProject>
   toast: ReturnType<typeof useToast>
+  i18n: ReturnType<typeof useI18n>
   workspaceID: string
   sessionID: string
   done?: () => void
@@ -95,7 +96,7 @@ export async function restoreWorkspaceSession(input: {
   await Promise.all([input.project.workspace.sync(), input.sync.session.sync(input.sessionID)])
 
   input.toast.show({
-    message: i18n.t("tui.dialog.workspace.restore_success"),
+    message: input.i18n.t("tui.dialog.workspace.restore_success"),
     variant: "success",
   })
   input.done?.()

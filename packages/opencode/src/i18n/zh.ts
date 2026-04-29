@@ -76,6 +76,7 @@ export const dict = {
   "tui.dialog.workspace.create_failed": "创建工作区失败",
   "tui.dialog.workspace.session_failed": "创建工作区会话失败",
   "tui.dialog.workspace.load_failed": "加载工作区适配器失败",
+  "tui.dialog.workspace.restore_success": "会话已恢复到新工作区",
   "tui.dialog.console_org.title": "切换组织",
   "tui.dialog.console_org.loading": "正在加载组织...",
   "tui.dialog.console_org.none": "未找到组织",

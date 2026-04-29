@@ -76,6 +76,7 @@ export const dict = {
   "tui.dialog.workspace.create_failed": "Failed to create workspace",
   "tui.dialog.workspace.session_failed": "Failed to create workspace session",
   "tui.dialog.workspace.load_failed": "Failed to load workspace adaptors",
+  "tui.dialog.workspace.restore_success": "Session restored into the new workspace",
   "tui.dialog.console_org.title": "Switch org",
   "tui.dialog.console_org.loading": "Loading orgs...",
   "tui.dialog.console_org.none": "No orgs found",

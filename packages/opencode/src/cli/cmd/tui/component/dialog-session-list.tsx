@@ -102,6 +102,7 @@ export function DialogSessionList() {
                   sync,
                   project,
                   toast,
+                  i18n,
                   workspaceID,
                   sessionID: session.id,
                   done: list,
