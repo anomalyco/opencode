@@ -1,17 +1,23 @@
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
-import { Effect, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./auth"
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "../auth"
+import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/permission"
+const ReplyPayload = Schema.Struct({
+  reply: Permission.Reply,
+  message: Schema.optional(Schema.String),
+})
 
 export const PermissionApi = HttpApi.make("permission")
   .add(
     HttpApiGroup.make("permission")
       .add(
         HttpApiEndpoint.get("list", root, {
-          success: Schema.Array(Permission.Request),
+          success: described(Schema.Array(Permission.Request), "List of pending permissions"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.list",
@@ -21,8 +27,9 @@ export const PermissionApi = HttpApi.make("permission")
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {
           params: { requestID: PermissionID },
-          payload: Permission.ReplyBody,
-          success: Schema.Boolean,
+          payload: ReplyPayload,
+          success: described(Schema.Boolean, "Permission processed successfully"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.reply",
@@ -37,6 +44,7 @@ export const PermissionApi = HttpApi.make("permission")
           description: "Experimental HttpApi permission routes.",
         }),
       )
+      .middleware(InstanceContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
@@ -46,27 +54,3 @@ export const PermissionApi = HttpApi.make("permission")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-
-export const permissionHandlers = HttpApiBuilder.group(PermissionApi, "permission", (handlers) =>
-  Effect.gen(function* () {
-    const svc = yield* Permission.Service
-
-    const list = Effect.fn("PermissionHttpApi.list")(function* () {
-      return yield* svc.list()
-    })
-
-    const reply = Effect.fn("PermissionHttpApi.reply")(function* (ctx: {
-      params: { requestID: PermissionID }
-      payload: Permission.ReplyBody
-    }) {
-      yield* svc.reply({
-        requestID: ctx.params.requestID,
-        reply: ctx.payload.reply,
-        message: ctx.payload.message,
-      })
-      return true
-    })
-
-    return handlers.handle("list", list).handle("reply", reply)
-  }),
-)
