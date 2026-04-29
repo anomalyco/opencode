@@ -60,15 +60,9 @@ const VERSION = await (async () => {
   return `${major}.${minor}.${patch + 1}`
 })()
 
-const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
-const teamPath = path.resolve(import.meta.dir, "../../../.github/TEAM_MEMBERS")
-const team = [
-  ...(await Bun.file(teamPath)
-    .text()
-    .then((x) => x.split(/\r?\n/).map((x) => x.trim()))
-    .then((x) => x.filter((x) => x && !x.startsWith("#")))),
-  ...bot,
-]
+// In this fork there is no human team list; only bot/service accounts are excluded.
+// Set OPENCODE_TEAM (comma-separated logins) in CI to exclude human maintainers too.
+const bots = ["actions-user", "opencode", "opencode-agent[bot]"]
 
 export const Script = {
   get channel() {
@@ -84,7 +78,7 @@ export const Script = {
     return !!env.OPENCODE_RELEASE
   },
   get team() {
-    return team
+    return bots
   },
 }
 console.log(`opencode script`, JSON.stringify(Script, null, 2))

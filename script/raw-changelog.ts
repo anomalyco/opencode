@@ -24,13 +24,10 @@ type Diff = {
 
 const repo = process.env.GH_REPO ?? "anomalyco/opencode"
 const bot = ["actions-user", "github-actions[bot]", "opencode", "opencode-agent[bot]"]
-const team = [
-  ...(await Bun.file(new URL("../.github/TEAM_MEMBERS", import.meta.url))
-    .text()
-    .then((x) => x.split(/\r?\n/).map((x) => x.trim()))
-    .then((x) => x.filter((x) => x && !x.startsWith("#")))),
-  ...bot,
-]
+// OPENCODE_TEAM can be set to a comma- or newline-separated list of GitHub logins
+// to exclude from the community-contributors section (e.g. human maintainers).
+// Falls back to bots-only when not set.
+const team = [...bot, ...(process.env.OPENCODE_TEAM ?? "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean)]
 const order = ["Core", "TUI", "Desktop", "SDK", "Extensions"] as const
 const sections = {
   core: "Core",
