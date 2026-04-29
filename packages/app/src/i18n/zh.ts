@@ -793,8 +793,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "从 URL 获取内容",
   "settings.permissions.tool.websearch.title": "网页搜索",
   "settings.permissions.tool.websearch.description": "搜索网页",
-  "settings.permissions.tool.codesearch.title": "代码搜索",
-  "settings.permissions.tool.codesearch.description": "在网上搜索代码",
   "settings.permissions.tool.external_directory.title": "外部目录",
   "settings.permissions.tool.external_directory.description": "访问项目目录之外的文件",
   "settings.permissions.tool.doom_loop.title": "死循环",
