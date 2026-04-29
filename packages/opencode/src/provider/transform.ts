@@ -801,7 +801,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       )
     case "@ai-sdk/openai": {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
-      const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
+      const efforts =
+        model.providerID.startsWith("opencode") && id.includes("gpt-5")
+          ? unique(["none", ...openaiReasoningEfforts(model.api.id, model.release_date)])
+          : openaiReasoningEfforts(model.api.id, model.release_date)
       return Object.fromEntries(
         efforts.map((effort) => [
           effort,

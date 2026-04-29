@@ -36,7 +36,7 @@ type ExecutionMode = Automation["executionMode"]
 type AutomationKind = Automation["kind"]
 type PermissionProfile = Automation["permissionProfile"]
 type NotificationBehavior = Automation["notificationBehavior"]
-type ReasoningEffort = "default" | NonNullable<Automation["reasoningEffort"]>
+type ReasoningEffort = NonNullable<Automation["reasoningEffort"]>
 
 type FormState = {
   title: string
@@ -61,7 +61,7 @@ type FormState = {
 const scheduleTypes: ScheduleType[] = ["interval", "daily", "weekly"]
 const executionModes: ExecutionMode[] = ["local", "worktree"]
 const automationKinds: AutomationKind[] = ["standalone", "thread"]
-const reasoningEfforts: ReasoningEffort[] = ["default", "low", "medium", "high"]
+const reasoningEfforts: ReasoningEffort[] = ["none", "low", "medium", "high"]
 const permissionProfiles: PermissionProfile[] = [
   "read_only",
   "repo_write_no_network",
@@ -94,7 +94,7 @@ function defaultForm(model: string): FormState {
     days: ["mon", "tue", "wed", "thu", "fri"],
     executionMode: "local",
     model,
-    reasoningEffort: "medium",
+    reasoningEffort: "none",
     permissionProfile: "read_only",
     notificationBehavior: "auto_archive_no_findings",
     maxRuntimeMinutes: "",
@@ -132,7 +132,7 @@ function formFromAutomation(automation: Automation, fallbackModel: string): Form
     days: schedule.type === "weekly" ? [...schedule.days] : base.days,
     executionMode: automation.executionMode,
     model: automation.model,
-    reasoningEffort: automation.reasoningEffort ?? "default",
+    reasoningEffort: automation.reasoningEffort ?? "none",
     permissionProfile: automation.permissionProfile,
     notificationBehavior: automation.notificationBehavior,
     maxRuntimeMinutes: automation.maxRuntimeMinutes ? String(automation.maxRuntimeMinutes) : "",
@@ -150,6 +150,7 @@ function isActiveRun(run: AutomationRun) {
 }
 
 function label(value: string) {
+  if (value === "none") return "Off"
   return value
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -380,7 +381,7 @@ export default function AutomationsPage() {
       schedule,
       executionMode: form.executionMode,
       model: form.model.trim() || undefined,
-      reasoningEffort: form.reasoningEffort === "default" ? undefined : form.reasoningEffort,
+      reasoningEffort: form.reasoningEffort,
       permissionProfile: form.permissionProfile,
       notificationBehavior: form.notificationBehavior,
       maxRuntimeMinutes: maxRuntimeMinutes === undefined ? undefined : Math.floor(maxRuntimeMinutes),

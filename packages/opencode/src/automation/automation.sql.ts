@@ -26,7 +26,7 @@ export const AutomationTable = sqliteTable(
     schedule: text({ mode: "json" }).$type<ScheduleConfig>().notNull(),
     execution_mode: text().$type<ExecutionMode>().notNull(),
     model: text().notNull(),
-    reasoning_effort: text().$type<"low" | "medium" | "high">(),
+    reasoning_effort: text().$type<"none" | "low" | "medium" | "high">(),
     permission_profile: text().$type<PermissionProfile>().notNull(),
     notification_behavior: text().$type<"inbox" | "auto_archive_no_findings">().notNull(),
     max_runtime_minutes: integer(),
