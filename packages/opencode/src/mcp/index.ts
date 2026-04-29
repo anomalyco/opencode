@@ -469,6 +469,15 @@ export const layer = Layer.effect(
       Effect.catch(() => Effect.succeed([] as number[])),
     )
 
+    function dropConnection(s: State, name: string, client: MCPClient, reason: string) {
+      if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+      log.warn("mcp server disconnected, marking as failed", { server: name, reason })
+      s.status[name] = { status: "failed", error: reason }
+      delete s.clients[name]
+      delete s.defs[name]
+      void client.close()
+    }
+
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
         log.info("tools list changed notification received", { server: name })
@@ -481,6 +490,10 @@ export const layer = Layer.effect(
         s.defs[name] = listed
         await bridge.promise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
+
+      client.onclose = () => {
+        bridge.fork(Effect.sync(() => dropConnection(s, name, client, "MCP transport closed unexpectedly")))
+      }
     }
 
     const state = yield* InstanceState.make<State>(
