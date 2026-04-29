@@ -3,6 +3,7 @@ import Http from "node:http"
 import { describe, expect } from "bun:test"
 import { Effect, Ref } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { WorkspaceID } from "../../src/control-plane/schema"
 import { HttpApiProxy } from "../../src/server/routes/instance/httpapi/middleware/proxy"
 import { testEffect } from "../lib/effect"
 
@@ -21,23 +22,53 @@ describe("HttpApi workspace proxy", () => {
       yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
           const req = yield* HttpServerRequest.HttpServerRequest
-          return yield* HttpServerResponse.json({ path: req.url, method: req.method }, {
+          const body = yield* req.text
+          return yield* HttpServerResponse.json({ path: req.url, method: req.method, body }, {
             status: 201,
-            headers: { "x-remote": "yes" },
+            headers: {
+              "content-encoding": "identity",
+              "content-length": "999",
+              "x-remote": "yes",
+            },
           })
         }),
       )
       const url = yield* serverUrl()
 
       const request = HttpServerRequest.fromWeb(
-        new Request("http://localhost/session/abc", { method: "POST", body: "{}" }),
+        new Request("http://localhost/session/abc", { method: "POST", body: "request-body" }),
       )
-      const response = yield* HttpApiProxy.http(`${url}/session/abc`, { "x-extra": "injected" }, request)
+      const response = yield* HttpApiProxy.http(`${url}/session/abc?keep=yes`, { "x-extra": "injected" }, request)
 
       expect(response.status).toBe(201)
       const client = HttpServerResponse.toClientResponse(response)
-      expect(yield* client.json).toEqual({ path: "/session/abc", method: "POST" })
+      expect(yield* client.json).toEqual({
+        path: "/session/abc?keep=yes",
+        method: "POST",
+        body: "request-body",
+      })
       expect(response.headers["x-remote"]).toBe("yes")
+      expect(response.headers["content-encoding"]).toBeUndefined()
+      expect(response.headers["content-length"]).toBeUndefined()
+    }),
+  )
+
+  it.live("handles empty sync fence headers when workspace context is supplied", () =>
+    Effect.gen(function* () {
+      yield* HttpServer.serveEffect()(
+        Effect.succeed(
+          HttpServerResponse.text("synced", {
+            headers: { "x-opencode-sync": "{}" },
+          }),
+        ),
+      )
+      const request = HttpServerRequest.fromWeb(new Request("http://localhost/sync"))
+      const response = yield* HttpApiProxy.http(`${yield* serverUrl()}/sync`, undefined, request, {
+        workspaceID: WorkspaceID.make("ws_sync_test"),
+      })
+
+      expect(response.status).toBe(200)
+      expect(yield* HttpServerResponse.toClientResponse(response).text).toBe("synced")
     }),
   )
 
