@@ -2712,3 +2712,133 @@ test("opencode loader keeps paid models when auth exists", async () => {
     }
   }
 })
+
+test("api: 'chat' sets apiMode in provider options and does not corrupt model URL", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "my-gateway": {
+              name: "My Gateway",
+              npm: "@ai-sdk/openai",
+              api: "chat",
+              env: [],
+              models: {
+                "gpt-5": {
+                  name: "GPT-5",
+                  tool_call: true,
+                  limit: { context: 128000, output: 16000 },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+                baseURL: "https://my-gateway.example.com/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const provider = providers[ProviderID.make("my-gateway")]
+      expect(provider).toBeDefined()
+      // apiMode should be stored in provider options
+      expect(provider.options.apiMode).toBe("chat")
+      // model api.url should NOT be "chat" — it should fall back to empty string
+      const model = provider.models["gpt-5"]
+      expect(model.api.url).not.toBe("chat")
+      // baseURL in options should be preserved
+      expect(provider.options.baseURL).toBe("https://my-gateway.example.com/v1")
+    },
+  })
+})
+
+test("api: 'responses' sets apiMode in provider options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "my-openai": {
+              name: "My OpenAI",
+              npm: "@ai-sdk/openai",
+              api: "responses",
+              env: [],
+              models: {
+                "gpt-5": {
+                  name: "GPT-5",
+                  tool_call: true,
+                  limit: { context: 128000, output: 16000 },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const provider = providers[ProviderID.make("my-openai")]
+      expect(provider).toBeDefined()
+      expect(provider.options.apiMode).toBe("responses")
+    },
+  })
+})
+
+test("api URL string (not a mode) still flows into model.api.url normally", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "url-api": {
+              name: "URL API",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://api.custom-gateway.com/v1",
+              env: [],
+              models: {
+                "model-1": {
+                  name: "Model 1",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const provider = providers[ProviderID.make("url-api")]
+      expect(provider).toBeDefined()
+      // api field with a URL should NOT set apiMode
+      expect(provider.options.apiMode).toBeUndefined()
+      // URL should flow into model.api.url as before
+      expect(provider.models["model-1"].api.url).toBe("https://api.custom-gateway.com/v1")
+    },
+  })
+})

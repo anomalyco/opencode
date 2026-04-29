@@ -138,6 +138,47 @@ function useLanguageModel(sdk: any) {
   return sdk.responses === undefined && sdk.chat === undefined
 }
 
+/**
+ * Resolve a language model from the SDK using the configured API mode.
+ *
+ * When a provider config sets `"api": "chat"`, this calls `sdk.chat(modelID)`
+ * which forces the Chat Completions API endpoint (`/chat/completions`) and
+ * correct parameter naming (`max_completion_tokens`) for GPT-5.x models.
+ *
+ * When `"api": "responses"`, uses the Responses API explicitly.
+ * Otherwise, falls back to `sdk.languageModel()` (default SDK behavior).
+ */
+function resolveLanguageModel(sdk: any, modelID: string, apiMode?: string) {
+  if (apiMode === "chat" && typeof sdk.chat === "function") {
+    return sdk.chat(modelID)
+  }
+  if (apiMode === "responses" && typeof sdk.responses === "function") {
+    return sdk.responses(modelID)
+  }
+  return sdk.languageModel(modelID)
+}
+
+/**
+ * Inline JSON Schema `$ref` references so that tool parameter schemas are
+ * self-contained. Some providers (e.g. GPT-5.x via Bedrock) crash on `$ref`.
+ */
+function resolveRefs(obj: any, defs: Record<string, any>): void {
+  if (!obj || typeof obj !== "object") return
+  for (const key of Object.keys(obj)) {
+    const val = obj[key]
+    if (key === "$ref" && typeof val === "string") {
+      const name = val.replace(/^#\/\$defs\//, "")
+      const resolved = defs[name]
+      if (resolved) {
+        delete obj["$ref"]
+        Object.assign(obj, JSON.parse(JSON.stringify(resolved)))
+      }
+    } else if (typeof val === "object" && val !== null) {
+      resolveRefs(val, defs)
+    }
+  }
+}
+
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
     anthropic: () =>
@@ -1124,11 +1165,19 @@ const layer: Layer.Layer<
         // extend database from config
         for (const [providerID, provider] of configProviders) {
           const existing = database[providerID]
+          const configOptions = mergeDeep(existing?.options ?? {}, provider.options ?? {})
+          // When provider.api is a known SDK method name (e.g. "chat", "responses"),
+          // store it as apiMode so getLanguage can call sdk.chat() / sdk.responses()
+          // instead of the default sdk.languageModel().
+          const API_MODES = ["chat", "responses"]
+          if (provider.api && API_MODES.includes(provider.api)) {
+            configOptions["apiMode"] = provider.api
+          }
           const parsed: Info = {
             id: ProviderID.make(providerID),
             name: provider.name ?? existing?.name ?? providerID,
             env: provider.env ?? existing?.env ?? [],
-            options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+            options: configOptions,
             source: "config",
             models: existing?.models ?? {},
           }
@@ -1152,7 +1201,12 @@ const layer: Layer.Layer<
               api: {
                 id: apiID,
                 npm: apiNpm,
-                url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? "",
+                url: iife(() => {
+                  // Skip provider.api if it's a mode selector (e.g. "chat", "responses")
+                  // rather than a URL — the mode is already captured in options.apiMode.
+                  const providerApiUrl = provider?.api && !API_MODES.includes(provider.api) ? provider.api : undefined
+                  return model.provider?.api ?? providerApiUrl ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? ""
+                }),
               },
               status: model.status ?? existingModel?.status ?? "active",
               name,
@@ -1480,6 +1534,34 @@ const layer: Layer.Layer<
             }
           }
 
+          // When apiMode is "chat", fix request body for gateway/proxy compatibility:
+          // 1. Rename max_tokens → max_completion_tokens (GPT-5.x rejects max_tokens)
+          // 2. Resolve $ref in tool parameter schemas (Bedrock/proxies don't support $ref)
+          if (options["apiMode"] === "chat" && opts.body && opts.method === "POST") {
+            const body = JSON.parse(opts.body as string)
+            let changed = false
+
+            if ("max_tokens" in body && !("max_completion_tokens" in body)) {
+              body.max_completion_tokens = body.max_tokens
+              delete body.max_tokens
+              changed = true
+            }
+
+            if (Array.isArray(body.tools)) {
+              for (const tool of body.tools) {
+                const params = tool?.function?.parameters
+                if (params && params["$defs"]) {
+                  resolveRefs(params, params["$defs"])
+                  delete params["$defs"]
+                  delete params["defs"]
+                  changed = true
+                }
+              }
+            }
+
+            if (changed) opts.body = JSON.stringify(body)
+          }
+
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
@@ -1570,7 +1652,7 @@ const layer: Layer.Layer<
                 ...provider.options,
                 ...model.options,
               })
-            : sdk.languageModel(model.api.id)
+            : resolveLanguageModel(sdk, model.api.id, provider.options?.["apiMode"])
           s.models.set(key, language)
           return language
         } catch (e) {
