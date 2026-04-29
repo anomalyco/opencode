@@ -33,7 +33,9 @@ const response = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] }).gener
 
 `LLM.request(...)` builds an `LLMRequest`. `LLMClient.make(...)` selects an adapter by `request.model.protocol`, applies patches, prepares a typed provider target, asks the adapter for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
-Use `LLMClient.make(...).stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.make(...).generate(request)` when callers want those same events collected into an `LLMResponse`.
+Use `LLMClient.make(...).stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.make(...).generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.make(...).prepare<Target>(request)` to compile a request through the adapter pipeline without sending it — the optional `Target` type argument narrows `.target` to the adapter's native shape (e.g. `prepare<OpenAIChatTarget>(...)` returns a `PreparedRequestOf<OpenAIChatTarget>`). The runtime payload is identical; the generic is a type-level assertion.
+
+Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g. `events.filter(LLMEvent.is.toolCall)`). The kebab-case `LLMEvent.guards["tool-call"]` form also works but prefer `is.*` in new code.
 
 ### Adapters
 
