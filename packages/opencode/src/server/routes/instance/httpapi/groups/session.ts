@@ -25,6 +25,8 @@ const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
 )
 export const ListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
+  scope: Schema.optional(Schema.Literals(["project"])),
+  path: Schema.optional(Schema.String),
   roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
@@ -413,4 +415,3 @@ export const SessionApi = HttpApi.make("session")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-
