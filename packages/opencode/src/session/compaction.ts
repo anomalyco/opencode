@@ -472,27 +472,46 @@ export const layer: Layer.Layer<
           tools[def.id] = aiTool({
             description: def.description,
             inputSchema: schema,
-            execute: async (args, options) => {
-              const toolCtx = {
-                sessionID: input.sessionID,
-                messageID: preMsg.id,
-                agent: userMessage.agent,
-                abort: options.abortSignal,
-                callID: options.toolCallId,
-                messages: messages,
-                metadata: () => Effect.void,
-                ask: () => Effect.void,
-              }
-              const result = await Effect.runPromise(
+            execute(args, options) {
+              return Effect.runPromise(
                 Effect.gen(function* () {
+                  const metadata = (val: any) =>
+                    preProcessor.updateToolCall(options.toolCallId, (match) => ({
+                      ...match,
+                      state: {
+                        ...match.state,
+                        title: val.title,
+                        metadata: val.metadata,
+                        status: "running",
+                        input: args,
+                        time: { start: Date.now() },
+                      },
+                    }))
+
+                  const ask = (req: any) => {
+                    log.info("pre-compact permission check", {
+                      tool: def.id,
+                      permission: req.permission,
+                      patterns: req.patterns,
+                    })
+                    // Pre-compact is an internal operation; allow all permissions
+                    return Effect.void
+                  }
+
+                  const toolCtx = {
+                    sessionID: input.sessionID,
+                    messageID: preMsg.id,
+                    agent: userMessage.agent,
+                    abort: options.abortSignal!,
+                    callID: options.toolCallId,
+                    messages,
+                    metadata,
+                    ask,
+                  }
+
                   return yield* def.execute(args, toolCtx as any)
                 })
               )
-              return {
-                title: result.title,
-                output: result.output,
-                metadata: result.metadata,
-              }
             },
           })
         }
