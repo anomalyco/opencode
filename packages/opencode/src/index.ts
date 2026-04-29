@@ -239,9 +239,9 @@ try {
   }
   process.exitCode = 1
 } finally {
-  // Some subprocesses don't react properly to SIGTERM and similar signals.
-  // Most notably, some docker-container-based MCP servers don't handle such signals unless
-  // run using `docker run --init`.
-  // Explicitly exit to avoid any hanging subprocesses.
-  process.exit()
+  // Some subprocesses don't react properly to SIGTERM (docker-container MCP servers
+  // without --init). Give a short grace period for cleanup finalizers to run, then
+  // force exit to avoid hanging.
+  if (process.exitCode === undefined) process.exitCode = 0
+  setTimeout(() => process.exit(process.exitCode), 3000).unref()
 }

@@ -97,10 +97,16 @@ const live: Layer.Layer<
       const isOpenaiOauth = item.id === "openai" && info?.type === "oauth"
 
       const system: string[] = []
+      const agentPrompts =
+        input.agent.prompt && input.agent.name === "build"
+          ? [...SystemPrompt.provider(input.model), input.agent.prompt]
+          : input.agent.prompt
+            ? [input.agent.prompt]
+            : SystemPrompt.provider(input.model)
       system.push(
         [
           // use agent prompt otherwise provider prompt
-          ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+          ...agentPrompts,
           // any custom prompt passed into this call
           ...input.system,
           // any custom prompt from last user message

@@ -36,7 +36,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
-import { Effect, Layer, Option, Context, Schema, Types } from "effect"
+import { Effect, Layer, Option, Context, Schema, Types, Cause } from "effect"
 import { zod } from "@/util/effect-zod"
 import { optionalOmitUndefined, withStatics } from "@/util/schema"
 
@@ -314,6 +314,17 @@ export function plan(input: { slug: string; time: { created: number } }) {
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }
 
+// Provider-specific metadata shapes for cache token tracking.
+// AI SDK's ProviderMetadata is a Record<string, Record<string, unknown>> so nested
+// provider-specific keys are not statically available. This interface documents the
+// known shapes and provides type-safe access without @ts-expect-error.
+interface ProviderCacheMetadata {
+  anthropic?: { cacheCreationInputTokens?: number }
+  vertex?: { cacheCreationInputTokens?: number }
+  bedrock?: { usage?: { cacheWriteInputTokens?: number } }
+  venice?: { usage?: { cacheCreationInputTokens?: number } }
+}
+
 export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
     if (!Number.isFinite(value)) return 0
@@ -326,17 +337,16 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
   const cacheReadInputTokens = safe(
     input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
   )
+  const meta = input.metadata as ProviderCacheMetadata | undefined
   const cacheWriteInputTokens = safe(
     Number(
       input.usage.inputTokenDetails?.cacheWriteTokens ??
-        input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        meta?.anthropic?.cacheCreationInputTokens ??
         // google-vertex-anthropic returns metadata under "vertex" key
         // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
-        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        meta?.vertex?.cacheCreationInputTokens ??
+        meta?.bedrock?.usage?.cacheWriteInputTokens ??
+        meta?.venice?.usage?.cacheCreationInputTokens ??
         0,
     ),
   )
@@ -505,17 +515,13 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
     })
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
-      try {
+      yield* Effect.gen(function* () {
         const session = yield* get(sessionID)
         const kids = yield* children(sessionID)
         for (const child of kids) {
           yield* remove(child.id)
         }
 
-        // `remove` needs to work in all cases, such as a broken
-        // sessions that run cleanup. In certain cases these will
-        // run without any instance state, so we need to turn off
-        // publishing of events in that case
         const hasInstance = yield* InstanceState.directory.pipe(
           Effect.as(true),
           Effect.catchCause(() => Effect.succeed(false)),
@@ -525,9 +531,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
           SyncEvent.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
           SyncEvent.remove(sessionID)
         })
-      } catch (e) {
-        log.error(e)
-      }
+      }).pipe(Effect.catchAllCause((cause) => Effect.sync(() => log.error("session remove failed", { cause: Cause.pretty(cause) }))))
     })
 
     const updateMessage = <T extends MessageV2.Info>(msg: T): Effect.Effect<T> =>

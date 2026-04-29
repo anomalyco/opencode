@@ -251,6 +251,9 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      self_reflect: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable agent self-reflection prompt injection for improved response quality",
+      }),
     }),
   ),
 })
