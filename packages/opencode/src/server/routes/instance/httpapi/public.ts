@@ -379,7 +379,7 @@ function normalizeLegacyErrorResponses(operation: OpenApiOperation) {
 }
 
 function applyLegacyErrorResponses(operation: OpenApiOperation, route: string) {
-  const responses = LegacyErrorResponses[route as keyof typeof LegacyErrorResponses]
+  const responses: ReadonlyArray<400 | 404> | undefined = LegacyErrorResponses[route as keyof typeof LegacyErrorResponses]
   if (!responses) return
   operation.responses ??= {}
   if (responses.includes(400)) operation.responses["400"] = legacyErrorResponse("Bad request", "BadRequestError")

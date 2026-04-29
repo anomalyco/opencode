@@ -57,14 +57,30 @@ function openApiParameters(spec: { paths: Record<string, Partial<Record<(typeof 
   )
 }
 
-function openApiRequestBodies(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }) {
+function openApiRequestBodies(spec: OpenApiSpec) {
   return Object.fromEntries(
     Object.entries(spec.paths).flatMap(([path, item]) =>
       methods
         .filter((method) => item[method])
-        .map((method) => [`${method.toUpperCase()} ${path}`, requestBodyKey(item[method]?.requestBody)]),
+        .map((method) => [`${method.toUpperCase()} ${path}`, requestBodyKey(spec, item[method]?.requestBody)]),
     ),
   )
+}
+
+type OpenApiSpec = {
+  components?: {
+    schemas?: Record<string, unknown>
+  }
+  paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>>
+}
+
+type OpenApiSchema = {
+  $ref?: string
+  allOf?: unknown[]
+  anyOf?: unknown[]
+  oneOf?: unknown[]
+  properties?: Record<string, unknown>
+  type?: string | string[]
 }
 
 type Operation = {
@@ -74,7 +90,7 @@ type Operation = {
 }
 
 type RequestBody = {
-  content?: Record<string, { schema?: { $ref?: string; type?: string } }>
+  content?: Record<string, { schema?: OpenApiSchema }>
   required?: boolean
 }
 
@@ -97,15 +113,25 @@ function parameterSchema(input: {
   return param.schema
 }
 
-function requestBodyKey(body: unknown) {
+function requestBodyKey(spec: OpenApiSpec, body: unknown) {
   if (!body || typeof body !== "object" || !("content" in body)) return ""
   const requestBody = body as RequestBody
   return JSON.stringify({
     required: requestBody.required === true,
     content: Object.entries(requestBody.content ?? {})
-      .map(([type, value]) => [type, value.schema?.$ref ?? value.schema?.type ?? "inline"])
+      .map(([type, value]) => [type, requestBodySchemaKind(spec, value.schema)])
       .sort(),
   })
+}
+
+function requestBodySchemaKind(spec: OpenApiSpec, schema: OpenApiSchema | undefined) {
+  if (!schema) return ""
+  const resolved = (schema.$ref ? spec.components?.schemas?.[schema.$ref.replace("#/components/schemas/", "")] : schema) as
+    | OpenApiSchema
+    | undefined
+  if (resolved?.properties) return "object"
+  if (resolved?.anyOf ?? resolved?.oneOf ?? resolved?.allOf) return "object"
+  return resolved?.type ?? schema.type ?? "inline"
 }
 
 function responseContentTypes(input: {
