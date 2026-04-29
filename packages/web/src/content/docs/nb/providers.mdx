@@ -323,6 +323,44 @@ Eller hvis du allerede har en API-nøkkel, kan du velge **Angi API-nøkkel manue
 
 ---
 
+### Atomic Chat
+
+Du kan konfigurere opencode til å bruke lokale modeller via [Atomic Chat](https://atomic.chat) — et skrivebordsprogram som kjører lokale LLM-er bak en OpenAI-kompatibel API-server (standard endepunkt `http://127.0.0.1:1337/v1`).
+
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
+
+I dette eksempelet:
+
+- `atomic-chat` er den egendefinerte leverandør-ID-en. Det kan være en hvilken som helst streng.
+- `npm` spesifiserer pakken som skal brukes for denne leverandøren. Her brukes `@ai-sdk/openai-compatible` for enhver OpenAI-kompatibel API.
+- `name` er visningsnavnet for leverandøren i grensesnittet.
+- `options.baseURL` er endepunktet for den lokale serveren. Endre vert og port for å matche Atomic Chat-oppsettet ditt.
+- `models` er en kartlegging av modell-IDer til visningsnavnene deres. Hver ID må samsvare med `id` som returneres av `GET /v1/models` — kjør `curl http://127.0.0.1:1337/v1/models` for å liste ID-ene som er lastet inn i Atomic Chat nå.
+
+:::tip
+Hvis verktøykall ikke fungerer godt, velg en lastet modell med god tool calling-støtte (for eksempel en Qwen-Coder- eller DeepSeek-Coder-variant).
+:::
+
+---
+
 ### Azure OpenAI
 
 :::note

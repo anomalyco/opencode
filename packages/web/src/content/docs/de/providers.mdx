@@ -321,6 +321,44 @@ Wenn Sie bereits über einen API-Schlüssel verfügen, können Sie **API-Schlüs
 
 ---
 
+### Atomic Chat
+
+Sie können opencode so konfigurieren, dass es lokale Modelle über [Atomic Chat](https://atomic.chat) verwendet — eine Desktop-Anwendung, die lokale LLMs hinter einem OpenAI-kompatiblen API-Server bereitstellt (Standard-Endpunkt `http://127.0.0.1:1337/v1`).
+
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
+
+In diesem Beispiel:
+
+- `atomic-chat` ist die benutzerdefinierte Provider-ID. Dies kann eine beliebige Zeichenkette sein.
+- `npm` gibt das für diesen Provider zu verwendende Paket an. Hier wird `@ai-sdk/openai-compatible` für jede OpenAI-kompatible API verwendet.
+- `name` ist der in der UI angezeigte Name des Providers.
+- `options.baseURL` ist der Endpunkt des lokalen Servers. Passen Sie Host und Port an Ihre Atomic-Chat-Konfiguration an.
+- `models` ist eine Zuordnung von Modell-IDs zu ihren Anzeigenamen. Jede ID muss dem `id`-Wert entsprechen, den `GET /v1/models` zurückgibt — führen Sie `curl http://127.0.0.1:1337/v1/models` aus, um die aktuell in Atomic Chat geladenen IDs aufzulisten.
+
+:::tip
+Wenn Tool-Aufrufe nicht zuverlässig funktionieren, wählen Sie ein geladenes Modell mit starker Tool-Calling-Unterstützung (zum Beispiel eine Qwen-Coder- oder DeepSeek-Coder-Variante).
+:::
+
+---
+
 ### Azure OpenAI
 
 :::note

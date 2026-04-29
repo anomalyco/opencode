@@ -722,8 +722,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "URL에서 콘텐츠 가져오기",
   "settings.permissions.tool.websearch.title": "웹 검색",
   "settings.permissions.tool.websearch.description": "웹 검색",
-  "settings.permissions.tool.codesearch.title": "코드 검색",
-  "settings.permissions.tool.codesearch.description": "웹에서 코드 검색",
   "settings.permissions.tool.external_directory.title": "외부 디렉터리",
   "settings.permissions.tool.external_directory.description": "프로젝트 디렉터리 외부의 파일에 액세스",
   "settings.permissions.tool.doom_loop.title": "무한 반복",
