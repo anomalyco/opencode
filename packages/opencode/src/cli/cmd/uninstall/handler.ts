@@ -1,20 +1,13 @@
-import type { Argv } from "yargs"
-import { UI } from "../ui"
+import { UI } from "../../ui"
 import * as prompts from "@clack/prompts"
-import { Installation } from "../../installation"
+import { Installation } from "../../../installation"
 import { Global } from "@opencode-ai/core/global"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
-
-interface UninstallArgs {
-  keepConfig: boolean
-  keepData: boolean
-  dryRun: boolean
-  force: boolean
-}
+import type { UninstallArgs } from "./command"
 
 interface RemovalTargets {
   directories: Array<{ path: string; label: string; keep: boolean }>
@@ -22,69 +15,39 @@ interface RemovalTargets {
   binary: string | null
 }
 
-export const UninstallCommand = {
-  command: "uninstall",
-  describe: "uninstall opencode and remove all related files",
-  builder: (yargs: Argv) =>
-    yargs
-      .option("keep-config", {
-        alias: "c",
-        type: "boolean",
-        describe: "keep configuration files",
-        default: false,
-      })
-      .option("keep-data", {
-        alias: "d",
-        type: "boolean",
-        describe: "keep session data and snapshots",
-        default: false,
-      })
-      .option("dry-run", {
-        type: "boolean",
-        describe: "show what would be removed without removing",
-        default: false,
-      })
-      .option("force", {
-        alias: "f",
-        type: "boolean",
-        describe: "skip confirmation prompts",
-        default: false,
-      }),
+export async function handler(args: UninstallArgs) {
+  UI.empty()
+  UI.println(UI.logo("  "))
+  UI.empty()
+  prompts.intro("Uninstall OpenCode")
 
-  handler: async (args: UninstallArgs) => {
-    UI.empty()
-    UI.println(UI.logo("  "))
-    UI.empty()
-    prompts.intro("Uninstall OpenCode")
+  const method = await Installation.method()
+  prompts.log.info(`Installation method: ${method}`)
 
-    const method = await Installation.method()
-    prompts.log.info(`Installation method: ${method}`)
+  const targets = await collectRemovalTargets(args, method)
 
-    const targets = await collectRemovalTargets(args, method)
+  await showRemovalSummary(targets, method)
 
-    await showRemovalSummary(targets, method)
-
-    if (!args.force && !args.dryRun) {
-      const confirm = await prompts.confirm({
-        message: "Are you sure you want to uninstall?",
-        initialValue: false,
-      })
-      if (!confirm || prompts.isCancel(confirm)) {
-        prompts.outro("Cancelled")
-        return
-      }
-    }
-
-    if (args.dryRun) {
-      prompts.log.warn("Dry run - no changes made")
-      prompts.outro("Done")
+  if (!args.force && !args.dryRun) {
+    const confirm = await prompts.confirm({
+      message: "Are you sure you want to uninstall?",
+      initialValue: false,
+    })
+    if (!confirm || prompts.isCancel(confirm)) {
+      prompts.outro("Cancelled")
       return
     }
+  }
 
-    await executeUninstall(method, targets)
-
+  if (args.dryRun) {
+    prompts.log.warn("Dry run - no changes made")
     prompts.outro("Done")
-  },
+    return
+  }
+
+  await executeUninstall(method, targets)
+
+  prompts.outro("Done")
 }
 
 async function collectRemovalTargets(args: UninstallArgs, method: Installation.Method): Promise<RemovalTargets> {
