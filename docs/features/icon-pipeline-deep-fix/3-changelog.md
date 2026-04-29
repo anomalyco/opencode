@@ -18,6 +18,7 @@ related: ./3-changelog.md
 |---|---|
 | `5704142fe` | `fix(branding): apply-icons 同步 dev/icon.ico — winres 嵌入 base path` |
 | `bc0b549b7` | `chore(branding): 三 env icon 资源全量更新 — 新设计 scale 1.4` |
+| `303fbc583` | `fix(branding): png-to-ico 修 ≥256 尺寸 writeUInt8 溢出 — prod/beta build 必踩(2026-04-29 follow-up)` |
 
 ## 改动文件
 
@@ -27,6 +28,7 @@ related: ./3-changelog.md
 | `packages/branding/src/assets/icons/prod/{32x32,128x128,128x128@2x}.png` + `ico-source/{16,32,64,128,256}.png` | 全量更新 | icon-primary 新设计(scale 1.4) |
 | `packages/branding/src/assets/icons/beta/{32x32,128x128,128x128@2x}.png` + `ico-source/{16,32,64,128,256}.png` | 全量更新 + 删 misnamed `48.png` + 补 64/128/256 | icon-mono 新设计;补齐多分辨率结构 |
 | `packages/branding/src/assets/icons/dev/{32x32,128x128}.png` + `ico-source/{16,32,48,64,128}.png` | 全量更新 + 补 64/128 | icon-favicon 新设计;source 没 256,`128x128@2x.png` 留旧 |
+| `packages/branding/scripts/png-to-ico.ts` | +2 行 / -2 行(2026-04-29 follow-up) | line 50-51 `=== 256 ? 0 : png.width` 改 `>= 256 ? 0` — ICO 1 byte width/height 字段对 ≥256 都需写 0(实际尺寸由 PNG header 决定);prod/beta 04-28 加的 512.png + 1024.png 触发 writeUInt8 溢出 |
 
 无 commit 改上游文件,无 FORK marker 增量。
 
@@ -100,3 +102,51 @@ git revert 5704142fe   # apply-icons 不再同步 dev/
 | 排查 winres / build script 嵌入问题,A/B 实验比 cache 清理更高效 | 本文 "排查链" 段 |
 | `cargo clean -p` 不清 `target/release/build/<crate>/`,要手动炸 | 本文 "排查链" 段 |
 | Windows 桌面快捷方式 icon 卡 cache 跟 exe 嵌入是两类问题,先排嵌入再排 cache | memory `feedback_windows_iconcache_fix.md` 已有,本次复用确认 |
+
+## Follow-up: prod/beta build ≥256 ICO 写溢出(2026-04-29)
+
+claude-code-loop-fix 收尾后给 user 打 prod 安装包发其他人,跑 `build-deskfox.ps1 -Env prod` 时 apply-icons.ps1 → png-to-ico.ts 报错:
+
+```
+RangeError: The value of "value" is out of range. It must be >= 0 and <= 255. Received 512
+  at writeU_Int8 (internal:buffer:30:29)
+  at main (...png-to-ico.ts:50:11)
+```
+
+### 根因
+
+`png-to-ico.ts:50-51` 把"≥256 用 0 表示"的 ICO 格式规则**只**对 256 一种尺寸做了:
+
+```ts
+entry.writeUInt8(png.width === 256 ? 0 : png.width, 0)   // 错:512 没被映射成 0
+entry.writeUInt8(png.height === 256 ? 0 : png.height, 1)
+```
+
+ICO 文件 ICONDIRENTRY 第 0/1 字节(width / height)**只有 1 byte**(0-255),256+ 尺寸**约定写 0**(由后续 PNG header 字段表达真实尺寸)。512 / 1024 没被映射成 0,直接当大数写 1 byte → writeUInt8 溢出 throw。
+
+### 为啥 bc0b549b7 当时没踩到
+
+`bc0b549b7`(2026-04-28)只**加资源** PNG(prod/beta 各加 512.png + 1024.png),没跑 build。同日 `5704142fe` 只跑过 dev / 当时 prod 资源里**还没** 512/1024.png。所以 bug 潜伏到 04-29 第一次跑 prod build 才暴露(就是这次打 installer)。
+
+### 修法
+
+`png-to-ico.ts:50-51`,`=== 256 ? 0` → `>= 256 ? 0`,2 行改 + 2 行注释:
+
+```ts
+// ICO 格式 1 byte width/height 字段,>=256 都写 0(实际尺寸由 PNG header 决定)
+// 之前用 === 256 ? 0,512/1024 等更大尺寸会触发 writeUInt8 溢出
+entry.writeUInt8(png.width >= 256 ? 0 : png.width, 0)
+entry.writeUInt8(png.height >= 256 ? 0 : png.height, 1)
+```
+
+### 验证
+
+- [x] `build-deskfox.ps1 -Env prod -NoBundle` 通过(2m 09s)
+- [x] `ISCC.exe DeskFox.iss` 通过,出 `DeskFox-1.14.21-setup.exe`(47 MB)
+- [x] dev env build 不受影响(dev ico-source 全 < 256,新条件等价)
+
+### 经验补一条
+
+| 启示 | 落实位置 |
+|---|---|
+| icon 资源加新尺寸时,要在三 env(dev/beta/prod)都跑一次 build smoke test 才算 done | 本段 |
