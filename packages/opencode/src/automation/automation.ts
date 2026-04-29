@@ -404,34 +404,6 @@ export function computeNextRun(input: { schedule: ScheduleConfig; after: number;
   return next
 }
 
-const automationOutputSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    result: { enum: ["findings", "no_findings", "needs_approval", "failed"] },
-    summary: { type: "string" },
-    findings: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          title: { type: "string" },
-          severity: { enum: ["low", "medium", "high"] },
-          details: { type: "string" },
-          filesChanged: { type: "array", items: { type: "string" } },
-          recommendedNextAction: { type: "string" },
-        },
-        required: ["title", "severity", "details", "filesChanged"],
-      },
-    },
-    diffSummary: { type: "string" },
-    commandsRun: { type: "array", items: { type: "string" } },
-    needsApprovalFor: { anyOf: [{ type: "string" }, { type: "null" }] },
-  },
-  required: ["result", "summary", "findings"],
-}
-
 const AutomationOutput = z.object({
   result: z.enum(["findings", "no_findings", "needs_approval", "failed"]),
   summary: z.string(),
@@ -516,9 +488,24 @@ function buildPrompt(automation: Info, project: { directory: string; worktree: s
     "- Return result findings whenever you changed files or have anything worth the user reviewing.",
     "- If result is findings, include at least one finding entry.",
     "- Use result no_findings only when you made no file changes and there is nothing worth reporting.",
-    "- If human approval is needed, stop and return result needs_approval.",
-    "- Return the required structured output exactly once.",
+    "- If human approval is needed, stop and say exactly what is needed.",
+    "- End with a concise final report. If possible, include a JSON object with result, summary, findings, diffSummary, commandsRun, and needsApprovalFor.",
   ].join("\n")
+}
+
+function parseTextOutput(text: string): AutomationOutput | undefined {
+  const candidates = [
+    ...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi),
+    ...text.matchAll(/(\{[\s\S]*"result"[\s\S]*\})/gi),
+  ]
+  for (const candidate of candidates) {
+    const raw = candidate[1]?.trim()
+    if (!raw) continue
+    try {
+      const parsed = AutomationOutput.safeParse(JSON.parse(raw))
+      if (parsed.success) return parsed.data
+    } catch {}
+  }
 }
 
 function fallbackOutput(message: MessageV2.WithParts): AutomationOutput {
@@ -527,6 +514,8 @@ function fallbackOutput(message: MessageV2.WithParts): AutomationOutput {
     .map((part) => part.text)
     .join("\n")
     .trim()
+  const parsed = parseTextOutput(text)
+  if (parsed) return parsed
   return {
     result: text.includes("NO_FINDINGS") ? "no_findings" : "findings",
     summary: text || "Automation completed.",
@@ -627,11 +616,6 @@ function runPromptEffect(automation: Info, runID: AutomationRunID) {
       model,
       variant: automation.reasoningEffort,
       parts: [{ type: "text", text: buildPrompt(automation, ctx) }],
-      format: {
-        type: "json_schema",
-        schema: automationOutputSchema,
-        retryCount: 1,
-      },
     })
     const diffs = yield* summary.diff({ sessionID: session.id })
     return { sessionID: session.id, assistant, diffs }
