@@ -1,5 +1,5 @@
 import path from "path"
-import { exec } from "child_process"
+import { execFile } from "child_process"
 import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
@@ -302,7 +302,8 @@ export const GithubInstallCommand = cmd({
           }
 
           async function promptModel() {
-            const providerData = providers[provider]!
+            const providerData = providers[provider]
+            if (!providerData) throw new Error(`Provider "${provider}" not found`)
 
             const model = await prompts.select({
               message: "Select model",
@@ -332,14 +333,10 @@ export const GithubInstallCommand = cmd({
 
             // Open browser
             const url = "https://github.com/apps/opencode-agent"
-            const command =
-              process.platform === "darwin"
-                ? `open "${url}"`
-                : process.platform === "win32"
-                  ? `start "" "${url}"`
-                  : `xdg-open "${url}"`
+            const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open"
+            const args = process.platform === "win32" ? ["/c", "start", "", url] : [url]
 
-            exec(command, (error) => {
+            execFile(cmd, args, (error) => {
               if (error) {
                 prompts.log.warn(`Could not open browser. Please visit: ${url}`)
               }
@@ -1209,7 +1206,8 @@ export const GithubRunCommand = cmd({
       }
 
       async function assertPermissions() {
-        // Only called for non-schedule events, so actor is defined
+        // Only called for non-schedule events, so actor should be defined
+        if (!actor) throw new Error("Cannot assert permissions: no actor available")
         console.log(`Asserting permissions for user ${actor}...`)
 
         let permission
@@ -1217,7 +1215,7 @@ export const GithubRunCommand = cmd({
           const response = await octoRest.repos.getCollaboratorPermissionLevel({
             owner,
             repo,
-            username: actor!,
+            username: actor,
           })
 
           permission = response.data.permission
@@ -1231,41 +1229,42 @@ export const GithubRunCommand = cmd({
       }
 
       async function addReaction(commentType?: "issue" | "pr_review") {
-        // Only called for non-schedule events, so triggerCommentId is defined
+        // Only called for non-schedule events, so triggerCommentId or issueId is defined
         console.log("Adding reaction...")
         if (triggerCommentId) {
           if (commentType === "pr_review") {
             return await octoRest.rest.reactions.createForPullRequestReviewComment({
               owner,
               repo,
-              comment_id: triggerCommentId!,
+              comment_id: triggerCommentId,
               content: AGENT_REACTION,
             })
           }
           return await octoRest.rest.reactions.createForIssueComment({
             owner,
             repo,
-            comment_id: triggerCommentId!,
+            comment_id: triggerCommentId,
             content: AGENT_REACTION,
           })
         }
+        if (issueId == null) throw new Error("Cannot add reaction: no issue ID available")
         return await octoRest.rest.reactions.createForIssue({
           owner,
           repo,
-          issue_number: issueId!,
+          issue_number: issueId,
           content: AGENT_REACTION,
         })
       }
 
       async function removeReaction(commentType?: "issue" | "pr_review") {
-        // Only called for non-schedule events, so triggerCommentId is defined
+        // Only called for non-schedule events, so triggerCommentId or issueId is defined
         console.log("Removing reaction...")
         if (triggerCommentId) {
           if (commentType === "pr_review") {
             const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
               owner,
               repo,
-              comment_id: triggerCommentId!,
+              comment_id: triggerCommentId,
               content: AGENT_REACTION,
             })
 
@@ -1275,7 +1274,7 @@ export const GithubRunCommand = cmd({
             return await octoRest.rest.reactions.deleteForPullRequestComment({
               owner,
               repo,
-              comment_id: triggerCommentId!,
+              comment_id: triggerCommentId,
               reaction_id: eyesReaction.id,
             })
           }
@@ -1283,7 +1282,7 @@ export const GithubRunCommand = cmd({
           const reactions = await octoRest.rest.reactions.listForIssueComment({
             owner,
             repo,
-            comment_id: triggerCommentId!,
+            comment_id: triggerCommentId,
             content: AGENT_REACTION,
           })
 
@@ -1293,15 +1292,16 @@ export const GithubRunCommand = cmd({
           return await octoRest.rest.reactions.deleteForIssueComment({
             owner,
             repo,
-            comment_id: triggerCommentId!,
+            comment_id: triggerCommentId,
             reaction_id: eyesReaction.id,
           })
         }
 
+        if (issueId == null) throw new Error("Cannot remove reaction: no issue ID available")
         const reactions = await octoRest.rest.reactions.listForIssue({
           owner,
           repo,
-          issue_number: issueId!,
+          issue_number: issueId,
           content: AGENT_REACTION,
         })
 
@@ -1311,18 +1311,19 @@ export const GithubRunCommand = cmd({
         await octoRest.rest.reactions.deleteForIssue({
           owner,
           repo,
-          issue_number: issueId!,
+          issue_number: issueId,
           reaction_id: eyesReaction.id,
         })
       }
 
       async function createComment(body: string) {
         // Only called for non-schedule events, so issueId is defined
+        if (issueId == null) throw new Error("Cannot create comment: no issue ID available")
         console.log("Creating comment...")
         return await octoRest.rest.issues.createComment({
           owner,
           repo,
-          issue_number: issueId!,
+          issue_number: issueId,
           body,
         })
       }

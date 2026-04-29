@@ -19,6 +19,18 @@ export function InstanceMiddleware(workspaceID?: WorkspaceID): MiddlewareHandler
       })(),
     )
 
+    // Path traversal guard: reject paths that escape the current working directory
+    // when the directory comes from a client-provided query parameter.
+    if (c.req.query("directory") || c.req.header("x-opencode-directory")) {
+      const cwd = AppFileSystem.resolve(process.cwd())
+      if (!AppFileSystem.contains(cwd, directory)) {
+        return c.json(
+          { error: "Directory is outside the allowed workspace boundary" },
+          403,
+        )
+      }
+    }
+
     return WorkspaceContext.provide({
       workspaceID,
       async fn() {

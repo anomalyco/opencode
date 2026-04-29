@@ -121,7 +121,13 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
               ...(truncated.truncated && { outputPath: truncated.outputPath }),
             },
           }
-        }).pipe(Effect.orDie, Effect.withSpan("Tool.execute", { attributes: attrs }))
+        }).pipe(
+          Effect.catchAll((error) => {
+            console.error(`Tool ${id} error:`, error)
+            return Effect.die(error)
+          }),
+          Effect.withSpan("Tool.execute", { attributes: attrs }),
+        )
       }
       return toolInfo
     })

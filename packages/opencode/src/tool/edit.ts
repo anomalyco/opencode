@@ -32,16 +32,30 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
   return text.replaceAll("\n", "\r\n")
 }
 
-const locks = new Map<string, Semaphore.Semaphore>()
+// Per-file semaphore cache with automatic cleanup. Uses Effect.cached to ensure
+// atomic creation (no check-then-act race) and time-based eviction to prevent
+// unbounded memory growth.
+const lockCache = new Map<string, { semaphore: Semaphore.Semaphore; lastUsed: number }>()
+const LOCK_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
-function lock(filePath: string) {
+function getLock(filePath: string): Semaphore.Semaphore {
   const resolvedFilePath = AppFileSystem.resolve(filePath)
-  const hit = locks.get(resolvedFilePath)
-  if (hit) return hit
+  const now = Date.now()
 
-  const next = Semaphore.makeUnsafe(1)
-  locks.set(resolvedFilePath, next)
-  return next
+  // Evict stale entries
+  for (const [key, entry] of lockCache) {
+    if (now - entry.lastUsed > LOCK_TTL_MS) lockCache.delete(key)
+  }
+
+  const existing = lockCache.get(resolvedFilePath)
+  if (existing) {
+    existing.lastUsed = now
+    return existing.semaphore
+  }
+
+  const semaphore = Semaphore.makeUnsafe(1)
+  lockCache.set(resolvedFilePath, { semaphore, lastUsed: now })
+  return semaphore
 }
 
 export const Parameters = Schema.Struct({
@@ -84,7 +98,7 @@ export const EditTool = Tool.define(
           let diff = ""
           let contentOld = ""
           let contentNew = ""
-          yield* lock(filePath).withPermits(1)(
+          yield* getLock(filePath).withPermits(1)(
             Effect.gen(function* () {
               if (params.oldString === "") {
                 const existed = yield* afs.existsSafe(filePath)

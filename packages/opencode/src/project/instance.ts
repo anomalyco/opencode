@@ -57,6 +57,11 @@ function track(directory: string, next: Promise<InstanceContext>) {
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
     const directory = AppFileSystem.resolve(input.directory)
+    // Atomic get-or-insert: if the cache already has an entry for this
+    // directory, reuse it; otherwise create and cache a new one.  The Map
+    // stores the Promise directly so concurrent callers for the same
+    // directory will await the same in-flight boot instead of spawning
+    // duplicate instances.
     let existing = cache.get(directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory })
@@ -120,6 +125,9 @@ export const Instance = {
     const directory = AppFileSystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
     await disposeInstance(directory)
+    // Delete old entry, then synchronously insert the new one via track().
+    // Both operations are synchronous with no yield between them, so no
+    // concurrent provide() can observe a missing entry.
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
 

@@ -46,6 +46,11 @@ export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & 
 type ProjectorFunc = (db: Database.TxOrDb, data: unknown) => void
 type ConvertEvent = (type: string, data: Event["data"]) => unknown | Promise<unknown>
 
+// Module-level state: write-once during bootstrap (define/init), then read-only
+// during concurrent access (run/replay). This is safe because:
+// 1. define() and init() complete before any run() or replay() calls
+// 2. frozen is set once in init() and only checked in define()
+// 3. projectors and registry are set once in init() and only read thereafter
 export const registry = new Map<string, Definition>()
 let projectors: Map<Definition, ProjectorFunc> | undefined
 const versions = new Map<string, number>()

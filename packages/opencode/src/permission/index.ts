@@ -232,8 +232,15 @@ export const layer = Layer.effect(
           input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
         )
 
+        // Collect matching entries first, then delete — avoids modifying the
+        // Map while iterating, which could skip entries or cause undefined
+        // behavior if another fiber mutates pending during yield points.
+        const toReject: Array<[string, (typeof pending extends Map<string, infer V> ? V : never)]> = []
         for (const [id, item] of pending.entries()) {
           if (item.info.sessionID !== existing.info.sessionID) continue
+          toReject.push([id, item])
+        }
+        for (const [id, item] of toReject) {
           pending.delete(id)
           yield* bus.publish(Event.Replied, {
             sessionID: item.info.sessionID,
@@ -256,12 +263,18 @@ export const layer = Layer.effect(
         })
       }
 
+      // Collect matching entries first, then process — avoids modifying the
+      // Map while iterating.
+      const toResolve: Array<[string, (typeof pending extends Map<string, infer V> ? V : never)]> = []
       for (const [id, item] of pending.entries()) {
         if (item.info.sessionID !== existing.info.sessionID) continue
         const ok = item.info.patterns.every(
           (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
         )
         if (!ok) continue
+        toResolve.push([id, item])
+      }
+      for (const [id, item] of toResolve) {
         pending.delete(id)
         yield* bus.publish(Event.Replied, {
           sessionID: item.info.sessionID,

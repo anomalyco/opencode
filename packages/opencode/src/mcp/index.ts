@@ -99,7 +99,9 @@ export const Status = Schema.Union([
   .pipe(withStatics((s) => ({ zod: effectZod(s) })))
 export type Status = Schema.Schema.Type<typeof Status>
 
-// Store transports for OAuth servers to allow finishing auth
+// Store transports for OAuth servers to allow finishing auth.
+// Thread-safety: all operations are synchronous Map get/set/delete on a
+// single-threaded runtime — no locking required.
 type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
 const pendingOAuthTransports = new Map<string, TransportWithAuth>()
 
@@ -496,7 +498,12 @@ export const layer = Layer.effect(
                 return
               }
 
-              const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.void))
+              const result = yield* create(key, mcp).pipe(
+                Effect.catch((error) => {
+                  log.error("MCP server creation failed", { key, error: String(error) })
+                  return Effect.void
+                }),
+              )
               if (!result) return
 
               s.status[key] = result.status

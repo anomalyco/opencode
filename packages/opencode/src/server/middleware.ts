@@ -44,7 +44,13 @@ export const AuthMiddleware: MiddlewareHandler = (c, next) => {
   if (!password) return next()
   const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
 
-  if (c.req.query("auth_token")) c.req.raw.headers.set("authorization", `Basic ${c.req.query("auth_token")}`)
+  // Query string auth is deprecated — tokens in URLs leak via logs, Referer headers,
+  // and browser history. Prefer the Authorization header.
+  const queryToken = c.req.query("auth_token")
+  if (queryToken) {
+    log.warn("auth_token passed via query string is deprecated and insecure; use Authorization header instead")
+    c.req.raw.headers.set("authorization", `Basic ${queryToken}`)
+  }
 
   return basicAuth({ username, password })(c, next)
 }

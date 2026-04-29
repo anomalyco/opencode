@@ -1,5 +1,6 @@
 import { codeToHtml, bundledLanguages } from "shiki"
 import { createResource, Suspense } from "solid-js"
+import DOMPurify from "dompurify"
 import style from "./content-code.module.css"
 
 interface Props {
@@ -13,7 +14,7 @@ export function ContentCode(props: Props) {
     async ([code, lang]) => {
       // TODO: For testing delays
       // await new Promise((resolve) => setTimeout(resolve, 3000))
-      return (await codeToHtml(code || "", {
+      return DOMPurify.sanitize(await codeToHtml(code || "", {
         lang: lang && lang in bundledLanguages ? lang : "text",
         themes: {
           light: "github-light",

@@ -624,6 +624,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })
         .pipe(
           Effect.catchCause((cause) => {
+            taskAbort.abort()
             const defect = Cause.squash(cause)
             error = defect instanceof Error ? defect : new Error(String(defect))
             log.error("subtask execution failed", { error, agent: task.agent, description: task.description })

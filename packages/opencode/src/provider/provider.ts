@@ -48,6 +48,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
       const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
         const id = setTimeout(() => {
           const err = new Error("SSE read timed out")
+          log.error("SSE read timed out", { timeout: ms })
           ctl.abort(err)
           void reader.cancel(err)
           reject(err)
@@ -1251,10 +1252,14 @@ const layer: Layer.Layer<
           if (!stored) continue
           if (!plugin.auth.loader) continue
 
+          const authConfig = plugin.auth
+          const authLoader = authConfig.loader
+          if (!authConfig || !authLoader) continue
+
           const options = yield* Effect.promise(() =>
-            plugin.auth!.loader!(
+            authLoader(
               () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
-              database[plugin.auth!.provider],
+              database[authConfig.provider],
             ),
           )
           const opts = options ?? {}

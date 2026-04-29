@@ -339,6 +339,10 @@ export const remove = fn(WorkspaceID.zod, async (id) => {
   }
 })
 
+// Module-level Maps for connection tracking. Thread-safety: all operations
+// are synchronous Map get/set/delete on a single-threaded runtime — no
+// locking required. setStatus() and the sync start logic are atomic within
+// their synchronous execution blocks.
 const connections = new Map<WorkspaceID, ConnectionStatus>()
 const aborts = new Map<WorkspaceID, AbortController>()
 const TIMEOUT = 5000

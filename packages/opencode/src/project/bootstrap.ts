@@ -12,7 +12,10 @@ import * as Log from "@opencode-ai/core/util/log"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share/share-next"
 import * as Effect from "effect/Effect"
+import * as Cause from "effect/Cause"
 import { Config } from "@/config/config"
+
+const log = Log.create({ service: "bootstrap" })
 
 export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
@@ -29,7 +32,17 @@ export const InstanceBootstrap = Effect.gen(function* () {
       FileWatcher.Service,
       Vcs.Service,
       Snapshot.Service,
-    ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
+    ].map((s) =>
+      s
+        .use((i) => i.init())
+        .pipe(
+          Effect.catchCause((cause) => {
+            log.error("service init failed", { service: s, cause: Cause.pretty(cause) })
+            return Effect.void
+          }),
+          Effect.fork,
+        ),
+    ),
   ).pipe(Effect.withSpan("InstanceBootstrap.init"))
 
   yield* Bus.Service.use((svc) =>
