@@ -1,0 +1,214 @@
+{
+  "$schema": "https://github.com/anomalyco/opencode/examples/terminal-pet/pet.config.schema.json",
+  "pets": [
+    {
+      "id": "cat",
+      "name": "Cyber Cat",
+      "frames": {
+        "idle": [
+          "  /\\_/\\  ",
+          " ( o.o ) ",
+          "  > ^ <  "
+        ],
+        "sleep": [
+          "  /\\_/\\  ",
+          " ( -.- ) ",
+          "  z Z z  "
+        ],
+        "play": [
+          "  /\\_/\\  ",
+          " ( o.o )~",
+          "  > ^ <  "
+        ],
+        "eat": [
+          "  /\\_/\\  ",
+          " ( @.@ ) ",
+          "  > ^ <  "
+        ],
+        "happy": [
+          "  /\\_/\\  ",
+          " ( ^ o ^)",
+          "  > w <  "
+        ]
+      },
+      "defaultState": "idle"
+    },
+    {
+      "id": "owl",
+      "name": "Night Owl",
+      "frames": {
+        "idle": [
+          "  ,___,  ",
+          "  [O.O]  ",
+          "  /)__) ",
+          "  -\"--\"-"
+        ],
+        "sleep": [
+          "  ,___,  ",
+          "  [---]  ",
+          "  /)__) ",
+          "  -\"--\"-"
+        ],
+        "play": [
+          "  ,___,  ",
+          "  [>.<]  ",
+          "  /)__) ",
+          "  -\"--\"-"
+        ]
+      },
+      "defaultState": "idle"
+    },
+    {
+      "id": "bunny",
+      "name": "CLI Bunny",
+      "frames": {
+        "idle": [
+          "  (\\(\\  ",
+          "  ( -.-)",
+          "  o_(\")(\")"
+        ],
+        "sleep": [
+          "  (\\(\  ",
+          "  ( ---)",
+          "  o_(\")(\")"
+        ],
+        "play": [
+          "  (\\(\  ",
+          "  ( ^ -)",
+          "  o_(\")(\")"
+        ]
+      },
+      "defaultState": "idle"
+    },
+    {
+      "id": "blob",
+      "name": "The Blob",
+      "frames": {
+        "idle": [
+          "  .---.  ",
+          " ( o o ) ",
+          "  \\ - /  ",
+          "   `-'   "
+        ],
+        "play": [
+          "  .---.  ",
+          " ( ^ ^ ) ",
+          "  \\ - /  ",
+          "   `-'   "
+        ],
+        "sleep": [
+          "  .---.  ",
+          " ( - - ) ",
+          "  \\ - /  ",
+          "   `-'   "
+        ]
+      },
+      "defaultState": "idle"
+    },
+    {
+      "id": "pikachu",
+      "name": "Pikachu",
+      "frames": {
+        "idle": [
+          "  _(\ PAS",
+          " //",
+          "  \\\"-/"
+        ],
+        "sleep": [
+          "  _(\\-/",
+          " //",
+          "  \\\"-/"
+        ],
+        "play": [
+          "  _(\\^/",
+          " //",
+          "  \\\"-/"
+        ],
+        "eat": [
+          "  _(\\&/",
+          " //",
+          "  \\\"-/"
+        ]
+      },
+      "defaultState": "idle"
+    },
+    {
+      "id": "fox",
+      "name": "Fox",
+      "frames": {
+        "idle": [
+          "  /\\_/\\",
+          " ( oo )",
+          "  ^^  ^^"
+        ],
+        "play": [
+          "  /\\_/\\",
+          " ( ^o^)",
+          "  ^^  ^^"
+        ],
+        "sleep": [
+          "  /\\_/\\",
+          " ( ---)",
+          "  ^^  ^^"
+        ]
+      },
+      "defaultState": "idle"
+    }
+  ],
+  "weathers": [
+    {
+      "id": "clear",
+      "name": "Sunny",
+      "frames": [
+        "   \\|/   ",
+        "  --O--  ",
+        "   /|\\   "
+      ],
+      "symbol": "☀️"
+    },
+    {
+      "id": "rain",
+      "name": "Rainy",
+      "frames": [
+        "  /   /  ",
+        " /   /  ",
+        "/   /  "
+      ],
+      "drops": true,
+      "symbol": "🌧️"
+    },
+    {
+      "id": "cloudy",
+      "name": "Cloudy",
+      "frames": [
+        "  .--.  ",
+        " .(    ). ",
+        "(___.__)"
+      ],
+      "symbol": "☁️"
+    },
+    {
+      "id": "snow",
+      "name": "Snowy",
+      "frames": [
+        "  .*.  ",
+        " *   * ",
+        "  .*.  "
+      ],
+      "drops": true,
+      "symbol": "❄️"
+    },
+    {
+      "id": "night",
+      "name": "Starry Night",
+      "frames": [
+        "  \\|/  ",
+        "   .*.  ",
+        "  / | \\"
+      ],
+      "symbol": "🌙"
+    }
+  ],
+  "defaultPet": "cat",
+  "defaultWeather": "clear"
+}

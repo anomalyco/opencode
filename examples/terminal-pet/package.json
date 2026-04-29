@@ -1,0 +1,9 @@
+{
+  "name": "opencode-terminal-pet",
+  "version": "1.0.0",
+  "description": "Terminal pet companion with ASCII art animation and weather effects",
+  "type": "module",
+  "opencode": {
+    "tui": "./index.ts"
+  }
+}

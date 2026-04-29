@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Terminal Pet Config",
+  "type": "object",
+  "definitions": {
+    "petFrame": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "pet": {
+      "type": "object",
+      "required": ["id", "name", "frames"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "frames": { "$ref": "#/definitions/petFrame" },
+        "defaultState": { "type": "string" }
+      }
+    },
+    "weather": {
+      "type": "object",
+      "required": ["id", "name", "frames"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "frames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "drops": { "type": "boolean" },
+        "symbol": { "type": "string" }
+      }
+    }
+  },
+  "properties": {
+    "pets": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/pet" }
+    },
+    "weathers": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/weather" }
+    },
+    "defaultPet": { "type": "string" },
+    "defaultWeather": { "type": "string" }
+  }
+}

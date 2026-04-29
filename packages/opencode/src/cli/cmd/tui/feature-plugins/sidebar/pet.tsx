@@ -1,119 +1,208 @@
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, createSignal, onCleanup, For } from "solid-js"
 
 // ============================================================================
-// ASCII Pet Art - More detailed
+// Constants & Types
 // ============================================================================
-
-const CAT_WALK_LEFT = [
-  "   /\\_/\\   ",
-  "  ( o.o )  ",
-  "  />  <\\  ",
-]
-
-const CAT_WALK_RIGHT = [
-  "   /\\_/\\   ",
-  "  ( o.o )  ",
-  "  />  <\\  ",
-]
-
-const CAT_RUN_LEFT = [
-  "  /\\_/\\    ",
-  " ( >o< )~  ",
-  " />  <\\   ",
-]
-
-const CAT_RUN_RIGHT = [
-  "   /\\_/\\   ",
-  " ~( >o< )  ",
-  "  />  <\\  ",
-]
-
-const CAT_SLEEP = [
-  "   /\\_/\\   ",
-  "  ( - - )  ",
-  "  (__n__)  ",
-]
-
-const CAT_PLAY = [
-  "   /\\_/\\   ",
-  "  ( ^o^ )  ",
-  "  />  <\\  ",
-]
-
-const CAT_EAT = [
-  "   /\\_/\\   ",
-  "  ( @.@ )  ",
-  "  />  <\\  ",
-]
-
-const CAT_HIDE = [
-  "   ____    ",
-  "  |    |   ",
-  "  | o.o|   ",
-]
-
-// Weather ASCII art
-const WEATHER_SUNNY = [
-  "   \\|/    ",
-  "  --O--   ",
-  "   /|\\    ",
-]
-
-const WEATHER_RAIN = [
-  "  .--.    ",
-  " (    ).  ",
-  "(___.__)  ",
-  " / / / /  ",
-]
-
-const WEATHER_CLOUDY = [
-  "   .--.   ",
-  " .(    ). ",
-  "(___.__)  ",
-]
 
 const BALL = "●"
 const FISH = "><>"
+const RAINDROP = "'"
 
 type PetState = "walk" | "run" | "sleep" | "play" | "eat" | "hide"
 type Weather = "sunny" | "rain" | "cloudy"
+type Direction = "left" | "right"
+
+interface PetFrame {
+  lines: string[]
+}
+
+interface WeatherFrame {
+  lines: string[]
+  emoji: string
+}
 
 // ============================================================================
-// Pet Widget with Movement and Weather Response
+// ASCII Art Database
+// ============================================================================
+
+const PET_FRAMES: Record<PetState, Record<Direction, PetFrame>> = {
+  walk: {
+    left: { lines: ["   /\\_/\\   ", "  ( o.o )  ", "  />  <\\  "] },
+    right: { lines: ["   /\\_/\\   ", "  ( o.o )  ", "  />  <\\  "] },
+  },
+  run: {
+    left: { lines: ["  /\\_/\\    ", " ( >o< )~  ", " />  <\\   "] },
+    right: { lines: ["   /\\_/\\   ", " ~( >o< )  ", "  />  <\\  "] },
+  },
+  sleep: {
+    left: { lines: ["   /\\_/\\   ", "  ( - - )  ", "  (__n__)  "] },
+    right: { lines: ["   /\\_/\\   ", "  ( - - )  ", "  (__n__)  "] },
+  },
+  play: {
+    left: { lines: ["   /\\_/\\   ", "  ( ^o^ )  ", "  />  <\\  "] },
+    right: { lines: ["   /\\_/\\   ", "  ( ^o^ )  ", "  />  <\\  "] },
+  },
+  eat: {
+    left: { lines: ["   /\\_/\\   ", "  ( @.@ )  ", "  />  <\\  "] },
+    right: { lines: ["   /\\_/\\   ", "  ( @.@ )  ", "  />  <\\  "] },
+  },
+  hide: {
+    left: { lines: ["   ____    ", "  |    |   ", "  | o.o|   "] },
+    right: { lines: ["   ____    ", "  |    |   ", "  | o.o|   "] },
+  },
+}
+
+const WEATHER_FRAMES: Record<Weather, WeatherFrame> = {
+  sunny: {
+    lines: ["   \\|/    ", "  --O--   ", "   /|\\    "],
+    emoji: "☀️",
+  },
+  rain: {
+    lines: ["  .--.    ", " (    ).  ", "(___.__)  "],
+    emoji: "🌧️",
+  },
+  cloudy: {
+    lines: ["   .--.   ", " .(    ). ", "(___.__)  "],
+    emoji: "☁️",
+  },
+}
+
+const RAIN_PATTERNS = [
+  [" ' ' ' ' '", "' ' ' ' ' ", " ' ' ' ' '"],
+  ["' ' ' ' ' ", " ' ' ' ' '", "' ' ' ' ' "],
+  [" ' ' ' ' '", "' ' ' ' ' ", " ' ' ' ' '"],
+]
+
+// ============================================================================
+// Pet State Machine
+// ============================================================================
+
+class PetStateMachine {
+  private state: PetState = "walk"
+  private weather: Weather = "sunny"
+
+  getNextState(currentWeather: Weather): PetState {
+    this.weather = currentWeather
+    const r = Math.random()
+
+    if (currentWeather === "rain") {
+      if (r < 0.4) return "hide"
+      if (r < 0.7) return "sleep"
+      return "walk"
+    }
+
+    if (currentWeather === "sunny") {
+      if (r < 0.3) return "play"
+      if (r < 0.5) return "run"
+      if (r < 0.8) return "walk"
+      return "eat"
+    }
+
+    // Cloudy
+    if (r < 0.4) return "walk"
+    if (r < 0.6) return "sleep"
+    if (r < 0.8) return "play"
+    return "eat"
+  }
+
+  getStateLabel(state: PetState): string {
+    const labels: Record<PetState, string> = {
+      walk: "walking...",
+      run: "running!",
+      sleep: "zzZ...",
+      play: "playing!",
+      eat: "nom nom",
+      hide: "hiding from rain",
+    }
+    return labels[state]
+  }
+}
+
+// ============================================================================
+// Layout Renderer
+// ============================================================================
+
+class PetLayoutRenderer {
+  private readonly CANVAS_WIDTH = 30
+  private readonly PET_CENTER = 15
+
+  renderPetWithToy(
+    petLines: string[],
+    petX: number,
+    state: PetState,
+    ballX: number
+  ): string[] {
+    const result = [...petLines]
+    const petPos = this.PET_CENTER + Math.round(petX)
+    const indent = " ".repeat(Math.max(0, petPos))
+
+    // Apply pet indent to all lines
+    result[0] = indent + result[0]
+    result[1] = indent + result[1]
+    result[2] = indent + result[2]
+
+    // Add toy on middle line (line 1)
+    if (state === "play") {
+      const ballPos = this.PET_CENTER + Math.round(ballX)
+      const ballIndent = " ".repeat(Math.max(0, ballPos))
+      
+      if (ballPos < petPos) {
+        // Ball is to the left of pet
+        const gap = " ".repeat(Math.max(0, petPos - ballPos - 1))
+        result[1] = ballIndent + BALL + gap + result[1].trim()
+      } else {
+        // Ball is to the right of pet
+        const gap = " ".repeat(Math.max(0, ballPos - petPos - result[1].trim().length))
+        result[1] = result[1] + gap + BALL
+      }
+    } else if (state === "eat") {
+      result[1] = result[1] + " " + FISH
+    }
+
+    return result
+  }
+
+  renderRain(frameIndex: number): string[] {
+    return RAIN_PATTERNS[frameIndex % RAIN_PATTERNS.length]
+  }
+
+  renderEmptyLines(count: number): string[] {
+    return Array(count).fill(" ".repeat(this.CANVAS_WIDTH))
+  }
+}
+
+// ============================================================================
+// Pet Widget Component
 // ============================================================================
 
 function PetWidget(props: { api: TuiPluginApi; session_id: string; audioLevel?: number }) {
   const theme = () => props.api.theme.current
-  
-  // Pet state
+
+  // State
   const [petState, setPetState] = createSignal<PetState>("walk")
-  const [petX, setPetX] = createSignal(0) // -10 to 10
-  const [petDir, setPetDir] = createSignal<"left" | "right">("right")
-  const [frame, setFrame] = createSignal(0)
-  
-  // Weather state
+  const [petX, setPetX] = createSignal(0)
+  const [petDir, setPetDir] = createSignal<Direction>("right")
   const [weather, setWeather] = createSignal<Weather>("sunny")
-  const [rainDrops, setRainDrops] = createSignal<Array<{ x: number; y: number }>>([])
-  
-  // Ball/toy position
   const [ballX, setBallX] = createSignal(5)
-  const [ballY, setBallY] = createSignal(0)
   const [ballVelX, setBallVelX] = createSignal(1)
-  const [ballVelY, setBallVelY] = createSignal(0)
+  const [rainFrame, setRainFrame] = createSignal(0)
+
+  // Helpers
+  const stateMachine = new PetStateMachine()
+  const renderer = new PetLayoutRenderer()
 
   // Animation loop - 10 FPS
   const animTimer = setInterval(() => {
-    setFrame(f => (f + 1) % 2)
-    
-    const currentWeather = weather()
-    const currentState = petState()
+    setRainFrame((f) => (f + 1) % 3)
+
     const audioBoost = (props.audioLevel ?? 0) > 0.3 ? 1.5 : 1
-    
-    // Pet movement logic
-    if (currentState === "walk" || currentState === "run") {
-      const speed = currentState === "run" ? 0.5 * audioBoost : 0.2
-      setPetX(x => {
+    const state = petState()
+
+    // Pet movement
+    if (state === "walk" || state === "run") {
+      const speed = (state === "run" ? 0.5 : 0.2) * audioBoost
+      setPetX((x) => {
         const next = x + (petDir() === "right" ? speed : -speed)
         if (next > 8) {
           setPetDir("left")
@@ -126,77 +215,31 @@ function PetWidget(props: { api: TuiPluginApi; session_id: string; audioLevel?: 
         return next
       })
     }
-    
+
     // Ball physics
-    if (currentState === "play") {
-      setBallX(x => {
+    if (state === "play") {
+      setBallX((x) => {
         const next = x + ballVelX()
         if (next > 10 || next < -10) {
-          setBallVelX(v => -v)
+          setBallVelX((v) => -v)
           return next > 10 ? 10 : -10
-        }
-        return next
-      })
-      setBallY(y => {
-        const next = y + ballVelY()
-        if (next > 2) {
-          setBallVelY(-0.5)
-          return 2
-        }
-        if (next < 0) {
-          setBallVelY(0.5)
-          return 0
-        }
-        return next
-      })
-    }
-    
-    // Rain drops
-    if (currentWeather === "rain") {
-      setRainDrops(drops => {
-        const next = drops.map(d => ({ ...d, y: d.y + 1 })).filter(d => d.y < 5)
-        if (Math.random() < 0.4) {
-          next.push({ x: Math.floor(Math.random() * 20) - 10, y: 0 })
         }
         return next
       })
     }
   }, 100)
 
-  // State transitions - every 3-8 seconds
+  // State transitions
   const stateTimer = setInterval(() => {
-    const currentWeather = weather()
-    const r = Math.random()
-    
-    // Weather influences behavior
-    if (currentWeather === "rain") {
-      // 70% chance to hide or sleep when raining
-      if (r < 0.4) setPetState("hide")
-      else if (r < 0.7) setPetState("sleep")
-      else setPetState("walk")
-    } else if (currentWeather === "sunny") {
-      // Active when sunny
-      if (r < 0.3) setPetState("play")
-      else if (r < 0.5) setPetState("run")
-      else if (r < 0.8) setPetState("walk")
-      else setPetState("eat")
-    } else {
-      // Cloudy - normal behavior
-      if (r < 0.4) setPetState("walk")
-      else if (r < 0.6) setPetState("sleep")
-      else if (r < 0.8) setPetState("play")
-      else setPetState("eat")
-    }
+    setPetState(stateMachine.getNextState(weather()))
   }, Math.random() * 5000 + 3000)
 
-  // Weather changes - every 10-20 seconds
+  // Weather changes
   const weatherTimer = setInterval(() => {
     const r = Math.random()
     if (r < 0.4) setWeather("sunny")
     else if (r < 0.7) setWeather("cloudy")
     else setWeather("rain")
-    
-    if (weather() !== "rain") setRainDrops([])
   }, Math.random() * 10000 + 10000)
 
   onCleanup(() => {
@@ -205,93 +248,66 @@ function PetWidget(props: { api: TuiPluginApi; session_id: string; audioLevel?: 
     clearInterval(weatherTimer)
   })
 
-  // Render pet art based on state
-  const petArt = createMemo(() => {
-    const state = petState()
-    const dir = petDir()
-    const f = frame()
-    
-    if (state === "sleep") return CAT_SLEEP
-    if (state === "hide") return CAT_HIDE
-    if (state === "eat") return CAT_EAT
-    if (state === "play") return CAT_PLAY
-    if (state === "run") return dir === "left" ? CAT_RUN_LEFT : CAT_RUN_RIGHT
-    return dir === "left" ? CAT_WALK_LEFT : CAT_WALK_RIGHT
+  // Computed values
+  const currentWeather = createMemo(() => WEATHER_FRAMES[weather()])
+  
+  const currentPetFrame = createMemo(() => {
+    return PET_FRAMES[petState()][petDir()]
   })
 
-  const weatherArt = createMemo(() => {
-    const w = weather()
-    if (w === "sunny") return WEATHER_SUNNY
-    if (w === "rain") return WEATHER_RAIN
-    return WEATHER_CLOUDY
+  const rainLines = createMemo(() => {
+    return weather() === "rain"
+      ? renderer.renderRain(rainFrame())
+      : renderer.renderEmptyLines(3)
   })
 
-  const petIndent = createMemo(() => {
-    const x = Math.round(petX())
-    return " ".repeat(Math.max(0, 10 + x))
-  })
-
-  const ballIndent = createMemo(() => {
-    const x = Math.round(ballX())
-    return " ".repeat(Math.max(0, 10 + x))
-  })
-
-  const stateLabel = createMemo(() => {
-    const s = petState()
-    if (s === "walk") return "walking..."
-    if (s === "run") return "running!"
-    if (s === "sleep") return "zzZ..."
-    if (s === "play") return "playing!"
-    if (s === "eat") return "nom nom"
-    if (s === "hide") return "hiding from rain"
-    return s
+  const petLines = createMemo(() => {
+    return renderer.renderPetWithToy(
+      currentPetFrame().lines,
+      petX(),
+      petState(),
+      ballX()
+    )
   })
 
   const weatherColor = createMemo(() => {
-    const w = weather()
     const t = theme()
+    const w = weather()
     if (w === "sunny") return t.warning
     if (w === "rain") return t.info
     return t.textMuted
   })
 
+  const stateLabel = createMemo(() => {
+    return stateMachine.getStateLabel(petState())
+  })
+
   return (
     <box>
+      {/* Header */}
       <box flexDirection="row" gap={1} alignItems="center">
         <text fg={theme().text}>
           <b>Pet</b>
         </text>
-        <text fg={weatherColor()}>{weather() === "sunny" ? "☀️" : weather() === "rain" ? "🌧️" : "☁️"}</text>
+        <text fg={weatherColor()}>{currentWeather().emoji}</text>
       </box>
-      
-      {/* Weather display */}
-      <For each={weatherArt()}>
+
+      {/* Weather (3 lines) */}
+      <For each={currentWeather().lines}>
         {(line) => <text fg={weatherColor()}>{line}</text>}
       </For>
-      
-      {/* Rain drops */}
-      {weather() === "rain" && (
-        <box>
-          <For each={rainDrops()}>
-            {(drop) => <text fg={theme().info}>{" ".repeat(Math.max(0, 10 + drop.x)) + "."}</text>}
-          </For>
-        </box>
-      )}
-      
-      {/* Pet */}
-      <For each={petArt()}>
-        {(line) => <text fg={theme().accent}>{petIndent()}{line}</text>}
+
+      {/* Rain (3 lines) */}
+      <For each={rainLines()}>
+        {(line) => <text fg={theme().info}>{line}</text>}
       </For>
-      
-      {/* Ball/toy */}
-      {petState() === "play" && (
-        <text fg={theme().warning}>{ballIndent()}{BALL}</text>
-      )}
-      
-      {petState() === "eat" && (
-        <text fg={theme().success}>{petIndent()}{FISH}</text>
-      )}
-      
+
+      {/* Pet with toy (3 lines) */}
+      <For each={petLines()}>
+        {(line) => <text fg={theme().accent}>{line}</text>}
+      </For>
+
+      {/* State label (1 line) */}
       <text fg={theme().textMuted}>{stateLabel()}</text>
     </box>
   )

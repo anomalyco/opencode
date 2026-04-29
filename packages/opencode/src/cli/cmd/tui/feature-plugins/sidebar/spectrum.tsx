@@ -7,13 +7,22 @@ import { spawn } from "child_process"
 // ============================================================================
 
 const SPEC_CHARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
-const BAR_COUNT = 16
+const BAR_COUNT = 12
 
-// CAVA config for raw ASCII output
-const CAVA_CONFIG = `
+function SpectrumWidget(props: { api: TuiPluginApi; onLevel?: (level: number) => void }) {
+  const theme = () => props.api.theme.current
+  const [bars, setBars] = createSignal<number[]>(Array(BAR_COUNT).fill(0))
+  const [source, setSource] = createSignal<"cava" | "sim">("sim")
+  const [avgLevel, setAvgLevel] = createSignal(0)
+
+  let cavaProc: ReturnType<typeof spawn> | null = null
+
+  // Try to spawn CAVA with proper config
+  try {
+    const cavaConfig = `
 [general]
 bars = ${BAR_COUNT}
-framerate = 30
+framerate = 20
 
 [input]
 method = pulse
@@ -25,25 +34,10 @@ data_format = ascii
 ascii_max_range = 7
 bar_delimiter = 59
 `
-
-function SpectrumWidget(props: { api: TuiPluginApi; onLevel?: (level: number) => void }) {
-  const theme = () => props.api.theme.current
-  const [bars, setBars] = createSignal<number[]>(Array(BAR_COUNT).fill(0))
-  const [source, setSource] = createSignal<"cava" | "sim">("sim")
-  const [avgLevel, setAvgLevel] = createSignal(0)
-
-  let cavaProc: ReturnType<typeof spawn> | null = null
-
-  // Try to spawn CAVA
-  try {
-    cavaProc = spawn("cava", ["-p", "/dev/stdin"], {
-      stdio: ["pipe", "pipe", "ignore"],
+    
+    cavaProc = spawn("sh", ["-c", `echo '${cavaConfig}' | cava -p /dev/stdin`], {
+      stdio: ["ignore", "pipe", "ignore"],
     })
-
-    if (cavaProc.stdin) {
-      cavaProc.stdin.write(CAVA_CONFIG)
-      cavaProc.stdin.end()
-    }
 
     if (cavaProc.stdout) {
       setSource("cava")
@@ -55,9 +49,12 @@ function SpectrumWidget(props: { api: TuiPluginApi; onLevel?: (level: number) =>
         buffer = lines.pop() || ""
         
         for (const line of lines) {
-          if (line.trim()) {
-            const vals = line.split(";").map(v => parseInt(v.trim(), 10) || 0)
-            if (vals.length > 0) {
+          if (line.trim() && line.includes(";")) {
+            const vals = line.split(";").map(v => {
+              const n = parseInt(v.trim(), 10)
+              return isNaN(n) ? 0 : Math.min(7, Math.max(0, n))
+            })
+            if (vals.length >= BAR_COUNT) {
               setBars(vals.slice(0, BAR_COUNT))
               const avg = vals.reduce((a, b) => a + b, 0) / vals.length / 7
               setAvgLevel(avg)
@@ -70,14 +67,18 @@ function SpectrumWidget(props: { api: TuiPluginApi; onLevel?: (level: number) =>
       cavaProc.on("error", () => {
         setSource("sim")
       })
+
+      cavaProc.on("exit", () => {
+        setSource("sim")
+      })
     }
   } catch {
     setSource("sim")
   }
 
   // Fallback simulation
-  if (source() === "sim") {
-    const simTimer = setInterval(() => {
+  const simTimer = setInterval(() => {
+    if (source() === "sim") {
       const time = Date.now() / 200
       const newBars = Array.from({ length: BAR_COUNT }, (_, i) => {
         const wave1 = Math.sin(time + i * 0.5) * 0.5 + 0.5
@@ -89,28 +90,17 @@ function SpectrumWidget(props: { api: TuiPluginApi; onLevel?: (level: number) =>
       const avg = newBars.reduce((a, b) => a + b, 0) / newBars.length / 7
       setAvgLevel(avg)
       props.onLevel?.(avg)
-    }, 50)
-    
-    onCleanup(() => clearInterval(simTimer))
-  }
+    }
+  }, 50)
 
   onCleanup(() => {
+    clearInterval(simTimer)
     if (cavaProc) {
       cavaProc.kill()
     }
   })
 
-  // Render spectrum as 3-row visualization
-  const specRows = createMemo(() => {
-    const b = bars()
-    const rows: string[] = []
-    for (let row = 2; row >= 0; row--) {
-      const threshold = row * 2.5
-      rows.push(b.map(v => v > threshold ? "█" : " ").join(""))
-    }
-    return rows
-  })
-
+  // Render spectrum as single bar line
   const barChars = createMemo(() => {
     return bars().map(v => SPEC_CHARS[Math.min(7, v)]).join("")
   })
@@ -132,9 +122,6 @@ function SpectrumWidget(props: { api: TuiPluginApi; onLevel?: (level: number) =>
           {source() === "cava" ? "● CAVA" : "○ sim"}
         </text>
       </box>
-      {specRows().map((row, i) => (
-        <text fg={theme().accent}>{row}</text>
-      ))}
       <text fg={theme().accent}>{barChars()}</text>
       <text fg={theme().textMuted}>level: {levelPct()}%</text>
     </box>
