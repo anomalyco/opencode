@@ -33,7 +33,7 @@ const DiagnosticsCommand = cmd({
   },
 })
 
-export const SymbolsCommand = cmd({
+const SymbolsCommand = cmd({
   command: "symbols <query>",
   describe: "search workspace symbols",
   builder: (yargs) => yargs.positional("query", { type: "string", demandOption: true }),
@@ -46,7 +46,7 @@ export const SymbolsCommand = cmd({
   },
 })
 
-export const DocumentSymbolsCommand = cmd({
+const DocumentSymbolsCommand = cmd({
   command: "document-symbols <uri>",
   describe: "get symbols from a document",
   builder: (yargs) => yargs.positional("uri", { type: "string", demandOption: true }),

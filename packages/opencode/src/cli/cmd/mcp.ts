@@ -109,7 +109,7 @@ export const McpCommand = cmd({
   async handler() {},
 })
 
-export const McpListCommand = cmd({
+const McpListCommand = cmd({
   command: "list",
   aliases: ["ls"],
   describe: "list MCP servers and their status",
@@ -175,7 +175,7 @@ export const McpListCommand = cmd({
   },
 })
 
-export const McpAuthCommand = cmd({
+const McpAuthCommand = cmd({
   command: "auth [name]",
   describe: "authenticate with an OAuth-enabled MCP server",
   builder: (yargs) =>
@@ -313,7 +313,7 @@ export const McpAuthCommand = cmd({
   },
 })
 
-export const McpAuthListCommand = cmd({
+const McpAuthListCommand = cmd({
   command: "list",
   aliases: ["ls"],
   describe: "list OAuth-capable MCP servers and their auth status",
@@ -348,7 +348,7 @@ export const McpAuthListCommand = cmd({
   },
 })
 
-export const McpLogoutCommand = cmd({
+const McpLogoutCommand = cmd({
   command: "logout [name]",
   describe: "remove OAuth credentials for an MCP server",
   builder: (yargs) =>
@@ -444,7 +444,7 @@ async function addMcpToConfig(name: string, mcpConfig: ConfigMCP.Info, configPat
   return configPath
 }
 
-export const McpAddCommand = cmd({
+const McpAddCommand = cmd({
   command: "add",
   describe: "add an MCP server",
   async handler() {
@@ -608,7 +608,7 @@ export const McpAddCommand = cmd({
   },
 })
 
-export const McpDebugCommand = cmd({
+const McpDebugCommand = cmd({
   command: "debug <name>",
   describe: "debug OAuth connection for an MCP server",
   builder: (yargs) =>

@@ -172,7 +172,7 @@ const openEffect = Effect.fn("open")(function* () {
   yield* Prompt.outro("Opened " + url)
 })
 
-export const LoginCommand = cmd({
+const LoginCommand = cmd({
   command: "login <url>",
   describe: false,
   builder: (yargs) =>
@@ -187,7 +187,7 @@ export const LoginCommand = cmd({
   },
 })
 
-export const LogoutCommand = cmd({
+const LogoutCommand = cmd({
   command: "logout [email]",
   describe: false,
   builder: (yargs) =>
@@ -201,7 +201,7 @@ export const LogoutCommand = cmd({
   },
 })
 
-export const SwitchCommand = cmd({
+const SwitchCommand = cmd({
   command: "switch",
   describe: false,
   async handler() {
@@ -210,7 +210,7 @@ export const SwitchCommand = cmd({
   },
 })
 
-export const OrgsCommand = cmd({
+const OrgsCommand = cmd({
   command: "orgs",
   describe: false,
   async handler() {
@@ -219,7 +219,7 @@ export const OrgsCommand = cmd({
   },
 })
 
-export const OpenCommand = cmd({
+const OpenCommand = cmd({
   command: "open",
   describe: false,
   async handler() {

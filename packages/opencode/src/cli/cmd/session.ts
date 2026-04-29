@@ -47,7 +47,7 @@ export const SessionCommand = cmd({
   async handler() {},
 })
 
-export const SessionDeleteCommand = cmd({
+const SessionDeleteCommand = cmd({
   command: "delete <sessionID>",
   describe: "delete a session",
   builder: (yargs: Argv) => {
@@ -72,7 +72,7 @@ export const SessionDeleteCommand = cmd({
   },
 })
 
-export const SessionListCommand = cmd({
+const SessionListCommand = cmd({
   command: "list",
   describe: "list sessions",
   builder: (yargs: Argv) => {

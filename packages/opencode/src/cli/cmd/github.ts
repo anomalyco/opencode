@@ -199,7 +199,7 @@ export const GithubCommand = cmd({
   async handler() {},
 })
 
-export const GithubInstallCommand = cmd({
+const GithubInstallCommand = cmd({
   command: "install",
   describe: "install the GitHub agent",
   async handler() {
@@ -424,7 +424,7 @@ jobs:
   },
 })
 
-export const GithubRunCommand = cmd({
+const GithubRunCommand = cmd({
   command: "run",
   describe: "run the GitHub agent",
   builder: (yargs) =>

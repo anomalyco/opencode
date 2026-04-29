@@ -229,7 +229,7 @@ export const ProvidersCommand = cmd({
   async handler() {},
 })
 
-export const ProvidersListCommand = cmd({
+const ProvidersListCommand = cmd({
   command: "list",
   aliases: ["ls"],
   describe: "list providers and credentials",
@@ -280,7 +280,7 @@ export const ProvidersListCommand = cmd({
   },
 })
 
-export const ProvidersLoginCommand = cmd({
+const ProvidersLoginCommand = cmd({
   command: "login [url]",
   describe: "log in to a provider",
   builder: (yargs) =>
@@ -489,7 +489,7 @@ export const ProvidersLoginCommand = cmd({
   },
 })
 
-export const ProvidersLogoutCommand = cmd({
+const ProvidersLogoutCommand = cmd({
   command: "logout",
   describe: "log out from a configured provider",
   async handler(_args) {
