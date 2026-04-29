@@ -1,8 +1,8 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
-import { Config } from "@/config"
-import { Provider } from "@/provider"
+import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { jsonRequest } from "./trace"
@@ -20,7 +20,7 @@ export const ConfigRoutes = lazy(() =>
             description: "Get config info",
             content: {
               "application/json": {
-                schema: resolver(Config.Info),
+                schema: resolver(Config.Info.zod),
               },
             },
           },
@@ -43,14 +43,14 @@ export const ConfigRoutes = lazy(() =>
             description: "Successfully updated config",
             content: {
               "application/json": {
-                schema: resolver(Config.Info),
+                schema: resolver(Config.Info.zod),
               },
             },
           },
           ...errors(400),
         },
       }),
-      validator("json", Config.Info),
+      validator("json", Config.Info.zod),
       async (c) =>
         jsonRequest("ConfigRoutes.update", c, function* () {
           const config = c.req.valid("json")

@@ -1,12 +1,6 @@
 import { lazy } from "@/util/lazy"
 import type { ProjectID } from "@/project/schema"
-import type { WorkspaceAdaptor } from "../types"
-
-export type WorkspaceAdaptorEntry = {
-  type: string
-  name: string
-  description: string
-}
+import type { WorkspaceAdaptor, WorkspaceAdaptorEntry } from "../types"
 
 const BUILTIN: Record<string, () => Promise<WorkspaceAdaptor>> = {
   worktree: lazy(async () => (await import("./worktree")).WorktreeAdaptor),

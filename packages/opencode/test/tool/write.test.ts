@@ -4,15 +4,15 @@ import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
-import { LSP } from "../../src/lsp"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { LSP } from "@/lsp/lsp"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Bus } from "../../src/bus"
 import { Format } from "../../src/format"
-import { Truncate } from "../../src/tool"
-import { Tool } from "../../src/tool"
+import { Truncate } from "@/tool/truncate"
+import { Tool } from "@/tool/tool"
 import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -111,6 +111,54 @@ describe("tool.write", () => {
           const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
           expect(content).toBe("new content")
         }),
+      ),
+    )
+
+    it.live("preserves BOM when overwriting existing files", () =>
+      provideTmpdirInstance((dir) =>
+        Effect.gen(function* () {
+          const filepath = path.join(dir, "existing.cs")
+          const bom = String.fromCharCode(0xfeff)
+          yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
+
+          yield* run({ filePath: filepath, content: "using Up;\n" })
+
+          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+          expect(content.charCodeAt(0)).toBe(0xfeff)
+          expect(content.slice(1)).toBe("using Up;\n")
+        }),
+      ),
+    )
+
+    it.live("restores BOM after formatter strips it", () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const filepath = path.join(dir, "formatted.cs")
+            const bom = String.fromCharCode(0xfeff)
+            yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
+
+            yield* run({ filePath: filepath, content: "using Up;\n" })
+
+            const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+            expect(content.charCodeAt(0)).toBe(0xfeff)
+            expect(content.slice(1)).toBe("using Up;\n")
+          }),
+        {
+          config: {
+            formatter: {
+              stripbom: {
+                extensions: [".cs"],
+                command: [
+                  "node",
+                  "-e",
+                  "const fs = require('fs'); const file = process.argv[1]; let text = fs.readFileSync(file, 'utf8'); if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); fs.writeFileSync(file, text, 'utf8')",
+                  "$FILE",
+                ],
+              },
+            },
+          },
+        },
       ),
     )
 

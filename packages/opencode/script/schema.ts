@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { z } from "zod"
-import { Config } from "../src/config"
+import { Config } from "@/config/config"
 import { TuiConfig } from "../src/cli/cmd/tui/config/tui"
 
 function generate(schema: z.ZodType) {
@@ -55,7 +55,7 @@ const configFile = process.argv[2]
 const tuiFile = process.argv[3]
 
 console.log(configFile)
-await Bun.write(configFile, JSON.stringify(generate(Config.Info), null, 2))
+await Bun.write(configFile, JSON.stringify(generate(Config.Info.zod), null, 2))
 
 if (tuiFile) {
   console.log(tuiFile)

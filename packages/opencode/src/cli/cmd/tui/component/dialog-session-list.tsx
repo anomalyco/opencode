@@ -3,14 +3,14 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { createMemo, createResource, createSignal, onMount } from "solid-js"
-import { Locale } from "@/util"
+import { Locale } from "@/util/locale"
 import { useProject } from "@tui/context/project"
 import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { DialogSessionRename } from "./dialog-session-rename"
-import { Keybind } from "@/util"
+import { Keybind } from "@/util/keybind"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { DialogWorkspaceCreate, openWorkspaceSession, restoreWorkspaceSession } from "./dialog-workspace-create"
@@ -32,11 +32,14 @@ export function DialogSessionList() {
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
 
-  const [searchResults, { refetch }] = createResource(search, async (query) => {
-    if (!query) return undefined
-    const result = await sdk.client.session.list({ search: query, limit: 30 })
-    return result.data ?? []
-  })
+  const [searchResults, { refetch }] = createResource(
+    () => ({ query: search(), filter: sync.session.query() }),
+    async (input) => {
+      if (!input.query) return undefined
+      const result = await sdk.client.session.list({ search: input.query, limit: 30, ...input.filter })
+      return result.data ?? []
+    },
+  )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const sessions = createMemo(() => searchResults() ?? sync.data.session)

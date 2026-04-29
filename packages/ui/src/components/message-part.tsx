@@ -45,8 +45,8 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
-import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/shared/util/path"
-import { checksum } from "@opencode-ai/shared/util/encode"
+import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { checksum } from "@opencode-ai/core/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { Spinner } from "./spinner"
@@ -1269,7 +1269,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
     <Accordion
       multiple
       data-scope="apply-patch"
-      style={{ "--sticky-accordion-offset": "40px" }}
+      style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
       defaultValue={[value()]}
     >
       <Accordion.Item value={value()}>
@@ -2061,7 +2061,7 @@ ToolRegistry.register({
                 <Accordion
                   multiple
                   data-scope="apply-patch"
-                  style={{ "--sticky-accordion-offset": "40px" }}
+                  style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
                   value={expanded()}
                   onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
                 >

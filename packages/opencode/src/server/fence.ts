@@ -1,9 +1,10 @@
 import type { MiddlewareHandler } from "hono"
-import { Database, inArray } from "@/storage"
+import { Database } from "@/storage/db"
+import { inArray } from "drizzle-orm"
 import { EventSequenceTable } from "@/sync/event.sql"
 import { Workspace } from "@/control-plane/workspace"
 import type { WorkspaceID } from "@/control-plane/schema"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 
 const HEADER = "x-opencode-sync"
 type State = Record<string, number>

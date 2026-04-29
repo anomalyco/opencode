@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import z from "zod"
+import { Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
 const TestEvent = {
-  Ping: BusEvent.define("test.ping", z.object({ value: z.number() })),
-  Pong: BusEvent.define("test.pong", z.object({ message: z.string() })),
+  Ping: BusEvent.define("test.ping", Schema.Struct({ value: Schema.Number })),
+  Pong: BusEvent.define("test.pong", Schema.Struct({ message: Schema.String })),
 }
 
 function withInstance(directory: string, fn: () => Promise<void>) {

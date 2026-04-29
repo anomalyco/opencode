@@ -1,7 +1,7 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
+import type { OpencodeClient, VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -14,6 +14,9 @@ import {
   type VcsCache,
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
+import { useQueries } from "@tanstack/solid-query"
+import { loadPathQuery, loadProvidersQuery } from "./bootstrap"
+import { loadLspQuery, loadMcpQuery } from "../global-sync"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -22,6 +25,7 @@ export function createChildStoreManager(input: {
   onBootstrap: (directory: string) => void
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
+  getSdk: (directory: string) => OpencodeClient
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const vcsCache = new Map<string, VcsCache>()
@@ -154,16 +158,34 @@ export function createChildStoreManager(input: {
 
       const init = () =>
         createRoot((dispose) => {
+          const sdk = input.getSdk(directory)
+
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
+
+          const [pathQuery, mcpQuery, lspQuery, providerQuery] = useQueries(() => ({
+            queries: [
+              loadPathQuery(directory, sdk),
+              loadMcpQuery(directory, sdk),
+              loadLspQuery(directory, sdk),
+              loadProvidersQuery(directory, sdk),
+            ],
+          }))
+
           const child = createStore<State>({
             project: "",
             projectMeta: initialMeta,
             icon: initialIcon,
-            provider_ready: false,
+            get provider_ready() {
+              return providerQuery.isLoading
+            },
             provider: { all: [], connected: [], default: {} },
             config: {},
-            path: { state: "", config: "", worktree: "", directory: "", home: "" },
+            get path() {
+              if (pathQuery.isLoading || !pathQuery.data)
+                return { state: "", config: "", worktree: "", directory: "", home: "" }
+              return pathQuery.data
+            },
             status: "loading" as const,
             agent: [],
             command: [],
@@ -174,10 +196,18 @@ export function createChildStoreManager(input: {
             todo: {},
             permission: {},
             question: {},
-            mcp_ready: false,
-            mcp: {},
-            lsp_ready: false,
-            lsp: [],
+            get mcp_ready() {
+              return mcpQuery.isLoading
+            },
+            get mcp() {
+              return mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
+            },
+            get lsp_ready() {
+              return lspQuery.isLoading
+            },
+            get lsp() {
+              return lspQuery.isLoading ? [] : (lspQuery.data ?? [])
+            },
             vcs: vcsStore.value,
             limit: 5,
             message: {},
