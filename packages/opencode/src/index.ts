@@ -1,7 +1,7 @@
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
-import { GenerateCommand } from "./cli/cmd/generate"
+import { GenerateCommand } from "./cli/cmd/generate/command"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConsoleCommand } from "./cli/cmd/account/command"
 import { ProvidersCommand } from "./cli/cmd/providers"
