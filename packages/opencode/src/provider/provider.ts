@@ -1449,11 +1449,42 @@ const layer: Layer.Layer<
 
         const customFetch = options["fetch"]
         const chunkTimeout = options["chunkTimeout"]
+        const apiKeyCommand = options["apiKeyCommand"]
         delete options["chunkTimeout"]
+        delete options["apiKeyCommand"]
+
+        // apiKeyCommand: run a shell command to get a fresh API key, cached with 5-min TTL.
+        // Same pattern as Claude Code's apiKeyHelper.
+        let cachedKey: { value: string; expires: number } | undefined
+        function resolveApiKey(): string | undefined {
+          if (!apiKeyCommand) return undefined
+          if (cachedKey && Date.now() < cachedKey.expires) return cachedKey.value
+          try {
+            const result = Bun.spawnSync(["sh", "-c", apiKeyCommand], { timeout: 10_000 })
+            const value = result.stdout.toString().trim()
+            if (value) {
+              cachedKey = { value, expires: Date.now() + 5 * 60 * 1000 }
+              return value
+            }
+          } catch {}
+          return cachedKey?.value
+        }
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
+
+          // Refresh API key if apiKeyCommand is configured
+          if (apiKeyCommand) {
+            const freshKey = resolveApiKey()
+            if (freshKey) {
+              const headers = new Headers(opts.headers)
+              headers.set("authorization", `Bearer ${freshKey}`)
+              headers.set("x-api-key", freshKey)
+              opts.headers = headers
+            }
+          }
+
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const signals: AbortSignal[] = []
 
