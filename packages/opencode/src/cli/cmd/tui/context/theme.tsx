@@ -40,7 +40,7 @@ import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@opencode-ai/core/global"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
@@ -500,7 +500,8 @@ async function getCustomThemes() {
       symlink: true,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Filesystem.readJson(item)
+      const theme = await Filesystem.readJson(item)
+      if (isTheme(theme)) result[name] = theme
     }
   }
   return result

@@ -1,7 +1,8 @@
 import { test, expect, describe, mock, afterEach, beforeEach } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Config, ConfigManaged } from "../../src/config"
+import { Config } from "@/config/config"
+import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
@@ -25,7 +26,7 @@ import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
 import { ProjectID } from "../../src/project/schema"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
 import { Npm } from "@opencode-ai/core/npm"
 

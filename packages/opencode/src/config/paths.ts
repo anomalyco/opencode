@@ -1,7 +1,7 @@
 export * as ConfigPaths from "./paths"
 
 import path from "path"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { unique } from "remeda"
