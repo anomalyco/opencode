@@ -1,101 +1,128 @@
-import { Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
+import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { Account } from "@/account/account"
+import { Agent } from "@/agent/agent"
+import { Auth } from "@/auth"
 import { Bus } from "@/bus"
-import { AppRuntime } from "@/effect/app-runtime"
-import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
-import { Observability } from "@/effect"
-import { InstanceBootstrap } from "@/project/bootstrap"
-import { Instance } from "@/project/instance"
+import { Config } from "@/config/config"
+import { Command } from "@/command"
+import * as Observability from "@opencode-ai/core/effect/observability"
+import { File } from "@/file"
+import { Ripgrep } from "@/file/ripgrep"
+import { Format } from "@/format"
+import { LSP } from "@/lsp/lsp"
+import { MCP } from "@/mcp"
+import { Permission } from "@/permission"
+import { Installation } from "@/installation"
+import { Project } from "@/project/project"
+import { ProviderAuth } from "@/provider/auth"
+import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
-import { Session } from "@/session"
+import { Question } from "@/question"
+import { Session } from "@/session/session"
+import { SessionRunState } from "@/session/run-state"
+import { SessionStatus } from "@/session/status"
+import { SessionSummary } from "@/session/summary"
+import { Todo } from "@/session/todo"
+import { Skill } from "@/skill"
+import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
-import { Filesystem } from "@/util"
+import { Vcs } from "@/project/vcs"
+import { Worktree } from "@/worktree"
+import { InstanceHttpApi, RootHttpApi } from "./api"
 import { authorizationLayer } from "./auth"
-import { ConfigApi, configHandlers } from "./config"
 import { eventRoute } from "./event"
-import { FileApi, fileHandlers } from "./file"
-import { ExperimentalApi, experimentalHandlers } from "./experimental"
-import { InstanceApi, instanceHandlers } from "./instance"
-import { McpApi, mcpHandlers } from "./mcp"
-import { PermissionApi, permissionHandlers } from "./permission"
-import { ProjectApi, projectHandlers } from "./project"
-import { PtyApi, ptyConnectRoute, ptyHandlers } from "./pty"
-import { ProviderApi, providerHandlers } from "./provider"
-import { QuestionApi, questionHandlers } from "./question"
-import { SessionApi, sessionHandlers } from "./session"
-import { SyncApi, syncHandlers } from "./sync"
-import { TuiApi, tuiHandlers } from "./tui"
-import { WorkspaceApi, workspaceHandlers } from "./workspace"
+import { configHandlers } from "./handlers/config"
+import { controlHandlers } from "./handlers/control"
+import { experimentalHandlers } from "./handlers/experimental"
+import { fileHandlers } from "./handlers/file"
+import { globalHandlers } from "./handlers/global"
+import { instanceHandlers } from "./handlers/instance"
+import { mcpHandlers } from "./handlers/mcp"
+import { permissionHandlers } from "./handlers/permission"
+import { projectHandlers } from "./handlers/project"
+import { providerHandlers } from "./handlers/provider"
+import { ptyConnectRoute, ptyHandlers } from "./handlers/pty"
+import { questionHandlers } from "./handlers/question"
+import { sessionHandlers } from "./handlers/session"
+import { syncHandlers } from "./handlers/sync"
+import { tuiHandlers } from "./handlers/tui"
+import { workspaceHandlers } from "./handlers/workspace"
+import { instanceContextLayer, instanceRouterLayer } from "./instance-context"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import * as ServerBackend from "@/server/backend"
 
-const Query = Schema.Struct({
-  directory: Schema.optional(Schema.String),
-  workspace: Schema.optional(Schema.String),
-  auth_token: Schema.optional(Schema.String),
-})
+export const context = Context.empty() as Context.Context<unknown>
 
-const Headers = Schema.Struct({
-  authorization: Schema.optional(Schema.String),
-  "x-opencode-directory": Schema.optional(Schema.String),
-})
-
-function decode(input: string) {
-  try {
-    return decodeURIComponent(input)
-  } catch {
-    return input
-  }
-}
-
-const instance = HttpRouter.middleware()(
-  Effect.gen(function* () {
-    return (effect) =>
-      Effect.gen(function* () {
-        const query = yield* HttpServerRequest.schemaSearchParams(Query)
-        const headers = yield* HttpServerRequest.schemaHeaders(Headers)
-        const raw = query.directory || headers["x-opencode-directory"] || process.cwd()
-        const workspace = query.workspace || undefined
-        const ctx = yield* Effect.promise(() =>
-          Instance.provide({
-            directory: Filesystem.resolve(decode(raw)),
-            init: () => AppRuntime.runPromise(InstanceBootstrap),
-            fn: () => Instance.current,
-          }),
-        )
-
-        const next = workspace ? effect.pipe(Effect.provideService(WorkspaceRef, workspace)) : effect
-        return yield* next.pipe(Effect.provideService(InstanceRef, ctx))
-      })
-  }),
+const runtime = HttpRouter.middleware()(
+  Effect.succeed((effect) =>
+    Effect.gen(function* () {
+      const selected = ServerBackend.select()
+      yield* Effect.annotateCurrentSpan(ServerBackend.attributes(ServerBackend.force(selected, "effect-httpapi")))
+      return yield* effect
+    }),
+  ),
 ).layer
 
-export const routes = Layer.mergeAll(
-  eventRoute,
-  ptyConnectRoute,
-  HttpApiBuilder.layer(ConfigApi).pipe(Layer.provide(configHandlers)),
-  HttpApiBuilder.layer(ExperimentalApi).pipe(Layer.provide(experimentalHandlers)),
-  HttpApiBuilder.layer(FileApi).pipe(Layer.provide(fileHandlers)),
-  HttpApiBuilder.layer(InstanceApi).pipe(Layer.provide(instanceHandlers)),
-  HttpApiBuilder.layer(McpApi).pipe(Layer.provide(mcpHandlers)),
-  HttpApiBuilder.layer(ProjectApi).pipe(Layer.provide(projectHandlers)),
-  HttpApiBuilder.layer(PtyApi).pipe(Layer.provide(ptyHandlers), Layer.provide(Pty.defaultLayer)),
-  HttpApiBuilder.layer(QuestionApi).pipe(Layer.provide(questionHandlers)),
-  HttpApiBuilder.layer(PermissionApi).pipe(Layer.provide(permissionHandlers)),
-  HttpApiBuilder.layer(ProviderApi).pipe(Layer.provide(providerHandlers)),
-  HttpApiBuilder.layer(SessionApi).pipe(Layer.provide(sessionHandlers)),
-  HttpApiBuilder.layer(SyncApi).pipe(Layer.provide(syncHandlers)),
-  HttpApiBuilder.layer(TuiApi).pipe(
-    Layer.provide(tuiHandlers),
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(Bus.layer),
-  ),
-  HttpApiBuilder.layer(WorkspaceApi).pipe(Layer.provide(workspaceHandlers)),
-).pipe(
-  Layer.provide(authorizationLayer),
-  Layer.provide(instance),
-  Layer.provide(HttpServer.layerServices),
+const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
+const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
+  Layer.provide([
+    configHandlers,
+    experimentalHandlers,
+    fileHandlers,
+    instanceHandlers,
+    mcpHandlers,
+    projectHandlers,
+    ptyHandlers,
+    questionHandlers,
+    permissionHandlers,
+    providerHandlers,
+    sessionHandlers,
+    syncHandlers,
+    tuiHandlers,
+    workspaceHandlers,
+  ]),
+)
+
+const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(Layer.provide(instanceRouterLayer))
+const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
+  Layer.provide([authorizationLayer, instanceContextLayer]),
+)
+
+export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
+  Layer.provide([
+    runtime,
+    Account.defaultLayer,
+    Agent.defaultLayer,
+    Auth.defaultLayer,
+    Command.defaultLayer,
+    Config.defaultLayer,
+    File.defaultLayer,
+    Format.defaultLayer,
+    LSP.defaultLayer,
+    Installation.defaultLayer,
+    MCP.defaultLayer,
+    Permission.defaultLayer,
+    Project.defaultLayer,
+    ProviderAuth.defaultLayer,
+    Provider.defaultLayer,
+    Pty.defaultLayer,
+    Question.defaultLayer,
+    Ripgrep.defaultLayer,
+    Session.defaultLayer,
+    SessionRunState.defaultLayer,
+    SessionStatus.defaultLayer,
+    SessionSummary.defaultLayer,
+    Skill.defaultLayer,
+    Todo.defaultLayer,
+    ToolRegistry.defaultLayer,
+    Vcs.defaultLayer,
+    Worktree.defaultLayer,
+    Bus.layer,
+    HttpServer.layerServices,
+  ]),
   Layer.provideMerge(Observability.layer),
 )
 

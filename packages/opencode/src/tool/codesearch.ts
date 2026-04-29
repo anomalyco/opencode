@@ -9,7 +9,7 @@ export const Parameters = Schema.Struct({
     description:
       "Search query to find relevant context for APIs, Libraries, and SDKs. For example, 'React useState hook examples', 'Python pandas dataframe filtering', 'Express.js middleware', 'Next js partial prerendering configuration'",
   }),
-  tokensNum: Schema.Number.check(Schema.isGreaterThanOrEqualTo(1000))
+  tokensNum: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1000))
     .check(Schema.isLessThanOrEqualTo(50000))
     .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(5000)))
     .annotate({

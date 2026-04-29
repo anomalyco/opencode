@@ -1,17 +1,18 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { Config } from "@/config"
-import { InstanceState, EffectBridge } from "@/effect"
+import { Config } from "@/config/config"
+import { InstanceState } from "@/effect/instance-state"
+import { EffectBridge } from "@/effect/bridge"
 import { lazy } from "@opencode-ai/core/util/lazy"
 import { Plugin } from "@/plugin"
 import { Instance } from "@/project/instance"
 import { Shell } from "@/shell/shell"
 import type { Proc } from "#pty"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, PositiveInt, withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "pty" })
 
@@ -61,7 +62,7 @@ export const Info = Schema.Struct({
   args: Schema.Array(Schema.String),
   cwd: Schema.String,
   status: Schema.Literals(["running", "exited"]),
-  pid: Schema.Number,
+  pid: PositiveInt,
 })
   .annotate({ identifier: "Pty" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -82,8 +83,8 @@ export const UpdateInput = Schema.Struct({
   title: Schema.optional(Schema.String),
   size: Schema.optional(
     Schema.Struct({
-      rows: Schema.Number,
-      cols: Schema.Number,
+      rows: PositiveInt,
+      cols: PositiveInt,
     }),
   ),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -93,7 +94,7 @@ export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInpu
 export const Event = {
   Created: BusEvent.define("pty.created", Schema.Struct({ info: Info })),
   Updated: BusEvent.define("pty.updated", Schema.Struct({ info: Info })),
-  Exited: BusEvent.define("pty.exited", Schema.Struct({ id: PtyID, exitCode: Schema.Number })),
+  Exited: BusEvent.define("pty.exited", Schema.Struct({ id: PtyID, exitCode: NonNegativeInt })),
   Deleted: BusEvent.define("pty.deleted", Schema.Struct({ id: PtyID })),
 }
 

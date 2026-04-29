@@ -1,9 +1,9 @@
 import os from "os"
 import fuzzysort from "fuzzysort"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
@@ -20,8 +20,8 @@ import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
-import { EffectBridge } from "@/effect"
-import { InstanceState } from "@/effect"
+import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { withStatics } from "@/util/schema"
@@ -112,7 +112,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/vercel": () => import("@ai-sdk/vercel").then((m) => m.createVercel),
   "@ai-sdk/alibaba": () => import("@ai-sdk/alibaba").then((m) => m.createAlibaba),
   "gitlab-ai-provider": () => import("gitlab-ai-provider").then((m) => m.createGitLab),
-  "@ai-sdk/github-copilot": () => import("./sdk/copilot").then((m) => m.createOpenaiCompatible),
+  "@ai-sdk/github-copilot": () => import("./sdk/copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
 }
 
@@ -848,27 +848,27 @@ const ProviderCapabilities = Schema.Struct({
 })
 
 const ProviderCacheCost = Schema.Struct({
-  read: Schema.Number,
-  write: Schema.Number,
+  read: Schema.Finite,
+  write: Schema.Finite,
 })
 
 const ProviderCost = Schema.Struct({
-  input: Schema.Number,
-  output: Schema.Number,
+  input: Schema.Finite,
+  output: Schema.Finite,
   cache: ProviderCacheCost,
   experimentalOver200K: Schema.optional(
     Schema.Struct({
-      input: Schema.Number,
-      output: Schema.Number,
+      input: Schema.Finite,
+      output: Schema.Finite,
       cache: ProviderCacheCost,
     }),
   ),
 })
 
 const ProviderLimit = Schema.Struct({
-  context: Schema.Number,
-  input: Schema.optional(Schema.Number),
-  output: Schema.Number,
+  context: Schema.Finite,
+  input: Schema.optional(Schema.Finite),
+  output: Schema.Finite,
 })
 
 export const Model = Schema.Struct({
@@ -1358,7 +1358,9 @@ const layer: Layer.Layer<
             )
               delete provider.models[modelID]
 
-            model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            if (!model.variants || Object.keys(model.variants).length === 0) {
+              model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            }
 
             const configVariants = configProvider?.models?.[modelID]?.variants
             if (configVariants && model.variants) {
@@ -1728,3 +1730,5 @@ export const ModelNotFoundError = namedSchemaError("ProviderModelNotFoundError",
 export const InitError = namedSchemaError("ProviderInitError", {
   providerID: ProviderID,
 })
+
+export * as Provider from "./provider"

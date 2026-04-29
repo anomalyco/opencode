@@ -4,7 +4,7 @@ import { Exit, Schema, SchemaGetter } from "effect"
 import { Bus } from "@/bus"
 import { zod } from "@/util/effect-zod"
 import { PositiveInt, withStatics } from "@/util/schema"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { configEntryNameFromPath } from "./entry-name"
@@ -26,8 +26,8 @@ const AgentSchema = Schema.StructWithRest(
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
     }),
-    temperature: Schema.optional(Schema.Number),
-    top_p: Schema.optional(Schema.Number),
+    temperature: Schema.optional(Schema.Finite),
+    top_p: Schema.optional(Schema.Finite),
     prompt: Schema.optional(Schema.String),
     tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
       description: "@deprecated Use 'permission' field instead",
@@ -119,7 +119,7 @@ export async function load(dir: string) {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
         : `Failed to parse agent ${item}`
-      const { Session } = await import("@/session")
+      const { Session } = await import("@/session/session")
       void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load agent", { agent: item, err })
       return undefined
@@ -151,7 +151,7 @@ export async function loadMode(dir: string) {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
         : `Failed to parse mode ${item}`
-      const { Session } = await import("@/session")
+      const { Session } = await import("@/session/session")
       void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load mode", { mode: item, err })
       return undefined
