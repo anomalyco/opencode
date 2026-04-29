@@ -1,16 +1,12 @@
-import { intro, log, outro, spinner } from "@clack/prompts"
-import type { Argv } from "yargs"
+import { log, spinner } from "@clack/prompts"
 
 import { ConfigPaths } from "@/config/paths"
 import { Global } from "@opencode-ai/core/global"
-import { installPlugin, patchPluginConfig, readPluginManifest } from "../../plugin/install"
-import { resolvePluginTarget } from "../../plugin/shared"
-import { Instance } from "../../project/instance"
-import { errorMessage } from "../../util/error"
+import { installPlugin, patchPluginConfig, readPluginManifest } from "../../../plugin/install"
+import { resolvePluginTarget } from "../../../plugin/shared"
+import { errorMessage } from "../../../util/error"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
-import { UI } from "../ui"
-import { cmd } from "./cmd"
 
 type Spin = {
   start: (msg: string) => void
@@ -174,60 +170,3 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
     return true
   }
 }
-
-export const PluginCommand = cmd({
-  command: "plugin <module>",
-  aliases: ["plug"],
-  describe: "install plugin and update config",
-  builder: (yargs: Argv) => {
-    return yargs
-      .positional("module", {
-        type: "string",
-        describe: "npm module name",
-      })
-      .option("global", {
-        alias: ["g"],
-        type: "boolean",
-        default: false,
-        describe: "install in global config",
-      })
-      .option("force", {
-        alias: ["f"],
-        type: "boolean",
-        default: false,
-        describe: "replace existing plugin version",
-      })
-  },
-  handler: async (args) => {
-    const mod = String(args.module ?? "").trim()
-    if (!mod) {
-      UI.error("module is required")
-      process.exitCode = 1
-      return
-    }
-
-    UI.empty()
-    intro(`Install plugin ${mod}`)
-
-    const run = createPlugTask({
-      mod,
-      global: Boolean(args.global),
-      force: Boolean(args.force),
-    })
-    let ok = true
-
-    await Instance.provide({
-      directory: process.cwd(),
-      fn: async () => {
-        ok = await run({
-          vcs: Instance.project.vcs,
-          worktree: Instance.worktree,
-          directory: Instance.directory,
-        })
-      },
-    })
-
-    outro("Done")
-    if (!ok) process.exitCode = 1
-  },
-})

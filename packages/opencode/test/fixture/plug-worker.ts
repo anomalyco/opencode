@@ -1,6 +1,6 @@
 import path from "path"
 
-import { createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug"
+import { createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug/task"
 import { Filesystem } from "@/util/filesystem"
 
 type Msg = {
