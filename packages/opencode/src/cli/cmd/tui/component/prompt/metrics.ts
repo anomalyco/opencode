@@ -2,6 +2,7 @@ import type { ConsoleState } from "@/config/console-state"
 
 type CodexQuotaSnapshot = NonNullable<ConsoleState["codexQuota"]>
 type CodexQuotaWindow = NonNullable<CodexQuotaSnapshot["fiveHour"]>
+type ProviderQuotaSnapshot = NonNullable<ConsoleState["providerQuota"]>[number]
 
 type CodexQuotaLayout = {
   barWidth?: number
@@ -47,6 +48,40 @@ function codexQuotaLayout(width: number): CodexQuotaLayout {
   return {}
 }
 
+function formatProviderWindow(item: {
+  label: string
+  remainingPercent?: number
+  confidence: "exact" | "reported" | "estimated"
+}) {
+  if (item.confidence !== "exact" && item.confidence !== "reported") return
+  if (item.remainingPercent == null) return
+  const percent = clampPercent(item.remainingPercent)
+  return `${item.label} ${percent}%`
+}
+
+function hasPromptVisibleProviderQuota(item: ProviderQuotaSnapshot) {
+  if (item.status === "unavailable") return false
+  return item.windows.some((window) => window.confidence === "exact" || window.confidence === "reported")
+}
+
+function providerMatchesActive(item: ProviderQuotaSnapshot, activeProvider: string | undefined) {
+  if (!activeProvider) return false
+  const active = activeProvider.toLowerCase()
+  return item.provider.toLowerCase() === active || item.label.toLowerCase() === active
+}
+
+function formatProviderWindows(item: ProviderQuotaSnapshot, width: number, now: number) {
+  const layout = codexQuotaLayout(width)
+  const parts = item.windows
+    .map((window) => formatProviderWindow(window))
+    .filter((part): part is string => Boolean(part))
+
+  if (parts.length === 0) return
+
+  const fetchedAt = layout.timestamp && item.fetchedAt ? formatCodexQuotaFetchedAt(item.fetchedAt, now) : undefined
+  return `${item.label} ${parts.join(" · ")}${fetchedAt ? ` · ⟳ ${fetchedAt}` : ""}`.trim()
+}
+
 export function formatCodexQuotaMetrics(item: CodexQuotaSnapshot | undefined, terminalWidth: number, now = Date.now()) {
   if (!item?.fiveHour && !item?.weekly) return
 
@@ -60,4 +95,17 @@ export function formatCodexQuotaMetrics(item: CodexQuotaSnapshot | undefined, te
 
   if (parts.length === 0) return
   return `codex ${parts.join(" · ")}`
+}
+
+export function formatProviderQuotaMetrics(
+  item: ConsoleState["providerQuota"],
+  terminalWidth: number,
+  now = Date.now(),
+  activeProvider?: string,
+) {
+  if (!item || item.length === 0) return
+  const visible = item.filter(hasPromptVisibleProviderQuota)
+  const quote = visible.find((entry) => providerMatchesActive(entry, activeProvider)) ?? visible[0]
+  if (!quote) return
+  return formatProviderWindows(quote, terminalWidth, now)
 }

@@ -113,6 +113,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const project = useProject()
     const sdk = useSDK()
     let codexQuotaSyncWorkspace: string | null | undefined
+    let providerQuotaSyncWorkspace: string | null | undefined
 
     async function syncCodexQuota(workspace = project.workspace.current()) {
       const syncWorkspace = workspace ?? null
@@ -125,6 +126,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         setStore("console_state", "codexQuota", reconcile(result.data))
       } finally {
         if (codexQuotaSyncWorkspace === syncWorkspace) codexQuotaSyncWorkspace = undefined
+      }
+    }
+
+    async function syncProviderQuota(workspace = project.workspace.current()) {
+      const syncWorkspace = workspace ?? null
+      if (providerQuotaSyncWorkspace === syncWorkspace) return
+      providerQuotaSyncWorkspace = syncWorkspace
+      try {
+        const result = await sdk.client.experimental.providerQuota({ workspace })
+        if (!result.data) return
+        if (workspace !== project.workspace.current()) return
+        setStore("console_state", "providerQuota", reconcile(result.data.providerQuota))
+      } catch {
+        return
+      } finally {
+        if (providerQuotaSyncWorkspace === syncWorkspace) providerQuotaSyncWorkspace = undefined
       }
     }
 
@@ -445,6 +462,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
           void syncCodexQuota(workspace).catch(() => undefined)
+          void syncProviderQuota(workspace).catch(() => undefined)
           // non-blocking
           Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
@@ -492,6 +510,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         (workspace) => {
           const interval = setInterval(() => {
             void syncCodexQuota(workspace).catch(() => undefined)
+            void syncProviderQuota(workspace).catch(() => undefined)
           }, CODEX_QUOTA_REFRESH_INTERVAL)
           onCleanup(() => clearInterval(interval))
         },

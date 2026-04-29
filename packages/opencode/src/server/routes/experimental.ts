@@ -9,11 +9,12 @@ import { Project } from "../../project/project"
 import { MCP } from "../../mcp"
 import { Session } from "../../session"
 import { Config } from "../../config/config"
-import { CodexQuotaSnapshot, ConsoleState } from "../../config/console-state"
+import { CodexQuotaSnapshot, ConsoleState, ProviderQuotaResponse } from "../../config/console-state"
 import { Account, AccountID, OrgID } from "../../account"
 import { Auth } from "../../auth"
 import { getCodexQuotaSnapshot } from "../../plugin/codex"
 import { zodToJsonSchema } from "zod-to-json-schema"
+import { getProviderQuotaSnapshots } from "../../provider/quota"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { WorkspaceRoutes } from "./workspace"
@@ -62,6 +63,31 @@ export const ExperimentalRoutes = lazy(() =>
           ...consoleState,
           switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
         })
+      },
+    )
+    .get(
+      "/provider-quota",
+      describeRoute({
+        summary: "Get provider quota snapshots",
+        description: "Get the latest known provider quota snapshots for the active session providers.",
+        operationId: "experimental.providerQuota",
+        responses: {
+          200: {
+            description: "Provider quota snapshots",
+            content: {
+              "application/json": {
+                schema: resolver(ProviderQuotaResponse),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const quotas = await getProviderQuotaSnapshots({
+          getAuth: () => Auth.get("openai"),
+          setAuth: (auth) => Auth.set("openai", auth),
+        })
+        return c.json(quotas)
       },
     )
     .get(

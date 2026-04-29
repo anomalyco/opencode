@@ -2687,6 +2687,22 @@ export type ExperimentalConsoleGetResponses = {
     consoleManagedProviders: Array<string>
     activeOrgName?: string
     switchableOrgCount: number
+    providerQuota?: Array<{
+      provider: string
+      label: string
+      fetchedAt: number
+      status: "available" | "unavailable" | "degraded"
+      windows: Array<{
+        label: string
+        remainingPercent?: number
+        remaining?: number
+        limit?: number
+        resetAt?: number
+        confidence: "exact" | "reported" | "estimated"
+        source: "official_api" | "response_headers" | "client_state" | "heuristic"
+      }>
+      detail?: string
+    }>
     codexQuota?: {
       fiveHour?: {
         remainingPercent: number
@@ -2704,6 +2720,44 @@ export type ExperimentalConsoleGetResponses = {
 }
 
 export type ExperimentalConsoleGetResponse = ExperimentalConsoleGetResponses[keyof ExperimentalConsoleGetResponses]
+
+export type ExperimentalProviderQuotaData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/provider-quota"
+}
+
+export type ExperimentalProviderQuotaResponses = {
+  /**
+   * Provider quota snapshots
+   */
+  200: {
+    providerQuota: Array<{
+      provider: string
+      label: string
+      fetchedAt: number
+      status: "available" | "unavailable" | "degraded"
+      windows: Array<{
+        label: string
+        remainingPercent?: number
+        remaining?: number
+        limit?: number
+        resetAt?: number
+        confidence: "exact" | "reported" | "estimated"
+        source: "official_api" | "response_headers" | "client_state" | "heuristic"
+      }>
+      detail?: string
+    }>
+    fetchedAt: number
+  }
+}
+
+export type ExperimentalProviderQuotaResponse =
+  ExperimentalProviderQuotaResponses[keyof ExperimentalProviderQuotaResponses]
 
 export type ExperimentalConsoleCodexQuotaData = {
   body?: never

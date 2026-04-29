@@ -126,6 +126,28 @@ function createFetch(log: Hit[]) {
           fetchedAt: 1700000000000 + quotaCalls * 1000,
         })
       }
+      if (url.pathname === "/experimental/provider-quota") {
+        const tag = workspace ?? "root"
+        return json({
+          providerQuota: [
+            {
+              provider: `provider-${tag}`,
+              label: `provider-${tag}`,
+              fetchedAt: 1700000005000,
+              status: "available",
+              windows: [
+                {
+                  label: "5h",
+                  remainingPercent: 81,
+                  confidence: "exact",
+                  source: "official_api",
+                },
+              ],
+            },
+          ],
+          fetchedAt: 1700000005000,
+        })
+      }
       if (url.pathname === "/agent") {
         return json([])
       }
@@ -268,7 +290,9 @@ describe("SyncProvider", () => {
         await wait(() => sync.status === "complete")
         expect(log.some((item) => item.path === "/experimental/console")).toBe(true)
         expect(log.some((item) => item.path === "/experimental/console/codex-quota")).toBe(true)
+        expect(log.some((item) => item.path === "/experimental/provider-quota")).toBe(true)
         await wait(() => !!sync.data.console_state.codexQuota?.fiveHour)
+        await wait(() => sync.data.console_state.providerQuota?.length === 1)
 
         expect(sync.data.console_state.codexQuota?.fiveHour).toEqual({
           remainingPercent: 61,
@@ -285,6 +309,7 @@ describe("SyncProvider", () => {
         await wait(() => log.filter((item) => item.path === "/experimental/console/codex-quota").length >= 2)
         await wait(() => sync.data.console_state.codexQuota?.fiveHour?.remainingPercent === 62)
         expect(sync.data.console_state.codexQuota?.fetchedAt).toBe(1700000002000)
+        await wait(() => sync.data.console_state.providerQuota?.[0]?.provider === "provider-root")
       } finally {
         app.renderer.destroy()
       }

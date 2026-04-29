@@ -37,7 +37,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
-import { formatCodexQuotaMetrics } from "./metrics"
+import { formatCodexQuotaMetrics, formatProviderQuotaMetrics } from "./metrics"
 
 export type PromptProps = {
   sessionID?: string
@@ -163,7 +163,15 @@ export function Prompt(props: PromptProps) {
     }
   })
   const quota = createMemo(() => {
-    return formatCodexQuotaMetrics(sync.data.console_state.codexQuota, terminal().width)
+    return (
+      formatProviderQuotaMetrics(
+        sync.data.console_state.providerQuota,
+        terminal().width,
+        Date.now(),
+        local.model.parsed().provider,
+      ) ??
+      formatCodexQuotaMetrics(sync.data.console_state.codexQuota, terminal().width)
+    )
   })
   const metrics = createMemo(() => {
     const parts = [usage()?.context, quota(), usage()?.cost].filter((part): part is string => Boolean(part))

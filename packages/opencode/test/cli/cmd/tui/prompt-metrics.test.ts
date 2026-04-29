@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   formatCodexQuotaFetchedAt,
   formatCodexQuotaMetrics,
+  formatProviderQuotaMetrics,
   formatQuotaBar,
 } from "../../../../src/cli/cmd/tui/component/prompt/metrics"
 
@@ -75,5 +76,104 @@ describe("prompt metrics", () => {
         sameDay,
       ),
     ).toBe("codex 5h ████░ 88%")
+  })
+
+  test("formats provider quota snapshots and skips estimated or unavailable windows", () => {
+    expect(
+      formatProviderQuotaMetrics(
+        [
+          {
+            provider: "copilot",
+            label: "copilot",
+            fetchedAt: fetchedAt,
+            status: "available",
+            windows: [
+              {
+                label: "wk",
+                confidence: "estimated",
+                remainingPercent: 58,
+                source: "heuristic",
+              },
+            ],
+          },
+          {
+            provider: "anthropic",
+            label: "anthropic",
+            fetchedAt: fetchedAt,
+            status: "unavailable",
+            windows: [
+              {
+                label: "req",
+                confidence: "reported",
+                remainingPercent: 0,
+                source: "response_headers",
+              },
+            ],
+          },
+          {
+            provider: "codex",
+            label: "codex",
+            fetchedAt: fetchedAt,
+            status: "available",
+            windows: [
+              {
+                label: "5h",
+                confidence: "exact",
+                remainingPercent: 97,
+                source: "official_api",
+              },
+              {
+                label: "wk",
+                confidence: "reported",
+                remainingPercent: 90,
+                source: "response_headers",
+              },
+            ],
+          },
+        ],
+        120,
+        sameDay,
+      ),
+    ).toBe("codex 5h 97% · wk 90% · ⟳ today@17h38m30s")
+  })
+
+  test("prioritizes the active provider quota", () => {
+    expect(
+      formatProviderQuotaMetrics(
+        [
+          {
+            provider: "codex",
+            label: "codex",
+            fetchedAt,
+            status: "available",
+            windows: [
+              {
+                label: "5h",
+                confidence: "exact",
+                remainingPercent: 97,
+                source: "official_api",
+              },
+            ],
+          },
+          {
+            provider: "anthropic",
+            label: "anthropic",
+            fetchedAt,
+            status: "available",
+            windows: [
+              {
+                label: "req",
+                confidence: "reported",
+                remainingPercent: 82,
+                source: "response_headers",
+              },
+            ],
+          },
+        ],
+        80,
+        sameDay,
+        "anthropic",
+      ),
+    ).toBe("anthropic req 82%")
   })
 })
