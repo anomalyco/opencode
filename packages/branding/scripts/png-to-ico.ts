@@ -47,8 +47,10 @@ function main() {
   let offset = dataOffset
   for (const png of pngs) {
     const entry = Buffer.alloc(ENTRY_SIZE)
-    entry.writeUInt8(png.width === 256 ? 0 : png.width, 0)
-    entry.writeUInt8(png.height === 256 ? 0 : png.height, 1)
+    // ICO 格式 1 byte width/height 字段,>=256 都写 0(实际尺寸由 PNG header 决定)
+    // 之前用 === 256 ? 0,512/1024 等更大尺寸会触发 writeUInt8 溢出
+    entry.writeUInt8(png.width >= 256 ? 0 : png.width, 0)
+    entry.writeUInt8(png.height >= 256 ? 0 : png.height, 1)
     entry.writeUInt8(0, 2) // colorCount
     entry.writeUInt8(0, 3) // reserved
     entry.writeUInt16LE(1, 4) // planes
