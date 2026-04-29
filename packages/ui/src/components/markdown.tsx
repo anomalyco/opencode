@@ -688,22 +688,37 @@ export function Markdown(
 
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
+  let live = true
+  let info = {
+    key: local.cacheKey ?? "",
+    text: local.text.length,
+    streaming: !!local.streaming,
+  }
+
+  createEffect(() => {
+    info = {
+      key: local.cacheKey ?? "",
+      text: local.text.length,
+      streaming: !!local.streaming,
+    }
+  })
 
   onMount(() => {
-    if (local.streaming) {
+    if (info.streaming) {
       console.debug("[markdown] mount", {
-        key: local.cacheKey ?? "",
-        text: local.text.length,
+        key: info.key,
+        text: info.text,
       })
     }
     setReady(true)
   })
 
   onCleanup(() => {
-    if (local.streaming) {
+    live = false
+    if (info.streaming) {
       console.debug("[markdown] cleanup", {
-        key: local.cacheKey ?? "",
-        text: local.text.length,
+        key: info.key,
+        text: info.text,
       })
     }
   })
@@ -718,6 +733,13 @@ export function Markdown(
         }
         const observer = new IntersectionObserver(
           (entries) => {
+            if (!live || !container.isConnected) {
+              console.debug("[markdown] skip stale visible observer", {
+                key: info.key,
+                text: info.text,
+              })
+              return
+            }
             if (!entries.some((entry) => entry.isIntersecting)) return
             setSeen(true)
           },
@@ -742,6 +764,13 @@ export function Markdown(
         }
         const observer = new IntersectionObserver(
           (entries) => {
+            if (!live || !container.isConnected) {
+              console.debug("[markdown] skip stale math observer", {
+                key: info.key,
+                text: info.text,
+              })
+              return
+            }
             if (!entries.some((entry) => entry.isIntersecting)) return
             setMathSeen(true)
           },
@@ -813,6 +842,13 @@ export function Markdown(
 
       if (copySetupTimer) clearTimeout(copySetupTimer)
       copySetupTimer = setTimeout(() => {
+        if (!live || !container.isConnected) {
+          console.debug("[markdown] skip stale copy setup", {
+            key: info.key,
+            text: info.text,
+          })
+          return
+        }
         if (copyCleanup) copyCleanup()
         copyCleanup = setupCodeCopy(container, next)
         setLabels(container, next)
@@ -906,6 +942,13 @@ export function Markdown(
 
     if (copySetupTimer) clearTimeout(copySetupTimer)
     copySetupTimer = setTimeout(() => {
+      if (!live || !container.isConnected) {
+        console.debug("[markdown] skip stale label sync", {
+          key: info.key,
+          text: info.text,
+        })
+        return
+      }
       if (copyCleanup) copyCleanup()
       copyCleanup = setupCodeCopy(container, next)
       setLabels(container, next)
