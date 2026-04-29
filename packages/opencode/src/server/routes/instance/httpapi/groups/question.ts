@@ -1,17 +1,24 @@
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
-import { Effect, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./auth"
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "../auth"
+import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/question"
+const ReplyPayload = Schema.Struct({
+  answers: Schema.Array(Question.Answer).annotate({
+    description: "User answers in order of questions (each answer is an array of selected labels)",
+  }),
+})
 
 export const QuestionApi = HttpApi.make("question")
   .add(
     HttpApiGroup.make("question")
       .add(
         HttpApiEndpoint.get("list", root, {
-          success: Schema.Array(Question.Request),
+          success: described(Schema.Array(Question.Request), "List of pending questions"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "question.list",
@@ -21,8 +28,9 @@ export const QuestionApi = HttpApi.make("question")
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {
           params: { requestID: QuestionID },
-          payload: Question.Reply,
-          success: Schema.Boolean,
+          payload: ReplyPayload,
+          success: described(Schema.Boolean, "Question answered successfully"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "question.reply",
@@ -32,7 +40,8 @@ export const QuestionApi = HttpApi.make("question")
         ),
         HttpApiEndpoint.post("reject", `${root}/:requestID/reject`, {
           params: { requestID: QuestionID },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Question rejected successfully"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "question.reject",
@@ -47,6 +56,7 @@ export const QuestionApi = HttpApi.make("question")
           description: "Question routes.",
         }),
       )
+      .middleware(InstanceContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
@@ -56,31 +66,3 @@ export const QuestionApi = HttpApi.make("question")
       description: "Effect HttpApi surface for instance routes.",
     }),
   )
-
-export const questionHandlers = HttpApiBuilder.group(QuestionApi, "question", (handlers) =>
-  Effect.gen(function* () {
-    const svc = yield* Question.Service
-
-    const list = Effect.fn("QuestionHttpApi.list")(function* () {
-      return yield* svc.list()
-    })
-
-    const reply = Effect.fn("QuestionHttpApi.reply")(function* (ctx: {
-      params: { requestID: QuestionID }
-      payload: Question.Reply
-    }) {
-      yield* svc.reply({
-        requestID: ctx.params.requestID,
-        answers: ctx.payload.answers,
-      })
-      return true
-    })
-
-    const reject = Effect.fn("QuestionHttpApi.reject")(function* (ctx: { params: { requestID: QuestionID } }) {
-      yield* svc.reject(ctx.params.requestID)
-      return true
-    })
-
-    return handlers.handle("list", list).handle("reply", reply).handle("reject", reject)
-  }),
-)

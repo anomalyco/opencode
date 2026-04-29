@@ -58,13 +58,13 @@ export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuth
 }
 
 export const AuthorizeInput = Schema.Struct({
-  method: Schema.Number.annotate({ description: "Auth method index" }),
+  method: Schema.Finite.annotate({ description: "Auth method index" }),
   inputs: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({ description: "Prompt inputs" }),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
 
 export const CallbackInput = Schema.Struct({
-  method: Schema.Number.annotate({ description: "Auth method index" }),
+  method: Schema.Finite.annotate({ description: "Auth method index" }),
   code: Schema.optional(Schema.String).annotate({ description: "OAuth authorization code" }),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>

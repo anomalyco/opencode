@@ -1,20 +1,21 @@
 import { File } from "@/file"
 import { Ripgrep } from "@/file/ripgrep"
-import * as InstanceState from "@/effect/instance-state"
 import { LSP } from "@/lsp/lsp"
-import { Effect, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./auth"
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "../auth"
+import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
-const FileQuery = Schema.Struct({
+export const FileQuery = Schema.Struct({
   path: Schema.String,
 })
 
-const FindTextQuery = Schema.Struct({
+export const FindTextQuery = Schema.Struct({
   pattern: Schema.String,
 })
 
-const FindFileQuery = Schema.Struct({
+export const FindFileQuery = Schema.Struct({
   query: Schema.String,
   dirs: Schema.optional(Schema.Literals(["true", "false"])),
   type: Schema.optional(Schema.Literals(["file", "directory"])),
@@ -23,7 +24,7 @@ const FindFileQuery = Schema.Struct({
   ),
 })
 
-const FindSymbolQuery = Schema.Struct({
+export const FindSymbolQuery = Schema.Struct({
   query: Schema.String,
 })
 
@@ -42,7 +43,7 @@ export const FileApi = HttpApi.make("file")
       .add(
         HttpApiEndpoint.get("findText", FilePaths.findText, {
           query: FindTextQuery,
-          success: Schema.Array(Ripgrep.SearchMatch),
+          success: described(Schema.Array(Ripgrep.SearchMatch), "Matches"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.text",
@@ -52,7 +53,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("findFile", FilePaths.findFile, {
           query: FindFileQuery,
-          success: Schema.Array(Schema.String),
+          success: described(Schema.Array(Schema.String), "File paths"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.files",
@@ -62,7 +63,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("findSymbol", FilePaths.findSymbol, {
           query: FindSymbolQuery,
-          success: Schema.Array(LSP.Symbol),
+          success: described(Schema.Array(LSP.Symbol), "Symbols"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.symbols",
@@ -72,7 +73,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("list", FilePaths.list, {
           query: FileQuery,
-          success: Schema.Array(File.Node),
+          success: described(Schema.Array(File.Node), "Files and directories"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.list",
@@ -82,7 +83,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("content", FilePaths.content, {
           query: FileQuery,
-          success: File.Content,
+          success: described(File.Content, "File content"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.read",
@@ -91,7 +92,7 @@ export const FileApi = HttpApi.make("file")
           }),
         ),
         HttpApiEndpoint.get("status", FilePaths.status, {
-          success: Schema.Array(File.Info),
+          success: described(Schema.Array(File.Info), "File status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.status",
@@ -106,6 +107,7 @@ export const FileApi = HttpApi.make("file")
           description: "Experimental HttpApi file routes.",
         }),
       )
+      .middleware(InstanceContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
@@ -115,51 +117,3 @@ export const FileApi = HttpApi.make("file")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-
-export const fileHandlers = HttpApiBuilder.group(FileApi, "file", (handlers) =>
-  Effect.gen(function* () {
-    const svc = yield* File.Service
-    const ripgrep = yield* Ripgrep.Service
-
-    const findText = Effect.fn("FileHttpApi.findText")(function* (ctx: { query: { pattern: string } }) {
-      return (yield* ripgrep
-        .search({ cwd: (yield* InstanceState.context).directory, pattern: ctx.query.pattern, limit: 10 })
-        .pipe(Effect.orDie)).items
-    })
-
-    const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
-      query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
-    }) {
-      return yield* svc.search({
-        query: ctx.query.query,
-        limit: ctx.query.limit ?? 10,
-        dirs: ctx.query.dirs !== "false",
-        type: ctx.query.type,
-      })
-    })
-
-    const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
-      return []
-    })
-
-    const list = Effect.fn("FileHttpApi.list")(function* (ctx: { query: { path: string } }) {
-      return yield* svc.list(ctx.query.path)
-    })
-
-    const content = Effect.fn("FileHttpApi.content")(function* (ctx: { query: { path: string } }) {
-      return yield* svc.read(ctx.query.path)
-    })
-
-    const status = Effect.fn("FileHttpApi.status")(function* () {
-      return yield* svc.status()
-    })
-
-    return handlers
-      .handle("findText", findText)
-      .handle("findFile", findFile)
-      .handle("findSymbol", findSymbol)
-      .handle("list", list)
-      .handle("content", content)
-      .handle("status", status)
-  }),
-)
