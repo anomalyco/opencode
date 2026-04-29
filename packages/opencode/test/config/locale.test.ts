@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import { Config } from "../../src/config/config"
 import { AppRuntime } from "../../src/effect/app-runtime"
-import { resolveLocale } from "../../src/i18n"
+import { resolveLocale, type Locale } from "../../src/i18n"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
@@ -23,7 +23,7 @@ test("loads locale from config and normalizes values", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
-      expect(config.locale).toBe("zh")
+      expect(config.locale).toBe("zh" satisfies Locale)
     },
   })
 })
@@ -42,7 +42,7 @@ test("invalid locale defers to environment fallback instead of forcing english",
     fn: async () => {
       const config = await AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
       expect(config.locale).toBeUndefined()
-      expect(resolveLocale(config.locale)).toBe("zh")
+      expect(resolveLocale(config.locale)).toBe("zh" satisfies Locale)
       expect(config.username).toBe("testuser")
     },
   })

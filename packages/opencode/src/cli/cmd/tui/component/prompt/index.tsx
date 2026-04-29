@@ -694,6 +694,7 @@ export function Prompt(props: PromptProps) {
                     sync,
                     project,
                     toast,
+                    i18n,
                     workspaceID: nextWorkspaceID,
                     sessionID: props.sessionID!,
                   })

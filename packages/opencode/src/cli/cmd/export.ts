@@ -10,7 +10,6 @@ import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
-import { AppRuntime } from "@/effect/app-runtime"
 
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value

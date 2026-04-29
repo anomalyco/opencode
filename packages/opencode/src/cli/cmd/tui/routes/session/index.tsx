@@ -1163,7 +1163,7 @@ export function Session() {
                             />
                           ))
                         }}
-                        message={message as UserMessage}
+                        message={message as UserMessageData}
                         parts={sync.data.part[message.id] ?? []}
                         pending={pending()}
                       />
@@ -1171,7 +1171,7 @@ export function Session() {
                     <Match when={message.role === "assistant"}>
                       <AssistantMessage
                         last={lastAssistant()?.id === message.id}
-                        message={message as AssistantMessage}
+                        message={message as AssistantMessageData}
                         parts={sync.data.part[message.id] ?? []}
                       />
                     </Match>
@@ -1615,7 +1615,7 @@ type ToolProps<T> = {
   permission: Record<string, any>
   tool: string
   output?: string
-  part: ToolPart
+  part: ToolPartData
 }
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
@@ -1662,7 +1662,7 @@ function InlineTool(props: {
   pending: string
   spinner?: boolean
   children: JSX.Element
-  part: ToolPart
+  part: ToolPartData
   onClick?: () => void
 }) {
   const [margin, setMargin] = createSignal(0)
@@ -1751,7 +1751,7 @@ function BlockTool(props: {
   title: string
   children: JSX.Element
   onClick?: () => void
-  part?: ToolPart
+  part?: ToolPartData
   spinner?: boolean
 }) {
   const { theme } = useTheme()
@@ -1989,7 +1989,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const tools = createMemo(() => {
     return messages().flatMap((msg) =>
       (sync.data.part[msg.id] ?? [])
-        .filter((part): part is ToolPart => part.type === "tool")
+        .filter((part): part is ToolPartData => part.type === "tool")
         .map((part) => ({ tool: part.tool, state: part.state })),
     )
   })
