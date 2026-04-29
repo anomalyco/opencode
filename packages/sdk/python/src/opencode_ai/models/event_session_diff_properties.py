@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, BinaryIO, Generator, TextIO, TypeVar, cast
+
+from attrs import define as _attrs_define
+from attrs import field as _attrs_field
+
+from ..types import UNSET, Unset
+
+if TYPE_CHECKING:
+    from ..models.snapshot_file_diff import SnapshotFileDiff
+
+
+T = TypeVar("T", bound="EventSessionDiffProperties")
+
+
+@_attrs_define
+class EventSessionDiffProperties:
+    """
+    Attributes:
+        session_id (str):
+        diff (list[SnapshotFileDiff]):
+    """
+
+    session_id: str
+    diff: list[SnapshotFileDiff]
+    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        from ..models.snapshot_file_diff import SnapshotFileDiff
+
+        session_id = self.session_id
+
+        diff = []
+        for diff_item_data in self.diff:
+            diff_item = diff_item_data.to_dict()
+            diff.append(diff_item)
+
+        field_dict: dict[str, Any] = {}
+        field_dict.update(self.additional_properties)
+        field_dict.update(
+            {
+                "sessionID": session_id,
+                "diff": diff,
+            }
+        )
+
+        return field_dict
+
+    @classmethod
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.snapshot_file_diff import SnapshotFileDiff
+
+        d = dict(src_dict)
+        session_id = d.pop("sessionID")
+
+        diff = []
+        _diff = d.pop("diff")
+        for diff_item_data in _diff:
+            diff_item = SnapshotFileDiff.from_dict(diff_item_data)
+
+            diff.append(diff_item)
+
+        event_session_diff_properties = cls(
+            session_id=session_id,
+            diff=diff,
+        )
+
+        event_session_diff_properties.additional_properties = d
+        return event_session_diff_properties
+
+    @property
+    def additional_keys(self) -> list[str]:
+        return list(self.additional_properties.keys())
+
+    def __getitem__(self, key: str) -> Any:
+        return self.additional_properties[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.additional_properties[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        del self.additional_properties[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.additional_properties

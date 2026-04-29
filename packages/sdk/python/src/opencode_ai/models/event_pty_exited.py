@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, BinaryIO, Generator, Literal, TextIO, TypeVar, cast
+
+from attrs import define as _attrs_define
+from attrs import field as _attrs_field
+
+from ..types import UNSET, Unset
+
+if TYPE_CHECKING:
+    from ..models.event_pty_exited_properties import EventPtyExitedProperties
+
+
+T = TypeVar("T", bound="EventPtyExited")
+
+
+@_attrs_define
+class EventPtyExited:
+    """
+    Attributes:
+        type_ (Literal['pty.exited']):
+        properties (EventPtyExitedProperties):
+    """
+
+    type_: Literal["pty.exited"]
+    properties: EventPtyExitedProperties
+    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        from ..models.event_pty_exited_properties import EventPtyExitedProperties
+
+        type_ = self.type_
+
+        properties = self.properties.to_dict()
+
+        field_dict: dict[str, Any] = {}
+        field_dict.update(self.additional_properties)
+        field_dict.update(
+            {
+                "type": type_,
+                "properties": properties,
+            }
+        )
+
+        return field_dict
+
+    @classmethod
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.event_pty_exited_properties import EventPtyExitedProperties
+
+        d = dict(src_dict)
+        type_ = cast(Literal["pty.exited"], d.pop("type"))
+        if type_ != "pty.exited":
+            raise ValueError(f"type must match const 'pty.exited', got '{type_}'")
+
+        properties = EventPtyExitedProperties.from_dict(d.pop("properties"))
+
+        event_pty_exited = cls(
+            type_=type_,
+            properties=properties,
+        )
+
+        event_pty_exited.additional_properties = d
+        return event_pty_exited
+
+    @property
+    def additional_keys(self) -> list[str]:
+        return list(self.additional_properties.keys())
+
+    def __getitem__(self, key: str) -> Any:
+        return self.additional_properties[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.additional_properties[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        del self.additional_properties[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.additional_properties
