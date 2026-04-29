@@ -659,7 +659,7 @@ export type WithParts = {
 
 const Cursor = Schema.Struct({
   id: MessageID,
-  time: NonNegativeInt,
+  time: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
 })
 type Cursor = typeof Cursor.Type
 

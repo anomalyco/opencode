@@ -68,6 +68,34 @@ const QueryParameterSchemas = {
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
 } satisfies Record<string, OpenApiSchema>
 
+const LegacyRequestBodySchemas: Record<string, OpenApiSchema> = {
+  "POST /global/upgrade": { type: "object" },
+  "POST /log": { type: "object" },
+  "POST /experimental/workspace": { type: "object" },
+  "POST /experimental/workspace/{id}/session-restore": { type: "object" },
+  "PATCH /project/{projectID}": { type: "object" },
+  "POST /experimental/console/switch": { type: "object" },
+  "POST /experimental/worktree": { $ref: "#/components/schemas/WorktreeCreateInput" },
+  "POST /session": { type: "object" },
+  "PATCH /session/{sessionID}": { type: "object" },
+  "POST /session/{sessionID}/init": { type: "object" },
+  "POST /session/{sessionID}/fork": { type: "object" },
+  "POST /session/{sessionID}/summarize": { type: "object" },
+  "POST /session/{sessionID}/message": { type: "object" },
+  "POST /session/{sessionID}/prompt_async": { type: "object" },
+  "POST /session/{sessionID}/command": { type: "object" },
+  "POST /session/{sessionID}/shell": { type: "object" },
+  "POST /session/{sessionID}/revert": { type: "object" },
+  "POST /session/{sessionID}/permissions/{permissionID}": { type: "object" },
+  "POST /permission/{requestID}/reply": { type: "object" },
+  "POST /question/{requestID}/reply": { type: "object" },
+  "POST /sync/replay": { type: "object" },
+  "POST /mcp": { type: "object" },
+  "POST /mcp/{name}/auth/callback": { type: "object" },
+  "POST /tui/execute-command": { type: "object" },
+  "POST /tui/publish": {},
+}
+
 // Mapping of "METHOD /path" to the correct 200 response description from Hono spec
 const ResponseDescriptions = {
   "GET /global/health": "Health information",
@@ -210,6 +238,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
         // Hono's generated OpenAPI never marked request bodies as required. Keep
         // that SDK surface stable during the HttpApi migration.
         delete operation.requestBody.required
+        normalizeRequestBody(operation, `${method.toUpperCase()} ${path}`)
         if (path === "/experimental/workspace" && method === "post") {
           // Workspace creation fields `branch` and `extra` are Schema.NullOr —
           // genuinely nullable, not just optional. Re-add the null that the
@@ -250,6 +279,13 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
     }
   }
   return input
+}
+
+function normalizeRequestBody(operation: OpenApiOperation, route: string) {
+  const schema = LegacyRequestBodySchemas[route]
+  const body = operation.requestBody?.content?.["application/json"]
+  if (!schema || !body) return
+  body.schema = structuredClone(schema)
 }
 
 /**
