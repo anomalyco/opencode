@@ -1537,6 +1537,7 @@ const layer: Layer.Layer<
           // When apiMode is "chat", fix request body for gateway/proxy compatibility:
           // 1. Rename max_tokens → max_completion_tokens (GPT-5.x rejects max_tokens)
           // 2. Resolve $ref in tool parameter schemas (Bedrock/proxies don't support $ref)
+          // 3. Convert reasoning_effort → thinking_config for Gemini models
           if (options["apiMode"] === "chat" && opts.body && opts.method === "POST") {
             const body = JSON.parse(opts.body as string)
             let changed = false
@@ -1544,6 +1545,15 @@ const layer: Layer.Layer<
             if ("max_tokens" in body && !("max_completion_tokens" in body)) {
               body.max_completion_tokens = body.max_tokens
               delete body.max_tokens
+              changed = true
+            }
+
+            // Gemini uses thinking_config instead of reasoning_effort
+            if ("reasoning_effort" in body && typeof body.model === "string" && body.model.includes("gemini")) {
+              const levelMap: Record<string, string> = { none: "THINKING_LEVEL_UNSPECIFIED", low: "LOW", medium: "LOW", high: "HIGH" }
+              const level = levelMap[body.reasoning_effort] ?? "LOW"
+              body.thinking_config = { thinking_level: level }
+              delete body.reasoning_effort
               changed = true
             }
 
