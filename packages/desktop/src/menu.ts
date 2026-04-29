@@ -30,7 +30,7 @@ export async function createMenu(trigger: (id: string) => void) {
             text: t("desktop.menu.installCli"),
           }),
           await MenuItem.new({
-            action: async () => window.location.reload(),
+            id: "app.reload-webview",
             text: t("desktop.menu.reloadWebview"),
           }),
           await MenuItem.new({

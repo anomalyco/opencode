@@ -270,6 +270,19 @@ fn startup_mark(
     sample
 }
 
+fn reload_webview(app: &AppHandle) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(MainWindow::LABEL) else {
+        tracing::warn!("reload webview skipped: main window missing");
+        return Err("Main window not found".to_string());
+    };
+
+    tracing::info!(label = %window.label(), "reloading webview");
+    window.reload().map_err(|err| {
+        tracing::warn!(label = %window.label(), error = ?err, "reload webview failed");
+        err.to_string()
+    })
+}
+
 fn push_config_file(
     list: &mut Vec<ConfigFile>,
     id: &str,
@@ -2055,6 +2068,13 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(crate::window_customizer::PinchZoomDisablePlugin)
         .plugin(tauri_plugin_decorum::init())
+        .on_menu_event(|app, event| {
+            if event.id() != "app.reload-webview" {
+                return;
+            }
+            tracing::info!(id = ?event.id(), "menu reload webview requested");
+            let _ = reload_webview(app);
+        })
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             let handle = app.handle().clone();
