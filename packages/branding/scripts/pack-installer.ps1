@@ -20,8 +20,8 @@ $iscc = "C:\ProgramData\chocolatey\bin\ISCC.exe"
 
 if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
 
-# 1. bump version
-$bumpOut = & (Join-Path $here "bump-installer-version.ps1")
+# 1. bump version (Windows platform)
+$bumpOut = & (Join-Path $here "bump-installer-version.ps1") -Platform "Windows"
 $bumpOut | Write-Output
 $versionLine = $bumpOut | Where-Object { $_ -match '^VERSION=' } | Select-Object -First 1
 if (-not $versionLine) { throw "bump script did not produce VERSION= line" }

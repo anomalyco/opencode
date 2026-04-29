@@ -1,15 +1,23 @@
 # [fork-only] DeskFox installer version bump
 #
 # Rule: YYYY.M.D.N (Year.Month.Day.Nth-of-day, N starts from 1)
-# Run before iscc to auto-increment N for today.
+# Per-platform counter: Windows and macOS each maintain their own N sequence,
+# they DO NOT share a counter. Same date Windows and macOS may both have .1.
+# Example:
+#   Day X: Windows packs once -> [Windows] X.1
+#   Day X: macOS packs twice  -> [macOS] X.1, [macOS] X.2
+#
+# Run before iscc / dmg build to auto-increment N for today on this platform.
 #
 # Side effects:
-#   1. Update packages/branding/installer/DeskFox.iss line `#define AppVersion "..."`
+#   1. Update packages/branding/installer/DeskFox.iss line `#define AppVersion "..."` (Windows only)
 #   2. Prepend a placeholder entry to top of /docs/installer-versions.md (you fill summary after build)
 #
 # Output: prints new version to stdout (used by pack-installer.ps1)
 
 param(
+    [ValidateSet("Windows", "macOS")]
+    [string]$Platform = "Windows",
     [switch]$DryRun
 )
 
@@ -22,31 +30,37 @@ $logFile = Join-Path $repoRoot "docs/installer-versions.md"
 if (-not (Test-Path $issFile)) { throw "iss not found: $issFile" }
 if (-not (Test-Path $logFile)) { throw "version log not found: $logFile" }
 
-# Compute today's version
+# Compute today's version (per-platform counter)
 $today = Get-Date -Format "yyyy.M.d"
 $logContent = Get-Content $logFile -Raw -Encoding UTF8
-$existingNs = [regex]::Matches($logContent, "## $([regex]::Escape($today))\.(\d+) ") |
+# Match only entries for THIS platform: ## [Platform] YYYY.M.D.N - timestamp
+$pattern = "## \[$([regex]::Escape($Platform))\] $([regex]::Escape($today))\.(\d+) "
+$existingNs = [regex]::Matches($logContent, $pattern) |
     ForEach-Object { [int]$_.Groups[1].Value }
 $nextN = if ($existingNs) { ($existingNs | Measure-Object -Maximum).Maximum + 1 } else { 1 }
 $newVersion = "$today.$nextN"
 
-Write-Output "[bump] today=$today, existing N=$($existingNs -join ','), next=$newVersion"
+Write-Output "[bump] platform=$Platform, today=$today, existing N=$($existingNs -join ','), next=$newVersion"
 
 if ($DryRun) {
-    Write-Output "[bump] DRY RUN, no files changed. Would set AppVersion=$newVersion"
+    Write-Output "[bump] DRY RUN, no files changed. Would set AppVersion=$newVersion (platform=$Platform)"
     exit 0
 }
 
-# 1. Update .iss AppVersion
-$iss = Get-Content $issFile -Raw -Encoding UTF8
-$iss = $iss -replace '#define AppVersion "[^"]*"', "#define AppVersion `"$newVersion`""
-Set-Content -Path $issFile -Value $iss -Encoding UTF8 -NoNewline
-Write-Output "[bump] updated $issFile -> AppVersion=$newVersion"
+# 1. Update .iss AppVersion (Windows only; macOS uses Info.plist or build-time arg)
+if ($Platform -eq "Windows") {
+    $iss = Get-Content $issFile -Raw -Encoding UTF8
+    $iss = $iss -replace '#define AppVersion "[^"]*"', "#define AppVersion `"$newVersion`""
+    Set-Content -Path $issFile -Value $iss -Encoding UTF8 -NoNewline
+    Write-Output "[bump] updated $issFile -> AppVersion=$newVersion"
+} else {
+    Write-Output "[bump] platform=$Platform, skipping .iss update (macOS uses Info.plist or build-time arg)"
+}
 
 # 2. Prepend placeholder entry to version log (above first existing ## entry)
 $placeholder = @"
 
-## $newVersion - $(Get-Date -Format "yyyy-MM-dd HH:mm")
+## [$Platform] $newVersion - $(Get-Date -Format "yyyy-MM-dd HH:mm")
 
 (待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
 

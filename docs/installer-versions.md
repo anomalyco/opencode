@@ -1,13 +1,14 @@
 # DeskFox installer 版本日志
 
 > 版本号规则:`YYYY.M.D.N`(年.月.日.当天第几版,N 从 1 开始)
-> 每次跑 `pack-installer.ps1`(自动 bump + ISCC)产生一条新 entry。
+> **Windows 和 macOS 各自独立 N 序列**(同一天 Win 打 1 次 + Mac 打 2 次,版本号分别为 [Windows] X.1 + [macOS] X.1, [macOS] X.2,**不共享计数器**)
+> 每次跑 `pack-installer.ps1`(Windows)/ `pack-installer.sh`(macOS,待补)自动 bump + 编译,产生一条新 entry。
 > 这个文件**只记录 ship 出去的 installer 版本**,不等同于 git commit。
 > commit 索引看 [`改动日志.md`](改动日志.md)。
 
 ---
 
-## 2026.4.29.1 — 2026-04-29 14:49
+## [Windows] 2026.4.29.1 — 2026-04-29 14:49
 
 **包含**:
 - claude-code plugin step loop 卡死修复(case-1,commit `e2a9d7167` R4)
@@ -27,7 +28,7 @@
 
 ---
 
-## 历史(2026-04-28 ~ 2026-04-29 早些时候,旧 1.14.21 命名规则)
+## 历史(2026-04-28 ~ 2026-04-29 早些时候,旧 1.14.21 命名规则,Windows-only)
 
 旧规则下 installer 都叫 `DeskFox-1.14.21-setup.exe`,接收方区分不开。从 2026.4.29.1 起统一新规则。
 

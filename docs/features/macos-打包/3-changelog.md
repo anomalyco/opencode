@@ -104,6 +104,7 @@ rm -rf docs/features/macos-打包/
 
 - **Phase 2** — user Mac 上首次 build,踩坑修补,3-changelog 回填
 - **Phase 3** — 出可分发 .dmg,丢给 Mac 用户测;考虑要不要做 universal binary 兼容 Intel
+  - **打 .dmg 时遵守 [installer-versioning](../installer-versioning/) 版本号规则**:`YYYY.M.D.N`,Mac 端跑 `bump-installer-version.ps1 -Platform macOS`(或后续补 `bump-installer-version.sh`)拿到 `[macOS] YYYY.M.D.N` — Win / Mac N 计数器**各自独立**,不共享
 - **Linux 等价**:build-deskfox.sh 已经在 Linux 路径下能跑(detect_rust_target 含 Linux),需要时跑一下出 .deb / .rpm
 - **Mac signing**:如果 user 真有需要分发给生人(Gatekeeper 拦不掉时),买 Apple Developer ID + Notarize
 - **CI 自动出 Mac 包**:GitHub Actions 加 macos-latest runner 跑 build-deskfox.sh,产物上传 release artifact
