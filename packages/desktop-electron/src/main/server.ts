@@ -9,16 +9,25 @@ export type HealthCheck = { wait: Promise<void> }
 
 export function getDefaultServerUrl(): string | null {
   const value = getStore().get(DEFAULT_SERVER_URL_KEY)
-  return typeof value === "string" ? value : null
+  return typeof value === "string" && isHttpUrl(value) ? value : null
 }
 
 export function setDefaultServerUrl(url: string | null) {
-  if (url) {
+  if (url && isHttpUrl(url)) {
     getStore().set(DEFAULT_SERVER_URL_KEY, url)
     return
   }
 
   getStore().delete(DEFAULT_SERVER_URL_KEY)
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === "http:" || url.protocol === "https:"
+  } catch {
+    return false
+  }
 }
 
 export function getWslConfig(): WslConfig {

@@ -20,7 +20,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-let backgroundColor: string | undefined
+let backgroundColor: string | undefined = "#101010"
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
@@ -164,7 +164,8 @@ export function registerRendererProtocol() {
       return new Response("Not found", { status: 404 })
     }
 
-    const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
+    const pathname = decodeURIComponent(url.pathname)
+    const file = resolve(rendererRoot, pathname === "/" ? "index.html" : `.${pathname}`)
     const rel = relative(rendererRoot, file)
     if (rel.startsWith("..") || isAbsolute(rel)) {
       return new Response("Not found", { status: 404 })
