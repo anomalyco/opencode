@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { Script } from "@opencode-ai/script"
 import { fileURLToPath } from "url"
 import path from "path"
 
@@ -42,6 +41,7 @@ console.log(`📝 ${commits.length} commits since last release`)
 console.log(`⬆️  Auto bump: ${bump}\n`)
 
 process.env.OPENCODE_BUMP = bump
+const { Script } = await import("@opencode-ai/script")
 
 // Step 1: Build
 if (skipBuild) {
