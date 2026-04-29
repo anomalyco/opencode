@@ -88,7 +88,7 @@ Permission 본 사용 간단한 wildcard 일치:
 
 ## 외부 디렉터리
 
-`external_directory`를 사용하여 도구가 opencode가 시작된 작업 디렉토리 밖에 터치 경로가 호출되도록합니다. 이것은 입력 (예 : `read`, `edit`, `list`, `glob`, `glob`, `grep` 및 많은 `bash` 명령)로 경로를 수행하는 모든 도구에 적용됩니다.
+`external_directory`를 사용하여 도구가 opencode가 시작된 작업 디렉토리 밖에 터치 경로가 호출되도록합니다. 이것은 입력 (예 : `read`, `edit`, `glob`, `grep` 및 많은 `bash` 명령)로 경로를 수행하는 모든 도구에 적용됩니다.
 
 홈 확장 (`~/...`와 같은) 패턴이 작성된 방법에 영향을 미칩니다. 그것은 현재의 작업 공간의 외부 경로 부분을 만들지 않습니다, 그래서 작업 디렉토리 외부 경로는 여전히 `external_directory`를 통해 허용해야합니다.
 
@@ -130,10 +130,9 @@ Permission 본 사용 간단한 wildcard 일치:
 opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 가드 :
 
 - `read` - 파일 읽기 (파일 경로의 매칭)
-- `edit` - 모든 파일 수정 (covers `edit`, `write`, `patch`, `multiedit`)
+- `edit` - 모든 파일 수정 (covers `edit`, `write`, `patch`)
 - `glob` - 파일 globbing (glob 패턴 매칭)
 - `grep` - 콘텐츠 검색 ( regex 패턴 매칭)
-- `list` - 디렉토리의 목록 파일 (폴더 경로 매칭)
 - `bash` - shell 명령 실행 (`git status --porcelain`와 같은 팟 명령)
 - `task` - 에이전트 실행 (작업 에이전트 유형)
 - `skill` - 기술을 로딩 (기술 이름을 매칭)

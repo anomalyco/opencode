@@ -297,10 +297,15 @@ const createPlatform = (): Platform => {
       return { updateAvailable: true, version: next.version }
     },
 
-    update: async () => {
+    updateAndRestart: async () => {
       if (!UPDATER_ENABLED || !update) return
       if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
-      await update.install().catch(() => undefined)
+      const installed = await update
+        .install()
+        .then(() => true)
+        .catch(() => false)
+      if (!installed) return
+      await relaunch()
     },
 
     restart: async () => {
@@ -410,7 +415,7 @@ const createPlatform = (): Platform => {
 }
 
 let menuTrigger = null as null | ((id: string) => void)
-createMenu((id) => {
+void createMenu((id) => {
   menuTrigger?.(id)
 })
 void listenForDeepLinks()

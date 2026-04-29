@@ -73,7 +73,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
       data-direction={local.direction}
       data-edge={local.edge ?? (local.direction === "vertical" ? "start" : "end")}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
       onMouseDown={handleMouseDown}

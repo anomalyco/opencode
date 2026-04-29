@@ -1,8 +1,9 @@
 import { cmd } from "./cmd"
 import { Duration, Effect, Match, Option } from "effect"
 import { UI } from "../ui"
-import { AccountID, Account, OrgID, PollExpired, type PollResult } from "@/account"
-import { type AccountError } from "@/account/schema"
+import { Account } from "@/account/account"
+import { AccountID, OrgID, PollExpired, type PollResult, type AccountError } from "@/account/schema"
+import { AppRuntime } from "@/effect/app-runtime"
 import * as Prompt from "../effect/prompt"
 import open from "open"
 
@@ -182,7 +183,7 @@ export const LoginCommand = cmd({
     }),
   async handler(args) {
     UI.empty()
-    await Account.runPromise((_svc) => loginEffect(args.url))
+    await AppRuntime.runPromise(loginEffect(args.url))
   },
 })
 
@@ -196,7 +197,7 @@ export const LogoutCommand = cmd({
     }),
   async handler(args) {
     UI.empty()
-    await Account.runPromise((_svc) => logoutEffect(args.email))
+    await AppRuntime.runPromise(logoutEffect(args.email))
   },
 })
 
@@ -205,7 +206,7 @@ export const SwitchCommand = cmd({
   describe: false,
   async handler() {
     UI.empty()
-    await Account.runPromise((_svc) => switchEffect())
+    await AppRuntime.runPromise(switchEffect())
   },
 })
 
@@ -214,7 +215,7 @@ export const OrgsCommand = cmd({
   describe: false,
   async handler() {
     UI.empty()
-    await Account.runPromise((_svc) => orgsEffect())
+    await AppRuntime.runPromise(orgsEffect())
   },
 })
 
@@ -223,7 +224,7 @@ export const OpenCommand = cmd({
   describe: false,
   async handler() {
     UI.empty()
-    await Account.runPromise((_svc) => openEffect())
+    await AppRuntime.runPromise(openEffect())
   },
 })
 

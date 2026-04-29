@@ -295,6 +295,46 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("does not emit user_message_chunk for live prompt parts", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: sessionId,
+              time: Date.now(),
+              part: {
+                id: "part_1",
+                sessionID: sessionId,
+                messageID: "msg_user",
+                type: "text",
+                text: "hello",
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(
+          sessionUpdates
+            .filter((u) => u.sessionId === sessionId)
+            .some((u) => u.update.sessionUpdate === "user_message_chunk"),
+        ).toBe(false)
+
+        stop()
+      },
+    })
+  })
+
   test("keeps concurrent sessions isolated when message.part.delta events are interleaved", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
@@ -423,9 +463,9 @@ describe("acp.agent event subscription", () => {
 
         // Make permission request for session A block until we release it
         const originalRequestPermission = connection.requestPermission.bind(connection)
-        let permissionCalls = 0
+        let _permissionCalls = 0
         connection.requestPermission = async (params: RequestPermissionParams) => {
-          permissionCalls++
+          _permissionCalls++
           if (params.sessionId.endsWith("1")) {
             await permissionABlocking
           }

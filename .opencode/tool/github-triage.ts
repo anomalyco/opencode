@@ -3,8 +3,8 @@ import { tool } from "@opencode-ai/plugin"
 const TEAM = {
   desktop: ["adamdotdevin", "iamdavidhill", "Brendonovich", "nexxeln"],
   zen: ["fwang", "MrMushrooooom"],
-  tui: ["thdxr", "kommander", "rekram1-node"],
-  core: ["thdxr", "rekram1-node", "jlongster"],
+  tui: ["kommander", "rekram1-node", "simonklee"],
+  core: ["kitlangton", "rekram1-node", "jlongster"],
   docs: ["R44VC0RP"],
   windows: ["Hona"],
 } as const
@@ -28,7 +28,7 @@ async function githubFetch(endpoint: string, options: RequestInit = {}) {
       Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
       Accept: "application/vnd.github+json",
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers instanceof Headers ? Object.fromEntries(options.headers.entries()) : options.headers),
     },
   })
   if (!response.ok) {

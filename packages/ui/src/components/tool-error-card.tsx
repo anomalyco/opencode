@@ -128,7 +128,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
                       e.stopPropagation()
-                      copy()
+                      void copy()
                     }}
                     aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
                   />

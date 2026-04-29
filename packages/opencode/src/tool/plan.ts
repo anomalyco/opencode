@@ -1,11 +1,10 @@
-import z from "zod"
 import path from "path"
-import { Effect } from "effect"
-import { Tool } from "./tool"
+import { Effect, Schema } from "effect"
+import * as Tool from "./tool"
 import { Question } from "../question"
-import { Session } from "../session"
+import { Session } from "@/session/session"
 import { MessageV2 } from "../session/message-v2"
-import { Provider } from "../provider/provider"
+import { Provider } from "@/provider/provider"
 import { Instance } from "../project/instance"
 import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
@@ -17,7 +16,9 @@ function getLastModel(sessionID: SessionID) {
   return undefined
 }
 
-export const PlanExitTool = Tool.defineEffect(
+export const Parameters = Schema.Struct({})
+
+export const PlanExitTool = Tool.define(
   "plan_exit",
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -26,7 +27,7 @@ export const PlanExitTool = Tool.defineEffect(
 
     return {
       description: EXIT_DESCRIPTION,
-      parameters: z.object({}),
+      parameters: Parameters,
       execute: (_params: {}, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const info = yield* session.get(ctx.sessionID)
@@ -74,7 +75,7 @@ export const PlanExitTool = Tool.defineEffect(
             output: "User approved switching to build agent. Wait for further instructions.",
             metadata: {},
           }
-        }).pipe(Effect.runPromise),
+        }).pipe(Effect.orDie),
     }
   }),
 )
