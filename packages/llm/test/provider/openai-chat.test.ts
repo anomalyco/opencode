@@ -42,9 +42,13 @@ const usageChunk = (usage: object) => ({
 describe("OpenAI Chat adapter", () => {
   it.effect("prepares OpenAI Chat target", () =>
     Effect.gen(function* () {
+      // Pass the OpenAIChat target type so `prepared.target` is statically
+      // typed to the adapter's native shape — the assertions below read field
+      // names without `unknown` casts.
       const prepared = yield* LLMClient.make({
         adapters: [OpenAIChat.adapter.withPatches([OpenAIChat.includeUsage])],
-      }).prepare(request)
+      }).prepare<OpenAIChat.OpenAIChatTarget>(request)
+      const _typed: { readonly model: string; readonly stream: true } = prepared.target
 
       expect(prepared.target).toEqual({
         model: "gpt-4o-mini",

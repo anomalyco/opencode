@@ -394,6 +394,20 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
+/**
+ * A `PreparedRequest` whose `target` is typed as `Target`. Use with the
+ * generic on `LLMClient.prepare<Target>(...)` when the caller knows which
+ * adapter their request will resolve to and wants its native shape statically
+ * exposed (debug UIs, request previews, plan rendering).
+ *
+ * The runtime payload is identical — the adapter still emits `target: unknown`
+ * — so this is a type-level assertion the caller makes about what they expect
+ * to find. The prepare runtime does not validate the assertion.
+ */
+export type PreparedRequestOf<Target> = Omit<PreparedRequest, "target"> & {
+  readonly target: Target
+}
+
 export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),

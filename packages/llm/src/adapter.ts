@@ -10,7 +10,16 @@ import { context, emptyRegistry, plan, registry as makePatchRegistry, target as 
 import type { Framing } from "./framing"
 import type { Protocol } from "./protocol"
 import { ProviderShared } from "./provider/shared"
-import type { LLMError, LLMEvent, LLMRequest, ModelRef, PatchTrace, PreparedRequest, ProtocolID } from "./schema"
+import type {
+  LLMError,
+  LLMEvent,
+  LLMRequest,
+  ModelRef,
+  PatchTrace,
+  PreparedRequest,
+  PreparedRequestOf,
+  ProtocolID,
+} from "./schema"
 import { LLMResponse, NoAdapterError, PreparedRequest as PreparedRequestSchema } from "./schema"
 
 interface RuntimeAdapter {
@@ -62,7 +71,19 @@ export interface AdapterDefinition<Draft, Target> extends Adapter<Draft, Target>
 }
 
 export interface LLMClient {
-  readonly prepare: (request: LLMRequest) => Effect.Effect<PreparedRequest, LLMError>
+  /**
+   * Compile a request through the adapter pipeline (patches, prepare, validate,
+   * toHttp) without sending it. Returns the prepared request including the
+   * provider-native target.
+   *
+   * Pass a `Target` type argument to statically expose the adapter's target
+   * shape (e.g. `prepare<OpenAIChatTarget>(...)`) — the runtime payload is
+   * identical, so this is a type-level assertion the caller makes about which
+   * adapter the request will resolve to.
+   */
+  readonly prepare: <Target = unknown>(
+    request: LLMRequest,
+  ) => Effect.Effect<PreparedRequestOf<Target>, LLMError>
   readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
   readonly generate: (request: LLMRequest) => Effect.Effect<LLMResponse, LLMError, RequestExecutor.Service>
 }
@@ -298,7 +319,10 @@ const makeClient = (options: ClientOptions): LLMClient => {
     )
   })
 
-  return { prepare, stream, generate }
+  // The runtime always emits a `PreparedRequest` (target: unknown). Callers
+  // who supply a `Target` type argument assert the shape they expect from
+  // their adapter; the cast hands them a typed view of the same payload.
+  return { prepare: prepare as LLMClient["prepare"], stream, generate }
 }
 
 export const LLMClient = { make: makeClient }
