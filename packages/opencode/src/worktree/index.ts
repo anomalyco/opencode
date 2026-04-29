@@ -1,14 +1,15 @@
 import z from "zod"
-import { NamedError } from "@opencode-ai/shared/util/error"
-import { Global } from "../global"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
-import { Project } from "../project"
-import { Database, eq } from "../storage"
+import { Project } from "@/project/project"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
-import { Log } from "../util"
-import { Slug } from "@opencode-ai/shared/util/slug"
+import * as Log from "@opencode-ai/core/util/log"
+import { Slug } from "@opencode-ai/core/util/slug"
 import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
@@ -16,10 +17,12 @@ import { Git } from "@/git"
 import { Effect, Layer, Path, Schema, Scope, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { InstanceState } from "@/effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { InstanceState } from "@/effect/instance-state"
+import { zod as effectZod } from "@/util/effect-zod"
+import { withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "worktree" })
 
@@ -39,48 +42,38 @@ export const Event = {
   ),
 }
 
-export const Info = z
-  .object({
-    name: z.string(),
-    branch: z.string(),
-    directory: z.string(),
-  })
-  .meta({
-    ref: "Worktree",
-  })
+export const Info = Schema.Struct({
+  name: Schema.String,
+  branch: Schema.String,
+  directory: Schema.String,
+})
+  .annotate({ identifier: "Worktree" })
+  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
-export type Info = z.infer<typeof Info>
+export const CreateInput = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  startCommand: Schema.optional(
+    Schema.String.annotate({ description: "Additional startup script to run after the project's start command" }),
+  ),
+})
+  .annotate({ identifier: "WorktreeCreateInput" })
+  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+export type CreateInput = Schema.Schema.Type<typeof CreateInput>
 
-export const CreateInput = z
-  .object({
-    name: z.string().optional(),
-    startCommand: z.string().optional().describe("Additional startup script to run after the project's start command"),
-  })
-  .meta({
-    ref: "WorktreeCreateInput",
-  })
+export const RemoveInput = Schema.Struct({
+  directory: Schema.String,
+})
+  .annotate({ identifier: "WorktreeRemoveInput" })
+  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+export type RemoveInput = Schema.Schema.Type<typeof RemoveInput>
 
-export type CreateInput = z.infer<typeof CreateInput>
-
-export const RemoveInput = z
-  .object({
-    directory: z.string(),
-  })
-  .meta({
-    ref: "WorktreeRemoveInput",
-  })
-
-export type RemoveInput = z.infer<typeof RemoveInput>
-
-export const ResetInput = z
-  .object({
-    directory: z.string(),
-  })
-  .meta({
-    ref: "WorktreeResetInput",
-  })
-
-export type ResetInput = z.infer<typeof ResetInput>
+export const ResetInput = Schema.Struct({
+  directory: Schema.String,
+})
+  .annotate({ identifier: "WorktreeResetInput" })
+  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+export type ResetInput = Schema.Schema.Type<typeof ResetInput>
 
 export const NotGitError = NamedError.create(
   "WorktreeNotGitError",
@@ -210,7 +203,7 @@ export const layer: Layer.Layer<
         const branchCheck = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: ctx.worktree })
         if (branchCheck.code === 0) continue
 
-        return Info.parse({ name, branch, directory })
+        return { name, branch, directory }
       }
       throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
     })

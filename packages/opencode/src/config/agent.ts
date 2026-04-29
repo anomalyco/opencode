@@ -1,17 +1,16 @@
 export * as ConfigAgent from "./agent"
 
-import { Schema } from "effect"
-import z from "zod"
+import { Exit, Schema, SchemaGetter } from "effect"
 import { Bus } from "@/bus"
 import { zod } from "@/util/effect-zod"
-import { PositiveInt } from "@/util/schema"
-import { Log } from "../util"
-import { NamedError } from "@opencode-ai/shared/util/error"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { PositiveInt, withStatics } from "@/util/schema"
+import * as Log from "@opencode-ai/core/util/log"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { Glob } from "@opencode-ai/core/util/glob"
 import { configEntryNameFromPath } from "./entry-name"
-import { InvalidError } from "./error"
 import * as ConfigMarkdown from "./markdown"
 import { ConfigModelID } from "./model-id"
+import { ConfigParse } from "./parse"
 import { ConfigPermission } from "./permission"
 
 const log = Log.create({ service: "config" })
@@ -77,7 +76,7 @@ const KNOWN_KEYS = new Set([
 //  - Translate the deprecated `tools: { name: boolean }` map into the new
 //    `permission` shape (write-adjacent tools collapse into `permission.edit`).
 //  - Coalesce `steps ?? maxSteps` so downstream can ignore the deprecated alias.
-const normalize = (agent: z.infer<typeof Info>) => {
+const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema.Type<typeof AgentSchema> => {
   const options: Record<string, unknown> = { ...agent.options }
   for (const [key, value] of Object.entries(agent)) {
     if (!KNOWN_KEYS.has(key)) options[key] = value
@@ -98,14 +97,15 @@ const normalize = (agent: z.infer<typeof Info>) => {
   return { ...agent, options, permission, ...(steps !== undefined ? { steps } : {}) }
 }
 
-export const Info = zod(AgentSchema).transform(normalize).meta({ ref: "AgentConfig" }) as unknown as z.ZodType<
-  Omit<z.infer<ReturnType<typeof zod<typeof AgentSchema>>>, "options" | "permission" | "steps"> & {
-    options?: Record<string, unknown>
-    permission?: ConfigPermission.Info
-    steps?: number
-  }
->
-export type Info = z.infer<typeof Info>
+export const Info = AgentSchema.pipe(
+  Schema.decodeTo(AgentSchema, {
+    decode: SchemaGetter.transform(normalize),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+  .annotate({ identifier: "AgentConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
 export async function load(dir: string) {
   const result: Record<string, Info> = {}
@@ -119,7 +119,7 @@ export async function load(dir: string) {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
         : `Failed to parse agent ${item}`
-      const { Session } = await import("@/session")
+      const { Session } = await import("@/session/session")
       void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load agent", { agent: item, err })
       return undefined
@@ -134,12 +134,7 @@ export async function load(dir: string) {
       ...md.data,
       prompt: md.content.trim(),
     }
-    const parsed = Info.safeParse(config)
-    if (parsed.success) {
-      result[config.name] = parsed.data
-      continue
-    }
-    throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+    result[config.name] = ConfigParse.effectSchema(Info, config, item)
   }
   return result
 }
@@ -156,7 +151,7 @@ export async function loadMode(dir: string) {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
         : `Failed to parse mode ${item}`
-      const { Session } = await import("@/session")
+      const { Session } = await import("@/session/session")
       void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load mode", { mode: item, err })
       return undefined
@@ -168,10 +163,10 @@ export async function loadMode(dir: string) {
       ...md.data,
       prompt: md.content.trim(),
     }
-    const parsed = Info.safeParse(config)
-    if (parsed.success) {
+    const parsed = Schema.decodeUnknownExit(Info)(config, { errors: "all", propertyOrder: "original" })
+    if (Exit.isSuccess(parsed)) {
       result[config.name] = {
-        ...parsed.data,
+        ...parsed.value,
         mode: "primary" as const,
       }
     }

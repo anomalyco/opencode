@@ -1032,6 +1032,62 @@
         ]
       }
     },
+    "/pty/shells": {
+      "get": {
+        "operationId": "pty.shells",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List available shells",
+        "description": "Get a list of available shells on the system.",
+        "responses": {
+          "200": {
+            "description": "List of shells",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "acceptable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["path", "name", "acceptable"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.pty.shells({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/pty": {
       "get": {
         "operationId": "pty.list",
@@ -2112,7 +2168,15 @@
             "in": "query",
             "name": "roots",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Only return root sessions (no parentID)"
           },
@@ -2152,7 +2216,15 @@
             "in": "query",
             "name": "archived",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Include archived sessions (default false)"
           }
@@ -2239,7 +2311,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Filter sessions by project directory"
+            "description": "Filter sessions by directory"
           },
           {
             "in": "query",
@@ -2250,9 +2322,34 @@
           },
           {
             "in": "query",
+            "name": "scope",
+            "schema": {
+              "type": "string",
+              "enum": ["project"]
+            },
+            "description": "List all sessions for the current project"
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter sessions by project-relative path"
+          },
+          {
+            "in": "query",
             "name": "roots",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Only return root sessions (no parentID)"
           },
@@ -6033,11 +6130,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "MCP server does not support OAuth",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/McpUnsupportedOAuthError"
                 }
               }
             }
@@ -6251,11 +6348,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "MCP server does not support OAuth",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/McpUnsupportedOAuthError"
                 }
               }
             }
@@ -7682,44 +7779,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.installation.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.installation.update-available": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.update-available"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event.message.part.delta": {
         "type": "object",
         "properties": {
@@ -8096,6 +8155,44 @@
                 ]
               }
             }
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.installation.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.installation.update-available": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.update-available"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"]
           }
         },
         "required": ["type", "properties"]
@@ -10074,6 +10171,9 @@
           "directory": {
             "type": "string"
           },
+          "path": {
+            "type": "string"
+          },
           "parentID": {
             "type": "string",
             "pattern": "^ses.*"
@@ -10504,6 +10604,16 @@
                       }
                     ]
                   },
+                  "path": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "parentID": {
                     "anyOf": [
                       {
@@ -10744,12 +10854,6 @@
                 "$ref": "#/components/schemas/Event.lsp.updated"
               },
               {
-                "$ref": "#/components/schemas/Event.installation.updated"
-              },
-              {
-                "$ref": "#/components/schemas/Event.installation.update-available"
-              },
-              {
                 "$ref": "#/components/schemas/Event.message.part.delta"
               },
               {
@@ -10763,6 +10867,12 @@
               },
               {
                 "$ref": "#/components/schemas/Event.session.error"
+              },
+              {
+                "$ref": "#/components/schemas/Event.installation.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.installation.update-available"
               },
               {
                 "$ref": "#/components/schemas/Event.question.asked"
@@ -11454,6 +11564,10 @@
             "description": "JSON schema reference for configuration validation",
             "type": "string"
           },
+          "shell": {
+            "description": "Default shell to use for terminal and bash tool",
+            "type": "string"
+          },
           "logLevel": {
             "$ref": "#/components/schemas/LogLevel"
           },
@@ -11679,8 +11793,7 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["enabled"],
-                  "additionalProperties": false
+                  "required": ["enabled"]
                 }
               ]
             }
@@ -12455,6 +12568,9 @@
           "directory": {
             "type": "string"
           },
+          "path": {
+            "type": "string"
+          },
           "parentID": {
             "type": "string",
             "pattern": "^ses.*"
@@ -13000,12 +13116,6 @@
             "$ref": "#/components/schemas/Event.lsp.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.installation.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.installation.update-available"
-          },
-          {
             "$ref": "#/components/schemas/Event.message.part.delta"
           },
           {
@@ -13019,6 +13129,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.error"
+          },
+          {
+            "$ref": "#/components/schemas/Event.installation.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.installation.update-available"
           },
           {
             "$ref": "#/components/schemas/Event.question.asked"
@@ -13193,6 +13309,15 @@
           }
         ]
       },
+      "McpUnsupportedOAuthError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["error"]
+      },
       "Path": {
         "type": "object",
         "properties": {
@@ -13345,9 +13470,7 @@
             "additionalProperties": {}
           },
           "steps": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
+            "type": "number"
           }
         },
         "required": ["name", "mode", "permission", "options"]

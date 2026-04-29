@@ -22,14 +22,16 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "@tui/context/project"
 import { useEvent } from "@tui/context/event"
 import { useSDK } from "@tui/context/sdk"
-import { Binary } from "@opencode-ai/shared/util/binary"
+import { Binary } from "@opencode-ai/core/util/binary"
 import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
+import path from "path"
+import { useKV } from "./kv"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -107,9 +109,26 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const event = useEvent()
     const project = useProject()
     const sdk = useSDK()
+    const kv = useKV()
 
     const fullSyncedSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
+
+    function sessionListQuery(): { scope?: "project"; path?: string } {
+      if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
+      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
+      return {
+        path: path
+          .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
+          .replaceAll("\\", "/"),
+      }
+    }
+
+    function listSessions() {
+      return sdk.client.session
+        .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
+        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+    }
 
     event.subscribe((event) => {
       switch (event.type) {
@@ -360,10 +379,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         fullSyncedSessions.clear()
         syncedWorkspace = workspace
       }
-      const start = Date.now() - 30 * 24 * 60 * 60 * 1000
-      const sessionListPromise = sdk.client.session
-        .list({ start: start })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+      const projectPromise = project.sync()
+      const sessionListPromise = projectPromise.then(() => listSessions())
 
       // blocking - include session.list when continuing a session
       const providersPromise = sdk.client.config.providers({ workspace }, { throwOnError: true })
@@ -374,7 +391,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         .catch(() => emptyConsoleState)
       const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
-      const projectPromise = project.sync()
       const blockingRequests: Promise<unknown>[] = [
         providersPromise,
         providerListPromise,
@@ -479,11 +495,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (match.found) return store.session[match.index]
           return undefined
         },
+        query() {
+          return sessionListQuery()
+        },
         async refresh() {
-          const start = Date.now() - 30 * 24 * 60 * 60 * 1000
-          const list = await sdk.client.session
-            .list({ start })
-            .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+          const list = await listSessions()
           setStore("session", reconcile(list))
         },
         status(sessionID: string) {

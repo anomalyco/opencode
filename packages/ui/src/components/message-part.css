@@ -1207,7 +1207,6 @@
 
   [data-slot="apply-patch-filename"] {
     color: var(--text-strong);
-    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

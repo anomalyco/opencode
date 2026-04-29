@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import path from "path"
 import { Instance } from "../../src/project/instance"
-import { Session as SessionNs } from "../../src/session"
+import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 
 const root = path.join(__dirname, "../..")
 void Log.init({ print: false })
@@ -28,6 +28,9 @@ const svc = {
   },
   updatePart<T extends MessageV2.Part>(part: T) {
     return run(SessionNs.Service.use((svc) => svc.updatePart(part)))
+  },
+  fork(input: { sessionID: SessionID; messageID?: MessageID }) {
+    return run(SessionNs.Service.use((svc) => svc.fork(input)))
   },
 }
 
@@ -832,6 +835,72 @@ describe("MessageV2.filterCompacted", () => {
 
         expect(result.map((item) => item.info.id)).toEqual([u2, a2, c1, s1, u3, a3])
 
+        await svc.remove(session.id)
+      },
+    })
+  })
+
+  test("fork remaps compaction tail_start_id for filterCompacted", async () => {
+    await Instance.provide({
+      directory: root,
+      fn: async () => {
+        const session = await svc.create({})
+
+        const u1 = await addUser(session.id, "first")
+        const a1 = await addAssistant(session.id, u1, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a1,
+          type: "text",
+          text: "first reply",
+        })
+
+        const u2 = await addUser(session.id, "second")
+        const a2 = await addAssistant(session.id, u2, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a2,
+          type: "text",
+          text: "second reply",
+        })
+
+        const c1 = await addUser(session.id)
+        await addCompactionPart(session.id, c1, u2)
+        const s1 = await addAssistant(session.id, c1, { summary: true, finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: s1,
+          type: "text",
+          text: "summary",
+        })
+
+        const u3 = await addUser(session.id, "third")
+        const a3 = await addAssistant(session.id, u3, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a3,
+          type: "text",
+          text: "third reply",
+        })
+
+        const parentFiltered = MessageV2.filterCompacted(MessageV2.stream(session.id))
+        expect(parentFiltered.map((item) => item.info.id)).toEqual([u2, a2, c1, s1, u3, a3])
+
+        const forked = await svc.fork({ sessionID: session.id })
+        const childFiltered = MessageV2.filterCompacted(MessageV2.stream(forked.id))
+        expect(childFiltered).toHaveLength(parentFiltered.length)
+
+        const tailPart = childFiltered.flatMap((m) => m.parts).find((p) => p.type === "compaction")
+        expect(tailPart?.type).toBe("compaction")
+        if (!tailPart || tailPart.type !== "compaction") throw new Error("Expected forked compaction part")
+        expect(tailPart.tail_start_id).toBeDefined()
+        expect(childFiltered.some((m) => m.info.id === tailPart.tail_start_id)).toBe(true)
+
+        await svc.remove(forked.id)
         await svc.remove(session.id)
       },
     })

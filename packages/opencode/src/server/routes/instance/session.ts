@@ -3,13 +3,13 @@ import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { SessionID, MessageID, PartID } from "@/session/schema"
 import z from "zod"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRunState } from "@/session/run-state"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionRevert } from "@/session/revert"
-import { SessionShare } from "@/share"
+import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
@@ -17,7 +17,7 @@ import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Command } from "@/command"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -25,10 +25,20 @@ import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { zodObject } from "@/util/effect-zod"
 import { Bus } from "@/bus"
-import { NamedError } from "@opencode-ai/shared/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { jsonRequest, runRequest } from "./trace"
 
 const log = Log.create({ service: "server" })
+
+const QueryBoolean = z.union([
+  z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean()),
+  z.enum(["true", "false"]),
+])
+
+function queryBoolean(value: z.infer<typeof QueryBoolean> | undefined) {
+  if (value === undefined) return
+  return value === true || value === "true"
+}
 
 export const SessionRoutes = lazy(() =>
   new Hono()
@@ -52,8 +62,12 @@ export const SessionRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
-          roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
+          directory: z.string().optional().meta({ description: "Filter sessions by directory" }),
+          // TODO: in 2.0 remove `scope` and `directory` and default
+          // to list all sessions for a project
+          scope: z.enum(["project"]).optional().meta({ description: "List all sessions for the current project" }),
+          path: z.string().optional().meta({ description: "Filter sessions by project-relative path" }),
+          roots: QueryBoolean.optional().meta({ description: "Only return root sessions (no parentID)" }),
           start: z.coerce
             .number()
             .optional()
@@ -66,8 +80,9 @@ export const SessionRoutes = lazy(() =>
         const query = c.req.valid("query")
         const sessions: Session.Info[] = []
         for await (const session of Session.list({
-          directory: query.directory,
-          roots: query.roots,
+          directory: query.scope === "project" ? undefined : query.directory,
+          path: query.path,
+          roots: queryBoolean(query.roots),
           start: query.start,
           search: query.search,
           limit: query.limit,
