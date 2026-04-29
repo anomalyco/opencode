@@ -1,11 +1,11 @@
-; DeskFox installer — Inno Setup 6 script
+﻿; DeskFox installer — Inno Setup 6 script
 ; 版本号规则: YYYY.M.D.N (年.月.日.当天第几版,N 从 1 开始)
 ; 由 packages/branding/scripts/bump-installer-version.ps1 自动维护本行 AppVersion
 ; 也可命令行 override: iscc /DAppVersion=2026.4.29.2 DeskFox.iss
 ; 产物: Output\DeskFox-<version>-setup.exe
 
 #ifndef AppVersion
-  #define AppVersion "2026.4.29.1"
+  #define AppVersion "2026.4.29.2"
 #endif
 
 #define AppName        "DeskFox"

@@ -8,6 +8,22 @@
 
 ---
 
+## [Windows] 2026.4.29.2 — 2026-04-29 21:56
+
+**包含**:
+- md-viewer-typography:文件查看器看 .md 时排版升级 — 标题加粗阶梯 + 行内代码芯片 + 引用块/表头底色 + HR 显形(commit `f66b26be0`,Tiny,走 wrapper 0 上游侵入,0 override 消耗)
+- 上一版 (.1) 包含的全部内容沿用(claude-code-loop-fix / plugin-cwd-channel / build-pipeline-sidecar-fix / icon-pipeline / installer-versioning)
+
+**配套要求**:无 plugin 仓改动,纯前端 CSS scope 增量
+
+**installer**:`packages/branding/installer/Output/DeskFox-2026.4.29.2-setup.exe`(49,095,582 bytes)
+
+**user 验收**:✅ 装好正常启动,文件查看器 .md 排版生效(标题阶梯清晰),聊天侧排版无变化
+
+**上游 baseline**:1.14.21(沿用)
+
+---
+
 ## [Windows] 2026.4.29.1 — 2026-04-29 14:49
 
 **包含**:
