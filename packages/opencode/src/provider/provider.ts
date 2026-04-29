@@ -100,6 +100,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/openai": () => import("@ai-sdk/openai").then((m) => m.createOpenAI),
   "@ai-sdk/openai-compatible": () => import("@ai-sdk/openai-compatible").then((m) => m.createOpenAICompatible),
   "@openrouter/ai-sdk-provider": () => import("@openrouter/ai-sdk-provider").then((m) => m.createOpenRouter),
+  "@apertis/ai-sdk-provider": () => import("@apertis/ai-sdk-provider").then((m) => m.createApertis),
   "@ai-sdk/xai": () => import("@ai-sdk/xai").then((m) => m.createXai),
   "@ai-sdk/mistral": () => import("@ai-sdk/mistral").then((m) => m.createMistral),
   "@ai-sdk/groq": () => import("@ai-sdk/groq").then((m) => m.createGroq),
@@ -401,6 +402,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }),
     openrouter: () =>
+      Effect.succeed({
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }),
+    apertis: () =>
       Effect.succeed({
         autoload: false,
         options: {
