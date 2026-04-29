@@ -6,7 +6,7 @@ related: ./3-changelog.md
 
 # bump-script-encoding-fix — changelog
 
-**关联 commit**: 待回填
+**关联 commit**: `e88dfbf52`
 **所在分支**: `feat/editable-file-viewer`
 **baseline tag**: 沿用线(无新 baseline)
 **触发原因**: ship `[Windows] 2026.4.29.2` installer 时发现 `bump-installer-version.ps1` 写入 `docs/installer-versions.md` 的 placeholder 段落出现中文乱码:`(寰呭～: ship 鍚庡洖濉湰鏉?鈥?鍖呭惈 commits / 閰嶅 plugin / installer 璺緞绛?` ← 期望是 `(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)`。当时手动重写 md 文件修掉了表象,但**根因在脚本**,下次打 installer 还会再坑一次,故立此 feat 单独修。
