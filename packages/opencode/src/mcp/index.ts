@@ -137,6 +137,7 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
         },
         CallToolResultSchema,
         {
+          onprogress: () => {},
           resetTimeoutOnProgress: true,
           timeout,
         },
