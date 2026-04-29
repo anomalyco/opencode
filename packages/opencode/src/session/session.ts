@@ -771,9 +771,14 @@ export function* list(input?: {
   start?: number
   search?: string
   limit?: number
+  archived?: boolean
 }) {
   const project = Instance.project
   const conditions = [eq(SessionTable.project_id, project.id)]
+
+  if (!input?.archived) {
+    conditions.push(isNull(SessionTable.time_archived))
+  }
 
   if (input?.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
