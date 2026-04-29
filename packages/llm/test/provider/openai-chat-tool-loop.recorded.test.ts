@@ -44,12 +44,12 @@ describe("OpenAI Chat tool-loop recorded", () => {
       // Two model rounds: tool-call + tool-result + final answer. Two
       // `request-finish` events confirm both interactions in the cassette
       // were dispatched in order.
-      const finishes = events.filter(LLMEvent.guards["request-finish"])
+      const finishes = events.filter(LLMEvent.is.requestFinish)
       expect(finishes).toHaveLength(2)
       expect(finishes[0]?.reason).toBe("tool-calls")
       expect(finishes.at(-1)?.reason).toBe("stop")
 
-      const toolResult = events.find(LLMEvent.guards["tool-result"])
+      const toolResult = events.find(LLMEvent.is.toolResult)
       expect(toolResult).toMatchObject({
         type: "tool-result",
         name: "get_weather",

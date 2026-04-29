@@ -52,7 +52,7 @@ describe("ToolRuntime", () => {
         ),
       )
 
-      const result = events.find(LLMEvent.guards["tool-result"])
+      const result = events.find(LLMEvent.is.toolResult)
       expect(result).toMatchObject({
         type: "tool-result",
         id: "call_1",
@@ -79,10 +79,10 @@ describe("ToolRuntime", () => {
         ),
       )
 
-      const toolError = events.find(LLMEvent.guards["tool-error"])
+      const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "missing_tool" })
       expect(toolError?.message).toContain("Unknown tool")
-      expect(events.find(LLMEvent.guards["tool-result"])).toMatchObject({
+      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
         type: "tool-result",
         id: "call_1",
         name: "missing_tool",
@@ -106,7 +106,7 @@ describe("ToolRuntime", () => {
         ),
       )
 
-      const toolError = events.find(LLMEvent.guards["tool-error"])
+      const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
       expect(toolError?.message).toContain("Invalid tool input")
     }),
@@ -127,7 +127,7 @@ describe("ToolRuntime", () => {
         ),
       )
 
-      const toolError = events.find(LLMEvent.guards["tool-error"])
+      const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
       expect(toolError?.message).toBe("Weather lookup failed for FAIL")
     }),
@@ -166,7 +166,7 @@ describe("ToolRuntime", () => {
         ),
       )
 
-      expect(events.filter(LLMEvent.guards["request-finish"])).toHaveLength(2)
+      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(2)
     }),
   )
 
@@ -186,8 +186,8 @@ describe("ToolRuntime", () => {
         }).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
-      expect(events.filter(LLMEvent.guards["request-finish"])).toHaveLength(1)
-      expect(events.find(LLMEvent.guards["tool-result"])).toBeUndefined()
+      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
+      expect(events.find(LLMEvent.is.toolResult)).toBeUndefined()
     }),
   )
 
@@ -238,8 +238,8 @@ describe("ToolRuntime", () => {
       )
 
       expect(streams).toBe(1)
-      expect(events.find(LLMEvent.guards["tool-error"])).toBeUndefined()
-      expect(events.filter(LLMEvent.guards["tool-call"])).toEqual([
+      expect(events.find(LLMEvent.is.toolError)).toBeUndefined()
+      expect(events.filter(LLMEvent.is.toolCall)).toEqual([
         {
           type: "tool-call",
           id: "srvtoolu_abc",
@@ -276,7 +276,7 @@ describe("ToolRuntime", () => {
         ),
       )
 
-      const results = events.filter(LLMEvent.guards["tool-result"])
+      const results = events.filter(LLMEvent.is.toolResult)
       expect(results).toHaveLength(2)
       expect(results.map((event) => event.id).toSorted()).toEqual(["c1", "c2"])
     }),

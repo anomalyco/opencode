@@ -191,7 +191,7 @@ export const updateRequest = (input: LLMRequest, patch: Partial<RequestInput>) =
 
 export const outputText = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) =>
   response.events
-    .filter(LLMEvent.guards["text-delta"])
+    .filter(LLMEvent.is.textDelta)
     .map((event) => event.text)
     .join("")
 
@@ -204,10 +204,10 @@ export const outputUsage = (response: LLMResponse | { readonly events: ReadonlyA
 }
 
 export const outputToolCalls = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) =>
-  response.events.filter(LLMEvent.guards["tool-call"])
+  response.events.filter(LLMEvent.is.toolCall)
 
 export const outputReasoning = (response: LLMResponse | { readonly events: ReadonlyArray<LLMEvent> }) =>
   response.events
-    .filter(LLMEvent.guards["reasoning-delta"])
+    .filter(LLMEvent.is.reasoningDelta)
     .map((event) => event.text)
     .join("")
