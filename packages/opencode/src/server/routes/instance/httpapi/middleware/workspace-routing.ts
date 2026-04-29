@@ -5,6 +5,7 @@ import { Workspace } from "@/control-plane/workspace"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session/session"
 import { HttpApiProxy } from "./proxy"
+import * as Fence from "@/server/fence"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/workspace"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer } from "effect"
@@ -106,7 +107,10 @@ function proxyRemote(
     const proxyURL = workspaceProxyURL(target.url, url)
     const headers = request.headers as Record<string, string>
     if (headers["upgrade"]?.toLowerCase() === "websocket") return yield* HttpApiProxy.websocket(request, proxyURL)
-    return yield* HttpApiProxy.http(proxyURL, target.headers, request, { workspaceID: workspace.id })
+    const response = yield* HttpApiProxy.http(proxyURL, target.headers, request)
+    const sync = Fence.parse(new Headers(response.headers))
+    if (sync) yield* Effect.promise(() => Fence.wait(workspace.id, sync, request.source instanceof Request ? request.source.signal : undefined))
+    return response
   })
 }
 

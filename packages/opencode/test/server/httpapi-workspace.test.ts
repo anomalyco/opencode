@@ -323,6 +323,9 @@ describe("workspace HttpApi", () => {
     const proxied: ProxiedRequest[] = []
     const remote = listenRemoteHttp((request) => {
       proxied.push(request)
+      const url = new URL(request.url)
+      if (url.pathname === "/base/global/event") return eventStreamResponse()
+      if (url.pathname === "/base/sync/history") return Response.json([])
       return Response.json({ proxied: true, path: new URL(request.url).pathname })
     })
 

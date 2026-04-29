@@ -1,6 +1,4 @@
 import { ProxyUtil } from "@/server/proxy-util"
-import * as Fence from "@/server/fence"
-import type { WorkspaceID } from "@/control-plane/schema"
 import { Effect, Stream } from "effect"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -64,7 +62,6 @@ export function http(
   url: string | URL,
   extra: HeadersInit | undefined,
   request: HttpServerRequest.HttpServerRequest,
-  options?: { workspaceID?: WorkspaceID },
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.gen(function* () {
     const response = yield* HttpClient.execute(
@@ -74,13 +71,9 @@ export function http(
       }),
     )
     const headers = new Headers(response.headers as HeadersInit)
-    const sync = Fence.parse(headers)
     headers.delete("content-encoding")
     headers.delete("content-length")
 
-    if (sync && options?.workspaceID) {
-      yield* Effect.promise(() => Fence.wait(options.workspaceID!, sync, webSource(request)?.signal))
-    }
     return HttpServerResponse.stream(response.stream.pipe(Stream.catchCause(() => Stream.empty)), {
       status: response.status,
       statusText: statusText(response),

@@ -3,7 +3,6 @@ import Http from "node:http"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { WorkspaceID } from "../../src/control-plane/schema"
 import { HttpApiProxy } from "../../src/server/routes/instance/httpapi/middleware/proxy"
 import { testEffect } from "../lib/effect"
 
@@ -50,25 +49,6 @@ describe("HttpApi workspace proxy", () => {
       expect(response.headers["x-remote"]).toBe("yes")
       expect(response.headers["content-encoding"]).toBeUndefined()
       expect(response.headers["content-length"]).toBeUndefined()
-    }),
-  )
-
-  it.live("handles empty sync fence headers when workspace context is supplied", () =>
-    Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(
-        Effect.succeed(
-          HttpServerResponse.text("synced", {
-            headers: { "x-opencode-sync": "{}" },
-          }),
-        ),
-      )
-      const request = HttpServerRequest.fromWeb(new Request("http://localhost/sync"))
-      const response = yield* HttpApiProxy.http(`${yield* serverUrl()}/sync`, undefined, request, {
-        workspaceID: WorkspaceID.make("ws_sync_test"),
-      })
-
-      expect(response.status).toBe(200)
-      expect(yield* HttpServerResponse.toClientResponse(response).text).toBe("synced")
     }),
   )
 
