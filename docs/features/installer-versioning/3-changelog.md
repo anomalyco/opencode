@@ -14,7 +14,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 | commit | 简述 |
 |---|---|
-| (待回填) | `feat(branding): installer 版本号规则 YYYY.M.D.N + 一键 pack 脚本 + 版本日志 [feat: installer-versioning]` |
+| `2bd3aa29e` | `feat(branding): installer 版本号规则 YYYY.M.D.N + 一键 pack 脚本 + 版本日志 [feat: installer-versioning]` |
+| `af4290659` | `docs+feat(installer-versioning): 补三文档骨架 + platform 维度规则(Win/Mac 各自独立 N 序列)[feat: installer-versioning]` |
 
 ## 改动文件
 
