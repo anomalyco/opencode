@@ -31,7 +31,7 @@ import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { authorizationLayer } from "./auth"
+import { authorizationLayer } from "./middleware/authorization"
 import { eventRoute } from "./event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
@@ -49,7 +49,8 @@ import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
 import { workspaceHandlers } from "./handlers/workspace"
-import { instanceContextLayer, instanceRouterLayer } from "./instance-context"
+import { instanceContextLayer, instanceRouterMiddleware } from "./middleware/instance-context"
+import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
@@ -86,9 +87,11 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   ]),
 )
 
-const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(Layer.provide(instanceRouterLayer))
+const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
+  Layer.provide(instanceRouterMiddleware.combine(workspaceRouterMiddleware).layer),
+)
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
-  Layer.provide([authorizationLayer, instanceContextLayer]),
+  Layer.provide([authorizationLayer, workspaceRoutingLayer, instanceContextLayer]),
 )
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
