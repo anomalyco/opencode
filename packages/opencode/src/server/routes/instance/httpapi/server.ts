@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
+import * as Socket from "effect/unstable/socket/Socket"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
@@ -88,10 +89,18 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
 )
 
 const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
-  Layer.provide(instanceRouterMiddleware.combine(workspaceRouterMiddleware).layer),
+  Layer.provide(
+    instanceRouterMiddleware.combine(workspaceRouterMiddleware).layer.pipe(
+      Layer.provide(Socket.layerWebSocketConstructorGlobal),
+    ),
+  ),
 )
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
-  Layer.provide([authorizationLayer, workspaceRoutingLayer, instanceContextLayer]),
+  Layer.provide([
+    authorizationLayer,
+    workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
+    instanceContextLayer,
+  ]),
 )
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(

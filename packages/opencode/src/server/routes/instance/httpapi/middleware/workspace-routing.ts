@@ -176,7 +176,7 @@ function routeHttpApiWorkspace<E>(
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   E,
-  Session.Service | HttpServerRequest.HttpServerRequest
+  Session.Service | HttpServerRequest.HttpServerRequest | Socket.WebSocketConstructor
 > {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
@@ -184,20 +184,29 @@ function routeHttpApiWorkspace<E>(
     const session = sessionID
       ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(Effect.catchDefect(() => Effect.void))
       : undefined
-    return yield* routeWorkspaceRequest(effect, request, session?.workspaceID).pipe(
-      Effect.provide(Socket.layerWebSocketConstructorGlobal),
-    )
+    return yield* routeWorkspaceRequest(effect, request, session?.workspaceID)
   })
 }
 
-export const workspaceRoutingLayer = Layer.succeed(
+export const workspaceRoutingLayer = Layer.effect(
   WorkspaceRoutingMiddleware,
-  WorkspaceRoutingMiddleware.of((effect) => routeHttpApiWorkspace(effect)),
+  Effect.gen(function* () {
+    const makeWebSocket = yield* Socket.WebSocketConstructor
+    return WorkspaceRoutingMiddleware.of((effect) =>
+      routeHttpApiWorkspace(effect).pipe(Effect.provideService(Socket.WebSocketConstructor, makeWebSocket)),
+    )
+  }),
 )
 
-export const workspaceRouterMiddleware = HttpRouter.middleware<{ provides: WorkspaceRouteContext }>()((effect) =>
+export const workspaceRouterMiddleware = HttpRouter.middleware<{ provides: WorkspaceRouteContext }>()(
   Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest
-    return yield* routeWorkspaceRequest(effect, request).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
+    const makeWebSocket = yield* Socket.WebSocketConstructor
+    return (effect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest
+        return yield* routeWorkspaceRequest(effect, request).pipe(
+          Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
+        )
+      })
   }),
 )
