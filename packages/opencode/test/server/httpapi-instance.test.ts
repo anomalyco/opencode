@@ -141,7 +141,7 @@ describe("instance HttpApi", () => {
   })
 
   test("serves project delete through Hono bridge", async () => {
-    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
 
     const current = await app().request("/project/current", { headers: { "x-opencode-directory": tmp.path } })
     expect(current.status).toBe(200)

@@ -2,6 +2,7 @@ import z from "zod"
 import { and } from "drizzle-orm"
 import { Database } from "@/storage/db"
 import { eq, sql } from "drizzle-orm"
+import { NotFoundError } from "@/storage/storage"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import * as Log from "@opencode-ai/core/util/log"
@@ -467,7 +468,7 @@ export const layer: Layer.Layer<
 
     const remove = Effect.fn("Project.remove")(function* (id: ProjectID) {
       const existing = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-      if (!existing) throw new Error(`Project not found: ${id}`)
+      if (!existing) throw new NotFoundError({ message: `Project not found: ${id}` })
       const sessionsRow = yield* db((d) =>
         d
           .select({ count: sql<number>`count(*)` })

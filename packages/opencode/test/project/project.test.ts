@@ -614,7 +614,7 @@ describe("Project.remove", () => {
   test("should throw error when project not found", async () => {
     await expect(
       run((svc) => svc.remove(ProjectID.make("nonexistent-project-id"))),
-    ).rejects.toThrow("Project not found: nonexistent-project-id")
+    ).rejects.toThrow("NotFoundError")
   })
 
   test("should remove project from list", async () => {
