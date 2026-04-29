@@ -1,15 +1,14 @@
 import { Agent } from "@/agent/agent"
 import { Command } from "@/command"
 import { Format } from "@/format"
-import { Global } from "@opencode-ai/core/global"
 import { LSP } from "@/lsp/lsp"
 import { Vcs } from "@/project/vcs"
 import { Skill } from "@/skill"
-import * as InstanceState from "@/effect/instance-state"
-import { Effect, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./auth"
-import { markInstanceForDisposal } from "./lifecycle"
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "../auth"
+import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const PathInfo = Schema.Struct({
   home: Schema.String,
@@ -19,7 +18,7 @@ const PathInfo = Schema.Struct({
   directory: Schema.String,
 }).annotate({ identifier: "Path" })
 
-const VcsDiffQuery = Schema.Struct({
+export const VcsDiffQuery = Schema.Struct({
   mode: Vcs.Mode,
 })
 
@@ -40,7 +39,7 @@ export const InstanceApi = HttpApi.make("instance")
     HttpApiGroup.make("instance")
       .add(
         HttpApiEndpoint.post("dispose", InstancePaths.dispose, {
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Instance disposed"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "instance.dispose",
@@ -59,7 +58,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("vcs", InstancePaths.vcs, {
-          success: Vcs.Info,
+          success: described(Vcs.Info, "VCS info"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "vcs.get",
@@ -70,7 +69,7 @@ export const InstanceApi = HttpApi.make("instance")
         ),
         HttpApiEndpoint.get("vcsDiff", InstancePaths.vcsDiff, {
           query: VcsDiffQuery,
-          success: Schema.Array(Vcs.FileDiff),
+          success: described(Schema.Array(Vcs.FileDiff), "VCS diff"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "vcs.diff",
@@ -79,7 +78,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("command", InstancePaths.command, {
-          success: Schema.Array(Command.Info),
+          success: described(Schema.Array(Command.Info), "List of commands"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "command.list",
@@ -88,7 +87,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("agent", InstancePaths.agent, {
-          success: Schema.Array(Agent.Info),
+          success: described(Schema.Array(Agent.Info), "List of agents"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "app.agents",
@@ -97,7 +96,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("skill", InstancePaths.skill, {
-          success: Schema.Array(Skill.Info),
+          success: described(Schema.Array(Skill.Info), "List of skills"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "app.skills",
@@ -106,7 +105,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("lsp", InstancePaths.lsp, {
-          success: Schema.Array(LSP.Status),
+          success: described(Schema.Array(LSP.Status), "LSP server status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "lsp.status",
@@ -115,7 +114,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("formatter", InstancePaths.formatter, {
-          success: Schema.Array(Format.Status),
+          success: described(Schema.Array(Format.Status), "Formatter status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "formatter.status",
@@ -130,6 +129,7 @@ export const InstanceApi = HttpApi.make("instance")
           description: "Experimental HttpApi instance read routes.",
         }),
       )
+      .middleware(InstanceContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
@@ -139,70 +139,3 @@ export const InstanceApi = HttpApi.make("instance")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-
-export const instanceHandlers = HttpApiBuilder.group(InstanceApi, "instance", (handlers) =>
-  Effect.gen(function* () {
-    const agent = yield* Agent.Service
-    const command = yield* Command.Service
-    const format = yield* Format.Service
-    const lsp = yield* LSP.Service
-    const skill = yield* Skill.Service
-    const vcs = yield* Vcs.Service
-
-    const dispose = Effect.fn("InstanceHttpApi.dispose")(function* () {
-      yield* markInstanceForDisposal(yield* InstanceState.context)
-      return true
-    })
-
-    const getPath = Effect.fn("InstanceHttpApi.path")(function* () {
-      const ctx = yield* InstanceState.context
-      return {
-        home: Global.Path.home,
-        state: Global.Path.state,
-        config: Global.Path.config,
-        worktree: ctx.worktree,
-        directory: ctx.directory,
-      }
-    })
-
-    const getVcs = Effect.fn("InstanceHttpApi.vcs")(function* () {
-      const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], { concurrency: 2 })
-      return { branch, default_branch }
-    })
-
-    const getVcsDiff = Effect.fn("InstanceHttpApi.vcsDiff")(function* (ctx: { query: { mode: Vcs.Mode } }) {
-      return yield* vcs.diff(ctx.query.mode)
-    })
-
-    const getCommand = Effect.fn("InstanceHttpApi.command")(function* () {
-      return yield* command.list()
-    })
-
-    const getAgent = Effect.fn("InstanceHttpApi.agent")(function* () {
-      return yield* agent.list()
-    })
-
-    const getSkill = Effect.fn("InstanceHttpApi.skill")(function* () {
-      return yield* skill.all()
-    })
-
-    const getLsp = Effect.fn("InstanceHttpApi.lsp")(function* () {
-      return yield* lsp.status()
-    })
-
-    const getFormatter = Effect.fn("InstanceHttpApi.formatter")(function* () {
-      return yield* format.status()
-    })
-
-    return handlers
-      .handle("dispose", dispose)
-      .handle("path", getPath)
-      .handle("vcs", getVcs)
-      .handle("vcsDiff", getVcsDiff)
-      .handle("command", getCommand)
-      .handle("agent", getAgent)
-      .handle("skill", getSkill)
-      .handle("lsp", getLsp)
-      .handle("formatter", getFormatter)
-  }),
-)

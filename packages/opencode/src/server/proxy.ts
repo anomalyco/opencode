@@ -33,7 +33,7 @@ function headers(req: Request, extra?: HeadersInit) {
   return out
 }
 
-function protocols(req: Request) {
+export function websocketProtocols(req: Request) {
   const value = req.headers.get("sec-websocket-protocol")
   if (!value) return []
   return value
@@ -42,7 +42,7 @@ function protocols(req: Request) {
     .filter(Boolean)
 }
 
-function socket(url: string | URL) {
+export function websocketTargetURL(url: string | URL) {
   const next = new URL(url)
   if (next.protocol === "http:") next.protocol = "ws:"
   if (next.protocol === "https:") next.protocol = "wss:"
@@ -69,7 +69,7 @@ const app = (upgrade: UpgradeWebSocket) =>
             ws.close(1011, "missing proxy target")
             return
           }
-          remote = new WebSocket(url, protocols(c.req.raw))
+          remote = new WebSocket(url, websocketProtocols(c.req.raw))
           remote.binaryType = "arraybuffer"
           remote.onopen = () => {
             for (const item of queue) remote?.send(item)
@@ -150,7 +150,7 @@ export function websocket(
   proxy.pathname = "/__workspace_ws"
   proxy.search = ""
   const next = new Headers(req.headers)
-  next.set("x-opencode-proxy-url", socket(target))
+  next.set("x-opencode-proxy-url", websocketTargetURL(target))
   for (const [key, value] of new Headers(extra).entries()) {
     next.set(key, value)
   }

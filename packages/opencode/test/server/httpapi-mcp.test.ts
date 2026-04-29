@@ -3,7 +3,7 @@ import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
-import { McpPaths } from "../../src/server/routes/instance/httpapi/mcp"
+import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
@@ -19,7 +19,7 @@ const it = testEffect(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))
 
 function app(experimental: boolean) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return Server.Default().app
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 type TestApp = ReturnType<typeof app>
 

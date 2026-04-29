@@ -1,26 +1,27 @@
 import { MCP } from "@/mcp"
 import { ConfigMCP } from "@/config/mcp"
-import { Effect, Schema } from "effect"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./auth"
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { Authorization } from "../auth"
+import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
-const AddPayload = Schema.Struct({
+export const AddPayload = Schema.Struct({
   name: Schema.String,
   config: ConfigMCP.Info,
-}).annotate({ identifier: "McpAddInput" })
+})
 
-const StatusMap = Schema.Record(Schema.String, MCP.Status)
-const AuthStartResponse = Schema.Struct({
+export const StatusMap = Schema.Record(Schema.String, MCP.Status)
+export const AuthStartResponse = Schema.Struct({
   authorizationUrl: Schema.String,
-  oauthState: Schema.String,
-}).annotate({ identifier: "McpAuthStartResponse" })
-const AuthCallbackPayload = Schema.Struct({
+})
+export const AuthCallbackPayload = Schema.Struct({
   code: Schema.String,
-}).annotate({ identifier: "McpAuthCallbackInput" })
-const AuthRemoveResponse = Schema.Struct({
+})
+export const AuthRemoveResponse = Schema.Struct({
   success: Schema.Literal(true),
-}).annotate({ identifier: "McpAuthRemoveResponse" })
-class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthError>("McpUnsupportedOAuthError")(
+})
+export class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthError>("McpUnsupportedOAuthError")(
   { error: Schema.String },
   { httpApiStatus: 400 },
 ) {}
@@ -39,7 +40,7 @@ export const McpApi = HttpApi.make("mcp")
     HttpApiGroup.make("mcp")
       .add(
         HttpApiEndpoint.get("status", McpPaths.status, {
-          success: Schema.Record(Schema.String, MCP.Status),
+          success: described(Schema.Record(Schema.String, MCP.Status), "MCP server status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.status",
@@ -49,7 +50,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("add", McpPaths.status, {
           payload: AddPayload,
-          success: StatusMap,
+          success: described(StatusMap, "MCP server added successfully"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
@@ -60,8 +61,8 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("authStart", McpPaths.auth, {
           params: { name: Schema.String },
-          success: AuthStartResponse,
-          error: UnsupportedOAuthError,
+          success: described(AuthStartResponse, "OAuth flow started"),
+          error: [UnsupportedOAuthError, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.start",
@@ -72,7 +73,8 @@ export const McpApi = HttpApi.make("mcp")
         HttpApiEndpoint.post("authCallback", McpPaths.authCallback, {
           params: { name: Schema.String },
           payload: AuthCallbackPayload,
-          success: MCP.Status,
+          success: described(MCP.Status, "OAuth authentication completed"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.callback",
@@ -83,8 +85,8 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("authAuthenticate", McpPaths.authAuthenticate, {
           params: { name: Schema.String },
-          success: MCP.Status,
-          error: UnsupportedOAuthError,
+          success: described(MCP.Status, "OAuth authentication completed"),
+          error: [UnsupportedOAuthError, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.authenticate",
@@ -94,7 +96,8 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.delete("authRemove", McpPaths.auth, {
           params: { name: Schema.String },
-          success: AuthRemoveResponse,
+          success: described(AuthRemoveResponse, "OAuth credentials removed"),
+          error: HttpApiError.NotFound,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.remove",
@@ -104,7 +107,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("connect", McpPaths.connect, {
           params: { name: Schema.String },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "MCP server connected successfully"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.connect",
@@ -113,7 +116,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("disconnect", McpPaths.disconnect, {
           params: { name: Schema.String },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "MCP server disconnected successfully"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.disconnect",
@@ -127,6 +130,7 @@ export const McpApi = HttpApi.make("mcp")
           description: "Experimental HttpApi MCP routes.",
         }),
       )
+      .middleware(InstanceContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(
@@ -136,66 +140,3 @@ export const McpApi = HttpApi.make("mcp")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-
-export const mcpHandlers = HttpApiBuilder.group(McpApi, "mcp", (handlers) =>
-  Effect.gen(function* () {
-    const mcp = yield* MCP.Service
-
-    const status = Effect.fn("McpHttpApi.status")(function* () {
-      return yield* mcp.status()
-    })
-
-    const add = Effect.fn("McpHttpApi.add")(function* (ctx: { payload: typeof AddPayload.Type }) {
-      const result = (yield* mcp.add(ctx.payload.name, ctx.payload.config)).status
-      return yield* Schema.decodeUnknownEffect(StatusMap)(
-        "status" in result ? { [ctx.payload.name]: result } : result,
-      ).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
-    })
-
-    const authStart = Effect.fn("McpHttpApi.authStart")(function* (ctx: { params: { name: string } }) {
-      if (!(yield* mcp.supportsOAuth(ctx.params.name))) {
-        return yield* new UnsupportedOAuthError({ error: `MCP server ${ctx.params.name} does not support OAuth` })
-      }
-      return yield* mcp.startAuth(ctx.params.name)
-    })
-
-    const authCallback = Effect.fn("McpHttpApi.authCallback")(function* (ctx: {
-      params: { name: string }
-      payload: typeof AuthCallbackPayload.Type
-    }) {
-      return yield* mcp.finishAuth(ctx.params.name, ctx.payload.code)
-    })
-
-    const authAuthenticate = Effect.fn("McpHttpApi.authAuthenticate")(function* (ctx: { params: { name: string } }) {
-      if (!(yield* mcp.supportsOAuth(ctx.params.name))) {
-        return yield* new UnsupportedOAuthError({ error: `MCP server ${ctx.params.name} does not support OAuth` })
-      }
-      return yield* mcp.authenticate(ctx.params.name)
-    })
-
-    const authRemove = Effect.fn("McpHttpApi.authRemove")(function* (ctx: { params: { name: string } }) {
-      yield* mcp.removeAuth(ctx.params.name)
-      return { success: true as const }
-    })
-
-    const connect = Effect.fn("McpHttpApi.connect")(function* (ctx: { params: { name: string } }) {
-      yield* mcp.connect(ctx.params.name)
-      return true
-    })
-
-    const disconnect = Effect.fn("McpHttpApi.disconnect")(function* (ctx: { params: { name: string } }) {
-      yield* mcp.disconnect(ctx.params.name)
-      return true
-    })
-
-    return handlers
-      .handle("status", status)
-      .handle("add", add)
-      .handle("authStart", authStart)
-      .handle("authCallback", authCallback)
-      .handle("authAuthenticate", authAuthenticate)
-      .handle("authRemove", authRemove)
-      .handle("connect", connect)
-      .handle("disconnect", disconnect)
-  }),
-)
