@@ -12,14 +12,22 @@
   }
 
   [data-slot="basic-tool-tool-trigger-content"] {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     width: auto;
     max-width: calc(100% - 24px);
     min-width: 0;
     display: flex;
     align-items: center;
-    align-self: stretch;
     gap: 8px;
+  }
+
+  [data-component="tool-trigger"]:not(:has([data-slot="basic-tool-tool-indicator"])) [data-slot="basic-tool-tool-trigger-content"] {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  [data-component="tool-trigger"]:not(:has([data-slot="basic-tool-tool-indicator"])) [data-slot="basic-tool-tool-trigger-content"] {
+    max-width: 100%;
   }
 
   [data-slot="basic-tool-tool-indicator"] {
@@ -57,7 +65,7 @@
   }
 
   [data-slot="basic-tool-tool-info"] {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-width: 0;
     max-width: 100%;
     font-size: 14px;
@@ -189,6 +197,7 @@
   [data-slot="basic-tool-tool-info-structured"] {
     flex: 1 1 auto;
     min-width: 0;
+    max-width: 100%;
   }
 
   [data-slot="basic-tool-tool-info-main"] {

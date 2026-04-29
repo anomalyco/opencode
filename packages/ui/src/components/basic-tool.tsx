@@ -29,6 +29,7 @@ export interface BasicToolProps {
   children?: JSX.Element
   status?: string
   hideDetails?: boolean
+  hideIcon?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
   defer?: boolean
@@ -131,7 +132,7 @@ export function BasicTool(props: BasicToolProps) {
       data-clickable={props.clickable ? "true" : undefined}
       data-hide-details={props.hideDetails ? "true" : undefined}
     >
-      <Show when={props.icon}>
+      <Show when={props.icon && !props.hideIcon}>
         <div data-slot="basic-tool-tool-indicator">
           <Icon name={props.icon!} size="small" />
         </div>

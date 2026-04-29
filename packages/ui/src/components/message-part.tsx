@@ -1775,6 +1775,7 @@ ToolRegistry.register({
     return (
       <BasicTool
         icon="task"
+        hideIcon
         status={props.status}
         trigger={trigger()}
         hideDetails
