@@ -80,7 +80,7 @@ const raiseChunk = (chunk: FakeChunk): import("../src/schema").LLMEvent =>
     ? { type: "request-finish", reason: chunk.reason }
     : { type: "text-delta", text: chunk.text }
 
-const fake = Adapter.define<FakeDraft, FakeDraft>({
+const fake = Adapter.unsafe<FakeDraft, FakeDraft>({
   id: "fake",
   protocol: "openai-chat",
   redact: (target) => ({ ...target, redacted: true }),
@@ -114,7 +114,7 @@ const fake = Adapter.define<FakeDraft, FakeDraft>({
     ),
 })
 
-const gemini = Adapter.define<FakeDraft, FakeDraft>({
+const gemini = Adapter.unsafe<FakeDraft, FakeDraft>({
   ...fake,
   id: "gemini-fake",
   protocol: "gemini",

@@ -61,18 +61,6 @@ export interface AdapterDefinition<Draft, Target> extends Adapter<Draft, Target>
   readonly withPatches: (patches: ReadonlyArray<Patch<Draft>>) => AdapterDefinition<Draft, Target>
 }
 
-export interface ComposeInput<Draft, Target> {
-  readonly id: string
-  readonly protocol?: ProtocolID
-  readonly base: Adapter<Draft, Target>
-  readonly patches?: ReadonlyArray<Patch<Draft>>
-  readonly redact?: (target: Target) => unknown
-  readonly prepare?: (request: LLMRequest) => Effect.Effect<Draft, LLMError>
-  readonly validate?: (draft: Draft) => Effect.Effect<Target, LLMError>
-  readonly toHttp?: (target: Target, context: HttpContext) => Effect.Effect<HttpClientRequest.HttpClientRequest, LLMError>
-  readonly parse?: (response: HttpClientResponse.HttpClientResponse) => Stream.Stream<LLMEvent, LLMError>
-}
-
 export interface LLMClient {
   readonly prepare: (request: LLMRequest) => Effect.Effect<PreparedRequest, LLMError>
   readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service>
@@ -93,7 +81,17 @@ const normalizeRegistry = (patches: PatchRegistry | ReadonlyArray<AnyPatch> | un
   return makePatchRegistry(patches)
 }
 
-export function define<Draft, Target>(input: AdapterInput<Draft, Target>): AdapterDefinition<Draft, Target> {
+/**
+ * Lower-level adapter constructor. Reach for this only when the adapter
+ * genuinely cannot fit `fromProtocol`'s four-axis model — for example, an
+ * adapter that needs hand-rolled `toHttp` / `parse` because no `Protocol`,
+ * `Endpoint`, `Auth`, or `Framing` value cleanly captures its behavior.
+ *
+ * Named `unsafe` to signal that you are escaping the safe abstraction; the
+ * canonical path is `Adapter.fromProtocol(...)`. New adapters should start
+ * there and prove they need otherwise before reaching for this.
+ */
+export function unsafe<Draft, Target>(input: AdapterInput<Draft, Target>): AdapterDefinition<Draft, Target> {
   const build = (patches: ReadonlyArray<Patch<Draft>>): AdapterDefinition<Draft, Target> => ({
     id: input.id,
     protocol: input.protocol,
@@ -113,19 +111,6 @@ export function define<Draft, Target>(input: AdapterInput<Draft, Target>): Adapt
   })
 
   return build(input.patches ?? [])
-}
-
-export function compose<Draft, Target>(input: ComposeInput<Draft, Target>): AdapterDefinition<Draft, Target> {
-  return define({
-    id: input.id,
-    protocol: input.protocol ?? input.base.protocol,
-    patches: [...input.base.patches, ...(input.patches ?? [])],
-    redact: input.redact ?? input.base.redact,
-    prepare: input.prepare ?? input.base.prepare,
-    validate: input.validate ?? input.base.validate,
-    toHttp: input.toHttp ?? input.base.toHttp,
-    parse: input.parse ?? input.base.parse,
-  })
 }
 
 export interface FromProtocolInput<Draft, Target, Frame, Chunk, State> {
@@ -169,7 +154,7 @@ export interface FromProtocolInput<Draft, Target, Frame, Chunk, State> {
  * Plus optional `headers` and `patches` for cross-cutting deployment concerns
  * (provider version pins, per-deployment quirks).
  *
- * This is the canonical adapter constructor. Reach for `define(...)` only
+ * This is the canonical adapter constructor. Reach for `unsafe(...)` only
  * when an adapter genuinely cannot fit the four-axis model.
  */
 export function fromProtocol<Draft, Target, Frame, Chunk, State>(
@@ -206,7 +191,7 @@ export function fromProtocol<Draft, Target, Frame, Chunk, State>(
       onHalt: protocol.onHalt,
     })
 
-  return define({
+  return unsafe({
     id: input.id,
     protocol: input.protocolId ?? protocol.id,
     patches: input.patches,

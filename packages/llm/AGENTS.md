@@ -58,7 +58,7 @@ export const adapter = Adapter.fromProtocol({
 
 The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Adapter.fromProtocol(...)` call instead of a 300-400 line adapter clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
-Reach for the lower-level `Adapter.define(...)` only when an adapter genuinely cannot fit the four-axis model. New adapters should always start with `Adapter.fromProtocol(...)` and prove they need otherwise.
+Reach for the lower-level `Adapter.unsafe(...)` only when an adapter genuinely cannot fit the four-axis model. The name signals that you're escaping the safe abstraction; new adapters should always start with `Adapter.fromProtocol(...)` and prove they need otherwise.
 
 When a provider ships a non-HTTP transport (OpenAI's WebSocket-based Codex backend, hypothetical bidirectional streaming APIs), the seam is `Framing` plus a parallel `Endpoint` / `Auth` interpretation — not a fork of the adapter contract.
 
