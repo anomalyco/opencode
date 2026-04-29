@@ -88,6 +88,11 @@ export const EditTool = Tool.define(
             Effect.gen(function* () {
               if (params.oldString === "") {
                 const existed = yield* afs.existsSafe(filePath)
+                if (existed) {
+                  throw new Error(
+                    "oldString cannot be empty for existing files. Provide exact oldString context for in-place edits.",
+                  )
+                }
                 const source = existed ? yield* Bom.readFile(afs, filePath) : { bom: false, text: "" }
                 const next = Bom.split(params.newString)
                 const desiredBom = source.bom || next.bom
