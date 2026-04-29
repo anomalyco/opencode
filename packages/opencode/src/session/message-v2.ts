@@ -243,8 +243,7 @@ export const RetryPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("retry"),
   attempt: NonNegativeInt,
-  // APIError is still NamedError-based Zod; bridge via ZodOverride until errors migrate.
-  error: Schema.Any.annotate({ [ZodOverride]: APIError.Schema }),
+  error: APIError.EffectSchema,
   time: Schema.Struct({
     created: NonNegativeInt,
   }),
@@ -447,9 +446,7 @@ export type Part =
   | RetryPart
   | CompactionPart
 
-// Errors are still NamedError-based Zod; bridge via ZodOverride so the derived
-// Zod + JSON Schema emit the original discriminatedUnion shape. Migrating the
-// error classes to Schema.TaggedErrorClass is a separate slice.
+// Zod discriminated union kept for the legacy Hono OpenAPI path.
 const AssistantErrorZod = z.discriminatedUnion("name", [
   AuthError.Schema,
   NamedError.Unknown.Schema,
@@ -460,6 +457,17 @@ const AssistantErrorZod = z.discriminatedUnion("name", [
   APIError.Schema,
 ])
 type AssistantError = z.infer<typeof AssistantErrorZod>
+
+// Effect Schema for the same union — used by HttpApi OpenAPI generation.
+const AssistantErrorSchema = Schema.Union([
+  AuthError.EffectSchema,
+  Schema.Struct({ name: Schema.Literal("UnknownError"), data: Schema.Struct({ message: Schema.String }) }).annotate({ identifier: "UnknownError" }),
+  OutputLengthError.EffectSchema,
+  AbortedError.EffectSchema,
+  StructuredOutputError.EffectSchema,
+  ContextOverflowError.EffectSchema,
+  APIError.EffectSchema,
+]).annotate({ discriminator: "name" })
 
 // ── Prompt input schemas ─────────────────────────────────────────────────────
 //
@@ -540,7 +548,7 @@ export const Assistant = Schema.Struct({
     created: NonNegativeInt,
     completed: Schema.optional(NonNegativeInt),
   }),
-  error: Schema.optional(Schema.Any.annotate({ [ZodOverride]: AssistantErrorZod })),
+  error: Schema.optional(AssistantErrorSchema),
   parentID: MessageID,
   modelID: ModelID,
   providerID: ProviderID,
