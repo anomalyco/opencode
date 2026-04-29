@@ -32,19 +32,20 @@ git -C "$SDK" checkout -- src/ 2>/dev/null
 
 echo "" >&2
 if [[ "${1:-}" == "--stat" ]]; then
-  honly=$(diff /tmp/sdk-types-hono.ts /tmp/sdk-types-httpapi.ts | grep -c '^< export type' || true)
-  aonly=$(diff /tmp/sdk-types-hono.ts /tmp/sdk-types-httpapi.ts | grep -c '^> export type' || true)
-  total=$(diff /tmp/sdk-types-hono.ts /tmp/sdk-types-httpapi.ts | wc -l | tr -d ' ')
+  diff_output=$(diff /tmp/sdk-types-hono.ts /tmp/sdk-types-httpapi.ts || true)
+  honly=$(printf "%s\n" "$diff_output" | grep -c '^< export type' || true)
+  aonly=$(printf "%s\n" "$diff_output" | grep -c '^> export type' || true)
+  total=$(printf "%s\n" "$diff_output" | wc -l | tr -d ' ')
   echo "Hono-only: $honly types  HttpApi-only: $aonly types  Diff lines: $total"
   echo ""
   if [[ $honly -gt 0 ]]; then
     echo "=== Hono-only types ==="
-    diff /tmp/sdk-types-hono.ts /tmp/sdk-types-httpapi.ts | grep '^< export type' | sed 's/< export type /  /' | sed 's/ .*//'
+    printf "%s\n" "$diff_output" | grep '^< export type' | sed 's/< export type //' | sed 's/[ =].*//' | sed 's/^/  /'
     echo ""
   fi
   if [[ $aonly -gt 0 ]]; then
     echo "=== HttpApi-only types ==="
-    diff /tmp/sdk-types-hono.ts /tmp/sdk-types-httpapi.ts | grep '^> export type' | sed 's/> export type /  /' | sed 's/ .*//'
+    printf "%s\n" "$diff_output" | grep '^> export type' | sed 's/> export type //' | sed 's/[ =].*//' | sed 's/^/  /'
   fi
 else
   diff /tmp/sdk-types-hono.ts /tmp/sdk-types-httpapi.ts || true

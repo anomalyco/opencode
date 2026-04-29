@@ -10,11 +10,12 @@ type OpenApiParameter = {
 
 type OpenApiOperation = {
   parameters?: OpenApiParameter[]
-  responses?: Record<string, unknown>
+  responses?: Record<string, OpenApiResponse>
   requestBody?: {
     required?: boolean
     content?: Record<string, { schema?: OpenApiSchema }>
   }
+  security?: unknown
 }
 
 type OpenApiPathItem = Partial<Record<"get" | "post" | "put" | "delete" | "patch", OpenApiOperation>>
@@ -22,6 +23,7 @@ type OpenApiPathItem = Partial<Record<"get" | "post" | "put" | "delete" | "patch
 type OpenApiSpec = {
   components?: {
     schemas?: Record<string, OpenApiSchema>
+    securitySchemes?: Record<string, unknown>
   }
   paths?: Record<string, OpenApiPathItem>
 }
@@ -31,14 +33,20 @@ type OpenApiSchema = {
   additionalProperties?: OpenApiSchema | boolean
   allOf?: OpenApiSchema[]
   anyOf?: OpenApiSchema[]
-  enum?: string[]
+  enum?: Array<string | boolean>
   items?: OpenApiSchema
   maximum?: number
   minimum?: number
   oneOf?: OpenApiSchema[]
   prefixItems?: OpenApiSchema[]
   properties?: Record<string, OpenApiSchema>
+  required?: string[]
   type?: string
+}
+
+type OpenApiResponse = {
+  description?: string
+  content?: Record<string, { schema?: OpenApiSchema }>
 }
 
 // Instance routes use middleware for directory/workspace resolution, but HttpApi
@@ -67,34 +75,6 @@ const QueryParameterSchemas = {
   "GET /find/file limit": { type: "integer", minimum: 1, maximum: 200 },
   "GET /session/{sessionID}/message limit": { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
 } satisfies Record<string, OpenApiSchema>
-
-const LegacyRequestBodySchemas: Record<string, OpenApiSchema> = {
-  "POST /global/upgrade": { type: "object" },
-  "POST /log": { type: "object" },
-  "POST /experimental/workspace": { type: "object" },
-  "POST /experimental/workspace/{id}/session-restore": { type: "object" },
-  "PATCH /project/{projectID}": { type: "object" },
-  "POST /experimental/console/switch": { type: "object" },
-  "POST /experimental/worktree": { $ref: "#/components/schemas/WorktreeCreateInput" },
-  "POST /session": { type: "object" },
-  "PATCH /session/{sessionID}": { type: "object" },
-  "POST /session/{sessionID}/init": { type: "object" },
-  "POST /session/{sessionID}/fork": { type: "object" },
-  "POST /session/{sessionID}/summarize": { type: "object" },
-  "POST /session/{sessionID}/message": { type: "object" },
-  "POST /session/{sessionID}/prompt_async": { type: "object" },
-  "POST /session/{sessionID}/command": { type: "object" },
-  "POST /session/{sessionID}/shell": { type: "object" },
-  "POST /session/{sessionID}/revert": { type: "object" },
-  "POST /session/{sessionID}/permissions/{permissionID}": { type: "object" },
-  "POST /permission/{requestID}/reply": { type: "object" },
-  "POST /question/{requestID}/reply": { type: "object" },
-  "POST /sync/replay": { type: "object" },
-  "POST /mcp": { type: "object" },
-  "POST /mcp/{name}/auth/callback": { type: "object" },
-  "POST /tui/execute-command": { type: "object" },
-  "POST /tui/publish": {},
-}
 
 // Mapping of "METHOD /path" to the correct 200 response description from Hono spec
 const ResponseDescriptions = {
@@ -212,6 +192,70 @@ const ResponseDescriptions = {
   "GET /formatter": "Formatter status",
 } as const satisfies Record<string, string>
 
+const LegacyErrorResponses = {
+  "PUT /auth/{providerID}": [400],
+  "DELETE /auth/{providerID}": [400],
+  "POST /log": [400],
+  "PATCH /global/config": [400],
+  "POST /global/upgrade": [400],
+  "POST /experimental/workspace": [400],
+  "POST /experimental/console/switch": [400],
+  "DELETE /experimental/workspace/{id}": [400],
+  "POST /experimental/workspace/{id}/session-restore": [400],
+  "GET /experimental/tool/ids": [400],
+  "GET /experimental/tool": [400],
+  "POST /experimental/worktree": [400],
+  "DELETE /experimental/worktree": [400],
+  "POST /experimental/worktree/reset": [400],
+  "PATCH /config": [400],
+  "PATCH /project/{projectID}": [400, 404],
+  "POST /pty": [400],
+  "GET /pty/{ptyID}": [404],
+  "PUT /pty/{ptyID}": [400],
+  "DELETE /pty/{ptyID}": [404],
+  "GET /pty/{ptyID}/connect": [404],
+  "POST /session": [400],
+  "GET /session/status": [400],
+  "GET /session/{sessionID}": [400, 404],
+  "DELETE /session/{sessionID}": [400, 404],
+  "PATCH /session/{sessionID}": [400, 404],
+  "GET /session/{sessionID}/children": [400, 404],
+  "GET /session/{sessionID}/todo": [400, 404],
+  "POST /session/{sessionID}/init": [400, 404],
+  "POST /session/{sessionID}/abort": [400, 404],
+  "POST /session/{sessionID}/share": [400, 404],
+  "DELETE /session/{sessionID}/share": [400, 404],
+  "POST /session/{sessionID}/summarize": [400, 404],
+  "GET /session/{sessionID}/message": [400, 404],
+  "POST /session/{sessionID}/message": [400, 404],
+  "GET /session/{sessionID}/message/{messageID}": [400, 404],
+  "DELETE /session/{sessionID}/message/{messageID}": [400, 404],
+  "DELETE /session/{sessionID}/message/{messageID}/part/{partID}": [400, 404],
+  "PATCH /session/{sessionID}/message/{messageID}/part/{partID}": [400, 404],
+  "POST /session/{sessionID}/prompt_async": [400, 404],
+  "POST /session/{sessionID}/command": [400, 404],
+  "POST /session/{sessionID}/shell": [400, 404],
+  "POST /session/{sessionID}/revert": [400, 404],
+  "POST /session/{sessionID}/unrevert": [400, 404],
+  "POST /session/{sessionID}/permissions/{permissionID}": [400, 404],
+  "POST /permission/{requestID}/reply": [400, 404],
+  "POST /question/{requestID}/reply": [400, 404],
+  "POST /question/{requestID}/reject": [400, 404],
+  "POST /provider/{providerID}/oauth/authorize": [400],
+  "POST /provider/{providerID}/oauth/callback": [400],
+  "POST /sync/replay": [400],
+  "POST /sync/history": [400],
+  "POST /mcp": [400],
+  "POST /mcp/{name}/auth": [404],
+  "POST /mcp/{name}/auth/callback": [400, 404],
+  "POST /mcp/{name}/auth/authenticate": [404],
+  "DELETE /mcp/{name}/auth": [404],
+  "POST /tui/append-prompt": [400],
+  "POST /tui/execute-command": [400],
+  "POST /tui/publish": [400],
+  "POST /tui/select-session": [400, 404],
+} as const satisfies Record<string, ReadonlyArray<400 | 404>>
+
 function matchLegacyOpenApi(input: Record<string, unknown>) {
   const spec = input as OpenApiSpec
 
@@ -228,6 +272,11 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
   for (const [name, schema] of Object.entries(spec.components?.schemas ?? {})) {
     spec.components!.schemas![name] = stripOptionalNull(structuredClone(schema))
   }
+  addLegacyErrorSchemas(spec)
+  delete spec.components?.schemas?.Unauthorized
+  delete spec.components?.schemas?.EffectHttpApiErrorBadRequest
+  delete spec.components?.schemas?.EffectHttpApiErrorNotFound
+  delete spec.components?.securitySchemes
 
   for (const [path, item] of Object.entries(spec.paths ?? {})) {
     const isInstanceRoute = !path.startsWith("/global/") && !path.startsWith("/auth/")
@@ -238,7 +287,6 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
         // Hono's generated OpenAPI never marked request bodies as required. Keep
         // that SDK surface stable during the HttpApi migration.
         delete operation.requestBody.required
-        normalizeRequestBody(operation, `${method.toUpperCase()} ${path}`)
         if (path === "/experimental/workspace" && method === "post") {
           // Workspace creation fields `branch` and `extra` are Schema.NullOr —
           // genuinely nullable, not just optional. Re-add the null that the
@@ -249,6 +297,11 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           if (properties?.extra) properties.extra = { anyOf: [properties.extra, { type: "null" }] }
         }
       }
+      // Hono applied auth as runtime middleware outside OpenAPI metadata, so the
+      // legacy SDK did not expose auth schemes or generated 401 error unions.
+      delete operation.security
+      delete operation.responses?.["401"]
+      normalizeLegacyErrorResponses(operation)
       if ((path === "/event" || path === "/global/event") && method === "get") {
         // HttpApi has no first-class SSE response schema, and these handlers are
         // raw/streaming routes. Document the actual wire protocol explicitly.
@@ -256,7 +309,7 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           description: "Event stream",
           content: {
             "text/event-stream": {
-              schema: path === "/event" ? {} : { $ref: "#/components/schemas/GlobalEvent" },
+              schema: path === "/event" ? { $ref: "#/components/schemas/Event" } : { $ref: "#/components/schemas/GlobalEvent" },
             },
           },
         }
@@ -264,6 +317,8 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
       // Apply response descriptions from the Hono spec to match legacy behavior
       const routeKey = `${method.toUpperCase()} ${path}` as keyof typeof ResponseDescriptions
       const responseDescription = ResponseDescriptions[routeKey]
+      applyLegacyErrorResponses(operation, routeKey)
+      inlineLegacyResponseSchemas(operation, routeKey)
       if (responseDescription && operation.responses?.["200"]) {
         const response200 = operation.responses["200"] as { description?: string }
         response200.description = responseDescription
@@ -281,11 +336,110 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
   return input
 }
 
-function normalizeRequestBody(operation: OpenApiOperation, route: string) {
-  const schema = LegacyRequestBodySchemas[route]
-  const body = operation.requestBody?.content?.["application/json"]
-  if (!schema || !body) return
-  body.schema = structuredClone(schema)
+function addLegacyErrorSchemas(spec: OpenApiSpec) {
+  if (!spec.components?.schemas) return
+  spec.components.schemas.BadRequestError = {
+    type: "object",
+    required: ["data", "errors", "success"],
+    properties: {
+      data: {},
+      errors: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: {},
+        },
+      },
+      success: { type: "boolean", enum: [false] },
+    },
+  }
+  spec.components.schemas.NotFoundError = {
+    type: "object",
+    required: ["name", "data"],
+    properties: {
+      name: { type: "string", enum: ["NotFoundError"] },
+      data: {
+        type: "object",
+        required: ["message"],
+        properties: {
+          message: { type: "string" },
+        },
+      },
+    },
+  }
+}
+
+function normalizeLegacyErrorResponses(operation: OpenApiOperation) {
+  if (operation.responses?.["400"] && isRefResponse(operation.responses["400"], "EffectHttpApiErrorBadRequest")) {
+    operation.responses["400"] = legacyErrorResponse("Bad request", "BadRequestError")
+  }
+  if (operation.responses?.["404"] && isRefResponse(operation.responses["404"], "EffectHttpApiErrorNotFound")) {
+    operation.responses["404"] = legacyErrorResponse("Not found", "NotFoundError")
+  }
+}
+
+function applyLegacyErrorResponses(operation: OpenApiOperation, route: string) {
+  const responses = LegacyErrorResponses[route as keyof typeof LegacyErrorResponses]
+  if (!responses) return
+  operation.responses ??= {}
+  if (responses.includes(400)) operation.responses["400"] = legacyErrorResponse("Bad request", "BadRequestError")
+  else if (operation.responses["400"] && isErrorResponse(operation.responses["400"], "BadRequest")) delete operation.responses["400"]
+  if (responses.includes(404)) operation.responses["404"] = legacyErrorResponse("Not found", "NotFoundError")
+  else if (operation.responses["404"] && isErrorResponse(operation.responses["404"], "NotFound")) delete operation.responses["404"]
+}
+
+function inlineLegacyResponseSchemas(operation: OpenApiOperation, route: string) {
+  const response = operation.responses?.["200"]
+  const schema = response?.content?.["application/json"]?.schema
+  if (!schema) return
+  if (route === "POST /mcp/{name}/auth") {
+    response.content!["application/json"]!.schema = {
+      type: "object",
+      required: ["authorizationUrl"],
+      properties: {
+        authorizationUrl: { type: "string" },
+      },
+    }
+    return
+  }
+  if (route === "DELETE /mcp/{name}/auth") {
+    response.content!["application/json"]!.schema = {
+      type: "object",
+      required: ["success"],
+      properties: {
+        success: { type: "boolean", enum: [true] },
+      },
+    }
+    return
+  }
+  if (route === "POST /sync/replay") {
+    response.content!["application/json"]!.schema = {
+      type: "object",
+      required: ["sessionID"],
+      properties: {
+        sessionID: { type: "string" },
+      },
+    }
+  }
+}
+
+function isRefResponse(response: OpenApiResponse, name: string) {
+  return response.content?.["application/json"]?.schema?.$ref === `#/components/schemas/${name}`
+}
+
+function isErrorResponse(response: OpenApiResponse, name: "BadRequest" | "NotFound") {
+  return isRefResponse(response, `EffectHttpApiError${name}`) || isRefResponse(response, `${name}Error`)
+}
+
+function legacyErrorResponse(description: string, name: "BadRequestError" | "NotFoundError"): OpenApiResponse {
+  return {
+    description,
+    content: {
+      "application/json": {
+        schema: { $ref: `#/components/schemas/${name}` },
+      },
+    },
+  }
 }
 
 /**
