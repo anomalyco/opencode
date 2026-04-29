@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/pty"
 export const Params = Schema.Struct({ ptyID: PtyID })
@@ -28,21 +29,25 @@ export const PtyApi = HttpApi.make("pty")
   .add(
     HttpApiGroup.make("pty")
       .add(
-        HttpApiEndpoint.get("shells", PtyPaths.shells, { success: Schema.Array(ShellItem) }).annotateMerge(
+        HttpApiEndpoint.get("shells", PtyPaths.shells, { success: described(Schema.Array(ShellItem), "List of shells") }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.shells",
             summary: "List available shells",
             description: "Get a list of available shells on the system.",
           }),
         ),
-        HttpApiEndpoint.get("list", PtyPaths.list, { success: Schema.Array(Pty.Info) }).annotateMerge(
+        HttpApiEndpoint.get("list", PtyPaths.list, { success: described(Schema.Array(Pty.Info), "List of sessions") }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.list",
             summary: "List PTY sessions",
             description: "Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.",
           }),
         ),
-        HttpApiEndpoint.post("create", PtyPaths.create, { payload: Pty.CreateInput, success: Pty.Info }).annotateMerge(
+        HttpApiEndpoint.post("create", PtyPaths.create, {
+          payload: Pty.CreateInput,
+          success: described(Pty.Info, "Created session"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.create",
             summary: "Create PTY session",
@@ -51,7 +56,7 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.get("get", PtyPaths.get, {
           params: { ptyID: PtyID },
-          success: Pty.Info,
+          success: described(Pty.Info, "Session info"),
           error: HttpApiError.NotFound,
         }).annotateMerge(
           OpenApi.annotations({
@@ -63,8 +68,8 @@ export const PtyApi = HttpApi.make("pty")
         HttpApiEndpoint.put("update", PtyPaths.update, {
           params: { ptyID: PtyID },
           payload: Pty.UpdateInput,
-          success: Pty.Info,
-          error: HttpApiError.NotFound,
+          success: described(Pty.Info, "Updated session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.update",
@@ -74,7 +79,8 @@ export const PtyApi = HttpApi.make("pty")
         ),
         HttpApiEndpoint.delete("remove", PtyPaths.remove, {
           params: { ptyID: PtyID },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Session removed"),
+          error: HttpApiError.NotFound,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "pty.remove",
@@ -98,7 +104,11 @@ export const PtyApi = HttpApi.make("pty")
 export const PtyConnectApi = HttpApi.make("pty-connect").add(
   HttpApiGroup.make("pty-connect")
     .add(
-      HttpApiEndpoint.get("connect", PtyPaths.connect, { params: Params, success: Schema.Boolean }).annotateMerge(
+      HttpApiEndpoint.get("connect", PtyPaths.connect, {
+        params: Params,
+        success: described(Schema.Boolean, "Connected session"),
+        error: HttpApiError.NotFound,
+      }).annotateMerge(
         OpenApi.annotations({
           identifier: "pty.connect",
           summary: "Connect to PTY session",

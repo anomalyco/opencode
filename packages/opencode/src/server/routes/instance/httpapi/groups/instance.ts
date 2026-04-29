@@ -8,6 +8,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const PathInfo = Schema.Struct({
   home: Schema.String,
@@ -38,7 +39,7 @@ export const InstanceApi = HttpApi.make("instance")
     HttpApiGroup.make("instance")
       .add(
         HttpApiEndpoint.post("dispose", InstancePaths.dispose, {
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Instance disposed"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "instance.dispose",
@@ -57,7 +58,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("vcs", InstancePaths.vcs, {
-          success: Vcs.Info,
+          success: described(Vcs.Info, "VCS info"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "vcs.get",
@@ -68,7 +69,7 @@ export const InstanceApi = HttpApi.make("instance")
         ),
         HttpApiEndpoint.get("vcsDiff", InstancePaths.vcsDiff, {
           query: VcsDiffQuery,
-          success: Schema.Array(Vcs.FileDiff),
+          success: described(Schema.Array(Vcs.FileDiff), "VCS diff"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "vcs.diff",
@@ -77,7 +78,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("command", InstancePaths.command, {
-          success: Schema.Array(Command.Info),
+          success: described(Schema.Array(Command.Info), "List of commands"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "command.list",
@@ -86,7 +87,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("agent", InstancePaths.agent, {
-          success: Schema.Array(Agent.Info),
+          success: described(Schema.Array(Agent.Info), "List of agents"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "app.agents",
@@ -95,7 +96,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("skill", InstancePaths.skill, {
-          success: Schema.Array(Skill.Info),
+          success: described(Schema.Array(Skill.Info), "List of skills"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "app.skills",
@@ -104,7 +105,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("lsp", InstancePaths.lsp, {
-          success: Schema.Array(LSP.Status),
+          success: described(Schema.Array(LSP.Status), "LSP server status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "lsp.status",
@@ -113,7 +114,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("formatter", InstancePaths.formatter, {
-          success: Schema.Array(Format.Status),
+          success: described(Schema.Array(Format.Status), "Formatter status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "formatter.status",

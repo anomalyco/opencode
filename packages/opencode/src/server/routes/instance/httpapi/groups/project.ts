@@ -1,18 +1,24 @@
 import { Project } from "@/project/project"
 import { ProjectID } from "@/project/schema"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/project"
+const UpdatePayload = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(Project.Info.fields.icon),
+  commands: Schema.optional(Project.Info.fields.commands),
+})
 
 export const ProjectApi = HttpApi.make("project")
   .add(
     HttpApiGroup.make("project")
       .add(
         HttpApiEndpoint.get("list", root, {
-          success: Schema.Array(Project.Info),
+          success: described(Schema.Array(Project.Info), "List of projects"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "project.list",
@@ -21,7 +27,7 @@ export const ProjectApi = HttpApi.make("project")
           }),
         ),
         HttpApiEndpoint.get("current", `${root}/current`, {
-          success: Project.Info,
+          success: described(Project.Info, "Current project information"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "project.current",
@@ -30,7 +36,7 @@ export const ProjectApi = HttpApi.make("project")
           }),
         ),
         HttpApiEndpoint.post("initGit", `${root}/git/init`, {
-          success: Project.Info,
+          success: described(Project.Info, "Project information after git initialization"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "project.initGit",
@@ -40,8 +46,9 @@ export const ProjectApi = HttpApi.make("project")
         ),
         HttpApiEndpoint.patch("update", `${root}/:projectID`, {
           params: { projectID: ProjectID },
-          payload: Project.UpdatePayload,
-          success: Project.Info,
+          payload: UpdatePayload,
+          success: described(Project.Info, "Updated project information"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "project.update",

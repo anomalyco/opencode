@@ -5,6 +5,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/provider"
 
@@ -13,7 +14,7 @@ export const ProviderApi = HttpApi.make("provider")
     HttpApiGroup.make("provider")
       .add(
         HttpApiEndpoint.get("list", root, {
-          success: Provider.ListResult,
+          success: described(Provider.ListResult, "List of providers"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.list",
@@ -22,7 +23,7 @@ export const ProviderApi = HttpApi.make("provider")
           }),
         ),
         HttpApiEndpoint.get("auth", `${root}/auth`, {
-          success: ProviderAuth.Methods,
+          success: described(ProviderAuth.Methods, "Provider auth methods"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.auth",
@@ -33,7 +34,7 @@ export const ProviderApi = HttpApi.make("provider")
         HttpApiEndpoint.post("authorize", `${root}/:providerID/oauth/authorize`, {
           params: { providerID: ProviderID },
           payload: ProviderAuth.AuthorizeInput,
-          success: Schema.UndefinedOr(ProviderAuth.Authorization),
+          success: described(Schema.UndefinedOr(ProviderAuth.Authorization), "Authorization URL and method"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
@@ -45,7 +46,7 @@ export const ProviderApi = HttpApi.make("provider")
         HttpApiEndpoint.post("callback", `${root}/:providerID/oauth/callback`, {
           params: { providerID: ProviderID },
           payload: ProviderAuth.CallbackInput,
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "OAuth callback processed successfully"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({

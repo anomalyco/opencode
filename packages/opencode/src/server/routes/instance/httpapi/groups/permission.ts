@@ -1,18 +1,23 @@
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/permission"
+const ReplyPayload = Schema.Struct({
+  reply: Permission.Reply,
+  message: Schema.optional(Schema.String),
+})
 
 export const PermissionApi = HttpApi.make("permission")
   .add(
     HttpApiGroup.make("permission")
       .add(
         HttpApiEndpoint.get("list", root, {
-          success: Schema.Array(Permission.Request),
+          success: described(Schema.Array(Permission.Request), "List of pending permissions"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.list",
@@ -22,8 +27,9 @@ export const PermissionApi = HttpApi.make("permission")
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {
           params: { requestID: PermissionID },
-          payload: Permission.ReplyBody,
-          success: Schema.Boolean,
+          payload: ReplyPayload,
+          success: described(Schema.Boolean, "Permission processed successfully"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.reply",

@@ -4,23 +4,23 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 export const AddPayload = Schema.Struct({
   name: Schema.String,
   config: ConfigMCP.Info,
-}).annotate({ identifier: "McpAddInput" })
+})
 
 export const StatusMap = Schema.Record(Schema.String, MCP.Status)
 export const AuthStartResponse = Schema.Struct({
   authorizationUrl: Schema.String,
-  oauthState: Schema.String,
-}).annotate({ identifier: "McpAuthStartResponse" })
+})
 export const AuthCallbackPayload = Schema.Struct({
   code: Schema.String,
-}).annotate({ identifier: "McpAuthCallbackInput" })
+})
 export const AuthRemoveResponse = Schema.Struct({
   success: Schema.Literal(true),
-}).annotate({ identifier: "McpAuthRemoveResponse" })
+})
 export class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthError>("McpUnsupportedOAuthError")(
   { error: Schema.String },
   { httpApiStatus: 400 },
@@ -40,7 +40,7 @@ export const McpApi = HttpApi.make("mcp")
     HttpApiGroup.make("mcp")
       .add(
         HttpApiEndpoint.get("status", McpPaths.status, {
-          success: Schema.Record(Schema.String, MCP.Status),
+          success: described(Schema.Record(Schema.String, MCP.Status), "MCP server status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.status",
@@ -50,7 +50,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("add", McpPaths.status, {
           payload: AddPayload,
-          success: StatusMap,
+          success: described(StatusMap, "MCP server added successfully"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
@@ -61,8 +61,8 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("authStart", McpPaths.auth, {
           params: { name: Schema.String },
-          success: AuthStartResponse,
-          error: UnsupportedOAuthError,
+          success: described(AuthStartResponse, "OAuth flow started"),
+          error: [UnsupportedOAuthError, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.start",
@@ -73,7 +73,8 @@ export const McpApi = HttpApi.make("mcp")
         HttpApiEndpoint.post("authCallback", McpPaths.authCallback, {
           params: { name: Schema.String },
           payload: AuthCallbackPayload,
-          success: MCP.Status,
+          success: described(MCP.Status, "OAuth authentication completed"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.callback",
@@ -84,8 +85,8 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("authAuthenticate", McpPaths.authAuthenticate, {
           params: { name: Schema.String },
-          success: MCP.Status,
-          error: UnsupportedOAuthError,
+          success: described(MCP.Status, "OAuth authentication completed"),
+          error: [UnsupportedOAuthError, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.authenticate",
@@ -95,7 +96,8 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.delete("authRemove", McpPaths.auth, {
           params: { name: Schema.String },
-          success: AuthRemoveResponse,
+          success: described(AuthRemoveResponse, "OAuth credentials removed"),
+          error: HttpApiError.NotFound,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.auth.remove",
@@ -105,7 +107,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("connect", McpPaths.connect, {
           params: { name: Schema.String },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "MCP server connected successfully"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.connect",
@@ -114,7 +116,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("disconnect", McpPaths.disconnect, {
           params: { name: Schema.String },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "MCP server disconnected successfully"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "mcp.disconnect",

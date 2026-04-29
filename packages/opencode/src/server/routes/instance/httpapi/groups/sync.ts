@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/sync"
 export const ReplayEvent = Schema.Struct({
@@ -11,14 +12,14 @@ export const ReplayEvent = Schema.Struct({
   seq: NonNegativeInt,
   type: Schema.String,
   data: Schema.Record(Schema.String, Schema.Unknown),
-}).annotate({ identifier: "SyncReplayEvent" })
+})
 export const ReplayPayload = Schema.Struct({
   directory: Schema.String,
   events: Schema.NonEmptyArray(ReplayEvent),
-}).annotate({ identifier: "SyncReplayInput" })
+})
 export const ReplayResponse = Schema.Struct({
   sessionID: Schema.String,
-}).annotate({ identifier: "SyncReplayResponse" })
+})
 export const HistoryPayload = Schema.Record(Schema.String, NonNegativeInt)
 export const HistoryEvent = Schema.Struct({
   id: Schema.String,
@@ -26,7 +27,7 @@ export const HistoryEvent = Schema.Struct({
   seq: NonNegativeInt,
   type: Schema.String,
   data: Schema.Record(Schema.String, Schema.Unknown),
-}).annotate({ identifier: "SyncHistoryEvent" })
+})
 
 export const SyncPaths = {
   start: `${root}/start`,
@@ -39,7 +40,7 @@ export const SyncApi = HttpApi.make("sync")
     HttpApiGroup.make("sync")
       .add(
         HttpApiEndpoint.post("start", SyncPaths.start, {
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Workspace sync started"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "sync.start",
@@ -49,7 +50,7 @@ export const SyncApi = HttpApi.make("sync")
         ),
         HttpApiEndpoint.post("replay", SyncPaths.replay, {
           payload: ReplayPayload,
-          success: ReplayResponse,
+          success: described(ReplayResponse, "Replayed sync events"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
@@ -60,7 +61,7 @@ export const SyncApi = HttpApi.make("sync")
         ),
         HttpApiEndpoint.post("history", SyncPaths.history, {
           payload: HistoryPayload,
-          success: Schema.Array(HistoryEvent),
+          success: described(Schema.Array(HistoryEvent), "Sync events"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
@@ -87,4 +88,3 @@ export const SyncApi = HttpApi.make("sync")
       description: "Experimental HttpApi surface for selected instance routes.",
     }),
   )
-

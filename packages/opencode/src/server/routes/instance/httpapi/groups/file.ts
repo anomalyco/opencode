@@ -5,6 +5,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 export const FileQuery = Schema.Struct({
   path: Schema.String,
@@ -42,7 +43,7 @@ export const FileApi = HttpApi.make("file")
       .add(
         HttpApiEndpoint.get("findText", FilePaths.findText, {
           query: FindTextQuery,
-          success: Schema.Array(Ripgrep.SearchMatch),
+          success: described(Schema.Array(Ripgrep.SearchMatch), "Matches"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.text",
@@ -52,7 +53,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("findFile", FilePaths.findFile, {
           query: FindFileQuery,
-          success: Schema.Array(Schema.String),
+          success: described(Schema.Array(Schema.String), "File paths"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.files",
@@ -62,7 +63,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("findSymbol", FilePaths.findSymbol, {
           query: FindSymbolQuery,
-          success: Schema.Array(LSP.Symbol),
+          success: described(Schema.Array(LSP.Symbol), "Symbols"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.symbols",
@@ -72,7 +73,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("list", FilePaths.list, {
           query: FileQuery,
-          success: Schema.Array(File.Node),
+          success: described(Schema.Array(File.Node), "Files and directories"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.list",
@@ -82,7 +83,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("content", FilePaths.content, {
           query: FileQuery,
-          success: File.Content,
+          success: described(File.Content, "File content"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.read",
@@ -91,7 +92,7 @@ export const FileApi = HttpApi.make("file")
           }),
         ),
         HttpApiEndpoint.get("status", FilePaths.status, {
-          success: Schema.Array(File.Info),
+          success: described(Schema.Array(File.Info), "File status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "file.status",

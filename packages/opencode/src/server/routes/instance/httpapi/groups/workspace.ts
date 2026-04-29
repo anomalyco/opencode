@@ -2,22 +2,19 @@ import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdaptorEntry } from "@/control-plane/types"
 import { NonNegativeInt } from "@/util/schema"
 import { Schema, Struct } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/experimental/workspace"
-export const CreatePayload = Schema.Struct(Struct.omit(Workspace.CreateInput.fields, ["projectID"])).annotate({
-  identifier: "WorkspaceCreateInput",
-})
+export const CreatePayload = Schema.Struct(Struct.omit(Workspace.CreateInput.fields, ["projectID"]))
 export const SessionRestorePayload = Schema.Struct(
   Struct.omit(Workspace.SessionRestoreInput.fields, ["workspaceID"]),
-).annotate({
-  identifier: "WorkspaceSessionRestoreInput",
-})
+)
 export const SessionRestoreResponse = Schema.Struct({
   total: NonNegativeInt,
-}).annotate({ identifier: "WorkspaceSessionRestoreResponse" })
+})
 
 export const WorkspacePaths = {
   adaptors: `${root}/adaptor`,
@@ -32,7 +29,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
     HttpApiGroup.make("workspace")
       .add(
         HttpApiEndpoint.get("adaptors", WorkspacePaths.adaptors, {
-          success: Schema.Array(WorkspaceAdaptorEntry),
+          success: described(Schema.Array(WorkspaceAdaptorEntry), "Workspace adaptors"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.workspace.adaptor.list",
@@ -40,7 +37,9 @@ export const WorkspaceApi = HttpApi.make("workspace")
             description: "List all available workspace adaptors for the current project.",
           }),
         ),
-        HttpApiEndpoint.get("list", WorkspacePaths.list, { success: Schema.Array(Workspace.Info) }).annotateMerge(
+        HttpApiEndpoint.get("list", WorkspacePaths.list, {
+          success: described(Schema.Array(Workspace.Info), "Workspaces"),
+        }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.workspace.list",
             summary: "List workspaces",
@@ -49,7 +48,8 @@ export const WorkspaceApi = HttpApi.make("workspace")
         ),
         HttpApiEndpoint.post("create", WorkspacePaths.list, {
           payload: CreatePayload,
-          success: Workspace.Info,
+          success: described(Workspace.Info, "Workspace created"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.workspace.create",
@@ -58,7 +58,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.get("status", WorkspacePaths.status, {
-          success: Schema.Array(Workspace.ConnectionStatus),
+          success: described(Schema.Array(Workspace.ConnectionStatus), "Workspace status"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.workspace.status",
@@ -68,7 +68,8 @@ export const WorkspaceApi = HttpApi.make("workspace")
         ),
         HttpApiEndpoint.delete("remove", WorkspacePaths.remove, {
           params: { id: Workspace.Info.fields.id },
-          success: Schema.UndefinedOr(Workspace.Info),
+          success: described(Schema.UndefinedOr(Workspace.Info), "Workspace removed"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.workspace.remove",
@@ -79,7 +80,8 @@ export const WorkspaceApi = HttpApi.make("workspace")
         HttpApiEndpoint.post("sessionRestore", WorkspacePaths.sessionRestore, {
           params: { id: Workspace.Info.fields.id },
           payload: SessionRestorePayload,
-          success: SessionRestoreResponse,
+          success: described(SessionRestoreResponse, "Session replay started"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.workspace.sessionRestore",

@@ -15,6 +15,7 @@ import { Schema, SchemaGetter, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/session"
 const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
@@ -46,35 +47,25 @@ export const UpdatePayload = Schema.Struct({
       archived: Schema.optional(NonNegativeInt),
     }),
   ),
-}).annotate({ identifier: "SessionUpdateInput" })
-export const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"])).annotate({
-  identifier: "SessionForkInput",
 })
+export const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"]))
 export const InitPayload = Schema.Struct({
   modelID: ModelID,
   providerID: ProviderID,
   messageID: MessageID,
-}).annotate({ identifier: "SessionInitInput" })
+})
 export const SummarizePayload = Schema.Struct({
   providerID: ProviderID,
   modelID: ModelID,
   auto: Schema.optional(Schema.Boolean),
-}).annotate({ identifier: "SessionSummarizeInput" })
-export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"])).annotate({
-  identifier: "SessionPromptInput",
 })
-export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"])).annotate({
-  identifier: "SessionCommandInput",
-})
-export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"])).annotate({
-  identifier: "SessionShellInput",
-})
-export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"])).annotate({
-  identifier: "SessionRevertInput",
-})
+export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))
+export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"]))
+export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
+export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput.fields, ["sessionID"]))
 export const PermissionResponsePayload = Schema.Struct({
   response: Permission.Reply,
-}).annotate({ identifier: "SessionPermissionResponseInput" })
+})
 
 export const SessionPaths = {
   list: root,
@@ -111,7 +102,7 @@ export const SessionApi = HttpApi.make("session")
       .add(
         HttpApiEndpoint.get("list", SessionPaths.list, {
           query: ListQuery,
-          success: Schema.Array(Session.Info),
+          success: described(Schema.Array(Session.Info), "List of sessions"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.list",
@@ -120,7 +111,8 @@ export const SessionApi = HttpApi.make("session")
           }),
         ),
         HttpApiEndpoint.get("status", SessionPaths.status, {
-          success: StatusMap,
+          success: described(StatusMap, "Get session status"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.status",
@@ -130,8 +122,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("get", SessionPaths.get, {
           params: { sessionID: SessionID },
-          success: Session.Info,
-          error: HttpApiError.NotFound,
+          success: described(Session.Info, "Get session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.get",
@@ -141,7 +133,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("children", SessionPaths.children, {
           params: { sessionID: SessionID },
-          success: Schema.Array(Session.Info),
+          success: described(Schema.Array(Session.Info), "List of children"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.children",
@@ -151,7 +144,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("todo", SessionPaths.todo, {
           params: { sessionID: SessionID },
-          success: Schema.Array(Todo.Info),
+          success: described(Schema.Array(Todo.Info), "Todo list"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.todo",
@@ -162,7 +156,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("diff", SessionPaths.diff, {
           params: { sessionID: SessionID },
           query: DiffQuery,
-          success: Schema.Array(Snapshot.FileDiff),
+          success: described(Schema.Array(Snapshot.FileDiff), "Successfully retrieved diff"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.diff",
@@ -173,7 +167,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.get("messages", SessionPaths.messages, {
           params: { sessionID: SessionID },
           query: MessagesQuery,
-          success: Schema.Array(MessageV2.WithParts),
+          success: described(Schema.Array(MessageV2.WithParts), "List of messages"),
           error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
@@ -184,8 +178,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.get("message", SessionPaths.message, {
           params: { sessionID: SessionID, messageID: MessageID },
-          success: MessageV2.WithParts,
-          error: HttpApiError.NotFound,
+          success: described(MessageV2.WithParts, "Message"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.message",
@@ -195,7 +189,7 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("create", SessionPaths.create, {
           payload: [HttpApiSchema.NoContent, Session.CreateInput],
-          success: Session.Info,
+          success: described(Session.Info, "Successfully created session"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
@@ -206,7 +200,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("remove", SessionPaths.remove, {
           params: { sessionID: SessionID },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Successfully deleted session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.delete",
@@ -217,7 +212,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.patch("update", SessionPaths.update, {
           params: { sessionID: SessionID },
           payload: UpdatePayload,
-          success: Session.Info,
+          success: described(Session.Info, "Successfully updated session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.update",
@@ -228,7 +224,7 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("fork", SessionPaths.fork, {
           params: { sessionID: SessionID },
           payload: ForkPayload,
-          success: Session.Info,
+          success: described(Session.Info, "200"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.fork",
@@ -238,7 +234,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("abort", SessionPaths.abort, {
           params: { sessionID: SessionID },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Aborted session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.abort",
@@ -249,7 +246,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("init", SessionPaths.init, {
           params: { sessionID: SessionID },
           payload: InitPayload,
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "200"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.init",
@@ -260,7 +258,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("share", SessionPaths.share, {
           params: { sessionID: SessionID },
-          success: Session.Info,
+          success: described(Session.Info, "Successfully shared session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.share",
@@ -270,7 +269,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("unshare", SessionPaths.share, {
           params: { sessionID: SessionID },
-          success: Session.Info,
+          success: described(Session.Info, "Successfully unshared session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.unshare",
@@ -281,7 +281,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("summarize", SessionPaths.summarize, {
           params: { sessionID: SessionID },
           payload: SummarizePayload,
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Summarized session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.summarize",
@@ -292,7 +293,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("prompt", SessionPaths.prompt, {
           params: { sessionID: SessionID },
           payload: PromptPayload,
-          success: MessageV2.WithParts,
+          success: described(MessageV2.WithParts, "Created message"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.prompt",
@@ -303,7 +305,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("promptAsync", SessionPaths.promptAsync, {
           params: { sessionID: SessionID },
           payload: PromptPayload,
-          success: HttpApiSchema.NoContent,
+          success: described(HttpApiSchema.NoContent, "Prompt accepted"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.prompt_async",
@@ -315,7 +318,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("command", SessionPaths.command, {
           params: { sessionID: SessionID },
           payload: CommandPayload,
-          success: MessageV2.WithParts,
+          success: described(MessageV2.WithParts, "Created message"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.command",
@@ -326,7 +330,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("shell", SessionPaths.shell, {
           params: { sessionID: SessionID },
           payload: ShellPayload,
-          success: MessageV2.WithParts,
+          success: described(MessageV2.WithParts, "Created message"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.shell",
@@ -337,7 +342,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("revert", SessionPaths.revert, {
           params: { sessionID: SessionID },
           payload: RevertPayload,
-          success: Session.Info,
+          success: described(Session.Info, "Updated session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.revert",
@@ -348,7 +354,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.post("unrevert", SessionPaths.unrevert, {
           params: { sessionID: SessionID },
-          success: Session.Info,
+          success: described(Session.Info, "Updated session"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.unrevert",
@@ -359,7 +366,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.post("permissionRespond", SessionPaths.permissions, {
           params: { sessionID: SessionID, permissionID: PermissionID },
           payload: PermissionResponsePayload,
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Permission processed successfully"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "permission.respond",
@@ -370,7 +378,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("deleteMessage", SessionPaths.deleteMessage, {
           params: { sessionID: SessionID, messageID: MessageID },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Successfully deleted message"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.deleteMessage",
@@ -381,7 +390,8 @@ export const SessionApi = HttpApi.make("session")
         ),
         HttpApiEndpoint.delete("deletePart", SessionPaths.deletePart, {
           params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Successfully deleted part"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "part.delete",
@@ -391,7 +401,8 @@ export const SessionApi = HttpApi.make("session")
         HttpApiEndpoint.patch("updatePart", SessionPaths.updatePart, {
           params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
           payload: MessageV2.Part,
-          success: MessageV2.Part,
+          success: described(MessageV2.Part, "Successfully updated part"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "part.update",

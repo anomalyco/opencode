@@ -8,6 +8,7 @@ import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const ConsoleStateResponse = Schema.Struct({
   consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
@@ -22,22 +23,22 @@ const ConsoleOrgOption = Schema.Struct({
   orgID: Schema.String,
   orgName: Schema.String,
   active: Schema.Boolean,
-}).annotate({ identifier: "ConsoleOrgOption" })
+})
 
 const ConsoleOrgList = Schema.Struct({
   orgs: Schema.Array(ConsoleOrgOption),
-}).annotate({ identifier: "ConsoleOrgList" })
+})
 
 export const ConsoleSwitchPayload = Schema.Struct({
   accountID: AccountID,
   orgID: OrgID,
-}).annotate({ identifier: "ConsoleSwitchInput" })
+})
 
 const ToolIDs = Schema.Array(Schema.String).annotate({ identifier: "ToolIDs" })
 const ToolListItem = Schema.Struct({
   id: Schema.String,
   description: Schema.String,
-  parameters: Schema.Record(Schema.String, Schema.Any),
+  parameters: Schema.Unknown,
 }).annotate({ identifier: "ToolListItem" })
 const ToolList = Schema.Array(ToolListItem).annotate({ identifier: "ToolList" })
 export const ToolListQuery = Schema.Struct({
@@ -51,7 +52,7 @@ const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
     encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
   }),
 )
-const WorktreeList = Schema.Array(Schema.String).annotate({ identifier: "WorktreeList" })
+const WorktreeList = Schema.Array(Schema.String)
 export const SessionListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
   roots: Schema.optional(QueryBoolean),
@@ -79,7 +80,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
     HttpApiGroup.make("experimental")
       .add(
         HttpApiEndpoint.get("console", ExperimentalPaths.console, {
-          success: ConsoleStateResponse,
+          success: described(ConsoleStateResponse, "Active Console provider metadata"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.console.get",
@@ -88,7 +89,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("consoleOrgs", ExperimentalPaths.consoleOrgs, {
-          success: ConsoleOrgList,
+          success: described(ConsoleOrgList, "Switchable Console orgs"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.console.listOrgs",
@@ -98,7 +99,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.post("consoleSwitch", ExperimentalPaths.consoleSwitch, {
           payload: ConsoleSwitchPayload,
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Switch success"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
@@ -109,7 +110,8 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.get("tool", ExperimentalPaths.tool, {
           query: ToolListQuery,
-          success: ToolList,
+          success: described(ToolList, "Tools"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tool.list",
@@ -119,7 +121,8 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("toolIDs", ExperimentalPaths.toolIDs, {
-          success: ToolIDs,
+          success: described(ToolIDs, "Tool IDs"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "tool.ids",
@@ -129,7 +132,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("worktree", ExperimentalPaths.worktree, {
-          success: WorktreeList,
+          success: described(WorktreeList, "List of worktree directories"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "worktree.list",
@@ -139,7 +142,8 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.post("worktreeCreate", ExperimentalPaths.worktree, {
           payload: Schema.optional(Worktree.CreateInput),
-          success: Worktree.Info,
+          success: described(Worktree.Info, "Worktree created"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "worktree.create",
@@ -149,7 +153,8 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.delete("worktreeRemove", ExperimentalPaths.worktree, {
           payload: Worktree.RemoveInput,
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Worktree removed"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "worktree.remove",
@@ -159,7 +164,8 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.post("worktreeReset", ExperimentalPaths.worktreeReset, {
           payload: Worktree.ResetInput,
-          success: Schema.Boolean,
+          success: described(Schema.Boolean, "Worktree reset"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "worktree.reset",
@@ -169,7 +175,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.get("session", ExperimentalPaths.session, {
           query: SessionListQuery,
-          success: Schema.Array(Session.GlobalInfo),
+          success: described(Schema.Array(Session.GlobalInfo), "List of sessions"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.session.list",
@@ -179,7 +185,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {
-          success: Schema.Record(Schema.String, MCP.Resource),
+          success: described(Schema.Record(Schema.String, MCP.Resource), "MCP resources"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.resource.list",

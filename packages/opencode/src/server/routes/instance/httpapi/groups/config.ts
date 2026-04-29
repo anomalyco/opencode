@@ -1,8 +1,9 @@
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../auth"
 import { InstanceContextMiddleware } from "../instance-context"
+import { described } from "./metadata"
 
 const root = "/config"
 
@@ -11,7 +12,7 @@ export const ConfigApi = HttpApi.make("config")
     HttpApiGroup.make("config")
       .add(
         HttpApiEndpoint.get("get", root, {
-          success: Config.Info,
+          success: described(Config.Info, "Get config info"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "config.get",
@@ -21,7 +22,8 @@ export const ConfigApi = HttpApi.make("config")
         ),
         HttpApiEndpoint.patch("update", root, {
           payload: Config.Info,
-          success: Config.Info,
+          success: described(Config.Info, "Successfully updated config"),
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "config.update",
@@ -30,7 +32,7 @@ export const ConfigApi = HttpApi.make("config")
           }),
         ),
         HttpApiEndpoint.get("providers", `${root}/providers`, {
-          success: Provider.ConfigProvidersResult,
+          success: described(Provider.ConfigProvidersResult, "List of providers"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "config.providers",
