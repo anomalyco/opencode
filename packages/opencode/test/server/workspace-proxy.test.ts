@@ -1,41 +1,43 @@
+import { NodeHttpServer } from "@effect/platform-node"
+import Http from "node:http"
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { Effect, Ref } from "effect"
+import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiProxy } from "../../src/server/routes/instance/httpapi/middleware/proxy"
-import { it } from "../lib/effect"
+import { testEffect } from "../lib/effect"
 
-function startRemote(handler: (req: Request) => Response | Promise<Response>) {
-  return Bun.serve({ port: 0, fetch: handler })
+function serverUrl() {
+  return Effect.gen(function* () {
+    return HttpServer.formatAddress((yield* HttpServer.HttpServer).address)
+  })
 }
+
+const testServerLayer = NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 })
+const it = testEffect(testServerLayer)
 
 describe("HttpApi workspace proxy", () => {
   it.live("proxies HTTP request and returns streamed response with status and headers", () =>
     Effect.gen(function* () {
-      const remote = startRemote((req) => {
-        const url = new URL(req.url)
-        return new Response(JSON.stringify({ path: url.pathname, method: req.method }), {
-          status: 201,
-          headers: { "content-type": "application/json", "x-remote": "yes" },
-        })
-      })
+      yield* HttpServer.serveEffect()(
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          return yield* HttpServerResponse.json({ path: req.url, method: req.method }, {
+            status: 201,
+            headers: { "x-remote": "yes" },
+          })
+        }),
+      )
+      const url = yield* serverUrl()
 
-      try {
-        const request = HttpServerRequest.fromWeb(
-          new Request("http://localhost/session/abc", { method: "POST", body: "{}" }),
-        )
-        const response = yield* HttpApiProxy.http(
-          `http://127.0.0.1:${remote.port}/session/abc`,
-          { "x-extra": "injected" },
-          request,
-        )
+      const request = HttpServerRequest.fromWeb(
+        new Request("http://localhost/session/abc", { method: "POST", body: "{}" }),
+      )
+      const response = yield* HttpApiProxy.http(`${url}/session/abc`, { "x-extra": "injected" }, request)
 
-        expect(response.status).toBe(201)
-        const client = HttpServerResponse.toClientResponse(response)
-        expect(yield* client.json).toEqual({ path: "/session/abc", method: "POST" })
-        expect((response.headers as Record<string, string>)["x-remote"]).toBe("yes")
-      } finally {
-        remote.stop(true)
-      }
+      expect(response.status).toBe(201)
+      const client = HttpServerResponse.toClientResponse(response)
+      expect(yield* client.json).toEqual({ path: "/session/abc", method: "POST" })
+      expect(response.headers["x-remote"]).toBe("yes")
     }),
   )
 
@@ -48,37 +50,34 @@ describe("HttpApi workspace proxy", () => {
     }),
   )
 
-  it.live("strips hop-by-hop and opencode headers from forwarded request", () =>
+  it.live("strips opencode-internal headers and merges extra headers", () =>
     Effect.gen(function* () {
-      let forwarded: Record<string, string> = {}
-      const remote = startRemote((req) => {
-        forwarded = Object.fromEntries(req.headers.entries())
-        return new Response("ok")
-      })
+      const forwarded = yield* Ref.make<Record<string, string>>({})
+      yield* HttpServer.serveEffect()(
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          yield* Ref.set(forwarded, req.headers)
+          return HttpServerResponse.empty()
+        }),
+      )
+      const url = yield* serverUrl()
 
-      try {
-        const request = HttpServerRequest.fromWeb(
-          new Request("http://localhost/test", {
-            headers: {
-              connection: "keep-alive",
-              "x-opencode-directory": "/secret/path",
-              "x-opencode-workspace": "ws_123",
-              "accept-encoding": "gzip",
-              "x-custom": "preserved",
-            },
-          }),
-        )
-        yield* HttpApiProxy.http(`http://127.0.0.1:${remote.port}/test`, { "x-injected": "extra" }, request)
+      const request = HttpServerRequest.fromWeb(
+        new Request("http://localhost/test", {
+          headers: {
+            "x-opencode-directory": "/secret/path",
+            "x-opencode-workspace": "ws_123",
+            "x-custom": "preserved",
+          },
+        }),
+      )
+      yield* HttpApiProxy.http(`${url}/test`, { "x-injected": "extra" }, request)
+      const headers = yield* Ref.get(forwarded)
 
-        // connection/accept-encoding are re-added by the transport layer,
-        // but opencode-internal headers must not leak to the upstream
-        expect(forwarded["x-opencode-directory"]).toBeUndefined()
-        expect(forwarded["x-opencode-workspace"]).toBeUndefined()
-        expect(forwarded["x-custom"]).toBe("preserved")
-        expect(forwarded["x-injected"]).toBe("extra")
-      } finally {
-        remote.stop(true)
-      }
+      expect(headers["x-opencode-directory"]).toBeUndefined()
+      expect(headers["x-opencode-workspace"]).toBeUndefined()
+      expect(headers["x-custom"]).toBe("preserved")
+      expect(headers["x-injected"]).toBe("extra")
     }),
   )
 })
