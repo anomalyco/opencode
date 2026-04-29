@@ -39,10 +39,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let auto: { top: number; time: number } | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
-  const log = (event: string, extra?: Record<string, unknown>) => {
-    if (!event || !extra) return
-    console.debug(`[auto-scroll] ${event}`, extra)
-  }
 
   const atBottom = (el: HTMLElement) => {
     return distanceFromBottom(el) <= threshold()
@@ -58,17 +54,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   const distanceFromBottom = (el: HTMLElement) => {
     return el.scrollHeight - el.clientHeight - el.scrollTop
-  }
-
-  const snap = (el: HTMLElement) => {
-    const max = Math.max(0, el.scrollHeight - el.clientHeight)
-    return {
-      top: Math.round(el.scrollTop),
-      height: Math.round(el.scrollHeight),
-      client: Math.round(el.clientHeight),
-      max: Math.round(max),
-      gap: Math.round(max - el.scrollTop),
-    }
   }
 
   const canScroll = (el: HTMLElement) => {
@@ -107,9 +92,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   const scrollToBottomNow = (behavior: ScrollBehavior) => {
     const el = store.scrollRef
     if (!el) return
-    const before = snap(el)
     markAuto(el)
-    log("scroll:write", { source: "scrollToBottomNow", behavior, nextTop: el.scrollHeight })
     if (behavior === "smooth") {
       el.scrollTo({ top: el.scrollHeight, behavior })
       return
@@ -117,16 +100,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     // `scrollTop` assignment bypasses any CSS `scroll-behavior: smooth`.
     el.scrollTop = el.scrollHeight
-    const after = snap(el)
-    const jump = after.top - before.top
-    if (jump < -24) {
-      console.warn("[auto-scroll] upward write", {
-        behavior,
-        jump,
-        before,
-        after,
-      })
-    }
   }
 
   const scrollToBottom = (force: boolean) => {
@@ -153,16 +126,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = store.scrollRef
     if (!el) return
     if (!canScroll(el)) {
-      log("stop:skip", { source: "stop", why: "cannot-scroll" })
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }
-    if (store.userScrolled) {
-      log("stop:skip", { source: "stop", why: "already-stopped" })
-      return
-    }
+    if (store.userScrolled) return
 
-    log("state:set", { source: "stop", nextUserScrolled: true })
     setStore("userScrolled", true)
     options.onUserInteracted?.()
   }
@@ -175,11 +143,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = store.scrollRef
     const target = e.target instanceof Element ? e.target : undefined
     const nested = target?.closest("[data-scrollable]")
-    if (el && nested && nested !== el) {
-      log("wheel:skip", { source: "handleWheel", why: "nested-scrollable", deltaY: e.deltaY })
-      return
-    }
-    log("wheel:up", { source: "handleWheel", deltaY: e.deltaY })
+    if (el && nested && nested !== el) return
     stop()
   }
 
@@ -188,25 +152,21 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (!el) return
 
     if (!canScroll(el)) {
-      log("scroll:state", { source: "handleScroll", why: "cannot-scroll" })
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }
 
     if (atBottom(el)) {
-      log("scroll:state", { source: "handleScroll", why: "at-bottom" })
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }
 
     // Ignore scroll events triggered by our own scrollToBottom calls.
     if (!store.userScrolled && isAuto(el)) {
-      log("scroll:state", { source: "handleScroll", why: "auto-scroll" })
       scrollToBottom(false)
       return
     }
 
-    log("scroll:state", { source: "handleScroll", why: "user-scroll" })
     stop()
   }
 
