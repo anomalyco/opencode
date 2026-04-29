@@ -14,7 +14,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 | commit | 简述 |
 |---|---|
-| (待回填,本次单笔) | `fix(opencode): claude-code plugin step loop 兜底 — workaround upstream finish 不上浮 [feat: claude-code-loop-fix] [override-blacklist: 修上游 sst/opencode step loop case-1 bug,plugin 5 轮证伤,wrapper 不可行]` |
+| `e2a9d7167` | `fix(opencode): claude-code plugin step loop 兜底 — workaround upstream finish 不上浮 [feat: claude-code-loop-fix] [override-blacklist: 修上游 sst/opencode step loop case-1 bug,plugin 5 轮证伤,wrapper 不可行]` |
 
 ## 改动文件
 
