@@ -6,7 +6,6 @@ import { createOpencodeServer } from "./server.js"
 import type { ServerOptions } from "./server.js"
 
 export * as data from "./data.js"
-import * as data from "./data.js"
 
 export async function createOpencode(options?: ServerOptions) {
   const server = await createOpencodeServer({

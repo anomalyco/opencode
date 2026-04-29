@@ -389,6 +389,7 @@ jobs:
     needs:
       - build-cli
       - version
+    if: github.repository == 'anomalyco/opencode'
     continue-on-error: false
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -401,12 +402,14 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          - host: macos-latest
+          - host: macos-26-intel
             target: x86_64-apple-darwin
             platform_flag: --mac --x64
-          - host: macos-latest
+            bun_install_flags: --os=darwin --cpu=x64
+          - host: macos-26
             target: aarch64-apple-darwin
             platform_flag: --mac --arm64
+            bun_install_flags: --os=darwin --cpu=arm64
           # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
           - host: "windows-2025"
             target: aarch64-pc-windows-msvc
@@ -421,7 +424,6 @@ jobs:
             target: aarch64-unknown-linux-gnu
             platform_flag: --linux
     runs-on: ${{ matrix.settings.host }}
-    # if: github.ref_name == 'beta'
     steps:
       - uses: actions/checkout@v3
 
@@ -437,6 +439,8 @@ jobs:
         run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
 
       - uses: ./.github/actions/setup-bun
+        with:
+          install-flags: ${{ matrix.settings.bun_install_flags }}
 
       - name: Azure login
         if: runner.os == 'Windows'
@@ -547,6 +551,7 @@ jobs:
       - sign-cli-windows
       - build-tauri
       - build-electron
+    if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3

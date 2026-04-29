@@ -4,14 +4,9 @@ export function lazy<T>(fn: () => T) {
 
   const result = (): T => {
     if (loaded) return value as T
-    try {
-      value = fn()
-      loaded = true
-      return value as T
-    } catch (e) {
-      // Don't mark as loaded if initialization failed
-      throw e
-    }
+    value = fn()
+    loaded = true
+    return value as T
   }
 
   result.reset = () => {

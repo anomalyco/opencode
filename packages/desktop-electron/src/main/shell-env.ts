@@ -82,7 +82,7 @@ export function loadShellEnv(shell: string) {
 
 export function mergeShellEnv(shell: Record<string, string> | null, env: Record<string, string>) {
   return {
-    ...(shell || {}),
+    ...shell,
     ...env,
   }
 }

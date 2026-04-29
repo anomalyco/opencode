@@ -95,7 +95,7 @@ Create new files or overwrite existing ones.
 Use this to allow the LLM to create new files. It will overwrite existing files if they already exist.
 
 :::note
-The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `apply_patch`, `multiedit`).
+The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `apply_patch`).
 :::
 
 ---
@@ -151,23 +151,6 @@ Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns ma
 
 ---
 
-### list
-
-List files and directories in a given path.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-This tool lists directory contents. It accepts glob patterns to filter results.
-
----
-
 ### lsp (experimental)
 
 Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy.
@@ -211,7 +194,7 @@ When handling `tool.execute.before` or `tool.execute.after` hooks, check `input.
 `apply_patch` uses `output.args.patchText` instead of `output.args.filePath`. Paths are embedded in marker lines within `patchText` and are relative to the project root (for example: `*** Add File: src/new-file.ts`, `*** Update File: src/existing.ts`, `*** Move to: src/renamed.ts`, `*** Delete File: src/obsolete.ts`).
 
 :::note
-The `apply_patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `apply_patch`, `multiedit`).
+The `apply_patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `apply_patch`).
 :::
 
 ---
@@ -345,7 +328,7 @@ MCP (Model Context Protocol) servers allow you to integrate external tools and s
 
 ## Internals
 
-Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
+Internally, tools like `grep` and `glob` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
 
 ---
 

@@ -1,21 +1,18 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Layer, Stream } from "effect"
-import z from "zod"
+import { Deferred, Effect, Layer, Schema, Stream } from "effect"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const TestEvent = {
-  Ping: BusEvent.define("test.effect.ping", z.object({ value: z.number() })),
-  Pong: BusEvent.define("test.effect.pong", z.object({ message: z.string() })),
+  Ping: BusEvent.define("test.effect.ping", Schema.Struct({ value: Schema.Number })),
+  Pong: BusEvent.define("test.effect.pong", Schema.Struct({ message: Schema.String })),
 }
 
-const node = NodeChildProcessSpawner.layer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-)
+const node = CrossSpawnSpawner.defaultLayer
 
 const live = Layer.mergeAll(Bus.layer, node)
 

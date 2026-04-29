@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { makeRuntime } from "../../src/effect/run-service"
 
-class Shared extends ServiceMap.Service<Shared, { readonly id: number }>()("@test/Shared") {}
+class Shared extends Context.Service<Shared, { readonly id: number }>()("@test/Shared") {}
 
 test("makeRuntime shares dependent layers through the shared memo map", async () => {
   let n = 0
@@ -15,7 +15,7 @@ test("makeRuntime shares dependent layers through the shared memo map", async ()
     }),
   )
 
-  class One extends ServiceMap.Service<One, { readonly get: () => Effect.Effect<number> }>()("@test/One") {}
+  class One extends Context.Service<One, { readonly get: () => Effect.Effect<number> }>()("@test/One") {}
   const one = Layer.effect(
     One,
     Effect.gen(function* () {
@@ -26,7 +26,7 @@ test("makeRuntime shares dependent layers through the shared memo map", async ()
     }),
   ).pipe(Layer.provide(shared))
 
-  class Two extends ServiceMap.Service<Two, { readonly get: () => Effect.Effect<number> }>()("@test/Two") {}
+  class Two extends Context.Service<Two, { readonly get: () => Effect.Effect<number> }>()("@test/Two") {}
   const two = Layer.effect(
     Two,
     Effect.gen(function* () {

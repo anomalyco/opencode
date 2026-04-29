@@ -25,6 +25,8 @@ export function DialogConfirm(props: DialogConfirmProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
       if (store.active === "confirm") props.onConfirm?.()
       if (store.active === "cancel") props.onCancel?.()
       dialog.clear()
@@ -54,7 +56,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={key === store.active ? theme.primary : undefined}
-              onMouseUp={(evt) => {
+              onMouseUp={(_evt) => {
                 if (key === "confirm") props.onConfirm?.()
                 if (key === "cancel") props.onCancel?.()
                 dialog.clear()
