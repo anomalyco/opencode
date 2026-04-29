@@ -1,5 +1,5 @@
 import { Identifier } from "@/id/id"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, withStatics } from "@/util/schema"
 import * as DateTime from "effect/DateTime"
 import { Schema } from "effect"
 
@@ -25,8 +25,8 @@ export namespace SessionEvent {
   }
 
   export class Source extends Schema.Class<Source>("Session.Event.Source")({
-    start: Schema.Number,
-    end: Schema.Number,
+    start: NonNegativeInt,
+    end: NonNegativeInt,
     text: Schema.String,
   }) {}
 
@@ -55,7 +55,7 @@ export namespace SessionEvent {
 
   export class RetryError extends Schema.Class<RetryError>("Session.Event.Retry.Error")({
     message: Schema.String,
-    statusCode: Schema.Number.pipe(Schema.optional),
+    statusCode: NonNegativeInt.pipe(Schema.optional),
     isRetryable: Schema.Boolean,
     responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
     responseBody: Schema.String.pipe(Schema.optional),
@@ -123,14 +123,14 @@ export namespace SessionEvent {
       ...Base,
       type: Schema.Literal("step.ended"),
       reason: Schema.String,
-      cost: Schema.Number,
+      cost: Schema.Finite,
       tokens: Schema.Struct({
-        input: Schema.Number,
-        output: Schema.Number,
-        reasoning: Schema.Number,
+        input: NonNegativeInt,
+        output: NonNegativeInt,
+        reasoning: NonNegativeInt,
         cache: Schema.Struct({
-          read: Schema.Number,
-          write: Schema.Number,
+          read: NonNegativeInt,
+          write: NonNegativeInt,
         }),
       }),
     }) {
@@ -395,7 +395,7 @@ export namespace SessionEvent {
   export class Retried extends Schema.Class<Retried>("Session.Event.Retried")({
     ...Base,
     type: Schema.Literal("retried"),
-    attempt: Schema.Number,
+    attempt: NonNegativeInt,
     error: RetryError,
   }) {
     static create(input: BaseInput & { attempt: number; error: RetryError }) {

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
-import { ControlPaths } from "../../src/server/routes/instance/httpapi/control"
-import { FileApi, FilePaths } from "../../src/server/routes/instance/httpapi/file"
-import { GlobalPaths } from "../../src/server/routes/instance/httpapi/global"
+import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
+import { FileApi, FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
+import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/global"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
@@ -57,14 +57,30 @@ function openApiParameters(spec: { paths: Record<string, Partial<Record<(typeof 
   )
 }
 
-function openApiRequestBodies(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }) {
+function openApiRequestBodies(spec: OpenApiSpec) {
   return Object.fromEntries(
     Object.entries(spec.paths).flatMap(([path, item]) =>
       methods
         .filter((method) => item[method])
-        .map((method) => [`${method.toUpperCase()} ${path}`, requestBodyKey(item[method]?.requestBody)]),
+        .map((method) => [`${method.toUpperCase()} ${path}`, requestBodyKey(spec, item[method]?.requestBody)]),
     ),
   )
+}
+
+type OpenApiSpec = {
+  components?: {
+    schemas?: Record<string, unknown>
+  }
+  paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>>
+}
+
+type OpenApiSchema = {
+  $ref?: string
+  allOf?: unknown[]
+  anyOf?: unknown[]
+  oneOf?: unknown[]
+  properties?: Record<string, unknown>
+  type?: string | string[]
 }
 
 type Operation = {
@@ -74,7 +90,7 @@ type Operation = {
 }
 
 type RequestBody = {
-  content?: Record<string, { schema?: { $ref?: string; type?: string } }>
+  content?: Record<string, { schema?: OpenApiSchema }>
   required?: boolean
 }
 
@@ -97,15 +113,25 @@ function parameterSchema(input: {
   return param.schema
 }
 
-function requestBodyKey(body: unknown) {
+function requestBodyKey(spec: OpenApiSpec, body: unknown) {
   if (!body || typeof body !== "object" || !("content" in body)) return ""
   const requestBody = body as RequestBody
   return JSON.stringify({
     required: requestBody.required === true,
     content: Object.entries(requestBody.content ?? {})
-      .map(([type, value]) => [type, value.schema?.$ref ?? value.schema?.type ?? "inline"])
+      .map(([type, value]) => [type, requestBodySchemaKind(spec, value.schema)])
       .sort(),
   })
+}
+
+function requestBodySchemaKind(spec: OpenApiSpec, schema: OpenApiSchema | undefined) {
+  if (!schema) return ""
+  const resolved = (
+    schema.$ref ? spec.components?.schemas?.[schema.$ref.replace("#/components/schemas/", "")] : schema
+  ) as OpenApiSchema | undefined
+  if (resolved?.properties) return "object"
+  if (resolved?.anyOf ?? resolved?.oneOf ?? resolved?.allOf) return "object"
+  return resolved?.type ?? schema.type ?? "inline"
 }
 
 function responseContentTypes(input: {
@@ -146,6 +172,14 @@ afterEach(async () => {
 })
 
 describe("HttpApi server", () => {
+  test("keeps Effect HttpApi behind the feature flag", () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = false
+    expect(Server.backend()).toEqual({ backend: "hono", reason: "stable" })
+
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    expect(Server.backend()).toEqual({ backend: "effect-httpapi", reason: "env" })
+  })
+
   test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
     const honoRoutes = openApiRouteKeys(await Server.openapi())
     const effectRoutes = openApiRouteKeys(effectOpenApi())
