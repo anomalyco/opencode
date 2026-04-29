@@ -3,8 +3,8 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
-import { InstallationChannel, InstallationVersion } from "@/installation/version"
-import { TuiPluginRuntime } from "../../plugin"
+import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
 import { getScrollAcceleration } from "../../util/scroll"
 

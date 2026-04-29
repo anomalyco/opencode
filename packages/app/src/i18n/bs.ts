@@ -228,7 +228,7 @@ export const dict = {
   "common.default": "Podrazumijevano",
   "common.attachment": "prilog",
 
-  "prompt.placeholder.shell": "Unesi shell naredbu...",
+  "prompt.placeholder.shell": "Unesi shell naredbu... {{example}}",
   "prompt.placeholder.normal": 'Pitaj bilo šta... "{{example}}"',
   "prompt.placeholder.simple": "Pitaj bilo šta...",
   "prompt.placeholder.summarizeComments": "Sažmi komentare…",

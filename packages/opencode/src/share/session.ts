@@ -1,9 +1,9 @@
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SyncEvent } from "@/sync"
 import { Effect, Layer, Scope, Context } from "effect"
-import { Config } from "../config"
-import { Flag } from "../flag/flag"
+import { Config } from "@/config/config"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import * as ShareNext from "./share-next"
 
 export interface Interface {
@@ -55,3 +55,5 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Session.defaultLayer),
   Layer.provide(Config.defaultLayer),
 )
+
+export * as SessionShare from "./session"
