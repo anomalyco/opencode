@@ -27,11 +27,13 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import * as Log from "@opencode-ai/core/util/log"
 import { emptyConsoleState, type ConsoleState } from "@/config/console-state"
 import path from "path"
 import { useKV } from "./kv"
+
+const CODEX_QUOTA_REFRESH_INTERVAL = 60 * 1000
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -110,6 +112,38 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const project = useProject()
     const sdk = useSDK()
     const kv = useKV()
+    let codexQuotaWorkspace: string | null | undefined
+    let providerQuotaWorkspace: string | null | undefined
+
+    async function syncCodexQuota(workspace = project.workspace.current()) {
+      const current = workspace ?? null
+      if (codexQuotaWorkspace === current) return
+      codexQuotaWorkspace = current
+      try {
+        const result = await sdk.client.experimental.console.codexQuota({ workspace })
+        if (!result.data) return
+        if (workspace !== project.workspace.current()) return
+        setStore("console_state", reconcile({ ...store.console_state, codexQuota: result.data }))
+      } finally {
+        if (codexQuotaWorkspace === current) codexQuotaWorkspace = undefined
+      }
+    }
+
+    async function syncProviderQuota(workspace = project.workspace.current()) {
+      const current = workspace ?? null
+      if (providerQuotaWorkspace === current) return
+      providerQuotaWorkspace = current
+      try {
+        const result = await sdk.client.experimental.providerQuota({ workspace })
+        if (!result.data) return
+        if (workspace !== project.workspace.current()) return
+        setStore("console_state", reconcile({ ...store.console_state, providerQuota: result.data.providerQuota }))
+      } catch {
+        return
+      } finally {
+        if (providerQuotaWorkspace === current) providerQuotaWorkspace = undefined
+      }
+    }
 
     const fullSyncedSessions = new Set<string>()
     let syncedWorkspace = project.workspace.current()
@@ -437,10 +471,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         })
         .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
+          void syncCodexQuota(workspace).catch(() => undefined)
+          void syncProviderQuota(workspace).catch(() => undefined)
           // non-blocking
           void Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
             consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
+            syncCodexQuota(workspace),
+            syncProviderQuota(workspace),
             sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
             sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
@@ -474,6 +512,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     onMount(() => {
       void bootstrap()
+      void syncCodexQuota().catch(() => undefined)
+      void syncProviderQuota().catch(() => undefined)
+      const interval = setInterval(() => {
+        void syncCodexQuota().catch(() => undefined)
+        void syncProviderQuota().catch(() => undefined)
+      }, CODEX_QUOTA_REFRESH_INTERVAL)
+      onCleanup(() => clearInterval(interval))
     })
 
     const result = {

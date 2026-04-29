@@ -43,6 +43,7 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import { formatCodexQuotaMetrics, formatProviderQuotaMetrics } from "./metrics"
 
 export type PromptProps = {
   sessionID?: string
@@ -199,6 +200,20 @@ export function Prompt(props: PromptProps) {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
     }
+  })
+  const quota = createMemo(
+    () =>
+      formatProviderQuotaMetrics(
+        sync.data.console_state.providerQuota,
+        dimensions().width,
+        Date.now(),
+        currentProviderLabel(),
+      ) ?? formatCodexQuotaMetrics(sync.data.console_state.codexQuota, dimensions().width),
+  )
+  const metrics = createMemo(() => {
+    const parts = [usage()?.context, quota(), usage()?.cost].filter((part): part is string => Boolean(part))
+    if (parts.length === 0) return
+    return parts.join(" · ")
   })
 
   const [store, setStore] = createStore<{
@@ -1395,10 +1410,10 @@ export function Prompt(props: PromptProps) {
               <Switch>
                 <Match when={store.mode === "normal"}>
                   <Switch>
-                    <Match when={usage()}>
+                    <Match when={metrics()}>
                       {(item) => (
                         <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+                          {item()}
                         </text>
                       )}
                     </Match>

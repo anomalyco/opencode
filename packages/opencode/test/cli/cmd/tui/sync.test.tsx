@@ -36,9 +36,11 @@ function eventSource(): EventSource {
 
 function createFetch() {
   const session = [] as URL[]
+  const quota = [] as URL[]
   const fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     if (url.pathname === "/session") session.push(url)
+    if (url.pathname === "/experimental/console/codex-quota") quota.push(url)
 
     switch (url.pathname) {
       case "/agent":
@@ -58,6 +60,8 @@ function createFetch() {
         return json({ providers: {}, default: {} })
       case "/experimental/console":
         return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
+      case "/experimental/console/codex-quota":
+        return json({ fiveHour: { remainingPercent: 82 }, weekly: { remainingPercent: 87 }, fetchedAt: 123 })
       case "/path":
         return json({ home: "", state: "", config: "", worktree, directory })
       case "/project/current":
@@ -73,7 +77,7 @@ function createFetch() {
     throw new Error(`unexpected request: ${url.pathname}`)
   }) as typeof globalThis.fetch
 
-  return { fetch, session }
+  return { fetch, session, quota }
 }
 
 async function mount() {
@@ -109,7 +113,7 @@ async function mount() {
 
   await ready
   await wait(() => sync.status === "complete")
-  return { app, kv, sync, session: calls.session }
+  return { app, kv, sync, session: calls.session, quota: calls.quota }
 }
 
 function Probe(props: { onReady: (ctx: { kv: ReturnType<typeof useKV>; sync: ReturnType<typeof useSync> }) => void }) {
@@ -141,6 +145,22 @@ describe("tui sync", () => {
 
       expect(session.at(-1)?.searchParams.get("scope")).toBe("project")
       expect(session.at(-1)?.searchParams.get("path")).toBeNull()
+    } finally {
+      app.renderer.destroy()
+      Global.Path.state = previous
+    }
+  })
+  test("syncs Codex quota into console state", async () => {
+    const previous = Global.Path.state
+    await using tmp = await tmpdir()
+    Global.Path.state = tmp.path
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    const { app, quota, sync } = await mount()
+
+    try {
+      await wait(() => quota.length > 0)
+      expect(sync.data.console_state.codexQuota?.fiveHour?.remainingPercent).toBe(82)
+      expect(sync.data.console_state.codexQuota?.weekly?.remainingPercent).toBe(87)
     } finally {
       app.renderer.destroy()
       Global.Path.state = previous

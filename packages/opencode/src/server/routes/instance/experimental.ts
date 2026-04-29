@@ -10,9 +10,12 @@ import { Project } from "@/project/project"
 import { MCP } from "@/mcp"
 import { Session } from "@/session/session"
 import { Config } from "@/config/config"
-import { ConsoleState } from "@/config/console-state"
+import { CodexQuotaSnapshot, ConsoleState, ProviderQuotaResponse } from "@/config/console-state"
 import { Account } from "@/account/account"
 import { AccountID, OrgID } from "@/account/schema"
+import { Auth } from "@/auth"
+import { getCodexQuotaSnapshot } from "@/plugin/codex"
+import { getProviderQuotaSnapshots } from "@/provider/quota"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { Effect, Option } from "effect"
@@ -77,6 +80,64 @@ export const ExperimentalRoutes = lazy(() =>
             ...state,
             switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
           }
+        }),
+    )
+    .get(
+      "/provider-quota",
+      describeRoute({
+        summary: "Get provider quota snapshots",
+        description: "Get the latest known provider quota snapshots for the active session providers.",
+        operationId: "experimental.providerQuota",
+        responses: {
+          200: {
+            description: "Provider quota snapshots",
+            content: {
+              "application/json": {
+                schema: resolver(ProviderQuotaResponse.zod),
+              },
+            },
+          },
+        },
+      }),
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.providerQuota", c, function* () {
+          const auth = yield* Auth.Service
+          const quota = yield* Effect.promise(() =>
+            getProviderQuotaSnapshots({
+              getAuth: () => Effect.runPromise(auth.get("openai")),
+              setAuth: (info) => Effect.runPromise(auth.set("openai", info)),
+            }),
+          )
+          return quota
+        }),
+    )
+    .get(
+      "/console/codex-quota",
+      describeRoute({
+        summary: "Get Codex quota snapshot",
+        description: "Get the current Codex quota snapshot for the active OpenAI OAuth account.",
+        operationId: "experimental.console.codexQuota",
+        responses: {
+          200: {
+            description: "Codex quota snapshot",
+            content: {
+              "application/json": {
+                schema: resolver(CodexQuotaSnapshot.zod),
+              },
+            },
+          },
+        },
+      }),
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.console.codexQuota", c, function* () {
+          const auth = yield* Auth.Service
+          const quota = yield* Effect.promise(() =>
+            getCodexQuotaSnapshot({
+              getAuth: () => Effect.runPromise(auth.get("openai")),
+              setAuth: (info) => Effect.runPromise(auth.set("openai", info)),
+            }),
+          )
+          return quota ? { ...quota, fetchedAt: Date.now() } : {}
         }),
     )
     .get(

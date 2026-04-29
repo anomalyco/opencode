@@ -1834,10 +1834,47 @@ export type Provider = {
   }
 }
 
+export type ProviderQuotaWindow = {
+  label: string
+  remainingPercent?: number
+  resetSeconds?: number
+  resetAt?: number
+  confidence: "exact" | "reported" | "estimated"
+  source: "official_api" | "response_headers" | "client_state" | "heuristic"
+}
+
+export type ProviderQuotaSnapshot = {
+  provider: string
+  label: string
+  fetchedAt: number
+  status: "available" | "unavailable"
+  windows: Array<ProviderQuotaWindow>
+  message?: string
+}
+
+export type ConsoleQuotaWindow = {
+  remainingPercent: number
+  resetSeconds?: number
+  resetAt?: number
+}
+
+export type CodexQuotaSnapshot = {
+  fiveHour?: ConsoleQuotaWindow
+  weekly?: ConsoleQuotaWindow
+  fetchedAt?: number
+}
+
 export type ConsoleState = {
   consoleManagedProviders: Array<string>
   activeOrgName?: string
   switchableOrgCount: number
+  providerQuota?: Array<ProviderQuotaSnapshot>
+  codexQuota?: CodexQuotaSnapshot
+}
+
+export type ProviderQuotaResponse = {
+  providerQuota: Array<ProviderQuotaSnapshot>
+  fetchedAt: number
 }
 
 export type ToolIds = Array<string>
@@ -2998,6 +3035,46 @@ export type ExperimentalConsoleGetResponses = {
 }
 
 export type ExperimentalConsoleGetResponse = ExperimentalConsoleGetResponses[keyof ExperimentalConsoleGetResponses]
+
+export type ExperimentalProviderQuotaData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/provider-quota"
+}
+
+export type ExperimentalProviderQuotaResponses = {
+  /**
+   * Provider quota snapshots
+   */
+  200: ProviderQuotaResponse
+}
+
+export type ExperimentalProviderQuotaResponse =
+  ExperimentalProviderQuotaResponses[keyof ExperimentalProviderQuotaResponses]
+
+export type ExperimentalConsoleCodexQuotaData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/console/codex-quota"
+}
+
+export type ExperimentalConsoleCodexQuotaResponses = {
+  /**
+   * Codex quota snapshot
+   */
+  200: CodexQuotaSnapshot
+}
+
+export type ExperimentalConsoleCodexQuotaResponse =
+  ExperimentalConsoleCodexQuotaResponses[keyof ExperimentalConsoleCodexQuotaResponses]
 
 export type ExperimentalConsoleListOrgsData = {
   body?: never

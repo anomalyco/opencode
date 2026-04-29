@@ -1677,6 +1677,88 @@
         ]
       }
     },
+    "/experimental/provider-quota": {
+      "get": {
+        "operationId": "experimental.providerQuota",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get provider quota snapshots",
+        "description": "Get the latest known provider quota snapshots for the active session providers.",
+        "responses": {
+          "200": {
+            "description": "Provider quota snapshots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderQuotaResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.providerQuota({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/console/codex-quota": {
+      "get": {
+        "operationId": "experimental.console.codexQuota",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get Codex quota snapshot",
+        "description": "Get the current Codex quota snapshot for the active OpenAI OAuth account.",
+        "responses": {
+          "200": {
+            "description": "Codex quota snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexQuotaSnapshot"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.console.codexQuota({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/console/orgs": {
       "get": {
         "operationId": "experimental.console.listOrgs",
@@ -12445,6 +12527,89 @@
         },
         "required": ["id", "name", "source", "env", "options", "models"]
       },
+      "ProviderQuotaWindow": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "remainingPercent": {
+            "type": "number"
+          },
+          "resetSeconds": {
+            "type": "number"
+          },
+          "resetAt": {
+            "type": "number"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["exact", "reported", "estimated"]
+          },
+          "source": {
+            "type": "string",
+            "enum": ["official_api", "response_headers", "client_state", "heuristic"]
+          }
+        },
+        "required": ["label", "confidence", "source"]
+      },
+      "ProviderQuotaSnapshot": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "fetchedAt": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["available", "unavailable"]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderQuotaWindow"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["provider", "label", "fetchedAt", "status", "windows"]
+      },
+      "ConsoleQuotaWindow": {
+        "type": "object",
+        "properties": {
+          "remainingPercent": {
+            "type": "number"
+          },
+          "resetSeconds": {
+            "type": "number"
+          },
+          "resetAt": {
+            "type": "number"
+          }
+        },
+        "required": ["remainingPercent"]
+      },
+      "CodexQuotaSnapshot": {
+        "type": "object",
+        "properties": {
+          "fiveHour": {
+            "$ref": "#/components/schemas/ConsoleQuotaWindow"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/ConsoleQuotaWindow"
+          },
+          "fetchedAt": {
+            "type": "number"
+          }
+        }
+      },
       "ConsoleState": {
         "type": "object",
         "properties": {
@@ -12459,9 +12624,33 @@
           },
           "switchableOrgCount": {
             "type": "number"
+          },
+          "providerQuota": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderQuotaSnapshot"
+            }
+          },
+          "codexQuota": {
+            "$ref": "#/components/schemas/CodexQuotaSnapshot"
           }
         },
         "required": ["consoleManagedProviders", "switchableOrgCount"]
+      },
+      "ProviderQuotaResponse": {
+        "type": "object",
+        "properties": {
+          "providerQuota": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderQuotaSnapshot"
+            }
+          },
+          "fetchedAt": {
+            "type": "number"
+          }
+        },
+        "required": ["providerQuota", "fetchedAt"]
       },
       "ToolIDs": {
         "type": "array",

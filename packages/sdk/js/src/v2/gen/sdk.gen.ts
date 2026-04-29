@@ -24,9 +24,11 @@ import type {
   EventTuiPromptAppend,
   EventTuiSessionSelect,
   EventTuiToastShow,
+  ExperimentalConsoleCodexQuotaResponses,
   ExperimentalConsoleGetResponses,
   ExperimentalConsoleListOrgsResponses,
   ExperimentalConsoleSwitchOrgResponses,
+  ExperimentalProviderQuotaResponses,
   ExperimentalResourceListResponses,
   ExperimentalSessionListResponses,
   ExperimentalWorkspaceAdaptorListResponses,
@@ -769,6 +771,36 @@ export class Console extends HeyApiClient {
   }
 
   /**
+   * Get Codex quota snapshot
+   *
+   * Get the current Codex quota snapshot for the active OpenAI OAuth account.
+   */
+  public codexQuota<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalConsoleCodexQuotaResponses, unknown, ThrowOnError>({
+      url: "/experimental/console/codex-quota",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * List switchable Console orgs
    *
    * Get the available Console orgs across logged-in accounts, including the current active org.
@@ -915,6 +947,36 @@ export class Resource extends HeyApiClient {
 }
 
 export class Experimental extends HeyApiClient {
+  /**
+   * Get provider quota snapshots
+   *
+   * Get the latest known provider quota snapshots for the active session providers.
+   */
+  public providerQuota<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalProviderQuotaResponses, unknown, ThrowOnError>({
+      url: "/experimental/provider-quota",
+      ...options,
+      ...params,
+    })
+  }
+
   private _workspace?: Workspace
   get workspace(): Workspace {
     return (this._workspace ??= new Workspace({ client: this.client }))
