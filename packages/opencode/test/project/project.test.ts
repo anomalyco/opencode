@@ -599,3 +599,34 @@ describe("Project.fromDirectory with bare repos", () => {
     }
   })
 })
+
+describe("Project.remove", () => {
+  test("should remove a project", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path))
+
+    const result = await run((svc) => svc.remove(project.id))
+
+    expect(result).toEqual({ deleted: true, sessionsRemoved: 0 })
+    expect(Project.get(project.id)).toBeUndefined()
+  })
+
+  test("should throw error when project not found", async () => {
+    await expect(
+      run((svc) => svc.remove(ProjectID.make("nonexistent-project-id"))),
+    ).rejects.toThrow("Project not found: nonexistent-project-id")
+  })
+
+  test("should remove project from list", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await run((svc) => svc.fromDirectory(tmp.path))
+
+    const before = Project.list()
+    expect(before.find((p) => p.id === project.id)).toBeDefined()
+
+    await run((svc) => svc.remove(project.id))
+
+    const after = Project.list()
+    expect(after.find((p) => p.id === project.id)).toBeUndefined()
+  })
+})

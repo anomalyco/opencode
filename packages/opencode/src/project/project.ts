@@ -1,7 +1,7 @@
 import z from "zod"
 import { and } from "drizzle-orm"
 import { Database } from "@/storage/db"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import * as Log from "@opencode-ai/core/util/log"
@@ -117,6 +117,7 @@ export interface Interface {
   readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
   readonly addSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
   readonly removeSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
+  readonly remove: (id: ProjectID) => Effect.Effect<{ deleted: boolean; sessionsRemoved: number }>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
@@ -464,6 +465,21 @@ export const layer: Layer.Layer<
       yield* emitUpdated(fromRow(result))
     })
 
+    const remove = Effect.fn("Project.remove")(function* (id: ProjectID) {
+      const existing = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+      if (!existing) throw new Error(`Project not found: ${id}`)
+      const sessionsRow = yield* db((d) =>
+        d
+          .select({ count: sql<number>`count(*)` })
+          .from(SessionTable)
+          .where(eq(SessionTable.project_id, id))
+          .get(),
+      )
+      const sessionsRemoved = sessionsRow?.count ?? 0
+      yield* db((d) => d.delete(ProjectTable).where(eq(ProjectTable.id, id)).run())
+      return { deleted: true, sessionsRemoved }
+    })
+
     return Service.of({
       fromDirectory,
       discover,
@@ -475,6 +491,7 @@ export const layer: Layer.Layer<
       sandboxes,
       addSandbox,
       removeSandbox,
+      remove,
     })
   }),
 )

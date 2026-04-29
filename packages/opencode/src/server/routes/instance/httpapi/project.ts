@@ -52,6 +52,20 @@ export const ProjectApi = HttpApi.make("project")
             description: "Update project properties such as name, icon, and commands.",
           }),
         ),
+        HttpApiEndpoint.delete("remove", `${root}/:projectID`, {
+          params: { projectID: ProjectID },
+          success: Schema.Struct({
+            deleted: Schema.Boolean,
+            sessionsRemoved: Schema.Number,
+          }),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.delete",
+            summary: "Delete project",
+            description:
+              "Delete a project and permanently remove all associated data including sessions, messages, and history.",
+          }),
+        ),
       )
       .annotateMerge(
         OpenApi.annotations({
@@ -102,6 +116,17 @@ export const projectHandlers = HttpApiBuilder.group(ProjectApi, "project", (hand
       return yield* svc.update({ ...ctx.payload, projectID: ctx.params.projectID })
     })
 
-    return handlers.handle("list", list).handle("current", current).handle("initGit", initGit).handle("update", update)
+    const remove_ = Effect.fn("ProjectHttpApi.remove")(function* (ctx: {
+      params: { projectID: ProjectID }
+    }) {
+      return yield* svc.remove(ctx.params.projectID)
+    })
+
+    return handlers
+      .handle("list", list)
+      .handle("current", current)
+      .handle("initGit", initGit)
+      .handle("update", update)
+      .handle("remove", remove_)
   }),
 )

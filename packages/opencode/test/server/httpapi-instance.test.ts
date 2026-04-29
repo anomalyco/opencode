@@ -140,6 +140,26 @@ describe("instance HttpApi", () => {
     )
   })
 
+  test("serves project delete through Hono bridge", async () => {
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+
+    const current = await app().request("/project/current", { headers: { "x-opencode-directory": tmp.path } })
+    expect(current.status).toBe(200)
+    const project = (await current.json()) as { id: string }
+
+    const response = await app().request(`/project/${project.id}`, {
+      method: "DELETE",
+      headers: { "x-opencode-directory": tmp.path },
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ deleted: true, sessionsRemoved: 0 })
+
+    const list = await app().request("/project", { headers: { "x-opencode-directory": tmp.path } })
+    expect(list.status).toBe(200)
+    expect(await list.json()).not.toContainEqual(expect.objectContaining({ id: project.id }))
+  })
+
   test("serves instance dispose through Hono bridge", async () => {
     await using tmp = await tmpdir()
 

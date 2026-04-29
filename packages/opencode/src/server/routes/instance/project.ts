@@ -118,5 +118,37 @@ export const ProjectRoutes = lazy(() =>
           const svc = yield* Project.Service
           return yield* svc.update({ ...body, projectID })
         }),
+    )
+    .delete(
+      "/:projectID",
+      describeRoute({
+        summary: "Delete project",
+        description:
+          "Delete a project and permanently remove all associated data including sessions, messages, and history. Cascading foreign keys handle all child data.",
+        operationId: "project.delete",
+        responses: {
+          200: {
+            description: "Successfully deleted project with cascade count",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    deleted: z.boolean(),
+                    sessionsRemoved: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ projectID: ProjectID.zod })),
+      async (c) =>
+        jsonRequest("ProjectRoutes.delete", c, function* () {
+          const projectID = c.req.valid("param").projectID
+          const svc = yield* Project.Service
+          return yield* svc.remove(projectID)
+        }),
     ),
 )
