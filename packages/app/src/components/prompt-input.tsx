@@ -1165,6 +1165,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
+    // Home/End move the caret to the line/document edge. contenteditable does
+    // not handle these reliably across the editor's mixed inline content
+    // (text + <br> + non-editable pills), so route them through Selection.modify.
+    if (event.key === "Home" || event.key === "End") {
+      if (event.metaKey || event.altKey) return
+      const selection = window.getSelection()
+      if (!selection) return
+      const direction = event.key === "Home" ? "backward" : "forward"
+      const granularity = event.ctrlKey ? "documentboundary" : "lineboundary"
+      const alter = event.shiftKey ? "extend" : "move"
+      selection.modify(alter, direction, granularity)
+      event.preventDefault()
+      return
+    }
+
     // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
     // and should always insert a newline regardless of composition state
     if (event.key === "Enter" && event.shiftKey) {
