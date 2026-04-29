@@ -749,11 +749,13 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
       }
       const copilotEfforts = iife(() => {
-        if (id.includes("5.1-codex-max") || id.includes("5.2") || id.includes("5.3"))
-          return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-        const arr = [...WIDELY_SUPPORTED_EFFORTS]
-        if (id.includes("gpt-5") && model.release_date >= "2025-12-04") arr.push("xhigh")
-        return arr
+        const base =
+          id.includes("5.1-codex-max") || id.includes("5.2") || id.includes("5.3")
+            ? [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+            : [...WIDELY_SUPPORTED_EFFORTS]
+        if (model.providerID.startsWith("opencode") && id.includes("gpt-5")) base.unshift("none")
+        if (id.includes("gpt-5") && model.release_date >= "2025-12-04") base.push("xhigh")
+        return base
       })
       return Object.fromEntries(
         copilotEfforts.map((effort) => [
@@ -778,6 +780,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+      if (model.providerID.startsWith("opencode") && id.includes("gpt-5")) {
+        efforts.unshift("none")
+      }
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
       }
