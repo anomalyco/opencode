@@ -45,6 +45,8 @@ const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
 )
 const ListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
+  scope: Schema.optional(Schema.Literals(["project"])),
+  path: Schema.optional(Schema.String),
   roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
@@ -444,6 +446,8 @@ export const sessionHandlers = HttpApiBuilder.group(SessionApi, "session", (hand
         Array.from(
           Session.list({
             directory: ctx.query.directory,
+            scope: ctx.query.scope,
+            path: ctx.query.path,
             roots: ctx.query.roots,
             start: ctx.query.start,
             search: ctx.query.search,

@@ -2311,7 +2311,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Filter sessions by project directory"
+            "description": "Filter sessions by directory"
           },
           {
             "in": "query",
@@ -2319,6 +2319,23 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "type": "string",
+              "enum": ["project"]
+            },
+            "description": "List all sessions for the current project"
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter sessions by project-relative path"
           },
           {
             "in": "query",

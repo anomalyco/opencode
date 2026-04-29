@@ -3285,10 +3285,18 @@ export type SessionListData = {
   path?: never
   query?: {
     /**
-     * Filter sessions by project directory
+     * Filter sessions by directory
      */
     directory?: string
     workspace?: string
+    /**
+     * List all sessions for the current project
+     */
+    scope?: "project"
+    /**
+     * Filter sessions by project-relative path
+     */
+    path?: string
     /**
      * Only return root sessions (no parentID)
      */
