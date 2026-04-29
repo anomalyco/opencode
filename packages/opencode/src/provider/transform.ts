@@ -760,9 +760,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
       // https://docs.mistral.ai/capabilities/reasoning/adjustable
       if (!model.capabilities.reasoning) return {}
-      // Only Mistral Small 4 supports reasoning (mistral-small-2603, mistral-small-latest)
+      // Only Mistral Small 4 and Medium 3.5 support reasoning
+      const MISTRAL_REASONING_IDS = ["mistral-small-2603", "mistral-small-latest", "mistral-medium-3.5"]
       const mistralId = model.api.id.toLowerCase()
-      if (!mistralId.includes("mistral-small-2603") && !mistralId.includes("mistral-small-latest")) return {}
+      if (!MISTRAL_REASONING_IDS.some((id) => mistralId.includes(id))) return {}
       return {
         high: { reasoningEffort: "high" },
       }
