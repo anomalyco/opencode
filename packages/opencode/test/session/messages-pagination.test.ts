@@ -896,6 +896,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const tailPart = childFiltered.flatMap((m) => m.parts).find((p) => p.type === "compaction")
         expect(tailPart?.type).toBe("compaction")
+        if (!tailPart || tailPart.type !== "compaction") throw new Error("Expected forked compaction part")
         expect(tailPart.tail_start_id).toBeDefined()
         expect(childFiltered.some((m) => m.info.id === tailPart.tail_start_id)).toBe(true)
 
