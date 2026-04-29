@@ -2,7 +2,13 @@ import { ModelID, ProviderID, type ProtocolID } from "./schema"
 import type { ModelID as ModelIDType, ProviderID as ProviderIDType } from "./schema"
 import type { CapabilitiesInput } from "./llm"
 
-export type ProviderAuth = "bearer" | "anthropic-api-key" | "google-api-key" | "none"
+/**
+ * Whether a provider needs an API key at request time. The OpenCode bridge
+ * consults this to decide whether to read `provider.key` and stamp it onto
+ * `model.apiKey`; the adapter's `Auth` axis owns header placement so this
+ * field does not need to distinguish bearer / x-api-key / x-goog-api-key.
+ */
+export type ProviderAuth = "key" | "none"
 
 export interface ProviderResolution {
   readonly provider: ProviderIDType
@@ -32,7 +38,7 @@ export const make = (
   provider: ProviderID.make(provider),
   protocol,
   ...options,
-  auth: options.auth ?? "bearer",
+  auth: options.auth ?? "key",
 })
 
 export const define = (input: ProviderResolver): ProviderResolver => input

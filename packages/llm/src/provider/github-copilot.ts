@@ -12,7 +12,7 @@ export const shouldUseResponsesApi = (modelID: string) => {
 export const resolver = ProviderResolver.define({
   id,
   resolve: (input) =>
-    ProviderResolver.make(id, shouldUseResponsesApi(input.modelID) ? "openai-responses" : "openai-chat", { auth: "bearer" }),
+    ProviderResolver.make(id, shouldUseResponsesApi(input.modelID) ? "openai-responses" : "openai-chat", { auth: "key" }),
 })
 
 export * as GitHubCopilot from "./github-copilot"

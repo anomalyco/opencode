@@ -6,7 +6,7 @@ describe("provider resolver", () => {
     expect(OpenAI.resolver.resolve(ProviderResolver.input("gpt-5", "openai", {}))).toMatchObject({
       provider: "openai",
       protocol: "openai-responses",
-      auth: "bearer",
+      auth: "key",
     })
   })
 
@@ -14,12 +14,12 @@ describe("provider resolver", () => {
     expect(GitHubCopilot.resolver.resolve(ProviderResolver.input("gpt-5", "github-copilot", {}))).toMatchObject({
       provider: "github-copilot",
       protocol: "openai-responses",
-      auth: "bearer",
+      auth: "key",
     })
     expect(GitHubCopilot.resolver.resolve(ProviderResolver.input("gpt-5-mini", "github-copilot", {}))).toMatchObject({
       provider: "github-copilot",
       protocol: "openai-chat",
-      auth: "bearer",
+      auth: "key",
     })
   })
 
@@ -28,7 +28,7 @@ describe("provider resolver", () => {
       provider: "togetherai",
       protocol: "openai-compatible-chat",
       baseURL: "https://api.together.xyz/v1",
-      auth: "bearer",
+      auth: "key",
     })
   })
 
