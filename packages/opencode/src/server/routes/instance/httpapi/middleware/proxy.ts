@@ -1,7 +1,6 @@
 import { ProxyUtil } from "@/server/proxy-util"
-import { Workspace } from "@/control-plane/workspace"
-import type { WorkspaceID } from "@/control-plane/schema"
 import * as Fence from "@/server/fence"
+import type { WorkspaceID } from "@/control-plane/schema"
 import { Effect, Stream } from "effect"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -65,20 +64,12 @@ export function http(
   url: string | URL,
   extra: HeadersInit | undefined,
   request: HttpServerRequest.HttpServerRequest,
-  workspaceID: WorkspaceID,
+  options?: { workspaceID?: WorkspaceID },
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.gen(function* () {
-    const syncing = yield* Effect.promise(() => Workspace.isSyncing(workspaceID))
-    if (!syncing) {
-      return HttpServerResponse.text(`broken sync connection for workspace: ${workspaceID}`, {
-        status: 503,
-        contentType: "text/plain; charset=utf-8",
-      })
-    }
-
     const response = yield* HttpClient.execute(
       HttpClientRequest.make(request.method as never)(url, {
-        headers: ProxyUtil.headers(request.headers, extra),
+        headers: ProxyUtil.headers(request.headers as HeadersInit, extra),
         body: requestBody(request),
       }),
     )
@@ -87,7 +78,9 @@ export function http(
     headers.delete("content-encoding")
     headers.delete("content-length")
 
-    if (sync) yield* Effect.promise(() => Fence.wait(workspaceID, sync, webSource(request)?.signal))
+    if (sync && options?.workspaceID) {
+      yield* Effect.promise(() => Fence.wait(options.workspaceID!, sync, webSource(request)?.signal))
+    }
     return HttpServerResponse.stream(response.stream.pipe(Stream.catchCause(() => Stream.empty)), {
       status: response.status,
       statusText: statusText(response),

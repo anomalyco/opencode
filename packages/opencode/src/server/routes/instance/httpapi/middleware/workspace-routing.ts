@@ -95,9 +95,19 @@ function proxyRemote(
   target: RemoteTarget,
   url: URL,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
-  const proxyURL = workspaceProxyURL(target.url, url)
-  if (request.headers["upgrade"]?.toLowerCase() === "websocket") return HttpApiProxy.websocket(request, proxyURL)
-  return HttpApiProxy.http(proxyURL, target.headers, request, workspace.id)
+  return Effect.gen(function* () {
+    const syncing = yield* Effect.promise(() => Workspace.isSyncing(workspace.id))
+    if (!syncing) {
+      return HttpServerResponse.text(`broken sync connection for workspace: ${workspace.id}`, {
+        status: 503,
+        contentType: "text/plain; charset=utf-8",
+      })
+    }
+    const proxyURL = workspaceProxyURL(target.url, url)
+    const headers = request.headers as Record<string, string>
+    if (headers["upgrade"]?.toLowerCase() === "websocket") return yield* HttpApiProxy.websocket(request, proxyURL)
+    return yield* HttpApiProxy.http(proxyURL, target.headers, request, { workspaceID: workspace.id })
+  })
 }
 
 function planWorkspaceRequest(
