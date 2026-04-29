@@ -1,12 +1,11 @@
-import type { Argv } from "yargs"
-import { cmd } from "./cmd"
 import { Session } from "@/session/session"
-import { bootstrap } from "../bootstrap"
+import { bootstrap } from "../../bootstrap"
 import { Database } from "@/storage/db"
-import { SessionTable } from "../../session/session.sql"
+import { SessionTable } from "../../../session/session.sql"
 import { Project } from "@/project/project"
-import { Instance } from "../../project/instance"
+import { Instance } from "../../../project/instance"
 import { AppRuntime } from "@/effect/app-runtime"
+import type { StatsArgs } from "./command"
 
 interface SessionStats {
   totalSessions: number
@@ -47,42 +46,20 @@ interface SessionStats {
   medianTokensPerSession: number
 }
 
-export const StatsCommand = cmd({
-  command: "stats",
-  describe: "show token usage and cost statistics",
-  builder: (yargs: Argv) => {
-    return yargs
-      .option("days", {
-        describe: "show stats for the last N days (default: all time)",
-        type: "number",
-      })
-      .option("tools", {
-        describe: "number of tools to show (default: all)",
-        type: "number",
-      })
-      .option("models", {
-        describe: "show model statistics (default: hidden). Pass a number to show top N, otherwise shows all",
-      })
-      .option("project", {
-        describe: "filter by project (default: all projects, empty string: current project)",
-        type: "string",
-      })
-  },
-  handler: async (args) => {
-    await bootstrap(process.cwd(), async () => {
-      const stats = await aggregateSessionStats(args.days, args.project)
+export async function handler(args: StatsArgs) {
+  await bootstrap(process.cwd(), async () => {
+    const stats = await aggregateSessionStats(args.days, args.project)
 
-      let modelLimit: number | undefined
-      if (args.models === true) {
-        modelLimit = Infinity
-      } else if (typeof args.models === "number") {
-        modelLimit = args.models
-      }
+    let modelLimit: number | undefined
+    if (args.models === true) {
+      modelLimit = Infinity
+    } else if (typeof args.models === "number") {
+      modelLimit = args.models
+    }
 
-      displayStats(stats, args.tools, modelLimit)
-    })
-  },
-})
+    displayStats(stats, args.tools, modelLimit)
+  })
+}
 
 async function getCurrentProject(): Promise<Project.Info> {
   return Instance.project
@@ -93,7 +70,7 @@ async function getAllSessions(): Promise<Session.Info[]> {
   return rows.map((row) => Session.fromRow(row))
 }
 
-export async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
+async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
   const sessions = await getAllSessions()
   const MS_IN_DAY = 24 * 60 * 60 * 1000
 
@@ -309,7 +286,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   return stats
 }
 
-export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
+function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
   const width = 56
 
   function renderRow(label: string, value: string): string {
