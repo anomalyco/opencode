@@ -1663,7 +1663,7 @@ Perplexity exposes its [Agent API](https://docs.perplexity.ai/docs/agent-api/qui
    └ enter
    ```
 
-4. Add the following to your `opencode.json`. Because the Agent API is [OpenAI Responses-compatible](https://docs.perplexity.ai/docs/agent-api/openai-compatibility), use the `@ai-sdk/openai` package.
+4. Add the following to your `opencode.json`. Because the Agent API is [OpenAI Responses-compatible](https://docs.perplexity.ai/docs/agent-api/openai-compatibility), use the `@ai-sdk/openai` package. The Agent API routes to many [third-party models](https://docs.perplexity.ai/docs/agent-api/models), so list the ones you want under `models`.
 
    ```json title="opencode.json" {5-9}
    {
@@ -1677,17 +1677,11 @@ Perplexity exposes its [Agent API](https://docs.perplexity.ai/docs/agent-api/qui
            "apiKey": "{env:PERPLEXITY_API_KEY}"
          },
          "models": {
-           "sonar-pro": {
-             "name": "Sonar Pro",
-             "limit": { "context": 200000, "output": 8192 }
+           "openai/gpt-5.4": {
+             "name": "GPT-5.4 (via Perplexity)"
            },
-           "sonar-reasoning-pro": {
-             "name": "Sonar Reasoning Pro",
-             "limit": { "context": 128000, "output": 8192 }
-           },
-           "sonar": {
-             "name": "Sonar",
-             "limit": { "context": 128000, "output": 8192 }
+           "anthropic/claude-sonnet-4-6": {
+             "name": "Claude Sonnet 4.6 (via Perplexity)"
            }
          }
        }
@@ -1695,7 +1689,7 @@ Perplexity exposes its [Agent API](https://docs.perplexity.ai/docs/agent-api/qui
    }
    ```
 
-5. Run `/models` and pick a Perplexity model. See the [Agent API models](https://docs.perplexity.ai/docs/agent-api/models) page for the full list, including `sonar-deep-research` and routed third-party models like `openai/gpt-5.4` and `anthropic/claude-sonnet-4-6`. The [presets](https://docs.perplexity.ai/docs/agent-api/presets) and [Agent API reference](https://docs.perplexity.ai/api-reference/agent-post) cover advanced options like fallback model lists.
+5. Run `/models` and pick a model. See the [Agent API models](https://docs.perplexity.ai/docs/agent-api/models) page for the full list. [Presets](https://docs.perplexity.ai/docs/agent-api/presets) (for example `pro-search`) and the [Agent API reference](https://docs.perplexity.ai/api-reference/agent-post) cover advanced options like fallback model lists.
 
    ```txt
    /models
@@ -1718,24 +1712,24 @@ curl -X POST https://api.perplexity.ai/search \
   }'
 ```
 
-**Via MCP** so the agent can call search as a tool. Add Perplexity's hosted MCP server to your `opencode.json`:
+**Via MCP** so the agent can call search as a tool. Perplexity ships an [official MCP server](https://github.com/perplexityai/modelcontextprotocol) on npm (`@perplexity-ai/mcp-server`); run it locally over stdio:
 
-```json title="opencode.json" {4-10}
+```json title="opencode.json" {4-13}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "perplexity": {
-      "type": "remote",
-      "url": "https://mcp.perplexity.ai/sse",
-      "headers": {
-        "Authorization": "Bearer {env:PERPLEXITY_API_KEY}"
+      "type": "local",
+      "command": ["npx", "-y", "@perplexity-ai/mcp-server"],
+      "environment": {
+        "PERPLEXITY_API_KEY": "{env:PERPLEXITY_API_KEY}"
       }
     }
   }
 }
 ```
 
-See the [Search API reference](https://docs.perplexity.ai/api-reference/search-post) for available filters and the response shape.
+The server exposes a `perplexity_search` tool (backed by the Search API) plus optional research and reasoning tools. See the [MCP server README](https://github.com/perplexityai/modelcontextprotocol#available-tools) for the tool list and the [Search API reference](https://docs.perplexity.ai/api-reference/search-post) for available filters and the response shape.
 
 ---
 
