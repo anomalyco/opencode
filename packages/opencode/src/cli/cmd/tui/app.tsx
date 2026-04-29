@@ -302,7 +302,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
   const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
-    kv.get("paste_summary_enabled") ?? !sync.data.config.experimental?.disable_paste_summary,
+    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
   )
 
   // Update terminal window title based on current route and session
