@@ -2,8 +2,7 @@
 
 const repo = "anomalyco/opencode"
 const days = 60
-const msg =
-  "To stay organized issues are automatically closed after 90 days of no activity. If the issue is still relevant please open a new one."
+const msg = `To stay organized issues are automatically closed after ${days} days of no activity. If the issue is still relevant please open a new one.`
 
 const token = process.env.GITHUB_TOKEN
 if (!token) {
@@ -38,7 +37,7 @@ async function close(num: number) {
   const patch = await fetch(base, {
     method: "PATCH",
     headers,
-    body: JSON.stringify({ state: "closed", state_reason: "completed" }),
+    body: JSON.stringify({ state: "closed", state_reason: "not_planned" }),
   })
   if (!patch.ok) throw new Error(`Failed to close #${num}: ${patch.status} ${patch.statusText}`)
 

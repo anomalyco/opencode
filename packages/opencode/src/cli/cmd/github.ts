@@ -1,6 +1,6 @@
 import path from "path"
 import { exec } from "child_process"
-import { Filesystem } from "../../util/filesystem"
+import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
@@ -18,14 +18,14 @@ import type {
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { ModelsDev } from "../../provider/models"
+import { ModelsDev } from "@/provider/models"
 import { Instance } from "@/project/instance"
 import { bootstrap } from "../bootstrap"
 import { SessionShare } from "@/share/session"
-import { Session } from "../../session"
+import { Session } from "@/session/session"
 import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
-import { Provider } from "../../provider/provider"
+import { Provider } from "@/provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -362,7 +362,7 @@ export const GithubInstallCommand = cmd({
 
               retries++
               await sleep(1000)
-            } while (true)
+            } while (true) // oxlint-disable-line no-constant-condition
 
             s.stop("Installed GitHub app")
 
@@ -931,7 +931,7 @@ export const GithubRunCommand = cmd({
       async function summarize(response: string) {
         try {
           return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
-        } catch (e) {
+        } catch {
           const title = issueEvent
             ? issueEvent.issue.title
             : (payload as PullRequestReviewCommentEvent).pull_request.title
@@ -985,7 +985,8 @@ export const GithubRunCommand = cmd({
               const err = result.info.error
               console.error("Agent error:", err)
               if (err.name === "ContextOverflowError") throw new Error(formatPromptTooLargeError(files))
-              throw new Error(`${err.name}: ${err.data?.message || ""}`)
+              const message = "message" in err.data ? err.data.message : ""
+              throw new Error(`${err.name}: ${message}`)
             }
 
             const text = extractResponseText(result.parts)
@@ -1014,7 +1015,8 @@ export const GithubRunCommand = cmd({
               const err = summary.info.error
               console.error("Summary agent error:", err)
               if (err.name === "ContextOverflowError") throw new Error(formatPromptTooLargeError(files))
-              throw new Error(`${err.name}: ${err.data?.message || ""}`)
+              const message = "message" in err.data ? err.data.message : ""
+              throw new Error(`${err.name}: ${message}`)
             }
 
             const summaryText = extractResponseText(summary.parts)
@@ -1031,6 +1033,7 @@ export const GithubRunCommand = cmd({
           console.error("Failed to get OIDC token:", error instanceof Error ? error.message : error)
           throw new Error(
             "Could not fetch an OIDC token. Make sure to add `id-token: write` to your workflow permissions.",
+            { cause: error },
           )
         }
       }
@@ -1221,7 +1224,7 @@ export const GithubRunCommand = cmd({
           console.log(`  permission: ${permission}`)
         } catch (error) {
           console.error(`Failed to check permissions: ${error}`)
-          throw new Error(`Failed to check permissions for user ${actor}: ${error}`)
+          throw new Error(`Failed to check permissions for user ${actor}: ${error}`, { cause: error })
         }
 
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)

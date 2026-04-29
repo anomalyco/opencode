@@ -1,15 +1,14 @@
 import { Layer, ManagedRuntime } from "effect"
-import { attach, memoMap } from "./run-service"
-import { Observability } from "./observability"
+import { attach } from "./run-service"
+import * as Observability from "@opencode-ai/core/effect/observability"
 
-import { AppFileSystem } from "@/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Bus } from "@/bus"
 import { Auth } from "@/auth"
-import { Account } from "@/account"
+import { Account } from "@/account/account"
 import { Config } from "@/config/config"
 import { Git } from "@/git"
 import { Ripgrep } from "@/file/ripgrep"
-import { FileTime } from "@/file/time"
 import { File } from "@/file"
 import { FileWatcher } from "@/file/watcher"
 import { Storage } from "@/storage/storage"
@@ -23,7 +22,7 @@ import { Discovery } from "@/skill/discovery"
 import { Question } from "@/question"
 import { Permission } from "@/permission"
 import { Todo } from "@/session/todo"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionRunState } from "@/session/run-state"
 import { SessionProcessor } from "@/session/processor"
@@ -33,7 +32,7 @@ import { SessionSummary } from "@/session/summary"
 import { SessionPrompt } from "@/session/prompt"
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
-import { LSP } from "@/lsp"
+import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
 import { Command } from "@/command"
@@ -47,9 +46,11 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
+import { Npm } from "@opencode-ai/core/npm"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 export const AppLayer = Layer.mergeAll(
-  Observability.layer,
+  Npm.defaultLayer,
   AppFileSystem.defaultLayer,
   Bus.defaultLayer,
   Auth.defaultLayer,
@@ -57,7 +58,6 @@ export const AppLayer = Layer.mergeAll(
   Config.defaultLayer,
   Git.defaultLayer,
   Ripgrep.defaultLayer,
-  FileTime.defaultLayer,
   File.defaultLayer,
   FileWatcher.defaultLayer,
   Storage.defaultLayer,
@@ -95,7 +95,7 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
-)
+).pipe(Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">

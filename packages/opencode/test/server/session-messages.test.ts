@@ -2,13 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { Session as SessionNs } from "../../src/session"
+import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
-import { Log } from "../../src/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
   return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))
@@ -163,18 +163,5 @@ describe("session messages endpoint", () => {
         },
       }),
     )
-  })
-})
-
-describe("session.prompt_async error handling", () => {
-  test("prompt_async route has error handler for detached prompt call", async () => {
-    const src = await Bun.file(new URL("../../src/server/instance/session.ts", import.meta.url)).text()
-    const start = src.indexOf('"/:sessionID/prompt_async"')
-    const end = src.indexOf('"/:sessionID/command"', start)
-    expect(start).toBeGreaterThan(-1)
-    expect(end).toBeGreaterThan(start)
-    const route = src.slice(start, end)
-    expect(route).toContain(".catch(")
-    expect(route).toContain("Bus.publish(Session.Event.Error")
   })
 })

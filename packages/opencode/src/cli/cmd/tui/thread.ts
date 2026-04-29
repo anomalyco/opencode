@@ -5,17 +5,23 @@ import { type rpc } from "./worker"
 import path from "path"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
-import { Log } from "@/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
-import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/config/tui"
-import { Instance } from "@/project/instance"
 import { writeHeapSnapshot } from "v8"
+import { TuiConfig } from "./config/tui"
+import {
+  OPENCODE_PROCESS_ROLE,
+  OPENCODE_RUN_ID,
+  ensureRunID,
+  sanitizedProcessEnv,
+} from "@opencode-ai/core/util/opencode-process"
+import { validateSession } from "./validate-session"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -130,11 +136,13 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+      const env = sanitizedProcessEnv({
+        [OPENCODE_PROCESS_ROLE]: "worker",
+        [OPENCODE_RUN_ID]: ensureRunID(),
+      })
 
       const worker = new Worker(file, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
+        env,
       })
       worker.onerror = (e) => {
         Log.Default.error("thread error", {
@@ -177,12 +185,9 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await Instance.provide({
-        directory: cwd,
-        fn: () => TuiConfig.get(),
-      })
+      const config = await TuiConfig.get()
 
-      const network = await resolveNetworkOptions(args)
+      const network = resolveNetworkOptionsNoConfig(args)
       const external =
         process.argv.includes("--port") ||
         process.argv.includes("--hostname") ||
@@ -202,6 +207,19 @@ export const TuiThreadCommand = cmd({
             fetch: createWorkerFetch(client),
             events: createEventSource(client),
           }
+
+      try {
+        await validateSession({
+          url: transport.url,
+          sessionID: args.session,
+          directory: cwd,
+          fetch: transport.fetch,
+        })
+      } catch (error) {
+        UI.error(errorMessage(error))
+        process.exitCode = 1
+        return
+      }
 
       setTimeout(() => {
         client.call("checkUpgrade", { directory: cwd }).catch(() => {})
@@ -237,3 +255,4 @@ export const TuiThreadCommand = cmd({
     process.exit(0)
   },
 })
+// scratch

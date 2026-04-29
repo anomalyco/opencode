@@ -53,6 +53,10 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: "src/preload/index.ts" },
+        output: {
+          format: "cjs",
+          entryFileNames: "[name].js",
+        },
       },
     },
   },
@@ -60,6 +64,9 @@ export default defineConfig({
     plugins: [appPlugin],
     publicDir: "../../../app/public",
     root: "src/renderer",
+    define: {
+      "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+    },
     build: {
       rollupOptions: {
         input: {

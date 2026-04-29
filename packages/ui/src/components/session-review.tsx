@@ -11,8 +11,8 @@ import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
 import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { checksum } from "@opencode-ai/core/util/encode"
 import { createEffect, createMemo, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type SnapshotFileDiff, type VcsFileDiff } from "@opencode-ai/sdk/v2"
@@ -385,11 +385,10 @@ export const SessionReview = (props: SessionReviewProps) => {
               <Accordion multiple value={open()} onChange={handleChange}>
                 <For each={items()}>
                   {(diff) => {
-                    let wrapper: HTMLDivElement | undefined
                     const file = diff.file
 
                     // binary files have empty diffs that we can't render
-                    const diffCanRender = () => diff.additions !== 0 && diff.deletions !== 0
+                    const diffCanRender = () => diff.additions !== 0 || diff.deletions !== 0
 
                     const expanded = createMemo(() => open().includes(file))
                     const mounted = createMemo(() => expanded() && (!!store.visible[file] || pinned(file)))
@@ -569,7 +568,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                           <div
                             data-slot="session-review-diff-wrapper"
                             ref={(el) => {
-                              wrapper = el
                               anchors.set(file, el)
                               nodes.set(file, el)
                               queue()

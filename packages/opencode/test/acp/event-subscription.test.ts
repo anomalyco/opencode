@@ -463,9 +463,9 @@ describe("acp.agent event subscription", () => {
 
         // Make permission request for session A block until we release it
         const originalRequestPermission = connection.requestPermission.bind(connection)
-        let permissionCalls = 0
+        let _permissionCalls = 0
         connection.requestPermission = async (params: RequestPermissionParams) => {
-          permissionCalls++
+          _permissionCalls++
           if (params.sessionId.endsWith("1")) {
             await permissionABlocking
           }

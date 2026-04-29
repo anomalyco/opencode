@@ -1,21 +1,22 @@
-import z from "zod"
-import { Effect } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { Tool } from "./tool"
+import { Effect, Schema } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import * as Tool from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
+import { isImageAttachment } from "@/util/media"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 
-const parameters = z.object({
-  url: z.string().describe("The URL to fetch content from"),
-  format: z
-    .enum(["text", "markdown", "html"])
-    .default("markdown")
-    .describe("The format to return the content in (text, markdown, or html). Defaults to markdown."),
-  timeout: z.number().describe("Optional timeout in seconds (max 120)").optional(),
+export const Parameters = Schema.Struct({
+  url: Schema.String.annotate({ description: "The URL to fetch content from" }),
+  format: Schema.Literals(["text", "markdown", "html"])
+    .pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed("markdown" as const)))
+    .annotate({
+      description: "The format to return the content in (text, markdown, or html). Defaults to markdown.",
+    }),
+  timeout: Schema.optional(Schema.Number).annotate({ description: "Optional timeout in seconds (max 120)" }),
 })
 
 export const WebFetchTool = Tool.define(
@@ -26,8 +27,8 @@ export const WebFetchTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters,
-      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) =>
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
             throw new Error("URL must start with http:// or https://")
@@ -104,10 +105,7 @@ export const WebFetchTool = Tool.define(
           const mime = contentType.split(";")[0]?.trim().toLowerCase() || ""
           const title = `${params.url} (${contentType})`
 
-          // Check if response is an image
-          const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
-
-          if (isImage) {
+          if (isImageAttachment(mime)) {
             const base64Content = Buffer.from(arrayBuffer).toString("base64")
             return {
               title,

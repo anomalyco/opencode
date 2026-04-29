@@ -1,5 +1,5 @@
 import type { Argv } from "yargs"
-import { Session } from "../../session"
+import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { cmd } from "./cmd"
@@ -297,7 +297,7 @@ export const ExportCommand = cmd({
 
         process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
         process.stdout.write(EOL)
-      } catch (error) {
+      } catch {
         UI.error(`Session not found: ${sessionID!}`)
         process.exit(1)
       }

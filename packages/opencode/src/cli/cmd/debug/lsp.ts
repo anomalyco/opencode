@@ -1,11 +1,10 @@
-import { LSP } from "../../../lsp"
+import { LSP } from "@/lsp/lsp"
 import { AppRuntime } from "../../../effect/app-runtime"
 import { Effect } from "effect"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
-import { Log } from "../../../util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { EOL } from "os"
-import { setTimeout as sleep } from "node:timers/promises"
 
 export const LSPCommand = cmd({
   command: "lsp",
@@ -24,8 +23,7 @@ const DiagnosticsCommand = cmd({
       const out = await AppRuntime.runPromise(
         LSP.Service.use((lsp) =>
           Effect.gen(function* () {
-            yield* lsp.touchFile(args.file, true)
-            yield* Effect.sleep(1000)
+            yield* lsp.touchFile(args.file, "full")
             return yield* lsp.diagnostics()
           }),
         ),

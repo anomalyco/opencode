@@ -1,4 +1,5 @@
 import { EOL } from "os"
+import { Effect, Stream } from "effect"
 import { AppRuntime } from "../../../effect/app-runtime"
 import { Ripgrep } from "../../../file/ripgrep"
 import { Instance } from "../../../project/instance"
@@ -21,7 +22,10 @@ const TreeCommand = cmd({
     }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
-      process.stdout.write((await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit })) + EOL)
+      const tree = await AppRuntime.runPromise(
+        Ripgrep.Service.use((svc) => svc.tree({ cwd: Instance.directory, limit: args.limit })),
+      )
+      process.stdout.write(tree + EOL)
     })
   },
 })
@@ -45,14 +49,21 @@ const FilesCommand = cmd({
       }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
-      const files: string[] = []
-      for await (const file of await Ripgrep.files({
-        cwd: Instance.directory,
-        glob: args.glob ? [args.glob] : undefined,
-      })) {
-        files.push(file)
-        if (args.limit && files.length >= args.limit) break
-      }
+      const files = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const rg = yield* Ripgrep.Service
+          return yield* rg
+            .files({
+              cwd: Instance.directory,
+              glob: args.glob ? [args.glob] : undefined,
+            })
+            .pipe(
+              Stream.take(args.limit ?? Infinity),
+              Stream.runCollect,
+              Effect.map((c) => [...c]),
+            )
+        }),
+      )
       process.stdout.write(files.join(EOL) + EOL)
     })
   },

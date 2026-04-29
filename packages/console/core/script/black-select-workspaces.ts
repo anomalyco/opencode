@@ -1,4 +1,4 @@
-import { Database, eq, and, sql, inArray, isNull, count } from "../src/drizzle/index.js"
+import { Database, eq, and, sql, inArray, isNull } from "../src/drizzle/index.js"
 import { BillingTable, BlackPlans } from "../src/schema/billing.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
 import { AuthTable } from "../src/schema/auth.sql.js"

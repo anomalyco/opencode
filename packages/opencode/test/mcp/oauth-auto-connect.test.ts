@@ -1,6 +1,5 @@
 import { test, expect, mock, beforeEach } from "bun:test"
 import { Effect } from "effect"
-import type { MCP as MCPNS } from "../../src/mcp/index"
 
 // Mock UnauthorizedError to match the SDK's class
 class MockUnauthorizedError extends Error {
@@ -23,7 +22,7 @@ let simulateAuthFlow = true
 let connectSucceedsImmediately = false
 
 // Mock the transport constructors to simulate OAuth auto-auth on 401
-mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     authProvider:
       | {
@@ -67,7 +66,7 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   },
 }))
 
-mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   SSEClientTransport: class MockSSE {
     constructor(url: URL, options?: { authProvider?: unknown }) {
       transportCalls.push({
@@ -83,7 +82,7 @@ mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
 }))
 
 // Mock the MCP SDK Client
-mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class MockClient {
     async connect(transport: { start: () => Promise<void> }) {
       await transport.start()
@@ -100,7 +99,7 @@ mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 }))
 
 // Mock UnauthorizedError in the auth module so instanceof checks work
-mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
 }))
 

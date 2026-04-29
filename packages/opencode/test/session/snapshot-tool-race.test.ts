@@ -16,13 +16,13 @@ import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import fs from "fs/promises"
 import path from "path"
-import { Session } from "../../src/session"
+import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionSummary } from "../../src/session/summary"
 import { MessageV2 } from "../../src/session/message-v2"
-import { Log } from "../../src/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
@@ -32,13 +32,12 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
-import { Config } from "../../src/config/config"
-import { FileTime } from "../../src/file/time"
-import { LSP } from "../../src/lsp"
+import { Config } from "@/config/config"
+import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
-import { Provider as ProviderSvc } from "../../src/provider/provider"
+import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { Question } from "../../src/question"
 import { Skill } from "../../src/skill"
@@ -49,16 +48,15 @@ import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionRunState } from "../../src/session/run-state"
 import { SessionStatus } from "../../src/session/status"
-import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
-import { ToolRegistry } from "../../src/tool/registry"
-import { Truncate } from "../../src/tool/truncate"
-import { AppFileSystem } from "../../src/filesystem"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { ToolRegistry } from "@/tool/registry"
+import { Truncate } from "@/tool/truncate"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 const mcp = Layer.succeed(
   MCP.Service,
@@ -103,16 +101,6 @@ const lsp = Layer.succeed(
   }),
 )
 
-const filetime = Layer.succeed(
-  FileTime.Service,
-  FileTime.Service.of({
-    read: () => Effect.void,
-    get: () => Effect.succeed(undefined),
-    assert: () => Effect.void,
-    withLock: (_filepath, fn) => fn(),
-  }),
-)
-
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
@@ -129,7 +117,6 @@ function makeHttp() {
     Plugin.defaultLayer,
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
-    filetime,
     lsp,
     mcp,
     AppFileSystem.defaultLayer,
