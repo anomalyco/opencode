@@ -2,7 +2,7 @@ import { Schema } from "effect"
 
 /**
  * Stable string identifier for a protocol implementation. The discriminator
- * value lives on `ModelRef.protocolId` and on the `Adapter.protocolId` field;
+ * value lives on `ModelRef.protocol` and on the `Adapter.protocol` field;
  * the runtime registry keys lookups by it. The implementation type itself is
  * `Protocol` (see `protocol.ts`).
  */

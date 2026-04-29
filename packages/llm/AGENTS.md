@@ -49,7 +49,6 @@ Compose them via `Adapter.fromProtocol(...)`:
 ```ts
 export const adapter = Adapter.fromProtocol({
   id: "openai-chat",
-  provider: "openai",
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/chat/completions" }),
   framing: Framing.sse,
