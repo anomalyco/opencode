@@ -126,6 +126,13 @@ function eventStreamResponse() {
   })
 }
 
+async function requestJson(init?: BunFetchRequestInit | RequestInit) {
+  if (typeof init?.body === "string") return JSON.parse(init.body)
+  if (init?.body instanceof Uint8Array) return JSON.parse(new TextDecoder().decode(init.body))
+  if (init?.body instanceof ReadableStream) return JSON.parse(await new Response(init.body).text())
+  return JSON.parse(String(init?.body))
+}
+
 describe("Workspace.sessionRestore", () => {
   test("replays session events in batches of 10 and emits progress", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -149,7 +156,7 @@ describe("Workspace.sessionRestore", () => {
           if (url.pathname === "/base/sync/history") {
             return Response.json([])
           }
-          const body = JSON.parse(String(init?.body))
+          const body = await requestJson(init)
           posts.push({
             path: url.pathname,
             body,
