@@ -98,5 +98,16 @@ describe("ProxyUtil", () => {
       expect(result.get("content-type")).toBe("application/json")
       expect(result.get("x-foo")).toBe("bar")
     })
+
+    test("accepts plain object (HeadersInit) as input", () => {
+      const result = ProxyUtil.headers(
+        { "content-type": "application/json", connection: "keep-alive", "x-custom": "val" },
+        { "x-extra": "added" },
+      )
+      expect(result.get("connection")).toBeNull()
+      expect(result.get("content-type")).toBe("application/json")
+      expect(result.get("x-custom")).toBe("val")
+      expect(result.get("x-extra")).toBe("added")
+    })
   })
 })
