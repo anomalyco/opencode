@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import stripAnsi from "strip-ansi"
 
-import { formatAccountLabel, formatOrgLine } from "../../src/cli/cmd/account"
+import { formatAccountLabel, formatOrgLine } from "../../src/cli/cmd/account/format"
 
 describe("console account display", () => {
   test("includes the account url in account labels", () => {

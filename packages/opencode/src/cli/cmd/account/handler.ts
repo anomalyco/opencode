@@ -1,35 +1,15 @@
-import { cmd } from "./cmd"
 import { Duration, Effect, Match, Option } from "effect"
-import { UI } from "../ui"
+import { UI } from "../../ui"
 import { Account } from "@/account/account"
 import { AccountID, OrgID, PollExpired, type PollResult, type AccountError } from "@/account/schema"
 import { AppRuntime } from "@/effect/app-runtime"
-import * as Prompt from "../effect/prompt"
+import * as Prompt from "../../effect/prompt"
 import open from "open"
+import { formatAccountLabel, formatOrgChoiceLabel, formatOrgLine } from "./format"
 
 const openBrowser = (url: string) => Effect.promise(() => open(url).catch(() => undefined))
 
 const println = (msg: string) => Effect.sync(() => UI.println(msg))
-
-const dim = (value: string) => UI.Style.TEXT_DIM + value + UI.Style.TEXT_NORMAL
-
-const activeSuffix = (isActive: boolean) => (isActive ? dim(" (active)") : "")
-
-export const formatAccountLabel = (account: { email: string; url: string }, isActive: boolean) =>
-  `${account.email} ${dim(account.url)}${activeSuffix(isActive)}`
-
-const formatOrgChoiceLabel = (account: { email: string }, org: { name: string }, isActive: boolean) =>
-  `${org.name} (${account.email})${activeSuffix(isActive)}`
-
-export const formatOrgLine = (
-  account: { email: string; url: string },
-  org: { id: string; name: string },
-  isActive: boolean,
-) => {
-  const dot = isActive ? UI.Style.TEXT_SUCCESS + "●" + UI.Style.TEXT_NORMAL : " "
-  const name = isActive ? UI.Style.TEXT_HIGHLIGHT_BOLD + org.name + UI.Style.TEXT_NORMAL : org.name
-  return `  ${dot} ${name}  ${dim(account.email)}  ${dim(account.url)}  ${dim(org.id)}`
-}
 
 const isActiveOrgChoice = (
   active: Option.Option<{ id: AccountID; active_org_id: OrgID | null }>,
@@ -172,87 +152,27 @@ const openEffect = Effect.fn("open")(function* () {
   yield* Prompt.outro("Opened " + url)
 })
 
-const LoginCommand = cmd({
-  command: "login <url>",
-  describe: false,
-  builder: (yargs) =>
-    yargs.positional("url", {
-      describe: "server URL",
-      type: "string",
-      demandOption: true,
-    }),
-  async handler(args) {
-    UI.empty()
-    await AppRuntime.runPromise(loginEffect(args.url))
-  },
-})
+export async function loginHandler(args: { url: string }) {
+  UI.empty()
+  await AppRuntime.runPromise(loginEffect(args.url))
+}
 
-const LogoutCommand = cmd({
-  command: "logout [email]",
-  describe: false,
-  builder: (yargs) =>
-    yargs.positional("email", {
-      describe: "account email to log out from",
-      type: "string",
-    }),
-  async handler(args) {
-    UI.empty()
-    await AppRuntime.runPromise(logoutEffect(args.email))
-  },
-})
+export async function logoutHandler(args: { email?: string }) {
+  UI.empty()
+  await AppRuntime.runPromise(logoutEffect(args.email))
+}
 
-const SwitchCommand = cmd({
-  command: "switch",
-  describe: false,
-  async handler() {
-    UI.empty()
-    await AppRuntime.runPromise(switchEffect())
-  },
-})
+export async function switchHandler() {
+  UI.empty()
+  await AppRuntime.runPromise(switchEffect())
+}
 
-const OrgsCommand = cmd({
-  command: "orgs",
-  describe: false,
-  async handler() {
-    UI.empty()
-    await AppRuntime.runPromise(orgsEffect())
-  },
-})
+export async function orgsHandler() {
+  UI.empty()
+  await AppRuntime.runPromise(orgsEffect())
+}
 
-const OpenCommand = cmd({
-  command: "open",
-  describe: false,
-  async handler() {
-    UI.empty()
-    await AppRuntime.runPromise(openEffect())
-  },
-})
-
-export const ConsoleCommand = cmd({
-  command: "console",
-  describe: false,
-  builder: (yargs) =>
-    yargs
-      .command({
-        ...LoginCommand,
-        describe: "log in to console",
-      })
-      .command({
-        ...LogoutCommand,
-        describe: "log out from console",
-      })
-      .command({
-        ...SwitchCommand,
-        describe: "switch active org",
-      })
-      .command({
-        ...OrgsCommand,
-        describe: "list orgs",
-      })
-      .command({
-        ...OpenCommand,
-        describe: "open active console account",
-      })
-      .demandCommand(),
-  async handler() {},
-})
+export async function openHandler() {
+  UI.empty()
+  await AppRuntime.runPromise(openEffect())
+}
