@@ -865,7 +865,7 @@ export function options(input: {
   }
 
   if (input.model.api.npm === "@ai-sdk/azure") {
-    result["store"] = true
+    result["store"] = false
     result["promptCacheKey"] = input.sessionID
   }
 
