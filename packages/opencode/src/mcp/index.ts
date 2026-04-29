@@ -127,7 +127,7 @@ const buildToolName = (clientName: string, toolName: string): string => {
   if (combined.length <= MAX_TOOL_NAME) return combined
   const hash = Hash.fast(combined).slice(0, 8)
   const truncated = combined.slice(0, MAX_TOOL_NAME - hash.length - 1) + "_" + hash
-  log.warn("MCP tool name exceeds 64 chars, truncating with hash suffix", {
+  log.warn(`MCP tool name exceeds ${MAX_TOOL_NAME} chars, truncating with hash suffix`, {
     server: clientName,
     tool: toolName,
     truncated,
