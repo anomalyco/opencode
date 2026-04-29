@@ -9,6 +9,7 @@ import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
 
 const MAX_LINE_LENGTH = 2000
+const SEARCH_TIMEOUT_MS = 30_000
 
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "The regex pattern to search for in file contents" }),
@@ -64,13 +65,30 @@ export const GrepTool = Tool.define(
             kind: info?.type === "Directory" ? "directory" : "file",
           })
 
-          const result = yield* rg.search({
-            cwd,
-            pattern: params.pattern,
-            glob: params.include ? [params.include] : undefined,
-            file,
-            signal: ctx.abort,
-          })
+          const timeoutSignal = AbortSignal.timeout(SEARCH_TIMEOUT_MS)
+          const signal = AbortSignal.any([ctx.abort, timeoutSignal])
+
+          const result = yield* rg
+            .search({
+              cwd,
+              pattern: params.pattern,
+              glob: params.include ? [params.include] : undefined,
+              file,
+              signal,
+            })
+            .pipe(
+              Effect.catchIf(
+                () => timeoutSignal.aborted && !ctx.abort.aborted,
+                () =>
+                  Effect.succeed({
+                    title: params.pattern,
+                    metadata: { matches: 0, truncated: false },
+                    output: `Search timed out after ${SEARCH_TIMEOUT_MS / 1000}s. The search path "${search}" is too broad. Use a more specific path closer to the target files.`,
+                  }),
+              ),
+            )
+
+          if ("output" in result) return result
           if (result.items.length === 0) return empty
 
           const rows = result.items.map((item) => ({

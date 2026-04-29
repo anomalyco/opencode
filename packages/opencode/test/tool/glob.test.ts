@@ -78,4 +78,23 @@ describe("tool.glob", () => {
       }),
     ),
   )
+
+  it.live("terminates promptly when context abort signal fires", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => Bun.write(path.join(dir, "a.ts"), "export const a = 1\n"))
+        const controller = new AbortController()
+        // Abort immediately
+        controller.abort()
+        const abortCtx = { ...ctx, abort: controller.signal }
+        const info = yield* GlobTool
+        const glob = yield* info.init()
+        const exit = yield* glob
+          .execute({ pattern: "*.ts", path: dir }, abortCtx)
+          .pipe(Effect.exit)
+        // Should fail (defect from abort) rather than hang
+        expect(Exit.isFailure(exit)).toBe(true)
+      }),
+    ),
+  )
 })
