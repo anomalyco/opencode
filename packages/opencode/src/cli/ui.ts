@@ -48,16 +48,17 @@ export namespace UI {
   }
 
   export function logo(pad?: string) {
-    if (!process.stdout.isTTY && !process.stderr.isTTY) {
+    //if (!process.stdout.isTTY && !process.stderr.isTTY) {
       const result = []
       for (const row of wordmark) {
-        if (pad) result.push(pad)
+        //if (pad) result.push(pad)
+        //result.push(pad)
         result.push(row)
         result.push(EOL)
       }
       return result.join("").trimEnd()
-    }
-
+   // }
+/** 
     const result: string[] = []
     const reset = "\x1b[0m"
     const left = {
@@ -102,7 +103,7 @@ export namespace UI {
       result.push(draw(other, right.fg, right.shadow, right.bg))
       result.push(EOL)
     })
-    return result.join("").trimEnd()
+    return result.join("").trimEnd()*/
   }
 
   export async function input(prompt: string): Promise<string> {

@@ -52,6 +52,8 @@ const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
+const targetFlag = process.argv.find((a) => a.startsWith("--target="))
+const targetFilter = targetFlag ? targetFlag.split("=")[1] : null
 
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
@@ -141,26 +143,57 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
+const targets = targetFilter
   ? allTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) {
-        return false
-      }
-
-      // When building for the current platform, prefer a single native binary by default.
-      // Baseline binaries require additional Bun artifacts and can be flaky to download.
-      if (item.avx2 === false) {
-        return baselineFlag
-      }
-
-      // also skip abi-specific builds for the same reason
-      if (item.abi !== undefined) {
-        return false
-      }
-
-      return true
+      const name = [
+        pkg.name,
+        item.os === "win32" ? "windows" : item.os,
+        item.arch,
+        item.avx2 === false ? "baseline" : undefined,
+        item.abi === undefined ? undefined : item.abi,
+      ]
+        .filter(Boolean)
+        .join("-")
+      return name === `${pkg.name}-${targetFilter}`
     })
-  : allTargets
+  : singleFlag
+    ? allTargets.filter((item) => {
+        if (item.os !== process.platform || item.arch !== process.arch) {
+          return false
+        }
+
+        // When building for the current platform, prefer a single native binary by default.
+        // Baseline binaries require additional Bun artifacts and can be flaky to download.
+        if (item.avx2 === false) {
+          return baselineFlag
+        }
+
+        // also skip abi-specific builds for the same reason
+        if (item.abi !== undefined) {
+          return false
+        }
+
+        return true
+      })
+    : allTargets
+
+if (targets.length === 0) {
+  console.error(`No matching target for: ${targetFilter}`)
+  console.error(`Available targets:`)
+  for (const item of allTargets) {
+    const name = [
+      pkg.name,
+      item.os === "win32" ? "windows" : item.os,
+      item.arch,
+      item.avx2 === false ? "baseline" : undefined,
+      item.abi === undefined ? undefined : item.abi,
+    ]
+      .filter(Boolean)
+      .join("-")
+    console.error(`  ${name.replace(pkg.name + "-", "")}`)
+  }
+  process.exit(1)
+}
 
 await $`rm -rf dist`
 
