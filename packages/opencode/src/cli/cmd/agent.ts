@@ -31,6 +31,7 @@ const AVAILABLE_PERMISSIONS = [
   "codesearch",
   "lsp",
   "skill",
+  "wait",
 ]
 
 const AgentCreateCommand = cmd({

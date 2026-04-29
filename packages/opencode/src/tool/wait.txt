@@ -1,0 +1,50 @@
+Pause the current turn for a specified duration, then continue in the same chat. Use this when you need to wait for an external event you cannot directly observe, such as a long download, a build job, a remote process, or a rate-limit cooldown, without burning a bash slot or asking the user to nudge you back.
+
+Modes (mutually exclusive after `seconds`/`reason`):
+
+1. **Fixed delay** - pass `seconds` and `reason`. The tool sleeps that long, then returns. Use this for predictable waits ("rate-limit cooldown", "let the dev server settle", "5 minutes between health-check pings").
+
+2. **Wait until file ready** - pass `seconds` (the maximum wait), `reason`, and `until_file`. The tool polls the file and returns early once its size has been stable long enough. If `min_size_bytes` is also provided, the file must additionally reach that size before the stable-size check can succeed. If `seconds` elapses first, the tool returns with `timed_out: true` so you can decide what to do.
+
+3. **Wait until URL ready** - pass `seconds`, `reason`, and `until_url` (and optionally `until_url_status`, default 200). The tool tries HEAD then GET, and returns early when the status code matches. Use this for waiting on a dev server, a freshly-deployed endpoint, or a webhook receiver to come up.
+
+4. **Wait until process exits** - pass `seconds`, `reason`, and `until_pid_exit` (a numeric PID). The tool returns early once the process is gone. Use this when a backgrounded shell command does not write a sentinel file but you still need to know when it finished.
+
+5. **Wait until pattern in file** - pass `seconds`, `reason`, `until_text` (file path), and `until_text_pattern` (regex string, no surrounding slashes). The tool tails the file and returns as soon as the pattern matches. Optionally pass `text_pattern_flags` (default `m`) and `text_tail_bytes` (default 32768). Pairs well with backgrounded build/test jobs that write progress to a log file - use a pattern like `BUILD SUCCESSFUL` or `\\d+ passed`.
+
+Always provide a short `reason` string. It is shown to the user in the UI so they can see why the agent is paused.
+
+Optional controls (work in every mode):
+- `poll_interval_ms`: polling interval. Default 5000. Range 100-60000.
+- `stable_ms`: stable-size threshold for `until_file`. Default 10000. Use 0 to return as soon as the file exists and meets `min_size_bytes`.
+- `cancel_if_file`: sentinel file path. If this file appears while waiting, return early with `cancelled_by_file: true`. This lets another process, a user action, or a pre-started shell command stop the wait without aborting the whole chat.
+
+The wait is cancellable: if the user aborts, the tool returns immediately. `cancel_if_file` is a softer cancellation path that completes the tool normally and leaves the chat alive.
+
+Live progress in the UI:
+- `until_file`: title updates as the file grows (e.g. "driver.exe 423.4 MB / 800.0 MB (45s)").
+- `until_url`: title shows the most recent status code and seconds left.
+- `until_pid_exit`: title shows the pid and seconds left.
+- `until_text`: title shows the pattern and seconds left.
+- `fixed`: title counts down each second.
+
+This tool **blocks the current turn**. If you instead want to schedule a *new* opencode session to fire later (fire-and-forget, non-blocking), use a scheduler MCP server. This `wait` tool is for waits that should keep the current chat open and resume in the same turn.
+
+Limits:
+- `seconds` is limited to [1, 3600] (1 hour cap to prevent runaway).
+- `poll_interval_ms` is limited to [100, 60000].
+- `stable_ms` is limited to [0, 600000].
+- `until_url_status` is a single HTTP status code in [100, 599].
+- `until_pid_exit` is a positive integer process id.
+
+Example uses:
+- Slow download: `{ "seconds": 900, "reason": "NVIDIA driver download (~12 min)", "until_file": "C:\\Users\\me\\Downloads\\driver.exe", "min_size_bytes": 700000000, "poll_interval_ms": 1000, "stable_ms": 3000 }`
+- Cooldown: `{ "seconds": 30, "reason": "API rate-limit cooldown" }`
+- Dev server: `{ "seconds": 60, "reason": "letting Vite finish first build", "until_url": "http://localhost:5173/", "poll_interval_ms": 500 }`
+- Auth-protected health endpoint: `{ "seconds": 30, "reason": "wait for service", "until_url": "https://api.local/healthz", "until_url_status": 401 }`
+- Backgrounded job: `{ "seconds": 600, "reason": "wait for tar archive", "until_pid_exit": 12345, "poll_interval_ms": 1000 }`
+- External cancel sentinel: `{ "seconds": 600, "reason": "wait for backup unless cancel sentinel appears", "cancel_if_file": ".opencode-cancel-wait" }`
+- Pattern in log: `{ "seconds": 600, "reason": "wait for build to succeed", "until_text": "build.log", "until_text_pattern": "BUILD SUCCESSFUL", "poll_interval_ms": 1000 }`
+- Test runner: `{ "seconds": 300, "reason": "tests done", "until_text": "test.log", "until_text_pattern": "(\\\\d+ pass|\\\\d+ fail)", "text_pattern_flags": "im" }`
+
+Do NOT use this tool to artificially slow down responses, pad time, or wait on something you could check directly with `read`/`glob`/`grep`. Use it only when there is a genuine asynchronous event you need to wait on.

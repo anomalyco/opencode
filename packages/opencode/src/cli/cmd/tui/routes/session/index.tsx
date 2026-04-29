@@ -46,6 +46,7 @@ import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { CodeSearchTool } from "@/tool/codesearch"
 import type { WebSearchTool } from "@/tool/websearch"
+import type { WaitTool } from "@/tool/wait"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
@@ -1592,6 +1593,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "skill"}>
           <Skill {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "wait"}>
+          <Wait {...toolprops} />
+        </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
         </Match>
@@ -2222,6 +2226,31 @@ function Skill(props: ToolProps<typeof SkillTool>) {
   return (
     <InlineTool icon="→" pending="Loading skill..." complete={props.input.name} part={props.part}>
       Skill "{props.input.name}"
+    </InlineTool>
+  )
+}
+
+function Wait(props: ToolProps<typeof WaitTool>) {
+  const isRunning = createMemo(() => props.part.state.status === "running")
+  const seconds = createMemo(() => props.input.seconds ?? props.metadata.seconds)
+  const reason = createMemo(() => props.input.reason ?? props.metadata.reason)
+  const target = createMemo(() => props.input.until_file ?? props.metadata.target)
+  const textTarget = createMemo(() => props.input.until_text)
+  const pattern = createMemo(() => props.input.until_text_pattern ?? props.metadata.pattern)
+  const url = createMemo(() => props.input.until_url ?? props.metadata.url)
+  const pid = createMemo(() => props.input.until_pid_exit ?? props.metadata.pid)
+  const label = createMemo(() => (typeof seconds() === "number" ? `${seconds()}s` : "delay"))
+
+  return (
+    <InlineTool icon="~" pending="Waiting..." spinner={isRunning()} complete={!isRunning()} part={props.part}>
+      Wait {label()}
+      <Show when={reason()}> - {reason()}</Show>
+      <Show when={target()}> ({path.basename(String(target()))})</Show>
+      <Show when={textTarget() && pattern()}>
+        {" "}({path.basename(String(textTarget()))} ~/{String(pattern()).slice(0, 24)}/)
+      </Show>
+      <Show when={url()}> [{String(url())}]</Show>
+      <Show when={pid()}> [pid {String(pid())}]</Show>
     </InlineTool>
   )
 }
