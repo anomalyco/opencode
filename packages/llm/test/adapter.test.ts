@@ -120,13 +120,6 @@ const gemini = Adapter.define<FakeDraft, FakeDraft>({
   protocol: "gemini",
 })
 
-const providerFake = Adapter.compose({
-  id: "provider-fake",
-  provider: "fake-provider",
-  base: fake,
-  prepare: (request) => fake.prepare(request).pipe(Effect.map((draft) => ({ ...draft, body: `provider:${draft.body}` }))),
-})
-
 const echoLayer = dynamicResponse(({ text, respond }) =>
   Effect.succeed(
     respond(
@@ -177,15 +170,6 @@ describe("llm adapter", () => {
       )
 
       expect(prepared.adapter).toBe("gemini-fake")
-    }),
-  )
-
-  it.effect("prefers provider-specific adapters over protocol fallbacks", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.make({ adapters: [fake, providerFake] }).prepare(request)
-
-      expect(prepared.adapter).toBe("provider-fake")
-      expect(prepared.target).toEqual({ body: "provider:hello" })
     }),
   )
 
