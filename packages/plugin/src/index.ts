@@ -300,6 +300,10 @@ export interface Hooks {
    * - `context`: Additional context strings appended to the default prompt
    * - `prompt`: If set, replaces the default compaction prompt entirely
    */
+  "experimental.session.pre-compact"?: (
+    input: { sessionID: string; auto: boolean; parentID: string },
+    output: { shouldRun: boolean; prompt?: string },
+  ) => Promise<void>
   "experimental.session.compacting"?: (
     input: { sessionID: string },
     output: { context: string[]; prompt?: string },

@@ -11,6 +11,7 @@ import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { ToolRegistry } from "@/tool/registry"
 import { NotFoundError } from "@/storage/storage"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, Context, Schema } from "effect"
@@ -18,6 +19,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
+import { tool as aiTool, jsonSchema } from "ai"
+import type { Tool as AITool } from "ai"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -215,6 +218,7 @@ export const layer: Layer.Layer<
   | Plugin.Service
   | SessionProcessor.Service
   | Provider.Service
+  | ToolRegistry.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -225,6 +229,7 @@ export const layer: Layer.Layer<
     const plugin = yield* Plugin.Service
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
+    const toolRegistry = yield* ToolRegistry.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
@@ -407,6 +412,114 @@ export const layer: Layer.Layer<
         toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
       })
       const ctx = yield* InstanceState.context
+
+      // ===== PRE-COMPACT PHASE (NEW) =====
+      const preCompact = yield* plugin.trigger(
+        "experimental.session.pre-compact",
+        { sessionID: input.sessionID, auto: input.auto, parentID: input.parentID },
+        { shouldRun: false, prompt: undefined },
+      )
+
+      if (preCompact.shouldRun) {
+        const preMsg: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: input.parentID,
+          sessionID: input.sessionID,
+          mode: "pre-compact",
+          agent: userMessage.agent,
+          variant: userMessage.model.variant,
+          summary: false,
+          path: {
+            cwd: ctx.directory,
+            root: ctx.worktree,
+          },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: model.id,
+          providerID: model.providerID,
+          time: {
+            created: Date.now(),
+          },
+        }
+        yield* session.updateMessage(preMsg)
+
+        const preProcessor = yield* processors.create({
+          assistantMessage: preMsg,
+          sessionID: input.sessionID,
+          model,
+        })
+
+        // Build tools for pre-compact round
+        const tools: Record<string, AITool> = {}
+        const toolDefs = yield* toolRegistry.tools({
+          providerID: model.providerID,
+          modelID: ModelID.make(model.id),
+          agent: yield* agents.get(userMessage.agent),
+        })
+
+        for (const def of toolDefs) {
+          const schema = Effect.runSync(
+            Effect.gen(function* () {
+              return jsonSchema(def.parameters)
+            })
+          )
+          tools[def.id] = aiTool({
+            description: def.description,
+            inputSchema: schema,
+            execute: async (args, options) => {
+              const toolCtx = {
+                sessionID: input.sessionID,
+                messageID: preMsg.id,
+                agent: userMessage.agent,
+                abort: options.abortSignal,
+                callID: options.toolCallId,
+                messages: messages,
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              }
+              const result = await Effect.runPromise(
+                Effect.gen(function* () {
+                  return yield* def.execute(args, toolCtx as any)
+                })
+              )
+              return {
+                title: result.title,
+                output: result.output,
+                metadata: result.metadata,
+              }
+            },
+          })
+        }
+
+        const preResult = yield* preProcessor.process({
+          user: userMessage,
+          agent: yield* agents.get(userMessage.agent),
+          sessionID: input.sessionID,
+          tools,
+          system: [],
+          messages: [
+            ...modelMessages,
+            {
+              role: "user",
+              content: [{ type: "text", text: preCompact.prompt || "Please complete any pending tasks before context compaction." }],
+            },
+          ],
+          model,
+        })
+
+        log.info("pre-compact completed", {
+          sessionID: input.sessionID,
+          result: preResult,
+        })
+      }
+      // ===== END PRE-COMPACT =====
+
       const msg: MessageV2.Assistant = {
         id: MessageID.ascending(),
         role: "assistant",
@@ -603,6 +716,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
+    Layer.provide(ToolRegistry.defaultLayer),
   ),
 )
 
