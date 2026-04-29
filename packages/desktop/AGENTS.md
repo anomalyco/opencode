@@ -1,4 +1,7 @@
-# OpenCode Desktop 构建指南
+# LOGGING
+- **FORBIDDEN**: NEVER print javascript object in console, print **strings** with what you need to debug
+
+# Desktop package notes
 
 ## ⚠️ 重要提示
 
