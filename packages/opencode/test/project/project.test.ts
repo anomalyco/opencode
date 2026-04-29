@@ -30,7 +30,8 @@ function run<A>(fn: (svc: Project.Interface) => Effect.Effect<A>, layer = Projec
  * matching `failArg` and returns exit code 128, while delegating everything
  * else to the real CrossSpawnSpawner.
  */
-function mockGitFailure(failArg: string) {
+function mockGitFailure(failArg: string | string[]) {
+  const failArgs = new Set(Array.isArray(failArg) ? failArg : [failArg])
   return Layer.effect(
     ChildProcessSpawner.ChildProcessSpawner,
     Effect.gen(function* () {
@@ -38,7 +39,7 @@ function mockGitFailure(failArg: string) {
       return ChildProcessSpawner.make(
         Effect.fnUntraced(function* (command) {
           const std = ChildProcess.isStandardCommand(command) ? command : undefined
-          if (std?.command === "git" && std.args.some((a) => a === failArg)) {
+          if (std?.command === "git" && std.args.some((a) => failArgs.has(a))) {
             return ChildProcessSpawner.makeHandle({
               pid: ChildProcessSpawner.ProcessId(0),
               exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(128)),
@@ -60,7 +61,7 @@ function mockGitFailure(failArg: string) {
   ).pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
 }
 
-function projectLayerWithFailure(failArg: string) {
+function projectLayerWithFailure(failArg: string | string[]) {
   return Project.layer.pipe(
     Layer.provide(mockGitFailure(failArg)),
     Layer.provide(AppFileSystem.defaultLayer),
@@ -192,6 +193,27 @@ describe("Project.fromDirectory with worktrees", () => {
       const cache = path.join(tmp.path, ".git", "opencode")
       const exists = await Bun.file(cache).exists()
       expect(exists).toBe(true)
+    } finally {
+      await $`git worktree remove ${worktreePath}`
+        .cwd(tmp.path)
+        .quiet()
+        .catch(() => {})
+    }
+  })
+
+  test("worktree resolves from gitdir metadata without git topology subprocesses", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-wt-metadata")
+    const layer = projectLayerWithFailure(["--git-common-dir", "--show-toplevel", "core.bare"])
+    try {
+      await $`git worktree add ${worktreePath} -b metadata-${Date.now()}`.cwd(tmp.path).quiet()
+
+      const { project, sandbox } = await run((svc) => svc.fromDirectory(worktreePath), layer)
+
+      expect(project.worktree).toBe(tmp.path)
+      expect(sandbox).toBe(worktreePath)
+      expect(project.sandboxes).toContain(worktreePath)
     } finally {
       await $`git worktree remove ${worktreePath}`
         .cwd(tmp.path)

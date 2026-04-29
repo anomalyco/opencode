@@ -17,7 +17,6 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
 import { NonNegativeInt, withStatics } from "@/util/schema"
-
 const log = Log.create({ service: "project" })
 
 const ProjectVcs = Schema.Literal("git")
@@ -173,6 +172,29 @@ export const layer: Layer.Layer<
       return pathSvc.resolve(cwd, name)
     }
 
+    const readLinkedWorktree = Effect.fnUntraced(function* (dotgit: string, sandbox: string) {
+      const text = yield* fs.readFileString(dotgit).pipe(Effect.catch(() => Effect.void))
+      const match = text?.match(/^gitdir:\s*(.+)$/m)
+      if (!match) return
+
+      const admin = resolveGitPath(sandbox, match[1]!.trim())
+      const [commonDirText, gitdirText] = yield* Effect.all(
+        [
+          fs.readFileString(pathSvc.join(admin, "commondir")).pipe(Effect.catch(() => Effect.void)),
+          fs.readFileString(pathSvc.join(admin, "gitdir")).pipe(Effect.catch(() => Effect.void)),
+        ],
+        { concurrency: 2 },
+      )
+      if (!commonDirText || !gitdirText) return
+
+      const linkedGitFile = resolveGitPath(admin, gitdirText.trim())
+      if (pathSvc.normalize(linkedGitFile) !== pathSvc.normalize(dotgit)) return
+
+      const common = resolveGitPath(admin, commonDirText.trim())
+      const worktree = pathSvc.basename(common) === ".git" ? pathSvc.dirname(common) : common
+      return { common, worktree, sandbox }
+    })
+
     const scope = yield* Scope.Scope
 
     const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
@@ -205,6 +227,8 @@ export const layer: Layer.Layer<
         let sandbox = pathSvc.dirname(dotgit)
         const gitBinary = yield* Effect.sync(() => which("git"))
         let id = yield* readCachedProjectId(dotgit)
+        const dotgitInfo = yield* fs.stat(dotgit).pipe(Effect.catch(() => Effect.void))
+        const directRepo = dotgitInfo?.type === "Directory"
 
         if (!gitBinary) {
           return {
@@ -212,6 +236,67 @@ export const layer: Layer.Layer<
             worktree: sandbox,
             sandbox,
             vcs: fakeVcs,
+          }
+        }
+
+        if (directRepo) {
+          // Standard repos already expose their real root via the discovered `.git` directory,
+          // so avoid extra git subprocesses that are only needed for linked worktrees/bare repos.
+          if (!id) {
+            const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
+            const roots = revList.text
+              .split("\n")
+              .filter(Boolean)
+              .map((x) => x.trim())
+              .toSorted()
+
+            id = roots[0] ? ProjectID.make(roots[0]) : undefined
+            if (id) {
+              yield* fs.writeFileString(pathSvc.join(dotgit, "opencode"), id).pipe(Effect.ignore)
+            }
+          }
+
+          if (!id) {
+            return { id: ProjectID.global, worktree: sandbox, sandbox, vcs: "git" as const }
+          }
+
+          return { id, sandbox, worktree: sandbox, vcs: "git" as const }
+        }
+
+        const linkedWorktree = yield* readLinkedWorktree(dotgit, sandbox)
+        if (linkedWorktree) {
+          if (id == null) {
+            id = yield* readCachedProjectId(linkedWorktree.common)
+          }
+
+          if (!id) {
+            const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
+            const roots = revList.text
+              .split("\n")
+              .filter(Boolean)
+              .map((x) => x.trim())
+              .toSorted()
+
+            id = roots[0] ? ProjectID.make(roots[0]) : undefined
+            if (id) {
+              yield* fs.writeFileString(pathSvc.join(linkedWorktree.common, "opencode"), id).pipe(Effect.ignore)
+            }
+          }
+
+          if (!id) {
+            return {
+              id: ProjectID.global,
+              worktree: linkedWorktree.worktree,
+              sandbox,
+              vcs: "git" as const,
+            }
+          }
+
+          return {
+            id,
+            sandbox,
+            worktree: linkedWorktree.worktree,
+            vcs: "git" as const,
           }
         }
 
