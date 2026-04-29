@@ -46,6 +46,7 @@ import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { CodeSearchTool } from "@/tool/codesearch"
 import type { WebSearchTool } from "@/tool/websearch"
+import type { HashTool } from "@/tool/hash"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
@@ -1592,6 +1593,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "skill"}>
           <Skill {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "hash"}>
+          <Hash {...toolprops} />
+        </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
         </Match>
@@ -2222,6 +2226,22 @@ function Skill(props: ToolProps<typeof SkillTool>) {
   return (
     <InlineTool icon="→" pending="Loading skill..." complete={props.input.name} part={props.part}>
       Skill "{props.input.name}"
+    </InlineTool>
+  )
+}
+
+function Hash(props: ToolProps<typeof HashTool>) {
+  const isRunning = createMemo(() => props.part.state.status === "running")
+  const algorithm = createMemo(() => props.input.algorithm ?? props.metadata.algorithm ?? "hash")
+  const filepath = createMemo(() => props.input.filePath)
+  const basename = createMemo(() => (filepath() ? path.basename(String(filepath())) : "file"))
+  const state = createMemo(() =>
+    props.metadata.matches === true ? "verified" : props.metadata.matches === false ? "mismatch" : "digest",
+  )
+
+  return (
+    <InlineTool icon="#" pending="Hashing..." spinner={isRunning()} complete={!isRunning()} part={props.part}>
+      {algorithm()} {state()} {basename()}
     </InlineTool>
   )
 }

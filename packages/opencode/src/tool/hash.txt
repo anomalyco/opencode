@@ -1,0 +1,23 @@
+Compute a cryptographic hash of a local file, optionally verifying against an expected digest.
+
+Use this when you need to confirm a downloaded file matches a published digest, compare two files for byte-identity, or record a digest for later verification.
+
+Parameters:
+- `filePath` (required): path to the file to hash. Absolute paths preferred. Relative paths resolve from the current project directory.
+- `algorithm` (optional): one of `sha256` (default), `sha512`, `sha1`, `md5`. Use sha256 unless a vendor specifically publishes a different digest.
+- `expected` (optional): hex digest to verify against. Case-insensitive, non-hex characters are stripped (so you can paste with colons/spaces from a checksum manifest). If provided, the tool's metadata will set `matches` to true/false.
+
+Behavior:
+- Streams the file from disk so it works on multi-gigabyte inputs without OOM.
+- Hashing is interruptible via the abort signal.
+- Returns the hex digest in `metadata.digest`, file size in `metadata.size_bytes`, elapsed time in `metadata.elapsed_ms`.
+- If `expected` is provided and the hash does not match, the tool still returns successfully (no thrown error) but with `matches: false` so you can branch on it.
+
+Examples:
+- Verify a downloaded installer: `{ "filePath": "C:\\Users\\me\\Downloads\\driver.exe", "algorithm": "sha256", "expected": "9af3...:b21" }`
+- Just compute a digest: `{ "filePath": "./build/output.tar.gz" }`
+- Compare two files (call twice and compare digests): `{ "filePath": "/tmp/a" }` then `{ "filePath": "/tmp/b" }`
+
+Do NOT use this tool to:
+- Hash strings or in-memory data. That's not what it does. Hash a file on disk.
+- Verify code-signing / Authenticode signatures. That's a separate operation; this tool only computes content hashes.
