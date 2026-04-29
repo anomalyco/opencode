@@ -58,10 +58,6 @@ const InstanceQueryParameters = [
   },
 ] satisfies OpenApiParameter[]
 
-// These refs already match the legacy SDK's expected body shape. Expanding all
-// other refs lets us strip Effect's `null` from optional fields in one place.
-const LegacyBodyRefParameters = new Set(["Auth", "Config", "Part", "WorktreeRemoveInput", "WorktreeResetInput"])
-
 // Query schemas describe decoded Effect values, but the generated SDK needs the
 // public call shape. These keep SDK callers passing numbers/booleans while the
 // server still decodes string query params at runtime.
@@ -82,6 +78,13 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
   // actual schema from any parent union that references them.
   fixSelfReferencingComponents(spec)
 
+  // Effect's Schema.optional emits `anyOf: [T, {type:"null"}]` in OpenAPI,
+  // but the legacy SDK expected plain `T` for optional fields. Strip null
+  // from all component schemas so both request and response types match.
+  for (const [name, schema] of Object.entries(spec.components?.schemas ?? {})) {
+    spec.components!.schemas![name] = stripOptionalNull(structuredClone(schema))
+  }
+
   for (const [path, item] of Object.entries(spec.paths ?? {})) {
     const isInstanceRoute = !path.startsWith("/global/") && !path.startsWith("/auth/")
     for (const method of ["get", "post", "put", "delete", "patch"] as const) {
@@ -91,23 +94,12 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
         // Hono's generated OpenAPI never marked request bodies as required. Keep
         // that SDK surface stable during the HttpApi migration.
         delete operation.requestBody.required
-        // Effect's Schema.optional emits `anyOf: [T, {type:"null"}]` in OpenAPI,
-        // but the legacy SDK expected plain `T` for optional fields. Expand
-        // non-legacy $refs and strip the null arms so the SDK surface is stable.
-        for (const media of Object.values(operation.requestBody.content ?? {})) {
-          const ref = media.schema?.$ref?.replace("#/components/schemas/", "")
-          if (ref && LegacyBodyRefParameters.has(ref)) continue
-          if (ref && spec.components?.schemas?.[ref]) {
-            media.schema = stripOptionalNull(structuredClone(spec.components.schemas[ref]))
-            continue
-          }
-          if (media.schema) media.schema = stripOptionalNull(media.schema)
-        }
         if (path === "/experimental/workspace" && method === "post") {
           // Workspace creation fields `branch` and `extra` are Schema.NullOr —
           // genuinely nullable, not just optional. Re-add the null that the
-          // global strip above removed.
-          const properties = operation.requestBody.content?.["application/json"]?.schema?.properties
+          // component-level strip above removed.
+          const ref = operation.requestBody.content?.["application/json"]?.schema?.$ref?.replace("#/components/schemas/", "")
+          const properties = ref ? spec.components?.schemas?.[ref]?.properties : operation.requestBody.content?.["application/json"]?.schema?.properties
           if (properties?.branch) properties.branch = { anyOf: [properties.branch, { type: "null" }] }
           if (properties?.extra) properties.extra = { anyOf: [properties.extra, { type: "null" }] }
         }
