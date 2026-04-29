@@ -1,7 +1,7 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import Http from "node:http"
 import { describe, expect } from "bun:test"
-import { Effect, Ref } from "effect"
+import { Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { WorkspaceID } from "../../src/control-plane/schema"
 import { HttpApiProxy } from "../../src/server/routes/instance/httpapi/middleware/proxy"
@@ -83,11 +83,11 @@ describe("HttpApi workspace proxy", () => {
 
   it.live("strips opencode-internal headers and merges extra headers", () =>
     Effect.gen(function* () {
-      const forwarded = yield* Ref.make<Record<string, string>>({})
+      let forwarded: Record<string, string> = {}
       yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
           const req = yield* HttpServerRequest.HttpServerRequest
-          yield* Ref.set(forwarded, req.headers)
+          forwarded = req.headers
           return HttpServerResponse.empty()
         }),
       )
@@ -103,12 +103,11 @@ describe("HttpApi workspace proxy", () => {
         }),
       )
       yield* HttpApiProxy.http(`${url}/test`, { "x-injected": "extra" }, request)
-      const headers = yield* Ref.get(forwarded)
 
-      expect(headers["x-opencode-directory"]).toBeUndefined()
-      expect(headers["x-opencode-workspace"]).toBeUndefined()
-      expect(headers["x-custom"]).toBe("preserved")
-      expect(headers["x-injected"]).toBe("extra")
+      expect(forwarded["x-opencode-directory"]).toBeUndefined()
+      expect(forwarded["x-opencode-workspace"]).toBeUndefined()
+      expect(forwarded["x-custom"]).toBe("preserved")
+      expect(forwarded["x-injected"]).toBe("extra")
     }),
   )
 })
