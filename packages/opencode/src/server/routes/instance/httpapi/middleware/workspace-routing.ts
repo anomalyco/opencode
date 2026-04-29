@@ -4,7 +4,7 @@ import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session/session"
-import { HttpApiProxy, sourceRequest } from "./proxy"
+import { HttpApiProxy } from "./proxy"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/workspace"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer } from "effect"
@@ -46,10 +46,6 @@ function currentDirectory(): string {
   }
 }
 
-function requestHeaders(request: HttpServerRequest.HttpServerRequest): Headers {
-  return sourceRequest(request).headers
-}
-
 function requestURL(request: HttpServerRequest.HttpServerRequest): URL {
   return new URL(request.url, "http://localhost")
 }
@@ -64,7 +60,7 @@ function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceID): Worksp
 }
 
 function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
-  return url.searchParams.get("directory") || requestHeaders(request).get("x-opencode-directory") || currentDirectory()
+  return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || currentDirectory()
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
@@ -100,9 +96,8 @@ function proxyRemote(
   url: URL,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   const proxyURL = workspaceProxyURL(target.url, url)
-  const source = sourceRequest(request)
-  if (source.headers.get("upgrade")?.toLowerCase() === "websocket") return HttpApiProxy.websocket(request, proxyURL)
-  return HttpApiProxy.http(proxyURL, target.headers, source, workspace.id).pipe(Effect.map(HttpServerResponse.raw))
+  if (request.headers["upgrade"]?.toLowerCase() === "websocket") return HttpApiProxy.websocket(request, proxyURL)
+  return HttpApiProxy.http(proxyURL, target.headers, request, workspace.id)
 }
 
 function planWorkspaceRequest(

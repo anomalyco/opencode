@@ -6,11 +6,16 @@ import { Effect, Stream } from "effect"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 
-export function sourceRequest(request: HttpServerRequest.HttpServerRequest): Request {
-  if (request.source instanceof Request) return request.source
-  return new Request(new URL(request.originalUrl, "http://localhost"), {
-    method: request.method,
-    headers: request.headers as HeadersInit,
+function webSource(request: HttpServerRequest.HttpServerRequest): Request | undefined {
+  return request.source instanceof Request ? request.source : undefined
+}
+
+function requestBody(request: HttpServerRequest.HttpServerRequest) {
+  if (request.method === "GET" || request.method === "HEAD") return HttpBody.empty
+  const len = request.headers["content-length"]
+  return HttpBody.raw(webSource(request)?.body ?? null, {
+    contentType: request.headers["content-type"],
+    contentLength: len ? Number(len) : undefined,
   })
 }
 
@@ -20,10 +25,9 @@ export function websocket(
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.scoped(
     Effect.gen(function* () {
-      const source = sourceRequest(request)
       const inbound = yield* Effect.orDie(request.upgrade)
       const outbound = yield* Socket.makeWebSocket(ProxyUtil.websocketTargetURL(target), {
-        protocols: ProxyUtil.websocketProtocols(source),
+        protocols: ProxyUtil.websocketProtocols(request.headers),
       }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
       const writeInbound = yield* inbound.writer
       const writeOutbound = yield* outbound.writer
@@ -57,51 +61,42 @@ function statusText(response: unknown) {
   return (response as { source?: Response }).source?.statusText
 }
 
-export function http(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
-  if (!Workspace.isSyncing(workspaceID)) {
-    return Effect.succeed(
-      new Response(`broken sync connection for workspace: ${workspaceID}`, {
-        status: 503,
-        headers: {
-          "content-type": "text/plain; charset=utf-8",
-        },
-      }),
-    )
-  }
-
+export function http(
+  url: string | URL,
+  extra: HeadersInit | undefined,
+  request: HttpServerRequest.HttpServerRequest,
+  workspaceID: WorkspaceID,
+): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.gen(function* () {
+    const syncing = yield* Effect.promise(() => Workspace.isSyncing(workspaceID))
+    if (!syncing) {
+      return HttpServerResponse.text(`broken sync connection for workspace: ${workspaceID}`, {
+        status: 503,
+        contentType: "text/plain; charset=utf-8",
+      })
+    }
+
     const response = yield* HttpClient.execute(
-      HttpClientRequest.make(req.method as never)(url, {
-        headers: ProxyUtil.headers(req, extra),
-        body:
-          req.method === "GET" || req.method === "HEAD"
-            ? HttpBody.empty
-            : HttpBody.raw(req.body, {
-                contentType: req.headers.get("content-type") ?? undefined,
-                contentLength: req.headers.get("content-length")
-                  ? Number(req.headers.get("content-length"))
-                  : undefined,
-              }),
+      HttpClientRequest.make(request.method as never)(url, {
+        headers: ProxyUtil.headers(request.headers, extra),
+        body: requestBody(request),
       }),
     )
-    const next = new Headers(response.headers as HeadersInit)
-    const sync = Fence.parse(next)
-    next.delete("content-encoding")
-    next.delete("content-length")
+    const headers = new Headers(response.headers as HeadersInit)
+    const sync = Fence.parse(headers)
+    headers.delete("content-encoding")
+    headers.delete("content-length")
 
-    if (sync) yield* Effect.promise(() => Fence.wait(workspaceID, sync, req.signal))
-    const body = yield* Stream.toReadableStreamEffect(response.stream.pipe(Stream.catchCause(() => Stream.empty)))
-    return new Response(body, {
+    if (sync) yield* Effect.promise(() => Fence.wait(workspaceID, sync, webSource(request)?.signal))
+    return HttpServerResponse.stream(response.stream.pipe(Stream.catchCause(() => Stream.empty)), {
       status: response.status,
       statusText: statusText(response),
-      headers: next,
+      headers,
     })
   }).pipe(
     Effect.provide(FetchHttpClient.layer),
-    Effect.catch(() => Effect.succeed(new Response(null, { status: 500 }))),
+    Effect.catch(() => Effect.succeed(HttpServerResponse.empty({ status: 500 }))),
   )
 }
-
-export { ProxyUtil }
 
 export * as HttpApiProxy from "./proxy"

@@ -11,12 +11,16 @@ const hop = new Set([
   "host",
 ])
 
-export function headers(req: Request, extra?: HeadersInit) {
-  const out = new Headers(req.headers)
+function sanitize(out: Headers) {
   for (const key of hop) out.delete(key)
   out.delete("accept-encoding")
   out.delete("x-opencode-directory")
   out.delete("x-opencode-workspace")
+}
+
+export function headers(input: Request | HeadersInit, extra?: HeadersInit) {
+  const out = new Headers(input instanceof Request ? input.headers : input)
+  sanitize(out)
   if (!extra) return out
   for (const [key, value] of new Headers(extra).entries()) {
     out.set(key, value)
@@ -24,8 +28,10 @@ export function headers(req: Request, extra?: HeadersInit) {
   return out
 }
 
-export function websocketProtocols(req: Request) {
-  const value = req.headers.get("sec-websocket-protocol")
+export function websocketProtocols(input: Request | Record<string, string | undefined>) {
+  const value = input instanceof Request
+    ? input.headers.get("sec-websocket-protocol")
+    : input["sec-websocket-protocol"]
   if (!value) return []
   return value
     .split(",")
