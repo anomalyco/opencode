@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
-import { FileApi, FilePaths } from "../../src/server/routes/instance/httpapi/file"
+import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
+import { FileApi, FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
+import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/global"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
@@ -18,6 +20,11 @@ const original = {
 }
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
+let effectSpec: ReturnType<typeof OpenApi.fromApi> | undefined
+
+function effectOpenApi() {
+  return (effectSpec ??= OpenApi.fromApi(PublicApi))
+}
 
 function app(input?: { password?: string; username?: string }) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
@@ -50,23 +57,40 @@ function openApiParameters(spec: { paths: Record<string, Partial<Record<(typeof 
   )
 }
 
-function openApiRequestBodies(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }) {
+function openApiRequestBodies(spec: OpenApiSpec) {
   return Object.fromEntries(
     Object.entries(spec.paths).flatMap(([path, item]) =>
       methods
         .filter((method) => item[method])
-        .map((method) => [`${method.toUpperCase()} ${path}`, requestBodyKey(item[method]?.requestBody)]),
+        .map((method) => [`${method.toUpperCase()} ${path}`, requestBodyKey(spec, item[method]?.requestBody)]),
     ),
   )
 }
 
+type OpenApiSpec = {
+  components?: {
+    schemas?: Record<string, unknown>
+  }
+  paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>>
+}
+
+type OpenApiSchema = {
+  $ref?: string
+  allOf?: unknown[]
+  anyOf?: unknown[]
+  oneOf?: unknown[]
+  properties?: Record<string, unknown>
+  type?: string | string[]
+}
+
 type Operation = {
   parameters?: unknown[]
+  responses?: unknown
   requestBody?: unknown
 }
 
 type RequestBody = {
-  content?: Record<string, { schema?: { $ref?: string; type?: string } }>
+  content?: Record<string, { schema?: OpenApiSchema }>
   required?: boolean
 }
 
@@ -76,15 +100,55 @@ function parameterKey(param: unknown) {
   return `${param.in}:${param.name}:${"required" in param && param.required === true}`
 }
 
-function requestBodyKey(body: unknown) {
+function parameterSchema(input: {
+  spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }
+  path: string
+  method: (typeof methods)[number]
+  name: string
+}) {
+  const param = input.spec.paths[input.path]?.[input.method]?.parameters?.find(
+    (param) => !!param && typeof param === "object" && "name" in param && param.name === input.name,
+  )
+  if (!param || typeof param !== "object" || !("schema" in param)) return
+  return param.schema
+}
+
+function requestBodyKey(spec: OpenApiSpec, body: unknown) {
   if (!body || typeof body !== "object" || !("content" in body)) return ""
   const requestBody = body as RequestBody
   return JSON.stringify({
     required: requestBody.required === true,
     content: Object.entries(requestBody.content ?? {})
-      .map(([type, value]) => [type, value.schema?.$ref ?? value.schema?.type ?? "inline"])
+      .map(([type, value]) => [type, requestBodySchemaKind(spec, value.schema)])
       .sort(),
   })
+}
+
+function requestBodySchemaKind(spec: OpenApiSpec, schema: OpenApiSchema | undefined) {
+  if (!schema) return ""
+  const resolved = (
+    schema.$ref ? spec.components?.schemas?.[schema.$ref.replace("#/components/schemas/", "")] : schema
+  ) as OpenApiSchema | undefined
+  if (resolved?.properties) return "object"
+  if (resolved?.anyOf ?? resolved?.oneOf ?? resolved?.allOf) return "object"
+  return resolved?.type ?? schema.type ?? "inline"
+}
+
+function responseContentTypes(input: {
+  spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }
+  path: string
+  method: (typeof methods)[number]
+  status: string
+}) {
+  const responses = input.spec.paths[input.path]?.[input.method]?.responses
+  if (!responses || typeof responses !== "object" || !(input.status in responses)) return []
+  const response = (responses as Record<string, unknown>)[input.status]
+  if (!response || typeof response !== "object" || !("content" in response)) return []
+  const content = (response as { content?: unknown }).content
+  if (!content || typeof content !== "object") {
+    return []
+  }
+  return Object.keys(content).sort()
 }
 
 function authorization(username: string, password: string) {
@@ -108,9 +172,17 @@ afterEach(async () => {
 })
 
 describe("HttpApi server", () => {
+  test("keeps Effect HttpApi behind the feature flag", () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = false
+    expect(Server.backend()).toEqual({ backend: "hono", reason: "stable" })
+
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    expect(Server.backend()).toEqual({ backend: "effect-httpapi", reason: "env" })
+  })
+
   test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
     const honoRoutes = openApiRouteKeys(await Server.openapi())
-    const effectRoutes = openApiRouteKeys(OpenApi.fromApi(PublicApi))
+    const effectRoutes = openApiRouteKeys(effectOpenApi())
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
     expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
@@ -118,7 +190,7 @@ describe("HttpApi server", () => {
 
   test("matches generated OpenAPI route parameters", async () => {
     const hono = openApiParameters(await Server.openapi())
-    const effect = openApiParameters(OpenApi.fromApi(PublicApi))
+    const effect = openApiParameters(effectOpenApi())
 
     expect(
       Object.keys(hono)
@@ -129,13 +201,47 @@ describe("HttpApi server", () => {
 
   test("matches generated OpenAPI request body shape", async () => {
     const hono = openApiRequestBodies(await Server.openapi())
-    const effect = openApiRequestBodies(OpenApi.fromApi(PublicApi))
+    const effect = openApiRequestBodies(effectOpenApi())
 
     expect(
       Object.keys(hono)
         .filter((route) => hono[route] !== effect[route])
         .map((route) => ({ route, hono: hono[route], effect: effect[route] })),
     ).toEqual([])
+  })
+
+  test("matches SDK-affecting query parameter schemas", async () => {
+    const effect = effectOpenApi()
+
+    expect(parameterSchema({ spec: effect, path: "/session", method: "get", name: "roots" })).toEqual({
+      anyOf: [{ type: "boolean" }, { type: "string", enum: ["true", "false"] }],
+    })
+    expect(parameterSchema({ spec: effect, path: "/session", method: "get", name: "start" })).toEqual({
+      type: "number",
+    })
+    expect(parameterSchema({ spec: effect, path: "/find/file", method: "get", name: "limit" })).toEqual({
+      type: "integer",
+      minimum: 1,
+      maximum: 200,
+    })
+    expect(
+      parameterSchema({ spec: effect, path: "/session/{sessionID}/message", method: "get", name: "limit" }),
+    ).toEqual({
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    })
+  })
+
+  test("documents event routes as server-sent events", () => {
+    const effect = effectOpenApi()
+
+    expect(responseContentTypes({ spec: effect, path: "/event", method: "get", status: "200" })).toEqual([
+      "text/event-stream",
+    ])
+    expect(responseContentTypes({ spec: effect, path: "/global/event", method: "get", status: "200" })).toEqual([
+      "text/event-stream",
+    ])
   })
 
   test("allows requests when auth is disabled", async () => {
@@ -222,5 +328,56 @@ describe("HttpApi server", () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ content: "query" })
+  })
+
+  test("serves global health from Effect HttpApi", async () => {
+    const response = await app().request(`${GlobalPaths.health}?directory=/does/not/exist/opencode-test`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ healthy: true })
+  })
+
+  test("serves global event stream from Effect HttpApi", async () => {
+    const response = await app().request(GlobalPaths.event)
+    if (!response.body) throw new Error("missing event stream body")
+    const reader = response.body.getReader()
+    const chunk = await reader.read()
+    await reader.cancel()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("text/event-stream")
+    expect(new TextDecoder().decode(chunk.value)).toContain("server.connected")
+  })
+
+  test("serves control log from Effect HttpApi", async () => {
+    const response = await app().request(ControlPaths.log, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ service: "httpapi-test", level: "info", message: "hello" }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toBe(true)
+  })
+
+  test("validates control auth without falling through to 404", async () => {
+    const response = await app().request(ControlPaths.auth.replace(":providerID", "test"), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "api" }),
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  test("validates global upgrade without invoking installers", async () => {
+    const response = await app().request(GlobalPaths.upgrade, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "not-json",
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ success: false })
   })
 })

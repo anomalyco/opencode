@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { PositiveInt, withStatics } from "@/util/schema"
 
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
@@ -13,7 +13,7 @@ export const Local = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean).annotate({
     description: "Enable or disable the MCP server on startup",
   }),
-  timeout: Schema.optional(Schema.Number).annotate({
+  timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
 })
@@ -49,7 +49,7 @@ export const Remote = Schema.Struct({
   oauth: Schema.optional(Schema.Union([OAuth, Schema.Literal(false)])).annotate({
     description: "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
   }),
-  timeout: Schema.optional(Schema.Number).annotate({
+  timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
 })

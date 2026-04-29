@@ -1,22 +1,25 @@
 import { Config } from "@/config/config"
+import { BusEvent } from "@/bus/bus-event"
+import { SyncEvent } from "@/sync"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { described } from "./metadata"
 
 const GlobalHealth = Schema.Struct({
   healthy: Schema.Literal(true),
   version: Schema.String,
-}).annotate({ identifier: "GlobalHealth" })
+})
 
-const GlobalEvent = Schema.Struct({
+const GlobalEventSchema = Schema.Struct({
   directory: Schema.String,
   project: Schema.optional(Schema.String),
   workspace: Schema.optional(Schema.String),
-  payload: Schema.Unknown,
+  payload: Schema.Union([...BusEvent.effectPayloads(), ...SyncEvent.effectPayloads()]),
 }).annotate({ identifier: "GlobalEvent" })
 
-const GlobalUpgradeInput = Schema.Struct({
+export const GlobalUpgradeInput = Schema.Struct({
   target: Schema.optional(Schema.String),
-}).annotate({ identifier: "GlobalUpgradeInput" })
+})
 
 const GlobalUpgradeResult = Schema.Union([
   Schema.Struct({
@@ -27,7 +30,7 @@ const GlobalUpgradeResult = Schema.Union([
     success: Schema.Literal(false),
     error: Schema.String,
   }),
-]).annotate({ identifier: "GlobalUpgradeResult" })
+])
 
 export const GlobalPaths = {
   health: "/global/health",
@@ -41,7 +44,7 @@ export const GlobalApi = HttpApi.make("global").add(
   HttpApiGroup.make("global")
     .add(
       HttpApiEndpoint.get("health", GlobalPaths.health, {
-        success: GlobalHealth,
+        success: described(GlobalHealth, "Health information"),
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.health",
@@ -50,7 +53,7 @@ export const GlobalApi = HttpApi.make("global").add(
         }),
       ),
       HttpApiEndpoint.get("event", GlobalPaths.event, {
-        success: GlobalEvent,
+        success: GlobalEventSchema,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.event",
@@ -59,7 +62,7 @@ export const GlobalApi = HttpApi.make("global").add(
         }),
       ),
       HttpApiEndpoint.get("configGet", GlobalPaths.config, {
-        success: Config.Info,
+        success: described(Config.Info, "Get global config info"),
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.config.get",
@@ -69,7 +72,8 @@ export const GlobalApi = HttpApi.make("global").add(
       ),
       HttpApiEndpoint.patch("configUpdate", GlobalPaths.config, {
         payload: Config.Info,
-        success: Config.Info,
+        success: described(Config.Info, "Successfully updated global config"),
+        error: HttpApiError.BadRequest,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.config.update",
@@ -78,7 +82,7 @@ export const GlobalApi = HttpApi.make("global").add(
         }),
       ),
       HttpApiEndpoint.post("dispose", GlobalPaths.dispose, {
-        success: Schema.Boolean,
+        success: described(Schema.Boolean, "Global disposed"),
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.dispose",
@@ -88,7 +92,8 @@ export const GlobalApi = HttpApi.make("global").add(
       ),
       HttpApiEndpoint.post("upgrade", GlobalPaths.upgrade, {
         payload: GlobalUpgradeInput,
-        success: GlobalUpgradeResult,
+        success: described(GlobalUpgradeResult, "Upgrade result"),
+        error: HttpApiError.BadRequest,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "global.upgrade",

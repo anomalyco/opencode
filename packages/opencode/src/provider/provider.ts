@@ -848,27 +848,27 @@ const ProviderCapabilities = Schema.Struct({
 })
 
 const ProviderCacheCost = Schema.Struct({
-  read: Schema.Number,
-  write: Schema.Number,
+  read: Schema.Finite,
+  write: Schema.Finite,
 })
 
 const ProviderCost = Schema.Struct({
-  input: Schema.Number,
-  output: Schema.Number,
+  input: Schema.Finite,
+  output: Schema.Finite,
   cache: ProviderCacheCost,
   experimentalOver200K: Schema.optional(
     Schema.Struct({
-      input: Schema.Number,
-      output: Schema.Number,
+      input: Schema.Finite,
+      output: Schema.Finite,
       cache: ProviderCacheCost,
     }),
   ),
 })
 
 const ProviderLimit = Schema.Struct({
-  context: Schema.Number,
-  input: Schema.optional(Schema.Number),
-  output: Schema.Number,
+  context: Schema.Finite,
+  input: Schema.optional(Schema.Finite),
+  output: Schema.Finite,
 })
 
 export const Model = Schema.Struct({
@@ -1358,7 +1358,9 @@ const layer: Layer.Layer<
             )
               delete provider.models[modelID]
 
-            model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            if (!model.variants || Object.keys(model.variants).length === 0) {
+              model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            }
 
             const configVariants = configProvider?.models?.[modelID]?.variants
             if (configVariants && model.variants) {

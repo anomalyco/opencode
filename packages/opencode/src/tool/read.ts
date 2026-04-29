@@ -1,4 +1,5 @@
 import { Effect, Option, Schema, Scope } from "effect"
+import { NonNegativeInt } from "@/util/schema"
 import { createReadStream } from "fs"
 import * as path from "path"
 import { createInterface } from "readline"
@@ -25,10 +26,10 @@ const SAMPLE_BYTES = 4096
 // unchanged; purely CLI-facing uses must now send numbers rather than strings.
 export const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "The absolute path to the file or directory to read" }),
-  offset: Schema.optional(Schema.Number).annotate({
+  offset: Schema.optional(NonNegativeInt).annotate({
     description: "The line number to start reading from (1-indexed)",
   }),
-  limit: Schema.optional(Schema.Number).annotate({
+  limit: Schema.optional(NonNegativeInt).annotate({
     description: "The maximum number of lines to read (defaults to 2000)",
   }),
 })

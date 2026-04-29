@@ -325,6 +325,44 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 
 ---
 
+### Atomic Chat
+
+OpenAI 호환 API 서버 뒤에서 로컬 LLM을 실행하는 데스크톱 애플리케이션인 [Atomic Chat](https://atomic.chat)을 통해 로컬 모델을 사용하도록 opencode를 구성할 수 있습니다(기본 엔드포인트 `http://127.0.0.1:1337/v1`).
+
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
+
+이 예시에서:
+
+- `atomic-chat`은 사용자 지정 공급자 ID입니다. 원하는 어떤 문자열이든 사용할 수 있습니다.
+- `npm`은 이 공급자에 사용할 패키지를 지정합니다. 여기서는 모든 OpenAI 호환 API에 `@ai-sdk/openai-compatible`이 사용됩니다.
+- `name`은 UI에 표시되는 공급자의 이름입니다.
+- `options.baseURL`은 로컬 서버의 엔드포인트입니다. Atomic Chat 설정에 맞게 호스트와 포트를 변경하세요.
+- `models`는 모델 ID와 해당 표시 이름의 맵입니다. 각 ID는 `GET /v1/models`가 반환하는 `id`와 일치해야 하며, 현재 Atomic Chat에 로드된 ID 목록을 확인하려면 `curl http://127.0.0.1:1337/v1/models`를 실행하세요.
+
+:::tip
+도구 호출이 잘 작동하지 않는 경우, 도구 호출을 잘 지원하는 로드된 모델(예: Qwen-Coder 또는 DeepSeek-Coder 변형)을 선택하세요.
+:::
+
+---
+
 ### Azure OpenAI
 
 :::note
