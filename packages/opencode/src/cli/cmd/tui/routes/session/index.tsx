@@ -19,7 +19,7 @@ import { useRoute, useRouteData } from "@tui/context/route"
 import { useProject } from "@tui/context/project"
 import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
-import { SplitBorder } from "@tui/component/border"
+import { FrameBorder, SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
@@ -2197,16 +2197,32 @@ function ApplyPatch(props: ToolProps<typeof ApplyPatchTool>) {
 }
 
 function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
+  const { theme } = useTheme()
+  const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
+
   return (
     <Switch>
       <Match when={props.metadata.todos?.length}>
-        <BlockTool title="# Todos" part={props.part}>
-          <box>
+        <box marginTop={1} paddingLeft={2} gap={1}>
+          <box
+            border={FrameBorder.border}
+            borderColor={theme.border}
+            customBorderChars={FrameBorder.customBorderChars}
+            paddingLeft={1}
+            paddingRight={1}
+            paddingTop={0}
+            paddingBottom={0}
+            gap={1}
+          >
+            <text fg={theme.textMuted}># Todos</text>
             <For each={props.input.todos ?? []}>
               {(todo) => <TodoItem status={todo.status} content={todo.content} />}
             </For>
           </box>
-        </BlockTool>
+          <Show when={error()}>
+            <text fg={theme.error}>{error()}</text>
+          </Show>
+        </box>
       </Match>
       <Match when={true}>
         <InlineTool icon="⚙" pending="Updating todos..." complete={false} part={props.part}>
