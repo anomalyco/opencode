@@ -3,7 +3,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { Project } from "@/project/project"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { ProjectID } from "@/project/schema"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 import { markInstanceForReload } from "./lifecycle"
@@ -69,7 +69,7 @@ export const ProjectApi = HttpApi.make("project")
     }),
   )
 
-export const projectHandlers = Layer.unwrap(
+export const projectHandlers = HttpApiBuilder.group(ProjectApi, "project", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* Project.Service
 
@@ -102,8 +102,6 @@ export const projectHandlers = Layer.unwrap(
       return yield* svc.update({ ...ctx.payload, projectID: ctx.params.projectID })
     })
 
-    return HttpApiBuilder.group(ProjectApi, "project", (handlers) =>
-      handlers.handle("list", list).handle("current", current).handle("initGit", initGit).handle("update", update),
-    )
+    return handlers.handle("list", list).handle("current", current).handle("initGit", initGit).handle("update", update)
   }),
-).pipe(Layer.provide(Project.defaultLayer))
+)

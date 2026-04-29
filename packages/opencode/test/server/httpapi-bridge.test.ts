@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
+import { ControlPaths } from "../../src/server/routes/instance/httpapi/control"
 import { FileApi, FilePaths } from "../../src/server/routes/instance/httpapi/file"
+import { GlobalPaths } from "../../src/server/routes/instance/httpapi/global"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
@@ -292,5 +294,56 @@ describe("HttpApi server", () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ content: "query" })
+  })
+
+  test("serves global health from Effect HttpApi", async () => {
+    const response = await app().request(`${GlobalPaths.health}?directory=/does/not/exist/opencode-test`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ healthy: true })
+  })
+
+  test("serves global event stream from Effect HttpApi", async () => {
+    const response = await app().request(GlobalPaths.event)
+    if (!response.body) throw new Error("missing event stream body")
+    const reader = response.body.getReader()
+    const chunk = await reader.read()
+    await reader.cancel()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("text/event-stream")
+    expect(new TextDecoder().decode(chunk.value)).toContain("server.connected")
+  })
+
+  test("serves control log from Effect HttpApi", async () => {
+    const response = await app().request(ControlPaths.log, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ service: "httpapi-test", level: "info", message: "hello" }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toBe(true)
+  })
+
+  test("validates control auth without falling through to 404", async () => {
+    const response = await app().request(ControlPaths.auth.replace(":providerID", "test"), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "api" }),
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  test("validates global upgrade without invoking installers", async () => {
+    const response = await app().request(GlobalPaths.upgrade, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "not-json",
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ success: false })
   })
 })

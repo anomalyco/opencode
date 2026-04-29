@@ -10,7 +10,7 @@ import { or } from "drizzle-orm"
 import { SyncEvent } from "@/sync"
 import { EventTable } from "@/sync/event.sql"
 import { NonNegativeInt } from "@/util/schema"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -97,7 +97,7 @@ export const SyncApi = HttpApi.make("sync")
     }),
   )
 
-export const syncHandlers = Layer.unwrap(
+export const syncHandlers = HttpApiBuilder.group(SyncApi, "sync", (handlers) =>
   Effect.gen(function* () {
     const start = Effect.fn("SyncHttpApi.start")(function* () {
       startWorkspaceSyncing((yield* InstanceState.context).project.id)
@@ -132,8 +132,6 @@ export const syncHandlers = Layer.unwrap(
       )
     })
 
-    return HttpApiBuilder.group(SyncApi, "sync", (handlers) =>
-      handlers.handle("start", start).handle("replay", replay).handle("history", history),
-    )
+    return handlers.handle("start", start).handle("replay", replay).handle("history", history)
   }),
 )

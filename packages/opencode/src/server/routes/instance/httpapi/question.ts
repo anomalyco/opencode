@@ -1,6 +1,6 @@
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -57,7 +57,7 @@ export const QuestionApi = HttpApi.make("question")
     }),
   )
 
-export const questionHandlers = Layer.unwrap(
+export const questionHandlers = HttpApiBuilder.group(QuestionApi, "question", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* Question.Service
 
@@ -81,8 +81,6 @@ export const questionHandlers = Layer.unwrap(
       return true
     })
 
-    return HttpApiBuilder.group(QuestionApi, "question", (handlers) =>
-      handlers.handle("list", list).handle("reply", reply).handle("reject", reject),
-    )
+    return handlers.handle("list", list).handle("reply", reply).handle("reject", reject)
   }),
-).pipe(Layer.provide(Question.defaultLayer))
+)
