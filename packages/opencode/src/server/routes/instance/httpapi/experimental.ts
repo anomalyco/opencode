@@ -10,7 +10,7 @@ import { Session } from "@/session/session"
 import { ToolRegistry } from "@/tool/registry"
 import * as EffectZod from "@/util/effect-zod"
 import { Worktree } from "@/worktree"
-import { Effect, Layer, Option, Schema, SchemaGetter } from "effect"
+import { Effect, Option, Schema, SchemaGetter } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
@@ -210,7 +210,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
     }),
   )
 
-export const experimentalHandlers = Layer.unwrap(
+export const experimentalHandlers = HttpApiBuilder.group(ExperimentalApi, "experimental", (handlers) =>
   Effect.gen(function* () {
     const account = yield* Account.Service
     const agents = yield* Agent.Service
@@ -335,27 +335,17 @@ export const experimentalHandlers = Layer.unwrap(
       return yield* mcp.resources()
     })
 
-    return HttpApiBuilder.group(ExperimentalApi, "experimental", (handlers) =>
-      handlers
-        .handle("console", getConsole)
-        .handle("consoleOrgs", listConsoleOrgs)
-        .handle("consoleSwitch", switchConsole)
-        .handle("tool", tool)
-        .handle("toolIDs", toolIDs)
-        .handle("worktree", worktree)
-        .handle("worktreeCreate", worktreeCreate)
-        .handle("worktreeRemove", worktreeRemove)
-        .handle("worktreeReset", worktreeReset)
-        .handle("session", session)
-        .handle("resource", resource),
-    )
+    return handlers
+      .handle("console", getConsole)
+      .handle("consoleOrgs", listConsoleOrgs)
+      .handle("consoleSwitch", switchConsole)
+      .handle("tool", tool)
+      .handle("toolIDs", toolIDs)
+      .handle("worktree", worktree)
+      .handle("worktreeCreate", worktreeCreate)
+      .handle("worktreeRemove", worktreeRemove)
+      .handle("worktreeReset", worktreeReset)
+      .handle("session", session)
+      .handle("resource", resource)
   }),
-).pipe(
-  Layer.provide(Account.defaultLayer),
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(MCP.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(ToolRegistry.defaultLayer),
-  Layer.provide(Worktree.defaultLayer),
 )

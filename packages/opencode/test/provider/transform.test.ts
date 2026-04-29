@@ -2917,6 +2917,28 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
+    test("github copilot opus 4.7 returns only medium reasoning effort", () => {
+      const model = createMockModel({
+        id: "claude-opus-4.7",
+        providerID: "github-copilot",
+        api: {
+          id: "claude-opus-4.7",
+          url: "https://api.githubcopilot.com/v1",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({
+        medium: {
+          thinking: {
+            type: "adaptive",
+            display: "summarized",
+          },
+          effort: "medium",
+        },
+      })
+    })
+
     test("returns high and max with thinking config", () => {
       const model = createMockModel({
         id: "anthropic/claude-4",

@@ -44,6 +44,7 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     parent_id: grab(info, "parentID"),
     slug: grab(info, "slug"),
     directory: grab(info, "directory"),
+    path: grab(info, "path"),
     title: grab(info, "title"),
     version: grab(info, "version"),
     share_url: grab(info, "share", (v) => grab(v, "url")),

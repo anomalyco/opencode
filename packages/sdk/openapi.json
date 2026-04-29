@@ -2311,7 +2311,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Filter sessions by project directory"
+            "description": "Filter sessions by directory"
           },
           {
             "in": "query",
@@ -2319,6 +2319,23 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "type": "string",
+              "enum": ["project"]
+            },
+            "description": "List all sessions for the current project"
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter sessions by project-relative path"
           },
           {
             "in": "query",
@@ -10154,6 +10171,9 @@
           "directory": {
             "type": "string"
           },
+          "path": {
+            "type": "string"
+          },
           "parentID": {
             "type": "string",
             "pattern": "^ses.*"
@@ -10575,6 +10595,16 @@
                     ]
                   },
                   "directory": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "path": {
                     "anyOf": [
                       {
                         "type": "string"
@@ -12536,6 +12566,9 @@
             "pattern": "^wrk.*"
           },
           "directory": {
+            "type": "string"
+          },
+          "path": {
             "type": "string"
           },
           "parentID": {

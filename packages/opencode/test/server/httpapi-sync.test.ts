@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
+import { Server } from "../../src/server/server"
 import { SyncPaths } from "../../src/server/routes/instance/httpapi/sync"
 import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
@@ -14,11 +13,10 @@ void Log.init({ print: false })
 
 const originalHttpApi = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
 function app(httpapi = true) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpapi
-  return InstanceRoutes(websocket)
+  return Server.Default().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
