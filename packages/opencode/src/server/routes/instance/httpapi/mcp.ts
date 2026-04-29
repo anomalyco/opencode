@@ -1,6 +1,6 @@
 import { MCP } from "@/mcp"
 import { ConfigMCP } from "@/config/mcp"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -137,7 +137,7 @@ export const McpApi = HttpApi.make("mcp")
     }),
   )
 
-export const mcpHandlers = Layer.unwrap(
+export const mcpHandlers = HttpApiBuilder.group(McpApi, "mcp", (handlers) =>
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
 
@@ -188,16 +188,14 @@ export const mcpHandlers = Layer.unwrap(
       return true
     })
 
-    return HttpApiBuilder.group(McpApi, "mcp", (handlers) =>
-      handlers
-        .handle("status", status)
-        .handle("add", add)
-        .handle("authStart", authStart)
-        .handle("authCallback", authCallback)
-        .handle("authAuthenticate", authAuthenticate)
-        .handle("authRemove", authRemove)
-        .handle("connect", connect)
-        .handle("disconnect", disconnect),
-    )
+    return handlers
+      .handle("status", status)
+      .handle("add", add)
+      .handle("authStart", authStart)
+      .handle("authCallback", authCallback)
+      .handle("authAuthenticate", authAuthenticate)
+      .handle("authRemove", authRemove)
+      .handle("connect", connect)
+      .handle("disconnect", disconnect)
   }),
-).pipe(Layer.provide(MCP.defaultLayer))
+)

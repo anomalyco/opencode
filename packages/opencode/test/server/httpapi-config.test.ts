@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
 import path from "path"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
+import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
@@ -12,11 +11,10 @@ import { tmpdir } from "../fixture/fixture"
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
 function app() {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return InstanceRoutes(websocket)
+  return Server.Default().app
 }
 
 async function waitDisposed(directory: string) {

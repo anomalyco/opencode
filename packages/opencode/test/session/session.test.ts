@@ -54,6 +54,7 @@ describe("session.created event", () => {
         expect(receivedInfo?.id).toBe(info.id)
         expect(receivedInfo?.projectID).toBe(info.projectID)
         expect(receivedInfo?.directory).toBe(info.directory)
+        expect(receivedInfo?.path).toBe(info.path)
         expect(receivedInfo?.title).toBe(info.title)
 
         await remove(info.id)

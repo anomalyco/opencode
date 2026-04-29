@@ -3,7 +3,7 @@ import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdaptorEntry } from "@/control-plane/types"
 import * as InstanceState from "@/effect/instance-state"
 import { Instance } from "@/project/instance"
-import { Effect, Layer, Schema, Struct } from "effect"
+import { Effect, Schema, Struct } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 
@@ -107,7 +107,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
     }),
   )
 
-export const workspaceHandlers = Layer.unwrap(
+export const workspaceHandlers = HttpApiBuilder.group(WorkspaceApi, "workspace", (handlers) =>
   Effect.gen(function* () {
     const adaptors = Effect.fn("WorkspaceHttpApi.adaptors")(function* () {
       const ctx = yield* InstanceState.context
@@ -155,14 +155,12 @@ export const workspaceHandlers = Layer.unwrap(
       )
     })
 
-    return HttpApiBuilder.group(WorkspaceApi, "workspace", (handlers) =>
-      handlers
-        .handle("adaptors", adaptors)
-        .handle("list", list)
-        .handle("create", create)
-        .handle("status", status)
-        .handle("remove", remove)
-        .handle("sessionRestore", sessionRestore),
-    )
+    return handlers
+      .handle("adaptors", adaptors)
+      .handle("list", list)
+      .handle("create", create)
+      .handle("status", status)
+      .handle("remove", remove)
+      .handle("sessionRestore", sessionRestore)
   }),
 )

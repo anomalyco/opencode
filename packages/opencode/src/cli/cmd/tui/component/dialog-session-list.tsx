@@ -32,11 +32,14 @@ export function DialogSessionList() {
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
 
-  const [searchResults, { refetch }] = createResource(search, async (query) => {
-    if (!query) return undefined
-    const result = await sdk.client.session.list({ search: query, limit: 30 })
-    return result.data ?? []
-  })
+  const [searchResults, { refetch }] = createResource(
+    () => ({ query: search(), filter: sync.session.query() }),
+    async (input) => {
+      if (!input.query) return undefined
+      const result = await sdk.client.session.list({ search: input.query, limit: 30, ...input.filter })
+      return result.data ?? []
+    },
+  )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const sessions = createMemo(() => searchResults() ?? sync.data.session)

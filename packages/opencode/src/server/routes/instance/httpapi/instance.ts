@@ -6,7 +6,7 @@ import { LSP } from "@/lsp/lsp"
 import { Vcs } from "@/project/vcs"
 import { Skill } from "@/skill"
 import * as InstanceState from "@/effect/instance-state"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
 import { markInstanceForDisposal } from "./lifecycle"
@@ -140,7 +140,7 @@ export const InstanceApi = HttpApi.make("instance")
     }),
   )
 
-export const instanceHandlers = Layer.unwrap(
+export const instanceHandlers = HttpApiBuilder.group(InstanceApi, "instance", (handlers) =>
   Effect.gen(function* () {
     const agent = yield* Agent.Service
     const command = yield* Command.Service
@@ -194,24 +194,15 @@ export const instanceHandlers = Layer.unwrap(
       return yield* format.status()
     })
 
-    return HttpApiBuilder.group(InstanceApi, "instance", (handlers) =>
-      handlers
-        .handle("dispose", dispose)
-        .handle("path", getPath)
-        .handle("vcs", getVcs)
-        .handle("vcsDiff", getVcsDiff)
-        .handle("command", getCommand)
-        .handle("agent", getAgent)
-        .handle("skill", getSkill)
-        .handle("lsp", getLsp)
-        .handle("formatter", getFormatter),
-    )
+    return handlers
+      .handle("dispose", dispose)
+      .handle("path", getPath)
+      .handle("vcs", getVcs)
+      .handle("vcsDiff", getVcsDiff)
+      .handle("command", getCommand)
+      .handle("agent", getAgent)
+      .handle("skill", getSkill)
+      .handle("lsp", getLsp)
+      .handle("formatter", getFormatter)
   }),
-).pipe(
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Command.defaultLayer),
-  Layer.provide(Format.defaultLayer),
-  Layer.provide(LSP.defaultLayer),
-  Layer.provide(Skill.defaultLayer),
-  Layer.provide(Vcs.defaultLayer),
 )
