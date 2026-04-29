@@ -359,23 +359,23 @@ const llmEventTagged = Schema.Union([
  * Lets consumers write `events.filter(LLMEvent.is.toolCall)` instead of
  * `events.filter(LLMEvent.guards["tool-call"])`.
  */
-const llmEventIs = {
-  requestStart: llmEventTagged.guards["request-start"],
-  stepStart: llmEventTagged.guards["step-start"],
-  textStart: llmEventTagged.guards["text-start"],
-  textDelta: llmEventTagged.guards["text-delta"],
-  textEnd: llmEventTagged.guards["text-end"],
-  reasoningDelta: llmEventTagged.guards["reasoning-delta"],
-  toolInputDelta: llmEventTagged.guards["tool-input-delta"],
-  toolCall: llmEventTagged.guards["tool-call"],
-  toolResult: llmEventTagged.guards["tool-result"],
-  toolError: llmEventTagged.guards["tool-error"],
-  stepFinish: llmEventTagged.guards["step-finish"],
-  requestFinish: llmEventTagged.guards["request-finish"],
-  providerError: llmEventTagged.guards["provider-error"],
-} as const
-
-export const LLMEvent = Object.assign(llmEventTagged, { is: llmEventIs })
+export const LLMEvent = Object.assign(llmEventTagged, {
+  is: {
+    requestStart: llmEventTagged.guards["request-start"],
+    stepStart: llmEventTagged.guards["step-start"],
+    textStart: llmEventTagged.guards["text-start"],
+    textDelta: llmEventTagged.guards["text-delta"],
+    textEnd: llmEventTagged.guards["text-end"],
+    reasoningDelta: llmEventTagged.guards["reasoning-delta"],
+    toolInputDelta: llmEventTagged.guards["tool-input-delta"],
+    toolCall: llmEventTagged.guards["tool-call"],
+    toolResult: llmEventTagged.guards["tool-result"],
+    toolError: llmEventTagged.guards["tool-error"],
+    stepFinish: llmEventTagged.guards["step-finish"],
+    requestFinish: llmEventTagged.guards["request-finish"],
+    providerError: llmEventTagged.guards["provider-error"],
+  },
+})
 export type LLMEvent = Schema.Schema.Type<typeof llmEventTagged>
 
 export class PatchTrace extends Schema.Class<PatchTrace>("LLM.PatchTrace")({
