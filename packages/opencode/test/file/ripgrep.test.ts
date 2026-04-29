@@ -169,6 +169,25 @@ describe("file.ripgrep", () => {
     expect(files).toEqual(["keep.ts"])
   })
 
+  test("files returns valid results despite broken symlinks", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "real.txt"), "hello")
+        await fs.symlink(path.join(dir, "nonexistent-target"), path.join(dir, "broken-link"))
+      },
+    })
+
+    const files = await run(
+      Ripgrep.Service.use((rg) =>
+        rg.files({ cwd: tmp.path, follow: true }).pipe(
+          Stream.runCollect,
+          Effect.map((c) => [...c]),
+        ),
+      ),
+    )
+    expect(files).toContain("real.txt")
+  })
+
   test("files dies on nonexistent directory", async () => {
     const exit = await Ripgrep.Service.use((rg) =>
       rg.files({ cwd: "/tmp/nonexistent-dir-12345" }).pipe(Stream.runCollect),
