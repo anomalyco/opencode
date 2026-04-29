@@ -34,4 +34,16 @@ export function payloads() {
     .toArray()
 }
 
+export function effectPayloads() {
+  return registry
+    .entries()
+    .map(([type, def]) =>
+      Schema.Struct({
+        type: Schema.Literal(type),
+        properties: def.properties,
+      }).annotate({ identifier: `Event.${type}` }),
+    )
+    .toArray()
+}
+
 export * as BusEvent from "./bus-event"

@@ -27,8 +27,8 @@
       "packages/slack"
     ],
     "catalog": {
-      "@effect/opentelemetry": "4.0.0-beta.48",
-      "@effect/platform-node": "4.0.0-beta.48",
+      "@effect/opentelemetry": "4.0.0-beta.57",
+      "@effect/platform-node": "4.0.0-beta.57",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.3.12",
       "@types/cross-spawn": "6.0.6",
@@ -53,7 +53,7 @@
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-beta.19-d95b7a4",
       "drizzle-orm": "1.0.0-beta.19-d95b7a4",
-      "effect": "4.0.0-beta.48",
+      "effect": "4.0.0-beta.57",
       "ai": "6.0.168",
       "cross-spawn": "7.0.6",
       "hono": "4.10.7",

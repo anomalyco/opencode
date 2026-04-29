@@ -1,23 +1,21 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { PtyID } from "../../src/pty/schema"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
-import { PtyPaths } from "../../src/server/routes/instance/httpapi/pty"
-import { Log } from "../../src/util"
+import { Server } from "../../src/server/server"
+import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
+import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 const testPty = process.platform === "win32" ? test.skip : test
 
 function app() {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return InstanceRoutes(websocket)
+  return Server.Default().app
 }
 
 afterEach(async () => {
@@ -27,6 +25,22 @@ afterEach(async () => {
 })
 
 describe("pty HttpApi bridge", () => {
+  test("serves available shell list through experimental Effect routes", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const response = await app().request(PtyPaths.shells, { headers: { "x-opencode-directory": tmp.path } })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: expect.any(String),
+          name: expect.any(String),
+          acceptable: expect.any(Boolean),
+        }),
+      ]),
+    )
+  })
+
   testPty("serves PTY JSON routes through experimental Effect routes", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const headers = { "x-opencode-directory": tmp.path }

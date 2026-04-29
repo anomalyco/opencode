@@ -1,6 +1,6 @@
 import { Auth } from "@/auth"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
 import { ProviderID } from "@/provider/schema"
 import { Hono } from "hono"
