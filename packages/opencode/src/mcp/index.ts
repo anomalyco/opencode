@@ -13,6 +13,7 @@ import { Config } from "@/config/config"
 import { ConfigMCP } from "../config/mcp"
 import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
+import { Hash } from "@opencode-ai/core/util/hash"
 import z from "zod/v4"
 import { Installation } from "../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -113,6 +114,26 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
 }
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
+
+// OpenAI's tool-use API rejects tools[].function.name strings longer than
+// 64 chars. When `<server>_<tool>` exceeds the limit, opencode silently
+// dies because the provider returns 400 and the error never reaches the
+// TUI. Truncate to 64 with a content-derived suffix so colliding prefixes
+// stay distinct (issue #3523).
+const MAX_TOOL_NAME = 64
+
+const buildToolName = (clientName: string, toolName: string): string => {
+  const combined = sanitize(clientName) + "_" + sanitize(toolName)
+  if (combined.length <= MAX_TOOL_NAME) return combined
+  const hash = Hash.fast(combined).slice(0, 8)
+  const truncated = combined.slice(0, MAX_TOOL_NAME - hash.length - 1) + "_" + hash
+  log.warn("MCP tool name exceeds 64 chars, truncating with hash suffix", {
+    server: clientName,
+    tool: toolName,
+    truncated,
+  })
+  return truncated
+}
 
 // Convert MCP tool definition to AI SDK Tool type
 function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
@@ -642,7 +663,7 @@ export const layer = Layer.effect(
 
             const timeout = entry?.timeout ?? defaultTimeout
             for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+              result[buildToolName(clientName, mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
             }
           }),
         { concurrency: "unbounded" },

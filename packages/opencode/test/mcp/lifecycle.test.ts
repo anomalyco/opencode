@@ -784,3 +784,79 @@ test(
     }),
   ),
 )
+
+// ========================================================================
+// Test: tool name length cap (issue #3523)
+// ========================================================================
+// When the combined `<server>_<tool>` exceeds 64 chars OpenAI rejects the
+// request and opencode silently dies. Truncate to 64 with a content-derived
+// suffix so collisions on the prefix still produce distinct keys.
+
+test(
+  "tools() truncates names exceeding 64 chars and preserves uniqueness",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      // Server name from the issue's reported reproducer (35 chars).
+      const longServer = "chrome-devtools-aaaaaaaaaaaaaaaaaaa"
+      lastCreatedClientName = longServer
+      const serverState = getOrCreateClientState(longServer)
+      // Two tool names that share the first 55 chars after the
+      // "<server>_" prefix — these would collide under blind truncation.
+      serverState.tools = [
+        {
+          name: "perform_extremely_specific_workflow_step_alpha",
+          description: "first long-named tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+        {
+          name: "perform_extremely_specific_workflow_step_beta",
+          description: "second long-named tool",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]
+
+      yield* mcp.add(longServer, {
+        type: "local",
+        command: ["echo", "test"],
+      })
+
+      const tools = yield* mcp.tools()
+      const keys = Object.keys(tools)
+
+      // Both tools registered — neither got dropped.
+      expect(keys.length).toBe(2)
+
+      // Every key fits the 64-char provider limit.
+      for (const key of keys) {
+        expect(key.length).toBeLessThanOrEqual(64)
+      }
+
+      // Both keys are present and distinct (collision avoidance).
+      expect(new Set(keys).size).toBe(2)
+
+      // Truncated names end with an 8-char hex hash suffix.
+      for (const key of keys) {
+        expect(key).toMatch(/_[0-9a-f]{8}$/)
+      }
+    }),
+  ),
+)
+
+test(
+  "tools() leaves short names untouched",
+  withInstance({}, (mcp) =>
+    Effect.gen(function* () {
+      lastCreatedClientName = "short"
+      const serverState = getOrCreateClientState("short")
+      serverState.tools = [{ name: "ping", description: "ping", inputSchema: { type: "object", properties: {} } }]
+
+      yield* mcp.add("short", {
+        type: "local",
+        command: ["echo", "test"],
+      })
+
+      const tools = yield* mcp.tools()
+      expect(Object.keys(tools)).toContain("short_ping")
+    }),
+  ),
+)
