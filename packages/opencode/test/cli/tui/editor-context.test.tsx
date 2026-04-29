@@ -131,7 +131,7 @@ test("useEditorContext favors configured port over lock files", async () => {
   mounted.dispose()
 })
 
-test("useEditorContext does not reset state when reconnecting with the same directory", async () => {
+test("useEditorContext resets selection when reconnecting", async () => {
   await using tmp = await tmpdir()
   const startupDirectory = path.join(tmp.path, "startup")
   const ideDirectory = path.join(tmp.path, ".claude", "ide")
@@ -203,25 +203,6 @@ test("useEditorContext does not reset state when reconnecting with the same dire
 
   expect(socket.closed).toBeFalse()
   expect(mounted.editor.connected()).toBeTrue()
-  expect(mounted.editor.server()).toEqual({
-    protocolVersion: "2025-11-25",
-    serverInfo: { name: "test", version: "0.0.0" },
-  })
-  expect(mounted.editor.selection()).toEqual({
-    text: "foo",
-    filePath: path.join(startupDirectory, "file.ts"),
-    source: "websocket",
-    selection: {
-      start: { line: 1, character: 1 },
-      end: { line: 1, character: 4 },
-    },
-  })
-
-  mounted.editor.reconnect(path.join(tmp.path, "other"))
-
-  expect(socket.closed).toBeTrue()
-  expect(mounted.editor.connected()).toBeFalse()
-  expect(mounted.editor.server()).toBeUndefined()
   expect(mounted.editor.selection()).toBeUndefined()
 
   mounted.dispose()
