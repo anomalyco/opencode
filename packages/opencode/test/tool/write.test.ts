@@ -200,9 +200,11 @@ describe("tool.write", () => {
     it.live("respects umask 0o022 → 0o644", () => writeAndCheckMode(0o022, base & ~0o022))
     it.live("respects corner umask 0o027 → 0o640", () => writeAndCheckMode(0o027, base & ~0o027))
     it.live("respects umask 0o077 → 0o600", () => writeAndCheckMode(0o077, base & ~0o077))
-    it.live("0o777 fully masks the 0o666 base mode", () => {
-      expect(base & ~0o777).toBe(0o000)
-    })
+    it.live("0o777 fully masks the 0o666 base mode", () =>
+      Effect.sync(() => {
+        expect(base & ~0o777).toBe(0o000)
+      }),
+    )
   })
 
   describe("content types", () => {
