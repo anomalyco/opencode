@@ -6,7 +6,7 @@ related: ./3-changelog.md
 
 # md-viewer-typography — changelog
 
-**关联 commit**: 待回填
+**关联 commit**: `f66b26be0`
 **所在分支**: `feat/editable-file-viewer`
 **baseline tag**: 沿用线(无新 baseline)
 **触发原因**: User 报文件查看器看 `.md` 时"标题层级表达不出来"。当前上游 `markdown.css` 把 h1-h6 全部统一为 `font-size: 14px` 同一颜色(贴近 TUI 风格),日常阅读时几乎无视觉层级。同时希望顺手做几处轻量配色提升(行内代码芯片 / 引用块底色 / HR 显形 / 表头底色)。
