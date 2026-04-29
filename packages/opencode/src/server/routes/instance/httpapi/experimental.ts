@@ -1,16 +1,16 @@
 import { Account } from "@/account/account"
 import { AccountID, OrgID } from "@/account/schema"
 import { Agent } from "@/agent/agent"
-import { Config } from "@/config"
-import { InstanceState } from "@/effect"
+import { Config } from "@/config/config"
+import { InstanceState } from "@/effect/instance-state"
 import { MCP } from "@/mcp"
-import { Project } from "@/project"
+import { Project } from "@/project/project"
 import { ProviderID, ModelID } from "@/provider/schema"
-import { Session } from "@/session"
-import { ToolRegistry } from "@/tool"
+import { Session } from "@/session/session"
+import { ToolRegistry } from "@/tool/registry"
 import * as EffectZod from "@/util/effect-zod"
 import { Worktree } from "@/worktree"
-import { Effect, Layer, Option, Schema } from "effect"
+import { Effect, Option, Schema, SchemaGetter } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "./auth"
@@ -51,15 +51,21 @@ const ToolListQuery = Schema.Struct({
   model: ModelID,
 })
 
+const QueryBoolean = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value) => (value ? "true" : "false")),
+  }),
+)
 const WorktreeList = Schema.Array(Schema.String).annotate({ identifier: "WorktreeList" })
 const SessionListQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
-  roots: Schema.optional(Schema.Literals(["true", "false"])),
+  roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   cursor: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.NumberFromString),
-  archived: Schema.optional(Schema.Literals(["true", "false"])),
+  archived: Schema.optional(QueryBoolean),
 })
 
 export const ExperimentalPaths = {
@@ -99,6 +105,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         HttpApiEndpoint.post("consoleSwitch", ExperimentalPaths.consoleSwitch, {
           payload: ConsoleSwitchPayload,
           success: Schema.Boolean,
+          error: HttpApiError.BadRequest,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.console.switchOrg",
@@ -203,7 +210,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
     }),
   )
 
-export const experimentalHandlers = Layer.unwrap(
+export const experimentalHandlers = HttpApiBuilder.group(ExperimentalApi, "experimental", (handlers) =>
   Effect.gen(function* () {
     const account = yield* Account.Service
     const agents = yield* Agent.Service
@@ -307,12 +314,12 @@ export const experimentalHandlers = Layer.unwrap(
       const sessions = Array.from(
         Session.listGlobal({
           directory: ctx.query.directory,
-          roots: ctx.query.roots === "true" ? true : undefined,
+          roots: ctx.query.roots,
           start: ctx.query.start,
           cursor: ctx.query.cursor,
           search: ctx.query.search,
           limit: limit + 1,
-          archived: ctx.query.archived === "true" ? true : undefined,
+          archived: ctx.query.archived,
         }),
       )
       const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
@@ -328,27 +335,17 @@ export const experimentalHandlers = Layer.unwrap(
       return yield* mcp.resources()
     })
 
-    return HttpApiBuilder.group(ExperimentalApi, "experimental", (handlers) =>
-      handlers
-        .handle("console", getConsole)
-        .handle("consoleOrgs", listConsoleOrgs)
-        .handle("consoleSwitch", switchConsole)
-        .handle("tool", tool)
-        .handle("toolIDs", toolIDs)
-        .handle("worktree", worktree)
-        .handle("worktreeCreate", worktreeCreate)
-        .handle("worktreeRemove", worktreeRemove)
-        .handle("worktreeReset", worktreeReset)
-        .handle("session", session)
-        .handle("resource", resource),
-    )
+    return handlers
+      .handle("console", getConsole)
+      .handle("consoleOrgs", listConsoleOrgs)
+      .handle("consoleSwitch", switchConsole)
+      .handle("tool", tool)
+      .handle("toolIDs", toolIDs)
+      .handle("worktree", worktree)
+      .handle("worktreeCreate", worktreeCreate)
+      .handle("worktreeRemove", worktreeRemove)
+      .handle("worktreeReset", worktreeReset)
+      .handle("session", session)
+      .handle("resource", resource)
   }),
-).pipe(
-  Layer.provide(Account.defaultLayer),
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(MCP.defaultLayer),
-  Layer.provide(Project.defaultLayer),
-  Layer.provide(ToolRegistry.defaultLayer),
-  Layer.provide(Worktree.defaultLayer),
 )

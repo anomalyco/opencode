@@ -1,11 +1,11 @@
 import { Global } from "@opencode-ai/core/global"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
 import { Schema } from "effect"
 import { Installation } from "../installation"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { lazy } from "@/util/lazy"
-import { Filesystem } from "../util"
+import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Hash } from "@opencode-ai/core/util/hash"
 
@@ -172,3 +172,5 @@ if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-c
     60 * 1000 * 60,
   ).unref()
 }
+
+export * as ModelsDev from "./models"

@@ -7,7 +7,7 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { Shell } from "@/shell/shell"
-import { NotFoundError } from "@/storage"
+import { NotFoundError } from "@/storage/storage"
 import { errors } from "../../error"
 import { jsonRequest, runRequest } from "./trace"
 

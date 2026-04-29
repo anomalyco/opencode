@@ -21,3 +21,5 @@ export function copy(renderer: Renderer, toast: Toast): boolean {
   renderer.clearSelection()
   return true
 }
+
+export * as Selection from "./selection"
