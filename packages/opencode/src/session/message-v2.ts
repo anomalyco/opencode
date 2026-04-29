@@ -838,6 +838,25 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 
     if (msg.info.role === "assistant") {
       const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+
+      // When switching between Anthropic-family models (e.g. Sonnet → Opus,
+      // or amazon-bedrock/claude-* → anthropic/claude-*), reasoning blocks
+      // MUST still carry their providerMetadata so the signature field is
+      // echoed back to the API.  Without the signature Anthropic rejects the
+      // request with:
+      //   "messages.N.content.0.thinking.signature: Field required"
+      //
+      // The signature is a cryptographic token that is valid across all
+      // Claude models; it only needs to be dropped when switching to a
+      // non-Anthropic provider that doesn't understand the thinking format.
+      const isAnthropicFamily = (providerID: string, modelID: string) =>
+        providerID === "anthropic" ||
+        providerID === "amazon-bedrock" ||
+        modelID.includes("claude")
+      const keepReasoningMetadata =
+        !differentModel ||
+        (isAnthropicFamily(model.providerID, model.id) &&
+          isAnthropicFamily(msg.info.providerID ?? "", msg.info.modelID ?? ""))
       const media: Array<{ mime: string; url: string }> = []
 
       if (
@@ -941,7 +960,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           assistantMessage.parts.push({
             type: "reasoning",
             text: part.text,
-            ...(differentModel ? {} : { providerMetadata: part.metadata }),
+            // Use keepReasoningMetadata (not differentModel) so the Anthropic
+            // signature is preserved when switching between Claude models.
+            // The signature is required by the API on every subsequent turn;
+            // dropping it causes "thinking.signature: Field required".
+            ...(keepReasoningMetadata ? { providerMetadata: part.metadata } : {}),
           })
         }
       }

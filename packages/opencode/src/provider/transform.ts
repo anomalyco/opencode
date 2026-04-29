@@ -93,6 +93,33 @@ function normalizeMessages(
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
+  // For Anthropic-family providers (both direct and via Bedrock), strip any
+  // reasoning/thinking parts whose providerMetadata is missing the signature.
+  // The Anthropic API requires the signature field on every thinking block in
+  // subsequent turns.  A missing signature means the block was produced by a
+  // different provider, the metadata was lost, or the session predates
+  // signature capture — in all cases the safest action is to drop the block.
+  // A reasoning block without a signature cannot be echoed back and causes:
+  //   "messages.N.content.0.thinking.signature: Field required"
+  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
+    msgs = msgs.map((msg) => {
+      if (!Array.isArray(msg.content)) return msg
+      const filtered = msg.content.filter((part) => {
+        if (part.type !== "reasoning") return true
+        // Keep the block only if providerMetadata contains a non-empty signature.
+        const sig = (part as any).providerMetadata?.anthropic?.signature
+        if (sig && typeof sig === "string" && sig.length > 0) return true
+        // No valid signature — drop the block to prevent API rejection.
+        return false
+      })
+      // If we dropped all content blocks, replace with an empty text block
+      // so the message remains structurally valid (empty array → API error).
+      if (filtered.length === 0 && Array.isArray(msg.content) && msg.content.length > 0)
+        return { ...msg, content: [{ type: "text" as const, text: "" }] }
+      return { ...msg, content: filtered }
+    })
+  }
+
   if (model.api.id.includes("claude")) {
     const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
     msgs = msgs.map((msg) => {
