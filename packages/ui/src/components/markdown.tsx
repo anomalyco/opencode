@@ -173,12 +173,23 @@ function markCodeLinks(root: HTMLDivElement) {
   }
 }
 
+const blockDirectionSelector = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "blockquote", "table"]
+  .map((tag) => `:scope > ${tag}`)
+  .join(",")
+
+function markBlockDirection(root: HTMLDivElement) {
+  for (const el of root.querySelectorAll(blockDirectionSelector)) {
+    el.setAttribute("dir", "auto")
+  }
+}
+
 function decorate(root: HTMLDivElement, labels: CopyLabels) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
   markCodeLinks(root)
+  markBlockDirection(root)
 }
 
 function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
@@ -337,6 +348,7 @@ export function Markdown(
   return (
     <div
       data-component="markdown"
+      dir="auto"
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
