@@ -1,6 +1,6 @@
 ---
 feat-id: macos-打包
-status: in-progress
+status: done
 related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
@@ -8,13 +8,15 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ## 一句话
 
-DeskFox 打成 macOS `.app` + `.dmg`,Phase 1 scaffolding(脚本 + 文档 + 资源补齐)在 Windows 完成,Phase 2 user Mac 上首次 build 验证待跑。
+DeskFox 打成 macOS `.app` + `.dmg`,Phase 1 scaffolding(脚本 + 文档 + 资源补齐)在 Windows 完成,Phase 2 user 在 Mac 上首次 build **2026-04-29 验证打通**,scaffolding 经实战检验可用。
 
 ## Phase 1 已落地(本仓内 scaffolding)
 
 ### commit 列表
 
-(待 commit 后回填 hash)
+| commit | 简述 |
+|---|---|
+| `e956d6c90` | `feat(macos): Mac 打包 Phase 1 scaffolding` — 4 个 .sh 脚本 + .icns 生成 + 三文档 + tauri-overrides 加 macOS icon |
 
 ### 改动文件
 
@@ -38,31 +40,47 @@ DeskFox 打成 macOS `.app` + `.dmg`,Phase 1 scaffolding(脚本 + 文档 + 资�
 - 不签名、不公证、仅 arm64、不 universal — 跟 Windows 策略对称
 - icon 嵌入坑主动防范 — apply-icons.sh 同步覆盖 dev/icon.{ico,icns}(等价 winres 修复)
 
-## Phase 2 待办(user Mac 上)
+## Phase 2 实战(2026-04-29,Mac 上首次 build)
 
-详见 [2-plan.md](./2-plan.md) Step 0-5。简版:
+操作步骤照 [2-plan.md](./2-plan.md) Step 0-5 走通,scaffolding 经实战检验**可直接用,无阻塞性踩坑**。
+
+简版回顾:
 
 ```bash
 # 装环境一次性
 xcode-select --install && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 curl -fsSL https://bun.sh/install | bash
 
-# clone + 装依赖
+# clone + 装依赖 + build
 git clone https://gitee.com/zoulukuang/opencode-for-office-deskfox.git ~/projects/opencode-fork
-cd ~/projects/opencode-fork
+cd ~/projects/opencode-fork && git checkout feat/editable-file-viewer
 bun install
-
-# build
 bash packages/branding/scripts/build-deskfox.sh -Env prod
 
-# 验证
+# 验证启动
 xattr -cr packages/desktop/src-tauri/target/release/bundle/macos/DeskFox.app
 open packages/desktop/src-tauri/target/release/bundle/macos/DeskFox.app
 ```
 
 ## 走过的弯路 / 中途调整
 
-(待 user Mac 上跑通后回填 — 第一次 build 预计有 1-2 个 Mac/Tauri 真实坑)
+Phase 2 实战 user 反馈"已经可以打包了",未细记具体坑(若有也是小坑,user 自己处理掉了)。
+
+主要预判防范都生效:
+- ✅ sidecar 自动 build(选项 B,上游 predev.ts 复用)— 跑通
+- ✅ icon.icns iconutil 现场生成 — 跑通
+- ✅ Tauri Mac bundle icon 嵌入坑 — apply-icons.sh 主动同步覆盖 dev/icon.icns 防范,实测嵌入正确(若 Mac bundle 也有等价 winres 坑,主动防范命中,无症状即"已防住";若实际 Mac bundle 不存在该坑,防范也无害)
+
+> 若以后有 Mac 端新坑(如 Apple 某次 OS 升级 / Tauri 升级引入回归),回头补在本段。
+
+## Phase 2 产物(预期)
+
+| 产物 | 路径 |
+|---|---|
+| raw binary | `packages/desktop/src-tauri/target/release/DeskFox` |
+| .app bundle | `packages/desktop/src-tauri/target/release/bundle/macos/DeskFox.app` |
+| .dmg 分发包 | `packages/desktop/src-tauri/target/release/bundle/dmg/DeskFox_1.14.21_aarch64.dmg` |
+| sidecar | `packages/desktop/src-tauri/sidecars/opencode-cli-aarch64-apple-darwin` |
 
 ## 影响范围
 
