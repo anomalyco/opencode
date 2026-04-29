@@ -7,6 +7,9 @@ import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Effect, Schema } from "effect"
+import * as Log from "@opencode-ai/core/util/log"
+
+const log = Log.create({ service: "task-tool" })
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): void
@@ -15,6 +18,92 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
+
+interface ParentContext {
+  recentMessages: string[]
+  fileReferences: string[]
+  parentAgent: string
+  taskDescription: string
+}
+
+async function extractParentContext(
+  sessionID: SessionID,
+  messages: MessageV2.WithParts[],
+  parentAgent: string,
+  taskDescription: string,
+): Promise<ParentContext> {
+  const recentMessages: string[] = []
+  const fileReferences = new Set<string>()
+
+  // Extract recent conversation context (last 5 messages)
+  const recentMsgs = messages.slice(-5)
+  for (const msg of recentMsgs) {
+    if (msg.info.role === "user") {
+      const textParts = msg.parts
+        .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+        .map((p) => p.text)
+        .join(" ")
+      if (textParts.trim()) {
+        recentMessages.push(`User: ${textParts.substring(0, 200)}${textParts.length > 200 ? "..." : ""}`)
+      }
+    } else if (msg.info.role === "assistant") {
+      const textParts = msg.parts
+        .filter((p): p is MessageV2.TextPart => p.type === "text")
+        .map((p) => p.text)
+        .join(" ")
+      if (textParts.trim()) {
+        recentMessages.push(`Assistant: ${textParts.substring(0, 200)}${textParts.length > 200 ? "..." : ""}`)
+      }
+    }
+
+    // Extract file references from tool calls
+    for (const part of msg.parts) {
+      if (part.type === "tool" && part.state.status === "completed") {
+        const input = part.state.input as Record<string, unknown>
+        if (input && typeof input === "object") {
+          // Extract file paths from common tool parameters
+          for (const key of ["filePath", "path", "file", "filename"]) {
+            const value = input[key]
+            if (typeof value === "string" && (value.includes("/") || value.includes("\\"))) {
+              fileReferences.add(value)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    recentMessages,
+    fileReferences: Array.from(fileReferences).slice(0, 10), // Limit to 10 files
+    parentAgent,
+    taskDescription,
+  }
+}
+
+function formatParentContext(context: ParentContext): string {
+  const parts: string[] = []
+
+  parts.push(`## Parent Context`)
+  parts.push(`- Parent Agent: ${context.parentAgent}`)
+  parts.push(`- Task: ${context.taskDescription}`)
+
+  if (context.recentMessages.length > 0) {
+    parts.push(`\n## Recent Conversation`)
+    for (const msg of context.recentMessages) {
+      parts.push(`- ${msg}`)
+    }
+  }
+
+  if (context.fileReferences.length > 0) {
+    parts.push(`\n## Relevant Files`)
+    for (const file of context.fileReferences) {
+      parts.push(`- ${file}`)
+    }
+  }
+
+  return parts.join("\n")
+}
 
 export const Parameters = Schema.Struct({
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
@@ -127,7 +216,33 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const parts = yield* ops.resolvePromptParts(params.prompt)
+            // Extract parent context for subagent
+            let enhancedPrompt = params.prompt
+            try {
+              const parentMessages = yield* sessions.messages({ sessionID: ctx.sessionID, limit: 20 })
+              const parentSession = yield* sessions.get(ctx.sessionID)
+              const parentAgentInfo = parentSession?.agent ? yield* agent.get(parentSession.agent) : undefined
+              const parentContext = yield* Effect.promise(() =>
+                extractParentContext(
+                  ctx.sessionID,
+                  parentMessages,
+                  parentAgentInfo?.name || 'unknown',
+                  params.description
+                )
+              )
+              const contextBlock = formatParentContext(parentContext)
+              enhancedPrompt = `${contextBlock}\n\n${params.prompt}`
+              log.info("enhanced subagent prompt with parent context", {
+                sessionID: ctx.sessionID,
+                subagentType: params.subagent_type,
+                contextMessages: parentContext.recentMessages.length,
+                contextFiles: parentContext.fileReferences.length,
+              })
+            } catch (err) {
+              log.info("failed to extract parent context, using original prompt", { error: err })
+            }
+
+            const parts = yield* ops.resolvePromptParts(enhancedPrompt)
             const result = yield* ops.prompt({
               messageID,
               sessionID: nextSession.id,

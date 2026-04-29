@@ -37,42 +37,40 @@ const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 8_000
-const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
+const SUMMARY_TEMPLATE = `Output the Markdown structure inside <template>. Keep section order. No <template> tags.
 <template>
 ## Goal
-- [single-sentence task summary]
-
-## Constraints & Preferences
-- [user constraints, preferences, specs, or "(none)"]
+- [task summary]
 
 ## Progress
-### Done
-- [completed work or "(none)"]
-
-### In Progress
-- [current work or "(none)"]
-
-### Blocked
-- [blockers or "(none)"]
+- Done: [completed]
+- In Progress: [current]
+- Blocked: [blockers]
 
 ## Key Decisions
-- [decision and why, or "(none)"]
+- [decision + why]
 
 ## Next Steps
-- [ordered next actions or "(none)"]
+- [actions]
 
 ## Critical Context
-- [important technical facts, errors, open questions, or "(none)"]
+- [errors, facts, identifiers]
 
-## Relevant Files
-- [file or directory path: why it matters, or "(none)"]
+## Files
+- Active: [being edited]
+- Relevant: [paths + why]
+
+## Pending
+- [verifications, checks]
+
+## Preferences
+- [user style, conventions]
 </template>
 
 Rules:
-- Keep every section, even when empty.
-- Use terse bullets, not prose paragraphs.
-- Preserve exact file paths, commands, error strings, and identifiers when known.
-- Do not mention the summary process or that context was compacted.`
+- Keep all sections, use "(none)" when empty.
+- Terse bullets, preserve paths/identifiers.
+- Do not mention summarization process.`
 type Turn = {
   start: number
   end: number

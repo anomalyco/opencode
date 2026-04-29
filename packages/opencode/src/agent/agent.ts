@@ -12,6 +12,8 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_REVIEW from "./prompt/review.txt"
+import PROMPT_TEST from "./prompt/test.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -104,6 +106,12 @@ export const layer = Layer.effect(
 
         const user = Permission.fromConfig(cfg.permission ?? {})
 
+        const selfReflectPrompt = cfg.experimental?.self_reflect
+          ? `\n# Self-Reflection\nBefore completing:\n1. All requirements addressed?\n2. Conventions followed?\n3. Validation run (lint/typecheck/tests)?`
+          : undefined
+
+        const buildAgentPrompt = `# Verification\nBefore completing: requirements met, conventions followed, no errors, tests pass, edge cases covered.`
+
         const agents: Record<string, Info> = {
           build: {
             name: "build",
@@ -119,6 +127,7 @@ export const layer = Layer.effect(
             ),
             mode: "primary",
             native: true,
+            prompt: selfReflectPrompt ?? buildAgentPrompt,
           },
           plan: {
             name: "plan",
@@ -229,6 +238,54 @@ export const layer = Layer.effect(
               user,
             ),
             prompt: PROMPT_SUMMARY,
+          },
+          review: {
+            name: "review",
+            description: `Code review specialist. Use this agent to review code changes for quality, correctness, and best practices. Provide specific files or changes to review.`,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                "*": "deny",
+                grep: "allow",
+                glob: "allow",
+                list: "allow",
+                read: "allow",
+                bash: "allow",
+                external_directory: {
+                  "*": "ask",
+                  ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+                },
+              }),
+              user,
+            ),
+            prompt: PROMPT_REVIEW,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          test: {
+            name: "test",
+            description: `Testing specialist. Use this agent to generate tests, run existing tests, and improve test coverage. Specify what code needs testing.`,
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                edit: "allow",
+                write: "allow",
+                read: "allow",
+                bash: "allow",
+                grep: "allow",
+                glob: "allow",
+                external_directory: {
+                  "*": "ask",
+                  ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+                },
+              }),
+              user,
+            ),
+            prompt: PROMPT_TEST,
+            options: {},
+            mode: "subagent",
+            native: true,
           },
         }
 
