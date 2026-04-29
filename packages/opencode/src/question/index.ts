@@ -132,7 +132,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Qu
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const vehicle = yield* Bus.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Question.state")(function* () {
         const state = {
@@ -169,7 +169,7 @@ export const layer = Layer.effect(
         tool: input.tool,
       })
       pending.set(id, { info, deferred })
-      yield* bus.publish(Event.Asked, info)
+      yield* vehicle.publish(Event.Asked, info)
 
       return yield* Effect.ensuring(
         Deferred.await(deferred),
@@ -191,7 +191,7 @@ export const layer = Layer.effect(
       }
       pending.delete(input.requestID)
       log.info("replied", { requestID: input.requestID, answers: input.answers })
-      yield* bus.publish(Event.Replied, {
+      yield* vehicle.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         answers: input.answers.map((a) => [...a]),
@@ -208,7 +208,7 @@ export const layer = Layer.effect(
       }
       pending.delete(requestID)
       log.info("rejected", { requestID })
-      yield* bus.publish(Event.Rejected, {
+      yield* vehicle.publish(Event.Rejected, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
       })
