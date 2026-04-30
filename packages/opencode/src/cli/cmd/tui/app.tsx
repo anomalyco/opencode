@@ -265,8 +265,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       
       kv.set("followup", next)
       
+      const nextName = next === "steer" ? "Halt and Steer" : next === "wrap" ? "Wait and Steer" : "Queue"
       toast.show({
-        message: `Follow-Up mode: ${next.charAt(0).toUpperCase() + next.slice(1)}`,
+        message: `Follow-Up mode: ${nextName}`,
         variant: "info",
         duration: 2000,
       })
@@ -613,7 +614,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: `Toggle follow-up mode (${kv.get("followup", "steer").charAt(0).toUpperCase() + kv.get("followup", "steer").slice(1)})`,
+      title: `Toggle follow-up mode (${
+        kv.get("followup", "steer") === "steer"
+          ? "Halt and Steer"
+          : kv.get("followup", "steer") === "wrap"
+          ? "Wait and Steer"
+          : "Queue"
+      })`,
       keybind: "session_toggle_queue_mode",
       value: "session.toggle-queue-mode",
       onSelect: (dialog) => {
@@ -624,8 +631,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         
         kv.set("followup", next)
         
+        const nextName = next === "steer" ? "Halt and Steer" : next === "wrap" ? "Wait and Steer" : "Queue"
         toast.show({
-          message: `Follow-Up mode: ${next.charAt(0).toUpperCase() + next.slice(1)}`,
+          message: `Follow-Up mode: ${nextName}`,
           variant: "info",
           duration: 2000,
         })

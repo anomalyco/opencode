@@ -22,10 +22,10 @@ export function SessionFollowupDock(props: {
   const label = createMemo(() => {
     const mode = props.items[0]?.followupMode ?? "queue"
     if (mode === "steer") {
-      return total() === 1 ? "1 message steering" : `${total()} messages steering`
+      return total() === 1 ? "1 message halting and steering" : `${total()} messages halting and steering`
     }
     if (mode === "wrap") {
-      return total() === 1 ? "1 message wrapping up" : `${total()} messages wrapping up`
+      return total() === 1 ? "1 message waiting and steering" : `${total()} messages waiting and steering`
     }
     return language.t(total() === 1 ? "session.followupDock.summary.one" : "session.followupDock.summary.other", {
       count: total(),

@@ -875,7 +875,7 @@ export function Prompt(props: PromptProps) {
         const { followupMode: _, ...cleanPayload } = payload
         sdk.client.session.promptAsync(cleanPayload).catch(() => {})
         toast.show({
-          message: followupMode === "steer" ? "Steering..." : "Wrapping up...",
+          message: followupMode === "steer" ? "Halt and steer..." : "Wait and steer...",
           variant: "info",
           duration: 2000,
         })
@@ -1095,7 +1095,7 @@ export function Prompt(props: PromptProps) {
                     const text = draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n")
                     const preview = text.length > 60 ? text.slice(0, 60).replace(/\n/g, " ") + "..." : text.replace(/\n/g, " ")
                     const mode = draft.followupMode ?? "queue"
-                    const prefix = mode === "steer" ? "Steering:" : mode === "wrap" ? "Wrapping:" : `[${i() + 1}] Queued:`
+                    const prefix = mode === "steer" ? "Halt and steer:" : mode === "wrap" ? "Wait and steer:" : `[${i() + 1}] Queued:`
                     return (
                       <box flexDirection="row" gap={1}>
                         <text fg={theme.textMuted}>{prefix}</text>
@@ -1390,10 +1390,10 @@ export function Prompt(props: PromptProps) {
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>
                             {(() => {
                               const mode = kv.get("followup", "steer")
-                              if (mode === "steer") return "Steer"
-                              if (mode === "wrap") return "Wrap"
+                              if (mode === "steer") return "Halt and Steer"
+                              if (mode === "wrap") return "Wait and Steer"
                               if (mode === "queue") return "Queue"
-                              return "Steer"
+                              return "Halt and Steer"
                             })()}
                           </text>
                         </box>
@@ -1459,8 +1459,8 @@ export function Prompt(props: PromptProps) {
                     })
                     const steerMsg = createMemo(() => {
                       const s = status()
-                      if (s.type === "steer") return "Steering"
-                      if (s.type === "wrap") return "Wrapping up"
+                      if (s.type === "steer") return "Halt and steer"
+                      if (s.type === "wrap") return "Wait and steer"
                       return null
                     })
                     const message = createMemo(() => {
