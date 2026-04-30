@@ -38,6 +38,12 @@ type Deps = {
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void> | void
   setBackgroundColor: (color: string) => void
+  /**
+   * Track a telemetry event from the renderer. The main-side implementation
+   * applies a strict allowlist; unknown event names are silently dropped.
+   * Renderer must NEVER pass user content (paths, prompts, model names).
+   */
+  trackTelemetryEvent: (name: string) => void
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -69,6 +75,12 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("check-update", () => deps.checkUpdate())
   ipcMain.handle("install-update", () => deps.installUpdate())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
+  // Telemetry event from renderer. Fire-and-forget; the main-side allowlist
+  // is the privacy guarantor — if `name` isn't in the whitelist, it's dropped.
+  ipcMain.on("track-telemetry-event", (_event: IpcMainEvent, name: string) => {
+    if (typeof name !== "string") return
+    deps.trackTelemetryEvent(name)
+  })
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     const store = getStore(name)
     const value = store.get(key)

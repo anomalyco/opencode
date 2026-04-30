@@ -76,4 +76,11 @@ export type ElectronAPI = {
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void>
   setBackgroundColor: (color: string) => Promise<void>
+  /**
+   * Fire a telemetry event from the renderer. The main process enforces a
+   * strict allowlist of event names; unknown names are dropped. Pass ONLY
+   * the event name — never include file paths, prompts, project names, or
+   * model identifiers. The SDK already attaches version / install_id / os.
+   */
+  trackTelemetryEvent: (name: string) => void
 }

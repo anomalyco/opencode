@@ -15,7 +15,8 @@
     "noEmit": true,
     "emitDeclarationOnly": false,
     "outDir": "node_modules/.ts-dist",
-    "types": ["vite/client", "node", "electron"]
+    "types": ["vite/client", "node", "electron"],
+    "allowImportingTsExtensions": true
   },
   "references": [{ "path": "../app" }],
   "include": ["src", "package.json"],
