@@ -14,7 +14,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ### 主 commit
 
-待落地后回填 hash(commit message 标 `[feat: win-tri-env-appid]`)。
+`21c3f80f9` — feat(branding): Windows 三档 AppId 同机共存 — DeskFox.iss 加 #if AppEnv 切档…[feat: win-tri-env-appid]
 
 ### 改动文件
 
