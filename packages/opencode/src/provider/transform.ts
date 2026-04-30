@@ -427,8 +427,13 @@ export function topK(model: Provider.Model) {
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+function isAnthropicOpus47(apiId: string) {
+  const id = apiId.toLowerCase()
+  return ["opus-4-7", "opus-4.7"].some((v) => id.includes(v))
+}
+
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
-  if (["opus-4-7", "opus-4.7"].some((v) => apiId.includes(v))) {
+  if (isAnthropicOpus47(apiId)) {
     return ["low", "medium", "high", "xhigh", "max"]
   }
   if (["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => apiId.includes(v))) {
@@ -485,6 +490,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               {
                 thinking: {
                   type: "adaptive",
+                  ...(isAnthropicOpus47(model.api.id) ? { display: "summarized" } : {}),
                 },
                 effort,
               },
@@ -645,9 +651,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             {
               thinking: {
                 type: "adaptive",
-                ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
-                  ? { display: "summarized" }
-                  : {}),
+                ...(isAnthropicOpus47(model.api.id) ? { display: "summarized" } : {}),
               },
               effort,
             },
@@ -680,9 +684,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               reasoningConfig: {
                 type: "adaptive",
                 maxReasoningEffort: effort,
-                ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
-                  ? { display: "summarized" }
-                  : {}),
+                ...(isAnthropicOpus47(model.api.id) ? { display: "summarized" } : {}),
               },
             },
           ]),
@@ -910,8 +912,25 @@ export function options(input: {
     }
   }
 
-  // Enable thinking by default for kimi models using anthropic SDK
   const modelId = input.model.api.id.toLowerCase()
+  // Opus 4.7 omits thinking text unless display is explicitly summarized.
+  if (
+    isAnthropicOpus47(modelId) &&
+    ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic", "@ai-sdk/gateway"].includes(input.model.api.npm)
+  ) {
+    result["thinking"] = {
+      type: "adaptive",
+      display: "summarized",
+    }
+  }
+  if (isAnthropicOpus47(modelId) && input.model.api.npm === "@ai-sdk/amazon-bedrock") {
+    result["reasoningConfig"] = {
+      type: "adaptive",
+      display: "summarized",
+    }
+  }
+
+  // Enable thinking by default for kimi models using anthropic SDK
   if (
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
     (modelId.includes("k2p") || modelId.includes("kimi-k2.") || modelId.includes("kimi-k2p"))

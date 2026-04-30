@@ -356,6 +356,82 @@ describe("ProviderTransform.options - gateway", () => {
       },
     })
   })
+
+  test("enables summarized thinking for opus 4.7", () => {
+    const model = createModel("anthropic/claude-opus-4.7")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result).toEqual({
+      thinking: {
+        type: "adaptive",
+        display: "summarized",
+      },
+      gateway: {
+        caching: "auto",
+      },
+    })
+  })
+})
+
+describe("ProviderTransform.options - opus 4.7 thinking", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (npm: string, apiId = "claude-opus-4-7") =>
+    ({
+      id: `anthropic/${apiId}`,
+      providerID: "anthropic",
+      api: {
+        id: apiId,
+        url: "https://api.anthropic.com",
+        npm,
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 200_000,
+        output: 64_000,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2026-04-16",
+    }) as any
+
+  test("enables summarized thinking for anthropic", () => {
+    const result = ProviderTransform.options({
+      model: createModel("@ai-sdk/anthropic"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.thinking).toEqual({
+      type: "adaptive",
+      display: "summarized",
+    })
+  })
+
+  test("enables summarized reasoning config for bedrock", () => {
+    const result = ProviderTransform.options({
+      model: createModel("@ai-sdk/amazon-bedrock", "anthropic.claude-opus-4-7"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.reasoningConfig).toEqual({
+      type: "adaptive",
+      display: "summarized",
+    })
+  })
 })
 
 describe("ProviderTransform.providerOptions", () => {
@@ -2456,12 +2532,14 @@ describe("ProviderTransform.variants", () => {
       expect(result.xhigh).toEqual({
         thinking: {
           type: "adaptive",
+          display: "summarized",
         },
         effort: "xhigh",
       })
       expect(result.max).toEqual({
         thinking: {
           type: "adaptive",
+          display: "summarized",
         },
         effort: "max",
       })
