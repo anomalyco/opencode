@@ -89,10 +89,12 @@ The opencode server exposes the following APIs.
 
 ### Global
 
-| Method | Path             | Description                    | Response                             |
-| ------ | ---------------- | ------------------------------ | ------------------------------------ |
-| `GET`  | `/global/health` | Get server health and version  | `{ healthy: true, version: string }` |
-| `GET`  | `/global/event`  | Get global events (SSE stream) | Event stream                         |
+| Method  | Path             | Description                    | Response                             |
+| ------- | ---------------- | ------------------------------ | ------------------------------------ |
+| `GET`   | `/global/health` | Get server health and version  | `{ healthy: true, version: string }` |
+| `GET`   | `/global/event`  | Get global events (SSE stream) | Event stream                         |
+| `GET`   | `/global/config` | Get global config info         | <a href={typesUrl}><code>Config</code></a> |
+| `PATCH` | `/global/config` | Update global config           | <a href={typesUrl}><code>Config</code></a> |
 
 ---
 
@@ -126,8 +128,8 @@ The opencode server exposes the following APIs.
 
 | Method  | Path                | Description                       | Response                                                                                 |
 | ------- | ------------------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
-| `GET`   | `/config`           | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                               |
-| `PATCH` | `/config`           | Update config                     | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config`           | Get instance config info          | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Update instance config            | <a href={typesUrl}><code>Config</code></a>                                               |
 | `GET`   | `/config/providers` | List providers and default models | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
 
 ---
