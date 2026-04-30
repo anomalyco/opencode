@@ -65,6 +65,8 @@ Linux 默认 case-sensitive(`feat/SOP` 与 `feat/sop` 是两个分支),Windows /
 
 **绝不复用**:`feat/A` 销毁后,新项目即使内容相关也用新名字(如 `feat/A-v2`、`feat/A-followup`)
 
+**关于文件名 / 路径 / 文档命名的大小写**:**不在本 SOP 范围**。本节只规定 git 分支名命名。仓库内文件名(如 `UPSTREAM-MERGE-GUIDE.md` / `STATUS.md` / `双端协作-SOP.md`)历史上没有统一规则,**保持现状**。文件名层级真正会出问题的是"同目录下两个文件名只差大小写"(跨平台冲突),那是 hook 层规则,详见 [`改动规则.md` 4.4 节(大小写冲突检查)](改动规则.md#44-大小写冲突检查跨平台)。
+
 ### 1.3 反例:为什么不能复用
 
 历史上 `feat/editable-file-viewer` 名字盖不住实际范围(里面塞了 file-viewer / GetBot / installer / md-viewer / privacy 一大堆),就是"feat 不删掉、一直加"的反面教材。详见 [`分支策略-v2/1-spec.md`](../features/分支策略-v2/1-spec.md) 第 1.1 节。
@@ -252,6 +254,36 @@ git push origin --delete feat/X            # 删远端
 
 **不要**直接把 feat/A 改名为 feat/A1 然后再切个 feat/A2 出来 —— 这会让两个 feat 共享 base,违反"一个 feat 一件事"原则。
 
+### 5.4 dev 上的小补丁(笑南 / 李哲都允许直推 dev)
+
+**适用情形**(且仅限这些):
+
+- typo / 错别字修复(注释 / 文档 / commit message 拼写)
+- 单行注释补充 / 措辞润色
+- 已合并 commit 的 message 补全(回填 commit hash 等)
+- 单文件 ≤ 10 行的纯文档改动
+
+**为什么允许**:这种"立 feat → push → merge → 删 feat"四步成本远大于改动本身,流程开销 > 价值。v2 模型 4.3 节已废除"禁止直 push dev"硬规则(详见 [`改动规则.md` 4.3 节](./改动规则.md#43-强制-feature-分支2026-04-30-起正式废除)),本节是把"什么算小到可以直推"的边界写明。
+
+**操作**:
+
+```bash
+git checkout dev
+git pull origin dev                        # 先确认最新
+# 改文件
+git add . && git commit -m "docs(<scope>): <说明> [feat: <相关-feat-id>]"
+git push origin dev
+```
+
+**反例**(必须立 feat,不许直推 dev):
+
+- 任何代码改动(`.ts` / `.tsx` / `.rs` / `.ps1` / `.sh` 等)
+- 跨多文件的文档改动(≥ 3 个文件)
+- 配置改动(`.iss` / `tauri.conf.json` / `.husky/*` 等)
+- 新增功能 / 重构 / bug fix(无论多小)
+
+**约定上限**:同一天直推 dev ≤ 3 笔。超过说明"小补丁"判断错了,后续应该立 feat 攒着合。
+
 ---
 
 ## 六、协作约定(沟通层)
@@ -299,3 +331,4 @@ git push origin --delete feat/X            # 删远端
 |---|---|---|
 | v1.0 | 2026-04-30 | 初版立稿,起源于 v2 模型锁版后笑南追问"feat 合并后下个项目用同名还是新名"。结论:**feat 一次性容器,新项目新名字**。同笔加 5 处引用点(CLAUDE.md / 治理总纲 / 分支策略-v2/2-plan / docs/README / 改动日志) |
 | v1.1 | 2026-04-30 | 1.2 节扩"分支命名规范":加 type 前缀清单(feat/fix/chore/sync/hotfix)+ 5 条 name 硬规则(**全小写 + kebab-case**)+ 立规则当天踩坑实录(case-insensitive FS 上同名只大小写不同会冲突)。**第六节 `[doc:]` tag 改回 `[feat:]` 统一**(本项目 commit tag 仅用 `[feat:]`,不引入 `[doc:]`,理由:仓库历史 100% 一致性优先)。本笔 commit `[feat: 双端协作-sop]`(分支已对齐小写)|
+| v1.2 | 2026-04-30 | review 后补丁(7 处):① 1.2 节末加"文件名大小写不在本 SOP 范围"+ 双向交叉引用 → [`改动规则.md` 4.4 节](./改动规则.md#44-大小写冲突检查跨平台);② 新增 **5.4 节"dev 上的小补丁"** 明确 typo/错别字/commit message 回填等小补丁笑南 / 李哲都允许直推 dev,边界 + 操作 + 反例 + 同日上限 3 笔;③ CLAUDE.md 同笔修复两处 stale 描述(`feat/win-tri-env-appid` 已落地 `21c3f80f9`,R3 段 + 文档链路表);④ CLAUDE.md 默认仓库约定段补"<name> 全小写 + kebab-case"短规则(指向本节);⑤ 改动规则 4.4 节加交叉引用回本 1.2 节(双向引用闭环)|

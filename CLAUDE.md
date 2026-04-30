@@ -19,7 +19,7 @@
 - 例外:仅追加依赖到 `package.json` / `Cargo.toml` 不需要 marker
 
 ### R3. 三类 hardcode 禁令
-- **品牌字符串**(productName/identifier)→ 走 `packages/branding/tauri-overrides/{dev,beta,prod}.json` override(不改 base `tauri.conf.json`)。**应用身份命名规则**:Mac Bundle ID 三档(prod=`ai.deskfox.app` / beta=`...beta` / dev=`...dev`,reverse-DNS 与 `deskfox.ai` 域名对齐);Win AppId 三档(prod GUID 锁死、beta/dev 待落地 `feat/win-tri-env-appid`),详见 [`docs/governance/应用身份-命名规则.md`](docs/governance/应用身份-命名规则.md)
+- **品牌字符串**(productName/identifier)→ 走 `packages/branding/tauri-overrides/{dev,beta,prod}.json` override(不改 base `tauri.conf.json`)。**应用身份命名规则**:Mac Bundle ID 三档(prod=`ai.deskfox.app` / beta=`...beta` / dev=`...dev`,reverse-DNS 与 `deskfox.ai` 域名对齐);Win AppId 三档独立 GUID(prod 锁死 `{F9F6F6C5-...}` / beta `{86413DCA-...}` / dev `{4C5D29F2-...}`,2026-04-30 落地 commit `21c3f80f9`),详见 [`docs/governance/应用身份-命名规则.md`](docs/governance/应用身份-命名规则.md)
 - **主题色/字号** → 自己入口 CSS `:root { --primary: ... }` 覆盖,**不改** `packages/ui/` 内部 token
 - **icon/启动图资源** → 自己目录放新资源 + build 脚本替换,**不直接覆盖** `packages/desktop/src-tauri/icons/`
 
@@ -92,7 +92,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 | 改动规则细则 | `docs/governance/改动规则.md` | 白黑名单 / baseline tag / diff 阈值 / hook 体系 |
 | **上游 merge SOP**(本次新增) | `docs/governance/UPSTREAM-MERGE-GUIDE.md` | 与 sst/opencode 合并的完整 checklist + 自动化辅助 |
 | DeskFox 品牌替换 | `docs/governance/DeskFox-品牌替换.md` | 已落地 |
-| 应用身份命名规则 | `docs/governance/应用身份-命名规则.md` | 两端规则统一:Mac Bundle ID 三档(已落地,与 `deskfox.ai` 域名对齐)+ Win AppId 三档(待落地 `feat/win-tri-env-appid`),merge upstream 维护规则 |
+| 应用身份命名规则 | `docs/governance/应用身份-命名规则.md` | 两端规则统一:Mac Bundle ID 三档(已落地,与 `deskfox.ai` 域名对齐)+ Win AppId 三档(已落地 2026-04-30,commit `21c3f80f9`),merge upstream 维护规则 |
 | **双端协作 SOP** | `docs/governance/双端协作-SOP.md` | feat 分支生命周期(短命,合 dev 即销毁,新项目新名字)+ Win/Mac 同时开发流程(rebase / merge / 删分支)+ 协作约定 |
 | 跨平台协作 | `docs/governance/跨平台协作.md` | 三端环境(目前已收口 Win) |
 | 数字签名问题 | `docs/governance/数字签名问题.md` | installer 不签名决策 |
@@ -105,7 +105,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 ## 默认仓库约定(分支策略 v2,2026-04-30 起)
 
 - **默认分支**:`dev` — **单一稳定主干**,不自动跟随 `upstream/dev`,合上游是主动决策(不是被动跟随)
-- **功能分支**:`feat/<name>` — **一次性容器**,合 dev = 销毁,**新项目用新名字,绝不复用**。详见 [`docs/governance/双端协作-SOP.md`](docs/governance/双端协作-SOP.md)(feat 生命周期 + Win/Mac 双端协作流程)
+- **功能分支**:`feat/<name>` — **一次性容器**,合 dev = 销毁,**新项目用新名字,绝不复用**。`<name>` **全小写 + kebab-case**(中划线分词,行业常规),中英混合 OK 但英文部分必须小写。详见 [`docs/governance/双端协作-SOP.md`](docs/governance/双端协作-SOP.md)(feat 生命周期 + 命名规范 + Win/Mac 双端协作流程)
 - **上游同步**:临时分支 `sync/upstream-<日期>`,merge 完即删
 - **三档环境**(dev/beta/prod):靠 **build 参数**切换(`pack-installer.* -Env <env>`),**不靠分支** — 同一 commit 可出三档产物
 - **tag 命名**:
