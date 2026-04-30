@@ -112,8 +112,8 @@ grep `[feat: <id>]` 能反查到对应文档。
   - `upstream-baseline`(同步起点)/ `pre-rebase-<日期>`(rebase 前)/ `pre-strategy-v2-<日期>`(关键切换兜底)
   - `ship-<env>-<版本>`,例 `ship-prod-2026.4.29.2`
 - **远端**:
-  - `origin` **临时只 push gitee**(github/dev 因 v2 切换时是上游 snapshot 幽灵分支,处置后置)
-  - `github` 独立 remote(可 fetch,push 单独决策)
+  - `origin` → GitHub 主仓(开源协作主平台,所有 PR / Issue / Star 在这里;国内 push 走 SSH + 代理)
+  - `gitee` → Gitee 镜像(国内用户快速 clone;Gitee 后台定时从 GitHub 自动同步,无需手动 push)
   - `upstream` 只读指 sst/opencode
 
 > 完整模型与切换逻辑见 [`docs/features/分支策略-v2/1-spec.md`](docs/features/分支策略-v2/1-spec.md)。

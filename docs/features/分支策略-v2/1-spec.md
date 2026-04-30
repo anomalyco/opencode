@@ -125,6 +125,7 @@ dev (DeskFox 稳定主干)  ← 只接收"已验证过"的内容
 | **B5 mac 端协作通知**(2026-04-30) | ✅ 已通知李哲暂停推 dev / feat,等切换稳定 |
 | **B1+B2 github 双 push**(2026-04-30) | 临时把 origin 的 github push URL 去除,**只推 gitee**;github/dev 幽灵分支后置处理(切换稳定后再决定 force push / 删除 / 保留) |
 | **B3 改动规则.md 4.3 节**(2026-04-30) | ✅ 正式废除"禁止直 push 到 main/dev/master"。理由:hook 从未实装该规则,且 v2 模型本意就是笑南本人直推 dev。详见 [`docs/governance/改动规则.md`](../../governance/改动规则.md) 4.3 节废除说明 |
+| **远端主仓调整**(后续) | GitHub 升为主仓(`origin`),Gitee 改为镜像(`gitee`)。背景:项目定位开源 + 全球贡献者,GitHub 是唯一可行的协作平台;Gitee 由后台定时从 GitHub 自动同步,国内用户 clone 走 Gitee,贡献走 GitHub。国内 push 走 SSH + 本地代理。 |
 
 ## 四、决策(待笑南最终敲定)
 
@@ -408,3 +409,4 @@ DeskFox 现状(2026-04-30):没有 prod 用户基数(自用 + 朋友 + 小范围)
 | v0.3(草稿) | 2026-04-30 | 加附录 D(三档环境与分支模型的关系)+ 动作计划 #5 补 `feat/win-tri-env-appid`(Win 三档 AppId,v2 切换之后立刻做)+ 动作计划 #1 修正(ship 调研确认只有 .2 一笔)| Claude |
 | v0.4(草稿) | 2026-04-30 | 第三节"决策已敲定"补 4 条:HANDOFF 删除 / B5 mac 协作通知 / B1+B2 origin 双 push 改单推 gitee / B3 改动规则 4.3 节正式废除(同笔改 `docs/governance/改动规则.md` 4.3 节加废除说明)| Claude |
 | **v1.0(锁版)** | 2026-04-30 | 笑南讨论锁版 → 切换执行完成(merge feat → dev `fae01d2a8`)→ status: draft 改 done | Claude |
+| **v1.1** | 2026-04-30 | 远端主仓调整:GitHub 升 `origin`(主仓),Gitee 降 `gitee`(镜像)。因项目定位开源 + 全球贡献者,GitHub 是唯一可行协作平台 | Claude |
