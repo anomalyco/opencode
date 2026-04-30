@@ -18,9 +18,8 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
-import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
@@ -39,8 +38,6 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
-
-const log = Log.create({ service: "server" })
 
 const mapNotFound = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   self.pipe(
@@ -63,6 +60,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
+    const bus = yield* Bus.Service
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
       const instance = yield* InstanceState.context
@@ -264,13 +262,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const bridge = yield* EffectBridge.make()
       return HttpServerResponse.stream(
         Stream.fromEffect(
-          Effect.promise(() =>
-            bridge.promise(
-              promptSvc.prompt({
-                ...ctx.payload,
-                sessionID: ctx.params.sessionID,
-              }),
-            ),
+          bridge.run(
+            promptSvc.prompt({
+              ...ctx.payload,
+              sessionID: ctx.params.sessionID,
+            }),
           ),
         ).pipe(
           Stream.map((message) => JSON.stringify(message)),
@@ -288,12 +284,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       yield* Effect.sync(() => {
         bridge.fork(
           promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
-            Effect.catchCause((error) =>
-              Effect.sync(() => {
-                log.error("prompt_async failed", { sessionID: ctx.params.sessionID, error })
-                void Bus.publish(Session.Event.Error, {
+            Effect.catchCause((cause) =>
+              Effect.gen(function* () {
+                yield* Effect.logError("prompt_async failed", { sessionID: ctx.params.sessionID, cause })
+                yield* bus.publish(Session.Event.Error, {
                   sessionID: ctx.params.sessionID,
-                  error: new NamedError.Unknown({ message: String(error) }).toObject(),
+                  error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
                 })
               }),
             ),
