@@ -15,6 +15,7 @@ export const AddPayload = Schema.Struct({
 export const StatusMap = Schema.Record(Schema.String, MCP.Status)
 export const AuthStartResponse = Schema.Struct({
   authorizationUrl: Schema.String,
+  oauthState: Schema.String,
 })
 export const AuthCallbackPayload = Schema.Struct({
   code: Schema.String,
