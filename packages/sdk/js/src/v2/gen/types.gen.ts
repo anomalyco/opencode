@@ -4290,6 +4290,7 @@ export type PermissionReplyData = {
   body?: {
     reply: "once" | "always" | "reject"
     message?: string
+    patterns?: Array<string>
   }
   path: {
     requestID: string

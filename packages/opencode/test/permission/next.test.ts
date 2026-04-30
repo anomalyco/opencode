@@ -1122,3 +1122,85 @@ it.live("ask - abort should clear pending request", () =>
     if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
   }),
 )
+
+it.live("reply - always with custom patterns overrides server-suggested patterns", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+    const fiber = yield* ask({
+      id: PermissionID.make("per_custom1"),
+      sessionID: SessionID.make("session_custom"),
+      permission: "bash",
+      patterns: ["docker exec -it app_foo cat /etc/hosts"],
+      metadata: {},
+      always: ["docker *"],
+      ruleset: [],
+    }).pipe(run, Effect.forkScoped)
+
+    yield* waitForPending(1).pipe(run)
+    yield* reply({
+      requestID: PermissionID.make("per_custom1"),
+      reply: "always",
+      patterns: ["docker exec -it app_* cat *"],
+    }).pipe(run)
+    yield* Fiber.join(fiber)
+
+    const ok = yield* ask({
+      sessionID: SessionID.make("session_custom2"),
+      permission: "bash",
+      patterns: ["docker exec -it app_bar cat /etc/passwd"],
+      metadata: {},
+      always: [],
+      ruleset: [],
+    }).pipe(run)
+    expect(ok).toBeUndefined()
+
+    const fiber2 = yield* ask({
+      id: PermissionID.make("per_custom2"),
+      sessionID: SessionID.make("session_custom3"),
+      permission: "bash",
+      patterns: ["docker ps"],
+      metadata: {},
+      always: ["docker *"],
+      ruleset: [],
+    }).pipe(run, Effect.forkScoped)
+
+    yield* waitForPending(1).pipe(run)
+    yield* reply({ requestID: PermissionID.make("per_custom2"), reply: "reject" }).pipe(run)
+    yield* Fiber.await(fiber2)
+  }),
+)
+
+it.live("reply - always with empty custom patterns falls back to server-suggested", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+    const fiber = yield* ask({
+      id: PermissionID.make("per_custom3"),
+      sessionID: SessionID.make("session_fallback"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: ["ls"],
+      ruleset: [],
+    }).pipe(run, Effect.forkScoped)
+
+    yield* waitForPending(1).pipe(run)
+    yield* reply({
+      requestID: PermissionID.make("per_custom3"),
+      reply: "always",
+      patterns: [],
+    }).pipe(run)
+    yield* Fiber.join(fiber)
+
+    const ok = yield* ask({
+      sessionID: SessionID.make("session_fallback2"),
+      permission: "bash",
+      patterns: ["ls"],
+      metadata: {},
+      always: [],
+      ruleset: [],
+    }).pipe(run)
+    expect(ok).toBeUndefined()
+  }),
+)

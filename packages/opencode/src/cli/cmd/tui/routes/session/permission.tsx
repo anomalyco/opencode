@@ -157,40 +157,20 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   return (
     <Switch>
       <Match when={store.stage === "always"}>
-        <Prompt
-          title="Always allow"
-          body={
-            <Switch>
-              <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
-              </Match>
-              <Match when={true}>
-                <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
-                  <box>
-                    <For each={props.request.always}>
-                      {(pattern) => (
-                        <text fg={theme.text}>
-                          {"- "}
-                          {pattern}
-                        </text>
-                      )}
-                    </For>
-                  </box>
-                </box>
-              </Match>
-            </Switch>
-          }
-          options={{ confirm: "Confirm", cancel: "Cancel" }}
-          escapeKey="cancel"
-          onSelect={(option) => {
+        <AlwaysEditPrompt
+          initial={Array.from(props.request.always)}
+          permission={props.request.permission}
+          onConfirm={(patterns) => {
             setStore("stage", "permission")
-            if (option === "cancel") return
             void sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,
               workspace: project.workspace.current(),
+              patterns: patterns.length > 0 ? patterns : undefined,
             })
+          }}
+          onCancel={() => {
+            setStore("stage", "permission")
           }}
         />
       </Match>
@@ -456,6 +436,97 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
         })()}
       </Match>
     </Switch>
+  )
+}
+
+function AlwaysEditPrompt(props: {
+  initial: string[]
+  permission: string
+  onConfirm: (patterns: string[]) => void
+  onCancel: () => void
+}) {
+  let input: TextareaRenderable
+  const { theme } = useTheme()
+  const keybind = useKeybind()
+  const textareaKeybindings = useTextareaKeybindings()
+  const dimensions = useTerminalDimensions()
+  const narrow = createMemo(() => dimensions().width < 80)
+  const dialog = useDialog()
+  const initialText = props.initial.join("\n")
+
+  useKeyboard((evt) => {
+    if (dialog.stack.length > 0) return
+
+    if (evt.name === "escape" || keybind.match("app_exit", evt)) {
+      evt.preventDefault()
+      props.onCancel()
+      return
+    }
+    if (evt.name === "return" && !evt.meta && !evt.shift) {
+      evt.preventDefault()
+      const patterns = input.plainText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+      props.onConfirm(patterns)
+    }
+  })
+
+  return (
+    <box
+      backgroundColor={theme.backgroundPanel}
+      border={["left"]}
+      borderColor={theme.warning}
+      customBorderChars={SplitBorder.customBorderChars}
+    >
+      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
+        <box flexDirection="row" gap={1} paddingLeft={1}>
+          <text fg={theme.warning}>{"△"}</text>
+          <text fg={theme.text}>Always allow</text>
+        </box>
+        <box paddingLeft={1}>
+          <text fg={theme.textMuted}>
+            {"Edit pattern(s) to allow for " + props.permission + " until OpenCode is restarted."}
+          </text>
+        </box>
+        <box paddingLeft={1}>
+          <text fg={theme.textMuted}>One pattern per line. Alt+Enter inserts a newline.</text>
+        </box>
+      </box>
+      <box
+        flexDirection={narrow() ? "column" : "row"}
+        flexShrink={0}
+        paddingTop={1}
+        paddingLeft={2}
+        paddingRight={3}
+        paddingBottom={1}
+        backgroundColor={theme.backgroundElement}
+        justifyContent={narrow() ? "flex-start" : "space-between"}
+        alignItems={narrow() ? "flex-start" : "center"}
+        gap={1}
+      >
+        <textarea
+          ref={(val: TextareaRenderable) => {
+            input = val
+            val.traits = { status: "ALWAYS" }
+          }}
+          initialValue={initialText}
+          focused
+          textColor={theme.text}
+          focusedTextColor={theme.text}
+          cursorColor={theme.primary}
+          keyBindings={textareaKeybindings()}
+        />
+        <box flexDirection="row" gap={2} flexShrink={0}>
+          <text fg={theme.text}>
+            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+          </text>
+          <text fg={theme.text}>
+            esc <span style={{ fg: theme.textMuted }}>cancel</span>
+          </text>
+        </box>
+      </box>
+    </box>
   )
 }
 

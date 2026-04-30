@@ -11,6 +11,7 @@ const root = "/permission"
 const ReplyPayload = Schema.Struct({
   reply: Permission.Reply,
   message: Schema.optional(Schema.String),
+  patterns: Schema.optional(Schema.Array(Schema.String)),
 })
 
 export const PermissionApi = HttpApi.make("permission")
