@@ -1,17 +1,11 @@
 import { ConfigService } from "@/effect/config-service"
-import { Config, Context, Effect, Encoding, Layer, Option, Redacted, Schema } from "effect"
-import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
-
-class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
-  "Unauthorized",
-  { message: Schema.String },
-  { httpApiStatus: 401 },
-) {}
+import { Config, Context, Effect, Encoding, Layer, Option, Redacted } from "effect"
+import { HttpApiError, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
 
 export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   "@opencode/ExperimentalHttpApiAuthorization",
   {
-    error: Unauthorized,
+    error: HttpApiError.UnauthorizedNoContent,
     security: {
       basic: HttpApiSecurity.basic,
       authToken: HttpApiSecurity.apiKey({ in: "query", key: "auth_token" }),
@@ -36,10 +30,10 @@ function validateCredential<A, E, R>(
     if (Option.isNone(config.password) || config.password.value === "") return yield* effect
 
     if (credential.username !== config.username) {
-      return yield* new Unauthorized({ message: "Unauthorized" })
+      return yield* new HttpApiError.Unauthorized({})
     }
     if (Redacted.value(credential.password) !== config.password.value) {
-      return yield* new Unauthorized({ message: "Unauthorized" })
+      return yield* new HttpApiError.Unauthorized({})
     }
     return yield* effect
   })
