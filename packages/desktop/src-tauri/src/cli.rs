@@ -43,6 +43,59 @@ impl CommandWrapper for WinCreationFlags {
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(unix)]
+const UNIX_SUPERVISOR: &str = r#"
+pid="$1"
+shift
+bin="$1"
+shift
+
+"$bin" "$@" &
+child="$!"
+
+while kill -0 "$pid" 2>/dev/null && kill -0 "$child" 2>/dev/null; do
+  sleep 1
+done
+
+if kill -0 "$child" 2>/dev/null; then
+  kill -TERM "$child" 2>/dev/null || true
+  sleep 2
+fi
+
+if kill -0 "$child" 2>/dev/null; then
+  kill -KILL "$child" 2>/dev/null || true
+fi
+
+wait "$child"
+"#;
+const WSL_SUPERVISOR: &str = r#"
+pid="$1"
+shift
+bin="$1"
+shift
+
+"$bin" "$@" &
+child="$!"
+
+alive() {
+  powershell.exe -NoProfile -NonInteractive -Command "if (Get-Process -Id $pid -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >/dev/null 2>&1
+}
+
+while alive && kill -0 "$child" 2>/dev/null; do
+  sleep 1
+done
+
+if kill -0 "$child" 2>/dev/null; then
+  kill -TERM "$child" 2>/dev/null || true
+  sleep 2
+fi
+
+if kill -0 "$child" 2>/dev/null; then
+  kill -KILL "$child" 2>/dev/null || true
+fi
+
+wait "$child"
+"#;
 
 #[derive(Clone, Debug)]
 pub enum CommandEvent {
@@ -392,7 +445,11 @@ pub fn spawn_command(
 
     let mut cmd = if cfg!(windows) {
         if is_wsl_enabled(app) {
-            tracing::info!("WSL is enabled, spawning CLI server in WSL");
+            let pid = std::process::id().to_string();
+            tracing::info!(
+                parent = pid,
+                "WSL is enabled, spawning supervised CLI server in WSL"
+            );
             let version = app.package_info().version.to_string();
             let mut script = vec![
                 "set -e".to_string(),
@@ -422,13 +479,24 @@ pub fn spawn_command(
                     .map(|(key, value)| format!("{}={}", key, shell_escape(value))),
             );
 
-            script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
+            script.push(format!(
+                "{} bash -lc {} opencode-wsl-supervisor {} \"$BIN\" {}",
+                env_prefix.join(" "),
+                shell_escape(WSL_SUPERVISOR),
+                shell_escape(&pid),
+                args
+            ));
 
             let mut cmd = Command::new("wsl");
             cmd.args(["-e", "bash", "-lc", &script.join("\n")]);
             cmd
         } else {
             let sidecar = get_sidecar_path(app);
+            tracing::info!(
+                sidecar = %sidecar.display(),
+                args,
+                "Spawning Windows sidecar with job object reaper"
+            );
             let mut cmd = Command::new(sidecar);
             cmd.args(args.split_whitespace());
 
@@ -442,11 +510,27 @@ pub fn spawn_command(
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
         let envs = merge_shell_env(load_shell_env(&shell), envs);
-        // Load the login shell environment once, then exec the bundled sidecar directly.
-        // Putting desktop startup back behind `shell -l -c ...` makes shell rc side effects
-        // part of app launch again and is much easier to break.
-        let mut cmd = Command::new(sidecar);
-        cmd.args(args.split_whitespace());
+        let argv = args
+            .split_whitespace()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        let pid = std::process::id().to_string();
+        tracing::info!(
+            parent = pid,
+            sidecar = %sidecar.display(),
+            args,
+            "Spawning supervised Unix sidecar"
+        );
+        // Load the login shell environment once, then run the bundled sidecar behind a small
+        // watchdog. This avoids shell rc side effects while still killing the sidecar if the
+        // desktop parent disappears before RunEvent::Exit can run.
+        let mut cmd = Command::new("/bin/sh");
+        cmd.arg("-c")
+            .arg(UNIX_SUPERVISOR)
+            .arg("opencode-supervisor");
+        cmd.arg(pid);
+        cmd.arg(sidecar);
+        cmd.args(&argv);
 
         for (key, value) in envs {
             cmd.env(key, value);
@@ -676,10 +760,7 @@ pub fn serve_genericagent(
     let mut envs = vec![
         ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
-        (
-            "OPENCODE_GENERICAGENT_DIR",
-            generic_agent_dir.to_string(),
-        ),
+        ("OPENCODE_GENERICAGENT_DIR", generic_agent_dir.to_string()),
     ];
 
     if let Some(python) = python_executable {
@@ -774,8 +855,7 @@ pub fn serve_hermes(
         "--log-level {level} extra-agent-serve --id hermes --hostname {hostname} --port {port}"
     );
 
-    let (events, child) =
-        spawn_command(app, &cmd, &envs).expect("Failed to spawn hermes adapter");
+    let (events, child) = spawn_command(app, &cmd, &envs).expect("Failed to spawn hermes adapter");
 
     let mut exit_tx = Some(exit_tx);
     tokio::spawn(

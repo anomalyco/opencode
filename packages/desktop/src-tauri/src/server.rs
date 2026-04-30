@@ -199,10 +199,7 @@ pub fn get_genericagent_config(app: AppHandle) -> Result<GenericagentConfig, Str
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_genericagent_config(
-    app: AppHandle,
-    config: GenericagentConfig,
-) -> Result<(), String> {
+pub fn set_genericagent_config(app: AppHandle, config: GenericagentConfig) -> Result<(), String> {
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open settings store: {}", e))?;

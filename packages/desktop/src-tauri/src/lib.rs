@@ -1207,21 +1207,17 @@ async fn test_genericagent_server(
         .filter(|x| !x.trim().is_empty());
     logs.push(format!(
         "Python executable: {}",
-        python.clone().unwrap_or_else(|| "python3 (default)".to_string())
+        python
+            .clone()
+            .unwrap_or_else(|| "python3 (default)".to_string())
     ));
     let port = get_genericagent_port();
     let hostname = "127.0.0.1".to_string();
     let password = uuid::Uuid::new_v4().to_string();
     let http = format!("http://{hostname}:{port}");
     logs.push(format!("Allocating temporary adapter on {http}"));
-    let (child, health_check) = crate::cli::serve_genericagent(
-        &app,
-        &hostname,
-        port,
-        &password,
-        python.as_deref(),
-        &dir,
-    );
+    let (child, health_check) =
+        crate::cli::serve_genericagent(&app, &hostname, port, &password, python.as_deref(), &dir);
     logs.push("Temporary adapter spawned".to_string());
 
     if let Some(state) = app.try_state::<GenericagentState>()
@@ -1457,11 +1453,7 @@ async fn test_hermes_server(
         });
     }
 
-    let Some(dir) = config
-        .hermes_dir
-        .clone()
-        .filter(|x| !x.trim().is_empty())
-    else {
+    let Some(dir) = config.hermes_dir.clone().filter(|x| !x.trim().is_empty()) else {
         return Ok(HermesTestResult {
             ok: false,
             logs: vec![
@@ -1477,15 +1469,15 @@ async fn test_hermes_server(
         .filter(|x| !x.trim().is_empty());
     logs.push(format!(
         "Python executable: {}",
-        python.clone().unwrap_or_else(|| "repo venv or python3".to_string())
+        python
+            .clone()
+            .unwrap_or_else(|| "repo venv or python3".to_string())
     ));
-    let home = config
-        .hermes_home
-        .clone()
-        .filter(|x| !x.trim().is_empty());
+    let home = config.hermes_home.clone().filter(|x| !x.trim().is_empty());
     logs.push(format!(
         "Hermes home: {}",
-        home.clone().unwrap_or_else(|| "~/.hermes (default)".to_string())
+        home.clone()
+            .unwrap_or_else(|| "~/.hermes (default)".to_string())
     ));
     let port = get_hermes_port();
     let hostname = "127.0.0.1".to_string();
@@ -2110,36 +2102,34 @@ pub fn run() {
     builder
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|app, event| {
-            match event {
-                #[cfg(target_os = "macos")]
-                RunEvent::WindowEvent { label, event, .. } => {
-                    if label == MainWindow::LABEL
-                        && let tauri::WindowEvent::CloseRequested { api, .. } = event
-                    {
-                        api.prevent_close();
-                        if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
-                            let _ = window.hide();
-                        }
+        .run(|app, event| match event {
+            #[cfg(target_os = "macos")]
+            RunEvent::WindowEvent { label, event, .. } => {
+                if label == MainWindow::LABEL
+                    && let tauri::WindowEvent::CloseRequested { api, .. } = event
+                {
+                    api.prevent_close();
+                    if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
+                        let _ = window.hide();
                     }
                 }
-                #[cfg(target_os = "macos")]
-                RunEvent::Reopen {
-                    has_visible_windows,
-                    ..
-                } => {
-                    if !has_visible_windows
-                        && let Some(window) = app.get_webview_window(MainWindow::LABEL)
-                    {
-                        MainWindow::reveal(&window, None);
-                    }
-                }
-                RunEvent::Exit => {
-                    tracing::info!("Received Exit");
-                    kill_sidecar(app.clone());
-                }
-                _ => {}
             }
+            #[cfg(target_os = "macos")]
+            RunEvent::Reopen {
+                has_visible_windows,
+                ..
+            } => {
+                if !has_visible_windows
+                    && let Some(window) = app.get_webview_window(MainWindow::LABEL)
+                {
+                    MainWindow::reveal(&window, None);
+                }
+            }
+            RunEvent::Exit => {
+                tracing::info!("Received Exit");
+                kill_sidecar(app.clone());
+            }
+            _ => {}
         });
 }
 
