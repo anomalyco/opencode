@@ -1,6 +1,6 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Context, Effect, Layer, Queue } from "effect"
 import {
   HttpClient,
@@ -57,7 +57,6 @@ type ProxiedRequest = {
   url: string
   method: string
   headers: Record<string, string>
-  body: string
 }
 
 type TestHandler<E, R> = (
@@ -107,7 +106,9 @@ const eventStreamResponse = () =>
     new Response(
       new ReadableStream({
         start(controller) {
-          controller.enqueue(new TextEncoder().encode('data: {"payload":{"type":"server.connected","properties":{}}}\n\n'))
+          controller.enqueue(
+            new TextEncoder().encode('data: {"payload":{"type":"server.connected","properties":{}}}\n\n'),
+          )
           controller.close()
         },
       }),
@@ -122,19 +123,10 @@ const syncResponse = (request: HttpServerRequest.HttpServerRequest) => {
   return undefined
 }
 
-const createRemoteWorkspace = (input: {
-  dir: string
-  projectID: Project.Info["id"]
-  type: string
-  url: string
-  headers?: HeadersInit
-}) =>
+const createWorkspace = (input: { projectID: Project.Info["id"]; type: string; adaptor: WorkspaceAdaptor }) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
-      // Workspace.create starts the remote sync loop. The test upstream exposes
-      // /global/event and /sync/history so middleware proxying sees the remote
-      // workspace as active, just like production would.
-      registerAdaptor(input.projectID, input.type, remoteAdaptor(path.join(input.dir, `.${input.type}`), input.url, input.headers))
+      registerAdaptor(input.projectID, input.type, input.adaptor)
       return Workspace.create({
         type: input.type,
         branch: null,
@@ -145,17 +137,37 @@ const createRemoteWorkspace = (input: {
     (workspace) => Effect.promise(() => Workspace.remove(workspace.id)).pipe(Effect.ignore),
   )
 
-const listenRemoteHttp = (handler: (request: ProxiedRequest) => Response | Promise<Response>) =>
+const createRemoteWorkspace = (input: {
+  dir: string
+  projectID: Project.Info["id"]
+  type: string
+  url: string
+  headers?: HeadersInit
+}) =>
+  // Workspace.create starts the remote sync loop. The test upstream exposes
+  // /global/event and /sync/history so middleware proxying sees the remote
+  // workspace as active, just like production would.
+  createWorkspace({
+    projectID: input.projectID,
+    type: input.type,
+    adaptor: remoteAdaptor(path.join(input.dir, `.${input.type}`), input.url, input.headers),
+  })
+
+const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
+  createWorkspace({
+    projectID: input.projectID,
+    type: input.type,
+    adaptor: localAdaptor(input.directory),
+  })
+
+const listenRemoteHttp = <E, R>(
+  handler: (request: ProxiedRequest) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+) =>
   listenAdditionalServer((request) =>
     Effect.gen(function* () {
       const sync = syncResponse(request)
       if (sync) return yield* sync
-      const body = yield* request.text
-      return HttpServerResponse.fromWeb(
-        yield* Effect.promise(() =>
-          Promise.resolve(handler({ url: request.url, method: request.method, headers: request.headers, body })),
-        ),
-      )
+      return yield* handler({ url: request.url, method: request.method, headers: request.headers })
     }),
   )
 
@@ -172,32 +184,13 @@ const echoWebSocket = (request: HttpServerRequest.HttpServerRequest) =>
     const socket = yield* Effect.orDie(request.upgrade)
     const write = yield* socket.writer
     yield* socket
-      .runRaw((message) => write(`echo:${message}`), {
+      .runRaw((message) => write(`echo:${String(message)}`), {
         onOpen: write(`protocol:${request.headers["sec-websocket-protocol"] ?? "none"}`).pipe(
           Effect.catch(() => Effect.void),
         ),
       })
       .pipe(Effect.catch(() => Effect.void))
     return HttpServerResponse.empty()
-  })
-
-const insertRemoteWorkspace = (input: {
-  dir: string
-  projectID: Project.Info["id"]
-  type: string
-  url: string
-  headers?: HeadersInit
-}) =>
-  Effect.sync(() => {
-    const id = WorkspaceID.ascending()
-    registerAdaptor(input.projectID, input.type, remoteAdaptor(path.join(input.dir, `.${input.type}`), input.url, input.headers))
-    Database.use((db) =>
-      db
-        .insert(WorkspaceTable)
-        .values({ id, type: input.type, project_id: input.projectID })
-        .run(),
-    )
-    return { id }
   })
 
 const serveRouteContextProbe = HttpRouter.add(
@@ -209,33 +202,29 @@ const serveRouteContextProbe = HttpRouter.add(
     const route = yield* WorkspaceRouteContext
     return yield* HttpServerResponse.json({ directory: route.directory, workspaceID: route.workspaceID })
   }),
-).pipe(
-  Layer.provide(workspaceRoutingTestLayer),
-  HttpRouter.serve,
-  Layer.build,
-)
+).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
 
 describe("HttpApi workspace routing middleware", () => {
   it.live("proxies remote workspace HTTP requests through the selected workspace target", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
-      const proxied: ProxiedRequest[] = []
+      let forwarded: ProxiedRequest | undefined
 
       // This is the remote workspace server. It handles sync bootstrap routes
       // itself, and captures /base/probe so we can inspect what the middleware
       // actually forwarded after URL rewriting and header sanitization.
       const remoteUrl = yield* listenRemoteHttp((request) => {
-        proxied.push(request)
+        forwarded = request
         const url = requestURL(request)
-        return Response.json(
+        return HttpServerResponse.json(
           {
             proxied: true,
             path: url.pathname,
             keep: url.searchParams.get("keep"),
             workspace: url.searchParams.get("workspace"),
           },
-            { status: 201, headers: { "x-remote": "yes" } },
+          { status: 201, headers: { "x-remote": "yes" } },
         )
       })
       const workspace = yield* createRemoteWorkspace({
@@ -266,7 +255,6 @@ describe("HttpApi workspace routing middleware", () => {
       expect(response.status).toBe(201)
       expect(response.headers["x-remote"]).toBe("yes")
       expect(yield* response.json).toEqual({ proxied: true, path: "/base/probe", keep: "yes", workspace: null })
-      const forwarded = proxied.find((item) => requestURL(item).pathname === "/base/probe")
       const forwardedURL = forwarded ? requestURL(forwarded) : undefined
       // These assertions are the routing contract: append the original path to
       // the remote base URL, preserve normal query params, and remove workspace.
@@ -288,7 +276,11 @@ describe("HttpApi workspace routing middleware", () => {
       const workspaceID = WorkspaceID.ascending("wrk_not_syncing")
       // Insert the row directly instead of Workspace.create. That gives the
       // middleware a valid remote workspace whose sync loop was never started.
-      registerAdaptor(project.project.id, "remote-not-syncing", remoteAdaptor(path.join(dir, ".remote-not-syncing"), "http://127.0.0.1:1/base"))
+      registerAdaptor(
+        project.project.id,
+        "remote-not-syncing",
+        remoteAdaptor(path.join(dir, ".remote-not-syncing"), "http://127.0.0.1:1/base"),
+      )
       yield* Effect.sync(() =>
         Database.use((db) =>
           db
@@ -331,10 +323,13 @@ describe("HttpApi workspace routing middleware", () => {
         Layer.build,
       )
 
-      const socket = yield* Socket.makeWebSocket(`${(yield* serverUrl).replace(/^http/, "ws")}/probe?workspace=${workspace.id}`, {
-        closeCodeIsError: () => false,
-        protocols: "chat",
-      })
+      const socket = yield* Socket.makeWebSocket(
+        `${(yield* serverUrl).replace(/^http/, "ws")}/probe?workspace=${workspace.id}`,
+        {
+          closeCodeIsError: () => false,
+          protocols: "chat",
+        },
+      )
       const messages = yield* Queue.unbounded<string>()
       yield* socket.runRaw((message) => Queue.offer(messages, String(message))).pipe(Effect.forkScoped)
       const write = yield* socket.writer
@@ -351,7 +346,7 @@ describe("HttpApi workspace routing middleware", () => {
       // If the middleware resolves the workspace first, this handler is never
       // reached and the response should be the middleware error response.
       yield* HttpRouter.add("GET", "/probe", HttpServerResponse.text("route called")).pipe(
-        Layer.provide(workspaceRouterMiddleware.layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))),
+        Layer.provide(workspaceRoutingTestLayer),
         HttpRouter.serve,
         Layer.build,
       )
@@ -369,14 +364,10 @@ describe("HttpApi workspace routing middleware", () => {
       const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
 
       const workspaceDir = path.join(dir, ".workspace-local")
-      const workspace = yield* Effect.promise(async () => {
-        registerAdaptor(project.project.id, "control-plane-target", localAdaptor(workspaceDir))
-        return Workspace.create({
-          type: "control-plane-target",
-          branch: null,
-          extra: null,
-          projectID: project.project.id,
-        })
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "control-plane-target",
+        directory: workspaceDir,
       })
 
       // GET /session is a control-plane route: it lists sessions for the main
@@ -388,11 +379,7 @@ describe("HttpApi workspace routing middleware", () => {
           const route = yield* WorkspaceRouteContext
           return yield* HttpServerResponse.json({ directory: route.directory, workspaceID: route.workspaceID })
         }),
-      ).pipe(
-        Layer.provide(workspaceRouterMiddleware.layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))),
-        HttpRouter.serve,
-        Layer.build,
-      )
+      ).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
 
       const response = yield* HttpClient.get(`/session?workspace=${workspace.id}`)
 
@@ -429,14 +416,10 @@ describe("HttpApi workspace routing middleware", () => {
       const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
 
       const workspaceDir = path.join(dir, ".workspace-local")
-      const workspace = yield* Effect.promise(async () => {
-        registerAdaptor(project.project.id, "local-target", localAdaptor(workspaceDir))
-        return Workspace.create({
-          type: "local-target",
-          branch: null,
-          extra: null,
-          projectID: project.project.id,
-        })
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "local-target",
+        directory: workspaceDir,
       })
 
       yield* serveRouteContextProbe
