@@ -269,7 +269,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
               promptSvc.prompt({
                 ...ctx.payload,
                 sessionID: ctx.params.sessionID,
-              } as unknown as SessionPrompt.PromptInput),
+              }),
             ),
           ),
         ).pipe(
@@ -288,7 +288,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       yield* Effect.sync(() => {
         bridge.fork(
           promptSvc
-            .prompt({ ...ctx.payload, sessionID: ctx.params.sessionID } as unknown as SessionPrompt.PromptInput)
+            .prompt({ ...ctx.payload, sessionID: ctx.params.sessionID })
             .pipe(
               Effect.catchCause((error) =>
                 Effect.sync(() => {
@@ -309,14 +309,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof CommandPayload.Type
     }) {
-      return yield* promptSvc.command({ ...ctx.payload, sessionID: ctx.params.sessionID } as SessionPrompt.CommandInput)
+      return yield* promptSvc.command({ ...ctx.payload, sessionID: ctx.params.sessionID })
     })
 
     const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof ShellPayload.Type
     }) {
-      return yield* promptSvc.shell({ ...ctx.payload, sessionID: ctx.params.sessionID } as SessionPrompt.ShellInput)
+      return yield* promptSvc.shell({ ...ctx.payload, sessionID: ctx.params.sessionID })
     })
 
     const revert = Effect.fn("SessionHttpApi.revert")(function* (ctx: {
