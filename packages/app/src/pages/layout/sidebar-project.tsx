@@ -31,7 +31,7 @@ export const ProjectDragOverlay = (props: {
   return (
     <Show when={project()}>
       {(p) => (
-        <div class="bg-background-base rounded-xl p-1">
+        <div class="bg-background-base rounded-xl p-1" style={{ cursor: "grabbing" }}>
           <ProjectIcon project={p()} />
         </div>
       )}
@@ -187,6 +187,10 @@ export const SortableProject = (props: {
     <div
       use:sortable
       class="flex w-full justify-center py-1.5"
+      style={{
+        transition: sortable.isActiveDraggable ? undefined : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "will-change": "transform",
+      }}
       classList={{ "opacity-30": sortable.isActiveDraggable }}
     >
       {tile()}
