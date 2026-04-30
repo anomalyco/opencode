@@ -202,11 +202,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const auth = yield* dep.auth(provider.id)
       const resource = iife(() => {
         const name =
-          provider.options?.resourceName || (auth?.type === "api" && auth.metadata?.resourceName) || env["AZURE_RESOURCE_NAME"]
+          provider.options?.resourceName ||
+          (auth?.type === "api" && auth.metadata?.resourceName) ||
+          env["AZURE_RESOURCE_NAME"]
         if (typeof name === "string" && name.trim() !== "") return name
       })
 
-      if (!resource) {
+      if (!resource && !provider.options?.baseURL) {
         return {
           autoload: false,
           async getModel() {
@@ -230,10 +232,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: {
           resourceName: resource,
         },
-        vars(_options) {
-          return {
-            AZURE_RESOURCE_NAME: resource,
+        vars(_options): Record<string, string> {
+          if (resource) {
+            return {
+              AZURE_RESOURCE_NAME: resource,
+            }
           }
+          return {}
         },
       }
     }),
