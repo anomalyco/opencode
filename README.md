@@ -1,8 +1,4 @@
-# OpenCode
-
-Fork para uso pessoal.
-
-## Requisitos
+## Install
 
 - `bun` instalado
 - dependencias instaladas com `bun install`
