@@ -94,14 +94,16 @@ const localAdaptor = (directory: string): WorkspaceAdaptor => ({
 })
 
 const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
-  Effect.promise(async () => {
+  Effect.gen(function* () {
     registerAdaptor(input.projectID, input.type, localAdaptor(input.directory))
-    return Workspace.create({
-      type: input.type,
-      branch: null,
-      extra: null,
-      projectID: input.projectID,
-    })
+    return yield* Workspace.Service.use((svc) =>
+      svc.create({
+        type: input.type,
+        branch: null,
+        extra: null,
+        projectID: input.projectID,
+      }),
+    ).pipe(Effect.provide(Workspace.defaultLayer))
   })
 
 function request(path: string, init?: RequestInit) {

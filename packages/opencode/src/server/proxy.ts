@@ -4,6 +4,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import * as Fence from "./fence"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
+import { AppRuntime } from "@/effect/app-runtime"
 import { ProxyUtil } from "./proxy-util"
 import { Effect, Stream } from "effect"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
@@ -69,18 +70,17 @@ function statusText(response: unknown) {
 }
 
 export function httpEffect(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
-  if (!Workspace.isSyncing(workspaceID)) {
-    return Effect.succeed(
-      new Response(`broken sync connection for workspace: ${workspaceID}`, {
+  return Effect.gen(function* () {
+    const syncing = yield* Workspace.Service.use((workspace) => workspace.isSyncing(workspaceID))
+    if (!syncing) {
+      return new Response(`broken sync connection for workspace: ${workspaceID}`, {
         status: 503,
         headers: {
           "content-type": "text/plain; charset=utf-8",
         },
-      }),
-    )
-  }
+      })
+    }
 
-  return Effect.gen(function* () {
     const response = yield* HttpClient.execute(
       HttpClientRequest.make(req.method as never)(url, {
         headers: ProxyUtil.headers(req, extra),
@@ -100,7 +100,7 @@ export function httpEffect(url: string | URL, extra: HeadersInit | undefined, re
     next.delete("content-encoding")
     next.delete("content-length")
 
-    if (sync) yield* Effect.promise(() => Fence.wait(workspaceID, sync, req.signal))
+    if (sync) yield* Fence.waitEffect(workspaceID, sync, req.signal)
     const body = yield* Stream.toReadableStreamEffect(response.stream.pipe(Stream.catchCause(() => Stream.empty)))
     return new Response(body, {
       status: response.status,
@@ -114,7 +114,7 @@ export function httpEffect(url: string | URL, extra: HeadersInit | undefined, re
 }
 
 export function http(url: string | URL, extra: HeadersInit | undefined, req: Request, workspaceID: WorkspaceID) {
-  return Effect.runPromise(httpEffect(url, extra, req, workspaceID))
+  return AppRuntime.runPromise(httpEffect(url, extra, req, workspaceID))
 }
 
 export function websocket(

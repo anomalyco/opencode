@@ -36,7 +36,13 @@ const testStateLayer = Layer.effectDiscard(
 )
 
 const it = testEffect(
-  Layer.mergeAll(testStateLayer, NodeHttpServer.layerTest, NodeServices.layer, Project.defaultLayer),
+  Layer.mergeAll(
+    testStateLayer,
+    NodeHttpServer.layerTest,
+    NodeServices.layer,
+    Project.defaultLayer,
+    Workspace.defaultLayer,
+  ),
 )
 
 const instanceContextTestLayer = instanceRouterMiddleware
@@ -56,16 +62,17 @@ const localAdaptor = (directory: string): WorkspaceAdaptor => ({
 
 const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
   Effect.acquireRelease(
-    Effect.promise(async () => {
+    Effect.gen(function* () {
       registerAdaptor(input.projectID, input.type, localAdaptor(input.directory))
-      return Workspace.create({
+      const workspace = yield* Workspace.Service
+      return yield* workspace.create({
         type: input.type,
         branch: null,
         extra: null,
         projectID: input.projectID,
       })
     }),
-    (workspace) => Effect.promise(() => Workspace.remove(workspace.id)).pipe(Effect.ignore),
+    (info) => Workspace.Service.use((workspace) => workspace.remove(info.id)).pipe(Effect.ignore),
   )
 
 const probeInstanceContext = Effect.gen(function* () {

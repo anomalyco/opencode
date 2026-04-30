@@ -75,9 +75,9 @@ function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, 
 function resolveWorkspace(
   id: WorkspaceID | undefined,
   envWorkspaceID: WorkspaceID | undefined,
-): Effect.Effect<Workspace.Info | void> {
+): Effect.Effect<Workspace.Info | void, never, Workspace.Service> {
   if (!id || envWorkspaceID) return Effect.void
-  return Effect.promise(() => Workspace.get(id))
+  return Workspace.Service.use((workspace) => workspace.get(id))
 }
 
 function missingWorkspaceResponse(id: WorkspaceID): HttpServerResponse.HttpServerResponse {
@@ -99,9 +99,9 @@ function proxyRemote(
   workspace: Workspace.Info,
   target: RemoteTarget,
   url: URL,
-): Effect.Effect<HttpServerResponse.HttpServerResponse, never, Socket.WebSocketConstructor> {
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, Socket.WebSocketConstructor | Workspace.Service> {
   return Effect.gen(function* () {
-    const syncing = yield* Effect.sync(() => Workspace.isSyncing(workspace.id))
+    const syncing = yield* Workspace.Service.use((svc) => svc.isSyncing(workspace.id))
     if (!syncing) {
       return HttpServerResponse.text(`broken sync connection for workspace: ${workspace.id}`, {
         status: 503,
@@ -113,10 +113,17 @@ function proxyRemote(
     if (headers["upgrade"]?.toLowerCase() === "websocket") return yield* HttpApiProxy.websocket(request, proxyURL)
     const response = yield* HttpApiProxy.http(proxyURL, target.headers, request)
     const sync = Fence.parse(new Headers(response.headers))
-    if (sync)
-      yield* Effect.promise(() =>
-        Fence.wait(workspace.id, sync, request.source instanceof Request ? request.source.signal : undefined),
+    if (sync) {
+      const syncFailure = yield* Fence.waitEffect(
+        workspace.id,
+        sync,
+        request.source instanceof Request ? request.source.signal : undefined,
+      ).pipe(
+        Effect.as(undefined),
+        Effect.catch((error) => Effect.succeed(HttpServerResponse.text(error.message, { status: 503 }))),
       )
+      if (syncFailure) return syncFailure
+    }
     return response
   })
 }
@@ -125,7 +132,7 @@ function planWorkspaceRequest(
   request: HttpServerRequest.HttpServerRequest,
   url: URL,
   workspace: Workspace.Info,
-): Effect.Effect<RequestPlan> {
+): Effect.Effect<RequestPlan, never, Workspace.Service> {
   return Effect.gen(function* () {
     const target = yield* resolveTarget(workspace)
     if (target.type === "remote") return RequestPlan.Remote({ request, workspace, target, url })
@@ -136,7 +143,7 @@ function planWorkspaceRequest(
 function planRequest(
   request: HttpServerRequest.HttpServerRequest,
   sessionWorkspaceID?: WorkspaceID,
-): Effect.Effect<RequestPlan> {
+): Effect.Effect<RequestPlan, never, Workspace.Service> {
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
@@ -158,7 +165,7 @@ function planRequest(
 function routeWorkspace<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
   plan: RequestPlan,
-): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Socket.WebSocketConstructor> {
+): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Socket.WebSocketConstructor | Workspace.Service> {
   return RequestPlan.$match(plan, {
     MissingWorkspace: ({ workspaceID }) => Effect.succeed(missingWorkspaceResponse(workspaceID)),
     Remote: ({ request, workspace, target, url }) => proxyRemote(request, workspace, target, url),
@@ -167,20 +174,12 @@ function routeWorkspace<E>(
   })
 }
 
-function routeWorkspaceRequest<E>(
-  effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
-  request: HttpServerRequest.HttpServerRequest,
-  sessionWorkspaceID?: WorkspaceID,
-): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Socket.WebSocketConstructor> {
-  return Effect.flatMap(planRequest(request, sessionWorkspaceID), (plan) => routeWorkspace(effect, plan))
-}
-
 function routeHttpApiWorkspace<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   E,
-  Session.Service | HttpServerRequest.HttpServerRequest | Socket.WebSocketConstructor
+  Session.Service | Workspace.Service | HttpServerRequest.HttpServerRequest | Socket.WebSocketConstructor
 > {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
@@ -188,7 +187,8 @@ function routeHttpApiWorkspace<E>(
     const session = sessionID
       ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(Effect.catchDefect(() => Effect.void))
       : undefined
-    return yield* routeWorkspaceRequest(effect, request, session?.workspaceID)
+    const plan = yield* planRequest(request, session?.workspaceID)
+    return yield* routeWorkspace(effect, plan)
   })
 }
 
@@ -196,8 +196,12 @@ export const workspaceRoutingLayer = Layer.effect(
   WorkspaceRoutingMiddleware,
   Effect.gen(function* () {
     const makeWebSocket = yield* Socket.WebSocketConstructor
+    const workspace = yield* Workspace.Service
     return WorkspaceRoutingMiddleware.of((effect) =>
-      routeHttpApiWorkspace(effect).pipe(Effect.provideService(Socket.WebSocketConstructor, makeWebSocket)),
+      routeHttpApiWorkspace(effect).pipe(
+        Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
+        Effect.provideService(Workspace.Service, workspace),
+      ),
     )
   }),
 )
@@ -205,12 +209,15 @@ export const workspaceRoutingLayer = Layer.effect(
 export const workspaceRouterMiddleware = HttpRouter.middleware<{ provides: WorkspaceRouteContext }>()(
   Effect.gen(function* () {
     const makeWebSocket = yield* Socket.WebSocketConstructor
+    const workspace = yield* Workspace.Service
     return (effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* routeWorkspaceRequest(effect, request).pipe(
-          Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
-        )
-      })
+        const plan = yield* planRequest(request)
+        return yield* routeWorkspace(effect, plan)
+      }).pipe(
+        Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
+        Effect.provideService(Workspace.Service, workspace),
+      )
   }),
 )
