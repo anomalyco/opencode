@@ -40,7 +40,7 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
   const enabledAgents = createMemo(() => enabledExtraAgents(server.list))
 
   const entries = createMemo((): ProjectEntry[] => {
-    const projects = layout.projects.visible()
+      const projects = layout.projects.rail()
     const current = currentDirectory()
 
     const result: ProjectEntry[] = projects.map((project) => ({
