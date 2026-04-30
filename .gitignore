@@ -29,3 +29,10 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Secrets — never commit
+*.pem
+*.key
+*.p12
+.env.local
+.env.*.local
