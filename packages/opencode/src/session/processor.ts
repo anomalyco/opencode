@@ -10,6 +10,7 @@ import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
+import { Token } from "@/util/token"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -542,6 +543,28 @@ export const layer: Layer.Layer<
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
         return yield* Effect.gen(function* () {
+          // Proactive context overflow prevention.
+          // Estimates context usage from the messages being sent to the API
+          // BEFORE the stream starts. This catches overflow even when the
+          // provider doesn't report accurate token counts or silently accepts
+          // overflows (e.g., z.ai, some OpenAI-compatible providers).
+          const preStreamPayload = JSON.stringify([
+            ...(streamInput.system ?? []).map((s: unknown) => s),
+            ...streamInput.messages,
+          ])
+          const preStreamTokens = Token.estimate(preStreamPayload)
+          const contextLimit = input.model.limit.context || 128_000
+          const compactionThreshold = Math.floor(contextLimit * 0.85)
+          if (preStreamTokens >= compactionThreshold) {
+            ctx.needsCompaction = true
+            slog.info("proactive compaction triggered", {
+              estimatedTokens: preStreamTokens,
+              threshold: compactionThreshold,
+              contextLimit,
+            })
+            return "compact" as const
+          }
+
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
