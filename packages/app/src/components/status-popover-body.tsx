@@ -6,7 +6,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
@@ -28,6 +28,23 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
       <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">{file}</code>
       {parts.slice(1).join(file)}
     </>
+  )
+}
+
+function SkillItem(props: { skill: { name: string; description: string } }) {
+  return (
+    <div class="group relative flex items-center gap-2 w-full px-2 py-1 hover:bg-surface-raised-base-hover rounded-md cursor-default">
+      <div class="size-1.5 rounded-full shrink-0 bg-icon-info-base" />
+      <span class="text-14-regular text-text-base truncate">{props.skill.name}</span>
+
+      {/* Tooltip on hover */}
+      <div class="absolute left-0 top-full mt-1 hidden group-hover:block z-50">
+        <div class="bg-surface-raised-base border border-border-base rounded-md p-2 shadow-lg w-48">
+          <div class="text-14-regular text-text-base font-medium">{props.skill.name}</div>
+          <div class="text-12-regular text-text-muted mt-1">{props.skill.description}</div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -163,6 +180,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
+  const sdk = useSDK()
 
   const fail = (err: unknown) => {
     showToast({
@@ -204,6 +222,44 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
 
+  const [skills, setSkills] = createSignal<Array<{
+    name: string
+    description: string
+    location: string
+    content: string
+  }>>([])
+
+  const skillsLoading = createSignal(false)
+
+  createEffect(() => {
+    if (!props.shown()) return
+    if (skillsLoading()) return
+
+    skillsLoading(true)
+    sdk.client.app.skills({ directory: sync.directory })
+      .then((res) => {
+        if (res.ok) setSkills(res.value)
+      })
+      .catch(() => {
+        // Handle error silently - skills will remain empty
+      })
+      .finally(() => {
+        skillsLoading(false)
+      })
+  })
+
+  const globalSkills = createMemo(() =>
+    skills().filter((s) =>
+      s.location.includes(".claude/skills") || s.location.includes(".agents/skills")
+    )
+  )
+
+  const projectSkills = createMemo(() =>
+    skills().filter((s) => s.location.includes(".opencode/skills"))
+  )
+
+  const skillsCount = createMemo(() => skills().length)
+
   return (
     <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
       <Tabs
@@ -230,6 +286,10 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
             {pluginCount() > 0 ? `${pluginCount()} ` : ""}
             {language.t("status.popover.tab.plugins")}
+          </Tabs.Trigger>
+          <Tabs.Trigger value="skills" data-slot="tab" class="text-12-regular">
+            {skillsCount() > 0 ? `${skillsCount()} ` : ""}
+            {language.t("status.popover.tab.skills")}
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -394,6 +454,47 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                     </div>
                   )}
                 </For>
+              </Show>
+            </div>
+          </div>
+        </Tabs.Content>
+        <Tabs.Content value="skills">
+          <div class="flex flex-col px-2 pb-2">
+            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+              <Show
+                when={!skillsLoading() && skills().length > 0}
+                fallback={
+                  <Show
+                    when={skillsLoading()}
+                    fallback={
+                      <div class="text-14-regular text-text-base text-center my-auto">
+                        {language.t("dialog.skills.empty")}
+                      </div>
+                    }
+                  >
+                    <div class="text-14-regular text-text-base text-center my-auto">Loading skills...</div>
+                  </Show>
+                }
+              >
+                {/* Global Skills Section */}
+                <Show when={globalSkills().length > 0}>
+                  <div class="text-12-regular text-text-muted mb-2">
+                    🌍 {language.t("status.popover.skills.global")}
+                  </div>
+                  <For each={globalSkills()}>
+                    {(skill) => <SkillItem skill={skill} />}
+                  </For>
+                </Show>
+
+                {/* Project Skills Section */}
+                <Show when={projectSkills().length > 0}>
+                  <div class="text-12-regular text-text-muted mb-2 mt-4">
+                    📁 {language.t("status.popover.skills.project")}
+                  </div>
+                  <For each={projectSkills()}>
+                    {(skill) => <SkillItem skill={skill} />}
+                  </For>
+                </Show>
               </Show>
             </div>
           </div>
