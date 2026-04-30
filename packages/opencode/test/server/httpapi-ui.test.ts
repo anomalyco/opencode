@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
-import { ConfigProvider, Layer } from "effect"
-import { HttpRouter } from "effect/unstable/http"
+import { ConfigProvider, Effect, Layer } from "effect"
+import { HttpClient, HttpClientResponse, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { serveUIEffect } from "../../src/server/routes/ui"
 import { Server } from "../../src/server/server"
 
 void Log.init({ print: false })
@@ -73,6 +75,45 @@ describe("HttpApi UI fallback", () => {
     expect(response.headers.get("content-type")).toContain("text/html")
     expect(await response.text()).toBe("<html>opencode</html>")
     expect(proxiedUrl).toBe("https://app.opencode.ai/")
+  })
+
+  test("strips upstream transfer encoding headers from proxied assets", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    let proxiedUrl: string | undefined
+
+    const response = await Effect.runPromise(
+      serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/assets/app.js"))).pipe(
+        Effect.provide(AppFileSystem.defaultLayer),
+        Effect.provide(
+          Layer.succeed(
+            HttpClient.HttpClient,
+            HttpClient.make((request) => {
+              proxiedUrl = request.url
+              return Effect.succeed(
+                HttpClientResponse.fromWeb(
+                  request,
+                  new Response("console.log('ok')", {
+                    headers: {
+                      "content-encoding": "br",
+                      "content-length": "999",
+                      "content-type": "text/javascript",
+                    },
+                  }),
+                ),
+              )
+            }),
+          ),
+        ),
+        Effect.map(HttpServerResponse.toWeb),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(proxiedUrl).toBe("https://app.opencode.ai/assets/app.js")
+    expect(response.headers.get("content-encoding")).toBeNull()
+    expect(response.headers.get("content-length")).not.toBe("999")
+    expect(response.headers.get("content-type")).toContain("text/javascript")
+    expect(await response.text()).toBe("console.log('ok')")
   })
 
   test("keeps matched API routes ahead of the UI fallback", async () => {

@@ -35,6 +35,15 @@ function requestBody(request: HttpServerRequest.HttpServerRequest) {
   )
 }
 
+function proxyResponseHeaders(headers: Record<string, string>) {
+  const result = new Headers(headers)
+  // FetchHttpClient exposes decoded response bodies, so forwarding upstream
+  // transfer metadata makes browsers decode already-decoded assets again.
+  result.delete("content-encoding")
+  result.delete("content-length")
+  return result
+}
+
 export async function serveUI(request: Request) {
   const embeddedWebUI = await embeddedUIPromise
   const path = new URL(request.url).pathname
@@ -89,7 +98,7 @@ export function serveUIEffect(request: HttpServerRequest.HttpServerRequest) {
     }
 
     const response = yield* HttpClient.execute(
-      HttpClientRequest.make(request.method as never)(`https://app.opencode.ai${path}`, {
+      HttpClientRequest.make(request.method)(`https://app.opencode.ai${path}`, {
         headers: {
           ...request.headers,
           host: "app.opencode.ai",
@@ -97,9 +106,7 @@ export function serveUIEffect(request: HttpServerRequest.HttpServerRequest) {
         body: requestBody(request),
       }),
     )
-    const headers = new Headers(response.headers as HeadersInit)
-    headers.delete("content-encoding")
-    headers.delete("content-length")
+    const headers = proxyResponseHeaders(response.headers)
 
     if (response.headers["content-type"]?.includes("text/html")) {
       const body = yield* response.text
