@@ -1,8 +1,8 @@
 name: Build Windows EXE
 
 on:
-  workflow_dispatch:  # 手动点击运行
-  push:               # 推送代码时自动运行
+  workflow_dispatch:
+  push:
     branches: [main, dev]
 
 jobs:
@@ -26,17 +26,25 @@ jobs:
       - name: 安装依赖
         run: bun install
 
-      - name: 打包 Windows 安装包
+      - name: 构建 Electron 主进程
         run: |
           cd packages/desktop-electron
-          bun run build --win
+          bun run build
+        env:
+          NODE_ENV: production
+
+      - name: 查看构建产物（调试）
+        run: |
+          ls packages/desktop-electron/out/
+          ls packages/desktop-electron/dist/
         continue-on-error: true
 
-      - name: 备用打包方式（直接调用 electron-builder）
+      - name: 打包成 EXE
         run: |
           cd packages/desktop-electron
           npx electron-builder --win --publish never
-        continue-on-error: true
+        env:
+          NODE_ENV: production
 
       - name: 上传安装包
         uses: actions/upload-artifact@v4
@@ -45,5 +53,3 @@ jobs:
           path: |
             packages/desktop-electron/dist/*.exe
             packages/desktop-electron/dist/*.msi
-            packages/desktop/dist/*.exe
-            packages/desktop/src-tauri/target/release/bundle/nsis/*.exe
