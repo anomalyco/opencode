@@ -412,19 +412,25 @@ export namespace ProviderTransform {
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
   const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+  function anthropicAdaptiveEfforts(apiId: string): string[] | null {
+    if (["opus-4-7", "opus-4.7"].some((v) => apiId.includes(v))) {
+      return ["low", "medium", "high", "xhigh", "max"]
+    }
+    if (["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => apiId.includes(v))) {
+      return ["low", "medium", "high", "max"]
+    }
+    return null
+  }
+
   export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
 
     const id = model.id.toLowerCase()
-    const isAnthropicAdaptive = ["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) =>
-      model.api.id.includes(v),
-    )
-    const adaptiveEfforts = ["low", "medium", "high", "max"]
+    const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
     if (
       id.includes("deepseek") ||
       id.includes("minimax") ||
       id.includes("glm") ||
-      id.includes("mistral") ||
       id.includes("kimi") ||
       // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
       id.includes("k2p5")
@@ -453,7 +459,7 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/gateway":
         if (model.id.includes("anthropic")) {
-          if (isAnthropicAdaptive) {
+          if (adaptiveEfforts) {
             return Object.fromEntries(
               adaptiveEfforts.map((effort) => [
                 effort,
@@ -609,7 +615,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/google-vertex/anthropic":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
 
-        if (isAnthropicAdaptive) {
+        if (adaptiveEfforts) {
           return Object.fromEntries(
             adaptiveEfforts.map((effort) => [
               effort,
@@ -640,7 +646,7 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/amazon-bedrock":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
-        if (isAnthropicAdaptive) {
+        if (adaptiveEfforts) {
           return Object.fromEntries(
             adaptiveEfforts.map((effort) => [
               effort,
@@ -723,7 +729,15 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/mistral":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
-        return {}
+        // https://docs.mistral.ai/capabilities/reasoning/adjustable
+        if (!model.capabilities.reasoning) return {}
+        // Only Mistral Small 4 and Medium 3.5 support reasoning
+        const MISTRAL_REASONING_IDS = ["mistral-small-2603", "mistral-small-latest", "mistral-medium-3.5"]
+        const mistralId = model.api.id.toLowerCase()
+        if (!MISTRAL_REASONING_IDS.some((rid) => mistralId.includes(rid))) return {}
+        return {
+          high: { reasoningEffort: "high" },
+        }
 
       case "@ai-sdk/cohere":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere
@@ -747,7 +761,7 @@ export namespace ProviderTransform {
 
       case "@jerome-benoit/sap-ai-provider-v2":
         if (model.api.id.includes("anthropic")) {
-          if (isAnthropicAdaptive) {
+          if (adaptiveEfforts) {
             return Object.fromEntries(
               adaptiveEfforts.map((effort) => [
                 effort,
