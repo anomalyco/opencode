@@ -1,14 +1,14 @@
 ---
 feat-id: 分支策略-v2
-status: draft(讨论稿,等笑南审定后锁版)
-related: ./1-spec.md
+status: done
+related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
 # 分支策略 v2:dev 稳定主干 + 上游同步分离
 
-> 状态:**讨论稿**,2026-04-30 起草。
+> 状态:**已锁版**,2026-04-30 起草 → 同日讨论锁版 + 切换执行完成。
 > 用途:对齐"opencode / deskfox / feat 三者关系"以及"如何处理上游漂移"的工作模型。
-> 后续:笑南审过 → 锁版 → 加 2-plan.md 实施 → 加 3-changelog.md 落账。
+> 实施:见 [`./2-plan.md`](./2-plan.md) / 落账:见 [`./3-changelog.md`](./3-changelog.md)。
 
 ---
 
@@ -407,3 +407,4 @@ DeskFox 现状(2026-04-30):没有 prod 用户基数(自用 + 朋友 + 小范围)
 | v0.2(草稿) | 2026-04-30 | 加"讨论引导"段(关注点 1/2 + 接下来怎么走)+ 附录 C(开源 PR 安全模型,源于笑南讨论提问)| Claude |
 | v0.3(草稿) | 2026-04-30 | 加附录 D(三档环境与分支模型的关系)+ 动作计划 #5 补 `feat/win-tri-env-appid`(Win 三档 AppId,v2 切换之后立刻做)+ 动作计划 #1 修正(ship 调研确认只有 .2 一笔)| Claude |
 | v0.4(草稿) | 2026-04-30 | 第三节"决策已敲定"补 4 条:HANDOFF 删除 / B5 mac 协作通知 / B1+B2 origin 双 push 改单推 gitee / B3 改动规则 4.3 节正式废除(同笔改 `docs/governance/改动规则.md` 4.3 节加废除说明)| Claude |
+| **v1.0(锁版)** | 2026-04-30 | 笑南讨论锁版 → 切换执行完成(merge feat → dev `fae01d2a8`)→ status: draft 改 done | Claude |
