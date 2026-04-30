@@ -1,20 +1,45 @@
-import { lazy } from "@/util/lazy"
-import type { Adaptor } from "../types"
+import type { ProjectID } from "@/project/schema"
+import type { WorkspaceAdaptor, WorkspaceAdaptorEntry } from "../types"
+import { WorktreeAdaptor } from "./worktree"
 
-const ADAPTORS: Record<string, () => Promise<Adaptor>> = {
-  worktree: lazy(async () => (await import("./worktree")).WorktreeAdaptor),
+const BUILTIN: Record<string, WorkspaceAdaptor> = {
+  worktree: WorktreeAdaptor,
 }
 
-export function getAdaptor(type: string): Promise<Adaptor> {
-  return ADAPTORS[type]()
+const state = new Map<ProjectID, Map<string, WorkspaceAdaptor>>()
+
+export function getAdaptor(projectID: ProjectID, type: string): WorkspaceAdaptor {
+  const custom = state.get(projectID)?.get(type)
+  if (custom) return custom
+
+  const builtin = BUILTIN[type]
+  if (builtin) return builtin
+
+  throw new Error(`Unknown workspace adaptor: ${type}`)
 }
 
-export function installAdaptor(type: string, adaptor: Adaptor) {
-  // This is experimental: mostly used for testing right now, but we
-  // will likely allow this in the future. Need to figure out the
-  // TypeScript story
+export async function listAdaptors(projectID: ProjectID): Promise<WorkspaceAdaptorEntry[]> {
+  const builtin = await Promise.all(
+    Object.entries(BUILTIN).map(async ([type, adaptor]) => {
+      return {
+        type,
+        name: adaptor.name,
+        description: adaptor.description,
+      }
+    }),
+  )
+  const custom = [...(state.get(projectID)?.entries() ?? [])].map(([type, adaptor]) => ({
+    type,
+    name: adaptor.name,
+    description: adaptor.description,
+  }))
+  return [...builtin, ...custom]
+}
 
-  // @ts-expect-error we force the builtin types right now, but we
-  // will implement a way to extend the types for custom adaptors
-  ADAPTORS[type] = () => adaptor
+// Plugins can be loaded per-project so we need to scope them. If you
+// want to install a global one pass `ProjectID.global`
+export function registerAdaptor(projectID: ProjectID, type: string, adaptor: WorkspaceAdaptor) {
+  const adaptors = state.get(projectID) ?? new Map<string, WorkspaceAdaptor>()
+  adaptors.set(type, adaptor)
+  state.set(projectID, adaptors)
 }

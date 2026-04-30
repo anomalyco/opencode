@@ -272,15 +272,14 @@ Use a dedicated `tui.json` (or `tui.jsonc`) file for TUI-specific settings.
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true
 }
 ```
 
 Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.
 
 Legacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and automatically migrated when possible.
-
-[Learn more about TUI configuration here](/docs/tui#configure).
 
 ---
 
@@ -310,6 +309,21 @@ Available options:
 - `cors` - Additional origins to allow for CORS when using the HTTP server from a browser-based client. Values must be full origins (scheme + host + optional port), eg `https://app.example.com`.
 
 [Learn more about the server here](/docs/server).
+
+---
+
+### Shell
+
+You can configure the shell used for the interactive terminal using the `shell` option. Compatible shells are also used for agent tool calls.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "shell": "pwsh"
+}
+```
+
+If not specified, OpenCode will automatically discover and use a sensible default based on your operating system (e.g. `pwsh` or `cmd.exe` on Windows, `/bin/zsh` or `/bin/bash` on macOS/Linux). You can provide an absolute path or a short name.
 
 ---
 
