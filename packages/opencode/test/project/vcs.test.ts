@@ -8,7 +8,7 @@ import { AppRuntime } from "../../src/effect/app-runtime"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
-import { Vcs } from "../../src/project"
+import { Vcs } from "@/project/vcs"
 
 // Skip in CI — native @parcel/watcher binding needed
 const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip

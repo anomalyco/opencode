@@ -1,7 +1,7 @@
 import { Effect, Layer, Context, Schema } from "effect"
 import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
-import { Storage } from "@/storage"
+import { Storage } from "@/storage/storage"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 import * as Session from "./session"

@@ -1,4 +1,5 @@
-import { Schema } from "effect"
+import { Option, Schema, SchemaGetter } from "effect"
+import { zod, ZodOverride } from "./effect-zod"
 
 /**
  * Integer greater than zero.
@@ -9,6 +10,19 @@ export const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
  * Integer greater than or equal to zero.
  */
 export const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+
+/**
+ * Optional public JSON field that can hold explicit `undefined` on the type
+ * side but encodes it as an omitted key, matching legacy `JSON.stringify`.
+ */
+export const optionalOmitUndefined = <S extends Schema.Top>(schema: S) =>
+  Schema.optionalKey(schema).pipe(
+    Schema.decodeTo(Schema.optional(schema), {
+      decode: SchemaGetter.passthrough({ strict: false }),
+      encode: SchemaGetter.transformOptional(Option.filter((value) => value !== undefined)),
+    }),
+    Schema.annotate({ [ZodOverride]: zod(schema).optional() }),
+  )
 
 /**
  * Strip `readonly` from a nested type. Stand-in for `effect`'s `Types.DeepMutable`

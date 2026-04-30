@@ -77,6 +77,8 @@ export function DialogGoUpsell(props: DialogGoUpsellProps) {
       return
     }
     if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
       if (selected() === "subscribe") subscribe(props, dialog)
       else dismiss(props, dialog)
     }

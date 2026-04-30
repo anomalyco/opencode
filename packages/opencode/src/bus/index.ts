@@ -1,9 +1,9 @@
 import { Effect, Exit, Layer, PubSub, Scope, Context, Stream, Schema } from "effect"
-import { EffectBridge } from "@/effect"
-import { Log } from "../util"
+import { EffectBridge } from "@/effect/bridge"
+import * as Log from "@opencode-ai/core/util/log"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
 const log = Log.create({ service: "bus" })
