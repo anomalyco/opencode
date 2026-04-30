@@ -1,5 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "DeskFox Beta",
-  "mainBinaryName": "DeskFox"
+  "mainBinaryName": "DeskFox",
+  "identifier": "ai.opencode.desktop.beta"
 }
