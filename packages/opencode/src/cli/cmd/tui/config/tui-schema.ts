@@ -24,6 +24,13 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  content_padding: z
+    .number()
+    .int()
+    .min(0)
+    .max(20)
+    .optional()
+    .describe("Horizontal padding (in columns) for the main content area (default: 2)"),
 })
 
 export const TuiInfo = z
