@@ -6,7 +6,7 @@ related: ./3-changelog.md
 
 # prod-bundle-id-fix — changelog
 
-**关联 commit**: 待回填
+**关联 commit**: `7618346fe`
 **所在分支**: `feat/editable-file-viewer`
 **规模**: Tiny(2 文件 +2 行,无 1-spec / 2-plan)
 **触发原因**: 2026-04-30 首版 macOS prod installer `2026.4.30.1` 装到 `/Applications/DeskFox.app` 后,**应用程序网格搜索"desk"搜不到**。诊断发现 prod 包 `CFBundleIdentifier` = `ai.opencode.desktop.dev`,继承自 base `tauri.conf.json`(没被 `prod.json` override)。macOS 26+ 应用程序网格搜索把含 `.dev` 后缀的 Bundle ID 当开发版降权 / 隐藏(网格里图标显示 OK,搜索栏过滤掉)。
