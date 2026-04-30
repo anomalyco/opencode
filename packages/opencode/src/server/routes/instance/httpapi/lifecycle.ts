@@ -10,6 +10,9 @@ type MarkedInstance = {
   workspaceID?: WorkspaceID
 }
 
+// Disposal is requested by an endpoint handler, but must run from the outer
+// server middleware after the response has been produced. The original Request
+// object is the stable handoff key between those two phases.
 const disposeAfterResponse = new WeakMap<object, MarkedInstance>()
 
 const mark = (ctx: InstanceContext) =>
@@ -17,6 +20,9 @@ const mark = (ctx: InstanceContext) =>
     return { ctx, workspaceID: yield* WorkspaceRef }
   })
 
+// Instance.dispose/reload still publish events through legacy ALS helpers.
+// Effect request handlers carry these values in services, so bridge them back
+// into the legacy contexts only around the lifecycle operation.
 const restoreMarked = <A>(marked: MarkedInstance, fn: () => A) =>
   Effect.promise(() =>
     WorkspaceContext.provide({
@@ -30,6 +36,7 @@ export const markInstanceForDisposal = (ctx: InstanceContext) =>
     const marked = yield* mark(ctx)
     return yield* HttpEffect.appendPreResponseHandler((request, response) =>
       Effect.sync(() => {
+        // The response is sent before disposeMiddleware performs the teardown.
         disposeAfterResponse.set(request.source, marked)
         return response
       }),
