@@ -30,6 +30,7 @@ export const SidebarContent = (props: {
   projects: Accessor<LocalProject[]>
   renderProject: (project: LocalProject) => JSX.Element
   handleDragStart: (event: unknown) => void
+  handleDragOver: (event: DragEvent) => void
   handleDragEnd: (event: DragEvent) => void
   openProjectLabel: JSX.Element
   openProjectKeybind: Accessor<string | undefined>
@@ -98,34 +99,37 @@ export const SidebarContent = (props: {
         <div class="flex-1 min-h-0 w-full">
           <DragDropProvider
             onDragStart={props.handleDragStart}
+            onDragOver={props.handleDragOver}
             onDragEnd={props.handleDragEnd}
             collisionDetector={closestCenter}
           >
             <DragDropSensors />
             <ConstrainDragXAxis />
-            <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
+            <div class="h-full w-full flex flex-col items-center px-3 py-3 overflow-y-auto no-scrollbar">
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
-              <Tooltip
-                placement={placement()}
-                value={
-                  <div class="flex items-center gap-2">
-                    <span>{props.openProjectLabel}</span>
-                    <Show when={!props.mobile && !!props.openProjectKeybind()}>
-                      <span class="text-icon-base text-12-medium">{props.openProjectKeybind()}</span>
-                    </Show>
-                  </div>
-                }
-              >
-                <IconButton
-                  icon="plus"
-                  variant="ghost"
-                  size="large"
-                  onClick={props.onOpenProject}
-                  aria-label={typeof props.openProjectLabel === "string" ? props.openProjectLabel : undefined}
-                />
-              </Tooltip>
+              <div class="py-1.5">
+                <Tooltip
+                  placement={placement()}
+                  value={
+                    <div class="flex items-center gap-2">
+                      <span>{props.openProjectLabel}</span>
+                      <Show when={!props.mobile && !!props.openProjectKeybind()}>
+                        <span class="text-icon-base text-12-medium">{props.openProjectKeybind()}</span>
+                      </Show>
+                    </div>
+                  }
+                >
+                  <IconButton
+                    icon="plus"
+                    variant="ghost"
+                    size="large"
+                    onClick={props.onOpenProject}
+                    aria-label={typeof props.openProjectLabel === "string" ? props.openProjectLabel : undefined}
+                  />
+                </Tooltip>
+              </div>
             </div>
             <DragOverlay>{props.renderProjectOverlay()}</DragOverlay>
           </DragDropProvider>

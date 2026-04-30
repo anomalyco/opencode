@@ -472,15 +472,24 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const index = current.findIndex((x) => x.worktree === directory)
           if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
-        move(directory: string, toIndex: number) {
+        move(directory: string, target: string) {
           const key = origin()
           if (!key) return
           const current = projectsFor()
           const fromIndex = current.findIndex((x) => x.worktree === directory)
+          const toIndex = current.findIndex((x) => x.worktree === target)
           if (fromIndex === -1 || fromIndex === toIndex) return
+          console.debug(
+            `[project-dnd] move request directory=${directory} target=${target} from=${fromIndex} to=${toIndex} order=${current.map((item) => item.worktree).join(" | ")}`,
+          )
+          if (toIndex === -1) {
+            console.debug(`[project-dnd] move target-missing directory=${directory} target=${target}`)
+            return
+          }
           const result = [...current]
           const [item] = result.splice(fromIndex, 1)
           result.splice(toIndex, 0, item)
+          console.debug(`[project-dnd] move applied order=${result.map((item) => item.worktree).join(" | ")}`)
           setStore("projects", key, result)
         },
         moveFor(input: ServerConnection.Key | undefined, directory: string, toIndex: number) {

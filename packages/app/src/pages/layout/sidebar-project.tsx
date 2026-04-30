@@ -46,7 +46,6 @@ const ProjectTile = (props: {
   selected: Accessor<boolean>
   active: Accessor<boolean>
   dirs: Accessor<string[]>
-  startDrag: (event: PointerEvent) => void
   consumeProjectClick: () => boolean
   navigateToProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
@@ -99,11 +98,6 @@ const ProjectTile = (props: {
             "bg-surface-base-hover border border-border-base": !props.selected() && props.active(),
           }}
           onPointerDown={(event) => {
-            if (event.button === 0 && (event.metaKey || event.ctrlKey)) {
-              props.startDrag(event)
-              if (event.ctrlKey) event.preventDefault()
-              return
-            }
             if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
             event.preventDefault()
           }}
@@ -164,12 +158,6 @@ export const SortableProject = (props: {
   ctx: ProjectSidebarContext
 }): JSX.Element => {
   const sortable = createSortable(props.project.worktree)
-  const startDrag = (event: PointerEvent) => sortable.dragActivators.onpointerdown?.(event)
-  const transform = createMemo(() => {
-    const value = sortable.transform
-    if (!value.x && !value.y) return undefined
-    return `translate3d(${value.x}px, ${value.y}px, 0)`
-  })
   const selected = createMemo(() =>
     projectSelected(props.ctx.currentDir(), props.project.worktree, props.project.sandboxes),
   )
@@ -184,7 +172,6 @@ export const SortableProject = (props: {
       selected={selected}
       active={() => state.menu}
       dirs={dirs}
-      startDrag={startDrag}
       consumeProjectClick={props.ctx.consumeProjectClick}
       navigateToProject={props.ctx.navigateToProject}
       showEditProjectDialog={props.ctx.showEditProjectDialog}
@@ -198,12 +185,8 @@ export const SortableProject = (props: {
 
   return (
     <div
-      ref={sortable.ref}
-      style={{
-        transform: transform(),
-        transition: sortable.isActiveDraggable ? undefined : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
-        "will-change": "transform",
-      }}
+      use:sortable
+      class="flex w-full justify-center py-1.5"
       classList={{ "opacity-30": sortable.isActiveDraggable }}
     >
       {tile()}
