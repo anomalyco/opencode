@@ -199,11 +199,25 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     azure: Effect.fnUntraced(function* (provider: Info) {
       const env = yield* dep.env()
+      const auth = yield* dep.auth(provider.id)
       const resource = iife(() => {
-        const name = provider.options?.resourceName
-        if (typeof name === "string" && name.trim() !== "") return name
-        return env["AZURE_RESOURCE_NAME"]
+        return [
+          provider.options?.resourceName,
+          auth?.type === "api" ? auth.metadata?.resourceName : undefined,
+          env["AZURE_RESOURCE_NAME"],
+        ].find((name) => typeof name === "string" && name.trim() !== "")
       })
+
+      if (!resource && !provider.options?.baseURL) {
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(
+              "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
+            )
+          },
+        }
+      }
 
       return {
         autoload: false,
@@ -215,11 +229,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             return sdk.responses(modelID)
           }
         },
-        options: {},
-        vars(_options) {
-          return {
-            ...(resource && { AZURE_RESOURCE_NAME: resource }),
+        options: {
+          resourceName: resource,
+        },
+        vars(_options): Record<string, string> {
+          if (resource) {
+            return {
+              AZURE_RESOURCE_NAME: resource,
+            }
           }
+          return {}
         },
       }
     }),
