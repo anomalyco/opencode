@@ -120,6 +120,74 @@ function normalizeMessages(
             return content
           })
         }
+
+        result.push(msg)
+
+        // Fix message sequence: tool messages cannot be followed by user messages
+        if (msg.role === "tool" && nextMsg?.role === "user") {
+          result.push({
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "Done.",
+              },
+            ],
+          })
+        }
+      }
+      return result
+    }
+
+    // Deepseek requires all assistant messages to have reasoning on them
+    if (model.api.id.includes("deepseek")) {
+      msgs = msgs.map((msg) => {
+        if (msg.role !== "assistant") return msg
+        if (Array.isArray(msg.content)) {
+          if (msg.content.some((part: any) => part.type === "reasoning")) return msg
+          return { ...msg, content: [...msg.content, { type: "reasoning", text: "" }] }
+        }
+        return {
+          ...msg,
+          content: [
+            ...(msg.content ? [{ type: "text" as const, text: msg.content }] : []),
+            { type: "reasoning" as const, text: "" },
+          ],
+        }
+      })
+    }
+
+    if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
+      const field = model.capabilities.interleaved.field
+      return msgs.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
+          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+
+          // Filter out reasoning parts from content
+          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+
+          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
+          if (reasoningText) {
+            return {
+              ...msg,
+              content: filteredContent,
+              providerOptions: {
+                ...msg.providerOptions,
+                openaiCompatible: {
+                  ...(msg.providerOptions as any)?.openaiCompatible,
+                  [field]: reasoningText,
+                },
+              },
+            }
+          }
+
+          return {
+            ...msg,
+            content: filteredContent,
+          }
+        }
+
         return msg
     }
   })
@@ -511,12 +579,23 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
       if (!modality) return part
       if (model.capabilities.input[modality]) return part
 
-      const name = filename ? `"${filename}"` : modality
-      return {
-        type: "text" as const,
-        text: `ERROR: Cannot read ${name} (this model does not support ${modality} input). Inform the user.`,
+      case "@ai-sdk/cerebras":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
+      case "@ai-sdk/togetherai":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/togetherai
+      case "@ai-sdk/xai":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/xai
+      case "@ai-sdk/deepinfra":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
+      case "venice-ai-sdk-provider":
+      // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
+      case "@ai-sdk/openai-compatible": {
+        const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+        if (model.api.id.includes("deepseek-v4")) {
+          efforts.push("max")
+        }
+        return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
       }
-    })
 
     return { ...msg, content: filtered }
   })
@@ -1149,6 +1228,13 @@ export function options(input: {
     result["store"] = false
   }
 
+    if (
+      input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+      (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic")
+    ) {
+      result["toolStreaming"] = false
+    }
+
     // openai and providers using openai package should set store to false by default.
     if (
       isOpenAIProviderID(input.model.providerID) ||
@@ -1441,7 +1527,125 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     schema = sanitizeGemini(schema)
   }
 
-  return schema
+  export function maxOutputTokens(model: Provider.Model): number {
+    return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+  }
+
+  export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
+    /*
+    if (["openai", "azure"].includes(providerID)) {
+      if (schema.type === "object" && schema.properties) {
+        for (const [key, value] of Object.entries(schema.properties)) {
+          if (schema.required?.includes(key)) continue
+          schema.properties[key] = {
+            anyOf: [
+              value as JSONSchema.JSONSchema,
+              {
+                type: "null",
+              },
+            ],
+          }
+        }
+      }
+    }
+    */
+
+    if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
+      const sanitizeMoonshot = (obj: unknown): unknown => {
+        if (obj === null || typeof obj !== "object") return obj
+        if (Array.isArray(obj)) return obj.map(sanitizeMoonshot)
+        // Moonshot expands $ref before validation and rejects sibling keywords like description on the same node.
+        if ("$ref" in obj && typeof (obj as any).$ref === "string") return { $ref: (obj as any).$ref }
+        const result = Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value)]))
+        // MFJS does not support tuple-style `items` arrays; it requires one schema object for all array items.
+        if (Array.isArray((result as any).items)) (result as any).items = (result as any).items[0] ?? {}
+        return result
+      }
+
+      schema = sanitizeMoonshot(schema) as JSONSchema.BaseSchema | JSONSchema7
+    }
+
+    // Convert integer enums to string enums for Google/Gemini
+    if (model.providerID === "google" || model.api.id.includes("gemini")) {
+      const isPlainObject = (node: unknown): node is Record<string, any> =>
+        typeof node === "object" && node !== null && !Array.isArray(node)
+      const hasCombiner = (node: unknown) =>
+        isPlainObject(node) && (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
+      const hasSchemaIntent = (node: unknown) => {
+        if (!isPlainObject(node)) return false
+        if (hasCombiner(node)) return true
+        return [
+          "type",
+          "properties",
+          "items",
+          "prefixItems",
+          "enum",
+          "const",
+          "$ref",
+          "additionalProperties",
+          "patternProperties",
+          "required",
+          "not",
+          "if",
+          "then",
+          "else",
+        ].some((key) => key in node)
+      }
+
+      const sanitizeGemini = (obj: any): any => {
+        if (obj === null || typeof obj !== "object") {
+          return obj
+        }
+
+        if (Array.isArray(obj)) {
+          return obj.map(sanitizeGemini)
+        }
+
+        const result: any = {}
+        for (const [key, value] of Object.entries(obj)) {
+          if (key === "enum" && Array.isArray(value)) {
+            // Convert all enum values to strings
+            result[key] = value.map((v) => String(v))
+            // If we have integer type with enum, change type to string
+            if (result.type === "integer" || result.type === "number") {
+              result.type = "string"
+            }
+          } else if (typeof value === "object" && value !== null) {
+            result[key] = sanitizeGemini(value)
+          } else {
+            result[key] = value
+          }
+        }
+
+        // Filter required array to only include fields that exist in properties
+        if (result.type === "object" && result.properties && Array.isArray(result.required)) {
+          result.required = result.required.filter((field: any) => field in result.properties)
+        }
+
+        if (result.type === "array" && !hasCombiner(result)) {
+          if (result.items == null) {
+            result.items = {}
+          }
+          // Ensure items has a type only when it's still schema-empty.
+          if (isPlainObject(result.items) && !hasSchemaIntent(result.items)) {
+            result.items.type = "string"
+          }
+        }
+
+        // Remove properties/required from non-object types (Gemini rejects these)
+        if (result.type && result.type !== "object" && !hasCombiner(result)) {
+          delete result.properties
+          delete result.required
+        }
+
+        return result
+      }
+
+      schema = sanitizeGemini(schema)
+    }
+
+    return schema as JSONSchema7
+  }
 }
 
 export * as ProviderTransform from "./transform"
