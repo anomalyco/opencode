@@ -344,33 +344,7 @@ export class Agent implements ACPAgent {
               this.toolStarts.delete(part.callID)
               this.bashSnapshots.delete(part.callID)
               const kind = toToolKind(part.tool)
-              const content: ToolCallContent[] = [
-                {
-                  type: "content",
-                  content: {
-                    type: "text",
-                    text: part.state.output,
-                  },
-                },
-              ]
-
-              if (kind === "edit") {
-                const input = part.state.input
-                const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
-                const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
-                const newText =
-                  typeof input["newString"] === "string"
-                    ? input["newString"]
-                    : typeof input["content"] === "string"
-                      ? input["content"]
-                      : ""
-                content.push({
-                  type: "diff",
-                  path: filePath,
-                  oldText,
-                  newText,
-                })
-              }
+              const content = completedToolContent(part, kind)
 
               if (part.tool === "todowrite") {
                 const parsedTodos = decodeTodos(part.state.output)
@@ -410,10 +384,7 @@ export class Agent implements ACPAgent {
                     content,
                     title: part.state.title,
                     rawInput: part.state.input,
-                    rawOutput: {
-                      output: part.state.output,
-                      metadata: part.state.metadata,
-                    },
+                    rawOutput: completedToolRawOutput(part),
                   },
                 })
                 .catch((error) => {
@@ -873,33 +844,7 @@ export class Agent implements ACPAgent {
             this.toolStarts.delete(part.callID)
             this.bashSnapshots.delete(part.callID)
             const kind = toToolKind(part.tool)
-            const content: ToolCallContent[] = [
-              {
-                type: "content",
-                content: {
-                  type: "text",
-                  text: part.state.output,
-                },
-              },
-            ]
-
-            if (kind === "edit") {
-              const input = part.state.input
-              const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
-              const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
-              const newText =
-                typeof input["newString"] === "string"
-                  ? input["newString"]
-                  : typeof input["content"] === "string"
-                    ? input["content"]
-                    : ""
-              content.push({
-                type: "diff",
-                path: filePath,
-                oldText,
-                newText,
-              })
-            }
+            const content = completedToolContent(part, kind)
 
             if (part.tool === "todowrite") {
               const parsedTodos = decodeTodos(part.state.output)
@@ -939,10 +884,7 @@ export class Agent implements ACPAgent {
                   content,
                   title: part.state.title,
                   rawInput: part.state.input,
-                  rawOutput: {
-                    output: part.state.output,
-                    metadata: part.state.metadata,
-                  },
+                  rawOutput: completedToolRawOutput(part),
                 },
               })
               .catch((err) => {
@@ -1589,6 +1531,70 @@ function toLocations(toolName: string, input: Record<string, any>): { path: stri
     default:
       return []
   }
+}
+
+function completedToolContent(part: ToolPart, kind: ToolKind): ToolCallContent[] {
+  if (part.state.status !== "completed") return []
+
+  const content: ToolCallContent[] = [
+    {
+      type: "content",
+      content: {
+        type: "text",
+        text: part.state.output,
+      },
+    },
+  ]
+
+  if (kind === "edit") {
+    const input = part.state.input
+    const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
+    const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
+    const newText =
+      typeof input["newString"] === "string"
+        ? input["newString"]
+        : typeof input["content"] === "string"
+          ? input["content"]
+          : ""
+    content.push({
+      type: "diff",
+      path: filePath,
+      oldText,
+      newText,
+    })
+  }
+
+  content.push(...imageContents(part.state.attachments ?? []))
+  return content
+}
+
+function completedToolRawOutput(part: ToolPart) {
+  if (part.state.status !== "completed") return {}
+  return {
+    output: part.state.output,
+    metadata: part.state.metadata,
+    ...(part.state.attachments?.length ? { attachments: part.state.attachments } : {}),
+  }
+}
+
+function imageContents(attachments: Array<{ mime: string; url: string }>): ToolCallContent[] {
+  return attachments.flatMap((attachment): ToolCallContent[] => {
+    const match = attachment.url.match(/^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$/)
+    const mime = match?.[1] ?? attachment.mime
+    if (!mime.startsWith("image/")) return []
+    const data = match?.[2]
+    if (data === undefined) return []
+    return [
+      {
+        type: "content" as const,
+        content: {
+          type: "image" as const,
+          mimeType: mime,
+          data,
+        },
+      },
+    ]
+  })
 }
 
 async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ providerID: ProviderID; modelID: ModelID }> {
