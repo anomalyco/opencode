@@ -520,6 +520,11 @@ export default function Layout(props: ParentProps) {
     if (extra) return extraAgentProject(extra.id)
     const key = workspaceKey(directory)
 
+    // IMPORTANT: use the same visible project list that the rail renders.
+    // This list intentionally excludes extra-agent pseudo projects such as
+    // /hermes, /genericagent, and /openclaw. Do NOT convert the drop result
+    // into an absolute index for the backing store here; only identify the
+    // dragged project and the target project that the user saw on screen.
     const projects = layout.projects.list()
 
     const sandbox = projects.find((p) => p.sandboxes?.some((item) => pathKey(item) === key))
@@ -2436,6 +2441,9 @@ export default function Layout(props: ParentProps) {
     projectOver = ""
     if (from === -1 || to === -1 || from === to) return
 
+    // Pass the target project ID, not the filtered list index. The backing
+    // store may contain hidden extra-agent entries, so only server-side code
+    // can safely translate this visible drop target into a real insertion slot.
     layout.projects.move(draggable.id.toString(), droppable.id.toString())
   }
 
@@ -3950,7 +3958,10 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const projects = () => layout.projects.list()
+  // Use the dedicated project rail source. This keeps the normal OpenCode
+  // project rail decoupled from extra-agent entry rendering while still
+  // preserving rail visibility when browsing extra-agent domains.
+  const projects = () => layout.projects.rail()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
   const sidebarContent = (mobile?: boolean) => (
     <SidebarContent

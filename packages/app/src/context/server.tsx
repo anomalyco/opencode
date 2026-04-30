@@ -476,6 +476,12 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const key = origin()
           if (!key) return
           const current = projectsFor()
+          // IMPORTANT: current is the full persisted order, which may include
+          // hidden pseudo projects (for example extra-agent entries). Dragging
+          // in the rail happens against a filtered visible list, so this layer
+          // must resolve the visible target project ID back into the real array
+          // slot. Do not accept a filtered index here, or visible reorders will
+          // drift whenever hidden entries are present in current.
           const fromIndex = current.findIndex((x) => x.worktree === directory)
           const toIndex = current.findIndex((x) => x.worktree === target)
           if (fromIndex === -1 || fromIndex === toIndex) return

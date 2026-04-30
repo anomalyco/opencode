@@ -586,6 +586,25 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     })
 
+    const railProjects = createMemo(() => {
+      const current = server.current
+      const next = list()
+      const cached = rail.projects
+      if (!current || server.domain === mainDomain) {
+        // Reuse the cached order when returning from OpenClaw so icons do not
+        // jitter while fresh project metadata streams back in from the server.
+        const live = new Map(next.map((project) => [project.worktree, project] as const))
+        const merged = cached.flatMap((project) => {
+          const hit = live.get(project.worktree)
+          if (!hit) return []
+          live.delete(project.worktree)
+          return [hit]
+        })
+        return [...merged, ...live.values()]
+      }
+      return cached
+    })
+
     return {
       ready,
       handoff: {
@@ -600,23 +619,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       projects: {
         list,
+        rail: railProjects,
         visible: createMemo(() => {
-          const current = server.current
-          const next = list()
-          const cached = rail.projects
-          if (!current || server.domain === mainDomain) {
-            // Reuse the cached order when returning from OpenClaw so icons do not
-            // jitter while fresh project metadata streams back in from the server.
-            const live = new Map(next.map((project) => [project.worktree, project] as const))
-            const merged = cached.flatMap((project) => {
-              const hit = live.get(project.worktree)
-              if (!hit) return []
-              live.delete(project.worktree)
-              return [hit]
-            })
-            return [...merged, ...live.values()]
-          }
-          return cached
+          // Deprecated alias. Prefer rail() for the normal OpenCode project rail,
+          // and keep list() for the plain filtered project collection.
+          return railProjects()
         }),
         open(directory: string) {
           const root = rootFor(directory)
@@ -634,6 +641,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           server.projects.collapse(directory)
         },
         move(directory: string, target: string) {
+          // Keep this API target-based. Callers work with the rail's filtered
+          // project list, while the server store may still include hidden
+          // extra-agent entries that should not shift visible drop positions.
           server.projects.move(directory, target)
         },
       },
