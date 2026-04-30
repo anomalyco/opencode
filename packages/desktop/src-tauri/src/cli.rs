@@ -43,7 +43,6 @@ impl CommandWrapper for WinCreationFlags {
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
-#[cfg(unix)]
 const UNIX_SUPERVISOR: &str = r#"
 pid="$1"
 shift
