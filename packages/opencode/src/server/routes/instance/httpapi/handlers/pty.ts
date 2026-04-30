@@ -1,4 +1,3 @@
-import { EffectBridge } from "@/effect/bridge"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { handlePtyInput } from "@/pty/input"
@@ -23,16 +22,11 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
     })
 
     const create = Effect.fn("PtyHttpApi.create")(function* (ctx: { payload: typeof Pty.CreateInput.Type }) {
-      const bridge = yield* EffectBridge.make()
-      return yield* Effect.promise(() =>
-        bridge.promise(
-          pty.create({
-            ...ctx.payload,
-            args: ctx.payload.args ? [...ctx.payload.args] : undefined,
-            env: ctx.payload.env ? { ...ctx.payload.env } : undefined,
-          }),
-        ),
-      )
+      return yield* pty.create({
+        ...ctx.payload,
+        args: ctx.payload.args ? [...ctx.payload.args] : undefined,
+        env: ctx.payload.env ? { ...ctx.payload.env } : undefined,
+      })
     })
 
     const get = Effect.fn("PtyHttpApi.get")(function* (ctx: { params: { ptyID: PtyID } }) {
@@ -115,5 +109,5 @@ export const ptyConnectRoute = HttpRouter.add(
         Effect.orDie,
       )
     return HttpServerResponse.empty()
-  }).pipe(Effect.provide(Pty.defaultLayer)),
+  }),
 )
