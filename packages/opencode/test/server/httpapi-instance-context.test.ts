@@ -214,7 +214,9 @@ describe("HttpApi instance context middleware", () => {
       yield* serveDisposeProbe()
       const disposed = yield* waitDisposedEvent.pipe(Effect.forkScoped)
 
-      const response = yield* HttpClientRequest.post(`/dispose-probe?workspace=${workspace.id}`).pipe(HttpClient.execute)
+      const response = yield* HttpClientRequest.post(`/dispose-probe?workspace=${workspace.id}`).pipe(
+        HttpClient.execute,
+      )
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toBe(true)
