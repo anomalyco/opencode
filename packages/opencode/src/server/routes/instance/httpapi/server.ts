@@ -38,7 +38,7 @@ import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { Workspace } from "@/control-plane/workspace"
 import { isAllowedCorsOrigin } from "@/server/cors"
-import { UIRoutes } from "@/server/routes/ui"
+import { serveUI } from "@/server/routes/ui"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { ServerAuthConfig, authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
 import { eventRoute } from "./event"
@@ -120,13 +120,12 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
   ]),
 )
 
-const uiRoutes = lazy(() => UIRoutes())
 const uiRoute = HttpRouter.add(
   "*",
   "/*",
   (request) =>
     Effect.promise(async () =>
-      uiRoutes().fetch(
+      serveUI(
         request.source instanceof Request
           ? request.source
           : new Request(new URL(request.originalUrl, "http://localhost"), {

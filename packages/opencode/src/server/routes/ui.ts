@@ -16,40 +16,39 @@ const DEFAULT_CSP =
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
-export const UIRoutes = (): Hono =>
-  new Hono().all("/*", async (c) => {
-    const embeddedWebUI = await embeddedUIPromise
-    const path = c.req.path
+export async function serveUI(request: Request) {
+  const embeddedWebUI = await embeddedUIPromise
+  const path = new URL(request.url).pathname
 
-    if (embeddedWebUI) {
-      const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
-      if (!match) return c.json({ error: "Not Found" }, 404)
+  if (embeddedWebUI) {
+    const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
+    if (!match) return Response.json({ error: "Not Found" }, { status: 404 })
 
-      if (await fs.exists(match)) {
-        const mime = getMimeType(match) ?? "text/plain"
-        c.header("Content-Type", mime)
-        if (mime.startsWith("text/html")) {
-          c.header("Content-Security-Policy", DEFAULT_CSP)
-        }
-        return c.body(new Uint8Array(await fs.readFile(match)))
-      } else {
-        return c.json({ error: "Not Found" }, 404)
-      }
-    } else {
-      const response = await proxy(`https://app.opencode.ai${path}`, {
-        raw: c.req.raw,
-        headers: {
-          ...Object.fromEntries(c.req.raw.headers.entries()),
-          host: "app.opencode.ai",
-        },
-      })
-      const match = response.headers.get("content-type")?.includes("text/html")
-        ? (await response.clone().text()).match(
-            /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
-          )
-        : undefined
-      const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
-      response.headers.set("Content-Security-Policy", csp(hash))
-      return response
+    if (await fs.exists(match)) {
+      const mime = getMimeType(match) ?? "text/plain"
+      const headers = new Headers({ "content-type": mime })
+      if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
+      return new Response(new Uint8Array(await fs.readFile(match)), { headers })
     }
+
+    return Response.json({ error: "Not Found" }, { status: 404 })
+  }
+
+  const response = await proxy(`https://app.opencode.ai${path}`, {
+    raw: request,
+    headers: {
+      ...Object.fromEntries(request.headers.entries()),
+      host: "app.opencode.ai",
+    },
   })
+  const match = response.headers.get("content-type")?.includes("text/html")
+    ? (await response.clone().text()).match(
+        /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
+      )
+    : undefined
+  const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
+  response.headers.set("Content-Security-Policy", csp(hash))
+  return response
+}
+
+export const UIRoutes = (): Hono => new Hono().all("/*", (c) => serveUI(c.req.raw))
