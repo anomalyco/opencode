@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
@@ -69,6 +69,20 @@ const runtime = HttpRouter.middleware()(
   ),
 ).layer
 
+function allowedCorsOrigin(input: string | undefined) {
+  if (!input) return false
+  if (input.startsWith("http://localhost:")) return true
+  if (input.startsWith("http://127.0.0.1:")) return true
+  if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
+    return true
+  return /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)
+}
+
+const cors = HttpRouter.middleware(HttpMiddleware.cors({
+  allowedOrigins: allowedCorsOrigin,
+  maxAge: 86_400,
+}), { global: true })
+
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
@@ -123,6 +137,7 @@ export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
     }),
   ),
   Layer.provide([
+    cors,
     runtime,
     Account.defaultLayer,
     Agent.defaultLayer,
