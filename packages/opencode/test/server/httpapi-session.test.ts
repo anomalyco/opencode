@@ -18,9 +18,9 @@ void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return Server.Default().app
+function app(experimental = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
@@ -74,6 +74,10 @@ function createTextMessage(directory: string, sessionID: SessionID, text: string
 
 function request(path: string, init?: RequestInit) {
   return Effect.promise(async () => app().request(path, init))
+}
+
+function requestWithBackend(experimental: boolean, path: string, init?: RequestInit) {
+  return Effect.promise(async () => app(experimental).request(path, init))
 }
 
 function json<T>(response: Response) {
@@ -213,6 +217,34 @@ describe("session HttpApi", () => {
             headers,
           }),
         ).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
+    "matches legacy archived timestamp validation",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+        const legacy = yield* createSession(tmp.path, { title: "legacy" })
+        const effect = yield* createSession(tmp.path, { title: "effect" })
+        const body = JSON.stringify({ time: { archived: -1 } })
+
+        const legacyResponse = yield* requestWithBackend(false, pathFor(SessionPaths.update, { sessionID: legacy.id }), {
+          method: "PATCH",
+          headers,
+          body,
+        })
+        expect(legacyResponse.status).toBe(200)
+        expect((yield* json<Session.Info>(legacyResponse)).time.archived).toBe(-1)
+
+        const effectResponse = yield* requestWithBackend(true, pathFor(SessionPaths.update, { sessionID: effect.id }), {
+          method: "PATCH",
+          headers,
+          body,
+        })
+        expect(effectResponse.status).toBe(legacyResponse.status)
+        expect((yield* json<Session.Info>(effectResponse)).time.archived).toBe(-1)
       }),
     ),
   )

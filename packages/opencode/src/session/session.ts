@@ -146,7 +146,7 @@ const Time = Schema.Struct({
   created: NonNegativeInt,
   updated: NonNegativeInt,
   compacting: optionalOmitUndefined(NonNegativeInt),
-  archived: optionalOmitUndefined(NonNegativeInt),
+  archived: optionalOmitUndefined(Schema.Number),
 })
 
 const Revert = Schema.Struct({
@@ -215,7 +215,7 @@ export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema
 )
 export const SetArchivedInput = Schema.Struct({
   sessionID: SessionID,
-  time: Schema.optional(NonNegativeInt),
+  time: Schema.optional(Schema.Number),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
@@ -244,7 +244,7 @@ const UpdatedTime = Schema.Struct({
   created: Schema.optional(Schema.NullOr(NonNegativeInt)),
   updated: Schema.optional(Schema.NullOr(NonNegativeInt)),
   compacting: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  archived: Schema.optional(Schema.NullOr(NonNegativeInt)),
+  archived: Schema.optional(Schema.NullOr(Schema.Number)),
 })
 
 const UpdatedInfo = Schema.Struct({
