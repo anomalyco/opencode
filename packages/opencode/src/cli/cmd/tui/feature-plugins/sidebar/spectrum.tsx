@@ -113,17 +113,10 @@ bar_delimiter = 59
   })
 
   return (
-    <box>
-      <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={theme().text}>
-          <b>♪ Audio</b>
-        </text>
-        <text fg={statusColor()}>
-          {source() === "cava" ? "● CAVA" : "○ sim"}
-        </text>
-      </box>
+    <box flexDirection="row" gap={1} alignItems="center">
+      <text fg={theme().text}>♪</text>
       <text fg={theme().accent}>{barChars()}</text>
-      <text fg={theme().textMuted}>level: {levelPct()}%</text>
+      <text fg={statusColor()}>{levelPct()}%</text>
     </box>
   )
 }
