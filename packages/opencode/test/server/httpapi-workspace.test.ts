@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test"
+import { afterEach, describe, expect, mock } from "bun:test"
 import { NodeServices } from "@effect/platform-node"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
@@ -133,8 +133,6 @@ afterEach(async () => {
 })
 
 describe("workspace HttpApi", () => {
-  test.todo("proxies remote workspace websocket through real Effect listener", () => {})
-
   it.live("serves read endpoints", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
