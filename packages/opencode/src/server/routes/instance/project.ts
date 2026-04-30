@@ -144,11 +144,17 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ projectID: ProjectID.zod })),
-      async (c) =>
-        jsonRequest("ProjectRoutes.delete", c, function* () {
-          const projectID = c.req.valid("param").projectID
-          const svc = yield* Project.Service
-          return yield* svc.remove(projectID)
-        }),
+      async (c) => {
+        const projectID = c.req.valid("param").projectID
+        const result = await runRequest(
+          "ProjectRoutes.delete",
+          c,
+          Project.Service.use((svc) => svc.remove(projectID)),
+        )
+        if (projectID === Instance.project.id) {
+          await Instance.dispose()
+        }
+        return c.json(result)
+      },
     ),
 )

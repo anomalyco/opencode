@@ -6,7 +6,7 @@ import { ProjectID } from "@/project/schema"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { markInstanceForReload } from "../lifecycle"
+import { markInstanceForDisposal, markInstanceForReload } from "../lifecycle"
 
 export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", (handlers) =>
   Effect.gen(function* () {
@@ -44,7 +44,12 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
     const remove_ = Effect.fn("ProjectHttpApi.remove")(function* (ctx: {
       params: { projectID: ProjectID }
     }) {
-      return yield* svc.remove(ctx.params.projectID)
+      const instance = yield* InstanceState.context
+      const result = yield* svc.remove(ctx.params.projectID)
+      if (ctx.params.projectID === instance.project.id) {
+        yield* markInstanceForDisposal(instance)
+      }
+      return result
     })
 
     return handlers

@@ -468,8 +468,6 @@ export const layer: Layer.Layer<
     })
 
     const remove = Effect.fn("Project.remove")(function* (id: ProjectID) {
-      const existing = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-      if (!existing) throw new NotFoundError({ message: `Project not found: ${id}` })
       const sessionsRow = yield* db((d) =>
         d
           .select({ count: sql<number>`count(*)` })
@@ -477,9 +475,11 @@ export const layer: Layer.Layer<
           .where(eq(SessionTable.project_id, id))
           .get(),
       )
-      const sessionsRemoved = sessionsRow?.count ?? 0
-      yield* db((d) => d.delete(ProjectTable).where(eq(ProjectTable.id, id)).run())
-      return { deleted: true, sessionsRemoved }
+      const result = yield* db(
+        (d) => d.delete(ProjectTable).where(eq(ProjectTable.id, id)).run() as unknown as { changes: number },
+      )
+      if (result.changes === 0) throw new NotFoundError({ message: `Project not found: ${id}` })
+      return { deleted: true, sessionsRemoved: sessionsRow?.count ?? 0 }
     })
 
     return Service.of({
