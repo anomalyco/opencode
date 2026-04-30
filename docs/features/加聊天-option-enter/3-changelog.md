@@ -6,7 +6,7 @@ related: ./3-changelog.md
 
 # 加聊天-option-enter — changelog
 
-**关联 commit**: 待回填
+**关联 commit**: `00b208eed`
 **所在分支**: `feat/editable-file-viewer`
 **规模**: Tiny(14 行 / 1 文件,无 1-spec / 2-plan)
 **触发原因**: User 在 macOS 上用文件查看器右键"+ 添加到聊天窗口"打开备注输入框,习惯按 Option+Enter 提交(macOS 下许多对话框的常见快捷键),实际只识别 Ctrl/Cmd+Enter。需要补 Option+Enter 通道,并把对话框底部提示文案做平台化。
