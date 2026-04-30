@@ -27,18 +27,13 @@ const apiLayer = HttpRouter.serve(
   { disableListenLog: true, disableLogger: true },
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
-const authConfigLayer = (input: { password?: string; username?: string } = {}) =>
-  ServerAuthConfig.layer({
-    password: input.password === undefined ? Option.none() : Option.some(input.password),
-    username: input.username ?? "opencode",
-  })
+const noAuthLayer = ServerAuthConfig.layer({ password: Option.none(), username: "opencode" })
+const secretLayer = ServerAuthConfig.layer({ password: Option.some("secret"), username: "opencode" })
+const kitSecretLayer = ServerAuthConfig.layer({ password: Option.some("secret"), username: "kit" })
 
-const itWithAuth = (input: { password?: string; username?: string } = {}) =>
-  testEffect(apiLayer.pipe(Layer.provide(authConfigLayer(input))))
-
-const it = itWithAuth()
-const itSecret = itWithAuth({ password: "secret" })
-const itKitSecret = itWithAuth({ username: "kit", password: "secret" })
+const it = testEffect(apiLayer.pipe(Layer.provide(noAuthLayer)))
+const itSecret = testEffect(apiLayer.pipe(Layer.provide(secretLayer)))
+const itKitSecret = testEffect(apiLayer.pipe(Layer.provide(kitSecretLayer)))
 
 const basic = (username: string, password: string) =>
   `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
