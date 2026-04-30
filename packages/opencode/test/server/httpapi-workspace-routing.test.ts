@@ -155,6 +155,9 @@ const listenRemoteHttp = <E, R>(
 ) =>
   listenAdditionalServer((request) =>
     Effect.gen(function* () {
+      // Remote workspaces run a sync loop against their target server. These
+      // bootstrap routes make Workspace.isSyncing(...) true for proxy tests;
+      // everything else is the request being proxied by the middleware.
       const sync = syncResponse(request)
       if (sync) return yield* sync
       return yield* handler({ url: request.url, method: request.method, headers: request.headers })
@@ -201,9 +204,9 @@ describe("HttpApi workspace routing middleware", () => {
       const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
       let forwarded: ProxiedRequest | undefined
 
-      // This is the remote workspace server. It handles sync bootstrap routes
-      // itself, and captures /base/probe so we can inspect what the middleware
-      // actually forwarded after URL rewriting and header sanitization.
+      // This starts a second HTTP server that stands in for the opencode server
+      // backing a remote workspace. The client below still calls the local test
+      // server; only the middleware should call this server.
       const remoteUrl = yield* listenRemoteHttp((request) => {
         forwarded = request
         const url = requestURL(request)
@@ -217,6 +220,9 @@ describe("HttpApi workspace routing middleware", () => {
           { status: 201, headers: { "x-remote": "yes" } },
         )
       })
+      // The adaptor target tells the middleware where to proxy selected remote
+      // workspace requests. Appending /probe to this base should produce
+      // `${remoteUrl}/base/probe` on the fake remote server above.
       const workspace = yield* createRemoteWorkspace({
         dir,
         projectID: project.project.id,
