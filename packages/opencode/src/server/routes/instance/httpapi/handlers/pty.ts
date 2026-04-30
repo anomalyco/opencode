@@ -9,6 +9,29 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
 import { CursorQuery, Params, PtyPaths } from "../groups/pty"
 
+const inputDecoder = new TextDecoder("utf-8", { fatal: true })
+
+export function handlePtyInput(
+  handler: { onMessage: (message: string | ArrayBuffer) => void },
+  message: string | Uint8Array,
+) {
+  if (typeof message === "string") {
+    handler.onMessage(message)
+    return Effect.void
+  }
+  return Effect.try({
+    try: () => inputDecoder.decode(message),
+    catch: () => new Error("invalid PTY websocket input"),
+  }).pipe(
+    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.flatMap((decoded) => {
+      if (decoded === undefined) return Effect.void
+      handler.onMessage(decoded)
+      return Effect.void
+    }),
+  )
+}
+
 export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handlers) =>
   Effect.gen(function* () {
     const pty = yield* Pty.Service
@@ -102,9 +125,7 @@ export const ptyConnectRoute = HttpRouter.add(
     if (!handler) return HttpServerResponse.empty()
 
     yield* socket
-      .runRaw((message) => {
-        handler.onMessage(typeof message === "string" ? message : message.slice().buffer)
-      })
+      .runRaw((message) => handlePtyInput(handler, message))
       .pipe(
         Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
         Effect.ensuring(
