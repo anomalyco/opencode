@@ -1,5 +1,5 @@
 import { Context, Effect, FiberMap, Layer, Schema, Stream } from "effect"
-import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { fn } from "@/util/fn"
 import { Database } from "@/storage/db"
 import { asc } from "drizzle-orm"
@@ -95,19 +95,68 @@ export const SessionRestoreInput = Schema.Struct({
 }).pipe(withStatics((s) => ({ zod: effectZod(s), zodObject: zodObject(s) })))
 export type SessionRestoreInput = Schema.Schema.Type<typeof SessionRestoreInput>
 
+export class SyncHttpError extends Schema.TaggedErrorClass<SyncHttpError>()("WorkspaceSyncHttpError", {
+  message: Schema.String,
+  status: Schema.Number,
+  body: Schema.optional(Schema.String),
+}) {}
+
+export class WorkspaceNotFoundError extends Schema.TaggedErrorClass<WorkspaceNotFoundError>()("WorkspaceNotFoundError", {
+  message: Schema.String,
+  workspaceID: WorkspaceID,
+}) {}
+
+export class SessionEventsNotFoundError extends Schema.TaggedErrorClass<SessionEventsNotFoundError>()(
+  "WorkspaceSessionEventsNotFoundError",
+  {
+    message: Schema.String,
+    sessionID: SessionID,
+  },
+) {}
+
+export class SessionRestoreHttpError extends Schema.TaggedErrorClass<SessionRestoreHttpError>()(
+  "WorkspaceSessionRestoreHttpError",
+  {
+    message: Schema.String,
+    workspaceID: WorkspaceID,
+    sessionID: SessionID,
+    status: Schema.Number,
+    body: Schema.String,
+  },
+) {}
+
+export class SyncTimeoutError extends Schema.TaggedErrorClass<SyncTimeoutError>()("WorkspaceSyncTimeoutError", {
+  message: Schema.String,
+  state: Schema.Record(Schema.String, Schema.Number),
+}) {}
+
+export class SyncAbortedError extends Schema.TaggedErrorClass<SyncAbortedError>()("WorkspaceSyncAbortedError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
+type CreateError = Auth.AuthError
+type SessionRestoreError =
+  | WorkspaceNotFoundError
+  | SessionEventsNotFoundError
+  | SessionRestoreHttpError
+  | HttpClientError.HttpClientError
+type WaitForSyncError = SyncTimeoutError | SyncAbortedError
+type SyncLoopError = SyncHttpError | HttpClientError.HttpClientError
+
 export interface Interface {
-  readonly create: (input: CreateInput) => Effect.Effect<Info, unknown>
-  readonly sessionRestore: (input: SessionRestoreInput) => Effect.Effect<{ total: number }, unknown>
+  readonly create: (input: CreateInput) => Effect.Effect<Info, CreateError>
+  readonly sessionRestore: (input: SessionRestoreInput) => Effect.Effect<{ total: number }, SessionRestoreError>
   readonly list: (project: Project.Info) => Effect.Effect<Info[]>
-  readonly get: (id: WorkspaceID) => Effect.Effect<Info | undefined, unknown>
-  readonly remove: (id: WorkspaceID) => Effect.Effect<Info | undefined, unknown>
+  readonly get: (id: WorkspaceID) => Effect.Effect<Info | undefined>
+  readonly remove: (id: WorkspaceID) => Effect.Effect<Info | undefined>
   readonly status: () => Effect.Effect<ConnectionStatus[]>
   readonly isSyncing: (workspaceID: WorkspaceID) => Effect.Effect<boolean>
   readonly waitForSync: (
     workspaceID: WorkspaceID,
     state: Record<string, number>,
     signal?: AbortSignal,
-  ) => Effect.Effect<void, unknown>
+  ) => Effect.Effect<void, WaitForSyncError>
   readonly startWorkspaceSyncing: (projectID: ProjectID) => Effect.Effect<void>
 }
 
@@ -120,7 +169,7 @@ export const layer = Layer.effect(
     const session = yield* Session.Service
     const http = yield* HttpClient.HttpClient
     const connections = new Map<WorkspaceID, ConnectionStatus>()
-    const syncFibers = yield* FiberMap.make<WorkspaceID, void, unknown>()
+    const syncFibers = yield* FiberMap.make<WorkspaceID, void, SyncLoopError>()
 
     const setStatus = (id: WorkspaceID, status: ConnectionStatus["status"]) => {
       const prev = connections.get(id)
@@ -138,14 +187,6 @@ export const layer = Layer.effect(
       })
     }
 
-    const listConnectionStatus = () => [...connections.values()]
-
-    const isWorkspaceSyncing = (workspaceID: WorkspaceID) =>
-      Effect.gen(function* () {
-        const exists = yield* FiberMap.has(syncFibers, workspaceID)
-        return exists && connections.get(workspaceID)?.status !== "error"
-      })
-
     const connectSSE = Effect.fn("Workspace.connectSSE")(function* (
       url: URL | string,
       headers: HeadersInit | undefined,
@@ -157,7 +198,10 @@ export const layer = Layer.effect(
         }),
       )
       if (response.status < 200 || response.status >= 300) {
-        return yield* Effect.fail(new Error(`Workspace sync HTTP failure: ${response.status}`))
+        return yield* new SyncHttpError({
+          message: `Workspace sync HTTP failure: ${response.status}`,
+          status: response.status,
+        })
       }
       return response.stream
     })
@@ -248,7 +292,11 @@ export const layer = Layer.effect(
 
       if (response.status < 200 || response.status >= 300) {
         const body = yield* response.text
-        return yield* Effect.fail(new Error(`Workspace history HTTP failure: ${response.status} ${body}`))
+        return yield* new SyncHttpError({
+          message: `Workspace history HTTP failure: ${response.status} ${body}`,
+          status: response.status,
+          body,
+        })
       }
 
       const events = (yield* response.json) as HistoryEvent[]
@@ -360,13 +408,16 @@ export const layer = Layer.effect(
         return
       }
 
-      if (yield* isWorkspaceSyncing(space.id)) return
+      const exists = yield* FiberMap.has(syncFibers, space.id)
+      if (exists && connections.get(space.id)?.status !== "error") return
 
       setStatus(space.id, "disconnected")
 
       yield* FiberMap.run(
         syncFibers,
         space.id,
+        // TODO: look into `tapError` to set the status but still
+        // allow the fiber to fail and automatically get removed
         syncWorkspaceLoop(space).pipe(
           Effect.catch((error) =>
             Effect.sync(() => {
@@ -455,7 +506,11 @@ export const layer = Layer.effect(
         })
 
         const space = yield* get(input.workspaceID)
-        if (!space) return yield* Effect.fail(new Error(`Workspace not found: ${input.workspaceID}`))
+        if (!space)
+          return yield* new WorkspaceNotFoundError({
+            message: `Workspace not found: ${input.workspaceID}`,
+            workspaceID: input.workspaceID,
+          })
 
         const adaptor = getAdaptor(space.projectID, space.type)
         const target = yield* Effect.promise(() => Promise.resolve(adaptor.target(space)))
@@ -483,9 +538,14 @@ export const layer = Layer.effect(
             .orderBy(asc(EventTable.seq))
             .all(),
         )
-        if (rows.length === 0) return yield* Effect.fail(new Error(`No events found for session: ${input.sessionID}`))
+        if (rows.length === 0)
+          return yield* new SessionEventsNotFoundError({
+            message: `No events found for session: ${input.sessionID}`,
+            sessionID: input.sessionID,
+          })
 
         const size = 10
+        // TODO: look into using effect APIs to process this in chunks
         const sets = Array.from({ length: Math.ceil(rows.length / size) }, (_, i) =>
           rows.slice(i * size, (i + 1) * size),
         )
@@ -562,11 +622,13 @@ export const layer = Layer.effect(
                 status: res.status,
                 body,
               })
-              return yield* Effect.fail(
-                new Error(
-                  `Failed to replay session ${input.sessionID} into workspace ${input.workspaceID}: HTTP ${res.status} ${body}`,
-                ),
-              )
+              return yield* new SessionRestoreHttpError({
+                message: `Failed to replay session ${input.sessionID} into workspace ${input.workspaceID}: HTTP ${res.status} ${body}`,
+                workspaceID: input.workspaceID,
+                sessionID: input.sessionID,
+                status: res.status,
+                body,
+              })
             }
 
             log.info("session restore batch posted", {
@@ -616,7 +678,15 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Workspace.list")(function* (project: Project.Info) {
-      return listWorkspacesForProject(project)
+      return yield* db((db) =>
+        db
+          .select()
+          .from(WorkspaceTable)
+          .where(eq(WorkspaceTable.project_id, project.id))
+          .all()
+          .map(fromRow)
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      )
     })
 
     const get = Effect.fn("Workspace.get")(function* (id: WorkspaceID) {
@@ -653,11 +723,12 @@ export const layer = Layer.effect(
     })
 
     const status = Effect.fn("Workspace.status")(function* () {
-      return listConnectionStatus()
+      return [...connections.values()]
     })
 
     const isSyncing = Effect.fn("Workspace.isSyncing")(function* (workspaceID: WorkspaceID) {
-      return yield* isWorkspaceSyncing(workspaceID)
+      const exists = yield* FiberMap.has(syncFibers, workspaceID)
+      return exists && connections.get(workspaceID)?.status !== "error"
     })
 
     const waitForSync = Effect.fn("Workspace.waitForSync")(function* (
@@ -678,10 +749,20 @@ export const layer = Layer.effect(
             return synced(state)
           },
         }),
-        () => {
-          if (signal?.aborted) return Effect.fail(signal.reason ?? new Error("Request aborted"))
-          return Effect.fail(new Error(`Timed out waiting for sync fence: ${JSON.stringify(state)}`))
-        },
+        (): Effect.Effect<never, WaitForSyncError> =>
+          signal?.aborted
+            ? Effect.fail(
+                new SyncAbortedError({
+                  message: signal.reason instanceof Error ? signal.reason.message : "Request aborted",
+                  cause: signal.reason,
+                }),
+              )
+            : Effect.fail(
+                new SyncTimeoutError({
+                  message: `Timed out waiting for sync fence: ${JSON.stringify(state)}`,
+                  state,
+                }),
+              ),
       )
     })
 
@@ -733,18 +814,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
 )
 
-function listWorkspacesForProject(project: Project.Info) {
-  return Database.use((db) =>
-    db
-      .select()
-      .from(WorkspaceTable)
-      .where(eq(WorkspaceTable.project_id, project.id))
-      .all()
-      .map(fromRow)
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  )
-}
-
 const TIMEOUT = 5000
 
 type HistoryEvent = {
@@ -792,7 +861,15 @@ export const create = fn(CreateInput.zod, (input) => runPromise((svc) => svc.cre
 export const sessionRestore = fn(SessionRestoreInput.zod, (input) => runPromise((svc) => svc.sessionRestore(input)))
 
 export function list(project: Project.Info) {
-  return listWorkspacesForProject(project)
+  return Database.use((db) =>
+    db
+      .select()
+      .from(WorkspaceTable)
+      .where(eq(WorkspaceTable.project_id, project.id))
+      .all()
+      .map(fromRow)
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  )
 }
 
 export const get = fn(WorkspaceID.zod, (id) => runPromise((svc) => svc.get(id)))

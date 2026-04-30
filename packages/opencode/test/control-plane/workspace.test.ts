@@ -1084,7 +1084,7 @@ describe("workspace-old waitForSync", () => {
       )
       abort.abort(reason)
 
-      await expect(waited).rejects.toBe(reason)
+      await expect(waited).rejects.toMatchObject({ _tag: "WorkspaceSyncAbortedError", message: reason.message, cause: reason })
     })
   })
 
