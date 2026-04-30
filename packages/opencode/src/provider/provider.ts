@@ -348,6 +348,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               void Bus.publish(TuiEvent.ToastShow, {
                 variant: "warning",
                 message: "AWS SSO session expired — re-authenticating...",
+                duration: 5000,
               })
               await new Promise<void>((resolve, reject) => {
                 const args = ["sso", "login", ...(profile ? ["--profile", profile] : [])]
@@ -357,6 +358,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                     void Bus.publish(TuiEvent.ToastShow, {
                       variant: "success",
                       message: "AWS SSO re-authentication successful",
+                      duration: 5000,
                     })
                     resolve()
                   } else {
