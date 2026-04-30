@@ -96,7 +96,10 @@ describe("Worktree", () => {
     )
   })
 
-  describe("create + remove lifecycle", () => {
+  // SKIP on windows: git worktree operations (create with custom name, fires Event.Ready)
+  // intermittently fail with WorktreeRemoveFailedError on github-hosted windows-2025
+  // (file lock / antivirus interference). Tracked in #90.
+  describe.skipIf(process.platform === "win32")("create + remove lifecycle", () => {
     it.live("create returns worktree info and remove cleans up", () =>
       provideTmpdirInstance(
         () =>

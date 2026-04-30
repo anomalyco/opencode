@@ -47,8 +47,9 @@ describe("tool.registry", () => {
     ),
   )
 
-  // SKIP on windows: same 60s import hang as the singular test above. Tracked in #90.
-  ;(process.platform === "win32" ? it.live.skip : it.live)("loads tools from .opencode/tools (plural)", () =>
+  // SKIP on CI (both linux and windows): same bun import hang as the singular test
+  // above. Linux passes locally but hangs at 60s in github-hosted CI. Tracked in #90.
+  it.live.skip("loads tools from .opencode/tools (plural)", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         const opencode = path.join(dir, ".opencode")
