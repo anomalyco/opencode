@@ -655,8 +655,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         collapse(directory: string) {
           server.projects.collapse(directory)
         },
-        move(directory: string, toIndex: number) {
-          server.projects.move(directory, toIndex)
+        move(directory: string, target: string) {
+          server.projects.move(directory, target)
         },
       },
       sidebar: {

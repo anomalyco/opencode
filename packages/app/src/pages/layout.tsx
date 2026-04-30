@@ -2267,6 +2267,7 @@ export default function Layout(props: ParentProps) {
     click: false,
     frame: 0,
   }
+  let projectOver = ""
 
   let started = false
 
@@ -2318,7 +2319,24 @@ export default function Layout(props: ParentProps) {
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
     if (!id) return
+    projectOver = ""
+    console.debug(`[project-dnd] start draggable=${id}`)
     setStore("activeProject", id)
+  }
+
+  function handleDragOver(event: DragEvent) {
+    const { draggable, droppable } = event
+    if (!draggable || !droppable) return
+    const next = `${draggable.id.toString()}->${droppable.id.toString()}`
+    if (next === projectOver) return
+    projectOver = next
+
+    const projects = layout.projects.list()
+    const from = projects.findIndex((p) => p.worktree === draggable.id.toString())
+    const to = projects.findIndex((p) => p.worktree === droppable.id.toString())
+    console.debug(
+      `[project-dnd] over draggable=${draggable.id.toString()} droppable=${droppable.id.toString()} from=${from} to=${to} order=${projects.map((project) => project.worktree).join(" | ")}`,
+    )
   }
 
   function handleDragEnd(event: DragEvent) {
@@ -2332,14 +2350,22 @@ export default function Layout(props: ParentProps) {
     }
     const { draggable, droppable } = event
     setStore("activeProject", undefined)
-    if (!draggable || !droppable) return
+    if (!draggable || !droppable) {
+      console.debug("[project-dnd] end cancelled")
+      projectOver = ""
+      return
+    }
 
     const projects = layout.projects.list()
     const from = projects.findIndex((p) => p.worktree === draggable.id.toString())
     const to = projects.findIndex((p) => p.worktree === droppable.id.toString())
+    console.debug(
+      `[project-dnd] end draggable=${draggable.id.toString()} droppable=${droppable.id.toString()} from=${from} to=${to} order=${projects.map((project) => project.worktree).join(" | ")}`,
+    )
+    projectOver = ""
     if (from === -1 || to === -1 || from === to) return
 
-    layout.projects.move(draggable.id.toString(), to)
+    layout.projects.move(draggable.id.toString(), droppable.id.toString())
   }
 
   function consumeProjectClick() {
@@ -2851,7 +2877,7 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const projects = () => layout.projects.visible()
+  const projects = () => layout.projects.list()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
   const sidebarContent = (mobile?: boolean) => (
     <SidebarContent
@@ -2860,6 +2886,7 @@ export default function Layout(props: ParentProps) {
       projects={projects}
       renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} mobile={mobile} />}
       handleDragStart={handleDragStart}
+      handleDragOver={handleDragOver}
       handleDragEnd={handleDragEnd}
       openProjectLabel={language.t("command.project.open")}
       openProjectKeybind={() => command.keybind("project.open")}
