@@ -1,4 +1,3 @@
-import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
@@ -147,6 +146,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   config: Config.Interface,
   discovery: Discovery.Interface,
   fsys: AppFileSystem.Interface,
+  global: Global.Interface,
   directory: string,
   worktree: string,
 ) {
@@ -154,7 +154,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
     for (const dir of EXTERNAL_DIRS) {
-      const root = path.join(Global.Path.home, dir)
+      const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
     }
@@ -175,7 +175,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   const cfg = yield* config.get()
   for (const item of cfg.skills?.paths ?? []) {
-    const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
+    const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
     const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
     if (!(yield* fsys.isDir(dir))) {
       log.warn("skill path not found", { path: dir })
@@ -216,13 +216,14 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const bus = yield* Bus.Service
     const fsys = yield* AppFileSystem.Service
+    const global = yield* Global.Service
     const discovered = yield* InstanceState.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
-        return yield* discoverSkills(config, discovery, fsys, ctx.directory, ctx.worktree)
+        return yield* discoverSkills(config, discovery, fsys, global, ctx.directory, ctx.worktree)
       }),
     )
     const state = yield* InstanceState.make(
-      Effect.fn("Skill.state")(function* (ctx) {
+      Effect.fn("Skill.state")(function* () {
         const s: State = { skills: {}, dirs: new Set() }
         yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
         return s
@@ -259,6 +260,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(Bus.layer),
   Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Global.layer),
 )
 
 export function fmt(list: Info[], opts: { verbose: boolean }) {
