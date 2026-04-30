@@ -50,8 +50,13 @@ function upstreamURL(path: string) {
   return new URL(path, UI_UPSTREAM).toString()
 }
 
+function embeddedUI() {
+  if (Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI) return Promise.resolve(null)
+  return embeddedUIPromise
+}
+
 export async function serveUI(request: Request) {
-  const embeddedWebUI = await embeddedUIPromise
+  const embeddedWebUI = await embeddedUI()
   const path = new URL(request.url).pathname
 
   if (embeddedWebUI) {
@@ -82,7 +87,7 @@ export async function serveUI(request: Request) {
 
 export function serveUIEffect(request: HttpServerRequest.HttpServerRequest) {
   return Effect.gen(function* () {
-    const embeddedWebUI = yield* Effect.promise(() => embeddedUIPromise)
+    const embeddedWebUI = yield* Effect.promise(() => embeddedUI())
     const path = new URL(request.url, "http://localhost").pathname
 
     if (embeddedWebUI) {
