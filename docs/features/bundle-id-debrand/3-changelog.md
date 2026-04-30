@@ -101,6 +101,12 @@ git revert <code commit hash>
 
 revert 后回到 `ai.opencode.desktop` 系列(`prod-bundle-id-fix` 时的状态)。
 
+## 已知遗留(2026-04-30 user 验收时发现)
+
+- **应用程序网格搜不到**(macOS 自带的"应用程序"全屏网格 + 顶上搜索框):图标可见,搜 "desk" / "fox" 搜不到。Cmd+Space Spotlight 搜得到 / Raycast 搜得到 / Launchpad 图标可见可点。
+- 推测原因:`ai.deskfox.app` 是全新 reverse-DNS 命名空间,系统索引刚 register 还没扫到 / 或对未见过的 reverse-DNS 有冷启动延迟
+- 不影响日常使用(其它启动途径都 OK),下次单笔治理(候选方案:`lsregister -kill -r -domain local -domain system -domain user` 全量重扫 / 等 Spotlight 完整扫描周期几小时 / 重启 Mac 一次让 mds + LaunchServices 完全 cold-start;均不需要改代码)
+
 ## 备注
 
 - **关联 feat 链**:`prod-bundle-id-fix`(去 `.dev` 后缀,让 prod 网格搜得到)→ `bundle-id-debrand`(本笔,完整品牌切割,去 `opencode` 字眼)。两笔分开做的原因:`prod-bundle-id-fix` 是修紧急 bug(网格搜不到 prod),`bundle-id-debrand` 是品牌治理,合并一笔会让 trade-off 不清晰。

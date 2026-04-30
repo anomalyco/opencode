@@ -10,6 +10,24 @@
 
 
 
+
+## [macOS] 2026.4.30.3 — 2026-04-30 16:30
+
+**包含**(自 `2026.4.30.2` 之后唯一增量):
+- `bundle-id-debrand`(`3fd5ceaf5`):Bundle ID 完整品牌切割,三档全去 `opencode` 字眼,改 `ai.deskfox.app` 系列(prod / `.beta` / `.dev`),reverse-DNS 与域名 `deskfox.ai`(在 user 手中)对齐;与 sst/opencode 上游 0 命名空间共享,未来 TCC / URL Scheme / Universal Link / OAuth callback 都不会冲突
+
+**配套要求**:**首装零额外步骤** ✅ — 实测 macOS 14+ 对用户目录(~/Downloads / ~/Documents 等)TCC 自动放行,**无任何弹窗,直接可用**(此实测推翻了 `2026.4.30.2` entry 中"长期治理:加 Info.plist usage description"的提议 — 不需要做,问题不存在)。
+
+**installer**:`packages/desktop/src-tauri/target/release/bundle/dmg/DeskFox-2026.4.30.3_aarch64.dmg`(49,263,356 bytes)
+
+**user 验收**:
+- ✅ 装到 `/Applications/DeskFox.app`,Bundle ID 验证 `ai.deskfox.app`(完全无 opencode 字眼)
+- ✅ 启动后访问 ~/Downloads → 无弹窗 → 直接列出文件 / 加载会话(macOS 14+ 自动 TCC 放行)
+- ⚠️ **已知遗留**:应用程序网格里能看到 DeskFox 图标,但顶上**搜索框搜 "desk" / "fox" 搜不到**(Cmd+Space Spotlight 搜得到,Raycast 等第三方启动器也搜得到,只有 macOS 自带应用程序网格搜索没收录)。猜测原因:`ai.deskfox.app` 是全新 reverse-DNS 命名空间,系统索引刚 register 还没扫到 / 或对未见过的 reverse-DNS 有冷启动延迟。**不影响日常使用**,user 通过 Cmd+Space / Launchpad 图标点击 / Dock 等其它途径都能启动。下次治理(可能 `lsregister -kill -r` 全量重扫 / 等 Spotlight 完整扫描周期 / 重启 Mac)
+
+**上游 baseline**:1.14.21(沿用)
+
+---
 ## [macOS] 2026.4.30.2 — 2026-04-30 15:16
 
 **包含**(自 Win `2026.4.29.2` 后的 macOS 全部增量,首版 macOS prod):
