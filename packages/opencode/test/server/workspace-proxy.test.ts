@@ -46,7 +46,7 @@ function echoWebSocket(request: HttpServerRequest.HttpServerRequest) {
     // The upstream announces the negotiated protocol, then echoes every
     // received frame. The assertions use those messages to prove proxy flow.
     yield* socket
-      .runRaw((message) => write(`echo:${message}`), {
+      .runRaw((message) => write(`echo:${String(message)}`), {
         onOpen: write(`protocol:${request.headers["sec-websocket-protocol"] ?? "none"}`).pipe(
           Effect.catch(() => Effect.void),
         ),

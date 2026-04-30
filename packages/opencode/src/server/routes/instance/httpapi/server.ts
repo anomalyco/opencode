@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
@@ -22,17 +22,24 @@ import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
 import { Question } from "@/question"
 import { Session } from "@/session/session"
+import { SessionCompaction } from "@/session/compaction"
+import { SessionPrompt } from "@/session/prompt"
+import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
+import { SessionShare } from "@/share/session"
 import { Skill } from "@/skill"
+import { SyncEvent } from "@/sync"
 import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
+import { Workspace } from "@/control-plane/workspace"
+import { isAllowedCorsOrigin } from "@/server/cors"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { authorizationLayer } from "./middleware/authorization"
+import { ServerAuthConfig, authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
 import { eventRoute } from "./event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
@@ -56,7 +63,7 @@ import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
 
-export const context = Context.empty() as Context.Context<unknown>
+export const context = Context.makeUnsafe<unknown>(new Map())
 
 const runtime = HttpRouter.middleware()(
   Effect.succeed((effect) =>
@@ -67,6 +74,14 @@ const runtime = HttpRouter.middleware()(
     }),
   ),
 ).layer
+
+const cors = HttpRouter.middleware(
+  HttpMiddleware.cors({
+    allowedOrigins: isAllowedCorsOrigin,
+    maxAge: 86_400,
+  }),
+  { global: true },
+)
 
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
@@ -90,14 +105,15 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
 
 const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
   Layer.provide(
-    instanceRouterMiddleware
+    authorizationRouterMiddleware
+      .combine(instanceRouterMiddleware)
       .combine(workspaceRouterMiddleware)
-      .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
+      .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal), Layer.provide(ServerAuthConfig.defaultLayer)),
   ),
 )
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
   Layer.provide([
-    authorizationLayer,
+    authorizationLayer.pipe(Layer.provide(ServerAuthConfig.defaultLayer)),
     workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
     instanceContextLayer,
   ]),
@@ -105,6 +121,7 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
   Layer.provide([
+    cors,
     runtime,
     Account.defaultLayer,
     Agent.defaultLayer,
@@ -124,13 +141,19 @@ export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
     Question.defaultLayer,
     Ripgrep.defaultLayer,
     Session.defaultLayer,
+    SessionCompaction.defaultLayer,
+    SessionPrompt.defaultLayer,
+    SessionRevert.defaultLayer,
+    SessionShare.defaultLayer,
     SessionRunState.defaultLayer,
     SessionStatus.defaultLayer,
     SessionSummary.defaultLayer,
+    SyncEvent.defaultLayer,
     Skill.defaultLayer,
     Todo.defaultLayer,
     ToolRegistry.defaultLayer,
     Vcs.defaultLayer,
+    Workspace.defaultLayer,
     Worktree.defaultLayer,
     Bus.layer,
     HttpServer.layerServices,

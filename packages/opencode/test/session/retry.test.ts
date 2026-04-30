@@ -2,28 +2,31 @@ import { describe, expect, test } from "bun:test"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule } from "effect"
+import { Effect, Layer, Schedule } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderID } from "../../src/provider/schema"
-import { AppRuntime } from "../../src/effect/app-runtime"
 import { SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
-import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 const providerID = ProviderID.make("test")
+const it = testEffect(Layer.mergeAll(SessionStatus.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
 function apiError(headers?: Record<string, string>): MessageV2.APIError {
-  return new MessageV2.APIError({
-    message: "boom",
-    isRetryable: true,
-    responseHeaders: headers,
-  }).toObject() as MessageV2.APIError
+  return MessageV2.APIError.Schema.parse(
+    new MessageV2.APIError({
+      message: "boom",
+      isRetryable: true,
+      responseHeaders: headers,
+    }).toObject(),
+  )
 }
 
 function wrap(message: unknown): ReturnType<NamedError["toObject"]> {
-  return { data: { message } } as ReturnType<NamedError["toObject"]>
+  return { name: "", data: { message } }
 }
 
 describe("session.retry.delay", () => {
@@ -80,47 +83,36 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
   })
 
-  test("policy updates retry status and increments attempts", async () => {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
+  it.live("policy updates retry status and increments attempts", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
         const sessionID = SessionID.make("session-retry-test")
         const error = apiError({ "retry-after-ms": "0" })
+        const status = yield* SessionStatus.Service
 
-        await Effect.runPromise(
-          Effect.gen(function* () {
-            const step = yield* Schedule.toStepWithMetadata(
-              SessionRetry.policy({
-                parse: (err) => err as MessageV2.APIError,
-                set: (info) =>
-                  Effect.promise(() =>
-                    AppRuntime.runPromise(
-                      SessionStatus.Service.use((svc) =>
-                        svc.set(sessionID, {
-                          type: "retry",
-                          attempt: info.attempt,
-                          message: info.message,
-                          next: info.next,
-                        }),
-                      ),
-                    ),
-                  ),
+        const step = yield* Schedule.toStepWithMetadata(
+          SessionRetry.policy({
+            parse: (err) => MessageV2.APIError.Schema.parse(err),
+            set: (info) =>
+              status.set(sessionID, {
+                type: "retry",
+                attempt: info.attempt,
+                message: info.message,
+                next: info.next,
               }),
-            )
-            yield* step(error)
-            yield* step(error)
           }),
         )
+        yield* step(error)
+        yield* step(error)
 
-        expect(await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.get(sessionID)))).toMatchObject({
+        expect(yield* status.get(sessionID)).toMatchObject({
           type: "retry",
           attempt: 2,
           message: "boom",
         })
-      },
-    })
-  })
+      }),
+    ),
+  )
 })
 
 describe("session.retry.retryable", () => {
@@ -173,58 +165,68 @@ describe("session.retry.retryable", () => {
     const error = new MessageV2.ContextOverflowError({
       message: "Input exceeds context window of this model",
       responseBody: '{"error":{"code":"context_length_exceeded"}}',
-    }).toObject() as ReturnType<NamedError["toObject"]>
+    }).toObject()
 
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
   test("retries 500 errors even when isRetryable is false", () => {
-    const error = new MessageV2.APIError({
-      message: "Internal server error",
-      isRetryable: false,
-      statusCode: 500,
-      responseBody: '{"type":"api_error","message":"Internal server error"}',
-    }).toObject() as MessageV2.APIError
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Internal server error",
+        isRetryable: false,
+        statusCode: 500,
+        responseBody: '{"type":"api_error","message":"Internal server error"}',
+      }).toObject(),
+    )
 
     expect(SessionRetry.retryable(error)).toBe("Internal server error")
   })
 
   test("retries 502 bad gateway errors", () => {
-    const error = new MessageV2.APIError({
-      message: "Bad gateway",
-      isRetryable: false,
-      statusCode: 502,
-    }).toObject() as MessageV2.APIError
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Bad gateway",
+        isRetryable: false,
+        statusCode: 502,
+      }).toObject(),
+    )
 
     expect(SessionRetry.retryable(error)).toBe("Bad gateway")
   })
 
   test("retries 503 service unavailable errors", () => {
-    const error = new MessageV2.APIError({
-      message: "Service unavailable",
-      isRetryable: false,
-      statusCode: 503,
-    }).toObject() as MessageV2.APIError
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Service unavailable",
+        isRetryable: false,
+        statusCode: 503,
+      }).toObject(),
+    )
 
     expect(SessionRetry.retryable(error)).toBe("Service unavailable")
   })
 
   test("does not retry 4xx errors when isRetryable is false", () => {
-    const error = new MessageV2.APIError({
-      message: "Bad request",
-      isRetryable: false,
-      statusCode: 400,
-    }).toObject() as MessageV2.APIError
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Bad request",
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
 
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
   test("retries ZlibError decompression failures", () => {
-    const error = new MessageV2.APIError({
-      message: "Response decompression failed",
-      isRetryable: true,
-      metadata: { code: "ZlibError" },
-    }).toObject() as MessageV2.APIError
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Response decompression failed",
+        isRetryable: true,
+        metadata: { code: "ZlibError" },
+      }).toObject(),
+    )
 
     const retryable = SessionRetry.retryable(error)
     expect(retryable).toBeDefined()
@@ -261,20 +263,23 @@ describe("session.message-v2.fromError", () => {
       const result = MessageV2.fromError(error, { providerID })
 
       expect(MessageV2.APIError.isInstance(result)).toBe(true)
-      expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
-      expect((result as MessageV2.APIError).data.message).toBe("Connection reset by server")
-      expect((result as MessageV2.APIError).data.metadata?.code).toBe("ECONNRESET")
-      expect((result as MessageV2.APIError).data.metadata?.message).toInclude("socket connection")
+      if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
+      expect(result.data.isRetryable).toBe(true)
+      expect(result.data.message).toBe("Connection reset by server")
+      expect(result.data.metadata?.code).toBe("ECONNRESET")
+      expect(result.data.metadata?.message).toInclude("socket connection")
     },
     15_000,
   )
 
   test("ECONNRESET socket error is retryable", () => {
-    const error = new MessageV2.APIError({
-      message: "Connection reset by server",
-      isRetryable: true,
-      metadata: { code: "ECONNRESET", message: "The socket connection was closed unexpectedly" },
-    }).toObject() as MessageV2.APIError
+    const error = MessageV2.APIError.Schema.parse(
+      new MessageV2.APIError({
+        message: "Connection reset by server",
+        isRetryable: true,
+        metadata: { code: "ECONNRESET", message: "The socket connection was closed unexpectedly" },
+      }).toObject(),
+    )
 
     const retryable = SessionRetry.retryable(error)
     expect(retryable).toBeDefined()
@@ -291,7 +296,8 @@ describe("session.message-v2.fromError", () => {
       responseBody: '{"error":"boom"}',
       isRetryable: false,
     })
-    const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError
+    const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") })
+    if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
     expect(result.data.isRetryable).toBe(true)
   })
 
@@ -313,7 +319,8 @@ describe("session.message-v2.fromError", () => {
     )
 
     expect(MessageV2.APIError.isInstance(result)).toBe(true)
-    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
     expect(SessionRetry.retryable(result)).toBe("An error occurred while processing your request.")
   })
 })
