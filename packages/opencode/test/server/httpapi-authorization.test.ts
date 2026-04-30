@@ -1,6 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import {
@@ -29,7 +29,7 @@ const apiLayer = HttpRouter.serve(
 
 const authConfigLayer = (input: { password?: string; username?: string } = {}) =>
   ServerAuthConfig.layer({
-    password: input.password,
+    password: input.password === undefined ? Option.none() : Option.some(input.password),
     username: input.username ?? "opencode",
   })
 

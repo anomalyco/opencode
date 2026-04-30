@@ -1,3 +1,4 @@
+import { ConfigService } from "@/effect/config-service"
 import { Config, Context, Effect, Encoding, Layer, Option, Redacted, Schema } from "effect"
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
 
@@ -18,30 +19,13 @@ export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   },
 ) {}
 
-export class ServerAuthConfig extends Context.Service<
-  ServerAuthConfig,
+export class ServerAuthConfig extends ConfigService.Service<ServerAuthConfig>()(
+  "@opencode/ExperimentalHttpApiServerAuthConfig",
   {
-    readonly password: string | undefined
-    readonly username: string
-  }
->()("@opencode/ExperimentalHttpApiServerAuthConfig") {
-  static readonly layer = (input: Context.Service.Shape<typeof ServerAuthConfig>) =>
-    Layer.succeed(ServerAuthConfig, ServerAuthConfig.of(input))
-
-  static readonly defaultLayer = Layer.effect(
-    ServerAuthConfig,
-    Effect.gen(function* () {
-      const config = yield* Config.all({
-        password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
-        username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
-      })
-      return ServerAuthConfig.of({
-        password: Option.getOrUndefined(config.password),
-        username: config.username,
-      })
-    }),
-  )
-}
+    password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
+    username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
+  },
+) {}
 
 function validateCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
@@ -49,12 +33,12 @@ function validateCredential<A, E, R>(
   config: Context.Service.Shape<typeof ServerAuthConfig>,
 ) {
   return Effect.gen(function* () {
-    if (!config.password) return yield* effect
+    if (Option.isNone(config.password) || config.password.value === "") return yield* effect
 
     if (credential.username !== config.username) {
       return yield* new Unauthorized({ message: "Unauthorized" })
     }
-    if (Redacted.value(credential.password) !== config.password) {
+    if (Redacted.value(credential.password) !== config.password.value) {
       return yield* new Unauthorized({ message: "Unauthorized" })
     }
     return yield* effect
