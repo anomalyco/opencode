@@ -87,7 +87,6 @@ jobs:
           bun turbo test:ci 2>&1 | tee unit-stdout.log
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
-          TEST_TIMEOUT: ${{ runner.os == 'Windows' && '60000' || '30000' }}
 
       - name: Publish unit reports
         if: always()
