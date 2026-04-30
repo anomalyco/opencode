@@ -24,26 +24,24 @@ export class ServerAuthConfig extends Context.Service<
     readonly password: string | undefined
     readonly username: string
   }
->()("@opencode/ExperimentalHttpApiServerAuthConfig") {}
+>()("@opencode/ExperimentalHttpApiServerAuthConfig") {
+  static readonly layer = (input: Context.Service.Shape<typeof ServerAuthConfig>) =>
+    Layer.succeed(ServerAuthConfig, ServerAuthConfig.of(input))
 
-const emptyCredential = {
-  username: "",
-  password: Redacted.make(""),
+  static readonly defaultLayer = Layer.effect(
+    ServerAuthConfig,
+    Effect.gen(function* () {
+      const config = yield* Config.all({
+        password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
+        username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
+      })
+      return ServerAuthConfig.of({
+        password: Option.getOrUndefined(config.password),
+        username: config.username,
+      })
+    }),
+  )
 }
-
-export const serverAuthConfigLayer = Layer.effect(
-  ServerAuthConfig,
-  Effect.gen(function* () {
-    const config = yield* Config.all({
-      password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
-      username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
-    })
-    return ServerAuthConfig.of({
-      password: Option.getOrUndefined(config.password),
-      username: config.username,
-    })
-  }),
-)
 
 function validateCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
@@ -64,6 +62,11 @@ function validateCredential<A, E, R>(
 }
 
 function decodeCredential(input: string) {
+  const emptyCredential = {
+    username: "",
+    password: Redacted.make(""),
+  }
+
   return Encoding.decodeBase64String(input)
     .asEffect()
     .pipe(
@@ -88,9 +91,9 @@ export const authorizationLayer = Layer.effect(
     return Authorization.of({
       basic: (effect, { credential }) => validateCredential(effect, credential, config),
       authToken: (effect, { credential }) =>
-        Effect.gen(function* () {
-          return yield* validateCredential(effect, yield* decodeCredential(Redacted.value(credential)), config)
-        }),
+        decodeCredential(Redacted.value(credential)).pipe(
+          Effect.flatMap((decoded) => validateCredential(effect, decoded, config)),
+        ),
     })
   }),
 )

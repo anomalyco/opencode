@@ -32,7 +32,7 @@ import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { authorizationLayer, serverAuthConfigLayer } from "./middleware/authorization"
+import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
 import { eventRoute } from "./event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
@@ -97,7 +97,7 @@ const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
 )
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
   Layer.provide([
-    authorizationLayer.pipe(Layer.provide(serverAuthConfigLayer)),
+    authorizationLayer.pipe(Layer.provide(ServerAuthConfig.defaultLayer)),
     workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
     instanceContextLayer,
   ]),

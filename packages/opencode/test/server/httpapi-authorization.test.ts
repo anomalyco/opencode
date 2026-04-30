@@ -28,13 +28,10 @@ const apiLayer = HttpRouter.serve(
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
 const authConfigLayer = (input: { password?: string; username?: string } = {}) =>
-  Layer.succeed(
-    ServerAuthConfig,
-    ServerAuthConfig.of({
-      password: input.password,
-      username: input.username ?? "opencode",
-    }),
-  )
+  ServerAuthConfig.layer({
+    password: input.password,
+    username: input.username ?? "opencode",
+  })
 
 const itWithAuth = (input: { password?: string; username?: string } = {}) =>
   testEffect(apiLayer.pipe(Layer.provide(authConfigLayer(input))))
