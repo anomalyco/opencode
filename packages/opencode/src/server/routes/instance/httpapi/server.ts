@@ -38,7 +38,7 @@ import { Worktree } from "@/worktree"
 import { Workspace } from "@/control-plane/workspace"
 import { isAllowedCorsOrigin } from "@/server/cors"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
+import { ServerAuthConfig, authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
 import { eventRoute } from "./event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
@@ -104,9 +104,10 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
 
 const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
   Layer.provide(
-    instanceRouterMiddleware
+    authorizationRouterMiddleware
+      .combine(instanceRouterMiddleware)
       .combine(workspaceRouterMiddleware)
-      .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
+      .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal), Layer.provide(ServerAuthConfig.defaultLayer)),
   ),
 )
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(

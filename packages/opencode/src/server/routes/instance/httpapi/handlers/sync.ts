@@ -13,6 +13,9 @@ import { Effect, Scope } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { HistoryPayload, ReplayPayload } from "../groups/sync"
+import * as Log from "@opencode-ai/core/util/log"
+
+const log = Log.create({ service: "server.sync" })
 
 export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handlers) =>
   Effect.gen(function* () {
@@ -34,8 +37,22 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         type: event.type,
         data: { ...event.data },
       }))
+      const source = events[0].aggregateID
+      log.info("sync replay requested", {
+        sessionID: source,
+        events: events.length,
+        first: events[0]?.seq,
+        last: events.at(-1)?.seq,
+        directory: ctx.payload.directory,
+      })
       SyncEvent.replayAll(events)
-      return { sessionID: events[0].aggregateID }
+      log.info("sync replay complete", {
+        sessionID: source,
+        events: events.length,
+        first: events[0]?.seq,
+        last: events.at(-1)?.seq,
+      })
+      return { sessionID: source }
     })
 
     const history = Effect.fn("SyncHttpApi.history")(function* (ctx: { payload: typeof HistoryPayload.Type }) {
