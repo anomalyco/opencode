@@ -1,3 +1,4 @@
+$ bun run --conditions=browser ./src/index.ts generate
 {
   "openapi": "3.1.1",
   "info": {
@@ -10256,6 +10257,9 @@
       "Session": {
         "type": "object",
         "properties": {
+          "totalCost": {
+            "type": "number"
+          },
           "id": {
             "type": "string",
             "pattern": "^ses.*"
@@ -10372,7 +10376,7 @@
             "required": ["messageID"]
           }
         },
-        "required": ["id", "slug", "projectID", "directory", "title", "version", "time"]
+        "required": ["totalCost", "id", "slug", "projectID", "directory", "title", "version", "time"]
       },
       "Event.session.created": {
         "type": "object",
@@ -10896,6 +10900,16 @@
                           }
                         },
                         "required": ["messageID"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "totalCost": {
+                    "anyOf": [
+                      {
+                        "type": "number"
                       },
                       {
                         "type": "null"
@@ -12688,6 +12702,9 @@
       "GlobalSession": {
         "type": "object",
         "properties": {
+          "totalCost": {
+            "type": "number"
+          },
           "id": {
             "type": "string",
             "pattern": "^ses.*"
@@ -12814,7 +12831,7 @@
             ]
           }
         },
-        "required": ["id", "slug", "projectID", "directory", "title", "version", "time", "project"]
+        "required": ["totalCost", "id", "slug", "projectID", "directory", "title", "version", "time", "project"]
       },
       "McpResource": {
         "type": "object",

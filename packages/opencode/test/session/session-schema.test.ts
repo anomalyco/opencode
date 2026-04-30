@@ -5,6 +5,7 @@ import { MessageID, SessionID } from "../../src/session/schema"
 import { Session } from "../../src/session/session"
 
 const info = {
+  totalCost: 0,
   id: SessionID.descending(),
   slug: "test-session",
   projectID: ProjectID.global,

@@ -11,8 +11,13 @@ const money = new Intl.NumberFormat("en-US", {
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
+
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
-  const cost = createMemo(() => msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0))
+
+  const cost = createMemo(() => {
+    const row = props.api.state.session.get(props.session_id)
+    return row?.totalCost ?? 0
+  })
 
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)

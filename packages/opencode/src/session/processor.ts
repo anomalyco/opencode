@@ -374,6 +374,7 @@ export const layer: Layer.Layer<
               cost: usage.cost,
             })
             yield* session.updateMessage(ctx.assistantMessage)
+            yield* session.addAccumulatedCost({ sessionID: ctx.sessionID, delta: usage.cost })
             if (ctx.snapshot) {
               const patch = yield* snapshot.patch(ctx.snapshot)
               if (patch.files.length) {

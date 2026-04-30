@@ -12,6 +12,7 @@ import type {
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
+  Session as SdkSession,
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
@@ -279,6 +280,7 @@ export type TuiState = {
     status: (sessionID: string) => SessionStatus | undefined
     permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
+    get: (sessionID: string) => SdkSession | undefined
   }
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>

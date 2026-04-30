@@ -70,6 +70,7 @@ export function fromRow(row: SessionRow): Info {
   const share = row.share_url ? { url: row.share_url } : undefined
   const revert = row.revert ?? undefined
   return {
+    totalCost: row.total_cost ?? 0,
     id: row.id,
     slug: row.slug,
     projectID: row.project_id,
@@ -94,6 +95,7 @@ export function fromRow(row: SessionRow): Info {
 
 export function toRow(info: Info) {
   return {
+    total_cost: info.totalCost ?? 0,
     id: info.id,
     project_id: info.projectID,
     workspace_id: info.workspaceID,
@@ -157,6 +159,7 @@ const Revert = Schema.Struct({
 })
 
 export const Info = Schema.Struct({
+  totalCost: Schema.Finite,
   id: SessionID,
   slug: Schema.String,
   projectID: ProjectID,
@@ -262,6 +265,7 @@ const UpdatedInfo = Schema.Struct({
   time: Schema.optional(UpdatedTime),
   permission: Schema.optional(Schema.NullOr(Permission.Ruleset)),
   revert: Schema.optional(Schema.NullOr(Revert)),
+  totalCost: Schema.optional(Schema.NullOr(Schema.Finite)),
 })
 
 const UpdatedEventSchema = Schema.Struct({
@@ -430,6 +434,7 @@ export interface Interface {
     sessionID: SessionID,
     predicate: (msg: MessageV2.WithParts) => boolean,
   ) => Effect.Effect<Option.Option<MessageV2.WithParts>>
+  readonly addAccumulatedCost: (input: { sessionID: SessionID; delta: number }) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
@@ -456,6 +461,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
+        totalCost: 0,
         id: SessionID.descending(input.id),
         slug: Slug.create(),
         version: InstallationVersion,
@@ -601,11 +607,13 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       })
       const msgs = yield* messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
+      let forkTotalCost = 0
 
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
         const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
+        if (msg.info.role === "assistant") forkTotalCost += msg.info.cost
 
         const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
         const cloned = yield* updateMessage({
@@ -628,11 +636,27 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
           yield* updatePart(p)
         }
       }
+      if (forkTotalCost !== 0) {
+        yield* patch(session.id, { totalCost: forkTotalCost, time: { updated: Date.now() } })
+        return yield* get(session.id)
+      }
       return session
     })
 
     const patch = (sessionID: SessionID, info: Patch) =>
       Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID, info }))
+
+    const addAccumulatedCost = Effect.fn("Session.addAccumulatedCost")(function* (input: {
+      sessionID: SessionID
+      delta: number
+    }) {
+      if (input.delta === 0 || !Number.isFinite(input.delta)) return
+      const current = yield* get(input.sessionID)
+      const next = new Decimal(current.totalCost ?? 0)
+        .plus(input.delta)
+        .toNumber()
+      yield* patch(input.sessionID, { totalCost: next, time: { updated: Date.now() } })
+    })
 
     const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
       yield* patch(sessionID, { time: { updated: Date.now() } })
@@ -756,6 +780,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
       getPart,
       updatePartDelta,
       findMessage,
+      addAccumulatedCost,
     })
   }),
 )

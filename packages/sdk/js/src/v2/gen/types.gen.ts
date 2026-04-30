@@ -931,6 +931,7 @@ export type PermissionRule = {
 export type PermissionRuleset = Array<PermissionRule>
 
 export type Session = {
+  totalCost: number
   id: string
   slug: string
   projectID: string
@@ -1090,6 +1091,7 @@ export type SyncEventSessionUpdated = {
         snapshot?: string
         diff?: string
       } | null
+      totalCost?: number | null
     }
   }
 }
@@ -1878,6 +1880,7 @@ export type ProjectSummary = {
 }
 
 export type GlobalSession = {
+  totalCost: number
   id: string
   slug: string
   projectID: string

@@ -40,6 +40,7 @@ describe("Session.Info", () => {
 
   test("accepts minimal session", () => {
     const input = {
+      totalCost: 0,
       id: sessionID,
       slug: "hello",
       projectID,
@@ -54,6 +55,7 @@ describe("Session.Info", () => {
 
   test("round-trips every optional field", () => {
     const input = {
+      totalCost: 1.25,
       id: sessionID,
       slug: "fullshape",
       projectID,
@@ -114,6 +116,7 @@ describe("Session.GlobalInfo", () => {
 
   test("accepts null project", () => {
     const input = {
+      totalCost: 0,
       id: sessionID,
       slug: "global",
       projectID,
@@ -129,6 +132,7 @@ describe("Session.GlobalInfo", () => {
 
   test("accepts populated project", () => {
     const input = {
+      totalCost: 0,
       id: sessionID,
       slug: "global",
       projectID,

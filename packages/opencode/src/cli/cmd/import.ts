@@ -161,6 +161,13 @@ export const ImportCommand = cmd({
       const info = Schema.decodeUnknownSync(Session.Info)({
         ...exportData.info,
         projectID: Instance.project.id,
+        totalCost:
+          "totalCost" in exportData.info && typeof exportData.info.totalCost === "number"
+            ? exportData.info.totalCost
+            : exportData.messages.reduce(
+                (sum, m) => (m.info.role === "assistant" ? sum + m.info.cost : sum),
+                0,
+              ),
       }) as Session.Info
       const row = Session.toRow(info)
       Database.use((db) =>
