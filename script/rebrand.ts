@@ -70,6 +70,27 @@ const RULES: Rule[] = [
   // app.tsx の "OpenCode v... Run 'opencode upgrade' to update manually" toast は
   // upstream v1.4.x で完全書き換え (`A new release v... Would you like to update now?`)。
   // branding 対象行ごと消えたためルールも削除。
+  {
+    file: "packages/opencode/src/cli/cmd/tui/app.tsx",
+    find: "      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,",
+    replace: "      `Successfully updated to securecode v${result.data.version}. Please restart the application.`,",
+  },
+
+  {
+    file: "packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx",
+    find: `                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />`,
+    replace: `                <TextBody title={"This will allow " + props.request.permission + " until securecode is restarted."} />`,
+  },
+  {
+    file: "packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx",
+    find: `                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>`,
+    replace: `                  <text fg={theme.textMuted}>This will allow the following patterns until securecode is restarted</text>`,
+  },
+  {
+    file: "packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx",
+    find: `          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>`,
+    replace: `          <text fg={theme.textMuted}>Tell securecode what to do differently</text>`,
+  },
 
   {
     file: "packages/opencode/src/cli/cmd/tui/attach.ts",
