@@ -1,8 +1,12 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, FileSystem, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { NodeFileSystem } from "@effect/platform-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Config } from "@/config/config"
+import { emptyConsoleState } from "@/config/console-state"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instruction } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
@@ -11,7 +15,34 @@ import { Global } from "@opencode-ai/core/global"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Instruction.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
+const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
+
+const configLayer = Layer.succeed(
+  Config.Service,
+  Config.Service.of({
+    get: () => Effect.succeed({}),
+    getGlobal: () => Effect.succeed({}),
+    getConsoleState: () => Effect.succeed(emptyConsoleState),
+    update: () => Effect.void,
+    updateGlobal: (config) => Effect.succeed(config),
+    invalidate: () => Effect.void,
+    directories: () => Effect.succeed([]),
+    waitForDependencies: () => Effect.void,
+  }),
+)
+
+const instructionLayer = (global: Partial<Global.Interface>) =>
+  Instruction.layer.pipe(
+    Layer.provide(configLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(Global.layerWith(global)),
+  )
+
+const provideInstruction =
+  (global: Partial<Global.Interface>) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>) =>
+    self.pipe(Effect.provide(instructionLayer(global)))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -30,7 +61,7 @@ const withFiles = <A, E, R>(files: Record<string, string>, self: (dir: string) =
   provideTmpdirInstance((dir) =>
     Effect.gen(function* () {
       yield* writeFiles(dir, files)
-      return yield* self(dir)
+      return yield* self(dir).pipe(provideInstruction({ home: dir, config: dir }))
     }),
   )
 
@@ -40,10 +71,6 @@ const tmpWithFiles = (files: Record<string, string>) =>
     yield* writeFiles(dir, files)
     return dir
   })
-
-const setGlobalConfig = (config: string) => {
-  Object.assign(Global.Path, { config })
-}
 
 function loaded(filepath: string): MessageV2.WithParts[] {
   const sessionID = SessionID.make("session-loaded-1")
@@ -185,117 +212,35 @@ describe("Instruction.resolve", () => {
 describe("Instruction.system", () => {
   it.live("loads both project and global AGENTS.md when both exist", () =>
     Effect.gen(function* () {
-      const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
-      delete process.env["OPENCODE_CONFIG_DIR"]
-
       const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
       const projectTmp = yield* tmpWithFiles({ "AGENTS.md": "# Project Instructions" })
-      const originalGlobalConfig = Global.Path.config
-      setGlobalConfig(globalTmp)
 
-      try {
-        yield* Effect.gen(function* () {
-          const svc = yield* Instruction.Service
-          const paths = yield* svc.systemPaths()
-          expect(paths.has(path.join(projectTmp, "AGENTS.md"))).toBe(true)
-          expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(projectTmp, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
 
-          const rules = yield* svc.system()
-          expect(rules).toHaveLength(2)
-          expect(rules[0]).toBe(`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Instructions`)
-          expect(rules[1]).toBe(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`)
-        }).pipe(provideInstance(projectTmp))
-      } finally {
-        setGlobalConfig(originalGlobalConfig)
-        if (originalConfigDir === undefined) {
-          delete process.env["OPENCODE_CONFIG_DIR"]
-        } else {
-          process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
-        }
-      }
+        const rules = yield* svc.system()
+        expect(rules).toHaveLength(2)
+        expect(rules[0]).toBe(`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Instructions`)
+        expect(rules[1]).toBe(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )
 })
 
-describe("Instruction.systemPaths OPENCODE_CONFIG_DIR", () => {
-  let originalConfigDir: string | undefined
-
-  beforeEach(() => {
-    originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
-  })
-
-  afterEach(() => {
-    if (originalConfigDir === undefined) {
-      delete process.env["OPENCODE_CONFIG_DIR"]
-    } else {
-      process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
-    }
-  })
-
-  it.live("prefers OPENCODE_CONFIG_DIR AGENTS.md over global when both exist", () =>
-    Effect.gen(function* () {
-      const profileTmp = yield* tmpWithFiles({ "AGENTS.md": "# Profile Instructions" })
-      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
-      const projectTmp = yield* tmpdirScoped()
-
-      process.env["OPENCODE_CONFIG_DIR"] = profileTmp
-      const originalGlobalConfig = Global.Path.config
-      setGlobalConfig(globalTmp)
-
-      try {
-        yield* Effect.gen(function* () {
-          const svc = yield* Instruction.Service
-          const paths = yield* svc.systemPaths()
-          expect(paths.has(path.join(profileTmp, "AGENTS.md"))).toBe(true)
-          expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(false)
-        }).pipe(provideInstance(projectTmp))
-      } finally {
-        setGlobalConfig(originalGlobalConfig)
-      }
-    }),
-  )
-
-  it.live("falls back to global AGENTS.md when OPENCODE_CONFIG_DIR has no AGENTS.md", () =>
-    Effect.gen(function* () {
-      const profileTmp = yield* tmpdirScoped()
-      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
-      const projectTmp = yield* tmpdirScoped()
-
-      process.env["OPENCODE_CONFIG_DIR"] = profileTmp
-      const originalGlobalConfig = Global.Path.config
-      setGlobalConfig(globalTmp)
-
-      try {
-        yield* Effect.gen(function* () {
-          const svc = yield* Instruction.Service
-          const paths = yield* svc.systemPaths()
-          expect(paths.has(path.join(profileTmp, "AGENTS.md"))).toBe(false)
-          expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
-        }).pipe(provideInstance(projectTmp))
-      } finally {
-        setGlobalConfig(originalGlobalConfig)
-      }
-    }),
-  )
-
-  it.live("uses global AGENTS.md when OPENCODE_CONFIG_DIR is not set", () =>
+describe("Instruction.systemPaths global config", () => {
+  it.live("uses Global.Service config AGENTS.md", () =>
     Effect.gen(function* () {
       const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
       const projectTmp = yield* tmpdirScoped()
 
-      delete process.env["OPENCODE_CONFIG_DIR"]
-      const originalGlobalConfig = Global.Path.config
-      setGlobalConfig(globalTmp)
-
-      try {
-        yield* Effect.gen(function* () {
-          const svc = yield* Instruction.Service
-          const paths = yield* svc.systemPaths()
-          expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
-        }).pipe(provideInstance(projectTmp))
-      } finally {
-        setGlobalConfig(originalGlobalConfig)
-      }
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )
 })
