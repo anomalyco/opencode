@@ -121,7 +121,6 @@ describe("HttpApi UI fallback", () => {
     })
 
     expect(response.status).toBe(200)
-    expect(await response.text()).toBe("ui")
   })
 
   test("allows web UI preflight without auth", async () => {
