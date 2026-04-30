@@ -6,7 +6,7 @@ related: ./3-changelog.md
 
 # office-installer-macos — changelog
 
-**关联 commit**: 待回填
+**关联 commit**: `fc69b462c`
 **所在分支**: `feat/editable-file-viewer`
 **规模**: Tiny(2 文件 净 +119 / -48,无 1-spec / 2-plan)
 **触发原因**: `66c8fa523`(2026-04 初版 office 文档预览)落地时只支持 Windows 自动安装 LibreOffice(`msiexec /i ...msi`),macOS 用户点"安装预览插件"会撞 `platformSupported = false`,只能手动装。本次补 macOS 自动安装通道:DMG 下载 → `hdiutil` 挂载 → `cp -R` 到 `~/Applications` → 自动检测 soffice。
