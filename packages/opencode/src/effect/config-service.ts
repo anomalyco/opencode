@@ -19,6 +19,9 @@ export type ServiceClass<Self, Id extends string, Service> = Context.ServiceClas
   readonly defaultLayer: Layer.Layer<Self, Config.ConfigError>
 }
 
+/** Extract the service shape from a config service class. */
+export type ServiceShape<Service extends Context.Service.Any> = Context.Service.Shape<Service>
+
 /**
  * Create a Context service whose implementation is derived from Effect `Config`.
  *

@@ -56,7 +56,7 @@ import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
 
-export const context = Context.empty() as Context.Context<unknown>
+export const context = Context.makeUnsafe<unknown>(new Map())
 
 const runtime = HttpRouter.middleware()(
   Effect.succeed((effect) =>

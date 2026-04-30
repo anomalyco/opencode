@@ -1,5 +1,5 @@
 import { ConfigService } from "@/effect/config-service"
-import { Config, Context, Effect, Encoding, Layer, Option, Redacted, Schema } from "effect"
+import { Config, Effect, Encoding, Layer, Option, Redacted, Schema } from "effect"
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
 
 class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
@@ -30,7 +30,7 @@ export class ServerAuthConfig extends ConfigService.Service<ServerAuthConfig>()(
 function validateCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
   credential: { readonly username: string; readonly password: Redacted.Redacted },
-  config: Context.Service.Shape<typeof ServerAuthConfig>,
+  config: ConfigService.ServiceShape<typeof ServerAuthConfig>,
 ) {
   return Effect.gen(function* () {
     if (Option.isNone(config.password) || config.password.value === "") return yield* effect
