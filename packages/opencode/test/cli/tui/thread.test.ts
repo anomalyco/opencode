@@ -71,11 +71,11 @@ describe("tui thread", () => {
 
   async function check(project?: string) {
     setup()
-    await using tmp = await tmpdir({ git: true })
     const cwd = process.cwd()
     const pwd = process.env.PWD
     const worker = globalThis.Worker
     const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
+    await using tmp = await tmpdir({ git: true })
     const link = path.join(path.dirname(tmp.path), path.basename(tmp.path) + "-link")
     const type = process.platform === "win32" ? "junction" : "dir"
     seen.tui.length = 0
@@ -109,11 +109,12 @@ describe("tui thread", () => {
     }
   }
 
-  test("uses the real cwd when PWD points at a symlink", async () => {
+  // serial because both modify real env vars
+  test.serial("uses the real cwd when PWD points at a symlink", async () => {
     await check()
   })
 
-  test("uses the real cwd after resolving a relative project from PWD", async () => {
+  test.serial("uses the real cwd after resolving a relative project from PWD", async () => {
     await check(".")
   })
 })
