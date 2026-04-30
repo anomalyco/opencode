@@ -16,32 +16,16 @@ export type Delivery = Schema.Schema.Type<typeof Delivery>
 
 export const DefaultDelivery = "immediate" satisfies Delivery
 
-export type MessagesCursor = {
-  id: SessionMessage.ID
-  time: number
-}
-
-export type MessagesInput = {
-  sessionID: SessionID
-  limit?: number
-  cursor?: MessagesCursor
-  direction?: "before" | "after"
-}
-
-const older = (item: MessagesCursor) =>
-  or(
-    lt(SessionMessageTable.time_created, item.time),
-    and(eq(SessionMessageTable.time_created, item.time), lt(SessionMessageTable.id, item.id)),
-  )
-
-const newer = (item: MessagesCursor) =>
-  or(
-    gt(SessionMessageTable.time_created, item.time),
-    and(eq(SessionMessageTable.time_created, item.time), gt(SessionMessageTable.id, item.id)),
-  )
-
 export interface Interface {
-  readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Message[], never>
+  readonly messages: (input: {
+    sessionID: SessionID
+    limit?: number
+    from?: "start" | "end"
+    cursor?: {
+      id: SessionMessage.ID
+      time: number
+    }
+  }) => Effect.Effect<SessionMessage.Message[], never>
   readonly prompt: (input: {
     id?: Event.ID
     sessionID: SessionID
@@ -64,44 +48,45 @@ export const layer = Layer.effect(
 
     const result: Interface = {
       messages: Effect.fn("V2Session.messages")(function* (input) {
-        if (input.limit === undefined) {
-          const rows = Database.use((db) =>
-            db
-              .select()
-              .from(SessionMessageTable)
-              .where(eq(SessionMessageTable.session_id, input.sessionID))
-              .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
-              .all(),
-          )
-          return rows.map((row) => decode(row))
-        }
-
-        const limit = input.limit
-        const direction = input.direction ?? "before"
-        const where = input.cursor
-          ? and(
-              eq(SessionMessageTable.session_id, input.sessionID),
-              direction === "after" ? newer(input.cursor) : older(input.cursor),
-            )
+        const from = input.from ?? (input.limit === undefined && input.cursor === undefined ? "start" : "end")
+        const boundary = input.cursor
+          ? from === "start"
+            ? or(
+                gt(SessionMessageTable.time_created, input.cursor.time),
+                and(
+                  eq(SessionMessageTable.time_created, input.cursor.time),
+                  gt(SessionMessageTable.id, input.cursor.id),
+                ),
+              )
+            : or(
+                lt(SessionMessageTable.time_created, input.cursor.time),
+                and(
+                  eq(SessionMessageTable.time_created, input.cursor.time),
+                  lt(SessionMessageTable.id, input.cursor.id),
+                ),
+              )
+          : undefined
+        const where = boundary
+          ? and(eq(SessionMessageTable.session_id, input.sessionID), boundary)
           : eq(SessionMessageTable.session_id, input.sessionID)
+
         const rows = Database.use((db) => {
-          if (direction === "after") {
-            return db
+          if (from === "start") {
+            const query = db
               .select()
               .from(SessionMessageTable)
               .where(where)
               .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
-              .limit(limit)
-              .all()
+            return input.limit === undefined ? query.all() : query.limit(input.limit).all()
           }
-          const ids = db
+          const idsQuery = db
             .select({ id: SessionMessageTable.id })
             .from(SessionMessageTable)
             .where(where)
             .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
-            .limit(limit)
-            .all()
-            .map((row) => row.id)
+          const ids = (input.limit === undefined ? idsQuery.all() : idsQuery.limit(input.limit).all()).map(
+            (row) => row.id,
+          )
           if (ids.length === 0) return []
           return db
             .select()

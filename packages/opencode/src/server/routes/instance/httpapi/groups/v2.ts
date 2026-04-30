@@ -4,7 +4,7 @@ import { Prompt } from "@/v2/session-prompt"
 import { SessionV2 } from "@/v2/session"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "./middleware/authorization"
+import { Authorization } from "../middleware/authorization"
 
 export const V2Api = HttpApi.make("v2")
   .add(
@@ -23,23 +23,17 @@ export const V2Api = HttpApi.make("v2")
               description:
                 "Maximum number of messages to return. When omitted, the endpoint returns its default page size. Use limit without a cursor to fetch the newest page for chat history.",
             }),
-            before: Schema.optional(Schema.String).annotate({
+            cursor: Schema.optional(Schema.String).annotate({
               description:
-                "Opaque pagination cursor for the item at the start of the current window. Returns messages older than this cursor. Mutually exclusive with after.",
-            }),
-            after: Schema.optional(Schema.String).annotate({
-              description:
-                "Opaque pagination cursor for the item at the end of the current window. Returns messages newer than this cursor. Mutually exclusive with before.",
-            }),
-            from: Schema.optional(Schema.Literal("start")).annotate({
-              description:
-                "Start from the beginning of session history instead of the newest messages. Mutually exclusive with before and after.",
+                "Opaque pagination cursor returned as before or after in the previous response. The cursor encodes whether to fetch older or newer messages. Use start to read from the beginning or end to read from the latest messages; end is the default.",
             }),
           }).annotate({ identifier: "V2SessionMessagesQuery" }),
           success: Schema.Struct({
             items: Schema.Array(SessionMessage.Message),
-            before: Schema.String.pipe(Schema.optional),
-            after: Schema.String.pipe(Schema.optional),
+            cursor: Schema.Struct({
+              before: Schema.String.pipe(Schema.optional),
+              after: Schema.String.pipe(Schema.optional),
+            }),
           }).annotate({ identifier: "V2SessionMessagesResponse" }),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
@@ -47,7 +41,7 @@ export const V2Api = HttpApi.make("v2")
             identifier: "v2.session.messages",
             summary: "Get v2 session messages",
             description:
-              "Retrieve projected v2 messages for a session. For chat clients, request the latest page with limit, page backward through older history with before, and catch up with newer messages using after.",
+              "Retrieve projected v2 messages for a session. For chat clients, request the latest page with limit, page backward through older history with the before cursor, and catch up with newer messages using the after cursor.",
           }),
         ),
       )

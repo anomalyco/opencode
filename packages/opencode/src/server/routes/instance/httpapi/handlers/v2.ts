@@ -10,14 +10,15 @@ const DefaultMessagesLimit = 50
 const Cursor = Schema.Struct({
   id: SessionMessage.ID,
   time: Schema.Number,
+  from: Schema.Union([Schema.Literal("start"), Schema.Literal("end")]),
 })
 
 const decodeCursor = Schema.decodeUnknownSync(Cursor)
 
 const cursor = {
-  encode(message: SessionMessage.Message) {
+  encode(message: SessionMessage.Message, from: "start" | "end") {
     return Buffer.from(
-      JSON.stringify({ id: message.id, time: DateTime.toEpochMillis(message.time.created) }),
+      JSON.stringify({ id: message.id, time: DateTime.toEpochMillis(message.time.created), from }),
     ).toString("base64url")
   },
   decode(input: string) {
@@ -33,29 +34,27 @@ export const v2Handlers = HttpApiBuilder.group(InstanceHttpApi, "v2", (handlers)
       .handle(
         "messages",
         Effect.fn(function* (ctx) {
-          if (ctx.query.before && ctx.query.after) return yield* new HttpApiError.BadRequest({})
-          if (ctx.query.from && (ctx.query.before || ctx.query.after)) return yield* new HttpApiError.BadRequest({})
           const decoded = yield* Effect.try({
-            try: () => {
-              return {
-                before: ctx.query.before ? cursor.decode(ctx.query.before) : undefined,
-                after: ctx.query.after ? cursor.decode(ctx.query.after) : undefined,
-              }
-            },
+            try: () =>
+              ctx.query.cursor && ctx.query.cursor !== "start" && ctx.query.cursor !== "end"
+                ? cursor.decode(ctx.query.cursor)
+                : undefined,
             catch: () => new HttpApiError.BadRequest({}),
           })
           const messages = yield* session.messages({
             sessionID: ctx.params.sessionID,
             limit: ctx.query.limit ?? DefaultMessagesLimit,
-            cursor: decoded.before ?? decoded.after,
-            direction: decoded.after ? "after" : "before",
+            from: decoded?.from ?? (ctx.query.cursor === "start" ? "start" : "end"),
+            cursor: decoded ? { id: decoded.id, time: decoded.time } : undefined,
           })
           const oldest = messages[0]
           const newest = messages.at(-1)
           return {
             items: messages,
-            before: oldest ? cursor.encode(oldest) : undefined,
-            after: newest ? cursor.encode(newest) : undefined,
+            cursor: {
+              before: oldest ? cursor.encode(oldest, "end") : undefined,
+              after: newest ? cursor.encode(newest, "start") : undefined,
+            },
           }
         }),
       )
