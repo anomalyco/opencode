@@ -17,6 +17,7 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
+import * as Log from "@opencode-ai/core/util/log"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Effect, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
@@ -37,6 +38,8 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
+
+const log = Log.create({ service: "server" })
 
 const mapNotFound = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   self.pipe(
