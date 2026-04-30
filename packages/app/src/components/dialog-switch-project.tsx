@@ -10,17 +10,27 @@ import { useServer } from "@/context/server"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { Icon, type IconName } from "@opencode-ai/ui/icon"
 import { decode64 } from "@/utils/base64"
-import { enabledExtraAgents, extraAgentProject } from "@/pages/layout/extra-agents"
+import { enabledExtraAgents } from "@/pages/layout/extra-agents"
 
-type ProjectEntry = {
+type ProjectItem = {
+  kind: "project"
   id: string
   name: string
   path: string
   isCurrent: boolean
   project: LocalProject
-  isExtraAgent?: boolean
+}
+
+type ExtraAgentItem = {
+  kind: "extra-agent"
+  id: string
+  name: string
+  path: string
+  isCurrent: boolean
   icon?: IconName
 }
+
+type ProjectEntry = ProjectItem | ExtraAgentItem
 
 export function DialogSwitchProject(props: { onSelect: (directory: string) => void }) {
   const dialog = useDialog()
@@ -40,10 +50,11 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
   const enabledAgents = createMemo(() => enabledExtraAgents(server.list))
 
   const entries = createMemo((): ProjectEntry[] => {
-      const projects = layout.projects.rail()
+    const projects = layout.projects.rail()
     const current = currentDirectory()
 
     const result: ProjectEntry[] = projects.map((project) => ({
+      kind: "project",
       id: project.worktree,
       name: project.name || getFilename(project.worktree),
       path: project.worktree,
@@ -53,13 +64,12 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
 
     for (const agent of enabledAgents().toReversed()) {
       result.unshift({
+        kind: "extra-agent",
         id: agent.directory,
         name: agent.label,
         path: agent.directory,
         isCurrent: current === agent.directory,
-        isExtraAgent: true,
         icon: agent.icon,
-        project: extraAgentProject(agent.id),
       })
     }
 
@@ -86,22 +96,24 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
           <div class="w-full flex items-center justify-between rounded-md pl-1">
             <div class="flex items-center grow min-w-0">
               <Show
-                when={!item.isExtraAgent}
+                when={item.kind === "project" && item}
                 fallback={
                   <div class="size-6 rounded shrink-0 flex items-center justify-center bg-surface-base">
-                    <Icon name={item.icon ?? "robot"} class="text-icon-base size-4" />
+                    <Icon name={item.kind === "extra-agent" ? item.icon ?? "robot" : "robot"} class="text-icon-base size-4" />
                   </div>
                 }
               >
-                <Avatar
-                  fallback={item.name}
-                  src={item.project.icon?.override}
-                  {...getAvatarColors(item.project.icon?.color)}
-                  class="size-6 rounded shrink-0"
-                />
+                {(entry) => (
+                  <Avatar
+                    fallback={item.name}
+                    src={entry().project.icon?.override}
+                    {...getAvatarColors(entry().project.icon?.color)}
+                    class="size-6 rounded shrink-0"
+                  />
+                )}
               </Show>
               <span class="text-14-medium text-text-base truncate w-[200px] shrink-0 pl-2">{item.name}</span>
-              <Show when={!item.isExtraAgent}>
+              <Show when={item.kind === "project"}>
                 <span class="text-12-regular text-text-weak truncate grow min-w-0 text-left pl-3">{item.path}</span>
               </Show>
               <Show when={item.isCurrent}>
