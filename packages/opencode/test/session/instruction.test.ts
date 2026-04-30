@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Effect, FileSystem, Layer } from "effect"
+import { NodeFileSystem } from "@effect/platform-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instruction } from "../../src/session/instruction"
@@ -10,9 +11,14 @@ import { Global } from "@opencode-ai/core/global"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Instruction.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(Layer.mergeAll(Instruction.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
 
-const write = (filepath: string, content: string) => Effect.promise(() => Bun.write(filepath, content))
+const write = (filepath: string, content: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    yield* fs.makeDirectory(path.dirname(filepath), { recursive: true })
+    yield* fs.writeFileString(filepath, content)
+  })
 
 const writeFiles = (dir: string, files: Record<string, string>) =>
   Effect.all(
