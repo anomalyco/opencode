@@ -946,6 +946,81 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("drops unsigned reasoning after switching from GPT to Bedrock Claude", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const bedrockModel: Provider.Model = {
+      ...model,
+      id: ModelID.make("amazon-bedrock/anthropic.claude-opus-4-7"),
+      providerID: ProviderID.make("amazon-bedrock"),
+      api: {
+        id: "anthropic.claude-opus-4-7",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+      capabilities: {
+        ...model.capabilities,
+        reasoning: true,
+        interleaved: { field: "reasoning_content" },
+      },
+    }
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "continue",
+          },
+        ] satisfies MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, {
+          providerID: "openai",
+          modelID: "gpt-5.5",
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "GPT reasoning cannot be replayed as Bedrock thinking",
+            time: { start: 0, end: 1 },
+            metadata: {
+              openai: {
+                itemId: "rs_123",
+              },
+            },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "text",
+            text: "answer",
+          },
+        ] satisfies MessageV2.Part[],
+      },
+    ]
+
+    const result = ProviderTransform.message(await MessageV2.toModelMessages(input, bedrockModel), bedrockModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({
+      role: "user",
+      content: [{ type: "text", text: "continue" }],
+      providerOptions: {
+        bedrock: { cachePoint: { type: "default" } },
+      },
+    })
+    expect(result[1]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "text", text: "answer" }],
+      providerOptions: {
+        bedrock: { cachePoint: { type: "default" } },
+      },
+    })
+  })
+
   test("splits assistant messages on step-start boundaries", async () => {
     const assistantID = "m-assistant"
 

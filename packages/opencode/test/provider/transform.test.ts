@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import type { ModelMessage } from "ai"
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -1326,6 +1327,17 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     headers: {},
   } as any
 
+  const bedrock = (apiId: string) => ({
+    ...anthropicModel,
+    id: `amazon-bedrock/${apiId}`,
+    providerID: "amazon-bedrock",
+    api: {
+      id: apiId,
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+  })
+
   test("filters out messages with empty string content", () => {
     const msgs = [
       { role: "user", content: "Hello" },
@@ -1442,17 +1454,6 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
   })
 
   test("filters empty content for bedrock provider", () => {
-    const bedrockModel = {
-      ...anthropicModel,
-      id: "amazon-bedrock/anthropic.claude-opus-4-6",
-      providerID: "amazon-bedrock",
-      api: {
-        id: "anthropic.claude-opus-4-6",
-        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
-        npm: "@ai-sdk/amazon-bedrock",
-      },
-    }
-
     const msgs = [
       { role: "user", content: "Hello" },
       { role: "assistant", content: "" },
@@ -1465,12 +1466,191 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, bedrockModel, {})
+    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-opus-4-6"), {})
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
     expect(result[1].content).toHaveLength(1)
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  test("drops unsigned Bedrock reasoning replay blocks", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking without a signature" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-opus-4-7"), {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
+  })
+
+  test("keeps signed Bedrock reasoning replay blocks", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Signed thinking",
+            providerOptions: {
+              bedrock: { signature: "sig-123" },
+            },
+          },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-opus-4-7"), {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([
+      {
+        type: "reasoning",
+        text: "Signed thinking",
+        providerOptions: {
+          bedrock: { signature: "sig-123" },
+        },
+      },
+      { type: "text", text: "Answer" },
+    ])
+  })
+
+  test("drops unsigned Bedrock thinking replay blocks without affecting direct Anthropic", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Thinking without a signature" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as unknown as ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-opus-4-7"), {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
+    expect(ProviderTransform.message(msgs, anthropicModel, {})[0].content).toEqual([
+      { type: "thinking", thinking: "Thinking without a signature" },
+      { type: "text", text: "Answer" },
+    ])
+  })
+
+  test("keeps signed Bedrock thinking replay blocks", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Signed thinking", signature: "sig-thinking" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as unknown as ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-opus-4-7"), {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([
+      { type: "thinking", thinking: "Signed thinking", signature: "sig-thinking" },
+      { type: "text", text: "Answer" },
+    ])
+  })
+
+  test("keeps signed Bedrock omitted-thinking replay blocks", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: {
+              bedrock: { signature: "sig-omitted" },
+            },
+          },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-opus-4-7"), {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([
+      {
+        type: "reasoning",
+        text: "",
+        providerOptions: {
+          bedrock: { signature: "sig-omitted" },
+        },
+      },
+      { type: "text", text: "Answer" },
+    ])
+  })
+
+  test("drops unsigned Bedrock Sonnet 4.6 reasoning replay blocks", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Unsigned Sonnet thinking" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-sonnet-4-6"), {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
+  })
+
+  test("does not require signatures for non-Claude Bedrock reasoning", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Nova reasoning" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, bedrock("amazon.nova-pro-v1:0"), {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([
+      { type: "reasoning", text: "Nova reasoning" },
+      { type: "text", text: "Answer" },
+    ])
+  })
+
+  test("does not require signatures for direct Anthropic reasoning", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Anthropic reasoning" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] satisfies ModelMessage[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([
+      { type: "reasoning", text: "Anthropic reasoning" },
+      { type: "text", text: "Answer" },
+    ])
   })
 
   test("does not filter for non-anthropic providers", () => {

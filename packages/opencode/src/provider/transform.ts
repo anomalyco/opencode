@@ -45,6 +45,36 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isBedrockClaude(model: Provider.Model) {
+  if (model.api.npm !== "@ai-sdk/amazon-bedrock") return false
+  const id = `${model.id}/${model.api.id}`.toLowerCase()
+  return id.includes("anthropic") || id.includes("claude")
+}
+
+function hasBedrockThinkingSignature(part: Record<string, unknown>) {
+  if (typeof part.signature === "string" && part.signature.length > 0) return true
+  return [part.providerOptions, part.providerMetadata].some((metadata) => {
+    if (!isRecord(metadata)) return false
+    return ["bedrock", "amazon-bedrock"].some((key) => {
+      const provider = metadata[key]
+      return isRecord(provider) && typeof provider.signature === "string" && provider.signature.length > 0
+    })
+  })
+}
+
+function keepContentPart(part: unknown, model: Provider.Model) {
+  if (!isRecord(part)) return true
+  if (part.type === "thinking") return isBedrockClaude(model) ? hasBedrockThinkingSignature(part) : true
+  if (part.type !== "text" && part.type !== "reasoning") return true
+  if (part.type === "text") return part.text !== ""
+  if (isBedrockClaude(model)) return hasBedrockThinkingSignature(part)
+  return part.text !== ""
+}
+
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
@@ -60,12 +90,7 @@ function normalizeMessages(
           return msg
         }
         if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text" || part.type === "reasoning") {
-            return part.text !== ""
-          }
-          return true
-        })
+        const filtered = msg.content.filter((part) => keepContentPart(part, model))
         if (filtered.length === 0) return undefined
         return { ...msg, content: filtered }
       })
@@ -81,12 +106,7 @@ function normalizeMessages(
           return msg
         }
         if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text" || part.type === "reasoning") {
-            return part.text !== ""
-          }
-          return true
-        })
+        const filtered = msg.content.filter((part) => keepContentPart(part, model))
         if (filtered.length === 0) return undefined
         return { ...msg, content: filtered }
       })
