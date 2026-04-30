@@ -14,6 +14,7 @@ import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
 import flexoki from "./theme/flexoki.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
+import graphite from "./theme/graphite.json" with { type: "json" }
 import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
 import material from "./theme/material.json" with { type: "json" }
@@ -96,6 +97,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   everforest,
   flexoki,
   github,
+  graphite,
   gruvbox,
   kanagawa,
   material,

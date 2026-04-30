@@ -64,3 +64,13 @@ test("resolveTheme keeps markdown prose on base text color", () => {
   expect(resolved.markdownCode).not.toBe(resolved.text)
   expect(resolved.markdownLink).not.toBe(resolved.text)
 })
+
+test("graphite registers a balanced neutral palette", () => {
+  const resolved = resolveTheme(DEFAULT_THEMES.graphite, "dark")
+
+  expect(DEFAULT_THEMES.graphite).toBeDefined()
+  expect(resolved.background).toBeDefined()
+  expect(resolved.text).toBeDefined()
+  expect(resolved.border).toBeDefined()
+  expect(resolved.background).not.toBe(resolved.text)
+})

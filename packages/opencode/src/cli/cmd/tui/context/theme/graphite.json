@@ -1,0 +1,229 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "charcoal": "#121416",
+    "ash": "#1A1D21",
+    "slate": "#24282D",
+    "steel": "#323840",
+    "fog": "#505963",
+    "mist": "#7B8692",
+    "frost": "#C9D0D7",
+    "paper": "#F5F3EF",
+    "linen": "#ECE8E1",
+    "sand": "#DDD7CE",
+    "taupe": "#A0968A",
+    "ink": "#2B2926",
+    "stone": "#8A8F96",
+    "stoneDeep": "#70767D",
+    "sage": "#7A927B",
+    "sageDeep": "#647A65",
+    "amber": "#A98A61",
+    "amberDeep": "#8E724D",
+    "rose": "#A87077",
+    "roseDeep": "#8B5B61",
+    "lilac": "#8A84A1",
+    "lilacDeep": "#706A87"
+  },
+  "theme": {
+    "primary": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "secondary": {
+      "dark": "mist",
+      "light": "taupe"
+    },
+    "accent": {
+      "dark": "stone",
+      "light": "stoneDeep"
+    },
+    "error": {
+      "dark": "rose",
+      "light": "roseDeep"
+    },
+    "warning": {
+      "dark": "amber",
+      "light": "amberDeep"
+    },
+    "success": {
+      "dark": "sage",
+      "light": "sageDeep"
+    },
+    "info": {
+      "dark": "stone",
+      "light": "stoneDeep"
+    },
+    "text": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "textMuted": {
+      "dark": "mist",
+      "light": "taupe"
+    },
+    "background": {
+      "dark": "charcoal",
+      "light": "paper"
+    },
+    "backgroundPanel": {
+      "dark": "ash",
+      "light": "linen"
+    },
+    "backgroundElement": {
+      "dark": "slate",
+      "light": "sand"
+    },
+    "border": {
+      "dark": "steel",
+      "light": "sand"
+    },
+    "borderActive": {
+      "dark": "fog",
+      "light": "taupe"
+    },
+    "borderSubtle": {
+      "dark": "ash",
+      "light": "linen"
+    },
+    "diffAdded": {
+      "dark": "sage",
+      "light": "sageDeep"
+    },
+    "diffRemoved": {
+      "dark": "rose",
+      "light": "roseDeep"
+    },
+    "diffContext": {
+      "dark": "mist",
+      "light": "taupe"
+    },
+    "diffHunkHeader": {
+      "dark": "stone",
+      "light": "stoneDeep"
+    },
+    "diffHighlightAdded": {
+      "dark": "sage",
+      "light": "sageDeep"
+    },
+    "diffHighlightRemoved": {
+      "dark": "rose",
+      "light": "roseDeep"
+    },
+    "diffAddedBg": {
+      "dark": "#172019",
+      "light": "#DEE7DE"
+    },
+    "diffRemovedBg": {
+      "dark": "#23181A",
+      "light": "#EEDFE0"
+    },
+    "diffContextBg": {
+      "dark": "ash",
+      "light": "linen"
+    },
+    "diffLineNumber": {
+      "dark": "fog",
+      "light": "taupe"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#1B261D",
+      "light": "#D4DFD4"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#2A1D20",
+      "light": "#E7D5D7"
+    },
+    "markdownText": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "markdownHeading": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "markdownLink": {
+      "dark": "stone",
+      "light": "stoneDeep"
+    },
+    "markdownLinkText": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "markdownCode": {
+      "dark": "mist",
+      "light": "taupe"
+    },
+    "markdownBlockQuote": {
+      "dark": "mist",
+      "light": "taupe"
+    },
+    "markdownEmph": {
+      "dark": "amber",
+      "light": "amberDeep"
+    },
+    "markdownStrong": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "markdownHorizontalRule": {
+      "dark": "steel",
+      "light": "sand"
+    },
+    "markdownListItem": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "markdownListEnumeration": {
+      "dark": "stone",
+      "light": "stoneDeep"
+    },
+    "markdownImage": {
+      "dark": "lilac",
+      "light": "lilacDeep"
+    },
+    "markdownImageText": {
+      "dark": "mist",
+      "light": "taupe"
+    },
+    "markdownCodeBlock": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "syntaxComment": {
+      "dark": "mist",
+      "light": "taupe"
+    },
+    "syntaxKeyword": {
+      "dark": "lilac",
+      "light": "lilacDeep"
+    },
+    "syntaxFunction": {
+      "dark": "stone",
+      "light": "stoneDeep"
+    },
+    "syntaxVariable": {
+      "dark": "frost",
+      "light": "ink"
+    },
+    "syntaxString": {
+      "dark": "sage",
+      "light": "sageDeep"
+    },
+    "syntaxNumber": {
+      "dark": "amber",
+      "light": "amberDeep"
+    },
+    "syntaxType": {
+      "dark": "stone",
+      "light": "stoneDeep"
+    },
+    "syntaxOperator": {
+      "dark": "fog",
+      "light": "taupe"
+    },
+    "syntaxPunctuation": {
+      "dark": "frost",
+      "light": "ink"
+    }
+  }
+}
