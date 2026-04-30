@@ -103,6 +103,12 @@
 
 > **配额按 commit 笔数算**,不是按文件条目数。一笔 commit 同时触动多个黑名单文件(例:换皮专项一次改 conf + ui + icons + vite.config)算 1 笔。同笔 commit 同时挂 `[override-blacklist] + [large-diff]` 等多个标也算 1 笔(标只是描述破例的不同维度,归属同一次决策)。配额测的是"破例频率",不是"破例严重度"。
 
+### R5. 分支生命周期与双端协作
+
+`feat/<name>` 是**一次性容器**:从最新 dev 切出来,做完合 dev 后**立刻销毁**(本地 + 远端),**新项目用新名字,绝不复用**。Win / Mac 双端同时开发的具体步骤(谁先合 / 谁后 rebase / 命令清单 / 常见坑)详见 [`双端协作-SOP.md`](./双端协作-SOP.md)。
+
+> R5 是 v2 分支模型的操作落地,与 R1-R4 正交(R1-R4 讲"哪些文件能改",R5 讲"分支怎么走")。
+
 ---
 
 ## 三个健康指标(刚刚够,不再多)
@@ -213,6 +219,7 @@ git cherry-pick <commit-sha>
 | 本文档 | `docs/governance/fork-跟随升级与协作规范.md`(2026-04-28 起,原 `opencode-plan/规划/12-...` 已迁入本仓) |
 | 改动规则(总纲) | `docs/governance/改动规则.md` |
 | 上游 merge SOP | `docs/governance/UPSTREAM-MERGE-GUIDE.md` |
+| **双端协作 SOP** | `docs/governance/双端协作-SOP.md`(feat 生命周期 + Win/Mac 双端流程,2026-04-30 立) |
 | FORK marker hook(待实现) | `scripts/install-hooks.sh`(扩展) |
 | Branding 目录 | `packages/branding/`(已落地) |
 | 改动日志(每次 commit 配套) | `改动日志.md`(根目录索引)+ `docs/features/<feat-id>/3-changelog.md`(详情) |
