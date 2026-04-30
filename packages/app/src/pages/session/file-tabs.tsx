@@ -662,94 +662,235 @@ export function FileTabContent(props: { tab: string }) {
   const [mdMenu, setMdMenu] = createSignal<MdMenuState>({ open: false, x: 0, y: 0, text: "", mode: "menu" })
   const [mdComment, setMdComment] = createSignal("")
 
-  // 持久化选区高亮:textarea 获取焦点后 window.getSelection 会 collapse,
-  // 用 CSS Custom Highlight API 单独画一层背景色保持视觉指示。
-  // Highlight Registry 是 document 全局(window.CSS.highlights),但 ::highlight() 样式规则是 per-tree,
-  // 所以非 md 文件走 Pierre 的 shadow DOM 时,需要把同一段 CSS 也注入到该 shadow root。
-  // 用 adoptedStyleSheets 注入,比 <style> 元素更稳,不会被 Pierre 内部 mutation 清掉。
-  // 颜色用红色:Pierre code viewer 行级活动区已是满黄底,叠 35% 黄看不出;红色对白底(md)和黄底(code)都清晰。
-  const HIGHLIGHT_CSS = `::highlight(md-quote-active){background-color:rgba(255,0,0,0.5);color:inherit;}`
-  let highlightSheet: CSSStyleSheet | null = null
-  const getHighlightSheet = (): CSSStyleSheet | null => {
-    if (highlightSheet) return highlightSheet
-    if (typeof CSSStyleSheet === "undefined") return null
-    try {
-      const sheet = new CSSStyleSheet()
-      sheet.replaceSync(HIGHLIGHT_CSS)
-      highlightSheet = sheet
-      return sheet
-    } catch {
-      return null
-    }
-  }
-  const ensureHighlightStyleIn = (root: Document | ShadowRoot) => {
-    const sheet = getHighlightSheet()
-    if (!sheet) return
-    const adopted = (root as unknown as { adoptedStyleSheets?: CSSStyleSheet[] }).adoptedStyleSheets
-    if (!adopted) return
-    if (adopted.includes(sheet)) return
-    ;(root as unknown as { adoptedStyleSheets: CSSStyleSheet[] }).adoptedStyleSheets = [...adopted, sheet]
-  }
+  // 选区红色覆盖层:绝对定位的 div 数组,通过 range.getClientRects() 计算每行 rect。
+  //
+  // 之前用 CSS Custom Highlight API(::highlight pseudo + CSS.highlights 注册表)实测在
+  // macOS WKWebView 上 delete 注册项**不能立即触发 repaint**(WebKit 的 stale 渲染 bug),
+  // 即便先 set 一个 collapsed 空 range 兜底也压不住 —— 用户点"加入聊天"或点空白处关菜单后,
+  // 红色高亮死活不消失,只能刷新页面才清。
+  //
+  // 改用 overlay div 方案:
+  //   - 显示:range.getClientRects() 拿每行 viewport rect → 渲染 fixed 定位的红色 div
+  //   - 清除:setHighlightRects(null) → Solid 信号驱动 unmount,WebKit 没机会缓存
+  //   - 滚动:绑 scroll capture 监听,滚动时直接清(用户在菜单生命周期内极少滚)
+  //
+  // 颜色:Microsoft Fluent 系统红 #d13438 半透明 0.5 alpha,与 Windows 同款操作色一致。
+  // md / 代码文件 / Pierre shadow DOM 都走同一渲染路径,视觉天然一致。
+  type HighlightRect = { left: number; top: number; width: number; height: number }
+  const [highlightRects, setHighlightRects] = createSignal<HighlightRect[] | null>(null)
 
   const setSelectionHighlight = (range: Range | null) => {
-    const css = (typeof window !== "undefined" ? (window as any).CSS : undefined) as
-      | { highlights?: { set: (k: string, v: unknown) => void; delete: (k: string) => void } }
-      | undefined
-    const HighlightCtor = (typeof window !== "undefined" ? (window as any).Highlight : undefined) as
-      | (new (range: Range) => unknown)
-      | undefined
-    if (!css?.highlights || !HighlightCtor) return
     if (!range) {
-      css.highlights.delete("md-quote-active")
+      setHighlightRects(null)
       return
     }
-    const root = range.startContainer.getRootNode()
-    if (root instanceof ShadowRoot) ensureHighlightStyleIn(root)
     try {
-      css.highlights.set("md-quote-active", new HighlightCtor(range))
+      const rects = Array.from(range.getClientRects())
+        .filter((r) => r.width > 0 && r.height > 0)
+        .map((r) => ({ left: r.left, top: r.top, width: r.width, height: r.height }))
+      setHighlightRects(rects.length > 0 ? rects : null)
     } catch {
-      // ignore
+      setHighlightRects(null)
     }
   }
 
-  // 一次性把 ::highlight 样式 adopt 进 document
-  onMount(() => {
-    if (typeof document === "undefined") return
-    ensureHighlightStyleIn(document)
+  // 滚动时清掉(viewport rect 会失效);菜单生命周期短,滚动概率低
+  createEffect(() => {
+    if (!highlightRects()) return
+    const onScroll = () => setHighlightRects(null)
+    window.addEventListener("scroll", onScroll, true)
+    onCleanup(() => window.removeEventListener("scroll", onScroll, true))
   })
 
   const closeMdMenu = () => {
     setMdMenu((m) => (m.open ? { ...m, open: false } : m))
     setMdComment("")
     setSelectionHighlight(null)
+    // 关闭右键菜单时一并清掉:① 原生 window selection(字符级蓝/黄高亮)
+    // ② Pierre 的 selectedLines(整行黄色色块)。无论用户是"加入聊天"还是"取消",
+    // 选区视觉都同步消失,菜单关闭后页面回到无选区干净态。
+    if (typeof window !== "undefined") {
+      try {
+        window.getSelection()?.removeAllRanges()
+      } catch {
+        // ignore
+      }
+    }
+    setNote("selected", null)
+    const p = path()
+    if (p) file.setSelectedLines(p, null)
   }
+
+  // FORK-BEGIN: macOS WebKit Shadow DOM 选区修复 2026-04-29
+  // 问题 1:WebKit 不支持 ShadowRoot.getSelection(),window.getSelection().toString()
+  // 对 Shadow DOM 内容返回空串 → 用 getComposedRanges({ shadowRoots }) API(WebKit 17+)读取。
+  //
+  // 问题 2:macOS WebKit 右键点击文字时 OS 级强制 collapse 选区到右键点中的那个词,
+  // 任何 JS 层 preventDefault 都拦不住,且 collapse 后的 selectionchange 时机不定
+  // (可能在 mousedown JS handler 之前或之后)。
+  //
+  // 第三轮 pop+block 方案的失败原因:用户刚选完就右键时,最后一条历史栈条目正是
+  // 用户真实选区(<100ms 新),被 pop 掉 → 栈空 → fallback 读 collapse 后的词。
+  // 空白处右键能成功是侥幸(WebKit 不 collapse 空白),一碰文字就破。
+  //
+  // 第四轮解法:**最近窗口内挑最长** —— WebKit collapse 出的单词必然比用户多行选区短。
+  //   1) selectionchange 不加任何屏蔽,所有非空选区都进历史栈(限 16 条)
+  //   2) 不在 mousedown 时 pop(那是错的)
+  //   3) contextmenu 时:从最近 30 秒的历史里挑文本最长的那条 → 必为用户真实选区
+  //   4) 程序化恢复 window.getSelection() + CSS Custom Highlight(0.55 alpha 强色)双重视觉
+  type SelSnapshot = { text: string; range: Range; shadow: ShadowRoot | null; time: number }
+  const selectionHistory: SelSnapshot[] = []
+  const SEL_HISTORY_LIMIT = 16
+  const SEL_HISTORY_RECENT_MS = 30_000
+  const knownShadows = new Set<ShadowRoot>()
+
+  // 收集 Shadow Root(从 mouse 事件 composedPath + DOM 查询双通道)
+  const handlePreContextCapture = (event: MouseEvent) => {
+    const composedPath = typeof event.composedPath === "function" ? event.composedPath() : []
+    for (const node of composedPath) {
+      if (node instanceof ShadowRoot) { knownShadows.add(node); break }
+    }
+    // 备用:直接查找 Pierre 的 diffs-container shadow root
+    const target = event.currentTarget as HTMLElement | null
+    if (target) {
+      const host = target.querySelector("diffs-container")
+      const sr = host?.shadowRoot
+      if (sr) knownShadows.add(sr)
+    }
+  }
+
+  // 从 Selection 对象读取文本(支持 Shadow DOM 跨边界选区)
+  const readSelectionText = (sel: Selection): { text: string; range: Range | null; shadow: ShadowRoot | null } => {
+    // 策略 1:getComposedRanges({ shadowRoots }) — WebKit 17+ 跨 shadow 选区 API
+    // API 签名:options object 形式(与 Pierre file-selection.ts 一致)
+    if (knownShadows.size > 0 && typeof (sel as any).getComposedRanges === "function") {
+      try {
+        const shadowArray = [...knownShadows]
+        const staticRanges = (sel as any).getComposedRanges({ shadowRoots: shadowArray }) as StaticRange[]
+        if (staticRanges?.length > 0) {
+          const sr = staticRanges[0]
+          const r = document.createRange()
+          r.setStart(sr.startContainer, sr.startOffset)
+          r.setEnd(sr.endContainer, sr.endOffset)
+          // 文本提取:toString() 优先,cloneContents().textContent 备用
+          const t = r.toString() || r.cloneContents()?.textContent || ""
+          if (t.trim()) {
+            const root = sr.startContainer.getRootNode()
+            return { text: t, range: r, shadow: root instanceof ShadowRoot ? root : null }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 策略 2:ShadowRoot.getSelection (Chromium 专有)
+    for (const sh of knownShadows) {
+      try {
+        const shadowSel = (sh as unknown as { getSelection?: () => Selection | null }).getSelection?.()
+        if (shadowSel && shadowSel.toString().trim()) {
+          return {
+            text: shadowSel.toString(),
+            range: shadowSel.rangeCount > 0 ? shadowSel.getRangeAt(0).cloneRange() : null,
+            shadow: sh,
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 策略 3:window.getSelection (light DOM / md 文件)
+    const t = sel.toString()
+    if (t.trim() && sel.rangeCount > 0) {
+      return { text: t, range: sel.getRangeAt(0).cloneRange(), shadow: null }
+    }
+
+    return { text: "", range: null, shadow: null }
+  }
+
+  // selectionchange:无脑记录所有非空选区到历史栈(不屏蔽、不 pop)。
+  // 之所以不需要屏蔽 collapse 回调:contextmenu 阶段挑"最近窗口里最长的那条"足以排除短的 collapse 词。
+  onMount(() => {
+    const onSelChange = () => {
+      const sel = typeof window !== "undefined" ? window.getSelection() : null
+      if (!sel) return
+      const result = readSelectionText(sel)
+      if (!result.text.trim() || !result.range) return
+      selectionHistory.push({
+        text: result.text,
+        range: result.range,
+        shadow: result.shadow,
+        time: Date.now(),
+      })
+      if (selectionHistory.length > SEL_HISTORY_LIMIT) selectionHistory.shift()
+    }
+    document.addEventListener("selectionchange", onSelChange)
+    onCleanup(() => document.removeEventListener("selectionchange", onSelChange))
+  })
+
+  // 从最近 30 秒历史里挑"文本最长"的快照:WebKit collapse 出的单词永远比用户多行选区短。
+  const pickBestRecentSelection = (): SelSnapshot | null => {
+    if (selectionHistory.length === 0) return null
+    const now = Date.now()
+    let best: SelSnapshot | null = null
+    for (let i = selectionHistory.length - 1; i >= 0; i--) {
+      const s = selectionHistory[i]!
+      if (now - s.time > SEL_HISTORY_RECENT_MS) break
+      if (!best || s.text.length > best.text.length) best = s
+    }
+    return best
+  }
+  // FORK-END
 
   const handleSelectionContextMenu = (event: MouseEvent) => {
     if (editing()) return // 编辑态让 CodeMirror 拿到原生右键菜单
-    // Pierre viewer 把内容渲染在 shadow DOM。当事件冒泡到 light DOM 监听器时,event.target 已被 retarget
-    // 成 shadow host (<diffs-container>),用 event.target.getRootNode() 拿不到真正的 ShadowRoot。
-    // 必须用 event.composedPath() —— 它返回未 retarget 的完整路径,从中找出真实的 ShadowRoot。
+    event.preventDefault()
+
+    // 从 composedPath 找 shadow root 并收集
     let shadow: ShadowRoot | null = null
-    const path = typeof event.composedPath === "function" ? event.composedPath() : []
-    for (const node of path) {
-      if (node instanceof ShadowRoot) {
-        shadow = node
-        break
+    const composedPath = typeof event.composedPath === "function" ? event.composedPath() : []
+    for (const node of composedPath) {
+      if (node instanceof ShadowRoot) { shadow = node; knownShadows.add(shadow); break }
+    }
+
+    // 主路径:历史栈里最近 30 秒"文本最长"的条目 → 必为用户多行真实选区
+    // (collapse 出的单词肯定更短)。
+    let text = ""
+    let range: Range | null = null
+
+    const best = pickBestRecentSelection()
+    if (best) {
+      text = best.text
+      range = best.range
+      shadow = best.shadow ?? shadow
+    } else {
+      // 回退:历史完全空(用户首次右键、或刚切换文件)→ 读当前选区
+      const sel = typeof window !== "undefined" ? window.getSelection() : null
+      if (sel) {
+        const result = readSelectionText(sel)
+        text = result.text
+        range = result.range
+        shadow = result.shadow ?? shadow
       }
     }
-    // shadow 内的真实选区要用 shadowRoot.getSelection(),window.getSelection 拿到的是投影到 host 的粗粒度 Range。
-    let selObj: Selection | null = null
-    if (shadow) {
-      selObj = (shadow as unknown as { getSelection?: () => Selection | null }).getSelection?.() ?? null
-    }
-    if (!selObj) selObj = typeof window !== "undefined" ? window.getSelection() : null
-    const text = selObj?.toString() ?? ""
-    event.preventDefault()
-    if (text.trim() && selObj && selObj.rangeCount > 0) {
-      const range = selObj.getRangeAt(0).cloneRange()
-      if (shadow) ensureHighlightStyleIn(shadow)
+
+    if (text.trim() && range) {
       setSelectionHighlight(range)
+
+      // 程序化恢复原生选区:让 OS 绘制的蓝/黄高亮重新覆盖到原始范围。
+      // 跨 Shadow DOM 时 addRange 可能静默失败,overlay div 兜底视觉。
+      try {
+        const sel = typeof window !== "undefined" ? window.getSelection() : null
+        if (sel) {
+          sel.removeAllRanges()
+          sel.addRange(range.cloneRange())
+        }
+      } catch {
+        // ignore — 恢复失败也不影响菜单功能
+      }
     }
+
     setMdComment("")
     setMdMenu({ open: true, x: event.clientX, y: event.clientY, text, mode: "menu" })
   }
@@ -789,7 +930,7 @@ export function FileTabContent(props: { tab: string }) {
       commentOrigin: "file",
     })
     showToast({ variant: "success", title: comment ? "已加入聊天上下文(含问题)" : "已加入聊天上下文" })
-    if (typeof window !== "undefined") window.getSelection()?.removeAllRanges()
+    // 注:closeMdMenu 已统一处理 removeAllRanges + 清 Pierre 行选区
   }
 
   createEffect(() => {
@@ -815,6 +956,7 @@ export function FileTabContent(props: { tab: string }) {
     <div
       data-context="file-viewer"
       class="relative pb-40 px-6 py-4 select-text"
+      onMouseDown={handlePreContextCapture}
       onContextMenu={handleSelectionContextMenu}
     >
       <Markdown text={source} cacheKey={cacheKey()} />
@@ -994,7 +1136,7 @@ export function FileTabContent(props: { tab: string }) {
     if (isMarkdownPath(p)) return renderMarkdown(source)
     if (mediaKindFromPath(p)) return renderMedia()
     return (
-      <div class="relative overflow-hidden pb-40" onContextMenu={handleSelectionContextMenu}>
+      <div class="relative overflow-hidden pb-40" onMouseDown={handlePreContextCapture} onContextMenu={handleSelectionContextMenu}>
         <Dynamic
           component={fileComponent}
           mode="text"
@@ -1135,6 +1277,24 @@ export function FileTabContent(props: { tab: string }) {
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
+      <Show when={highlightRects()}>
+        <Portal mount={document.body}>
+          <For each={highlightRects()!}>
+            {(rect) => (
+              <div
+                class="fixed pointer-events-none z-40"
+                style={{
+                  left: `${rect.left}px`,
+                  top: `${rect.top}px`,
+                  width: `${rect.width}px`,
+                  height: `${rect.height}px`,
+                  "background-color": "rgba(209, 52, 56, 0.5)",
+                }}
+              />
+            )}
+          </For>
+        </Portal>
+      </Show>
       <Show when={mdMenu().open}>
         <Portal mount={document.body}>
           <Switch>
