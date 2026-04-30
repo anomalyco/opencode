@@ -74,6 +74,7 @@ export function CorsMiddleware(opts?: { cors?: string[] }): MiddlewareHandler {
 
       if (input.startsWith("http://localhost:")) return input
       if (input.startsWith("http://127.0.0.1:")) return input
+      if (input.startsWith("oc://renderer")) return input
       if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
         return input
 
