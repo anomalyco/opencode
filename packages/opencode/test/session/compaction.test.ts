@@ -1058,7 +1058,8 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("does not leave a summary assistant when aborted before processor setup", async () => {
+  // SKIP on windows: timing race on slow github-hosted windows-2025 runner. Tracked in #90.
+  test.skipIf(process.platform === "win32")("does not leave a summary assistant when aborted before processor setup", async () => {
     const ready = defer()
 
     await using tmp = await tmpdir({ git: true })

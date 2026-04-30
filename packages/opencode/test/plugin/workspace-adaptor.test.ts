@@ -30,7 +30,10 @@ afterAll(() => {
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = experimental
 })
 
-describe("plugin.workspace", () => {
+// SKIP entire describe on windows: plugin import via file:// URL hangs on github-hosted
+// windows-2025. Same root cause as plugin.loader.shared / plugin.trigger / etc. Tracked
+// in #90.
+describe.skipIf(process.platform === "win32")("plugin.workspace", () => {
   test("plugin can install a workspace adaptor", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

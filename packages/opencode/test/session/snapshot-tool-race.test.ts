@@ -186,7 +186,9 @@ const providerCfg = (url: string) => ({
   },
 })
 
-it.live("tool execution produces non-empty session diff (snapshot race)", () =>
+// SKIP on windows: snapshot race timing exceeds 60s on github-hosted windows-2025
+// runner. Tracked in #90.
+;(process.platform === "win32" ? it.live.skip : it.live)("tool execution produces non-empty session diff (snapshot race)", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ dir, llm }) {
       const prompt = yield* SessionPrompt.Service

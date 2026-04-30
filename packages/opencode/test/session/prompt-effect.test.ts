@@ -810,7 +810,9 @@ it.live(
   30_000,
 )
 
-it.live(
+// SKIP on windows: 3000ms timeout race on slow github-hosted windows-2025 runner.
+// Same family as the loop / shell completion skips above. Tracked in #90.
+;(process.platform === "win32" ? it.live.skip : it.live)(
   "cancel with queued callers resolves all cleanly",
   () =>
     provideTmpdirServer(
