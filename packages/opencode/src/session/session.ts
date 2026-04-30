@@ -142,11 +142,15 @@ const Share = Schema.Struct({
   url: Schema.String,
 })
 
+// Legacy HTTP accepted any number here, and persisted data may already contain
+// negative values. Keep archive timestamps permissive while other clocks stay non-negative.
+export const ArchivedTimestamp = Schema.Number
+
 const Time = Schema.Struct({
   created: NonNegativeInt,
   updated: NonNegativeInt,
   compacting: optionalOmitUndefined(NonNegativeInt),
-  archived: optionalOmitUndefined(NonNegativeInt),
+  archived: optionalOmitUndefined(ArchivedTimestamp),
 })
 
 const Revert = Schema.Struct({
@@ -215,7 +219,7 @@ export const SetTitleInput = Schema.Struct({ sessionID: SessionID, title: Schema
 )
 export const SetArchivedInput = Schema.Struct({
   sessionID: SessionID,
-  time: Schema.optional(NonNegativeInt),
+  time: Schema.optional(ArchivedTimestamp),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
@@ -244,7 +248,7 @@ const UpdatedTime = Schema.Struct({
   created: Schema.optional(Schema.NullOr(NonNegativeInt)),
   updated: Schema.optional(Schema.NullOr(NonNegativeInt)),
   compacting: Schema.optional(Schema.NullOr(NonNegativeInt)),
-  archived: Schema.optional(Schema.NullOr(NonNegativeInt)),
+  archived: Schema.optional(Schema.NullOr(ArchivedTimestamp)),
 })
 
 const UpdatedInfo = Schema.Struct({

@@ -20,6 +20,7 @@ import type { WorkspaceAdaptor } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 import { Project } from "../../src/project/project"
+import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
   WorkspaceRouteContext,
   workspaceRouterMiddleware,
@@ -381,6 +382,36 @@ describe("HttpApi workspace routing middleware", () => {
       ).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
 
       const response = yield* HttpClient.get(`/session?workspace=${workspace.id}`)
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
+    }),
+  )
+
+  it.live("keeps workspace control routes local even when workspace is selected", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-local")
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "workspace-control-plane-target",
+        directory: workspaceDir,
+      })
+
+      // Workspace CRUD/status routes manage the control plane itself. Selecting
+      // a workspace should preserve the selected id for handlers, but must not
+      // swap the route context to the workspace target directory.
+      yield* HttpRouter.add(
+        "GET",
+        WorkspacePaths.list,
+        Effect.gen(function* () {
+          const route = yield* WorkspaceRouteContext
+          return yield* HttpServerResponse.json({ directory: route.directory, workspaceID: route.workspaceID })
+        }),
+      ).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
+
+      const response = yield* HttpClient.get(`${WorkspacePaths.list}?workspace=${workspace.id}`)
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
