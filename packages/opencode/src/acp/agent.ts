@@ -189,6 +189,19 @@ export class Agent implements ACPAgent {
 
   private async handleEvent(event: Event) {
     switch (event.type) {
+      case "session.created": {
+        const info = event.properties.info
+        if (info.parentID) {
+          this.sessionManager.registerChild(event.properties.sessionID, info.parentID)
+        }
+        return
+      }
+
+      case "session.deleted": {
+        this.sessionManager.unregisterChild(event.properties.sessionID)
+        return
+      }
+
       case "permission.asked": {
         const permission = event.properties
         const session = this.sessionManager.tryGet(permission.sessionID)
