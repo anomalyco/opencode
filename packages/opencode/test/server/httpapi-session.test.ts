@@ -1,4 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
+import { mkdir } from "node:fs/promises"
+import path from "node:path"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { PermissionID } from "../../src/permission/schema"
@@ -9,7 +11,10 @@ import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/se
 import { Session } from "@/session/session"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
+import { Database } from "@/storage/db"
+import { SessionTable } from "@/session/session.sql"
 import * as Log from "@opencode-ai/core/util/log"
+import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
@@ -245,6 +250,41 @@ describe("session HttpApi", () => {
         })
         expect(effectResponse.status).toBe(legacyResponse.status)
         expect((yield* json<Session.Info>(effectResponse)).time.archived).toBe(-1)
+      }),
+    ),
+  )
+
+  it.live(
+    "matches legacy project-scoped path and directory precedence",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const currentDir = path.join(tmp.path, "packages", "opencode", "src")
+        yield* Effect.promise(() => mkdir(currentDir, { recursive: true }))
+
+        const pathSession = yield* createSession(currentDir)
+        const pathlessSession = yield* createSession(currentDir)
+        yield* Effect.sync(() =>
+          Database.use((db) =>
+            db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, pathlessSession.id)).run(),
+          ),
+        )
+
+        const query = new URLSearchParams({
+          scope: "project",
+          path: "packages/opencode/src",
+          directory: currentDir,
+        })
+        const headers = { "x-opencode-directory": tmp.path }
+        const legacy = (yield* json<Session.Info[]>(
+          yield* requestWithBackend(false, `${SessionPaths.list}?${query}`, { headers }),
+        )).map((item) => item.id)
+        const effect = (yield* json<Session.Info[]>(
+          yield* requestWithBackend(true, `${SessionPaths.list}?${query}`, { headers }),
+        )).map((item) => item.id)
+
+        expect(legacy).toContain(pathSession.id)
+        expect(legacy).not.toContain(pathlessSession.id)
+        expect(effect).toEqual(legacy)
       }),
     ),
   )
