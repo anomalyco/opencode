@@ -20,6 +20,7 @@ docs/
 │   ├── 改动规则.md                 # 白黑名单 / hook / diff 阈值 / 回滚演练
 │   ├── 跨平台协作.md               # Win/Linux/Mac 三端环境 + 提拉流程
 │   ├── fork-跟随升级与协作规范.md  # 治理总纲(原则 / SOP / 健康指标)
+│   ├── 双端协作-SOP.md             # ⭐ feat 分支生命周期 + Win/Mac 双端流程
 │   ├── DeskFox-品牌替换.md         # 品牌注入策略(productName / icon / 资源)
 │   ├── 数字签名问题.md             # installer 不签名决策 + SmartScreen 应对
 │   └── UPSTREAM-MERGE-GUIDE.md     # ⭐ 与 sst/opencode 合并的 SOP
@@ -36,6 +37,7 @@ docs/
 |---|---|
 | 第一次接手项目,想理解全貌 | [PLANNING-OVERVIEW.md](./PLANNING-OVERVIEW.md) → [STATUS.md](./STATUS.md) |
 | 上手开发,要知道改什么文件能 commit | [governance/改动规则.md](./governance/改动规则.md) |
+| 双端(Win+Mac)同时开发,要知道分支怎么走 | ⭐ [governance/双端协作-SOP.md](./governance/双端协作-SOP.md) |
 | 准备从上游 sst/opencode 拉新版合并 | ⭐ [governance/UPSTREAM-MERGE-GUIDE.md](./governance/UPSTREAM-MERGE-GUIDE.md) |
 | 改东西不知道走 fork 路径还是上游路径 | [governance/fork-跟随升级与协作规范.md](./governance/fork-跟随升级与协作规范.md) — R1 三级跳决策 |
 | 改品牌相关(name / icon / 主题色) | [governance/DeskFox-品牌替换.md](./governance/DeskFox-品牌替换.md) + [governance/改动规则.md](./governance/改动规则.md) R3 |

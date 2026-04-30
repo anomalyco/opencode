@@ -85,3 +85,18 @@ git remote set-url --delete --push origin <github-url>
 | CLAUDE.md "默认仓库约定"段更新 | 文档撒谎,小 feat | 动作计划 #6 |
 
 落账细节见 [`./3-changelog.md`](./3-changelog.md)。
+
+---
+
+## 五、补充:双端协作 SOP(v2 锁版后追加,2026-04-30)
+
+v2 spec 锁版后追问:**feat/A 合并 dev 后,下一个项目用同名还是新名字?**
+
+结论:**新名字,feat = 一次性容器,合 dev 即销毁,绝不复用**。
+
+完整规则(feat 生命周期 + Win/Mac 双端协作流程 + 三个常见坑 + 命令速查)单独立文档:[`docs/governance/双端协作-SOP.md`](../../governance/双端协作-SOP.md)。
+
+理由(为什么不塞回本 spec):
+- spec status=done,锁版后只补不改;且 spec 是**起草决策的过程性文档**,不是长期 SOP
+- 协作流程是**长期生效的规范**,归 `governance/` 比归 `features/` 合理
+- CLAUDE.md / 治理总纲 / 本 plan 加指针即可,**不重复内容**(对齐"避免文档无限膨胀")
