@@ -1,7 +1,7 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
-import { Effect, FileSystem, Layer, Path } from "effect"
+import { Config, Effect, FileSystem, Layer, Path } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
@@ -32,7 +32,7 @@ const testStateLayer = Layer.effectDiscard(
 // 127.0.0.1:0 and a fetch-based HttpClient that prepends the server URL. This
 // keeps the test wired through the same route layer production uses, without
 // going through Server.Default()/Hono.
-const servedRoutes: Layer.Layer<never, never, HttpServer.HttpServer> = HttpRouter.serve(
+const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
   ExperimentalHttpApiServer.routes,
   { disableListenLog: true, disableLogger: true },
 )

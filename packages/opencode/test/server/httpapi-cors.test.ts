@@ -1,7 +1,7 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Config, Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
@@ -28,7 +28,7 @@ const testStateLayer = Layer.effectDiscard(
   }),
 )
 
-const servedRoutes: Layer.Layer<never, never, HttpServer.HttpServer> = HttpRouter.serve(
+const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
   ExperimentalHttpApiServer.routes,
   { disableListenLog: true, disableLogger: true },
 )
