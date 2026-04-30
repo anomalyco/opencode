@@ -18,29 +18,26 @@ export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   },
 ) {}
 
-export interface ServerAuthConfigService {
-  readonly password: string | undefined
-  readonly username: string
-}
-
-export class ServerAuthConfig extends Context.Service<ServerAuthConfig, ServerAuthConfigService>()(
-  "@opencode/ExperimentalHttpApiServerAuthConfig",
-) {}
+export class ServerAuthConfig extends Context.Service<
+  ServerAuthConfig,
+  {
+    readonly password: string | undefined
+    readonly username: string
+  }
+>()("@opencode/ExperimentalHttpApiServerAuthConfig") {}
 
 const emptyCredential = {
   username: "",
   password: Redacted.make(""),
 }
 
-const authConfig = Config.all({
-  password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
-  username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
-})
-
 export const serverAuthConfigLayer = Layer.effect(
   ServerAuthConfig,
   Effect.gen(function* () {
-    const config = yield* authConfig
+    const config = yield* Config.all({
+      password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
+      username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
+    })
     return ServerAuthConfig.of({
       password: Option.getOrUndefined(config.password),
       username: config.username,
@@ -50,8 +47,8 @@ export const serverAuthConfigLayer = Layer.effect(
 
 function validateCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
-  credential: { readonly username: string; readonly password: typeof emptyCredential.password },
-  config: ServerAuthConfigService,
+  credential: { readonly username: string; readonly password: Redacted.Redacted },
+  config: Context.Service.Shape<typeof ServerAuthConfig>,
 ) {
   return Effect.gen(function* () {
     if (!config.password) return yield* effect
