@@ -6,7 +6,7 @@ import { Instruction } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { Instance } from "../../src/project/instance"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
-import { Global } from "../../src/global"
+import { Global } from "@opencode-ai/core/global"
 import { tmpdir } from "../fixture/fixture"
 
 const run = <A>(effect: Effect.Effect<A, any, Instruction.Service>) =>
@@ -251,11 +251,11 @@ describe("Instruction.system", () => {
 
                 const rules = yield* svc.system()
                 expect(rules).toHaveLength(2)
-                expect(rules).toContain(
-                  `Instructions from: ${path.join(projectTmp.path, "AGENTS.md")}\n# Project Instructions`,
-                )
-                expect(rules).toContain(
+                expect(rules[0]).toBe(
                   `Instructions from: ${path.join(globalTmp.path, "AGENTS.md")}\n# Global Instructions`,
+                )
+                expect(rules[1]).toBe(
+                  `Instructions from: ${path.join(projectTmp.path, "AGENTS.md")}\n# Project Instructions`,
                 )
               }),
             ),

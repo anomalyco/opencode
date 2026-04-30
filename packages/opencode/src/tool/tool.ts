@@ -158,3 +158,5 @@ export function init<P extends Schema.Decoder<unknown>, M extends Metadata>(
     }
   })
 }
+
+export * as Tool from "./tool"

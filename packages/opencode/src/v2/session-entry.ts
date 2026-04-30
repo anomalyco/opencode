@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { NonNegativeInt } from "@/util/schema"
 import { SessionEvent } from "./session-event"
 
 export const ID = SessionEvent.ID
@@ -105,7 +106,7 @@ export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Sessio
 }) {}
 
 export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Entry.Assistant.Retry")({
-  attempt: Schema.Number,
+  attempt: NonNegativeInt,
   error: SessionEvent.RetryError,
   time: Schema.Struct({
     created: Schema.DateTimeUtc,
@@ -132,14 +133,14 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
   type: Schema.Literal("assistant"),
   content: AssistantContent.pipe(Schema.Array),
   retries: AssistantRetry.pipe(Schema.Array, Schema.optional),
-  cost: Schema.Number.pipe(Schema.optional),
+  cost: Schema.Finite.pipe(Schema.optional),
   tokens: Schema.Struct({
-    input: Schema.Number,
-    output: Schema.Number,
-    reasoning: Schema.Number,
+    input: NonNegativeInt,
+    output: NonNegativeInt,
+    reasoning: NonNegativeInt,
     cache: Schema.Struct({
-      read: Schema.Number,
-      write: Schema.Number,
+      read: NonNegativeInt,
+      write: NonNegativeInt,
     }),
   }).pipe(Schema.optional),
   error: Schema.String.pipe(Schema.optional),

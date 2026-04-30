@@ -4,14 +4,14 @@ import { getAdaptor } from "@/control-plane/adaptors"
 import { WorkspaceID } from "@/control-plane/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Workspace } from "@/control-plane/workspace"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { ServerProxy } from "./proxy"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
@@ -21,7 +21,7 @@ const RULES: Array<Rule> = [
   { method: "GET", path: "/session", action: "local" },
 ]
 
-function local(method: string, path: string) {
+export function isLocalWorkspaceRoute(method: string, path: string) {
   for (const rule of RULES) {
     if (rule.method && rule.method !== method) continue
     const match = rule.exact ? path === rule.path : path === rule.path || path.startsWith(rule.path + "/")
@@ -30,7 +30,7 @@ function local(method: string, path: string) {
   return false
 }
 
-function getSessionID(url: URL) {
+export function getWorkspaceRouteSessionID(url: URL) {
   if (url.pathname === "/session/status") return null
 
   const id = url.pathname.match(/^\/session\/([^/]+)(?:\/|$)/)?.[1]
@@ -39,8 +39,17 @@ function getSessionID(url: URL) {
   return SessionID.make(id)
 }
 
+export function workspaceProxyURL(target: string | URL, requestURL: URL) {
+  const proxyURL = new URL(target)
+  proxyURL.pathname = `${proxyURL.pathname.replace(/\/$/, "")}${requestURL.pathname}`
+  proxyURL.search = requestURL.search
+  proxyURL.hash = requestURL.hash
+  proxyURL.searchParams.delete("workspace")
+  return proxyURL
+}
+
 async function getSessionWorkspace(url: URL) {
-  const id = getSessionID(url)
+  const id = getWorkspaceRouteSessionID(url)
   if (!id) return null
 
   const session = await AppRuntime.runPromise(
@@ -73,7 +82,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })
     }
 
-    if (local(c.req.method, url.pathname)) {
+    if (isLocalWorkspaceRoute(c.req.method, url.pathname)) {
       // No instance provided because we are serving cached data; there
       // is no instance to work with
       return next()
@@ -96,11 +105,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })
     }
 
-    const proxyURL = new URL(target.url)
-    proxyURL.pathname = `${proxyURL.pathname.replace(/\/$/, "")}${url.pathname}`
-    proxyURL.search = url.search
-    proxyURL.hash = url.hash
-    proxyURL.searchParams.delete("workspace")
+    const proxyURL = workspaceProxyURL(target.url, url)
 
     log.info("workspace proxy forwarding", {
       workspaceID,

@@ -324,6 +324,44 @@ Ili ako već imate API ključ, možete odabrati **Ručno unesite API ključ** i 
 
 ---
 
+### Atomic Chat
+
+Možete konfigurirati opencode za korištenje lokalnih modela preko [Atomic Chata](https://atomic.chat) — desktop aplikacije koja pokreće lokalne LLM-ove iza OpenAI-kompatibilnog API servera (zadana krajnja tačka `http://127.0.0.1:1337/v1`).
+
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
+
+U ovom primjeru:
+
+- `atomic-chat` je prilagođeni ID provajdera. Može biti bilo koji niz.
+- `npm` specificira paket koji se koristi za ovog provajdera. Ovdje se koristi `@ai-sdk/openai-compatible` za svaki OpenAI-kompatibilni API.
+- `name` je prikazano ime provajdera u interfejsu.
+- `options.baseURL` je krajnja tačka lokalnog servera. Promijenite host i port da odgovaraju vašoj Atomic Chat konfiguraciji.
+- `models` je mapa ID-ova modela u njihova prikazana imena. Svaki ID mora odgovarati `id` vrijednosti koju vraća `GET /v1/models` — pokrenite `curl http://127.0.0.1:1337/v1/models` da vidite ID-ove trenutno učitane u Atomic Chat.
+
+:::tip
+Ako pozivi alata ne rade dobro, odaberite učitani model sa jakom podrškom za tool calling (na primjer, Qwen-Coder ili DeepSeek-Coder varijantu).
+:::
+
+---
+
 ### Azure OpenAI
 
 :::note

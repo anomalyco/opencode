@@ -1,0 +1,1 @@
+ALTER TABLE `session` ADD `path` text;

@@ -1,6 +1,6 @@
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { Auth } from "@/auth"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { zod } from "@/util/effect-zod"
 import { namedSchemaError } from "@/util/named-schema-error"
 import { withStatics } from "@/util/schema"
@@ -58,13 +58,13 @@ export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuth
 }
 
 export const AuthorizeInput = Schema.Struct({
-  method: Schema.Number.annotate({ description: "Auth method index" }),
+  method: Schema.Finite.annotate({ description: "Auth method index" }),
   inputs: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({ description: "Prompt inputs" }),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type AuthorizeInput = Schema.Schema.Type<typeof AuthorizeInput>
 
 export const CallbackInput = Schema.Struct({
-  method: Schema.Number.annotate({ description: "Auth method index" }),
+  method: Schema.Finite.annotate({ description: "Auth method index" }),
   code: Schema.optional(Schema.String).annotate({ description: "OAuth authorization code" }),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
@@ -222,3 +222,5 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
 )
+
+export * as ProviderAuth from "./auth"

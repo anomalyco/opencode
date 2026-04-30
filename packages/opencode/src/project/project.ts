@@ -1,9 +1,11 @@
 import z from "zod"
-import { and, Database, eq } from "../storage"
+import { and } from "drizzle-orm"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
-import { Log } from "../util"
-import { Flag } from "@/flag/flag"
+import * as Log from "@opencode-ai/core/util/log"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
@@ -12,9 +14,10 @@ import { Effect, Layer, Path, Scope, Context, Stream, Types, Schema } from "effe
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, withStatics } from "@/util/schema"
+import { serviceUse } from "@/effect/service-use"
 
 const log = Log.create({ service: "project" })
 
@@ -33,9 +36,9 @@ const ProjectCommands = Schema.Struct({
 })
 
 const ProjectTime = Schema.Struct({
-  created: Schema.Number,
-  updated: Schema.Number,
-  initialized: Schema.optional(Schema.Number),
+  created: NonNegativeInt,
+  updated: NonNegativeInt,
+  initialized: Schema.optional(NonNegativeInt),
 })
 
 export const Info = Schema.Struct({
@@ -90,6 +93,15 @@ export const UpdateInput = z.object({
   commands: zod(ProjectCommands).optional(),
 })
 export type UpdateInput = z.infer<typeof UpdateInput>
+
+export const UpdatePayload = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
+})
+  .annotate({ identifier: "ProjectUpdateInput" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
 // ---------------------------------------------------------------------------
 // Effect service
@@ -167,7 +179,7 @@ export const layer: Layer.Layer<
     const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
         Effect.map((x) => x.trim()),
-        Effect.map(ProjectID.make),
+        Effect.map((x) => ProjectID.make(x)),
         Effect.catch(() => Effect.void),
       )
     })
@@ -474,6 +486,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(NodePath.layer),
 )
 
+export const use = serviceUse(Service)
+
 export function list() {
   return Database.use((db) =>
     db
@@ -495,3 +509,5 @@ export function setInitialized(id: ProjectID) {
     db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
   )
 }
+
+export * as Project from "./project"

@@ -4,10 +4,10 @@ import { Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
 import { SyncEvent } from "../../src/sync"
-import { Database } from "../../src/storage"
+import { Database } from "@/storage/db"
 import { EventTable } from "../../src/sync/event.sql"
 import { Identifier } from "../../src/id/id"
-import { Flag } from "../../src/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { initProjectors } from "../../src/server/projectors"
 
 const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
