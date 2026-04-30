@@ -251,11 +251,11 @@ describe("Instruction.system", () => {
 
                 const rules = yield* svc.system()
                 expect(rules).toHaveLength(2)
-                expect(rules).toContain(
-                  `Instructions from: ${path.join(projectTmp.path, "AGENTS.md")}\n# Project Instructions`,
-                )
-                expect(rules).toContain(
+                expect(rules[0]).toBe(
                   `Instructions from: ${path.join(globalTmp.path, "AGENTS.md")}\n# Global Instructions`,
+                )
+                expect(rules[1]).toBe(
+                  `Instructions from: ${path.join(projectTmp.path, "AGENTS.md")}\n# Project Instructions`,
                 )
               }),
             ),

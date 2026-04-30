@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import * as Sse from "effect/unstable/encoding/Sse"
 
 const log = Log.create({ service: "server" })
 
@@ -27,8 +28,13 @@ export const EventApi = HttpApi.make("event").add(
     .annotateMerge(OpenApi.annotations({ title: "event", description: "Instance event stream route." })),
 )
 
-function eventData(data: unknown) {
-  return `data: ${JSON.stringify(data)}\n\n`
+function eventData(data: unknown): Sse.Event {
+  return {
+    _tag: "Event",
+    event: "message",
+    id: undefined,
+    data: JSON.stringify(data),
+  }
 }
 
 export const eventRoute = HttpRouter.add(
@@ -47,6 +53,7 @@ export const eventRoute = HttpRouter.add(
       Stream.make({ type: "server.connected", properties: {} }).pipe(
         Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
         Stream.map(eventData),
+        Stream.pipeThroughChannel(Sse.encode()),
         Stream.encodeText,
         Stream.ensuring(Effect.sync(() => log.info("event disconnected"))),
       ),
