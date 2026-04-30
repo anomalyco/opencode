@@ -58,6 +58,17 @@ const model: Provider.Model = {
   release_date: "2026-01-01",
 }
 
+const model2: Provider.Model = {
+  ...model,
+  id: ModelID.make("other-model"),
+  providerID: ProviderID.make("other"),
+  api: {
+    ...model.api,
+    id: "other-model",
+  },
+  name: "Other Model",
+}
+
 function userInfo(id: string): MessageV2.User {
   return {
     id,
@@ -443,7 +454,129 @@ describe("session.message-v2.toModelMessage", () => {
     })
   })
 
-  test("omits provider metadata when assistant model differs", async () => {
+  test("preserves reasoning providerMetadata when model matches", async () => {
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { openai: { signature: "sig-match" } },
+            time: { start: 0 },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "thinking", providerOptions: { openai: { signature: "sig-match" } } }],
+      },
+    ])
+  })
+
+  test("preserves reasoning providerMetadata when same provider, different model (e.g. compaction)", async () => {
+    const assistantID = "m-assistant"
+    // model2sameProvider: same providerID as model but different model variant (simulates compaction)
+    const model2sameProvider: Provider.Model = {
+      ...model,
+      id: ModelID.make("test-model-variant"),
+      api: { ...model.api, id: "test-model-variant" },
+      name: "Test Model Variant",
+    }
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: model2sameProvider.providerID,
+          modelID: model2sameProvider.api.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { openai: { signature: "sig-same-provider" } },
+            time: { start: 0 },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    // Same provider, different model — signatures must be preserved (compaction use case)
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "thinking", providerOptions: { openai: { signature: "sig-same-provider" } } }],
+      },
+    ])
+  })
+
+  test("omits reasoning providerMetadata when provider differs (cross-provider model switch)", async () => {
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: model2.providerID,
+          modelID: model2.api.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { openai: { signature: "sig-different" } },
+            time: { start: 0 },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    // Different provider — provider-specific metadata is stripped
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "thinking", providerOptions: undefined }],
+      },
+    ])
+  })
+
+  test("omits text providerMetadata when provider differs", async () => {
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: model2.providerID,
+          modelID: model2.api.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "done",
+            metadata: { openai: { assistant: "meta" } },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    // Different provider — provider-specific metadata is stripped
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+      },
+    ])
+  })
+
+  test("omits tool callProviderMetadata when provider differs", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -459,16 +592,13 @@ describe("session.message-v2.toModelMessage", () => {
         ] as MessageV2.Part[],
       },
       {
-        info: assistantInfo(assistantID, userID, undefined, { providerID: "other", modelID: "other" }),
+        info: assistantInfo(assistantID, userID, undefined, {
+          providerID: model2.providerID,
+          modelID: model2.api.id,
+        }),
         parts: [
           {
             ...basePart(assistantID, "a1"),
-            type: "text",
-            text: "done",
-            metadata: { openai: { assistant: "meta" } },
-          },
-          {
-            ...basePart(assistantID, "a2"),
             type: "tool",
             callID: "call-1",
             tool: "bash",
@@ -494,7 +624,89 @@ describe("session.message-v2.toModelMessage", () => {
       {
         role: "assistant",
         content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "text", value: "ok" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("handles undefined metadata gracefully", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID, undefined, {
+          providerID: model2.providerID,
+          modelID: model2.api.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "done",
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
           { type: "text", text: "done" },
+          { type: "reasoning", text: "thinking", providerOptions: undefined },
           {
             type: "tool-call",
             toolCallId: "call-1",
