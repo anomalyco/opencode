@@ -10344,9 +10344,7 @@
                 "maximum": 9007199254740991
               },
               "archived": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
+                "type": "number"
               }
             },
             "required": ["created", "updated"]
@@ -10857,9 +10855,7 @@
                       "archived": {
                         "anyOf": [
                           {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
+                            "type": "number"
                           },
                           {
                             "type": "null"
@@ -12789,9 +12785,7 @@
                 "maximum": 9007199254740991
               },
               "archived": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
+                "type": "number"
               }
             },
             "required": ["created", "updated"]
