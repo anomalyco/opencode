@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { FetchHttpClient, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Account } from "@/account/account"
@@ -121,9 +121,16 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
   ]),
 )
 
-const uiRoute = HttpRouter.add("*", "/*", (request) =>
-  serveUIEffect(request).pipe(Effect.provide(AppFileSystem.defaultLayer), Effect.provide(FetchHttpClient.layer)),
-).pipe(Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))))
+const uiRoute = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const fs = yield* AppFileSystem.Service
+    const client = yield* HttpClient.HttpClient
+    const router = yield* HttpRouter.HttpRouter
+    yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
+  }),
+).pipe(
+  Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))),
+)
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes, uiRoute).pipe(
   Layer.provide([
@@ -162,6 +169,8 @@ export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes, uiRoute).pip
     Workspace.defaultLayer,
     Worktree.defaultLayer,
     Bus.layer,
+    AppFileSystem.defaultLayer,
+    FetchHttpClient.layer,
     HttpServer.layerServices,
   ]),
   Layer.provideMerge(Observability.layer),

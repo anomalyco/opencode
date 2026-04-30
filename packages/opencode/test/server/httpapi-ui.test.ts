@@ -74,22 +74,26 @@ function app(input?: { password?: string; username?: string }) {
 
 function uiApp(input?: { password?: string; username?: string; client?: Layer.Layer<HttpClient.HttpClient> }) {
   const handler = HttpRouter.toWebHandler(
-    HttpRouter.add("*", "/*", (request) =>
-      serveUIEffect(request).pipe(
-        Effect.provide(AppFileSystem.defaultLayer),
-        Effect.provide(input?.client ?? httpClient(new Response("ui"))),
-      ),
+    Layer.effectDiscard(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const client = yield* HttpClient.HttpClient
+        const router = yield* HttpRouter.HttpRouter
+        yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
+      }),
     ).pipe(
       Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))),
-      Layer.provide(HttpServer.layerServices),
-      Layer.provide(
+      Layer.provide([
+        AppFileSystem.defaultLayer,
+        input?.client ?? httpClient(new Response("ui")),
+        HttpServer.layerServices,
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
             OPENCODE_SERVER_PASSWORD: input?.password,
             OPENCODE_SERVER_USERNAME: input?.username,
           }),
         ),
-      ),
+      ]),
     ),
     { disableLogger: true },
   ).handler
@@ -140,26 +144,32 @@ describe("HttpApi UI fallback", () => {
     let proxiedUrl: string | undefined
 
     const response = await Effect.runPromise(
-      serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/assets/app.js"))).pipe(
-        Effect.provide(AppFileSystem.defaultLayer),
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const client = yield* HttpClient.HttpClient
+        return yield* serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/assets/app.js")), { fs, client })
+      }).pipe(
         Effect.provide(
-          Layer.succeed(
-            HttpClient.HttpClient,
-            HttpClient.make((request) => {
-              proxiedUrl = request.url
-              return Effect.succeed(
-                HttpClientResponse.fromWeb(
-                  request,
-                  new Response("console.log('ok')", {
-                    headers: {
-                      "content-encoding": "br",
-                      "content-length": "999",
-                      "content-type": "text/javascript",
-                    },
-                  }),
-                ),
-              )
-            }),
+          Layer.mergeAll(
+            AppFileSystem.defaultLayer,
+            Layer.succeed(
+              HttpClient.HttpClient,
+              HttpClient.make((request) => {
+                proxiedUrl = request.url
+                return Effect.succeed(
+                  HttpClientResponse.fromWeb(
+                    request,
+                    new Response("console.log('ok')", {
+                      headers: {
+                        "content-encoding": "br",
+                        "content-length": "999",
+                        "content-type": "text/javascript",
+                      },
+                    }),
+                  ),
+                )
+              }),
+            ),
           ),
         ),
         Effect.map(HttpServerResponse.toWeb),
