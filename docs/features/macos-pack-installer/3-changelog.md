@@ -6,7 +6,7 @@ related: ./3-changelog.md
 
 # macos-pack-installer — changelog
 
-**关联 commit**: 待回填
+**关联 commit**: `373195692`
 **所在分支**: `feat/editable-file-viewer`
 **规模**: Tiny(2 新 sh ≈ 209 行 + 4 mode change + 1 行 gitignore + 文档,无 1-spec / 2-plan)
 **触发原因**: `installer-versioning`(2026-04-29 done)Win 侧已落 `pack-installer.ps1` + `bump-installer-version.ps1`,macOS 侧标记"待补"。本次补全 macOS 一键打包脚本,并修复 `apply-icons.sh` 现场生成的 `icon.icns` 没进 .gitignore 导致工作树脏的小漏。
