@@ -27,3 +27,4 @@
 | [prod-bundle-id-fix](./prod-bundle-id-fix/) | done | macOS prod / beta Bundle ID 独立 override(prod=ai.opencode.desktop,beta=...beta),修应用程序网格搜不到 .dev Bundle ID 应用的问题(Tiny) |
 | [bundle-id-debrand](./bundle-id-debrand/) | done | 完整品牌切割 — Bundle ID 三档全去 `opencode` 字眼,改 `ai.deskfox.app` 系列(prod/.beta/.dev),与 sst/opencode 上游 0 命名空间共享(Tiny) |
 | [分支策略-v2](./分支策略-v2/) | done | dev 单一稳定主干 + 上游同步分离 + 三档环境正交分支 — feat → dev 一次性 merge 切换(`fae01d2a8`,187 文件 / +19721 行),废除 4.3 节"禁止直 push 到 dev",origin 双 push 临时改单推 gitee |
+| [win-tri-env-appid](./win-tri-env-appid/) | done | Windows 三档 AppId 同机共存 — `DeskFox.iss` 加 `#if AppEnv` 切档(beta `{86413DCA-...}` + dev `{4C5D29F2-...}` 新生成,prod GUID 锁死不变);`pack-installer.ps1` 加 `-Env` 参数;Mac/Win 三档共存能力对齐 |

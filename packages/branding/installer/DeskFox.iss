@@ -2,28 +2,51 @@
 ; 版本号规则: YYYY.M.D.N (年.月.日.当天第几版,N 从 1 开始)
 ; 由 packages/branding/scripts/bump-installer-version.ps1 自动维护本行 AppVersion
 ; 也可命令行 override: iscc /DAppVersion=2026.4.29.2 DeskFox.iss
-; 产物: Output\DeskFox-<version>-setup.exe
+;
+; 三档环境(2026-04-30 起,见 docs/governance/应用身份-命名规则.md)
+;   AppEnv 默认为 prod,可通过 ISCC /DAppEnv=dev|beta|prod 切换
+;   产物: Output\DeskFox[-Beta|-Dev]-<version>-setup.exe
+;   AppId 三档独立 GUID → 控制面板"应用与功能"识别成 3 个独立 app,可同机共存
 
 #ifndef AppVersion
   #define AppVersion "2026.4.29.2"
 #endif
 
-#define AppName        "DeskFox"
+#ifndef AppEnv
+  #define AppEnv "prod"
+#endif
+
+; 三档身份 — AppId 一旦发布禁止改,改了等于换新 app,装新版不会替换旧版
+#if AppEnv == "prod"
+  #define AppId          "{{F9F6F6C5-D865-468C-BCE5-BF0ECA24A763}"
+  #define AppName        "DeskFox"
+  #define OutputBase     "DeskFox"
+#elif AppEnv == "beta"
+  #define AppId          "{{86413DCA-EA81-415A-A309-473EBFD78990}"
+  #define AppName        "DeskFox Beta"
+  #define OutputBase     "DeskFox-Beta"
+#elif AppEnv == "dev"
+  #define AppId          "{{4C5D29F2-3BBB-49A2-B248-B74B716F8EA1}"
+  #define AppName        "DeskFox Dev"
+  #define OutputBase     "DeskFox-Dev"
+#else
+  #error Unknown AppEnv. Use prod | beta | dev.
+#endif
+
 #define AppPublisher   "DeskFox"
 #define AppExeName     "DeskFox.exe"
 #define ReleaseDir     "..\..\desktop\src-tauri\target\release"
 #define IconFile       "..\src\assets\icons\prod\icon.ico"
 
 [Setup]
-; AppId 一旦发布禁止改 — 改了等于换新 app,装新版不会替换旧版
-AppId={{F9F6F6C5-D865-468C-BCE5-BF0ECA24A763}
+AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
-OutputBaseFilename={#AppName}-{#AppVersion}-setup
+OutputBaseFilename={#OutputBase}-{#AppVersion}-setup
 OutputDir=Output
 SetupIconFile={#IconFile}
 UninstallDisplayIcon={app}\{#AppExeName}
