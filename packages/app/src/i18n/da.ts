@@ -23,6 +23,9 @@ export const dict = {
 
   "command.sidebar.toggle": "Skift sidebjælke",
   "command.project.open": "Åbn projekt",
+  "command.project.openInFinder": "Open in Finder",
+  "command.project.openInFileExplorer": "Open in File Explorer",
+  "command.project.openInFileManager": "Open in File Manager",
   "command.provider.connect": "Tilslut udbyder",
   "command.server.switch": "Skift server",
   "command.settings.open": "Åbn indstillinger",

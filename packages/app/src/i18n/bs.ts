@@ -23,6 +23,9 @@ export const dict = {
 
   "command.sidebar.toggle": "Prikaži/sakrij bočnu traku",
   "command.project.open": "Otvori projekat",
+  "command.project.openInFinder": "Open in Finder",
+  "command.project.openInFileExplorer": "Open in File Explorer",
+  "command.project.openInFileManager": "Open in File Manager",
   "command.provider.connect": "Poveži provajdera",
   "command.server.switch": "Promijeni server",
   "command.settings.open": "Otvori postavke",

@@ -23,6 +23,9 @@ export const dict = {
 
   "command.sidebar.toggle": "Alternar barra lateral",
   "command.project.open": "Abrir proyecto",
+  "command.project.openInFinder": "Open in Finder",
+  "command.project.openInFileExplorer": "Open in File Explorer",
+  "command.project.openInFileManager": "Open in File Manager",
   "command.provider.connect": "Conectar proveedor",
   "command.server.switch": "Cambiar servidor",
   "command.settings.open": "Abrir ajustes",
