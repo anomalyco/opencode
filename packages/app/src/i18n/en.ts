@@ -103,6 +103,7 @@ export const dict = {
   "dialog.provider.opencode.note": "Curated models including Claude, GPT, Gemini and more",
   "dialog.provider.opencode.tagline": "Reliable optimized models",
   "dialog.provider.opencodeGo.tagline": "Low cost subscription for everyone",
+  "dialog.provider.getbot.tagline": "Aggregated models, pay-as-you-go", // FORK: getbot 2026-04-26
   "dialog.provider.anthropic.note": "Direct access to Claude models, including Pro and Max",
   "dialog.provider.copilot.note": "AI models for coding assistance via GitHub Copilot",
   "dialog.provider.openai.note": "GPT models for fast, capable general AI tasks",
@@ -141,6 +142,19 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "Visit ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " to collect your API key.",
+  // FORK-BEGIN: getbot 连接对话框文案 2026-04-26
+  "provider.connect.getbot.line1":
+    "GetBot is a model aggregation gateway. With one API key you get Qwen, DeepSeek, Kimi, Minimax, GLM and more, billed by usage.",
+  "provider.connect.getbot.line2": "We will fetch your available chat models right after the key is saved.",
+  "provider.connect.getbot.visit.prefix": "Visit ",
+  "provider.connect.getbot.visit.link": "getbot.me",
+  "provider.connect.getbot.visit.suffix": " to collect your API key.",
+  "provider.connect.getbot.fetchModels.failed":
+    "API key saved, but failed to fetch model list: {{error}}. You can refresh later from Settings.",
+  "provider.connect.getbot.apiKey.invalid": "API key validation failed. Please check the key and try again.",
+  "provider.connect.getbot.timeout":
+    "Request to api.getbot.me timed out (15s). Please check your network and try again.",
+  // FORK-END
   "provider.connect.oauth.code.visit.prefix": "Visit ",
   "provider.connect.oauth.code.visit.link": "this link",
   "provider.connect.oauth.code.visit.suffix":
@@ -438,6 +452,8 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Failed to load file",
   "toast.file.listFailed.title": "Failed to list files",
+  "toast.file.dirtyConflict.title": "AI modified this file",
+  "toast.file.dirtyConflict.description": "Your draft is preserved. On save you'll be prompted to choose whether to overwrite the disk version.",
 
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",

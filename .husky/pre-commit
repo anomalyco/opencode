@@ -2,8 +2,8 @@
 # ============================================================
 # opencode-fork pre-commit hook（fork 自加，upstream 不存在此文件）
 # 实现 09-改动规则.md 节 4 的 3 道自动化护栏：
-#   4.1 文件路径白名单/黑名单
-#   4.2 diff 体量阈值（>200 行警告）
+#   4.1 文件路径白名单/黑名单（含注册型扩展点豁免）
+#   4.2 diff 体量阈值（>500 行警告，规范 v2 由 200 调整为 500）
 #   4.4 大小写冲突检查（防 Windows/macOS 端崩）
 #
 # 跳过方式: git commit --no-verify（必须在 commit 信息或 改动日志.md 显式说明）
@@ -15,9 +15,12 @@ set -e
 # 4.1 白名单/黑名单
 # ------------------------------------------------------------
 BLACKLIST_REGEX='^(packages/(console|containers|desktop-electron|docs|enterprise|extensions|function|identity|opencode|plugin|script|sdk|shared|slack|storybook|ui|web)/|packages/desktop/src-tauri/(tauri\..+\.conf\.json|build\.rs|capabilities/|icons/|entitlements\.plist)|\.github/|bunfig\.toml$|.*\.config\.(ts|js|mjs)$|^package\.json$|^bun\.lock$|^tsconfig\.json$|^flake\.lock$|^LICENSE$)'
+# 规范 v2(2026-04-27)豁免:注册型扩展点(provider-icons sprite/types)从黑名单豁免。
+# 理由:这俩本就是上游设计的"加新 provider"append-only 注册表,每次加 provider 必改,误报率太高。
+EXCEPTION_REGEX='^packages/ui/src/components/provider-icons/(sprite\.svg|types\.ts)$'
 SCRIPTS_ALLOWED='^scripts/install-hooks\.sh$'
 
-violations=$(git diff --cached --name-only | grep -E "$BLACKLIST_REGEX" || true)
+violations=$(git diff --cached --name-only | grep -E "$BLACKLIST_REGEX" | grep -vE "$EXCEPTION_REGEX" || true)
 scripts_violations=$(git diff --cached --name-only | grep -E "^scripts/" | grep -vE "$SCRIPTS_ALLOWED" || true)
 
 if [ -n "$violations" ] || [ -n "$scripts_violations" ]; then
@@ -33,7 +36,8 @@ fi
 # ------------------------------------------------------------
 # 4.2 diff 体量阈值
 # ------------------------------------------------------------
-THRESHOLD=200
+# 规范 v2(2026-04-27):200 → 500。理由:实际 feature commit 普遍 200-400 行,200 阈值导致 [large-diff] 频繁覆盖等于规则失效。500 是真实"该停下想想"的体量。
+THRESHOLD=500
 DIFF_LINES=$(git diff --cached --shortstat 2>/dev/null | awk '{print ($4+0)+($6+0)}')
 DIFF_LINES=${DIFF_LINES:-0}
 

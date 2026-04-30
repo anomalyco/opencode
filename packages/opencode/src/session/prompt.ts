@@ -1342,6 +1342,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const hasToolCalls =
             lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
+          // FORK-BEGIN: claude-code-loop-fix — workaround upstream step-loop bug (case 1)
+          // 现象:claude-code plugin emit finish=stop 后,opencode runLoop 不 break,UI 卡死
+          // 根因(Phase A 诊断 2026-04-29):lastAssistant.finish 顶层字段永远 undefined,
+          //   但 message.parts 里含 "step-finish" part — ai-sdk LanguageModelV2 finish event
+          //   被转成 step-finish part 写进 parts 数组,opencode 没把 reason 提升到顶层 finish
+          // 上游 sst/opencode dev 当前未修(2026-04-29 核实)
+          // 上游若以后改了顶层 finish 写入逻辑,删本块 + tracking 注释即可恢复主线行为
+          // 详见 docs/features/claude-code-loop-fix/3-changelog.md
+          const hasStepFinish = lastAssistantMsg?.parts.some((part) => part.type === "step-finish") ?? false
+          if (hasStepFinish && !hasToolCalls && lastAssistant && lastUser.id < lastAssistant.id) {
+            yield* slog.info("exiting loop (FORK claude-code-loop-fix case-1)")
+            break
+          }
+          // FORK-END
+
           if (
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&

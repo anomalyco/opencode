@@ -1,6 +1,6 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Dynamic } from "solid-js/web"
+import { Dynamic, Portal } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
@@ -9,16 +9,158 @@ import { createLineCommentController } from "@opencode-ai/ui/line-comment-annota
 import { sampledChecksum } from "@opencode-ai/shared/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
+import { invoke } from "@tauri-apps/api/core"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
+import { useSDK } from "@/context/sdk"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import CodeMirrorView from "@/components/code-mirror-view"
+import { langFromExt } from "@/utils/lang-from-ext"
+import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
+
+// FORK: macOS 平台检测,用于右键菜单输入框 Option+Enter 提交支持 2026-04-30
+const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
+
+function isMarkdownPath(p: string | undefined): boolean {
+  if (!p) return false
+  const lower = p.toLowerCase()
+  return lower.endsWith(".md") || lower.endsWith(".markdown")
+}
+
+// In-memory LRU cache for fetched office PDF binaries. Saves having to re-fetch
+// 200+ MB across tab switches. Bounded so RAM doesn't grow unboundedly.
+const OFFICE_PDF_CACHE_MAX = 2
+const officePdfCache = new Map<string, Uint8Array>()
+function officePdfCacheGet(key: string): Uint8Array | undefined {
+  const value = officePdfCache.get(key)
+  if (value) {
+    officePdfCache.delete(key)
+    officePdfCache.set(key, value) // bump to most-recent
+  }
+  return value
+}
+function officePdfCacheSet(key: string, value: Uint8Array) {
+  if (officePdfCache.has(key)) officePdfCache.delete(key)
+  officePdfCache.set(key, value)
+  while (officePdfCache.size > OFFICE_PDF_CACHE_MAX) {
+    const oldest = officePdfCache.keys().next().value
+    if (oldest === undefined) break
+    officePdfCache.delete(oldest)
+  }
+}
+
+// audio 元素分支:纯音频容器
+const AUDIO_MIME_FALLBACKS: Record<string, string[]> = {
+  ".mp3": ["audio/mpeg"],
+  ".m4a": ["audio/mp4", "audio/x-m4a", "audio/aac"],
+  ".wav": ["audio/wav", "audio/wave", "audio/x-wav"],
+  ".ogg": ["audio/ogg"],
+  ".aac": ["audio/aac", "audio/mp4"],
+  ".flac": ["audio/flac", "audio/x-flac"],
+  ".opus": ["audio/opus", "audio/ogg"],
+}
+
+// video 元素分支
+const VIDEO_MIME_FALLBACKS: Record<string, string[]> = {
+  ".mp4": ["video/mp4"],
+  ".m4v": ["video/mp4"],
+  ".mov": ["video/quicktime", "video/mp4"],
+  ".webm": ["video/webm"],
+  ".mkv": ["video/x-matroska", "video/mp4"],
+  ".avi": ["video/x-msvideo", "video/avi"],
+}
+
+// WebView2 内置播放器解不出的扩展(实测:audio 元素和 video 元素都失败)。直接走"用系统播放器打开"兜底,跳过 base64 加载。
+const UNSUPPORTED_MEDIA_EXTS = new Set([".m4a"])
+
+function isUnsupportedMedia(p: string | undefined): boolean {
+  if (!p) return false
+  const lower = p.toLowerCase()
+  for (const ext of UNSUPPORTED_MEDIA_EXTS) {
+    if (lower.endsWith(ext)) return true
+  }
+  return false
+}
+
+type MediaKind = "audio" | "video"
+
+function mediaKindFromPath(p: string | undefined): { kind: MediaKind; mimes: string[] } | null {
+  if (!p) return null
+  const lower = p.toLowerCase()
+  for (const ext in VIDEO_MIME_FALLBACKS) {
+    if (lower.endsWith(ext)) return { kind: "video", mimes: VIDEO_MIME_FALLBACKS[ext] }
+  }
+  for (const ext in AUDIO_MIME_FALLBACKS) {
+    if (lower.endsWith(ext)) return { kind: "audio", mimes: AUDIO_MIME_FALLBACKS[ext] }
+  }
+  return null
+}
+
+function rangeAt(source: string, offset: number, len: number) {
+  const before = source.slice(0, offset)
+  const inner = source.slice(offset, offset + len)
+  const start = (before.match(/\n/g)?.length ?? 0) + 1
+  const end = start + (inner.match(/\n/g)?.length ?? 0)
+  return { start, end }
+}
+
+// 构建归一化空白后的字符串 + 原 offset 映射,用于宽松匹配。
+function normalizeWithMap(s: string): { text: string; back: number[] } {
+  const back: number[] = []
+  let out = ""
+  let prevSpace = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+      if (!prevSpace && out.length > 0) {
+        out += " "
+        back.push(i)
+      }
+      prevSpace = true
+    } else {
+      out += c
+      back.push(i)
+      prevSpace = false
+    }
+  }
+  return { text: out, back }
+}
+
+// 把选中文字映射回源码行号区间(1-based)。
+// 1. 精确 indexOf;2. 归一化空白后再 indexOf(应对跨行选中的表格/列表,DOM text 中空白被压缩)。
+// 都失败 → null,调用方走无 selection 分支(commentID 兜底去重)。
+function findLineRange(source: string, needle: string): { start: number; end: number } | null {
+  if (!source || !needle) return null
+  const trimmed = needle.trim()
+  if (!trimmed) return null
+
+  const idx = source.indexOf(trimmed)
+  if (idx >= 0) return rangeAt(source, idx, trimmed.length)
+
+  const { text: nSource, back } = normalizeWithMap(source)
+  const nNeedle = trimmed.replace(/[\s]+/g, " ")
+  const nIdx = nSource.indexOf(nNeedle)
+  if (nIdx < 0 || nIdx >= back.length) return null
+
+  const srcStart = back[nIdx]
+  const endNIdx = Math.min(nIdx + nNeedle.length, back.length - 1)
+  const srcEnd = back[endNIdx] ?? source.length
+  return rangeAt(source, srcStart, Math.max(1, srcEnd - srcStart))
+}
+
+function truncatePreview(text: string, max = 500): string {
+  const collapsed = text.replace(/\s+/g, " ").trim()
+  if (collapsed.length <= max) return collapsed
+  return collapsed.slice(0, max) + "…"
+}
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -173,6 +315,7 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 
 export function FileTabContent(props: { tab: string }) {
   const file = useFile()
+  const sdk = useSDK()
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
@@ -200,6 +343,127 @@ export function FileTabContent(props: { tab: string }) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+
+  // === editable viewer state (Phase 2 editable file viewer + Phase 3 guardrails) ===
+  const [editing, setEditing] = createSignal(false)
+  const [draft, setDraft] = createSignal<string | null>(null)
+  const [loadedMtime, setLoadedMtime] = createSignal<number | null>(null)
+  const dirty = createMemo(() => {
+    const d = draft()
+    return d !== null && d !== contents()
+  })
+  const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+  const canEdit = () => {
+    if (!isTauri()) return false
+    const p = path()
+    if (!p) return false
+    if (isBinary(p)) return false
+    if (isOfficeDocument(p)) return false
+    if (tooLarge(contents())) return false
+    return true
+  }
+  const editDisabledReason = () => {
+    if (!isTauri()) return "Edit only available in desktop app"
+    const p = path()
+    if (!p) return undefined
+    if (isOfficeDocument(p)) return "Office 文件暂不支持在 OpenCode 内编辑，请用本机软件打开"
+    if (isBinary(p)) return "Binary file cannot be edited"
+    if (tooLarge(contents())) return "File >10MB, editing disabled"
+    return undefined
+  }
+  const startEdit = async () => {
+    const p = path()
+    const root = sdk.directory
+    if (!p || !root) return
+    try {
+      const mtime = await invoke<number>("get_file_mtime", { root, path: p })
+      setLoadedMtime(mtime)
+    } catch (e) {
+      // 拿不到 mtime(文件可能不存在、权限问题)→ mtime 检测跳过(传 null)
+      setLoadedMtime(null)
+      console.warn("get_file_mtime failed, skipping mtime check:", e)
+    }
+    setDraft(contents())
+    setEditing(true)
+  }
+  const cancelEdit = () => {
+    setEditing(false)
+    setDraft(null)
+    setLoadedMtime(null)
+  }
+  const performWrite = async (root: string, p: string, content: string, expectedMtime: number | null) => {
+    await invoke("write_text_file", { root, path: p, content, expectedMtime })
+  }
+  const reloadAndExitEdit = async (p: string) => {
+    setEditing(false)
+    setDraft(null)
+    setLoadedMtime(null)
+    await file.load(p, { force: true })
+  }
+  const saveEdit = async () => {
+    const p = path()
+    const root = sdk.directory
+    if (!p || !root || draft() === null) return
+    try {
+      await performWrite(root, p, draft() ?? "", loadedMtime())
+      await reloadAndExitEdit(p)
+      showToast({ variant: "success", title: "Saved" })
+    } catch (e) {
+      const msg = String(e)
+      if (msg.includes("mtime_conflict")) {
+        const overwrite = window.confirm(
+          "⚠ 磁盘上的这个文件已被其他程序修改(可能是 AI 或外部编辑器)。\n\n" +
+            "[确定] 覆盖磁盘版本,保存我的改动\n" +
+            "[取消] 丢弃我的改动,重新加载磁盘版本",
+        )
+        if (overwrite) {
+          try {
+            await performWrite(root, p, draft() ?? "", null)
+            await reloadAndExitEdit(p)
+            showToast({ variant: "success", title: "Overwritten" })
+          } catch (e2) {
+            showToast({ variant: "error", title: `Overwrite failed: ${e2}` })
+          }
+        } else {
+          await reloadAndExitEdit(p)
+          showToast({ variant: "success", title: "Reloaded from disk" })
+        }
+      } else if (msg.includes("readonly:")) {
+        showToast({ variant: "error", title: "File is read-only, cannot save" })
+      } else {
+        showToast({ variant: "error", title: `Save failed: ${e}` })
+      }
+    }
+  }
+  // close editing when tab/path switches
+  createEffect(
+    on(
+      path,
+      () => {
+        if (editing()) {
+          setEditing(false)
+          setDraft(null)
+        }
+      },
+      { defer: true },
+    ),
+  )
+  // FORK: dirty 状态同步给 file context,让 watcher reload 守卫(查看器-自动刷新)2026-04-28
+  createEffect(
+    on(
+      () => ({ p: path(), d: dirty() }),
+      (curr, prev) => {
+        if (prev?.p && prev.p !== curr.p) {
+          file.markDirty(prev.p, false)
+        }
+        if (curr.p) file.markDirty(curr.p, curr.d)
+      },
+    ),
+  )
+  onCleanup(() => {
+    const p = path()
+    if (p) file.markDirty(p, false)
+  })
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -394,56 +658,621 @@ export function FileTabContent(props: { tab: string }) {
     scrollSync.queueRestore()
   })
 
-  const renderFile = (source: string) => (
-    <div class="relative overflow-hidden pb-40">
-      <Dynamic
-        component={fileComponent}
-        mode="text"
-        file={{
-          name: path() ?? "",
-          contents: source,
-          cacheKey: cacheKey(),
-        }}
-        enableLineSelection
-        enableHoverUtility
-        selectedLines={activeSelection()}
-        commentedLines={commentedLines()}
-        onRendered={() => {
-          scrollSync.queueRestore()
-        }}
-        annotations={commentsUi.annotations()}
-        renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
-        onLineSelected={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelected(range)
-        }}
-        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
-        onLineSelectionEnd={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelectionEnd(range)
-        }}
-        search={search}
-        class="select-text"
-        media={{
-          mode: "auto",
-          path: path(),
-          current: state()?.content,
-          onLoad: scrollSync.queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
-            showToast({
-              variant: "error",
-              title: language.t("toast.file.loadFailed.title"),
-            })
-          },
-        }}
-      />
+  // 右键选中文字弹自定义菜单(2 项:复制 / + 添加到聊天窗口)
+  // 点 "+ 添加到聊天窗口" 切到输入面板,用户写问题/修改意见,提交后选中文字 + 评论一起加进聊天上下文
+  type MdMenuMode = "menu" | "input"
+  type MdMenuState = { open: boolean; x: number; y: number; text: string; mode: MdMenuMode }
+  const [mdMenu, setMdMenu] = createSignal<MdMenuState>({ open: false, x: 0, y: 0, text: "", mode: "menu" })
+  const [mdComment, setMdComment] = createSignal("")
+
+  // 选区红色覆盖层:绝对定位的 div 数组,通过 range.getClientRects() 计算每行 rect。
+  //
+  // 之前用 CSS Custom Highlight API(::highlight pseudo + CSS.highlights 注册表)实测在
+  // macOS WKWebView 上 delete 注册项**不能立即触发 repaint**(WebKit 的 stale 渲染 bug),
+  // 即便先 set 一个 collapsed 空 range 兜底也压不住 —— 用户点"加入聊天"或点空白处关菜单后,
+  // 红色高亮死活不消失,只能刷新页面才清。
+  //
+  // 改用 overlay div 方案:
+  //   - 显示:range.getClientRects() 拿每行 viewport rect → 渲染 fixed 定位的红色 div
+  //   - 清除:setHighlightRects(null) → Solid 信号驱动 unmount,WebKit 没机会缓存
+  //   - 滚动:绑 scroll capture 监听,滚动时直接清(用户在菜单生命周期内极少滚)
+  //
+  // 颜色:Microsoft Fluent 系统红 #d13438 半透明 0.5 alpha,与 Windows 同款操作色一致。
+  // md / 代码文件 / Pierre shadow DOM 都走同一渲染路径,视觉天然一致。
+  type HighlightRect = { left: number; top: number; width: number; height: number }
+  const [highlightRects, setHighlightRects] = createSignal<HighlightRect[] | null>(null)
+
+  const setSelectionHighlight = (range: Range | null) => {
+    if (!range) {
+      setHighlightRects(null)
+      return
+    }
+    try {
+      const rects = Array.from(range.getClientRects())
+        .filter((r) => r.width > 0 && r.height > 0)
+        .map((r) => ({ left: r.left, top: r.top, width: r.width, height: r.height }))
+      setHighlightRects(rects.length > 0 ? rects : null)
+    } catch {
+      setHighlightRects(null)
+    }
+  }
+
+  // 滚动时清掉(viewport rect 会失效);菜单生命周期短,滚动概率低
+  createEffect(() => {
+    if (!highlightRects()) return
+    const onScroll = () => setHighlightRects(null)
+    window.addEventListener("scroll", onScroll, true)
+    onCleanup(() => window.removeEventListener("scroll", onScroll, true))
+  })
+
+  const closeMdMenu = () => {
+    setMdMenu((m) => (m.open ? { ...m, open: false } : m))
+    setMdComment("")
+    setSelectionHighlight(null)
+    // 关闭右键菜单时一并清掉:① 原生 window selection(字符级蓝/黄高亮)
+    // ② Pierre 的 selectedLines(整行黄色色块)。无论用户是"加入聊天"还是"取消",
+    // 选区视觉都同步消失,菜单关闭后页面回到无选区干净态。
+    if (typeof window !== "undefined") {
+      try {
+        window.getSelection()?.removeAllRanges()
+      } catch {
+        // ignore
+      }
+    }
+    setNote("selected", null)
+    const p = path()
+    if (p) file.setSelectedLines(p, null)
+  }
+
+  // FORK-BEGIN: macOS WebKit Shadow DOM 选区修复 2026-04-29
+  // 问题 1:WebKit 不支持 ShadowRoot.getSelection(),window.getSelection().toString()
+  // 对 Shadow DOM 内容返回空串 → 用 getComposedRanges({ shadowRoots }) API(WebKit 17+)读取。
+  //
+  // 问题 2:macOS WebKit 右键点击文字时 OS 级强制 collapse 选区到右键点中的那个词,
+  // 任何 JS 层 preventDefault 都拦不住,且 collapse 后的 selectionchange 时机不定
+  // (可能在 mousedown JS handler 之前或之后)。
+  //
+  // 第三轮 pop+block 方案的失败原因:用户刚选完就右键时,最后一条历史栈条目正是
+  // 用户真实选区(<100ms 新),被 pop 掉 → 栈空 → fallback 读 collapse 后的词。
+  // 空白处右键能成功是侥幸(WebKit 不 collapse 空白),一碰文字就破。
+  //
+  // 第四轮解法:**最近窗口内挑最长** —— WebKit collapse 出的单词必然比用户多行选区短。
+  //   1) selectionchange 不加任何屏蔽,所有非空选区都进历史栈(限 16 条)
+  //   2) 不在 mousedown 时 pop(那是错的)
+  //   3) contextmenu 时:从最近 30 秒的历史里挑文本最长的那条 → 必为用户真实选区
+  //   4) 程序化恢复 window.getSelection() + CSS Custom Highlight(0.55 alpha 强色)双重视觉
+  type SelSnapshot = { text: string; range: Range; shadow: ShadowRoot | null; time: number }
+  const selectionHistory: SelSnapshot[] = []
+  const SEL_HISTORY_LIMIT = 16
+  const SEL_HISTORY_RECENT_MS = 30_000
+  const knownShadows = new Set<ShadowRoot>()
+
+  // 收集 Shadow Root(从 mouse 事件 composedPath + DOM 查询双通道)
+  const handlePreContextCapture = (event: MouseEvent) => {
+    const composedPath = typeof event.composedPath === "function" ? event.composedPath() : []
+    for (const node of composedPath) {
+      if (node instanceof ShadowRoot) { knownShadows.add(node); break }
+    }
+    // 备用:直接查找 Pierre 的 diffs-container shadow root
+    const target = event.currentTarget as HTMLElement | null
+    if (target) {
+      const host = target.querySelector("diffs-container")
+      const sr = host?.shadowRoot
+      if (sr) knownShadows.add(sr)
+    }
+  }
+
+  // 从 Selection 对象读取文本(支持 Shadow DOM 跨边界选区)
+  const readSelectionText = (sel: Selection): { text: string; range: Range | null; shadow: ShadowRoot | null } => {
+    // 策略 1:getComposedRanges({ shadowRoots }) — WebKit 17+ 跨 shadow 选区 API
+    // API 签名:options object 形式(与 Pierre file-selection.ts 一致)
+    if (knownShadows.size > 0 && typeof (sel as any).getComposedRanges === "function") {
+      try {
+        const shadowArray = [...knownShadows]
+        const staticRanges = (sel as any).getComposedRanges({ shadowRoots: shadowArray }) as StaticRange[]
+        if (staticRanges?.length > 0) {
+          const sr = staticRanges[0]
+          const r = document.createRange()
+          r.setStart(sr.startContainer, sr.startOffset)
+          r.setEnd(sr.endContainer, sr.endOffset)
+          // 文本提取:toString() 优先,cloneContents().textContent 备用
+          const t = r.toString() || r.cloneContents()?.textContent || ""
+          if (t.trim()) {
+            const root = sr.startContainer.getRootNode()
+            return { text: t, range: r, shadow: root instanceof ShadowRoot ? root : null }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 策略 2:ShadowRoot.getSelection (Chromium 专有)
+    for (const sh of knownShadows) {
+      try {
+        const shadowSel = (sh as unknown as { getSelection?: () => Selection | null }).getSelection?.()
+        if (shadowSel && shadowSel.toString().trim()) {
+          return {
+            text: shadowSel.toString(),
+            range: shadowSel.rangeCount > 0 ? shadowSel.getRangeAt(0).cloneRange() : null,
+            shadow: sh,
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 策略 3:window.getSelection (light DOM / md 文件)
+    const t = sel.toString()
+    if (t.trim() && sel.rangeCount > 0) {
+      return { text: t, range: sel.getRangeAt(0).cloneRange(), shadow: null }
+    }
+
+    return { text: "", range: null, shadow: null }
+  }
+
+  // selectionchange:无脑记录所有非空选区到历史栈(不屏蔽、不 pop)。
+  // 之所以不需要屏蔽 collapse 回调:contextmenu 阶段挑"最近窗口里最长的那条"足以排除短的 collapse 词。
+  onMount(() => {
+    const onSelChange = () => {
+      const sel = typeof window !== "undefined" ? window.getSelection() : null
+      if (!sel) return
+      const result = readSelectionText(sel)
+      if (!result.text.trim() || !result.range) return
+      selectionHistory.push({
+        text: result.text,
+        range: result.range,
+        shadow: result.shadow,
+        time: Date.now(),
+      })
+      if (selectionHistory.length > SEL_HISTORY_LIMIT) selectionHistory.shift()
+    }
+    document.addEventListener("selectionchange", onSelChange)
+    onCleanup(() => document.removeEventListener("selectionchange", onSelChange))
+  })
+
+  // 从最近 30 秒历史里挑"文本最长"的快照:WebKit collapse 出的单词永远比用户多行选区短。
+  const pickBestRecentSelection = (): SelSnapshot | null => {
+    if (selectionHistory.length === 0) return null
+    const now = Date.now()
+    let best: SelSnapshot | null = null
+    for (let i = selectionHistory.length - 1; i >= 0; i--) {
+      const s = selectionHistory[i]!
+      if (now - s.time > SEL_HISTORY_RECENT_MS) break
+      if (!best || s.text.length > best.text.length) best = s
+    }
+    return best
+  }
+  // FORK-END
+
+  const handleSelectionContextMenu = (event: MouseEvent) => {
+    if (editing()) return // 编辑态让 CodeMirror 拿到原生右键菜单
+    event.preventDefault()
+
+    // 从 composedPath 找 shadow root 并收集
+    let shadow: ShadowRoot | null = null
+    const composedPath = typeof event.composedPath === "function" ? event.composedPath() : []
+    for (const node of composedPath) {
+      if (node instanceof ShadowRoot) { shadow = node; knownShadows.add(shadow); break }
+    }
+
+    // 主路径:历史栈里最近 30 秒"文本最长"的条目 → 必为用户多行真实选区
+    // (collapse 出的单词肯定更短)。
+    let text = ""
+    let range: Range | null = null
+
+    const best = pickBestRecentSelection()
+    if (best) {
+      text = best.text
+      range = best.range
+      shadow = best.shadow ?? shadow
+    } else {
+      // 回退:历史完全空(用户首次右键、或刚切换文件)→ 读当前选区
+      const sel = typeof window !== "undefined" ? window.getSelection() : null
+      if (sel) {
+        const result = readSelectionText(sel)
+        text = result.text
+        range = result.range
+        shadow = result.shadow ?? shadow
+      }
+    }
+
+    if (text.trim() && range) {
+      setSelectionHighlight(range)
+
+      // 程序化恢复原生选区:让 OS 绘制的蓝/黄高亮重新覆盖到原始范围。
+      // 跨 Shadow DOM 时 addRange 可能静默失败,overlay div 兜底视觉。
+      try {
+        const sel = typeof window !== "undefined" ? window.getSelection() : null
+        if (sel) {
+          sel.removeAllRanges()
+          sel.addRange(range.cloneRange())
+        }
+      } catch {
+        // ignore — 恢复失败也不影响菜单功能
+      }
+    }
+
+    setMdComment("")
+    setMdMenu({ open: true, x: event.clientX, y: event.clientY, text, mode: "menu" })
+  }
+
+  const startEditFromMenu = () => {
+    closeMdMenu()
+    if (canEdit() && state()?.loaded) void startEdit()
+  }
+
+  const copyMdSelection = () => {
+    const text = mdMenu().text
+    if (text && typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {})
+    }
+    closeMdMenu()
+  }
+
+  const openMdInputPanel = () => {
+    setMdMenu((m) => ({ ...m, mode: "input" }))
+  }
+
+  const submitMdSelection = () => {
+    const m = mdMenu()
+    const p = path()
+    const comment = mdComment().trim()
+    closeMdMenu()
+    if (!p || !m.text.trim()) return
+    const range = findLineRange(contents(), m.text)
+    const uid = `md-sel-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    prompt.context.add({
+      type: "file",
+      path: p,
+      selection: range ? selectionFromLines(range) : undefined,
+      preview: truncatePreview(m.text),
+      comment: comment || undefined,
+      commentID: uid,
+      commentOrigin: "file",
+    })
+    showToast({ variant: "success", title: comment ? "已加入聊天上下文(含问题)" : "已加入聊天上下文" })
+    // 注:closeMdMenu 已统一处理 removeAllRanges + 清 Pierre 行选区
+  }
+
+  createEffect(() => {
+    if (!mdMenu().open) return
+    const onDocDown = (e: MouseEvent) => {
+      const t = e.target as Element | null
+      if (t?.closest('[data-slot="md-selection-menu"]')) return
+      closeMdMenu()
+    }
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMdMenu()
+    }
+    document.addEventListener("mousedown", onDocDown, true)
+    document.addEventListener("keydown", onEsc, true)
+    onCleanup(() => {
+      document.removeEventListener("mousedown", onDocDown, true)
+      document.removeEventListener("keydown", onEsc, true)
+    })
+  })
+
+  const renderMarkdown = (source: string) => (
+    // FORK: data-context scope 让 markdown.css 单独定制文件查看器排版,不影响聊天 2026-04-29
+    <div
+      data-context="file-viewer"
+      class="relative pb-40 px-6 py-4 select-text"
+      onMouseDown={handlePreContextCapture}
+      onContextMenu={handleSelectionContextMenu}
+    >
+      <Markdown text={source} cacheKey={cacheKey()} />
     </div>
   )
 
+  // 媒体文件(audio + video):server 对 binary 扩展返 content="",走 Tauri command 直读本地成 base64
+  // 用 createSignal + createEffect 手动管理(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
+  // 转 Blob URL 而非 dataURL:元素 seek/decode 更稳定,大文件不卡 string 拼接
+  const mediaInput = createMemo<{ root: string; path: string; mimes: string[]; kind: MediaKind } | null>(() => {
+    const p = path()
+    if (!p) return null
+    const m = mediaKindFromPath(p)
+    if (!m) return null
+    const root = sdk.directory
+    if (!root) return null
+    return { root, path: p, mimes: m.mimes, kind: m.kind }
+  })
+
+  type MediaState = {
+    url: string | null
+    mimes: string[]
+    kind: MediaKind | null
+    error: string | null
+    loading: boolean
+  }
+  const [mediaState, setMediaState] = createSignal<MediaState>({
+    url: null,
+    mimes: [],
+    kind: null,
+    error: null,
+    loading: false,
+  })
+  let currentBlobUrl: string | null = null
+  const releaseMediaBlob = () => {
+    if (currentBlobUrl) {
+      URL.revokeObjectURL(currentBlobUrl)
+      currentBlobUrl = null
+    }
+  }
+
+  const base64ToBlob = (b64: string, mime: string): Blob => {
+    const bin = atob(b64)
+    const len = bin.length
+    const buf = new Uint8Array(len)
+    for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i)
+    return new Blob([buf], { type: mime })
+  }
+
+  createEffect(() => {
+    const input = mediaInput()
+    releaseMediaBlob()
+    if (!input) {
+      setMediaState({ url: null, mimes: [], kind: null, error: null, loading: false })
+      return
+    }
+    if (isUnsupportedMedia(input.path)) {
+      setMediaState({
+        url: null,
+        mimes: input.mimes,
+        kind: input.kind,
+        error: "此格式 WebView2 内置播放器无法解码,请用下方按钮调系统播放器",
+        loading: false,
+      })
+      return
+    }
+    setMediaState({ url: null, mimes: input.mimes, kind: input.kind, error: null, loading: true })
+    const requestedPath = input.path
+    invoke<string>("read_binary_file_base64", { root: input.root, path: input.path })
+      .then((b64) => {
+        // race 防护:切 tab 太快时,旧请求迟到则丢弃
+        if (mediaInput()?.path !== requestedPath) return
+        try {
+          // Blob.type 用第一个 mime,实际识别交给 <source type=> 列表
+          const blob = base64ToBlob(b64, input.mimes[0])
+          const url = URL.createObjectURL(blob)
+          currentBlobUrl = url
+          setMediaState({ url, mimes: input.mimes, kind: input.kind, error: null, loading: false })
+        } catch (e) {
+          setMediaState({
+            url: null,
+            mimes: input.mimes,
+            kind: input.kind,
+            error: `decode failed: ${String(e)}`,
+            loading: false,
+          })
+        }
+      })
+      .catch((e) => {
+        if (mediaInput()?.path !== requestedPath) return
+        setMediaState({
+          url: null,
+          mimes: input.mimes,
+          kind: input.kind,
+          error: String(e),
+          loading: false,
+        })
+      })
+  })
+
+  onCleanup(() => releaseMediaBlob())
+
+  const openMediaInSystemPlayer = async () => {
+    const root = sdk.directory
+    const p = path()
+    if (!root || !p) return
+    const absPath = `${root}/${p}`.replace(/\\/g, "/")
+    try {
+      await invoke("open_path", { path: absPath, appName: null })
+    } catch (e) {
+      showToast({ variant: "error", title: `打开失败: ${e}` })
+    }
+  }
+
+  const onMediaError = (e: { currentTarget: HTMLMediaElement }) => {
+    const err = e.currentTarget.error
+    const codeMap: Record<number, string> = {
+      1: "ABORTED",
+      2: "NETWORK",
+      3: "DECODE",
+      4: "SRC_NOT_SUPPORTED",
+    }
+    const detail = err
+      ? `code=${err.code} (${codeMap[err.code] ?? "UNKNOWN"}) msg="${err.message ?? ""}"`
+      : "unknown"
+    setMediaState((s) => ({ ...s, url: null, error: `解码失败: ${detail}` }))
+  }
+
+  const renderMedia = () => (
+    <div class="flex flex-col items-center justify-center px-6 py-8 gap-3">
+      <Show
+        when={mediaState().url}
+        fallback={
+          <div class="text-text-weak text-sm max-w-xl text-center break-words">
+            {mediaState().error
+              ? `加载失败:${mediaState().error}`
+              : mediaState().loading
+                ? `${mediaState().kind === "video" ? "视频" : "音频"}加载中…`
+                : "无内容"}
+          </div>
+        }
+      >
+        <Switch>
+          <Match when={mediaState().kind === "video"}>
+            <video
+              class="w-full max-w-3xl max-h-[60vh] bg-black"
+              controls
+              preload="metadata"
+              onError={onMediaError}
+            >
+              <For each={mediaState().mimes}>{(t) => <source src={mediaState().url!} type={t} />}</For>
+            </video>
+          </Match>
+          <Match when={mediaState().kind === "audio"}>
+            <audio class="w-full max-w-xl" controls preload="metadata" onError={onMediaError}>
+              <For each={mediaState().mimes}>{(t) => <source src={mediaState().url!} type={t} />}</For>
+            </audio>
+          </Match>
+        </Switch>
+      </Show>
+      <div class="text-xs text-text-weak truncate max-w-full" title={mediaState().mimes.join(", ")}>
+        {path()}
+      </div>
+      <button
+        type="button"
+        onClick={openMediaInSystemPlayer}
+        class="text-xs px-3 py-1.5 rounded border border-border-base hover:bg-surface-base-hover"
+        title="若内置播放器解不出(WebView2 codec 受限或文件用了不支持的编码),点这里用系统默认应用打开"
+      >
+        🔊 用系统播放器打开
+      </button>
+    </div>
+  )
+
+  const renderFile = (source: string) => {
+    const p = path()
+    if (isMarkdownPath(p)) return renderMarkdown(source)
+    if (mediaKindFromPath(p)) return renderMedia()
+    return (
+      <div class="relative overflow-hidden pb-40" onMouseDown={handlePreContextCapture} onContextMenu={handleSelectionContextMenu}>
+        <Dynamic
+          component={fileComponent}
+          mode="text"
+          file={{
+            name: path() ?? "",
+            contents: source,
+            cacheKey: cacheKey(),
+          }}
+          enableLineSelection
+          enableHoverUtility
+          selectedLines={activeSelection()}
+          commentedLines={commentedLines()}
+          onRendered={() => {
+            scrollSync.queueRestore()
+          }}
+          annotations={commentsUi.annotations()}
+          renderAnnotation={commentsUi.renderAnnotation}
+          renderHoverUtility={commentsUi.renderHoverUtility}
+          onLineSelected={(range: SelectedLineRange | null) => {
+            commentsUi.onLineSelected(range)
+          }}
+          onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+          onLineSelectionEnd={(range: SelectedLineRange | null) => {
+            commentsUi.onLineSelectionEnd(range)
+          }}
+          search={search}
+          class="select-text"
+          media={{
+            mode: "auto",
+            path: path(),
+            current: state()?.content,
+            onLoad: scrollSync.queueRestore,
+            onError: (args: { kind: "image" | "audio" | "svg" | "pdf" }) => {
+              if (args.kind !== "svg") return
+              showToast({
+                variant: "error",
+                title: language.t("toast.file.loadFailed.title"),
+              })
+            },
+            officeTooling: {
+              getStatus: async () =>
+                sdk.client.office.tooling
+                  .status()
+                  .then((x) => x.data as any)
+                  .catch(() => undefined),
+              startInstall: async () =>
+                sdk.client.office.tooling
+                  .install()
+                  .then((x) => x.data as any)
+                  .catch(() => undefined),
+              getProgress: async () =>
+                sdk.client.office.tooling
+                  .progress()
+                  .then((x) => x.data as any)
+                  .catch(() => undefined),
+            },
+            onRetryFile: () => {
+              const p = path()
+              if (p) void file.load(p, { force: true })
+            },
+            onOpenExternal: () => {
+              const root = sdk.directory
+              const p = path()
+              if (!root || !p) return
+              const absPath = `${root}/${p}`.replace(/\\/g, "/")
+              invoke("open_path", { path: absPath, appName: null }).catch((e) => {
+                showToast({
+                  variant: "error",
+                  title: "无法用本机软件打开",
+                  description: String(e),
+                })
+              })
+            },
+            loadOfficePdf: async (filePath: string) => {
+              const cacheKey = `${sdk.directory ?? ""}::${filePath}`
+              const cached = officePdfCacheGet(cacheKey)
+              if (cached) return cached
+              try {
+                const res = await sdk.client.file.officePdf(
+                  { path: filePath },
+                  { parseAs: "arrayBuffer" } as any,
+                )
+                const data = (res as any)?.data
+                let bytes: Uint8Array | undefined
+                if (data instanceof ArrayBuffer) bytes = new Uint8Array(data)
+                else if (data instanceof Uint8Array) bytes = data
+                else if (data && (data as any).byteLength != null)
+                  bytes = new Uint8Array(data as ArrayBufferLike)
+                if (bytes && bytes.length > 0) {
+                  officePdfCacheSet(cacheKey, bytes)
+                }
+                return bytes
+              } catch (e) {
+                console.warn("loadOfficePdf failed", e)
+                return undefined
+              }
+            },
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
-    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
+    <Tabs.Content value={props.tab} class="mt-3 relative h-full flex flex-col">
+      <Show when={editing()}>
+        <div class="flex items-center justify-between px-4 py-1.5 border-b border-border-base bg-surface-raised-stronger-non-alpha shadow-sm">
+          <button
+            onClick={saveEdit}
+            disabled={!dirty()}
+            class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover disabled:opacity-50"
+          >
+            保存{dirty() ? " *" : ""}
+          </button>
+          <button
+            onClick={cancelEdit}
+            class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
+          >
+            关闭
+          </button>
+        </div>
+      </Show>
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
+          <Match when={editing() && state()?.loaded}>
+            <div class="relative overflow-hidden p-2" style={{ "min-height": "300px" }}>
+              <CodeMirrorView
+                value={contents()}
+                language={langFromExt(path() ?? "")}
+                onChange={setDraft}
+              />
+            </div>
+          </Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
@@ -451,6 +1280,101 @@ export function FileTabContent(props: { tab: string }) {
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
+      <Show when={highlightRects()}>
+        <Portal mount={document.body}>
+          <For each={highlightRects()!}>
+            {(rect) => (
+              <div
+                class="fixed pointer-events-none z-40"
+                style={{
+                  left: `${rect.left}px`,
+                  top: `${rect.top}px`,
+                  width: `${rect.width}px`,
+                  height: `${rect.height}px`,
+                  "background-color": "rgba(209, 52, 56, 0.5)",
+                }}
+              />
+            )}
+          </For>
+        </Portal>
+      </Show>
+      <Show when={mdMenu().open}>
+        <Portal mount={document.body}>
+          <Switch>
+            <Match when={mdMenu().mode === "menu"}>
+              <div
+                data-slot="md-selection-menu"
+                class="fixed z-50 min-w-[220px] rounded-md border border-border-base bg-surface-raised-stronger-non-alpha text-text-strong shadow-[var(--shadow-lg-border-base)] py-1 text-sm"
+                style={{ left: `${mdMenu().x}px`, top: `${mdMenu().y}px` }}
+              >
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!mdMenu().text.trim()}
+                  onClick={openMdInputPanel}
+                >
+                  添加到聊天窗口
+                </button>
+                <button
+                  class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!canEdit() || !state()?.loaded}
+                  title={editDisabledReason()}
+                  onClick={startEditFromMenu}
+                >
+                  编辑
+                </button>
+                <div class="my-1 border-t border-border-base" />
+                <button
+                  class="w-full px-3 py-1.5 hover:bg-surface-base-hover flex justify-between items-center gap-6 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!mdMenu().text.trim()}
+                  onClick={copyMdSelection}
+                >
+                  <span>复制</span>
+                  <span class="text-xs text-text-weak">Ctrl+C</span>
+                </button>
+              </div>
+            </Match>
+            <Match when={mdMenu().mode === "input"}>
+              <div
+                data-slot="md-selection-menu"
+                class="fixed z-50 w-[360px] rounded-md border border-border-base bg-surface-raised-stronger-non-alpha text-text-strong shadow-[var(--shadow-lg-border-base)] p-3 text-sm flex flex-col gap-2"
+                style={{ left: `${mdMenu().x}px`, top: `${mdMenu().y}px` }}
+              >
+                <textarea
+                  ref={(el) => queueMicrotask(() => el.focus())}
+                  class="w-full min-h-[80px] rounded border border-border-base bg-background-base px-2 py-1.5 text-sm text-text-strong placeholder:text-text-weak focus:outline-none focus:ring-1 focus:ring-text-interactive-base resize-y"
+                  placeholder="想怎么改 / 想问什么..."
+                  value={mdComment()}
+                  onInput={(e) => setMdComment(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return
+                    // FORK: macOS 加 Option+Enter 提交,Win/Linux 维持 Ctrl+Enter,Mac 维持 Cmd+Enter 2026-04-30
+                    if (!(e.ctrlKey || e.metaKey || (IS_MAC && e.altKey))) return
+                    e.preventDefault()
+                    submitMdSelection()
+                  }}
+                />
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] text-text-weak">{IS_MAC ? "Cmd/Opt+Enter" : "Ctrl+Enter"} 提交 · Esc 取消</span>
+                  <div class="flex items-center gap-2">
+                    <button
+                      class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
+                      onClick={closeMdMenu}
+                    >
+                      取消
+                    </button>
+                    <button
+                      class="text-xs px-2 py-1 rounded border border-border-base bg-surface-base hover:bg-surface-base-hover"
+                      onClick={submitMdSelection}
+                    >
+                      加入聊天
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Match>
+          </Switch>
+        </Portal>
+      </Show>
     </Tabs.Content>
   )
 }

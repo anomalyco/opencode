@@ -105,6 +105,7 @@ export const dict = {
   "dialog.provider.opencode.note": "精選模型，包含 Claude、GPT、Gemini 等等",
   "dialog.provider.opencode.tagline": "可靠的優化模型",
   "dialog.provider.opencodeGo.tagline": "適合所有人的低成本訂閱",
+  "dialog.provider.getbot.tagline": "聚合多家大模型，國內直連按量付費", // FORK: getbot 2026-04-26
   "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 金鑰連線",
   "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 金鑰連線",
   "dialog.provider.copilot.note": "使用 Copilot 或 API 金鑰連線",
@@ -141,6 +142,16 @@ export const dict = {
   "provider.connect.opencodeZen.visit.prefix": "造訪 ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": " 取得你的 API 金鑰。",
+  // FORK-BEGIN: getbot 連線對話框文案 2026-04-26
+  "provider.connect.getbot.line1": "GetBot 是模型聚合閘道，一把 API Key 就能用 Qwen / DeepSeek / Kimi / Minimax / GLM 等模型，按量計費。",
+  "provider.connect.getbot.line2": "儲存 API Key 後會自動拉取可用 chat 模型清單。",
+  "provider.connect.getbot.visit.prefix": "前往 ",
+  "provider.connect.getbot.visit.link": "getbot.me",
+  "provider.connect.getbot.visit.suffix": " 取得你的 API Key。",
+  "provider.connect.getbot.fetchModels.failed": "API Key 已儲存，但拉取模型清單失敗：{{error}}。可稍後到設定裡手動重整。",
+  "provider.connect.getbot.apiKey.invalid": "API 金鑰驗證未通過，請檢查後重試。",
+  "provider.connect.getbot.timeout": "連線 api.getbot.me 逾時（15 秒未回應）。請檢查網路後重試。",
+  // FORK-END
   "provider.connect.oauth.code.visit.prefix": "造訪 ",
   "provider.connect.oauth.code.visit.link": "此連結",
   "provider.connect.oauth.code.visit.suffix": " 取得授權碼，以連線你的帳戶並在 OpenCode 中使用 {{provider}} 模型。",
@@ -421,6 +432,8 @@ export const dict = {
   "toast.file.loadFailed.title": "載入檔案失敗",
 
   "toast.file.listFailed.title": "列出檔案失敗",
+  "toast.file.dirtyConflict.title": "AI 修改了此檔案",
+  "toast.file.dirtyConflict.description": "你的草稿已保留。儲存時會讓你選擇是否覆寫磁碟版本。",
   "toast.context.noLineSelection.title": "未選取行",
   "toast.context.noLineSelection.description": "請先在檔案分頁中選取行範圍。",
   "toast.session.share.copyFailed.title": "無法複製連結到剪貼簿",

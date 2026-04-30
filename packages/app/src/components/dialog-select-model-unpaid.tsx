@@ -108,6 +108,15 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
                   <div class="w-full flex items-center gap-x-3">
                     <ProviderIcon data-slot="list-item-extra-icon" id={i.id} />
                     <span>{i.name}</span>
+                    {/* FORK: getbot tagline + 推荐 Tag（与 select-provider 一致）2026-04-26 */}
+                    <Show when={i.id === "getbot"}>
+                      <>
+                        <div class="text-14-regular text-text-weak">
+                          {language.t("dialog.provider.getbot.tagline")}
+                        </div>
+                        <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                      </>
+                    </Show>
                     <Show when={i.id === "opencode"}>
                       <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
                     </Show>

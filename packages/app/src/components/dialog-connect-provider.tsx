@@ -15,13 +15,24 @@ import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { useProviders } from "@/hooks/use-providers"
+// FORK: getbot 内置接入流程 2026-04-26
+import {
+  buildGetbotProviderConfig,
+  fetchGetbotChatModels,
+  GETBOT_PROVIDER_ID,
+  GETBOT_SITE_URL,
+  GetbotInvalidKeyError,
+  GetbotTimeoutError,
+} from "@/utils/getbot"
 
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
+  const platform = usePlatform()
   const providers = useProviders()
 
   const all = () => {
@@ -394,10 +405,15 @@ export function DialogConnectProvider(props: { provider: string }) {
     const [formStore, setFormStore] = createStore({
       value: "",
       error: undefined as string | undefined,
+      // FORK: 提交中状态,getbot 走 fetch /v1/models 可能耗时数秒,需要 disabled + spinner 反馈 2026-04-27
+      submitting: false,
     })
 
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
+
+      // FORK: 已在提交中防止重复触发 2026-04-27
+      if (formStore.submitting) return
 
       const form = e.currentTarget as HTMLFormElement
       const formData = new FormData(form)
@@ -409,15 +425,88 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      await globalSDK.client.auth.set({
-        providerID: props.provider,
-        auth: {
-          type: "api",
-          key: apiKey,
-        },
-      })
+
+      // FORK-BEGIN: getbot 走自定义 submit（拉模型列表 + updateConfig 写 provider 配置） 2026-04-26
+      if (props.provider === GETBOT_PROVIDER_ID) {
+        setFormStore("submitting", true)
+        try {
+          await handleGetbotSubmit(apiKey.trim())
+        } finally {
+          setFormStore("submitting", false)
+        }
+        return
+      }
+      // FORK-END
+
+      setFormStore("submitting", true)
+      try {
+        await globalSDK.client.auth.set({
+          providerID: props.provider,
+          auth: {
+            type: "api",
+            key: apiKey,
+          },
+        })
+        await complete()
+      } finally {
+        setFormStore("submitting", false)
+      }
+    }
+
+    // FORK-BEGIN: getbot apiKey 提交流程 — 先拉 /v1/models 校验 key,通过后再保存 2026-04-26
+    async function handleGetbotSubmit(apiKey: string) {
+      let chatIds: string[]
+      let fetchError: string | undefined
+      try {
+        chatIds = await fetchGetbotChatModels(apiKey, { fetch: platform.fetch })
+      } catch (e) {
+        // 401/403:key 不对,直接在 form 内联报错,不保存任何东西,让用户改 key 重试
+        if (e instanceof GetbotInvalidKeyError) {
+          setFormStore("error", language.t("provider.connect.getbot.apiKey.invalid"))
+          return
+        }
+        // 超时:多半是网络问题,直接 inline 报错,不保存
+        if (e instanceof GetbotTimeoutError) {
+          setFormStore("error", language.t("provider.connect.getbot.timeout"))
+          return
+        }
+        // 其他错误(网络/5xx):保存 key,但用空模型列表 + 警告 toast,让用户稍后从设置里刷新
+        chatIds = []
+        fetchError = formatError(e, language.t("common.requestFailed"))
+      }
+
+      try {
+        await globalSDK.client.auth.set({
+          providerID: GETBOT_PROVIDER_ID,
+          auth: { type: "api", key: apiKey },
+        })
+        // 关键:把自己从 disabled_providers 清出去（用户之前断开过会留这一行,不清的话连了等于没连）
+        const beforeDisabled = globalSync.data.config.disabled_providers ?? []
+        const nextDisabled = beforeDisabled.filter((id) => id !== GETBOT_PROVIDER_ID)
+        await globalSync.updateConfig({
+          provider: { [GETBOT_PROVIDER_ID]: buildGetbotProviderConfig(apiKey, chatIds) },
+          ...(nextDisabled.length !== beforeDisabled.length ? { disabled_providers: nextDisabled } : {}),
+        })
+      } catch (e) {
+        setFormStore("error", formatError(e, language.t("common.requestFailed")))
+        return
+      }
+
+      if (fetchError) {
+        showToast({
+          variant: "default",
+          icon: "warning",
+          title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
+          description: language.t("provider.connect.getbot.fetchModels.failed", { error: fetchError }),
+        })
+        await globalSDK.client.global.dispose()
+        dialog.close()
+        return
+      }
+
       await complete()
     }
+    // FORK-END
 
     return (
       <div class="flex flex-col gap-6">
@@ -432,6 +521,20 @@ export function DialogConnectProvider(props: { provider: string }) {
                   {language.t("provider.connect.opencodeZen.visit.link")}
                 </Link>
                 {language.t("provider.connect.opencodeZen.visit.suffix")}
+              </div>
+            </div>
+          </Match>
+          {/* FORK: getbot 介绍区 + 链接 2026-04-26 */}
+          <Match when={provider().id === GETBOT_PROVIDER_ID}>
+            <div class="flex flex-col gap-4">
+              <div class="text-14-regular text-text-base">{language.t("provider.connect.getbot.line1")}</div>
+              <div class="text-14-regular text-text-base">{language.t("provider.connect.getbot.line2")}</div>
+              <div class="text-14-regular text-text-base">
+                {language.t("provider.connect.getbot.visit.prefix")}
+                <Link href={GETBOT_SITE_URL} tabIndex={-1}>
+                  {language.t("provider.connect.getbot.visit.link")}
+                </Link>
+                {language.t("provider.connect.getbot.visit.suffix")}
               </div>
             </div>
           </Match>
@@ -453,8 +556,17 @@ export function DialogConnectProvider(props: { provider: string }) {
             validationState={formStore.error ? "invalid" : undefined}
             error={formStore.error}
           />
-          <Button class="w-auto" type="submit" size="large" variant="primary">
-            {language.t("common.continue")}
+          {/* FORK: 提交中 disable + 文案切到"正在验证..." 2026-04-27 */}
+          <Button
+            class="w-auto"
+            type="submit"
+            size="large"
+            variant="primary"
+            disabled={formStore.submitting}
+          >
+            {formStore.submitting
+              ? language.t("provider.connect.status.inProgress")
+              : language.t("common.continue")}
           </Button>
         </form>
       </div>

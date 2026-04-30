@@ -167,7 +167,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       {
         id: Identifier.ascending("part"),
         type: "text",
-        text: formatCommentNote({ path: item.path, selection: item.selection, comment }),
+        text: formatCommentNote({ path: item.path, selection: item.selection, comment, preview: item.preview }),
         synthetic: true,
         metadata: createCommentMetadata({
           path: item.path,

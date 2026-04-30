@@ -46,8 +46,12 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     const current = tree.dir[dir]
     if (!opts?.force && current?.loaded) return Promise.resolve()
 
-    const pending = inflight.get(dir)
-    if (pending) return pending
+    // FORK: force=true 必须绕过 inflight,否则会等到一个可能返回 stale 数据的旧 promise
+    // (拖放后 refresh 拿到操作前的列表 → UI 不刷新的根因)2026-04-28
+    if (!opts?.force) {
+      const pending = inflight.get(dir)
+      if (pending) return pending
+    }
 
     setTree(
       "dir",

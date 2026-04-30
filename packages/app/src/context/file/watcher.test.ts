@@ -147,3 +147,150 @@ describe("file watcher invalidation", () => {
     expect(refresh).toEqual([])
   })
 })
+
+describe("file.edited tool-direct invalidation", () => {
+  test("reloads open file when AI tool edits it", () => {
+    const loads: string[] = []
+    const refresh: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.edited",
+        properties: { file: "src/foo.ts" },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: (path) => path === "src/foo.ts",
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        isDirLoaded: () => true,
+        refreshDir: (path) => refresh.push(path),
+      },
+    )
+
+    expect(loads).toEqual(["src/foo.ts"])
+    // file.edited 不刷目录树
+    expect(refresh).toEqual([])
+  })
+
+  test("reloads file open in tab even if not in cache", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.edited",
+        properties: { file: "docs/readme.md" },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        isOpen: (path) => path === "docs/readme.md",
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      },
+    )
+
+    expect(loads).toEqual(["docs/readme.md"])
+  })
+
+  test("skips load when file is dirty (user has unsaved draft) and notifies conflict", () => {
+    const loads: string[] = []
+    const conflicts: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.edited",
+        properties: { file: "src/draft.ts" },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => true,
+        isDirty: (path) => path === "src/draft.ts",
+        notifyDirtyConflict: (path) => conflicts.push(path),
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      },
+    )
+
+    expect(loads).toEqual([])
+    expect(conflicts).toEqual(["src/draft.ts"])
+  })
+
+  test("ignores file.edited for files not open or cached", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.edited",
+        properties: { file: "irrelevant/path.ts" },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        isOpen: () => false,
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      },
+    )
+
+    expect(loads).toEqual([])
+  })
+
+  test("ignores file.edited for .git paths", () => {
+    const loads: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.edited",
+        properties: { file: ".git/HEAD" },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => true,
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      },
+    )
+
+    expect(loads).toEqual([])
+  })
+
+  test("file.watcher.updated also honors isDirty guard (external edit while drafting)", () => {
+    const loads: string[] = []
+    const conflicts: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.watcher.updated",
+        properties: { file: "src/draft.ts", event: "change" },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => true,
+        isDirty: (path) => path === "src/draft.ts",
+        notifyDirtyConflict: (path) => conflicts.push(path),
+        loadFile: (path) => loads.push(path),
+        node: () => ({
+          path: "src/draft.ts",
+          type: "file",
+          name: "draft.ts",
+          absolute: "/repo/src/draft.ts",
+          ignored: false,
+        }),
+        isDirLoaded: () => false,
+        refreshDir: () => {},
+      },
+    )
+
+    expect(loads).toEqual([])
+    expect(conflicts).toEqual(["src/draft.ts"])
+  })
+})

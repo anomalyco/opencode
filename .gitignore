@@ -36,3 +36,10 @@ tsconfig.tsbuildinfo
 *.p12
 .env.local
 .env.*.local
+
+# FORK: Obsidian 编辑器本地配置(user 用 Obsidian 浏览 docs/features/) 2026-04-28
+.obsidian/
+
+# FORK: DeskFox installer 编译产物(iscc 输出,binary 不入仓) 2026-04-28
+packages/branding/installer/Output/
+packages/branding/installer/*.lnk

@@ -16,6 +16,10 @@ export default [
         resolve: {
           alias: {
             "@": fileURLToPath(new URL("./src", import.meta.url)),
+            // FORK: DeskFox logo overlay 2026-04-26 — 把 ui 的 logo 重定向到 branding 包
+            "@opencode-ai/ui/logo": fileURLToPath(
+              new URL("../branding/src/logo.tsx", import.meta.url),
+            ),
           },
         },
         worker: {

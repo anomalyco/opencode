@@ -39,6 +39,8 @@ import type {
   ExperimentalWorkspaceSessionRestoreResponses,
   ExperimentalWorkspaceStatusResponses,
   FileListResponses,
+  FileOfficePdfErrors,
+  FileOfficePdfResponses,
   FilePartInput,
   FilePartSource,
   FileReadResponses,
@@ -72,6 +74,9 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  OfficeToolingInstallResponses,
+  OfficeToolingProgressResponses,
+  OfficeToolingStatusResponses,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -3342,6 +3347,135 @@ export class File extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Office file as PDF (binary)
+   *
+   * Convert an office document to PDF via LibreOffice and return the bytes. Used by the in-app PDF viewer to avoid the memory cost of base64 + JSON for very large decks.
+   */
+  public officePdf<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<FileOfficePdfResponses, FileOfficePdfErrors, ThrowOnError>({
+      url: "/file/office-pdf",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Tooling extends HeyApiClient {
+  /**
+   * Office tooling status
+   *
+   * Whether LibreOffice is available for office document preview, plus install progress.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OfficeToolingStatusResponses, unknown, ThrowOnError>({
+      url: "/office-tooling/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Start office tooling install
+   *
+   * Begin downloading and installing LibreOffice in the background.
+   */
+  public install<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<OfficeToolingInstallResponses, unknown, ThrowOnError>({
+      url: "/office-tooling/install",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Poll office tooling install progress
+   */
+  public progress<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<OfficeToolingProgressResponses, unknown, ThrowOnError>({
+      url: "/office-tooling/progress",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Office extends HeyApiClient {
+  private _tooling?: Tooling
+  get tooling(): Tooling {
+    return (this._tooling ??= new Tooling({ client: this.client }))
+  }
 }
 
 export class Event extends HeyApiClient {
@@ -4413,6 +4547,11 @@ export class OpencodeClient extends HeyApiClient {
   private _file?: File
   get file(): File {
     return (this._file ??= new File({ client: this.client }))
+  }
+
+  private _office?: Office
+  get office(): Office {
+    return (this._office ??= new Office({ client: this.client }))
   }
 
   private _event?: Event

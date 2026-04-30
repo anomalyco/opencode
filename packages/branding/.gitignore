@@ -1,0 +1,6 @@
+# icon.ico 由 scripts/apply-icons.{ps1,sh} 跑 png-to-ico.ts 现场生成,
+# icon.icns 由 scripts/apply-icons.sh 在 macOS 上跑 iconutil 现场生成,
+# 源头是 src/assets/icons/<env>/ico-source/{16,32,48,...}.png
+# 都是 build 派生物,不进 git。
+src/assets/icons/*/icon.ico
+src/assets/icons/*/icon.icns

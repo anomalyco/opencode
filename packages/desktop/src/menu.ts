@@ -20,11 +20,16 @@ export async function createMenu(trigger: (id: string) => void) {
           await PredefinedMenuItem.new({
             item: { About: null },
           }),
-          await MenuItem.new({
-            enabled: UPDATER_ENABLED,
-            action: () => runUpdater({ alertOnFail: true }),
-            text: t("desktop.menu.checkForUpdates"),
-          }),
+          // FORK: 禁自动升级 — UPDATER_ENABLED=false 时菜单条目不渲染(连 disabled 灰也不出现)2026-04-28
+          ...(UPDATER_ENABLED
+            ? [
+                await MenuItem.new({
+                  enabled: UPDATER_ENABLED,
+                  action: () => runUpdater({ alertOnFail: true }),
+                  text: t("desktop.menu.checkForUpdates"),
+                }),
+              ]
+            : []),
           await MenuItem.new({
             action: () => installCli(),
             text: t("desktop.menu.installCli"),

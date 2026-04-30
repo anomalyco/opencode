@@ -284,24 +284,29 @@ const createPlatform = (): Platform => {
       }
     })(),
 
-    checkUpdate: async () => {
-      if (!UPDATER_ENABLED) return { updateAvailable: false }
-      const next = await check().catch(() => null)
-      if (!next) return { updateAvailable: false }
-      const ok = await next
-        .download()
-        .then(() => true)
-        .catch(() => false)
-      if (!ok) return { updateAvailable: false }
-      update = next
-      return { updateAvailable: true, version: next.version }
-    },
-
-    update: async () => {
-      if (!UPDATER_ENABLED || !update) return
-      if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
-      await update.install().catch(() => undefined)
-    },
+    // FORK: UPDATER_ENABLED=false 时不暴露 checkUpdate/update,所有 UI 入口(layout polling /
+    // settings UI / error 页 / 菜单)通过现有的 if (!platform.checkUpdate) return 自动短路
+    // 失效,无需逐个改 UI(禁自动升级 2026-04-28)
+    ...(UPDATER_ENABLED
+      ? {
+          checkUpdate: async () => {
+            const next = await check().catch(() => null)
+            if (!next) return { updateAvailable: false }
+            const ok = await next
+              .download()
+              .then(() => true)
+              .catch(() => false)
+            if (!ok) return { updateAvailable: false }
+            update = next
+            return { updateAvailable: true, version: next.version }
+          },
+          update: async () => {
+            if (!update) return
+            if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
+            await update.install().catch(() => undefined)
+          },
+        }
+      : {}),
 
     restart: async () => {
       await commands.killSidecar().catch(() => undefined)

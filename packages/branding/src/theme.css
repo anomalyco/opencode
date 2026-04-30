@@ -1,0 +1,125 @@
+/* [fork-only] DeskFox 主题色覆盖 + logo 专用 var,不与 sst/opencode 上游同步 */
+/* 在 packages/app/src/index.css 里 @import "@opencode-ai/ui/styles/tailwind" 之后再 @import 本文件 */
+/* 级联让本文件的 var 值赢,覆盖上游 packages/ui/src/styles/theme.css */
+/* 色值依据:D:\Kbase\奇思妙想\opencode\品牌设计\品牌设计.md 第三节(主色板)+ 第十节(深色映射) */
+
+:root {
+  /* === 5a 覆盖上游主题色(主品牌色 + 链接 + icon + 焦点) === */
+  --surface-brand-base: #1f2d44; /* Slate Navy 主品牌 */
+  --surface-brand-hover: #1a2538;
+  --text-interactive-base: #7295c4; /* Cool Blue 链接 */
+  --icon-interactive-base: #7295c4; /* Cool Blue icon */
+  --border-selected: rgba(114, 149, 196, 0.99); /* Cool Blue 焦点环 */
+
+  /* === 5b logo 专用 var(光暗成对,严格按品牌设计.md 第十节色映射) === */
+  --logo-text: #1f2d44; /* 主文字 / 主体 / 耳外(Slate Navy) */
+  --logo-text-secondary: #7295c4; /* 辅文字 Fo / 嘴(Cool Blue) */
+  --logo-text-accent: #9dbbe3; /* Splash 左下三角 / 高光(Light Blue) */
+  --logo-coral: #ff9a7a; /* 珊瑚点缀 / 耳内 / X 中心(Warm Coral,面积 ≤ 15%) */
+  --logo-eye: #f4f7fb; /* 眼睛(Off-white,与深主体对比) */
+  --logo-slogan: #6b7c9a; /* slogan(Cool Gray) */
+  --logo-container-from: #243353; /* 容器渐变上端(暂未使用,无容器版) */
+  --logo-container-to: #172238; /* 容器渐变下端 */
+
+  @media (prefers-color-scheme: dark) {
+    /* === dark 覆盖主题色 === */
+    --surface-brand-base: #7295c4; /* Cool Blue 提亮 */
+    --surface-brand-hover: #5d7eaa;
+    --text-interactive-base: #9dbbe3; /* Light Blue 链接 */
+    --icon-interactive-base: #9dbbe3;
+    --border-selected: #9dbbe3;
+
+    /* === dark logo var(深↔浅互换 + 提亮) === */
+    --logo-text: #f4f7fb; /* 主文字深↔浅互换 */
+    --logo-text-secondary: #9dbbe3; /* 辅文字提亮一档 */
+    --logo-text-accent: #b5d2f0; /* Splash 左下再提亮(深底对比) */
+    --logo-coral: #ffb89e; /* 珊瑚深底加亮 */
+    --logo-eye: #1f2d44; /* 眼睛反向深↔浅 */
+    --logo-slogan: #9cafcc; /* slogan 提亮(WCAG AA) */
+    --logo-container-from: #2d3f60; /* 容器轻提亮(elevated card 效果) */
+    --logo-container-to: #1f2d44;
+  }
+}
+
+/* ========================================================================
+ * [fork-only] 文件查看器 markdown 排版升级(scope = data-context="file-viewer")
+ *
+ * 触发原因:上游 packages/ui/.../markdown.css 把 h1-h6 全部统一 14px/medium,
+ * 文件查看器看 .md 时层级表达不出来。需要标题阶梯 + 几处轻量配色。
+ *
+ * 走 wrapper 路径不动上游(R3 明文规定;上游 markdown.css 在 packages/ui 黑名单内)。
+ * 加载顺序:packages/app/src/index.css 先 import ui/styles/tailwind(上游 markdown.css
+ * 在那条链路上),再 import 本 branding/theme.css → 本文件 specificity 同等情况下后写赢,
+ * 加上 scope 选择器多一个 attribute(0,3,1 vs 上游 0,1,1)双保险覆盖。
+ *
+ * scope 锚点在 packages/app/src/pages/session/file-tabs.tsx renderMarkdown 外层 wrapper,
+ * 见 file-tabs.tsx FORK marker。聊天/思考/工具输出/session 上下文 4 类场景都不在该 scope 下,零影响。
+ * ======================================================================== */
+[data-context="file-viewer"] [data-component="markdown"] {
+  /* 标题阶梯 — 字号 + 加粗双轨,层级一眼看穿 */
+  /* 上游 token 只到 medium(500),fork 局部用数值 600/700 拉出 bold 档,不引新变量(单文件单处用,P2 配置化收益不大) */
+  h1 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-top: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-weak-base);
+    line-height: var(--line-height-large);
+  }
+  h2 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 24px;
+    margin-bottom: 12px;
+  }
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }
+  h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-base);
+    margin-top: 16px;
+    margin-bottom: 8px;
+  }
+  h5,
+  h6 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-weak);
+    margin-top: 16px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* 行内代码芯片 — 浅底色 + 圆角,扫读时立得起来 */
+  :not(pre) > code {
+    padding: 1px 4px;
+    margin: 0 1px;
+    border-radius: 3px;
+    background: var(--surface-base);
+  }
+
+  /* 引用块加底色 + 内边距,与正文形成体块对比(原 2px 左边框保留) */
+  blockquote {
+    background: var(--surface-base);
+    padding: 8px 12px;
+    border-radius: 4px;
+  }
+
+  /* HR 显形 — 上游 border:none + height:0 完全隐形,改 1px 浅色实线(margin 沿用上游 40px) */
+  hr {
+    border-top: 1px solid var(--border-weaker-base);
+  }
+
+  /* 表头加底色,表格结构感一眼能看出来 */
+  th {
+    background: var(--surface-base);
+  }
+}

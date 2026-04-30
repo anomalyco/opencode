@@ -22,6 +22,12 @@ import {
 } from "./file/content-cache"
 import { createFileViewCache } from "./file/view-cache"
 import { createFileTreeStore } from "./file/tree-store"
+// FORK: 文件树多选 (commit #2 of file-tree-dnd) 2026-04-27
+import { createSelectionStore } from "./file/selection-store"
+// FORK: 文件树剪切/复制板 (commit #3 of file-tree-dnd) 2026-04-27
+import { createClipboardStore } from "./file/clipboard-store"
+// FORK: 文件树撤销栈 (commit #4 of file-tree-dnd) 2026-04-28
+import { createUndoStack } from "./file/undo-stack"
 import { invalidateFromWatcher } from "./file/watcher"
 import {
   selectionFromLines,
@@ -82,6 +88,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         })
       },
     })
+
+    // FORK: 文件树多选 store(commit #2 of file-tree-dnd)2026-04-27
+    const selection = createSelectionStore()
+
+    // FORK: 文件树剪切/复制板 store(commit #3 of file-tree-dnd)2026-04-27
+    const clipboard = createClipboardStore()
+
+    // FORK: 文件树撤销栈(commit #4 of file-tree-dnd)2026-04-28
+    const undoStack = createUndoStack()
 
     const evictContent = (keep?: Set<string>) => {
       evictContentLru(keep, (target) => {
@@ -200,6 +215,42 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         () => [],
       )
 
+    // FORK: 编辑态 dirty 守卫,防止 AI/外部写文件覆盖用户未保存草稿(查看器-自动刷新)2026-04-28
+    const dirtyPaths = new Set<string>()
+    const markDirty = (input: string, dirty: boolean) => {
+      const file = path.normalize(input)
+      if (!file) return
+      if (dirty) dirtyPaths.add(file)
+      else dirtyPaths.delete(file)
+    }
+    const isDirty = (input: string) => {
+      const file = path.normalize(input)
+      if (!file) return false
+      return dirtyPaths.has(file)
+    }
+    // 同一次 AI 写会触发多事件(file.edited + 显式 file.watcher.updated + parcel/watcher OS 监听 + 可能的 format pass),
+    // 且 2 秒内可能有多次连续 edit。按 path + 时间窗去重,避免 toast 洪泛。
+    const dirtyConflictWindowMs = 2000
+    const recentDirtyConflicts = new Map<string, number>()
+    const notifyDirtyConflict = (file: string) => {
+      const now = Date.now()
+      const last = recentDirtyConflicts.get(file)
+      if (last !== undefined && now - last < dirtyConflictWindowMs) return
+      recentDirtyConflicts.set(file, now)
+      // 顺手收割过期项,Map 不会无限长
+      if (recentDirtyConflicts.size > 32) {
+        for (const [p, t] of recentDirtyConflicts) {
+          if (now - t >= dirtyConflictWindowMs) recentDirtyConflicts.delete(p)
+        }
+      }
+      showToast({
+        variant: "default",
+        icon: "warning",
+        title: language.t("toast.file.dirtyConflict.title"),
+        description: language.t("toast.file.dirtyConflict.description"),
+      })
+    }
+
     const stop = sdk.event.listen((e) => {
       invalidateFromWatcher(e.details, {
         normalize: path.normalize,
@@ -208,6 +259,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         loadFile: (file) => {
           void load(file, { force: true })
         },
+        // FORK: 编辑态守卫(查看器-自动刷新)2026-04-28
+        // path 在 invalidateFromWatcher 内已 normalize,这里直接查表
+        isDirty: (file) => dirtyPaths.has(file),
+        notifyDirtyConflict,
         node: tree.node,
         isDirLoaded: tree.isLoaded,
         refreshDir: (dir) => {
@@ -257,6 +312,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         children: tree.children,
         expand: tree.expandDir,
         collapse: tree.collapseDir,
+        // FORK: 暴露 node 给 pasteSmart 用(commit #3 of file-tree-dnd)2026-04-27
+        node: tree.node,
         toggle(input: string) {
           if (tree.dirState(input)?.expanded) {
             tree.collapseDir(input)
@@ -265,8 +322,17 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           tree.expandDir(input)
         },
       },
+      // FORK: 文件树多选 store(commit #2 of file-tree-dnd)2026-04-27
+      selection,
+      // FORK: 文件树剪切/复制板 store(commit #3 of file-tree-dnd)2026-04-27
+      clipboard,
+      // FORK: 文件树撤销栈(commit #4 of file-tree-dnd)2026-04-28
+      undoStack,
       get,
       load,
+      // FORK: 编辑态 dirty 守卫(查看器-自动刷新)2026-04-28
+      markDirty,
+      isDirty,
       scrollTop,
       scrollLeft,
       setScrollTop,

@@ -1,4 +1,6 @@
 @import "@opencode-ai/ui/styles/tailwind";
+/* FORK: DeskFox theme overlay 2026-04-26 — 覆盖上游主题色 + logo 专用 var */
+@import "@opencode-ai/branding/theme.css";
 
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
