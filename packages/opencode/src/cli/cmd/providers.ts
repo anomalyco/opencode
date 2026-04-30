@@ -365,6 +365,7 @@ export const ProvidersLoginCommand = cmd({
           anthropic: 4,
           openrouter: 5,
           vercel: 6,
+          cursor: 7,
         }
         const pluginProviders = resolvePluginProviders({
           hooks,
@@ -374,6 +375,11 @@ export const ProvidersLoginCommand = cmd({
           providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
         })
         const options = [
+          {
+            label: "Cursor (Cookbook / Cloud)",
+            value: "cursor",
+            hint: "CURSOR_API_KEY + Cloud Agents API",
+          },
           ...pipe(
             providers,
             values(),
@@ -463,6 +469,12 @@ export const ProvidersLoginCommand = cmd({
           prompts.log.info("Create an api key at https://opencode.ai/auth")
         }
 
+        if (provider === "cursor") {
+          prompts.log.info("Cursor Cookbook: https://github.com/cursor/cookbook")
+          prompts.log.info("Create a Cursor API key: https://cursor.com/dashboard/integrations")
+          prompts.log.info("Docs: https://cursor.com/docs/api/sdk/typescript")
+        }
+
         if (provider === "vercel") {
           prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
         }
@@ -471,6 +483,20 @@ export const ProvidersLoginCommand = cmd({
           prompts.log.info(
             "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
           )
+        }
+
+        if (provider === "cursor") {
+          const key = await prompts.password({
+            message: "Paste your Cursor API key (CURSOR_API_KEY)",
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          })
+          if (prompts.isCancel(key)) throw new UI.CancelledError()
+          await put("cursor", {
+            type: "api",
+            key,
+          })
+          prompts.outro("Done")
+          return
         }
 
         const key = await prompts.password({

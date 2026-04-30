@@ -28,6 +28,9 @@ import { withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
+import { defaultCursorModelsDevProvider } from "./cursor/models-dev"
+import { fetchCursorModelIds } from "./cursor/fetch-models"
+import { CursorCloudAgentLanguageModel } from "./cursor/cloud-agent-language-model"
 
 const log = Log.create({ service: "provider" })
 
@@ -822,6 +825,81 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    cursor: Effect.fnUntraced(function* (input: Info) {
+      const authRecord = yield* dep.auth("cursor").pipe(Effect.orDie)
+      const env = yield* dep.env()
+      const apiKey = (authRecord?.type === "api" ? authRecord.key : undefined) ?? env["CURSOR_API_KEY"]
+
+      return {
+        autoload: Boolean(apiKey),
+        options: {
+          baseURL: "https://api.cursor.com/v1",
+          ...(typeof input.options?.repoUrl === "string" ? { repoUrl: input.options.repoUrl } : {}),
+          ...(typeof input.options?.startingRef === "string" ? { startingRef: input.options.startingRef } : {}),
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          if (!apiKey) {
+            log.info("cursor model discovery skipped: no apiKey")
+            return {}
+          }
+          try {
+            const ids = await fetchCursorModelIds(apiKey)
+            const models: Record<string, Model> = {}
+            for (const id of ids) {
+              if (input.models[id]) continue
+              const parsedModel: Model = {
+                id: ModelID.make(id),
+                providerID: ProviderID.make("cursor"),
+                name: id,
+                family: "",
+                api: {
+                  id,
+                  url: "https://api.cursor.com/v1",
+                  npm: "@ai-sdk/openai-compatible",
+                },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 200_000, output: 32_000 },
+                capabilities: {
+                  temperature: false,
+                  reasoning: true,
+                  attachment: true,
+                  toolcall: false,
+                  input: { text: true, audio: false, image: true, video: false, pdf: true },
+                  output: { text: true, audio: false, image: false, video: false, pdf: false },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+              parsedModel.variants = mapValues(
+                pickBy(ProviderTransform.variants(parsedModel), (v) => !v.disabled),
+                (v) => omit(v, ["disabled"]),
+              )
+              models[id] = parsedModel
+            }
+            log.info("cursor model discovery complete", {
+              count: Object.keys(models).length,
+              models: Object.keys(models),
+            })
+            return models
+          } catch (e) {
+            log.warn("cursor model discovery failed", { error: e })
+            return {}
+          }
+        },
+        async getModel(_sdk: unknown, modelID: string, options?: Record<string, unknown>) {
+          const key = typeof options?.apiKey === "string" ? options.apiKey : apiKey ?? ""
+          return new CursorCloudAgentLanguageModel({
+            modelId: modelID,
+            apiKey: key,
+            providerOptions: options ?? {},
+          })
+        },
+      }
+    }),
     kilo: () =>
       Effect.succeed({
         autoload: false,
@@ -1089,7 +1167,11 @@ const layer: Layer.Layer<
         using _ = log.time("state")
         const bridge = yield* EffectBridge.make()
         const cfg = yield* config.get()
-        const modelsDev = yield* Effect.promise(() => ModelsDev.get())
+        const modelsDev = yield* Effect.promise(async () => {
+          const raw = await ModelsDev.get()
+          if (raw["cursor"]) return raw
+          return { ...raw, cursor: defaultCursorModelsDevProvider() }
+        })
         const database = mapValues(modelsDev, fromModelsDevProvider)
 
         const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
@@ -1322,6 +1404,22 @@ const layer: Layer.Layer<
               }
             } catch (e) {
               log.warn("state discovery error", { id: "gitlab", error: e })
+            }
+          })
+        }
+
+        const cursorProvider = ProviderID.make("cursor")
+        if (discoveryLoaders[cursorProvider] && providers[cursorProvider] && isProviderAllowed(cursorProvider)) {
+          yield* Effect.promise(async () => {
+            try {
+              const discovered = await discoveryLoaders[cursorProvider]()
+              for (const [modelID, model] of Object.entries(discovered)) {
+                if (!providers[cursorProvider].models[modelID]) {
+                  providers[cursorProvider].models[modelID] = model
+                }
+              }
+            } catch (e) {
+              log.warn("state discovery error", { id: "cursor", error: e })
             }
           })
         }
@@ -1580,20 +1678,24 @@ const layer: Layer.Layer<
       const s = yield* InstanceState.get(state)
       const envs = yield* env.all()
       const key = `${model.providerID}/${model.id}`
-      if (s.models.has(key)) return s.models.get(key)!
+      if (model.providerID !== "cursor" && s.models.has(key)) return s.models.get(key)!
 
       return yield* Effect.promise(async () => {
         const provider = s.providers[model.providerID]
         const sdk = await resolveSDK(model, s, envs)
 
         try {
+          const mergedOptions = {
+            ...provider.options,
+            ...model.options,
+            ...(model.providerID === "cursor" && provider.key ? { apiKey: provider.key } : {}),
+          }
           const language = s.modelLoaders[model.providerID]
-            ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
-                ...provider.options,
-                ...model.options,
-              })
+            ? await s.modelLoaders[model.providerID](sdk, model.api.id, mergedOptions)
             : sdk.languageModel(model.api.id)
-          s.models.set(key, language)
+          if (model.providerID !== "cursor") {
+            s.models.set(key, language)
+          }
           return language
         } catch (e) {
           if (e instanceof NoSuchModelError)

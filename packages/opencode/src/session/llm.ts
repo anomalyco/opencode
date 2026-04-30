@@ -18,6 +18,7 @@ import { PermissionID } from "@/permission/schema"
 import { Bus } from "@/bus"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
+import { setActiveCursorSession } from "@/provider/cursor/active-session"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -110,6 +111,12 @@ const live: Layer.Layer<
           .join("\n"),
       )
 
+      if (input.model.providerID === "cursor") {
+        system.push(
+          "Note: Cursor Cloud runs in Cursor's VM with Cursor-side tools; OpenCode tool calls are not forwarded for this provider.",
+        )
+      }
+
       const header = system[0]
       yield* plugin.trigger(
         "experimental.chat.system.transform",
@@ -193,7 +200,11 @@ const live: Layer.Layer<
         },
       )
 
-      const tools = resolveTools(input)
+      let tools = resolveTools(input)
+      const isCursor = input.model.providerID === "cursor"
+      if (isCursor) {
+        tools = {}
+      }
 
       // LiteLLM and some Anthropic proxies require the tools parameter to be present
       // when message history contains tool calls, even if no tools are being used.
@@ -211,6 +222,7 @@ const live: Layer.Layer<
       // during compaction), inject a stub tool to satisfy the validation requirement.
       // The stub description explicitly tells the model not to call it.
       if (
+        !isCursor &&
         (isLiteLLMProxy || input.model.providerID.includes("github-copilot")) &&
         Object.keys(tools).length === 0 &&
         hasToolCalls(input.messages)
@@ -363,7 +375,7 @@ const live: Layer.Layer<
         providerOptions: ProviderTransform.providerOptions(input.model, params.options),
         activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
         tools,
-        toolChoice: input.toolChoice,
+        toolChoice: isCursor ? ("none" as const) : input.toolChoice,
         maxOutputTokens: params.maxOutputTokens,
         abortSignal: input.abort,
         headers: {
@@ -420,6 +432,13 @@ const live: Layer.Layer<
               Effect.sync(() => new AbortController()),
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
+
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                if (input.model.providerID === "cursor") setActiveCursorSession(undefined)
+              }),
+            )
+            if (input.model.providerID === "cursor") setActiveCursorSession(input.sessionID)
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
