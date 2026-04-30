@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { SyncPaths } from "../../src/server/routes/instance/httpapi/sync"
+import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
 import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
@@ -16,7 +16,7 @@ const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
 function app(httpapi = true) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpapi
-  return Server.Default().app
+  return httpapi ? Server.Default().app : Server.Legacy().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {

@@ -9,7 +9,7 @@ import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "vcs" })
 
@@ -125,8 +125,8 @@ export type Info = Schema.Schema.Type<typeof Info>
 export const FileDiff = Schema.Struct({
   file: Schema.String,
   patch: Schema.String,
-  additions: Schema.Number,
-  deletions: Schema.Number,
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
 })
   .annotate({ identifier: "VcsFileDiff" })

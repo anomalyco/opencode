@@ -4,8 +4,8 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/experimental"
-import { SessionPaths } from "../../src/server/routes/instance/httpapi/session"
+import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
+import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { MessageID, PartID } from "../../src/session/schema"
 import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
@@ -19,7 +19,7 @@ const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
 function app(experimental: boolean) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return Server.Default().app
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 type TestApp = ReturnType<typeof app>
 

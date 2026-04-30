@@ -15,12 +15,12 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
 import { zod } from "@/util/effect-zod"
-import { type DeepMutable, withStatics } from "@/util/schema"
+import { NonNegativeInt, type DeepMutable, withStatics } from "@/util/schema"
 
 export const Info = Schema.Struct({
   path: Schema.String,
-  added: Schema.Int,
-  removed: Schema.Int,
+  added: NonNegativeInt,
+  removed: NonNegativeInt,
   status: Schema.Literals(["added", "deleted", "modified"]),
 })
   .annotate({ identifier: "File" })
@@ -39,10 +39,10 @@ export const Node = Schema.Struct({
 export type Node = DeepMutable<Schema.Schema.Type<typeof Node>>
 
 const Hunk = Schema.Struct({
-  oldStart: Schema.Number,
-  oldLines: Schema.Number,
-  newStart: Schema.Number,
-  newLines: Schema.Number,
+  oldStart: NonNegativeInt,
+  oldLines: NonNegativeInt,
+  newStart: NonNegativeInt,
+  newLines: NonNegativeInt,
   lines: Schema.Array(Schema.String),
 })
 
