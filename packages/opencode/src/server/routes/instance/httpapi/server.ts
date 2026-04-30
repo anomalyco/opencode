@@ -55,6 +55,7 @@ import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/w
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
+import type { Predicate } from "effect/Predicate"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -104,6 +105,23 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
 )
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
+  Layer.provide(
+    HttpRouter.cors({
+      maxAge: 86_400,
+      allowedOrigins: ((input) => {
+        return (
+          !input ||
+          input.startsWith("http://localhost:") ||
+          input.startsWith("http://127.0.0.1:") ||
+          input.startsWith("oc://renderer") ||
+          input === "tauri://localhost" ||
+          input === "http://tauri.localhost" ||
+          input === "https://tauri.localhost" ||
+          /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)
+        )
+      }) as Predicate<string> as any,
+    }),
+  ),
   Layer.provide([
     runtime,
     Account.defaultLayer,
