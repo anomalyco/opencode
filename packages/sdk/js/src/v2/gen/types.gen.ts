@@ -344,10 +344,10 @@ export type SessionStatus =
       type: "busy"
     }
   | {
-      type: "steer"
+      type: "haltingSteer"
     }
   | {
-      type: "wrap"
+      type: "waitingSteer"
     }
 
 export type EventSessionStatus = {
@@ -1524,9 +1524,9 @@ export type Config = {
    */
   share?: "manual" | "auto" | "disabled"
   /**
-   * Follow-up behavior: 'queue' to wait, 'steer' to interrupt immediately, 'wrap' to finish current step
+   * Follow-up behavior: 'queue' to wait for all steps, 'steer' to halt and steer immediately, 'wrap' to wait for current step and steer
    */
-  followup?: "queue" | "steer" | "wrap"
+  followup?: "queue" | "haltingSteer" | "waitingSteer"
   /**
    * @deprecated Use 'share' field instead. Share newly created sessions automatically
    */
@@ -3808,7 +3808,7 @@ export type SessionPromptData = {
     agent?: string
     noReply?: boolean
     isSteer?: boolean
-    followupMode?: "steer" | "wrap" | "queue"
+    followupMode?: "haltingSteer" | "waitingSteer" | "queue"
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
      */
@@ -4010,7 +4010,7 @@ export type SessionPromptAsyncData = {
     agent?: string
     noReply?: boolean
     isSteer?: boolean
-    followupMode?: "steer" | "wrap" | "queue"
+    followupMode?: "haltingSteer" | "waitingSteer" | "queue"
     /**
      * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
      */
@@ -4153,7 +4153,7 @@ export type SessionShellResponse = SessionShellResponses[keyof SessionShellRespo
 
 export type SessionInterruptData = {
   body?: {
-    type: "steer" | "wrap" | "clear"
+    type: "haltingSteer" | "waitingSteer" | "clear"
   }
   path: {
     sessionID: string

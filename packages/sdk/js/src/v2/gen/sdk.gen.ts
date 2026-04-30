@@ -2202,7 +2202,7 @@ export class Session2 extends HeyApiClient {
       agent?: string
       noReply?: boolean
       isSteer?: boolean
-      followupMode?: "steer" | "wrap" | "queue"
+      followupMode?: "haltingSteer" | "waitingSteer" | "queue"
       tools?: {
         [key: string]: boolean
       }
@@ -2338,7 +2338,7 @@ export class Session2 extends HeyApiClient {
       agent?: string
       noReply?: boolean
       isSteer?: boolean
-      followupMode?: "steer" | "wrap" | "queue"
+      followupMode?: "haltingSteer" | "waitingSteer" | "queue"
       tools?: {
         [key: string]: boolean
       }
@@ -2500,7 +2500,7 @@ export class Session2 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
-      type?: "steer" | "wrap" | "clear"
+      type?: "haltingSteer" | "waitingSteer" | "clear"
     },
     options?: Options<never, ThrowOnError>,
   ) {

@@ -1524,11 +1524,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const interrupt = yield* state.getInterrupt(sessionID)
             if (interrupt === "waitingSteer") {
               yield* state.clearInterrupt(sessionID)
-              return "continue" as const
+              return "break" as const
             }
             if (interrupt === "haltingSteer") {
               yield* state.clearInterrupt(sessionID)
-              return "continue" as const
+              return "break" as const
             }
 
             if (result === "stop") return "break" as const
