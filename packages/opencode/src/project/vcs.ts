@@ -1,4 +1,4 @@
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap, Scope } from "effect"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
@@ -210,6 +210,7 @@ export namespace Vcs {
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const git = yield* Git.Service
+      const scope = yield* Scope.Scope
       const state = yield* InstanceState.make<State>(
         Effect.fn("Vcs.state")((ctx) =>
           Effect.gen(function* () {
@@ -248,7 +249,7 @@ export namespace Vcs {
 
       return Service.of({
         init: Effect.fn("Vcs.init")(function* () {
-          yield* InstanceState.get(state)
+          yield* InstanceState.get(state).pipe(Effect.forkIn(scope))
         }),
         branch: Effect.fn("Vcs.branch")(function* () {
           return yield* InstanceState.use(state, (x) => x.current)
