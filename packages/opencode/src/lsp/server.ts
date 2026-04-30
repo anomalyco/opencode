@@ -265,22 +265,23 @@ export namespace LSPServer {
       }
 
       if (lintBin) {
-        // Use Process.run so stdout and stderr are consumed concurrently with
-        // the process exit, preventing a race where the stream has already
-        // emitted 'end' before we start reading (regression from Bun → Node
-        // migration in 814c1d398). Also check stderr since some CLI builds
-        // of oxlint emit help text there.
-        const helpResult = await Process.run([lintBin, "--help"], { nothrow: true }).catch(() => ({
-          stdout: Buffer.alloc(0),
-          stderr: Buffer.alloc(0),
-          code: 1,
-        }))
-        const help = helpResult.stdout.toString() + helpResult.stderr.toString()
-        if (help.includes("--lsp")) {
+        const proc = spawn(lintBin, ["--lsp"], {
+          cwd: root,
+        })
+        const exitCode = await new Promise<number | undefined>((resolve) => {
+          const timeout = setTimeout(() => resolve(undefined), 500)
+          proc.once("exit", (code) => {
+            clearTimeout(timeout)
+            resolve(code ?? 0)
+          })
+          proc.once("error", () => {
+            clearTimeout(timeout)
+            resolve(1)
+          })
+        })
+        if (exitCode === undefined) {
           return {
-            process: spawn(lintBin, ["--lsp"], {
-              cwd: root,
-            }),
+            process: proc,
           }
         }
       }
