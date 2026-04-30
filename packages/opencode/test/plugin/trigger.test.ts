@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect } from "bun:test"
+import { afterAll, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import path from "path"
@@ -11,12 +11,8 @@ const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
 process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 
 const { Plugin } = await import("../../src/plugin/index")
-const { Instance } = await import("../../src/project/instance")
 const it = testEffect(Layer.mergeAll(Plugin.defaultLayer, CrossSpawnSpawner.defaultLayer))
-
-afterEach(async () => {
-  await Instance.disposeAll()
-})
+const systemHook = "experimental.chat.system.transform"
 
 afterAll(() => {
   if (disableDefault === undefined) {
@@ -30,39 +26,44 @@ function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
   return provideTmpdirInstance((dir) =>
     Effect.gen(function* () {
       const file = path.join(dir, "plugin.ts")
-      yield* Effect.promise(() => Bun.write(file, source))
-      yield* Effect.promise(() =>
-        Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify(
-            {
-              $schema: "https://opencode.ai/config.json",
-              plugin: [pathToFileURL(file).href],
-            },
-            null,
-            2,
+      yield* Effect.all(
+        [
+          Effect.promise(() => Bun.write(file, source)),
+          Effect.promise(() =>
+            Bun.write(
+              path.join(dir, "opencode.json"),
+              JSON.stringify(
+                {
+                  $schema: "https://opencode.ai/config.json",
+                  plugin: [pathToFileURL(file).href],
+                },
+                null,
+                2,
+              ),
+            ),
           ),
-        ),
+        ],
+        { discard: true, concurrency: 2 },
       )
       return yield* self
     }),
   )
 }
 
-const trigger = Effect.fn("PluginTriggerTest.trigger")(function* () {
+const triggerSystemTransform = Effect.fn("PluginTriggerTest.triggerSystemTransform")(function* () {
   const plugin = yield* Plugin.Service
   const out = { system: [] as string[] }
   yield* plugin.trigger(
-    "experimental.chat.system.transform",
+    systemHook,
     {
       model: {
-        providerID: ProviderID.make("anthropic"),
+        providerID: ProviderID.anthropic,
         modelID: ModelID.make("claude-sonnet-4-6"),
       },
     },
     out,
   )
-  return out
+  return out.system
 })
 
 describe("plugin.trigger", () => {
@@ -70,14 +71,14 @@ describe("plugin.trigger", () => {
     withProject(
       [
         "export default async () => ({",
-        '  "experimental.chat.system.transform": (_input, output) => {',
+        `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
         '    output.system.unshift("sync")',
         "  },",
         "})",
         "",
       ].join("\n"),
       Effect.gen(function* () {
-        expect((yield* trigger()).system).toEqual(["sync"])
+        expect(yield* triggerSystemTransform()).toEqual(["sync"])
       }),
     ),
   )
@@ -86,7 +87,7 @@ describe("plugin.trigger", () => {
     withProject(
       [
         "export default async () => ({",
-        '  "experimental.chat.system.transform": async (_input, output) => {',
+        `  ${JSON.stringify(systemHook)}: async (_input, output) => {`,
         "    await Bun.sleep(1)",
         '    output.system.unshift("async")',
         "  },",
@@ -94,7 +95,7 @@ describe("plugin.trigger", () => {
         "",
       ].join("\n"),
       Effect.gen(function* () {
-        expect((yield* trigger()).system).toEqual(["async"])
+        expect(yield* triggerSystemTransform()).toEqual(["async"])
       }),
     ),
   )
