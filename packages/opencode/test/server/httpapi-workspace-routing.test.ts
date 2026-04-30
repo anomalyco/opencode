@@ -150,6 +150,19 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
     adaptor: localAdaptor(input.directory),
   })
 
+const insertRemoteWorkspaceWithoutSync = (input: {
+  dir: string
+  projectID: Project.Info["id"]
+  type: string
+  url: string
+}) =>
+  Effect.sync(() => {
+    const id = WorkspaceID.ascending()
+    registerAdaptor(input.projectID, input.type, remoteAdaptor(path.join(input.dir, `.${input.type}`), input.url))
+    Database.use((db) => db.insert(WorkspaceTable).values({ id, type: input.type, project_id: input.projectID }).run())
+    return id
+  })
+
 const startRemoteWorkspaceHttpServer = <E, R>(
   handler: (request: ProxiedRequest) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
 ) =>
@@ -269,22 +282,12 @@ describe("HttpApi workspace routing middleware", () => {
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const project = yield* Project.use.fromDirectory(dir)
-      const workspaceID = WorkspaceID.ascending("wrk_not_syncing")
-      // Insert the row directly instead of Workspace.create. That gives the
-      // middleware a valid remote workspace whose sync loop was never started.
-      registerAdaptor(
-        project.project.id,
-        "remote-not-syncing",
-        remoteAdaptor(path.join(dir, ".remote-not-syncing"), "http://127.0.0.1:1/base"),
-      )
-      yield* Effect.sync(() =>
-        Database.use((db) =>
-          db
-            .insert(WorkspaceTable)
-            .values({ id: workspaceID, type: "remote-not-syncing", project_id: project.project.id })
-            .run(),
-        ),
-      )
+      const workspaceID = yield* insertRemoteWorkspaceWithoutSync({
+        dir,
+        projectID: project.project.id,
+        type: "remote-not-syncing",
+        url: "http://127.0.0.1:1/base",
+      })
 
       yield* HttpRouter.add("GET", "/probe", HttpServerResponse.text("route called")).pipe(
         Layer.provide(workspaceRoutingTestLayer),
