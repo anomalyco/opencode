@@ -52,9 +52,9 @@ export const TuiEvent = {
   ),
   SessionNew: BusEvent.define(
     "tui.session.new",
-    z.object({
-      message: z.string().describe("Initial message to send in the new session"),
-      sessionID: SessionID.zod.describe("Session ID of the current session to abort"),
+    Schema.Struct({
+      message: Schema.String.annotate({ description: "Initial message to send in the new session" }),
+      sessionID: SessionID.annotate({ description: "Session ID of the current session to abort" }),
     }),
   ),
 }

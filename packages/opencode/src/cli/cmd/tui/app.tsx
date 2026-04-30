@@ -800,6 +800,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   event.on(TuiEvent.SessionNew.type, async (evt) => {
     const model = local.model.current()
     if (!model) return
+    const agent = local.agent.current()
+    if (!agent) return
 
     // Abort the old session
     await sdk.client.session.abort({ sessionID: evt.properties.sessionID }).catch(() => {})
@@ -817,7 +819,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         sessionID: id,
         ...model,
         messageID: MessageID.ascending(),
-        agent: local.agent.current().name,
+        agent: agent.name,
         model,
         parts: [
           {

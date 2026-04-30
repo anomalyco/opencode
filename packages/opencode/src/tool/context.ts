@@ -1,10 +1,9 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
-import type { Provider } from "../provider"
+import type { Provider } from "../provider/provider"
 import DESCRIPTION from "./context.txt"
 
-const parameters = z.object({})
+export const Parameters = Schema.Struct({})
 
 type Metadata = {
   total?: number
@@ -13,13 +12,13 @@ type Metadata = {
   tokens?: unknown
 }
 
-export const ContextUsageTool = Tool.define<typeof parameters, Metadata, never>(
+export const ContextUsageTool = Tool.define<typeof Parameters, Metadata, never>(
   "check_context_usage",
   Effect.gen(function* () {
     return {
       description: DESCRIPTION,
-      parameters,
-      execute: (_params: z.infer<typeof parameters>, ctx: Tool.Context<Metadata>) =>
+      parameters: Parameters,
+      execute: (_params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const model = ctx.extra?.model as Provider.Model | undefined
           const last = ctx.messages.filter((msg) => msg.info.role === "assistant" && msg.info.tokens.output > 0).at(-1)

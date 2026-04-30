@@ -420,6 +420,20 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type EventTuiSessionNew = {
+  type: "tui.session.new"
+  properties: {
+    /**
+     * Initial message to send in the new session
+     */
+    message: string
+    /**
+     * Session ID of the current session to abort
+     */
+    sessionID: string
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -1137,6 +1151,7 @@ export type GlobalEvent = {
     | EventTuiCommandExecute
     | EventTuiToastShow
     | EventTuiSessionSelect
+    | EventTuiSessionNew
     | EventMcpToolsChanged
     | EventMcpBrowserOpenFailed
     | EventCommandExecuted
@@ -2080,6 +2095,7 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
+  | EventTuiSessionNew
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -5263,7 +5279,7 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect | EventTuiSessionNew
   path?: never
   query?: {
     directory?: string
