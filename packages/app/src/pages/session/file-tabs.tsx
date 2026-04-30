@@ -26,6 +26,9 @@ import CodeMirrorView from "@/components/code-mirror-view"
 import { langFromExt } from "@/utils/lang-from-ext"
 import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
 
+// FORK: macOS 平台检测,用于右键菜单输入框 Option+Enter 提交支持 2026-04-30
+const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
+
 function isMarkdownPath(p: string | undefined): boolean {
   if (!p) return false
   const lower = p.toLowerCase()
@@ -1343,14 +1346,15 @@ export function FileTabContent(props: { tab: string }) {
                   value={mdComment()}
                   onInput={(e) => setMdComment(e.currentTarget.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                      e.preventDefault()
-                      submitMdSelection()
-                    }
+                    if (e.key !== "Enter") return
+                    // FORK: macOS 加 Option+Enter 提交,Win/Linux 维持 Ctrl+Enter,Mac 维持 Cmd+Enter 2026-04-30
+                    if (!(e.ctrlKey || e.metaKey || (IS_MAC && e.altKey))) return
+                    e.preventDefault()
+                    submitMdSelection()
                   }}
                 />
                 <div class="flex items-center justify-between">
-                  <span class="text-[11px] text-text-weak">Ctrl+Enter 提交 · Esc 取消</span>
+                  <span class="text-[11px] text-text-weak">{IS_MAC ? "Cmd/Opt+Enter" : "Ctrl+Enter"} 提交 · Esc 取消</span>
                   <div class="flex items-center gap-2">
                     <button
                       class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"

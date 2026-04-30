@@ -21,3 +21,4 @@
 | [md-viewer-typography](./md-viewer-typography/) | done | 文件查看器看 .md 时排版升级 — 标题阶梯(字号+加粗双轨,h1/h2=700,h3-h6=600)/ 行内代码芯片 / 引用块底色 / HR 显形 / 表头底色,scoped 在 data-context="file-viewer" 下,聊天侧零影响 |
 | [bump-script-encoding-fix](./bump-script-encoding-fix/) | done | bump-installer-version.ps1 加 UTF-8 BOM 修中文 placeholder 乱码(PS 5.1 源解析陷阱)|
 | [macos-右键选区-修复](./macos-右键选区-修复/) | done | macOS WKWebView 文字上右键选区丢失 — 选区历史栈挑最长 + overlay div 替代 stale 的 CSS Custom Highlight + 关闭菜单时统一清原生/Pierre 选区 |
+| [加聊天-option-enter](./加聊天-option-enter/) | done | 文件查看器"+ 添加到聊天窗口"对话框 macOS 加 Option+Enter 提交快捷键 + 底部提示文案平台化(Tiny) |
