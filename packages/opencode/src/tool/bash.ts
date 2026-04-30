@@ -90,50 +90,55 @@ export const BashTool = Tool.define("bash", async () => {
       const patterns = new Set<string>()
       const always = new Set<string>()
 
-      for (const node of tree.rootNode.descendantsOfType("command")) {
-        if (!node) continue
+      try {
+        for (const node of tree.rootNode.descendantsOfType("command")) {
+          if (!node) continue
 
-        // Get full command text including redirects if present
-        let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
+          // Get full command text including redirects if present
+          let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
 
-        const command = []
-        for (let i = 0; i < node.childCount; i++) {
-          const child = node.child(i)
-          if (!child) continue
-          if (
-            child.type !== "command_name" &&
-            child.type !== "word" &&
-            child.type !== "string" &&
-            child.type !== "raw_string" &&
-            child.type !== "concatenation"
-          ) {
-            continue
+          const command = []
+          for (let i = 0; i < node.childCount; i++) {
+            const child = node.child(i)
+            if (!child) continue
+            if (
+              child.type !== "command_name" &&
+              child.type !== "word" &&
+              child.type !== "string" &&
+              child.type !== "raw_string" &&
+              child.type !== "concatenation"
+            ) {
+              continue
+            }
+            command.push(child.text)
           }
-          command.push(child.text)
-        }
 
-        // not an exhaustive list, but covers most common cases
-        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
-          for (const arg of command.slice(1)) {
-            if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await fs.realpath(path.resolve(cwd, arg)).catch(() => "")
-            log.info("resolved path", { arg, resolved })
-            if (resolved) {
-              const normalized =
-                process.platform === "win32" ? Filesystem.windowsPath(resolved).replace(/\//g, "\\") : resolved
-              if (!Instance.containsPath(normalized)) {
-                const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
-                directories.add(dir)
+          // not an exhaustive list, but covers most common cases
+          if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
+            for (const arg of command.slice(1)) {
+              if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
+              const resolved = await fs.realpath(path.resolve(cwd, arg)).catch(() => "")
+              log.info("resolved path", { arg, resolved })
+              if (resolved) {
+                const normalized =
+                  process.platform === "win32" ? Filesystem.windowsPath(resolved).replace(/\//g, "\\") : resolved
+                if (!Instance.containsPath(normalized)) {
+                  const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
+                  directories.add(dir)
+                }
               }
             }
           }
-        }
 
-        // cd covered by above check
-        if (command.length && command[0] !== "cd") {
-          patterns.add(commandText)
-          always.add(BashArity.prefix(command).join(" ") + " *")
+          // cd covered by above check
+          if (command.length && command[0] !== "cd") {
+            patterns.add(commandText)
+            always.add(BashArity.prefix(command).join(" ") + " *")
+          }
         }
+      } finally {
+        // Release tree-sitter syntax tree to prevent WASM memory leak.
+        tree.delete()
       }
 
       if (directories.size > 0) {

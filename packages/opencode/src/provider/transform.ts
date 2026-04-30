@@ -134,6 +134,24 @@ export namespace ProviderTransform {
       return result
     }
 
+    // Deepseek requires all assistant messages to have reasoning on them
+    if (model.api.id.includes("deepseek")) {
+      msgs = msgs.map((msg) => {
+        if (msg.role !== "assistant") return msg
+        if (Array.isArray(msg.content)) {
+          if (msg.content.some((part: any) => part.type === "reasoning")) return msg
+          return { ...msg, content: [...msg.content, { type: "reasoning", text: "" }] }
+        }
+        return {
+          ...msg,
+          content: [
+            ...(msg.content ? [{ type: "text" as const, text: msg.content }] : []),
+            { type: "reasoning" as const, text: "" },
+          ],
+        }
+      })
+    }
+
     if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
       const field = model.capabilities.interleaved.field
       return msgs.map((msg) => {
@@ -530,8 +548,13 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
       case "venice-ai-sdk-provider":
       // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
-      case "@ai-sdk/openai-compatible":
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+      case "@ai-sdk/openai-compatible": {
+        const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+        if (model.api.id.includes("deepseek-v4")) {
+          efforts.push("max")
+        }
+        return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
+      }
 
       case "@ai-sdk/azure":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
@@ -783,6 +806,13 @@ export namespace ProviderTransform {
   }): Record<string, any> {
     const result: Record<string, any> = {}
 
+    if (
+      input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+      (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic")
+    ) {
+      result["toolStreaming"] = false
+    }
+
     // openai and providers using openai package should set store to false by default.
     if (
       isOpenAIProviderID(input.model.providerID) ||
@@ -992,6 +1022,21 @@ export namespace ProviderTransform {
       }
     }
     */
+
+    if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
+      const sanitizeMoonshot = (obj: unknown): unknown => {
+        if (obj === null || typeof obj !== "object") return obj
+        if (Array.isArray(obj)) return obj.map(sanitizeMoonshot)
+        // Moonshot expands $ref before validation and rejects sibling keywords like description on the same node.
+        if ("$ref" in obj && typeof (obj as any).$ref === "string") return { $ref: (obj as any).$ref }
+        const result = Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value)]))
+        // MFJS does not support tuple-style `items` arrays; it requires one schema object for all array items.
+        if (Array.isArray((result as any).items)) (result as any).items = (result as any).items[0] ?? {}
+        return result
+      }
+
+      schema = sanitizeMoonshot(schema) as JSONSchema.BaseSchema | JSONSchema7
+    }
 
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
