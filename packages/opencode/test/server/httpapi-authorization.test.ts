@@ -1,9 +1,13 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
-import { ConfigProvider, Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
-import { Authorization, authorizationLayer } from "../../src/server/routes/instance/httpapi/middleware/authorization"
+import {
+  Authorization,
+  ServerAuthConfig,
+  authorizationLayer,
+} from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { testEffect } from "../lib/effect"
 
 const Api = HttpApi.make("test-authorization").add(
@@ -23,19 +27,17 @@ const apiLayer = HttpRouter.serve(
   { disableListenLog: true, disableLogger: true },
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
-const itWithAuth = (input: { password?: string; username?: string } = {}) =>
-  testEffect(
-    apiLayer.pipe(
-      Layer.provide(
-        ConfigProvider.layer(
-          ConfigProvider.fromUnknown({
-            ...(input.password === undefined ? {} : { OPENCODE_SERVER_PASSWORD: input.password }),
-            ...(input.username === undefined ? {} : { OPENCODE_SERVER_USERNAME: input.username }),
-          }),
-        ),
-      ),
-    ),
+const authConfigLayer = (input: { password?: string; username?: string } = {}) =>
+  Layer.succeed(
+    ServerAuthConfig,
+    ServerAuthConfig.of({
+      password: input.password,
+      username: input.username ?? "opencode",
+    }),
   )
+
+const itWithAuth = (input: { password?: string; username?: string } = {}) =>
+  testEffect(apiLayer.pipe(Layer.provide(authConfigLayer(input))))
 
 const it = itWithAuth()
 const itSecret = itWithAuth({ password: "secret" })
