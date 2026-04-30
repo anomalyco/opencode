@@ -42,7 +42,9 @@ async function project(source: string) {
   })
 }
 
-describe("plugin.trigger", () => {
+// SKIP entire describe on windows: every test imports a generated plugin via file:// URL
+// which hangs >60s on github-hosted windows-2025 runner. Same root cause as #90.
+describe.skipIf(process.platform === "win32")("plugin.trigger", () => {
   test("runs synchronous hooks without crashing", async () => {
     await using tmp = await project(
       [
