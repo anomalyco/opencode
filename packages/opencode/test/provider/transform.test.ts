@@ -1121,6 +1121,227 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
   })
+
+  const deepSeekModel = {
+    id: ModelID.make("deepseek/deepseek-chat"),
+    providerID: ProviderID.make("deepseek"),
+    api: {
+      id: "deepseek-chat",
+      url: "https://api.deepseek.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DeepSeek Chat",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: {
+        field: "reasoning_content" as const,
+      },
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active" as const,
+    options: {},
+    headers: {},
+    release_date: "2023-04-01",
+  }
+
+  test("DeepSeek multi-turn tool calls preserve reasoning_content on all assistant messages", () => {
+    // Simulate a full multi-turn conversation with tool calls
+    const msgs = [
+      // Turn 1: User message
+      {
+        role: "user",
+        content: [{ type: "text", text: "What is the weather?" }],
+      },
+      // Turn 1: Assistant response with reasoning + tool call
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me check the weather API." },
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "get_weather",
+            input: { city: "New York" },
+          },
+        ],
+      },
+      // Turn 1: Tool result
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "get_weather",
+            output: { type: "text", value: "Sunny, 72F" },
+          },
+        ],
+      },
+      // Turn 1: Assistant final response with reasoning
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "The weather data shows sunny conditions." },
+          { type: "text", text: "The weather in New York is sunny, 72F." },
+        ],
+      },
+      // Turn 2: User continues the conversation
+      {
+        role: "user",
+        content: [{ type: "text", text: "What about tomorrow?" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, deepSeekModel, {})
+
+    // Every assistant message must have reasoning_content in providerOptions
+    // Index 1: assistant with tool call
+    expect(result[1].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me check the weather API.")
+    expect(result[1].content).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "call_1",
+        toolName: "get_weather",
+        input: { city: "New York" },
+      },
+    ])
+
+    // Index 3: assistant with text response
+    expect(result[3].providerOptions?.openaiCompatible?.reasoning_content).toBe(
+      "The weather data shows sunny conditions.",
+    )
+    expect(result[3].content).toEqual([{ type: "text", text: "The weather in New York is sunny, 72F." }])
+  })
+
+  test("DeepSeek multi-turn: preserves empty reasoning_content from previous tool call turns", () => {
+    // DeepSeek sometimes returns empty reasoning_content with tool calls,
+    // and it MUST be sent back in subsequent requests
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "List files" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "" },
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "bash",
+            input: { command: "ls" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "bash",
+            output: { type: "text", value: "file1.txt\nfile2.txt" },
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Here are the files: file1.txt, file2.txt" }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Read file1.txt" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, deepSeekModel, {})
+
+    // The assistant with tool call should have empty reasoning_content preserved
+    expect(result[1].providerOptions?.openaiCompatible).toBeDefined()
+    expect(result[1].providerOptions?.openaiCompatible?.reasoning_content).toBe("")
+    // The final assistant should also have reasoning_content (added by block A)
+    expect(result[3].providerOptions?.openaiCompatible).toBeDefined()
+    expect(result[3].providerOptions?.openaiCompatible?.reasoning_content).toBe("")
+  })
+
+  test("DeepSeek with interleaved: true (boolean) still gets reasoning_content in providerOptions", () => {
+    // Some DeepSeek model definitions from models.dev may have interleaved: true
+    // instead of interleaved: { field: "reasoning_content" }. We must still
+    // extract reasoning from content and place it in providerOptions.
+    const boolInterleavedModel: any = {
+      ...deepSeekModel,
+      capabilities: {
+        ...deepSeekModel.capabilities,
+        interleaved: true,
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me think about this..." },
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "bash",
+            input: { command: "echo hello" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, boolInterleavedModel, {})
+
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
+    expect(result[0].content).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "test",
+        toolName: "bash",
+        input: { command: "echo hello" },
+      },
+    ])
+  })
+
+  test("DeepSeek with no interleaved still gets reasoning_content in providerOptions", () => {
+    // Edge case: model definition without any interleaved field
+    const noInterleavedModel: any = {
+      ...deepSeekModel,
+      capabilities: {
+        ...deepSeekModel.capabilities,
+        interleaved: false,
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "I should look up the file." },
+          { type: "text", text: "Let me check that file for you." },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, noInterleavedModel, {})
+
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("I should look up the file.")
+    expect(result[0].content).toEqual([{ type: "text", text: "Let me check that file for you." }])
+  })
 })
 
 describe("ProviderTransform.message - empty image handling", () => {

@@ -214,12 +214,22 @@ function normalizeMessages(
     })
   }
 
-  if (
-    typeof model.capabilities.interleaved === "object" &&
-    model.capabilities.interleaved.field &&
-    model.api.npm !== "@openrouter/ai-sdk-provider"
-  ) {
-    const field = model.capabilities.interleaved.field
+  // Determine if we should extract reasoning from content and place it in
+  // providerOptions. DeepSeek requires reasoning_content to be round-tripped
+  // on all assistant messages in multi-turn conversations, especially those
+  // with tool calls. We always do this for DeepSeek on the openai-compatible
+  // SDK, even when the model definition has interleaved: true (boolean).
+  const shouldInterleave =
+    (typeof model.capabilities.interleaved === "object" &&
+      model.capabilities.interleaved.field &&
+      model.api.npm !== "@openrouter/ai-sdk-provider") ||
+    (model.api.npm === "@ai-sdk/openai-compatible" && model.api.id.toLowerCase().includes("deepseek"))
+
+  if (shouldInterleave) {
+    const field =
+      typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field
+        ? model.capabilities.interleaved.field
+        : "reasoning_content"
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
