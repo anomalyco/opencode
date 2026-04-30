@@ -254,10 +254,8 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
       session: {
         message: {
           async sync(sessionID: string) {
-            const response = await sdk.client.v2.session.messages({
-              sessionID,
-            })
-            setStore("messages", sessionID, reconcile(response.data ?? []))
+            const response = await sdk.client.v2.session.messages({ sessionID })
+            setStore("messages", sessionID, reconcile(response.data?.items ?? []))
           },
           fromSession(sessionID: string) {
             const messages = store.messages[sessionID]

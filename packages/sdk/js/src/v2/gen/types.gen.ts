@@ -2842,6 +2842,14 @@ export type SessionMessage =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
+export type V2SessionMessagesResponse = {
+  items: Array<SessionMessage>
+  cursor: {
+    before?: string
+    after?: string
+  }
+}
+
 export type Symbol = {
   name: string
   kind: number
@@ -5528,6 +5536,8 @@ export type V2SessionMessagesData = {
   query?: {
     directory?: string
     workspace?: string
+    limit?: number
+    cursor?: string
   }
   url: "/api/session/{sessionID}/message"
 }
@@ -5549,10 +5559,10 @@ export type V2SessionMessagesResponses = {
   /**
    * List of v2 session messages
    */
-  200: Array<SessionMessage>
+  200: V2SessionMessagesResponse
 }
 
-export type V2SessionMessagesResponse = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
+export type V2SessionMessagesResponse2 = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
 
 export type FindTextData = {
   body?: never

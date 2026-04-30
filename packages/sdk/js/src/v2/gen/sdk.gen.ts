@@ -3192,6 +3192,8 @@ export class Session3 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      limit?: number
+      cursor?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3203,6 +3205,8 @@ export class Session3 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "cursor" },
           ],
         },
       ],
