@@ -1,14 +1,18 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { afterAll, afterEach, describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import path from "path"
 import { pathToFileURL } from "url"
-import { tmpdir } from "../fixture/fixture"
+import { ModelID, ProviderID } from "../../src/provider/schema"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
 process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 
 const { Plugin } = await import("../../src/plugin/index")
 const { Instance } = await import("../../src/project/instance")
+const it = testEffect(Layer.mergeAll(Plugin.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -22,29 +26,48 @@ afterAll(() => {
   process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
 })
 
-async function project(source: string) {
-  return tmpdir({
-    init: async (dir) => {
+function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
+  return provideTmpdirInstance((dir) =>
+    Effect.gen(function* () {
       const file = path.join(dir, "plugin.ts")
-      await Bun.write(file, source)
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify(
-          {
-            $schema: "https://opencode.ai/config.json",
-            plugin: [pathToFileURL(file).href],
-          },
-          null,
-          2,
+      yield* Effect.promise(() => Bun.write(file, source))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify(
+            {
+              $schema: "https://opencode.ai/config.json",
+              plugin: [pathToFileURL(file).href],
+            },
+            null,
+            2,
+          ),
         ),
       )
-    },
-  })
+      return yield* self
+    }),
+  )
 }
 
+const trigger = Effect.fn("PluginTriggerTest.trigger")(function* () {
+  const plugin = yield* Plugin.Service
+  const out = { system: [] as string[] }
+  yield* plugin.trigger(
+    "experimental.chat.system.transform",
+    {
+      model: {
+        providerID: ProviderID.make("anthropic"),
+        modelID: ModelID.make("claude-sonnet-4-6"),
+      },
+    },
+    out,
+  )
+  return out
+})
+
 describe("plugin.trigger", () => {
-  test("runs synchronous hooks without crashing", async () => {
-    await using tmp = await project(
+  it.live("runs synchronous hooks without crashing", () =>
+    withProject(
       [
         "export default async () => ({",
         '  "experimental.chat.system.transform": (_input, output) => {',
@@ -53,33 +76,14 @@ describe("plugin.trigger", () => {
         "})",
         "",
       ].join("\n"),
-    )
+      Effect.gen(function* () {
+        expect((yield* trigger()).system).toEqual(["sync"])
+      }),
+    ),
+  )
 
-    const out = await Instance.provide({
-      directory: tmp.path,
-      fn: async () =>
-        Effect.gen(function* () {
-          const plugin = yield* Plugin.Service
-          const out = { system: [] as string[] }
-          yield* plugin.trigger(
-            "experimental.chat.system.transform",
-            {
-              model: {
-                providerID: "anthropic",
-                modelID: "claude-sonnet-4-6",
-              } as any,
-            },
-            out,
-          )
-          return out
-        }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
-    })
-
-    expect(out.system).toEqual(["sync"])
-  })
-
-  test("awaits asynchronous hooks", async () => {
-    await using tmp = await project(
+  it.live("awaits asynchronous hooks", () =>
+    withProject(
       [
         "export default async () => ({",
         '  "experimental.chat.system.transform": async (_input, output) => {',
@@ -89,28 +93,9 @@ describe("plugin.trigger", () => {
         "})",
         "",
       ].join("\n"),
-    )
-
-    const out = await Instance.provide({
-      directory: tmp.path,
-      fn: async () =>
-        Effect.gen(function* () {
-          const plugin = yield* Plugin.Service
-          const out = { system: [] as string[] }
-          yield* plugin.trigger(
-            "experimental.chat.system.transform",
-            {
-              model: {
-                providerID: "anthropic",
-                modelID: "claude-sonnet-4-6",
-              } as any,
-            },
-            out,
-          )
-          return out
-        }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
-    })
-
-    expect(out.system).toEqual(["async"])
-  })
+      Effect.gen(function* () {
+        expect((yield* trigger()).system).toEqual(["async"])
+      }),
+    ),
+  )
 })
