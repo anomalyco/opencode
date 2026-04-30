@@ -109,5 +109,5 @@ export const ptyConnectRoute = HttpRouter.add(
         Effect.orDie,
       )
     return HttpServerResponse.empty()
-  }),
+  }).pipe(Effect.provide(Pty.defaultLayer)),
 )
