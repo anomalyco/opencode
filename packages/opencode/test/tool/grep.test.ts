@@ -4,11 +4,11 @@ import { Effect, Layer } from "effect"
 import { GrepTool } from "../../src/tool/grep"
 import { provideInstance, provideTmpdirInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { Truncate } from "../../src/tool/truncate"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
 import { Ripgrep } from "../../src/file/ripgrep"
-import { AppFileSystem } from "../../src/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
@@ -32,18 +32,18 @@ const ctx = {
   ask: () => Effect.void,
 }
 
-const projectRoot = path.join(__dirname, "../..")
+const root = path.join(__dirname, "../..")
 
 describe("tool.grep", () => {
   it.live("basic search", () =>
     Effect.gen(function* () {
       const info = yield* GrepTool
       const grep = yield* info.init()
-      const result = yield* provideInstance(projectRoot)(
+      const result = yield* provideInstance(root)(
         grep.execute(
           {
             pattern: "export",
-            path: path.join(projectRoot, "src/tool"),
+            path: path.join(root, "src/tool"),
             include: "*.ts",
           },
           ctx,
@@ -87,6 +87,27 @@ describe("tool.grep", () => {
           ctx,
         )
         expect(result.metadata.matches).toBeGreaterThan(0)
+      }),
+    ),
+  )
+
+  it.live("supports exact file paths", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const file = path.join(dir, "test.txt")
+        yield* Effect.promise(() => Bun.write(file, "line1\nline2\nline3"))
+        const info = yield* GrepTool
+        const grep = yield* info.init()
+        const result = yield* grep.execute(
+          {
+            pattern: "line2",
+            path: file,
+          },
+          ctx,
+        )
+        expect(result.metadata.matches).toBe(1)
+        expect(result.output).toContain(file)
+        expect(result.output).toContain("Line 2: line2")
       }),
     ),
   )

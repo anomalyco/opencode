@@ -49,7 +49,7 @@ export type WorkspaceAdaptor = {
   name: string
   description: string
   configure(config: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
-  create(config: WorkspaceInfo, from?: WorkspaceInfo): Promise<void>
+  create(config: WorkspaceInfo, env: Record<string, string | undefined>, from?: WorkspaceInfo): Promise<void>
   remove(config: WorkspaceInfo): Promise<void>
   target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
 }
@@ -303,6 +303,24 @@ export interface Hooks {
   "experimental.session.compacting"?: (
     input: { sessionID: string },
     output: { context: string[]; prompt?: string },
+  ) => Promise<void>
+  /**
+   * Called after compaction succeeds and before a synthetic user
+   * auto-continue message is added.
+   *
+   * - `enabled`: Defaults to `true`. Set to `false` to skip the synthetic
+   *   user "continue" turn.
+   */
+  "experimental.compaction.autocontinue"?: (
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      provider: ProviderContext
+      message: UserMessage
+      overflow: boolean
+    },
+    output: { enabled: boolean },
   ) => Promise<void>
   "experimental.text.complete"?: (
     input: { sessionID: string; messageID: string; partID: string },

@@ -44,6 +44,6 @@ try {
   const after = heap()
   process.stdout.write(JSON.stringify({ baseline, after, growth: after - baseline }))
 } finally {
-  server.stop(true)
+  void server.stop(true)
   process.exit(0)
 }

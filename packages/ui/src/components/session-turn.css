@@ -26,7 +26,7 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: 18px;
+    gap: 0px;
     overflow-anchor: none;
   }
 
@@ -47,6 +47,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-top: 12px;
     width: 100%;
     min-width: 0;
     color: var(--text-weak);
@@ -226,5 +227,5 @@
 }
 
 [data-slot="session-turn-list"] {
-  gap: 48px;
+  gap: 24px;
 }

@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { Effect } from "effect"
 import path from "path"
 import { GlobalBus } from "../../src/bus/global"
 import { Snapshot } from "../../src/snapshot"
-import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { Filesystem } from "../../src/util/filesystem"
-import { Log } from "../../src/util/log"
+import { Filesystem } from "@/util/filesystem"
+import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdir } from "../fixture/fixture"
 
-Log.init({ print: false })
+void Log.init({ print: false })
 
 afterEach(async () => {
   await resetDatabase()
@@ -60,12 +60,14 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.path,
       })
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          expect(await Snapshot.track()).toBeTruthy()
-        },
-      })
+      expect(
+        await Effect.runPromise(
+          Snapshot.Service.use((svc) => svc.track()).pipe(
+            provideInstance(tmp.path),
+            Effect.provide(Snapshot.defaultLayer),
+          ),
+        ),
+      ).toBeTruthy()
     } finally {
       await Instance.disposeAll()
       reloadSpy.mockRestore()

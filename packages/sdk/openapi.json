@@ -66,31 +66,6 @@
         ]
       }
     },
-    "/global/sync-event": {
-      "get": {
-        "operationId": "global.sync-event.subscribe",
-        "summary": "Subscribe to global sync events",
-        "description": "Get global sync events",
-        "responses": {
-          "200": {
-            "description": "Event stream",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "$ref": "#/components/schemas/SyncEvent"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.sync-event.subscribe({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/global/config": {
       "get": {
         "operationId": "global.config.get",
@@ -440,6 +415,391 @@
         ]
       }
     },
+    "/experimental/workspace/adaptor": {
+      "get": {
+        "operationId": "experimental.workspace.adaptor.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List workspace adaptors",
+        "description": "List all available workspace adaptors for the current project.",
+        "responses": {
+          "200": {
+            "description": "Workspace adaptors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type", "name", "description"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.adaptor.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/workspace": {
+      "post": {
+        "operationId": "experimental.workspace.create",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Create workspace",
+        "description": "Create a workspace for the current project.",
+        "responses": {
+          "200": {
+            "description": "Workspace created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^wrk.*"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "extra": {
+                    "anyOf": [
+                      {},
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["type", "branch", "extra"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.create({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "experimental.workspace.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List workspaces",
+        "description": "List all workspaces.",
+        "responses": {
+          "200": {
+            "description": "Workspaces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Workspace"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/workspace/status": {
+      "get": {
+        "operationId": "experimental.workspace.status",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Workspace status",
+        "description": "Get connection status for workspaces in the current project.",
+        "responses": {
+          "200": {
+            "description": "Workspace status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "workspaceID": {
+                        "type": "string",
+                        "pattern": "^wrk.*"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["connected", "connecting", "disconnected", "error"]
+                      }
+                    },
+                    "required": ["workspaceID", "status"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/workspace/{id}": {
+      "delete": {
+        "operationId": "experimental.workspace.remove",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^wrk.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Remove workspace",
+        "description": "Remove an existing workspace.",
+        "responses": {
+          "200": {
+            "description": "Workspace removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experimental/workspace/{id}/session-restore": {
+      "post": {
+        "operationId": "experimental.workspace.sessionRestore",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^wrk.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Restore session into workspace",
+        "description": "Replay a session's sync events into the target workspace in batches.",
+        "responses": {
+          "200": {
+            "description": "Session replay started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["total"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses.*"
+                  }
+                },
+                "required": ["sessionID"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.sessionRestore({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "operationId": "project.list",
@@ -668,6 +1028,62 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.project.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/pty/shells": {
+      "get": {
+        "operationId": "pty.shells",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List available shells",
+        "description": "Get a list of available shells on the system.",
+        "responses": {
+          "200": {
+            "description": "List of shells",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "acceptable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["path", "name", "acceptable"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.pty.shells({\n  ...\n})"
           }
         ]
       }
@@ -923,10 +1339,14 @@
                     "type": "object",
                     "properties": {
                       "rows": {
-                        "type": "number"
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
                       },
                       "cols": {
-                        "type": "number"
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": ["rows", "cols"]
@@ -1247,24 +1667,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "consoleManagedProviders": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "activeOrgName": {
-                      "type": "string"
-                    },
-                    "switchableOrgCount": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991
-                    }
-                  },
-                  "required": ["consoleManagedProviders", "switchableOrgCount"]
+                  "$ref": "#/components/schemas/ConsoleState"
                 }
               }
             }
@@ -1526,310 +1929,6 @@
         ]
       }
     },
-    "/experimental/workspace/adaptor": {
-      "get": {
-        "operationId": "experimental.workspace.adaptor.list",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "List workspace adaptors",
-        "description": "List all available workspace adaptors for the current project.",
-        "responses": {
-          "200": {
-            "description": "Workspace adaptors",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "type": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "description": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["type", "name", "description"]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.adaptor.list({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/experimental/workspace": {
-      "post": {
-        "operationId": "experimental.workspace.create",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Create workspace",
-        "description": "Create a workspace for the current project.",
-        "responses": {
-          "200": {
-            "description": "Workspace created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Workspace"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^wrk.*"
-                  },
-                  "type": {
-                    "type": "string"
-                  },
-                  "branch": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "extra": {
-                    "anyOf": [
-                      {},
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": ["type", "branch", "extra"]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.create({\n  ...\n})"
-          }
-        ]
-      },
-      "get": {
-        "operationId": "experimental.workspace.list",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "List workspaces",
-        "description": "List all workspaces.",
-        "responses": {
-          "200": {
-            "description": "Workspaces",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Workspace"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.list({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/experimental/workspace/status": {
-      "get": {
-        "operationId": "experimental.workspace.status",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Workspace status",
-        "description": "Get connection status for workspaces in the current project.",
-        "responses": {
-          "200": {
-            "description": "Workspace status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "workspaceID": {
-                        "type": "string",
-                        "pattern": "^wrk.*"
-                      },
-                      "status": {
-                        "type": "string",
-                        "enum": ["connected", "connecting", "disconnected", "error"]
-                      },
-                      "error": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["workspaceID", "status"]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.status({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/experimental/workspace/{id}": {
-      "delete": {
-        "operationId": "experimental.workspace.remove",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "id",
-            "schema": {
-              "type": "string",
-              "pattern": "^wrk.*"
-            },
-            "required": true
-          }
-        ],
-        "summary": "Remove workspace",
-        "description": "Remove an existing workspace.",
-        "responses": {
-          "200": {
-            "description": "Workspace removed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Workspace"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.workspace.remove({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/experimental/worktree": {
       "post": {
         "operationId": "worktree.create",
@@ -2073,7 +2172,15 @@
             "in": "query",
             "name": "roots",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Only return root sessions (no parentID)"
           },
@@ -2113,7 +2220,15 @@
             "in": "query",
             "name": "archived",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Include archived sessions (default false)"
           }
@@ -2200,7 +2315,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Filter sessions by project directory"
+            "description": "Filter sessions by directory"
           },
           {
             "in": "query",
@@ -2211,9 +2326,34 @@
           },
           {
             "in": "query",
+            "name": "scope",
+            "schema": {
+              "type": "string",
+              "enum": ["project"]
+            },
+            "description": "List all sessions for the current project"
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter sessions by project-relative path"
+          },
+          {
+            "in": "query",
             "name": "roots",
             "schema": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
             },
             "description": "Only return root sessions (no parentID)"
           },
@@ -4135,34 +4275,30 @@
                   "parts": {
                     "type": "array",
                     "items": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "pattern": "^prt.*"
-                            },
-                            "type": {
-                              "type": "string",
-                              "const": "file"
-                            },
-                            "mime": {
-                              "type": "string"
-                            },
-                            "filename": {
-                              "type": "string"
-                            },
-                            "url": {
-                              "type": "string"
-                            },
-                            "source": {
-                              "$ref": "#/components/schemas/FilePartSource"
-                            }
-                          },
-                          "required": ["type", "mime", "url"]
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^prt.*"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "file"
+                        },
+                        "mime": {
+                          "type": "string"
+                        },
+                        "filename": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "$ref": "#/components/schemas/FilePartSource"
                         }
-                      ]
+                      },
+                      "required": ["type", "mime", "url"]
                     }
                   }
                 },
@@ -5168,6 +5304,243 @@
         ]
       }
     },
+    "/sync/start": {
+      "post": {
+        "operationId": "sync.start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Start workspace sync",
+        "description": "Start sync loops for workspaces in the current project that have active sessions.",
+        "responses": {
+          "200": {
+            "description": "Workspace sync started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sync.start({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/sync/replay": {
+      "post": {
+        "operationId": "sync.replay",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Replay sync events",
+        "description": "Validate and replay a complete sync event history.",
+        "responses": {
+          "200": {
+            "description": "Replayed sync events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionID": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["sessionID"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "events": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "aggregateID": {
+                          "type": "string"
+                        },
+                        "seq": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": ["id", "aggregateID", "seq", "type", "data"]
+                    }
+                  }
+                },
+                "required": ["directory", "events"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sync.replay({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/sync/history": {
+      "post": {
+        "operationId": "sync.history.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List sync events",
+        "description": "List sync events for all aggregates. Keys are aggregate IDs the client already knows about, values are the last known sequence ID. Events with seq > value are returned for those aggregates. Aggregates not listed in the input get their full history.",
+        "responses": {
+          "200": {
+            "description": "Sync events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "aggregate_id": {
+                        "type": "string"
+                      },
+                      "seq": {
+                        "type": "number"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "data": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": ["id", "aggregate_id", "seq", "type", "data"]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sync.history.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/find": {
       "get": {
         "operationId": "find.text",
@@ -5226,10 +5599,14 @@
                         "required": ["text"]
                       },
                       "line_number": {
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       },
                       "absolute_offset": {
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       },
                       "submatches": {
                         "type": "array",
@@ -5246,10 +5623,14 @@
                               "required": ["text"]
                             },
                             "start": {
-                              "type": "number"
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             },
                             "end": {
-                              "type": "number"
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             }
                           },
                           "required": ["match", "start", "end"]
@@ -5761,11 +6142,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "MCP server does not support OAuth",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/McpUnsupportedOAuthError"
                 }
               }
             }
@@ -5979,11 +6360,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "MCP server does not support OAuth",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/McpUnsupportedOAuthError"
                 }
               }
             }
@@ -6532,8 +6913,9 @@
                   },
                   "duration": {
                     "description": "Duration in milliseconds",
-                    "default": 5000,
-                    "type": "number"
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["message", "variant"]
@@ -7253,13 +7635,19 @@
             "type": "object",
             "properties": {
               "created": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "updated": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "initialized": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["created", "updated"]
@@ -7301,44 +7689,6 @@
               }
             },
             "required": ["directory"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.installation.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.installation.update-available": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.update-available"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"]
           }
         },
         "required": ["type", "properties"]
@@ -7404,20 +7754,8 @@
                 "type": "string"
               },
               "event": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "add"
-                  },
-                  {
-                    "type": "string",
-                    "const": "change"
-                  },
-                  {
-                    "type": "string",
-                    "const": "unlink"
-                  }
-                ]
+                "type": "string",
+                "enum": ["add", "change", "unlink"]
               }
             },
             "required": ["file", "event"]
@@ -7595,10 +7933,14 @@
             "type": "string"
           },
           "additions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "deletions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "status": {
             "type": "string",
@@ -7721,7 +8063,9 @@
                 "type": "string"
               },
               "retries": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["message", "retries"]
@@ -7765,7 +8109,9 @@
                 "type": "string"
               },
               "statusCode": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "isRetryable": {
                 "type": "boolean"
@@ -7841,6 +8187,44 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.installation.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.installation.update-available": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.update-available"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "QuestionOption": {
         "type": "object",
         "properties": {
@@ -7884,6 +8268,19 @@
         },
         "required": ["question", "header", "options"]
       },
+      "QuestionTool": {
+        "type": "object",
+        "properties": {
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg.*"
+          },
+          "callID": {
+            "type": "string"
+          }
+        },
+        "required": ["messageID", "callID"]
+      },
       "QuestionRequest": {
         "type": "object",
         "properties": {
@@ -7903,17 +8300,7 @@
             }
           },
           "tool": {
-            "type": "object",
-            "properties": {
-              "messageID": {
-                "type": "string",
-                "pattern": "^msg.*"
-              },
-              "callID": {
-                "type": "string"
-              }
-            },
-            "required": ["messageID", "callID"]
+            "$ref": "#/components/schemas/QuestionTool"
           }
         },
         "required": ["id", "sessionID", "questions"]
@@ -7937,6 +8324,26 @@
           "type": "string"
         }
       },
+      "QuestionReplied": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "requestID": {
+            "type": "string",
+            "pattern": "^que.*"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionAnswer"
+            }
+          }
+        },
+        "required": ["sessionID", "requestID", "answers"]
+      },
       "Event.question.replied": {
         "type": "object",
         "properties": {
@@ -7945,27 +8352,24 @@
             "const": "question.replied"
           },
           "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que.*"
-              },
-              "answers": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/QuestionAnswer"
-                }
-              }
-            },
-            "required": ["sessionID", "requestID", "answers"]
+            "$ref": "#/components/schemas/QuestionReplied"
           }
         },
         "required": ["type", "properties"]
+      },
+      "QuestionRejected": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "requestID": {
+            "type": "string",
+            "pattern": "^que.*"
+          }
+        },
+        "required": ["sessionID", "requestID"]
       },
       "Event.question.rejected": {
         "type": "object",
@@ -7975,18 +8379,7 @@
             "const": "question.rejected"
           },
           "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que.*"
-              }
-            },
-            "required": ["sessionID", "requestID"]
+            "$ref": "#/components/schemas/QuestionRejected"
           }
         },
         "required": ["type", "properties"]
@@ -8055,13 +8448,17 @@
                 "const": "retry"
               },
               "attempt": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "message": {
                 "type": "string"
               },
               "next": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["type", "attempt", "message", "next"]
@@ -8226,8 +8623,9 @@
               },
               "duration": {
                 "description": "Duration in milliseconds",
-                "default": 5000,
-                "type": "number"
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["message", "variant"]
@@ -8345,6 +8743,102 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.workspace.ready": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "workspace.ready"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["name"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.workspace.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "workspace.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.workspace.restore": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "workspace.restore"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "workspaceID": {
+                "type": "string",
+                "pattern": "^wrk.*"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "step": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["workspaceID", "sessionID", "total", "step"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.workspace.status": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "workspace.status"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "workspaceID": {
+                "type": "string",
+                "pattern": "^wrk.*"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["connected", "connecting", "disconnected", "error"]
+              }
+            },
+            "required": ["workspaceID", "status"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.worktree.ready": {
         "type": "object",
         "properties": {
@@ -8413,7 +8907,9 @@
             "enum": ["running", "exited"]
           },
           "pid": {
-            "type": "number"
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": ["id", "title", "command", "args", "cwd", "status", "pid"]
@@ -8471,7 +8967,9 @@
                 "pattern": "^pty.*"
               },
               "exitCode": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["id", "exitCode"]
@@ -8495,71 +8993,6 @@
               }
             },
             "required": ["id"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.workspace.ready": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "workspace.ready"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": ["name"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.workspace.failed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "workspace.failed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.workspace.status": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "workspace.status"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "workspaceID": {
-                "type": "string",
-                "pattern": "^wrk.*"
-              },
-              "status": {
-                "type": "string",
-                "enum": ["connected", "connecting", "disconnected", "error"]
-              },
-              "error": {
-                "type": "string"
-              }
-            },
-            "required": ["workspaceID", "status"]
           }
         },
         "required": ["type", "properties"]
@@ -8629,7 +9062,9 @@
             "type": "object",
             "properties": {
               "created": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["created"]
@@ -8707,10 +9142,14 @@
             "type": "object",
             "properties": {
               "created": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "completed": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["created"]
@@ -8778,25 +9217,37 @@
             "type": "object",
             "properties": {
               "total": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "input": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "output": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "reasoning": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "cache": {
                 "type": "object",
                 "properties": {
                   "read": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
                   "write": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["read", "write"]
@@ -8916,10 +9367,14 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "end": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["start"]
@@ -9013,10 +9468,14 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "end": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["start"]
@@ -9032,12 +9491,12 @@
           },
           "start": {
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "maximum": 9007199254740991
           },
           "end": {
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "maximum": 9007199254740991
           }
         },
@@ -9066,10 +9525,14 @@
             "type": "object",
             "properties": {
               "line": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "character": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["line", "character"]
@@ -9078,10 +9541,14 @@
             "type": "object",
             "properties": {
               "line": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "character": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["line", "character"]
@@ -9110,7 +9577,7 @@
           },
           "kind": {
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "maximum": 9007199254740991
           }
         },
@@ -9230,7 +9697,9 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["start"]
@@ -9269,13 +9738,19 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "end": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "compacted": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["start", "end"]
@@ -9317,10 +9792,14 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "end": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["start", "end"]
@@ -9439,25 +9918,37 @@
             "type": "object",
             "properties": {
               "total": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "input": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "output": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "reasoning": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "cache": {
                 "type": "object",
                 "properties": {
                   "read": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
                   "write": {
-                    "type": "number"
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": ["read", "write"]
@@ -9554,12 +10045,12 @@
               },
               "start": {
                 "type": "integer",
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "maximum": 9007199254740991
               },
               "end": {
                 "type": "integer",
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "maximum": 9007199254740991
               }
             },
@@ -9588,7 +10079,9 @@
             "const": "retry"
           },
           "attempt": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "error": {
             "$ref": "#/components/schemas/APIError"
@@ -9597,7 +10090,9 @@
             "type": "object",
             "properties": {
               "created": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["created"]
@@ -9629,6 +10124,10 @@
           },
           "overflow": {
             "type": "boolean"
+          },
+          "tail_start_id": {
+            "type": "string",
+            "pattern": "^msg.*"
           }
         },
         "required": ["id", "sessionID", "messageID", "type", "auto"]
@@ -9691,7 +10190,9 @@
                 "$ref": "#/components/schemas/Part"
               },
               "time": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["sessionID", "part", "time"]
@@ -9772,6 +10273,9 @@
           "directory": {
             "type": "string"
           },
+          "path": {
+            "type": "string"
+          },
           "parentID": {
             "type": "string",
             "pattern": "^ses.*"
@@ -9780,13 +10284,19 @@
             "type": "object",
             "properties": {
               "additions": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "deletions": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "files": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "diffs": {
                 "type": "array",
@@ -9816,13 +10326,19 @@
             "type": "object",
             "properties": {
               "created": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "updated": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "compacting": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "archived": {
                 "type": "number"
@@ -9925,174 +10441,24 @@
         },
         "required": ["type", "properties"]
       },
-      "Event": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Event.project.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.server.instance.disposed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.installation.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.installation.update-available"
-          },
-          {
-            "$ref": "#/components/schemas/Event.server.connected"
-          },
-          {
-            "$ref": "#/components/schemas/Event.global.disposed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.file.edited"
-          },
-          {
-            "$ref": "#/components/schemas/Event.file.watcher.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
-          },
-          {
-            "$ref": "#/components/schemas/Event.lsp.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.message.part.delta"
-          },
-          {
-            "$ref": "#/components/schemas/Event.permission.asked"
-          },
-          {
-            "$ref": "#/components/schemas/Event.permission.replied"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.diff"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.error"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.asked"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.replied"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.rejected"
-          },
-          {
-            "$ref": "#/components/schemas/Event.todo.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.status"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.idle"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.compacted"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.prompt.append"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.command.execute"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.toast.show"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.session.select"
-          },
-          {
-            "$ref": "#/components/schemas/Event.mcp.tools.changed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.mcp.browser.open.failed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.command.executed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.vcs.branch.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.worktree.ready"
-          },
-          {
-            "$ref": "#/components/schemas/Event.worktree.failed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.pty.created"
-          },
-          {
-            "$ref": "#/components/schemas/Event.pty.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.pty.exited"
-          },
-          {
-            "$ref": "#/components/schemas/Event.pty.deleted"
-          },
-          {
-            "$ref": "#/components/schemas/Event.workspace.ready"
-          },
-          {
-            "$ref": "#/components/schemas/Event.workspace.failed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.workspace.status"
-          },
-          {
-            "$ref": "#/components/schemas/Event.message.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.message.removed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.message.part.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.message.part.removed"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.created"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.deleted"
-          }
-        ]
-      },
-      "GlobalEvent": {
-        "type": "object",
-        "properties": {
-          "directory": {
-            "type": "string"
-          },
-          "project": {
-            "type": "string"
-          },
-          "workspace": {
-            "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/Event"
-          }
-        },
-        "required": ["directory", "payload"]
-      },
       "SyncEvent.message.updated": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
+            "const": "sync"
+          },
+          "name": {
+            "type": "string",
             "const": "message.updated.1"
           },
-          "aggregate": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "aggregateID": {
             "type": "string",
             "const": "sessionID"
           },
@@ -10110,16 +10476,26 @@
             "required": ["sessionID", "info"]
           }
         },
-        "required": ["type", "aggregate", "data"]
+        "required": ["type", "name", "id", "seq", "aggregateID", "data"]
       },
       "SyncEvent.message.removed": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
+            "const": "sync"
+          },
+          "name": {
+            "type": "string",
             "const": "message.removed.1"
           },
-          "aggregate": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "aggregateID": {
             "type": "string",
             "const": "sessionID"
           },
@@ -10138,16 +10514,26 @@
             "required": ["sessionID", "messageID"]
           }
         },
-        "required": ["type", "aggregate", "data"]
+        "required": ["type", "name", "id", "seq", "aggregateID", "data"]
       },
       "SyncEvent.message.part.updated": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
+            "const": "sync"
+          },
+          "name": {
+            "type": "string",
             "const": "message.part.updated.1"
           },
-          "aggregate": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "aggregateID": {
             "type": "string",
             "const": "sessionID"
           },
@@ -10162,22 +10548,34 @@
                 "$ref": "#/components/schemas/Part"
               },
               "time": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["sessionID", "part", "time"]
           }
         },
-        "required": ["type", "aggregate", "data"]
+        "required": ["type", "name", "id", "seq", "aggregateID", "data"]
       },
       "SyncEvent.message.part.removed": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
+            "const": "sync"
+          },
+          "name": {
+            "type": "string",
             "const": "message.part.removed.1"
           },
-          "aggregate": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "aggregateID": {
             "type": "string",
             "const": "sessionID"
           },
@@ -10200,16 +10598,26 @@
             "required": ["sessionID", "messageID", "partID"]
           }
         },
-        "required": ["type", "aggregate", "data"]
+        "required": ["type", "name", "id", "seq", "aggregateID", "data"]
       },
       "SyncEvent.session.created": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
+            "const": "sync"
+          },
+          "name": {
+            "type": "string",
             "const": "session.created.1"
           },
-          "aggregate": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "aggregateID": {
             "type": "string",
             "const": "sessionID"
           },
@@ -10227,16 +10635,26 @@
             "required": ["sessionID", "info"]
           }
         },
-        "required": ["type", "aggregate", "data"]
+        "required": ["type", "name", "id", "seq", "aggregateID", "data"]
       },
       "SyncEvent.session.updated": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
+            "const": "sync"
+          },
+          "name": {
+            "type": "string",
             "const": "session.updated.1"
           },
-          "aggregate": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "aggregateID": {
             "type": "string",
             "const": "sessionID"
           },
@@ -10302,6 +10720,16 @@
                       }
                     ]
                   },
+                  "path": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "parentID": {
                     "anyOf": [
                       {
@@ -10319,13 +10747,19 @@
                         "type": "object",
                         "properties": {
                           "additions": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
                           "deletions": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
                           "files": {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
                           "diffs": {
                             "type": "array",
@@ -10354,8 +10788,7 @@
                           }
                         ]
                       }
-                    },
-                    "required": ["url"]
+                    }
                   },
                   "title": {
                     "anyOf": [
@@ -10383,7 +10816,9 @@
                       "created": {
                         "anyOf": [
                           {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
                           {
                             "type": "null"
@@ -10393,7 +10828,9 @@
                       "updated": {
                         "anyOf": [
                           {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
                           {
                             "type": "null"
@@ -10403,7 +10840,9 @@
                       "compacting": {
                         "anyOf": [
                           {
-                            "type": "number"
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
                           {
                             "type": "null"
@@ -10420,8 +10859,7 @@
                           }
                         ]
                       }
-                    },
-                    "required": ["created", "updated", "compacting", "archived"]
+                    }
                   },
                   "permission": {
                     "anyOf": [
@@ -10460,35 +10898,32 @@
                       }
                     ]
                   }
-                },
-                "required": [
-                  "id",
-                  "slug",
-                  "projectID",
-                  "workspaceID",
-                  "directory",
-                  "parentID",
-                  "summary",
-                  "title",
-                  "version",
-                  "permission",
-                  "revert"
-                ]
+                }
               }
             },
             "required": ["sessionID", "info"]
           }
         },
-        "required": ["type", "aggregate", "data"]
+        "required": ["type", "name", "id", "seq", "aggregateID", "data"]
       },
       "SyncEvent.session.deleted": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
+            "const": "sync"
+          },
+          "name": {
+            "type": "string",
             "const": "session.deleted.1"
           },
-          "aggregate": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "number"
+          },
+          "aggregateID": {
             "type": "string",
             "const": "sessionID"
           },
@@ -10506,16 +10941,188 @@
             "required": ["sessionID", "info"]
           }
         },
-        "required": ["type", "aggregate", "data"]
+        "required": ["type", "name", "id", "seq", "aggregateID", "data"]
       },
-      "SyncEvent": {
+      "GlobalEvent": {
         "type": "object",
         "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          },
           "payload": {
-            "$ref": "#/components/schemas/SyncEvent"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Event.project.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.server.instance.disposed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.server.connected"
+              },
+              {
+                "$ref": "#/components/schemas/Event.global.disposed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.file.edited"
+              },
+              {
+                "$ref": "#/components/schemas/Event.file.watcher.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
+              },
+              {
+                "$ref": "#/components/schemas/Event.lsp.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.message.part.delta"
+              },
+              {
+                "$ref": "#/components/schemas/Event.permission.asked"
+              },
+              {
+                "$ref": "#/components/schemas/Event.permission.replied"
+              },
+              {
+                "$ref": "#/components/schemas/Event.session.diff"
+              },
+              {
+                "$ref": "#/components/schemas/Event.session.error"
+              },
+              {
+                "$ref": "#/components/schemas/Event.installation.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.installation.update-available"
+              },
+              {
+                "$ref": "#/components/schemas/Event.question.asked"
+              },
+              {
+                "$ref": "#/components/schemas/Event.question.replied"
+              },
+              {
+                "$ref": "#/components/schemas/Event.question.rejected"
+              },
+              {
+                "$ref": "#/components/schemas/Event.todo.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.session.status"
+              },
+              {
+                "$ref": "#/components/schemas/Event.session.idle"
+              },
+              {
+                "$ref": "#/components/schemas/Event.session.compacted"
+              },
+              {
+                "$ref": "#/components/schemas/Event.tui.prompt.append"
+              },
+              {
+                "$ref": "#/components/schemas/Event.tui.command.execute"
+              },
+              {
+                "$ref": "#/components/schemas/Event.tui.toast.show"
+              },
+              {
+                "$ref": "#/components/schemas/Event.tui.session.select"
+              },
+              {
+                "$ref": "#/components/schemas/Event.mcp.tools.changed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.mcp.browser.open.failed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.command.executed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.vcs.branch.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.workspace.ready"
+              },
+              {
+                "$ref": "#/components/schemas/Event.workspace.failed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.workspace.restore"
+              },
+              {
+                "$ref": "#/components/schemas/Event.workspace.status"
+              },
+              {
+                "$ref": "#/components/schemas/Event.worktree.ready"
+              },
+              {
+                "$ref": "#/components/schemas/Event.worktree.failed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.pty.created"
+              },
+              {
+                "$ref": "#/components/schemas/Event.pty.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.pty.exited"
+              },
+              {
+                "$ref": "#/components/schemas/Event.pty.deleted"
+              },
+              {
+                "$ref": "#/components/schemas/Event.message.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.message.removed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.message.part.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.message.part.removed"
+              },
+              {
+                "$ref": "#/components/schemas/Event.session.created"
+              },
+              {
+                "$ref": "#/components/schemas/Event.session.updated"
+              },
+              {
+                "$ref": "#/components/schemas/Event.session.deleted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEvent.message.updated"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEvent.message.removed"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEvent.message.part.updated"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEvent.message.part.removed"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEvent.session.created"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEvent.session.updated"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEvent.session.deleted"
+              }
+            ]
           }
         },
-        "required": ["payload"]
+        "required": ["directory", "payload"]
       },
       "LogLevel": {
         "description": "Log level",
@@ -10551,8 +11158,7 @@
               "type": "string"
             }
           }
-        },
-        "additionalProperties": false
+        }
       },
       "PermissionActionConfig": {
         "type": "string",
@@ -10580,14 +11186,11 @@
       "PermissionConfig": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/PermissionActionConfig"
+          },
+          {
             "type": "object",
             "properties": {
-              "__originalKeys": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
               "read": {
                 "$ref": "#/components/schemas/PermissionRuleConfig"
               },
@@ -10624,9 +11227,6 @@
               "websearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
-              "codesearch": {
-                "$ref": "#/components/schemas/PermissionActionConfig"
-              },
               "lsp": {
                 "$ref": "#/components/schemas/PermissionRuleConfig"
               },
@@ -10640,9 +11240,6 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/PermissionRuleConfig"
             }
-          },
-          {
-            "$ref": "#/components/schemas/PermissionActionConfig"
           }
         ]
       },
@@ -10782,13 +11379,11 @@
                 "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
                 "anyOf": [
                   {
-                    "description": "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
                   },
                   {
-                    "description": "Disable timeout for this provider entirely.",
                     "type": "boolean",
                     "const": false
                   }
@@ -10849,8 +11444,7 @@
                           "enum": ["reasoning_content", "reasoning_details"]
                         }
                       },
-                      "required": ["field"],
-                      "additionalProperties": false
+                      "required": ["field"]
                     }
                   ]
                 },
@@ -10979,8 +11573,7 @@
               }
             }
           }
-        },
-        "additionalProperties": false
+        }
       },
       "McpLocalConfig": {
         "type": "object",
@@ -11018,8 +11611,7 @@
             "maximum": 9007199254740991
           }
         },
-        "required": ["type", "command"],
-        "additionalProperties": false
+        "required": ["type", "command"]
       },
       "McpOAuthConfig": {
         "type": "object",
@@ -11040,8 +11632,7 @@
             "description": "OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).",
             "type": "string"
           }
-        },
-        "additionalProperties": false
+        }
       },
       "McpRemoteConfig": {
         "type": "object",
@@ -11088,8 +11679,7 @@
             "maximum": 9007199254740991
           }
         },
-        "required": ["type", "url"],
-        "additionalProperties": false
+        "required": ["type", "url"]
       },
       "LayoutConfig": {
         "description": "@deprecated Always uses stretch layout.",
@@ -11101,6 +11691,10 @@
         "properties": {
           "$schema": {
             "description": "JSON schema reference for configuration validation",
+            "type": "string"
+          },
+          "shell": {
+            "description": "Default shell to use for terminal and bash tool",
             "type": "string"
           },
           "logLevel": {
@@ -11328,8 +11922,7 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["enabled"],
-                  "additionalProperties": false
+                  "required": ["enabled"]
                 }
               ]
             }
@@ -11337,8 +11930,7 @@
           "formatter": {
             "anyOf": [
               {
-                "type": "boolean",
-                "const": false
+                "type": "boolean"
               },
               {
                 "type": "object",
@@ -11380,8 +11972,7 @@
           "lsp": {
             "anyOf": [
               {
-                "type": "boolean",
-                "const": false
+                "type": "boolean"
               },
               {
                 "type": "object",
@@ -11473,6 +12064,24 @@
               }
             }
           },
+          "tool_output": {
+            "description": "Thresholds for truncating tool output. When output exceeds either limit, the full text is written to the truncation directory and a preview is returned.",
+            "type": "object",
+            "properties": {
+              "max_lines": {
+                "description": "Maximum lines of tool output before it is truncated and saved to disk (default: 2000)",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "max_bytes": {
+                "description": "Maximum bytes of tool output before it is truncated and saved to disk (default: 51200)",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            }
+          },
           "compaction": {
             "type": "object",
             "properties": {
@@ -11483,6 +12092,18 @@
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"
+              },
+              "tail_turns": {
+                "description": "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "preserve_recent_tokens": {
+                "description": "Maximum number of tokens from recent turns to preserve verbatim after compaction",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "reserved": {
                 "description": "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
@@ -11563,7 +12184,9 @@
             "type": "string"
           },
           "expires": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "accountId": {
             "type": "string"
@@ -11624,6 +12247,53 @@
             "$ref": "#/components/schemas/WellKnownAuth"
           }
         ]
+      },
+      "Workspace": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^wrk.*"
+          },
+          "type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extra": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectID": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID"]
       },
       "NotFoundError": {
         "type": "object",
@@ -11906,6 +12576,26 @@
         },
         "required": ["id", "name", "source", "env", "options", "models"]
       },
+      "ConsoleState": {
+        "type": "object",
+        "properties": {
+          "consoleManagedProviders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "activeOrgName": {
+            "type": "string"
+          },
+          "switchableOrgCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["consoleManagedProviders", "switchableOrgCount"]
+      },
       "ToolIDs": {
         "type": "array",
         "items": {
@@ -11930,53 +12620,6 @@
         "items": {
           "$ref": "#/components/schemas/ToolListItem"
         }
-      },
-      "Workspace": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^wrk.*"
-          },
-          "type": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "branch": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "directory": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "extra": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "projectID": {
-            "type": "string"
-          }
-        },
-        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID"]
       },
       "Worktree": {
         "type": "object",
@@ -12058,6 +12701,9 @@
           "directory": {
             "type": "string"
           },
+          "path": {
+            "type": "string"
+          },
           "parentID": {
             "type": "string",
             "pattern": "^ses.*"
@@ -12066,13 +12712,19 @@
             "type": "object",
             "properties": {
               "additions": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "deletions": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "files": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "diffs": {
                 "type": "array",
@@ -12102,13 +12754,19 @@
             "type": "object",
             "properties": {
               "created": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "updated": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "compacting": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "archived": {
                 "type": "number"
@@ -12197,10 +12855,14 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               },
               "end": {
-                "type": "number"
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": ["start"]
@@ -12263,12 +12925,12 @@
               },
               "start": {
                 "type": "integer",
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "maximum": 9007199254740991
               },
               "end": {
                 "type": "integer",
-                "minimum": -9007199254740991,
+                "minimum": 0,
                 "maximum": 9007199254740991
               }
             },
@@ -12319,16 +12981,8 @@
         "type": "object",
         "properties": {
           "type": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "oauth"
-              },
-              {
-                "type": "string",
-                "const": "api"
-              }
-            ]
+            "type": "string",
+            "enum": ["oauth", "api"]
           },
           "label": {
             "type": "string"
@@ -12360,16 +13014,8 @@
                           "type": "string"
                         },
                         "op": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "const": "eq"
-                            },
-                            {
-                              "type": "string",
-                              "const": "neq"
-                            }
-                          ]
+                          "type": "string",
+                          "enum": ["eq", "neq"]
                         },
                         "value": {
                           "type": "string"
@@ -12418,16 +13064,8 @@
                           "type": "string"
                         },
                         "op": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "const": "eq"
-                            },
-                            {
-                              "type": "string",
-                              "const": "neq"
-                            }
-                          ]
+                          "type": "string",
+                          "enum": ["eq", "neq"]
                         },
                         "value": {
                           "type": "string"
@@ -12451,16 +13089,8 @@
             "type": "string"
           },
           "method": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "auto"
-              },
-              {
-                "type": "string",
-                "const": "code"
-              }
-            ]
+            "type": "string",
+            "enum": ["auto", "code"]
           },
           "instructions": {
             "type": "string"
@@ -12475,7 +13105,9 @@
             "type": "string"
           },
           "kind": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "location": {
             "type": "object",
@@ -12548,16 +13180,24 @@
                   "type": "object",
                   "properties": {
                     "oldStart": {
-                      "type": "number"
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "oldLines": {
-                      "type": "number"
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "newStart": {
-                      "type": "number"
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "newLines": {
-                      "type": "number"
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     },
                     "lines": {
                       "type": "array",
@@ -12593,12 +13233,12 @@
           },
           "added": {
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "maximum": 9007199254740991
           },
           "removed": {
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "maximum": 9007199254740991
           },
           "status": {
@@ -12607,6 +13247,151 @@
           }
         },
         "required": ["path", "added", "removed", "status"]
+      },
+      "Event": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Event.project.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.server.instance.disposed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.file.edited"
+          },
+          {
+            "$ref": "#/components/schemas/Event.file.watcher.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
+          },
+          {
+            "$ref": "#/components/schemas/Event.lsp.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.message.part.delta"
+          },
+          {
+            "$ref": "#/components/schemas/Event.permission.asked"
+          },
+          {
+            "$ref": "#/components/schemas/Event.permission.replied"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.diff"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.error"
+          },
+          {
+            "$ref": "#/components/schemas/Event.installation.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.installation.update-available"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.asked"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.replied"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.rejected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.todo.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.status"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.idle"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.compacted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.prompt.append"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.command.execute"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.toast.show"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.session.select"
+          },
+          {
+            "$ref": "#/components/schemas/Event.mcp.tools.changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.mcp.browser.open.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.command.executed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.vcs.branch.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.workspace.ready"
+          },
+          {
+            "$ref": "#/components/schemas/Event.workspace.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.workspace.restore"
+          },
+          {
+            "$ref": "#/components/schemas/Event.workspace.status"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.ready"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.failed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.pty.created"
+          },
+          {
+            "$ref": "#/components/schemas/Event.pty.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.pty.exited"
+          },
+          {
+            "$ref": "#/components/schemas/Event.pty.deleted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.message.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.message.removed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.message.part.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.message.part.removed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.created"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.deleted"
+          }
+        ]
       },
       "MCPStatusConnected": {
         "type": "object",
@@ -12683,6 +13468,15 @@
           }
         ]
       },
+      "McpUnsupportedOAuthError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["error"]
+      },
       "Path": {
         "type": "object",
         "properties": {
@@ -12725,10 +13519,14 @@
             "type": "string"
           },
           "additions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "deletions": {
-            "type": "number"
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "status": {
             "type": "string",
@@ -12835,9 +13633,7 @@
             "additionalProperties": {}
           },
           "steps": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
+            "type": "number"
           }
         },
         "required": ["name", "mode", "permission", "options"]
