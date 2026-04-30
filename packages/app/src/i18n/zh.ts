@@ -37,6 +37,9 @@ export const dict = {
   "command.project.switch": "切换项目",
   "command.project.copyPath": "复制工作区路径",
   "command.project.copyPath.description": "复制当前工作区的绝对路径到剪贴板",
+  "command.project.openInFinder": "在 Finder 打开",
+  "command.project.openInFileExplorer": "在文件资源管理器打开",
+  "command.project.openInFileManager": "在文件管理器打开",
 
   "command.project.open": "打开项目",
   "command.project.switch": "切换项目",

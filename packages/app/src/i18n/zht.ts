@@ -27,6 +27,9 @@ export const dict = {
 
   "command.sidebar.toggle": "切換側邊欄",
   "command.project.open": "開啟專案",
+  "command.project.openInFinder": "在 Finder 中開啟",
+  "command.project.openInFileExplorer": "在檔案總管中開啟",
+  "command.project.openInFileManager": "在檔案管理員中開啟",
   "command.provider.connect": "連接提供者",
   "command.server.switch": "切換伺服器",
   "command.settings.open": "開啟設定",

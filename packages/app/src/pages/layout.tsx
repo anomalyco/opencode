@@ -1282,10 +1282,10 @@ export default function Layout(props: ParentProps) {
         id: "project.openInFinder",
         title:
           platform.os === "macos"
-            ? language.t("session.header.open.finder")
+            ? language.t("command.project.openInFinder")
             : platform.os === "windows"
-              ? language.t("session.header.open.fileExplorer")
-              : language.t("session.header.open.fileManager"),
+              ? language.t("command.project.openInFileExplorer")
+              : language.t("command.project.openInFileManager"),
         category: language.t("command.category.project"),
         disabled: !params.dir || (platform.os === "windows" ? !platform.openPath : !platform.openInFinder),
         onSelect: async () => {

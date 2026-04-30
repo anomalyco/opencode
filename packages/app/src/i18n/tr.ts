@@ -27,6 +27,9 @@ export const dict = {
 
   "command.sidebar.toggle": "Kenar çubuğunu aç/kapat",
   "command.project.open": "Proje aç",
+  "command.project.openInFinder": "Open in Finder",
+  "command.project.openInFileExplorer": "Open in File Explorer",
+  "command.project.openInFileManager": "Open in File Manager",
   "command.provider.connect": "Sağlayıcı bağla",
   "command.server.switch": "Sunucu değiştir",
   "command.settings.open": "Ayarları aç",

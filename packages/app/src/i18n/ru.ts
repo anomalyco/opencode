@@ -23,6 +23,9 @@ export const dict = {
 
   "command.sidebar.toggle": "Переключить боковую панель",
   "command.project.open": "Открыть проект",
+  "command.project.openInFinder": "Open in Finder",
+  "command.project.openInFileExplorer": "Open in File Explorer",
+  "command.project.openInFileManager": "Open in File Manager",
   "command.provider.connect": "Подключить провайдера",
   "command.server.switch": "Переключить сервер",
   "command.settings.open": "Открыть настройки",

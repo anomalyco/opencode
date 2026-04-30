@@ -23,6 +23,9 @@ export const dict = {
 
   "command.sidebar.toggle": "สลับแถบข้าง",
   "command.project.open": "เปิดโปรเจกต์",
+  "command.project.openInFinder": "Open in Finder",
+  "command.project.openInFileExplorer": "Open in File Explorer",
+  "command.project.openInFileManager": "Open in File Manager",
   "command.provider.connect": "เชื่อมต่อผู้ให้บริการ",
   "command.server.switch": "สลับเซิร์ฟเวอร์",
   "command.settings.open": "เปิดการตั้งค่า",
