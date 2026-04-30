@@ -19,7 +19,7 @@
 - 例外:仅追加依赖到 `package.json` / `Cargo.toml` 不需要 marker
 
 ### R3. 三类 hardcode 禁令
-- **品牌字符串**(productName/identifier)→ 走 `packages/branding/tauri-overrides/{dev,beta,prod}.json` override(不改 base `tauri.conf.json`)。**Bundle ID 命名规则**: prod=`ai.deskfox.app` / beta=`...beta` / dev=`...dev`(reverse-DNS 与 `deskfox.ai` 域名对齐),详见 [`docs/governance/Bundle-ID-命名规则.md`](docs/governance/Bundle-ID-命名规则.md)
+- **品牌字符串**(productName/identifier)→ 走 `packages/branding/tauri-overrides/{dev,beta,prod}.json` override(不改 base `tauri.conf.json`)。**应用身份命名规则**:Mac Bundle ID 三档(prod=`ai.deskfox.app` / beta=`...beta` / dev=`...dev`,reverse-DNS 与 `deskfox.ai` 域名对齐);Win AppId 三档(prod GUID 锁死、beta/dev 待落地 `feat/win-tri-env-appid`),详见 [`docs/governance/应用身份-命名规则.md`](docs/governance/应用身份-命名规则.md)
 - **主题色/字号** → 自己入口 CSS `:root { --primary: ... }` 覆盖,**不改** `packages/ui/` 内部 token
 - **icon/启动图资源** → 自己目录放新资源 + build 脚本替换,**不直接覆盖** `packages/desktop/src-tauri/icons/`
 
@@ -92,7 +92,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 | 改动规则细则 | `docs/governance/改动规则.md` | 白黑名单 / baseline tag / diff 阈值 / hook 体系 |
 | **上游 merge SOP**(本次新增) | `docs/governance/UPSTREAM-MERGE-GUIDE.md` | 与 sst/opencode 合并的完整 checklist + 自动化辅助 |
 | DeskFox 品牌替换 | `docs/governance/DeskFox-品牌替换.md` | 已落地 |
-| Bundle ID 命名规则 | `docs/governance/Bundle-ID-命名规则.md` | macOS reverse-DNS 三档(prod/beta/dev),与 `deskfox.ai` 域名对齐,merge upstream 维护规则 |
+| 应用身份命名规则 | `docs/governance/应用身份-命名规则.md` | 两端规则统一:Mac Bundle ID 三档(已落地,与 `deskfox.ai` 域名对齐)+ Win AppId 三档(待落地 `feat/win-tri-env-appid`),merge upstream 维护规则 |
 | 跨平台协作 | `docs/governance/跨平台协作.md` | 三端环境(目前已收口 Win) |
 | 数字签名问题 | `docs/governance/数字签名问题.md` | installer 不签名决策 |
 | 改动索引 | `本仓 改动日志.md` | feature 索引(规范 v2 起,详细在 docs/features/) |
