@@ -28,8 +28,8 @@ const commandAliases = {
 export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handlers) =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const publishCommand = (command: typeof TuiEvent.CommandExecute.properties.Type.command) =>
-      bus.publish(TuiEvent.CommandExecute, { command })
+    const publishCommand = (command: typeof TuiEvent.CommandExecute.properties.Type.command | undefined) =>
+      bus.publish(TuiEvent.CommandExecute, { command } as typeof TuiEvent.CommandExecute.properties.Type)
 
     const appendPrompt = Effect.fn("TuiHttpApi.appendPrompt")(function* (ctx: {
       payload: typeof TuiEvent.PromptAppend.properties.Type
@@ -71,7 +71,8 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
     const executeCommand = Effect.fn("TuiHttpApi.executeCommand")(function* (ctx: {
       payload: typeof CommandPayload.Type
     }) {
-      yield* publishCommand(commandAliases[ctx.payload.command as keyof typeof commandAliases] ?? ctx.payload.command)
+      // Legacy only publishes known aliases; unknown commands become undefined.
+      yield* publishCommand(commandAliases[ctx.payload.command as keyof typeof commandAliases])
       return true
     })
 

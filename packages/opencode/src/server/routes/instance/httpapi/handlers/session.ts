@@ -62,7 +62,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return Instance.restore(instance, () =>
         Array.from(
           Session.list({
-            directory: ctx.query.directory,
+            directory: ctx.query.scope === "project" ? undefined : ctx.query.directory,
             scope: ctx.query.scope,
             path: ctx.query.path,
             roots: ctx.query.roots,
