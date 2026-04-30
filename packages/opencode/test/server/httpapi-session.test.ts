@@ -290,6 +290,28 @@ describe("session HttpApi", () => {
   )
 
   it.live(
+    "matches legacy paginated message link headers",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const headers = { "x-opencode-directory": tmp.path }
+        const session = yield* createSession(tmp.path, { title: "messages" })
+        yield* createTextMessage(tmp.path, session.id, "first")
+        yield* createTextMessage(tmp.path, session.id, "second")
+        const route = `${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=1`
+
+        const legacy = yield* requestWithBackend(false, route, { headers })
+        const effect = yield* requestWithBackend(true, route, { headers })
+
+        expect(effect.headers.get("x-next-cursor")).toBe(legacy.headers.get("x-next-cursor"))
+        expect(effect.headers.get("link")).toBe(legacy.headers.get("link"))
+        expect(effect.headers.get("access-control-expose-headers")).toBe(
+          legacy.headers.get("access-control-expose-headers"),
+        )
+      }),
+    ),
+  )
+
+  it.live(
     "serves message mutation routes through Hono bridge",
     withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
