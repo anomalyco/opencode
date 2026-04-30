@@ -13,11 +13,6 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v4
 
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: 安装 Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -26,31 +21,14 @@ jobs:
       - name: 安装依赖
         run: bun install
 
-      - name: 构建主进程和渲染进程
+      - name: 构建独立可执行文件
         run: |
-          cd packages/desktop-electron
-          bun run build
+          cd packages/opencode
+          bun run script/build.ts --single
 
-      - name: 查看 out 目录
-        run: ls packages/desktop-electron/out/
-
-      - name: 打包成可执行文件
-        run: |
-          cd packages/desktop-electron
-          npx electron-builder --win --publish never --config electron-builder.config.ts
-        continue-on-error: true
-
-      - name: 如果上面失败，尝试不带配置文件
-        run: |
-          cd packages/desktop-electron
-          npx electron-builder --win --publish never
-        continue-on-error: true
-
-      - name: 上传安装包
+      - name: 上传可执行文件
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-win-installer
-          path: |
-            packages/desktop-electron/dist/*.exe
-            packages/desktop-electron/dist/*.msi
-          if-no-files-found: warn
+          name: opencode-win-x64
+          path: packages/opencode/dist/opencode-windows-x64/bin/opencode.exe
+          if-no-files-found: error
