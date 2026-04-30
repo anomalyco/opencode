@@ -121,17 +121,22 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
 )
 
 const uiRoutes = lazy(() => UIRoutes())
-const uiRoute = HttpRouter.add("*", "/*", (request) =>
-  Effect.promise(async () =>
-    uiRoutes().fetch(
-      request.source instanceof Request
-        ? request.source
-        : new Request(new URL(request.originalUrl, "http://localhost"), {
-            method: request.method,
-            headers: request.headers,
-          }),
-    ),
-  ).pipe(Effect.map(HttpServerResponse.fromWeb)),
+const uiRoute = HttpRouter.add(
+  "*",
+  "/*",
+  (request) =>
+    Effect.promise(async () =>
+      uiRoutes().fetch(
+        request.source instanceof Request
+          ? request.source
+          : new Request(new URL(request.originalUrl, "http://localhost"), {
+              method: request.method,
+              headers: request.headers,
+            }),
+      ),
+    ).pipe(Effect.map(HttpServerResponse.fromWeb)),
+).pipe(
+  Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))),
 )
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes, uiRoute).pipe(
