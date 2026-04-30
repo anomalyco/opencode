@@ -108,12 +108,12 @@ git push origin dev
 
 ## 五、未结尾巴(转交后续)
 
-| 事项 | 入口 | 性质 |
-|---|---|---|
-| `github/dev` 幽灵分支处置 | 1-spec.md 动作计划 #11 | 不紧急,不影响功能 |
-| `feat/win-tri-env-appid` 立项 | 1-spec.md 动作计划 #5 | 这周内做 |
-| `CLAUDE.md` "默认仓库约定"段更新 | 1-spec.md 动作计划 #6 | 单独小 feat,文档撒谎不影响功能 |
-| 第一次合上游(sst/opencode 282 笔) | 1-spec.md 第四节 4.2 | 这次切换的下游里程碑 |
+| 事项 | 入口 | 性质 | 状态 |
+|---|---|---|---|
+| `github/dev` 幽灵分支处置 | 1-spec.md 动作计划 #11 | 不紧急,不影响功能 | 待办 |
+| `feat/win-tri-env-appid` 立项 | 1-spec.md 动作计划 #5 | 这周内做 | 待办 |
+| `CLAUDE.md` "默认仓库约定"段更新 | 1-spec.md 动作计划 #6 | 文档撒谎不影响功能 | ✅ done(本笔 follow-up commit)|
+| 第一次合上游(sst/opencode 282 笔) | 1-spec.md 第四节 4.2 | 这次切换的下游里程碑 | 待办 |
 
 ---
 

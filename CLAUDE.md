@@ -101,12 +101,21 @@ grep `[feat: <id>]` 能反查到对应文档。
 | 早期调研 | `docs/history/规划-archive/01..11-*.md` | Phase 0-2 用过现已超越,锁死保留 |
 | 沟通历史 | `docs/history/沟通记录.md` | 关键决策时刻对话日志 |
 
-## 默认仓库约定
+## 默认仓库约定(分支策略 v2,2026-04-30 起)
 
-- 默认分支:`dev`(跟随 `upstream/dev`)
-- 功能分支:`feat/<name>`,例 `feat/editable-file-viewer`
-- baseline tag:`upstream-baseline`(同步起点),`pre-rebase-<日期>`(rebase 前)
-- 远端:`origin` 双 push gitee + github;`upstream` 只读指 sst/opencode
+- **默认分支**:`dev` — **单一稳定主干**,不自动跟随 `upstream/dev`,合上游是主动决策(不是被动跟随)
+- **功能分支**:`feat/<name>` — 短命,合 dev 后即退役(不再有"feat 主线"模式)
+- **上游同步**:临时分支 `sync/upstream-<日期>`,merge 完即删
+- **三档环境**(dev/beta/prod):靠 **build 参数**切换(`pack-installer.* -Env <env>`),**不靠分支** — 同一 commit 可出三档产物
+- **tag 命名**:
+  - `upstream-baseline`(同步起点)/ `pre-rebase-<日期>`(rebase 前)/ `pre-strategy-v2-<日期>`(关键切换兜底)
+  - `ship-<env>-<版本>`,例 `ship-prod-2026.4.29.2`
+- **远端**:
+  - `origin` **临时只 push gitee**(github/dev 因 v2 切换时是上游 snapshot 幽灵分支,处置后置)
+  - `github` 独立 remote(可 fetch,push 单独决策)
+  - `upstream` 只读指 sst/opencode
+
+> 完整模型与切换逻辑见 [`docs/features/分支策略-v2/1-spec.md`](docs/features/分支策略-v2/1-spec.md)。
 
 ## 产品名
 
