@@ -235,11 +235,15 @@ describe("session HttpApi", () => {
         const effect = yield* createSession(tmp.path, { title: "effect" })
         const body = JSON.stringify({ time: { archived: -1 } })
 
-        const legacyResponse = yield* requestWithBackend(false, pathFor(SessionPaths.update, { sessionID: legacy.id }), {
-          method: "PATCH",
-          headers,
-          body,
-        })
+        const legacyResponse = yield* requestWithBackend(
+          false,
+          pathFor(SessionPaths.update, { sessionID: legacy.id }),
+          {
+            method: "PATCH",
+            headers,
+            body,
+          },
+        )
         expect(legacyResponse.status).toBe(200)
         expect((yield* json<Session.Info>(legacyResponse)).time.archived).toBe(-1)
 

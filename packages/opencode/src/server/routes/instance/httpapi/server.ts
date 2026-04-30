@@ -69,10 +69,13 @@ const runtime = HttpRouter.middleware()(
   ),
 ).layer
 
-const cors = HttpRouter.middleware(HttpMiddleware.cors({
-  allowedOrigins: isAllowedCorsOrigin,
-  maxAge: 86_400,
-}), { global: true })
+const cors = HttpRouter.middleware(
+  HttpMiddleware.cors({
+    allowedOrigins: isAllowedCorsOrigin,
+    maxAge: 86_400,
+  }),
+  { global: true },
+)
 
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
