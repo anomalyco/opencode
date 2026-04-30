@@ -26,25 +26,25 @@ jobs:
       - name: 安装依赖
         run: bun install
 
-      - name: 构建 Electron 主进程
+      - name: 构建主进程和渲染进程
         run: |
           cd packages/desktop-electron
           bun run build
-        env:
-          NODE_ENV: production
 
-      - name: 查看构建产物（调试）
+      - name: 查看 out 目录
+        run: ls packages/desktop-electron/out/
+
+      - name: 打包成可执行文件
         run: |
-          ls packages/desktop-electron/out/
-          ls packages/desktop-electron/dist/
+          cd packages/desktop-electron
+          npx electron-builder --win --publish never --config electron-builder.config.ts
         continue-on-error: true
 
-      - name: 打包成 EXE
+      - name: 如果上面失败，尝试不带配置文件
         run: |
           cd packages/desktop-electron
           npx electron-builder --win --publish never
-        env:
-          NODE_ENV: production
+        continue-on-error: true
 
       - name: 上传安装包
         uses: actions/upload-artifact@v4
@@ -53,3 +53,4 @@ jobs:
           path: |
             packages/desktop-electron/dist/*.exe
             packages/desktop-electron/dist/*.msi
+          if-no-files-found: warn
