@@ -688,7 +688,7 @@ export const layer = Layer.effect(
     const startWorkspaceSyncing = Effect.fn("Workspace.startWorkspaceSyncing")(function* (projectID: ProjectID) {
       // This session table join makes this query only return
       // workspaces that have sessions
-      const spaces = yield* db((db) =>
+      const rows = yield* db((db) =>
         db
           .selectDistinct({ workspace: WorkspaceTable })
           .from(WorkspaceTable)
@@ -697,8 +697,19 @@ export const layer = Layer.effect(
           .all(),
       )
 
-      for (const row of spaces) {
-        yield* startSync(fromRow(row.workspace)).pipe(Effect.forkDetach)
+      for (const { workspace } of rows) {
+        yield* startSync(fromRow(workspace)).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              setStatus(workspace.id, "error")
+              log.warn("workspace sync failed to start", {
+                workspaceID: workspace.id,
+                error,
+              })
+            }),
+          ),
+          Effect.forkDetach,
+        )
       }
     })
 
@@ -801,12 +812,7 @@ export function waitForSync(workspaceID: WorkspaceID, state: Record<string, numb
 }
 
 export function startWorkspaceSyncing(projectID: ProjectID) {
-  void runPromise((svc) => svc.startWorkspaceSyncing(projectID)).catch((error) => {
-    log.warn("workspace syncing failed to start", {
-      projectID,
-      error,
-    })
-  })
+  void runPromise((svc) => svc.startWorkspaceSyncing(projectID))
 }
 
 export * as Workspace from "./workspace"
