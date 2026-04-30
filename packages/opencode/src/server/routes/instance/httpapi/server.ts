@@ -42,7 +42,7 @@ import { isAllowedCorsOrigin } from "@/server/cors"
 import { serveUIEffect } from "@/server/routes/ui"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { ServerAuthConfig, authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
-import { eventRoute } from "./event"
+import { EventApi, eventHandlers } from "./event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
 import { experimentalHandlers } from "./handlers/experimental"
@@ -86,6 +86,14 @@ const cors = HttpRouter.middleware(
 )
 
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
+const instanceRouterLayer = authorizationRouterMiddleware
+  .combine(instanceRouterMiddleware)
+  .combine(workspaceRouterMiddleware)
+  .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal), Layer.provide(ServerAuthConfig.defaultLayer))
+const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
+  Layer.provide(eventHandlers),
+  Layer.provide(instanceRouterLayer),
+)
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
     configHandlers,
@@ -105,13 +113,8 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   ]),
 )
 
-const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
-  Layer.provide(
-    authorizationRouterMiddleware
-      .combine(instanceRouterMiddleware)
-      .combine(workspaceRouterMiddleware)
-      .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal), Layer.provide(ServerAuthConfig.defaultLayer)),
-  ),
+const rawInstanceRoutes = Layer.mergeAll(ptyConnectRoute).pipe(
+  Layer.provide(instanceRouterLayer),
 )
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
   Layer.provide([
@@ -129,7 +132,7 @@ const uiRoute = HttpRouter.use((router) =>
   }),
 ).pipe(Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))))
 
-export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes, uiRoute).pipe(
+export const routes = Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
   Layer.provide([
     cors,
     runtime,
