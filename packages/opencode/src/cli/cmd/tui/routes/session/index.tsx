@@ -1257,23 +1257,28 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
+  const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const text = createMemo(() => {
+    const markers = files().flatMap((file) => {
+      if (!file.source?.text?.value) return []
+      return [file.source.text.value + " ", file.source.text.value]
+    })
     const texts = props.parts
       .map((x) => {
         if (x.type === "text" && !x.synthetic) {
-          return x.text
+          return markers.reduce((acc, marker) => acc.replaceAll(marker, "").replace(/[ \t]{2,}/g, " "), x.text).trim()
         }
         return null
       })
       .filter(Boolean)
     return texts.join("\n\n")
   })
-  const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
+  const borderColor = createMemo(() => (hover() ? color() : theme.backgroundElement))
   const bubbleMaxWidth = createMemo(() =>
     Math.min(Math.max(1, ctx.width), Math.max(12, Math.min(ctx.width - 4, Math.floor(ctx.width * 0.78)))),
   )
@@ -1282,7 +1287,7 @@ function UserMessage(props: {
 
   return (
     <>
-      <Show when={text()}>
+      <Show when={text() || files().length}>
         <box width="100%" alignItems="flex-start" marginTop={props.index === 0 ? 0 : 1}>
           <box
             id={props.message.id}
@@ -1295,31 +1300,48 @@ function UserMessage(props: {
             onMouseUp={props.onMouseUp}
             flexDirection="row"
             alignItems="flex-start"
+            border={["left"]}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={borderColor()}
             gap={1}
             paddingTop={0}
             paddingBottom={0}
             paddingLeft={1}
-            paddingRight={2}
-            backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundElement}
+            paddingRight={1}
             flexShrink={0}
             maxWidth={bubbleMaxWidth()}
           >
             <text fg={hover() ? color() : theme.textMuted}>›</text>
             <box flexDirection="column" flexShrink={1} paddingRight={1}>
-              <text fg={theme.text}>{text()}</text>
+              <text fg={theme.backgroundElement}>{text()}</text>
               <Show when={files().length}>
                 <box flexDirection="row" paddingBottom={queued() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                   <For each={files()}>
-                    {(file) => {
+                    {(file, index) => {
                       const bg = createMemo(() => {
                         if (file.mime.startsWith("image/")) return theme.accent
                         if (file.mime === "application/pdf") return theme.primary
                         return theme.secondary
                       })
+                      const generatedLabel = createMemo(() => {
+                        if (file.mime.startsWith("image/")) return `image ${index() + 1}`
+                        if (file.mime === "application/pdf") return `pdf ${index() + 1}`
+                        return MIME_BADGE[file.mime] ?? file.mime
+                      })
+                      const generated = createMemo(() => !file.filename || file.filename === "clipboard")
                       return (
                         <text fg={theme.text}>
-                          <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                          <span style={{ bg: theme.backgroundPanel, fg: theme.textMuted }}> {file.filename} </span>
+                          <Show
+                            when={generated()}
+                            fallback={
+                              <>
+                                <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                                <span style={{ bg: theme.backgroundPanel, fg: theme.textMuted }}> {file.filename} </span>
+                              </>
+                            }
+                          >
+                            <span style={{ bg: bg(), fg: theme.background }}> {generatedLabel()} </span>
+                          </Show>
                         </text>
                       )
                     }}

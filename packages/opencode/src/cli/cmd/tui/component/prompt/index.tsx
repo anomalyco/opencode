@@ -945,7 +945,7 @@ export function Prompt(props: PromptProps) {
       start: extmarkStart,
       end: extmarkEnd,
       virtual: true,
-      styleId: pasteStyleId,
+      styleId: fileStyleId,
       typeId: promptPartTypeId,
     })
 
@@ -1067,7 +1067,6 @@ export function Prompt(props: PromptProps) {
         <box border borderColor={theme.backgroundElement}>
           <box
             flexDirection="row"
-            gap={1}
             alignItems="flex-start"
             paddingLeft={2}
             paddingRight={2}
@@ -1076,7 +1075,9 @@ export function Prompt(props: PromptProps) {
             flexShrink={0}
             flexGrow={1}
           >
-            <text fg={highlight()}>›</text>
+            <box width={2} flexShrink={0}>
+              <text fg={highlight()}>›</text>
+            </box>
             <textarea
               flexGrow={1}
               placeholder={placeholderText()}
