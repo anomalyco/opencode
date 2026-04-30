@@ -854,11 +854,17 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         role: "assistant",
         parts: [],
       }
-      // Substitute a space for empty text between signed Anthropic reasoning
+      // Substitute a space for empty text between signed reasoning
       // blocks to keep thinking block positions (and signatures) valid without
       // triggering Anthropic's empty-content rejection or the AI SDK's filter.
+      // Signatures live under the provider-namespaced metadata key: anthropic
+      // (direct API), bedrock (AWS Bedrock), or vertex (GCP Vertex AI).
       const hasSignedReasoning = msg.parts.some(
-        (p) => p.type === "reasoning" && (p.metadata as any)?.anthropic?.signature != null,
+        (p) =>
+          p.type === "reasoning" &&
+          ((p.metadata as any)?.anthropic?.signature != null ||
+            (p.metadata as any)?.bedrock?.signature != null ||
+            (p.metadata as any)?.vertex?.signature != null),
       )
       for (const part of msg.parts) {
         if (part.type === "text") {

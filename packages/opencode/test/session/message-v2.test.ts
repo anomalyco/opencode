@@ -1126,6 +1126,58 @@ describe("session.message-v2.toModelMessage", () => {
     expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("the answer")
   })
 
+  test("substitutes space for empty text when reasoning signature is under 'bedrock' namespace", async () => {
+    // AWS Bedrock hosts Anthropic Claude but stores signatures under metadata.bedrock
+    const assistantID = "m-assistant-bedrock"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "p1"),
+            type: "reasoning",
+            text: "thinking-bedrock",
+            metadata: { bedrock: { signature: "bedrock-sig" } },
+          },
+          { ...basePart(assistantID, "p2"), type: "text", text: "" },
+          { ...basePart(assistantID, "p3"), type: "text", text: "answer" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result).toHaveLength(1)
+    const texts = (result[0].content as any[]).filter((p) => p.type === "text")
+    expect(texts.map((t) => t.text)).toStrictEqual([" ", "answer"])
+  })
+
+  test("substitutes space for empty text when reasoning signature is under 'vertex' namespace", async () => {
+    // GCP Vertex AI hosts Anthropic Claude but stores signatures under metadata.vertex
+    const assistantID = "m-assistant-vertex"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "p1"),
+            type: "reasoning",
+            text: "thinking-vertex",
+            metadata: { vertex: { signature: "vertex-sig" } },
+          },
+          { ...basePart(assistantID, "p2"), type: "text", text: "" },
+          { ...basePart(assistantID, "p3"), type: "text", text: "answer" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result).toHaveLength(1)
+    const texts = (result[0].content as any[]).filter((p) => p.type === "text")
+    expect(texts.map((t) => t.text)).toStrictEqual([" ", "answer"])
+  })
+
   test("leaves empty text alone when reasoning has no Anthropic signature", async () => {
     // Non-Anthropic providers' reasoning doesn't position-validate, so empty text
     // should be filtered normally rather than substituted.
