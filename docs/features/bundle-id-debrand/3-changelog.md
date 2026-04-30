@@ -6,7 +6,7 @@ related: ./3-changelog.md
 
 # bundle-id-debrand — changelog
 
-**关联 commit**: 待回填
+**关联 commit**: `3fd5ceaf5`
 **所在分支**: `feat/editable-file-viewer`
 **规模**: Tiny(3 文件 +3 行,无 1-spec / 2-plan)
 **触发原因**: `prod-bundle-id-fix`(`7618346fe`)只解决了"prod 去掉 `.dev` 后缀"让应用程序网格搜得到,但 prod / beta / dev 三档 Bundle ID 仍带 **`opencode`** 字眼(`ai.opencode.desktop` 系列),共享 sst/opencode 上游的 reverse-DNS 命名空间。两个软件未来同 Mac 共存会:① TCC 权限混 ② `~/Library/Application Support/ai.opencode.*/` 数据目录命名空间共享 ③ URL Scheme / Universal Link 冲突 ④ Crash 报告 / 遥测按 reverse-DNS 关联 ⑤ 法律 / 品牌:DeskFox 是独立产品,不该用 opencode 命名空间。本笔做完整品牌切割,改用 fork 自己的 `ai.deskfox.app` 系列(域名 `deskfox.ai` 在 user 手中)。
