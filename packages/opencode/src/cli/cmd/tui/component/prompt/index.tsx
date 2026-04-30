@@ -875,7 +875,7 @@ export function Prompt(props: PromptProps) {
         const { followupMode: _, ...cleanPayload } = payload
         sdk.client.session.promptAsync(cleanPayload).catch(() => {})
         toast.show({
-          message: followupMode === "steer" ? "Halt and steer..." : "Wait and steer...",
+          message: "Steering...",
           variant: "info",
           duration: 2000,
         })
@@ -1459,8 +1459,7 @@ export function Prompt(props: PromptProps) {
                     })
                     const steerMsg = createMemo(() => {
                       const s = status()
-                      if (s.type === "steer") return "Halt and steer"
-                      if (s.type === "wrap") return "Wait and steer"
+                      if (s.type === "steer" || s.type === "wrap") return "Steering"
                       return null
                     })
                     const message = createMemo(() => {
