@@ -1,7 +1,6 @@
 import { ProxyUtil } from "@/server/proxy-util"
 import { Effect, Stream } from "effect"
 import {
-  FetchHttpClient,
   HttpBody,
   HttpClient,
   HttpClientRequest,
@@ -66,12 +65,13 @@ function statusText(response: unknown) {
 }
 
 export function http(
+  client: HttpClient.HttpClient,
   url: string | URL,
   extra: HeadersInit | undefined,
   request: HttpServerRequest.HttpServerRequest,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.gen(function* () {
-    const response = yield* HttpClient.execute(
+    const response = yield* client.execute(
       HttpClientRequest.make(request.method as never)(url, {
         headers: ProxyUtil.headers(request.headers as HeadersInit, extra),
         body: requestBody(request),
@@ -86,10 +86,7 @@ export function http(
       statusText: statusText(response),
       headers,
     })
-  }).pipe(
-    Effect.provide(FetchHttpClient.layer),
-    Effect.catch(() => Effect.succeed(HttpServerResponse.empty({ status: 500 }))),
-  )
+  }).pipe(Effect.catch(() => Effect.succeed(HttpServerResponse.empty({ status: 500 }))))
 }
 
 export * as HttpApiProxy from "./proxy"

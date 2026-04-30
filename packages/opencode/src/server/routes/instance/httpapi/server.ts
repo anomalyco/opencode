@@ -121,11 +121,10 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
   ]),
 )
 
-const uiRoute = Layer.effectDiscard(
+const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const client = yield* HttpClient.HttpClient
-    const router = yield* HttpRouter.HttpRouter
     yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
   }),
 ).pipe(

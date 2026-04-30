@@ -1,8 +1,8 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import Http from "node:http"
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer, Queue } from "effect"
-import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { HttpApiProxy } from "../../src/server/routes/instance/httpapi/middleware/proxy"
 import { testEffect } from "../lib/effect"
@@ -13,6 +13,8 @@ function serverUrl() {
 
 const testServerLayer = Layer.mergeAll(
   NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
+  NodeServices.layer,
+  FetchHttpClient.layer,
   Socket.layerWebSocketConstructorGlobal,
 )
 const it = testEffect(testServerLayer)
@@ -79,7 +81,8 @@ describe("HttpApi workspace proxy", () => {
       const request = HttpServerRequest.fromWeb(
         new Request("http://localhost/session/abc", { method: "POST", body: "request-body" }),
       )
-      const response = yield* HttpApiProxy.http(`${url}/session/abc?keep=yes`, { "x-extra": "injected" }, request)
+      const httpClient = yield* HttpClient.HttpClient
+      const response = yield* HttpApiProxy.http(httpClient, `${url}/session/abc?keep=yes`, { "x-extra": "injected" }, request)
 
       expect(response.status).toBe(201)
       const client = HttpServerResponse.toClientResponse(response)
@@ -97,7 +100,8 @@ describe("HttpApi workspace proxy", () => {
   it.live("returns 500 when remote is unreachable", () =>
     Effect.gen(function* () {
       const request = HttpServerRequest.fromWeb(new Request("http://localhost/anything"))
-      const response = yield* HttpApiProxy.http("http://127.0.0.1:1/unreachable", undefined, request)
+      const httpClient = yield* HttpClient.HttpClient
+      const response = yield* HttpApiProxy.http(httpClient, "http://127.0.0.1:1/unreachable", undefined, request)
 
       expect(response.status).toBe(500)
     }),
@@ -122,7 +126,8 @@ describe("HttpApi workspace proxy", () => {
           },
         }),
       )
-      yield* HttpApiProxy.http(`${url}/test`, { "x-injected": "extra" }, request)
+      const httpClient = yield* HttpClient.HttpClient
+      yield* HttpApiProxy.http(httpClient, `${url}/test`, { "x-injected": "extra" }, request)
 
       expect(forwarded["x-opencode-directory"]).toBeUndefined()
       expect(forwarded["x-opencode-workspace"]).toBeUndefined()

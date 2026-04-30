@@ -3,6 +3,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer, Queue } from "effect"
 import {
+  FetchHttpClient,
   HttpClient,
   HttpClientRequest,
   HttpRouter,
@@ -66,7 +67,7 @@ type TestHandler<E, R> = (
 ) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
 
 const workspaceRoutingTestLayer = workspaceRouterMiddleware.layer.pipe(
-  Layer.provide(Socket.layerWebSocketConstructorGlobal),
+  Layer.provide([Socket.layerWebSocketConstructorGlobal, FetchHttpClient.layer]),
 )
 
 const serverUrl = HttpServer.HttpServer.use((server) => Effect.succeed(HttpServer.formatAddress(server.address)))

@@ -74,11 +74,10 @@ function app(input?: { password?: string; username?: string }) {
 
 function uiApp(input?: { password?: string; username?: string; client?: Layer.Layer<HttpClient.HttpClient> }) {
   const handler = HttpRouter.toWebHandler(
-    Layer.effectDiscard(
+    HttpRouter.use((router) =>
       Effect.gen(function* () {
         const fs = yield* AppFileSystem.Service
         const client = yield* HttpClient.HttpClient
-        const router = yield* HttpRouter.HttpRouter
         yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
       }),
     ).pipe(
