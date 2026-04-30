@@ -1,6 +1,7 @@
 import { EffectBridge } from "@/effect/bridge"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
+import { handlePtyInput } from "@/pty/input"
 import { Shell } from "@/shell/shell"
 import { Effect } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -8,29 +9,6 @@ import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
 import { CursorQuery, Params, PtyPaths } from "../groups/pty"
-
-const inputDecoder = new TextDecoder("utf-8", { fatal: true })
-
-export function handlePtyInput(
-  handler: { onMessage: (message: string | ArrayBuffer) => void },
-  message: string | Uint8Array,
-) {
-  if (typeof message === "string") {
-    handler.onMessage(message)
-    return Effect.void
-  }
-  return Effect.try({
-    try: () => inputDecoder.decode(message),
-    catch: () => new Error("invalid PTY websocket input"),
-  }).pipe(
-    Effect.catch(() => Effect.succeed(undefined)),
-    Effect.flatMap((decoded) => {
-      if (decoded === undefined) return Effect.void
-      handler.onMessage(decoded)
-      return Effect.void
-    }),
-  )
-}
 
 export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handlers) =>
   Effect.gen(function* () {

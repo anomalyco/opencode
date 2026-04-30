@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { handlePtyInput } from "../../src/server/routes/instance/httpapi/handlers/pty"
+import { handlePtyInput } from "../../src/pty/input"
 
 describe("pty HttpApi websocket input", () => {
   test("does not forward invalid binary frames to the PTY handler", async () => {

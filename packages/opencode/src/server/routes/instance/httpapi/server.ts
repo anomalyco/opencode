@@ -31,6 +31,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
+import { isAllowedCorsOrigin } from "@/server/cors"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
 import { eventRoute } from "./event"
@@ -55,7 +56,6 @@ import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/w
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
-import type { Predicate } from "effect/Predicate"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -69,17 +69,8 @@ const runtime = HttpRouter.middleware()(
   ),
 ).layer
 
-function allowedCorsOrigin(input: string | undefined) {
-  if (!input) return false
-  if (input.startsWith("http://localhost:")) return true
-  if (input.startsWith("http://127.0.0.1:")) return true
-  if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
-    return true
-  return /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)
-}
-
 const cors = HttpRouter.middleware(HttpMiddleware.cors({
-  allowedOrigins: allowedCorsOrigin,
+  allowedOrigins: isAllowedCorsOrigin,
   maxAge: 86_400,
 }), { global: true })
 
@@ -119,23 +110,6 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
 )
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
-  Layer.provide(
-    HttpRouter.cors({
-      maxAge: 86_400,
-      allowedOrigins: ((input) => {
-        return (
-          !input ||
-          input.startsWith("http://localhost:") ||
-          input.startsWith("http://127.0.0.1:") ||
-          input.startsWith("oc://renderer") ||
-          input === "tauri://localhost" ||
-          input === "http://tauri.localhost" ||
-          input === "https://tauri.localhost" ||
-          /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)
-        )
-      }) as Predicate<string> as any,
-    }),
-  ),
   Layer.provide([
     cors,
     runtime,
