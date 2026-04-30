@@ -42,6 +42,12 @@ function buildPathSuffix(): string | undefined {
   if (process.platform === "win32" && process.arch === "x64") {
     return `${LIBREOFFICE_VERSION}/win/x86_64/LibreOffice_${LIBREOFFICE_VERSION}_Win_x86-64.msi`
   }
+  // FORK: macOS LibreOffice DMG download 2026-04-29
+  if (process.platform === "darwin" && (process.arch === "arm64" || process.arch === "x64")) {
+    const dir = process.arch === "arm64" ? "aarch64" : "x86_64"
+    const suffix = process.arch === "arm64" ? "aarch64" : "x86-64"
+    return `${LIBREOFFICE_VERSION}/mac/${dir}/LibreOffice_${LIBREOFFICE_VERSION}_MacOS_${suffix}.dmg`
+  }
   return undefined
 }
 
@@ -115,12 +121,22 @@ async function whichSoffice(): Promise<string | undefined> {
 }
 
 function commonInstallPaths(): string[] {
-  if (process.platform !== "win32") return []
-  return [
-    path.join(process.env.LOCALAPPDATA ?? "", "Programs", "LibreOffice", "program", "soffice.exe"),
-    "C:\\Program Files\\LibreOffice\\program\\soffice.exe",
-    "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe",
-  ].filter(Boolean)
+  if (process.platform === "win32") {
+    return [
+      path.join(process.env.LOCALAPPDATA ?? "", "Programs", "LibreOffice", "program", "soffice.exe"),
+      "C:\\Program Files\\LibreOffice\\program\\soffice.exe",
+      "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe",
+    ].filter(Boolean)
+  }
+  // FORK: macOS soffice detection paths 2026-04-29
+  if (process.platform === "darwin") {
+    const home = process.env.HOME ?? ""
+    return [
+      path.join(home, "Applications/LibreOffice.app/Contents/MacOS/soffice"),
+      "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    ]
+  }
+  return []
 }
 
 export async function detectSofficePath(force = false): Promise<string | undefined> {
@@ -164,7 +180,7 @@ export async function status(): Promise<ToolingStatus> {
     installed: !!sofficePath,
     sofficePath,
     platformSupported: isPlatformSupported(),
-    downloadSizeMB: 355,
+    downloadSizeMB: process.platform === "darwin" ? 281 : 355, // FORK: macOS DMG smaller 2026-04-29
     progress,
   }
 }
@@ -279,53 +295,108 @@ export async function startInstall(): Promise<InstallProgress> {
         })
       }
 
-      const logPath = path.join(DOWNLOAD_DIR, "msiexec.log")
-      await fs.unlink(logPath).catch(() => undefined)
+      // FORK-BEGIN: platform-specific install (Windows msiexec / macOS DMG) 2026-04-29
+      if (process.platform === "win32") {
+        const logPath = path.join(DOWNLOAD_DIR, "msiexec.log")
+        await fs.unlink(logPath).catch(() => undefined)
 
-      progress = {
-        phase: "installing",
-        message: "正在静默安装到本用户目录…",
-      }
-
-      log.info("running msiexec install (per-user, silent)", { msiPath })
-      const result = await Process.run(
-        [
-          "msiexec",
-          "/i",
-          msiPath,
-          "/qn",
-          "ALLUSERS=2",
-          "MSIINSTALLPERUSER=1",
-          "REGISTER_ALL_MSO_TYPES=0",
-          "REBOOT=ReallySuppress",
-          "/norestart",
-          "/l*v",
-          logPath,
-        ],
-        { nothrow: true, timeout: 600_000 },
-      )
-
-      if (result.code !== 0) {
-        const tail = await readLogTail(logPath, 100).catch(() => "")
-        const isPendingReboot = /MsiSystemRebootPending\D+'1'|RebootPending|Note: 1: 1708/.test(tail)
-        const summary = isPendingReboot
-          ? "Windows 检测到挂起的重启操作（MsiSystemRebootPending=1）。请先重启 Windows，然后重新点击下载预览插件即可（已下载的 MSI 会被复用）"
-          : extractMsiError(tail) ?? `msiexec 退出码 ${result.code}`
         progress = {
-          phase: "error",
-          message: summary + ` （日志: ${logPath}）`,
+          phase: "installing",
+          message: "正在静默安装到本用户目录…",
         }
-        log.error("msiexec failed", {
-          code: result.code,
-          isPendingReboot,
-          tail: tail.slice(0, 2000),
-        })
-        return
+
+        log.info("running msiexec install (per-user, silent)", { msiPath })
+        const result = await Process.run(
+          [
+            "msiexec",
+            "/i",
+            msiPath,
+            "/qn",
+            "ALLUSERS=2",
+            "MSIINSTALLPERUSER=1",
+            "REGISTER_ALL_MSO_TYPES=0",
+            "REBOOT=ReallySuppress",
+            "/norestart",
+            "/l*v",
+            logPath,
+          ],
+          { nothrow: true, timeout: 600_000 },
+        )
+
+        if (result.code !== 0) {
+          const tail = await readLogTail(logPath, 100).catch(() => "")
+          const isPendingReboot = /MsiSystemRebootPending\D+'1'|RebootPending|Note: 1: 1708/.test(tail)
+          const summary = isPendingReboot
+            ? "Windows 检测到挂起的重启操作（MsiSystemRebootPending=1）。请先重启 Windows，然后重新点击下载预览插件即可（已下载的 MSI 会被复用）"
+            : extractMsiError(tail) ?? `msiexec 退出码 ${result.code}`
+          progress = {
+            phase: "error",
+            message: summary + ` （日志: ${logPath}）`,
+          }
+          log.error("msiexec failed", {
+            code: result.code,
+            isPendingReboot,
+            tail: tail.slice(0, 2000),
+          })
+          return
+        }
+      } else if (process.platform === "darwin") {
+        progress = { phase: "installing", message: "正在安装到 ~/Applications …" }
+        log.info("mounting DMG", { msiPath })
+
+        const mountResult = await Process.run(
+          ["hdiutil", "attach", msiPath, "-nobrowse", "-noautoopen"],
+          { nothrow: true, timeout: 60_000 },
+        )
+        if (mountResult.code !== 0) {
+          progress = {
+            phase: "error",
+            message: `挂载 DMG 失败: ${mountResult.stderr.toString().trim().slice(0, 200)}`,
+          }
+          return
+        }
+
+        const mountOutput = mountResult.stdout.toString().trim()
+        const mountPoint = mountOutput.split(/\r?\n/).pop()?.split(/\t/).pop()?.trim()
+        if (!mountPoint) {
+          progress = { phase: "error", message: "无法解析 DMG 挂载点" }
+          return
+        }
+
+        try {
+          const entries = await fs.readdir(mountPoint)
+          const appName = entries.find((e) => e.endsWith(".app") && /libre/i.test(e))
+          if (!appName) {
+            throw new Error(`DMG 中未找到 LibreOffice.app: ${entries.join(", ")}`)
+          }
+
+          const srcApp = path.join(mountPoint, appName)
+          const destDir = path.join(process.env.HOME ?? "", "Applications")
+          const destApp = path.join(destDir, appName)
+
+          await fs.mkdir(destDir, { recursive: true })
+          await fs.rm(destApp, { recursive: true, force: true }).catch(() => {})
+
+          log.info("copying LibreOffice.app", { src: srcApp, dest: destApp })
+          const cpResult = await Process.run(["cp", "-R", srcApp, destApp], {
+            nothrow: true,
+            timeout: 120_000,
+          })
+          if (cpResult.code !== 0) {
+            throw new Error(`复制失败: ${cpResult.stderr.toString().trim().slice(0, 200)}`)
+          }
+        } finally {
+          await Process.run(["hdiutil", "detach", mountPoint, "-force"], {
+            nothrow: true,
+            timeout: 30_000,
+          })
+        }
       }
+      // FORK-END
 
       const sofficePath = await detectSofficePath(true)
       if (!sofficePath) {
-        progress = { phase: "error", message: "安装完成但找不到 soffice.exe" }
+        progress = { phase: "error", message: "安装完成但找不到 soffice" }
         return
       }
 

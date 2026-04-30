@@ -229,7 +229,7 @@ export function OfficeInstallPrompt(props: {
         </div>
 
         <div class="text-12-regular text-text-weak" style={{ "max-width": "520px" }}>
-          安装到本用户目录、不需要管理员权限、不弹 UAC 提示
+          安装到本用户目录、不需要管理员权限
         </div>
       </Show>
 
