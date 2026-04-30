@@ -19,7 +19,7 @@ const oauthInstructions = "Finish OAuth"
 
 function app(experimental: boolean) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return Server.Default().app
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 
 function requestAuthorize(input: {
