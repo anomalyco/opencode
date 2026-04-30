@@ -25,6 +25,19 @@ export type ServiceClass<Self, Id extends string, Service> = Context.ServiceClas
  * This keeps Effect `Config` as the source of truth for env names, defaults, and
  * validation while generating a typed service plus convenient production/test
  * layers.
+ *
+ * ```ts
+ * class ServerAuthConfig extends ConfigService.Service<ServerAuthConfig>()(
+ *   "@opencode/ServerAuthConfig",
+ *   {
+ *     password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
+ *     username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
+ *   },
+ * ) {}
+ *
+ * const live = ServerAuthConfig.defaultLayer
+ * const test = ServerAuthConfig.layer({ password: Option.some("secret"), username: "kit" })
+ * ```
  */
 export const Service =
   <Self>() =>
