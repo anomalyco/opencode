@@ -203,7 +203,7 @@ function normalizeMessages(
   }
 
   // Deepseek requires all assistant messages to have reasoning on them
-  if (model.api.id.includes("deepseek")) {
+  if (model.api.id.toLowerCase().includes("deepseek")) {
     msgs = msgs.map((msg) => {
       if (msg.role !== "assistant") return msg
       if (Array.isArray(msg.content)) {
@@ -591,7 +591,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
-      if (model.api.id.includes("deepseek-v4")) {
+      if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
       }
       return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
@@ -884,7 +884,7 @@ export function options(input: {
   }
 
   if (input.model.api.npm === "@ai-sdk/azure") {
-    result["store"] = true
+    result["store"] = false
     result["promptCacheKey"] = input.sessionID
   }
 

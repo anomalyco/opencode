@@ -101,7 +101,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.store).toBe(false)
   })
 
-  test("should set store=true for azure provider by default", () => {
+  test("should set store=false for azure provider by default", () => {
     const azureModel = {
       ...mockModel,
       providerID: "azure",
@@ -116,7 +116,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
       sessionID,
       providerOptions: {},
     })
-    expect(result.store).toBe(true)
+    expect(result.store).toBe(false)
   })
 })
 
