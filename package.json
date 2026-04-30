@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "opencode",
-  "version": "1.19.0",
+  "version": "1.20.0",
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",
