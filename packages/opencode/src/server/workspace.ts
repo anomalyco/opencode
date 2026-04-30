@@ -72,7 +72,9 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       return next()
     }
 
-    const workspace = await Workspace.get(WorkspaceID.make(workspaceID))
+    const workspace = await AppRuntime.runPromise(
+      Workspace.Service.use((svc) => svc.get(WorkspaceID.make(workspaceID))),
+    )
 
     if (!workspace) {
       return new Response(`Workspace not found: ${workspaceID}`, {
@@ -89,7 +91,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       return next()
     }
 
-    const adaptor = await getAdaptor(workspace.projectID, workspace.type)
+    const adaptor = getAdaptor(workspace.projectID, workspace.type)
     const target = await adaptor.target(workspace)
 
     if (target.type === "local") {

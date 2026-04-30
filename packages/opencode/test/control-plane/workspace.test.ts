@@ -107,6 +107,24 @@ async function withInstance<T>(fn: (dir: string) => T | Promise<T>) {
   })
 }
 
+const runWorkspace = <A, E>(effect: Effect.Effect<A, E, WorkspaceOld.Service>) => AppRuntime.runPromise(effect)
+const createWorkspace = (input: WorkspaceOld.CreateInput) =>
+  runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.create(input)))
+const restoreWorkspaceSession = (input: WorkspaceOld.SessionRestoreInput) =>
+  runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.sessionRestore(input)))
+const listWorkspaces = (project: Parameters<WorkspaceOld.Interface["list"]>[0]) =>
+  runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.list(project)))
+const getWorkspace = (id: WorkspaceID) => runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.get(id)))
+const removeWorkspace = (id: WorkspaceID) => runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.remove(id)))
+const workspaceStatus = () => runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.status()))
+const isWorkspaceSyncing = (id: WorkspaceID) =>
+  runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.isSyncing(id)))
+const startWorkspaceSyncing = (projectID: ProjectID) => {
+  void runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.startWorkspaceSyncing(projectID)))
+}
+const waitForWorkspaceSync = (workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) =>
+  runWorkspace(WorkspaceOld.Service.use((workspace) => workspace.waitForSync(workspaceID, state, signal)))
+
 function captureGlobalEvents() {
   const events: GlobalEvent[] = []
   const handler = (event: GlobalEvent) => events.push(event)
@@ -372,12 +390,12 @@ describe("workspace-old schemas and exports", () => {
 describe("workspace-old CRUD", () => {
   test("get returns undefined for a missing workspace", async () => {
     await withInstance(async () => {
-      expect(await WorkspaceOld.get(WorkspaceID.ascending("wrk_missing_get"))).toBeUndefined()
+      expect(await getWorkspace(WorkspaceID.ascending("wrk_missing_get"))).toBeUndefined()
     })
   })
 
   test("list maps database rows, filters by project, and sorts by id", async () => {
-    await withInstance(() => {
+    await withInstance(async () => {
       const otherProjectID = ProjectID.make("project-other")
       insertProject(otherProjectID, "/tmp/other")
       const a = workspaceInfo(Instance.project.id, "manual", {
@@ -397,7 +415,7 @@ describe("workspace-old CRUD", () => {
       insertWorkspace(other)
       insertWorkspace(a)
 
-      expect(WorkspaceOld.list(Instance.project)).toEqual([a, b])
+      expect(await listWorkspaces(Instance.project)).toEqual([a, b])
     })
   })
 
@@ -430,7 +448,7 @@ describe("workspace-old CRUD", () => {
       })
       registerAdaptor(Instance.project.id, type, recorded.adaptor)
 
-      const info = await WorkspaceOld.create({
+      const info = await createWorkspace({
         id: workspaceID,
         type,
         branch: null,
@@ -447,8 +465,8 @@ describe("workspace-old CRUD", () => {
         extra: { configured: true },
         projectID: Instance.project.id,
       })
-      expect(await WorkspaceOld.get(workspaceID)).toEqual(info)
-      expect(WorkspaceOld.list(Instance.project)).toEqual([info])
+      expect(await getWorkspace(workspaceID)).toEqual(info)
+      expect(await listWorkspaces(Instance.project)).toEqual([info])
       expect(recorded.calls.configure).toHaveLength(1)
       expect(recorded.calls.configure[0]).toMatchObject({ id: workspaceID, type, directory: null })
       expect(recorded.calls.create).toHaveLength(1)
@@ -461,10 +479,10 @@ describe("workspace-old CRUD", () => {
       expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_HEADERS).toBe("authorization=otel")
       expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe("https://otel.test")
       expect(recorded.calls.create[0].env.OTEL_RESOURCE_ATTRIBUTES).toBe("service.name=opencode-test")
-      expect(WorkspaceOld.status().find((item) => item.workspaceID === workspaceID)?.status).toBe("connected")
+      expect((await workspaceStatus()).find((item) => item.workspaceID === workspaceID)?.status).toBe("connected")
 
-      await WorkspaceOld.remove(workspaceID)
-      expect(WorkspaceOld.status().find((item) => item.workspaceID === workspaceID)?.status).toBeUndefined()
+      await removeWorkspace(workspaceID)
+      expect((await workspaceStatus()).find((item) => item.workspaceID === workspaceID)?.status).toBeUndefined()
     })
   })
 
@@ -485,9 +503,9 @@ describe("workspace-old CRUD", () => {
       )
 
       await expect(
-        WorkspaceOld.create({ type, branch: null, projectID: Instance.project.id, extra: null }),
+        createWorkspace({ type, branch: null, projectID: Instance.project.id, extra: null }),
       ).rejects.toThrow("configure exploded")
-      expect(WorkspaceOld.list(Instance.project)).toEqual([])
+      expect(await listWorkspaces(Instance.project)).toEqual([])
     })
   })
 
@@ -505,14 +523,14 @@ describe("workspace-old CRUD", () => {
       registerAdaptor(Instance.project.id, type, recorded.adaptor)
 
       await expect(
-        WorkspaceOld.create({ type, branch: "branch", projectID: Instance.project.id, extra: { x: 1 } }),
+        createWorkspace({ type, branch: "branch", projectID: Instance.project.id, extra: { x: 1 } }),
       ).rejects.toThrow("create exploded")
 
-      const rows = WorkspaceOld.list(Instance.project)
+      const rows = await listWorkspaces(Instance.project)
       expect(rows).toHaveLength(1)
       expect(rows[0]).toMatchObject({ type, branch: "branch", extra: { x: 1 } })
       expect(recorded.calls.target).toHaveLength(0)
-      await WorkspaceOld.remove(rows[0].id)
+      await removeWorkspace(rows[0].id)
     })
   })
 
@@ -523,11 +541,11 @@ describe("workspace-old CRUD", () => {
       const recorded = localAdaptor(missing, { createDir: false })
       registerAdaptor(Instance.project.id, type, recorded.adaptor)
 
-      const info = await WorkspaceOld.create({ type, branch: null, projectID: Instance.project.id, extra: null })
+      const info = await createWorkspace({ type, branch: null, projectID: Instance.project.id, extra: null })
 
       expect(info.directory).toBe(missing)
-      expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBe("error")
-      await WorkspaceOld.remove(info.id)
+      expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
+      await removeWorkspace(info.id)
     })
   })
 
@@ -581,7 +599,7 @@ describe("workspace-old CRUD", () => {
 
   test("remove returns undefined for a missing workspace", async () => {
     await withInstance(async () => {
-      expect(await WorkspaceOld.remove(WorkspaceID.ascending("wrk_missing_remove"))).toBeUndefined()
+      expect(await removeWorkspace(WorkspaceID.ascending("wrk_missing_remove"))).toBeUndefined()
     })
   })
 
@@ -590,18 +608,18 @@ describe("workspace-old CRUD", () => {
       const type = unique("remove-local")
       const recorded = localAdaptor(path.join(dir, "remove-local"))
       registerAdaptor(Instance.project.id, type, recorded.adaptor)
-      const info = await WorkspaceOld.create({ type, branch: null, projectID: Instance.project.id, extra: null })
+      const info = await createWorkspace({ type, branch: null, projectID: Instance.project.id, extra: null })
       const one = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
       const two = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
       attachSessionToWorkspace(one.id, info.id)
       attachSessionToWorkspace(two.id, info.id)
 
-      const removed = await WorkspaceOld.remove(info.id)
+      const removed = await removeWorkspace(info.id)
 
       expect(removed).toEqual(info)
-      expect(await WorkspaceOld.get(info.id)).toBeUndefined()
+      expect(await getWorkspace(info.id)).toBeUndefined()
       expect(recorded.calls.remove).toEqual([info])
-      expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
+      expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
       expect(
         Database.use((db) =>
           db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, info.id)).all(),
@@ -628,8 +646,8 @@ describe("workspace-old CRUD", () => {
       )
       insertWorkspace(info)
 
-      expect(await WorkspaceOld.remove(info.id)).toEqual(info)
-      expect(await WorkspaceOld.get(info.id)).toBeUndefined()
+      expect(await removeWorkspace(info.id)).toEqual(info)
+      expect(await getWorkspace(info.id)).toBeUndefined()
     })
   })
 })
@@ -645,10 +663,10 @@ describe("workspace-old sync state", () => {
       insertWorkspace(info)
       registerAdaptor(Instance.project.id, type, localAdaptor(path.join(dir, "flag-disabled")).adaptor)
 
-      WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
+      startWorkspaceSyncing(Instance.project.id)
       await delay(25)
 
-      expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
+      expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
     })
   })
 
@@ -671,14 +689,16 @@ describe("workspace-old sync state", () => {
         withSession.id,
       )
 
-      WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
+      startWorkspaceSyncing(Instance.project.id)
 
       await eventually(() =>
-        expect(WorkspaceOld.status().find((item) => item.workspaceID === withSession.id)?.status).toBe("connected"),
+        workspaceStatus().then((status) =>
+          expect(status.find((item) => item.workspaceID === withSession.id)?.status).toBe("connected"),
+        ),
       )
-      expect(WorkspaceOld.status().find((item) => item.workspaceID === withoutSession.id)?.status).toBeUndefined()
-      await WorkspaceOld.remove(withSession.id)
-      await WorkspaceOld.remove(withoutSession.id)
+      expect((await workspaceStatus()).find((item) => item.workspaceID === withoutSession.id)?.status).toBeUndefined()
+      await removeWorkspace(withSession.id)
+      await removeWorkspace(withoutSession.id)
     })
   })
 
@@ -697,13 +717,15 @@ describe("workspace-old sync state", () => {
         info.id,
       )
 
-      WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
+      startWorkspaceSyncing(Instance.project.id)
 
       await eventually(() =>
-        expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBe("error"),
+        workspaceStatus().then((status) =>
+          expect(status.find((item) => item.workspaceID === info.id)?.status).toBe("error"),
+        ),
       )
-      expect(await WorkspaceOld.isSyncing(info.id)).toBe(false)
-      await WorkspaceOld.remove(info.id)
+      expect(await isWorkspaceSyncing(info.id)).toBe(false)
+      await removeWorkspace(info.id)
     })
   })
 
@@ -722,18 +744,20 @@ describe("workspace-old sync state", () => {
           info.id,
         )
 
-        WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
-        WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
+        startWorkspaceSyncing(Instance.project.id)
+        startWorkspaceSyncing(Instance.project.id)
 
         await eventually(() =>
-          expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBe("connected"),
+          workspaceStatus().then((status) =>
+            expect(status.find((item) => item.workspaceID === info.id)?.status).toBe("connected"),
+          ),
         )
         expect(
           captured.events.filter(
             (event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Status.type,
           ),
         ).toHaveLength(1)
-        await WorkspaceOld.remove(info.id)
+        await removeWorkspace(info.id)
       } finally {
         captured.dispose()
       }
@@ -1106,7 +1130,7 @@ describe("workspace-old sync state", () => {
 describe("workspace-old waitForSync", () => {
   test("returns immediately for an empty fence", async () => {
     await withInstance(async () => {
-      await expect(WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_empty"), {})).resolves.toBeUndefined()
+      await expect(waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_empty"), {})).resolves.toBeUndefined()
     })
   })
 
@@ -1116,10 +1140,10 @@ describe("workspace-old waitForSync", () => {
       Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 4 }).run())
 
       await expect(
-        WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_done"), { [sessionID]: 4 }),
+        waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_done"), { [sessionID]: 4 }),
       ).resolves.toBeUndefined()
       await expect(
-        WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_done_2"), { [sessionID]: 3 }),
+        waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_done_2"), { [sessionID]: 3 }),
       ).resolves.toBeUndefined()
     })
   })
@@ -1130,7 +1154,7 @@ describe("workspace-old waitForSync", () => {
       const sessionID = SessionID.descending("ses_wait_event")
       Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 1 }).run())
 
-      const waited = WorkspaceOld.waitForSync(workspaceID, { [sessionID]: 2 })
+      const waited = waitForWorkspaceSync(workspaceID, { [sessionID]: 2 })
       await delay(10)
       Database.use((db) =>
         db.update(EventSequenceTable).set({ seq: 2 }).where(eq(EventSequenceTable.aggregate_id, sessionID)).run(),
@@ -1147,7 +1171,7 @@ describe("workspace-old waitForSync", () => {
       const sessionID = SessionID.descending("ses_wait_sync_any")
       Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 0 }).run())
 
-      const waited = WorkspaceOld.waitForSync(workspaceID, { [sessionID]: 1 })
+      const waited = waitForWorkspaceSync(workspaceID, { [sessionID]: 1 })
       await delay(10)
       Database.use((db) =>
         db.update(EventSequenceTable).set({ seq: 1 }).where(eq(EventSequenceTable.aggregate_id, sessionID)).run(),
@@ -1165,7 +1189,7 @@ describe("workspace-old waitForSync", () => {
     await withInstance(async () => {
       const abort = new AbortController()
       const reason = new Error("caller aborted")
-      const waited = WorkspaceOld.waitForSync(
+      const waited = waitForWorkspaceSync(
         WorkspaceID.ascending("wrk_wait_abort"),
         { [SessionID.descending("ses_wait_abort")]: 1 },
         abort.signal,
@@ -1184,9 +1208,9 @@ describe("workspace-old waitForSync", () => {
     await withInstance(async () => {
       const sessionID = SessionID.descending("ses_wait_timeout")
 
-      await expect(
-        WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }),
-      ).rejects.toThrow(`Timed out waiting for sync fence: {"${sessionID}":1}`)
+      await expect(waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 })).rejects.toThrow(
+        `Timed out waiting for sync fence: {"${sessionID}":1}`,
+      )
     })
   }, 7000)
 })
@@ -1195,7 +1219,7 @@ describe("workspace-old sessionRestore", () => {
   test("throws when the workspace is missing", async () => {
     await withInstance(async () => {
       await expect(
-        WorkspaceOld.sessionRestore({
+        restoreWorkspaceSession({
           workspaceID: WorkspaceID.ascending("wrk_restore_missing"),
           sessionID: SessionID.descending("ses_restore_missing_workspace"),
         }),
@@ -1211,9 +1235,9 @@ describe("workspace-old sessionRestore", () => {
       registerAdaptor(Instance.project.id, type, localAdaptor(dir).adaptor)
 
       await expect(
-        WorkspaceOld.sessionRestore({ workspaceID: info.id, sessionID: SessionID.descending("ses_missing_restore") }),
+        restoreWorkspaceSession({ workspaceID: info.id, sessionID: SessionID.descending("ses_missing_restore") }),
       ).rejects.toThrow("NotFoundError")
-      await WorkspaceOld.remove(info.id)
+      await removeWorkspace(info.id)
     })
   })
 
@@ -1424,7 +1448,7 @@ describe("workspace-old sessionRestore", () => {
         )
         replaceSessionEvents(session.id, 20)
 
-        expect(await WorkspaceOld.sessionRestore({ workspaceID: info.id, sessionID: session.id })).toEqual({ total: 3 })
+        expect(await restoreWorkspaceSession({ workspaceID: info.id, sessionID: session.id })).toEqual({ total: 3 })
 
         expect(fetchCallCount).toBe(0)
         expect(replayAll).toHaveBeenCalledTimes(3)
@@ -1438,7 +1462,7 @@ describe("workspace-old sessionRestore", () => {
             .filter((event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Restore.type)
             .map((event) => event.payload.properties.step),
         ).toEqual([0, 1, 2, 3])
-        await WorkspaceOld.remove(info.id)
+        await removeWorkspace(info.id)
       } finally {
         captured.dispose()
       }

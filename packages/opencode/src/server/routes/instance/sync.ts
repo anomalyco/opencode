@@ -12,7 +12,8 @@ import { eq } from "drizzle-orm"
 import { EventTable } from "@/sync/event.sql"
 import { lazy } from "@/util/lazy"
 import * as Log from "@opencode-ai/core/util/log"
-import { startWorkspaceSyncing } from "@/control-plane/workspace"
+import { Workspace } from "@/control-plane/workspace"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Instance } from "@/project/instance"
 import { errors } from "../../error"
 
@@ -46,7 +47,9 @@ export const SyncRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        startWorkspaceSyncing(Instance.project.id)
+        void AppRuntime.runPromise(
+          Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(Instance.project.id)),
+        )
         return c.json(true)
       },
     )

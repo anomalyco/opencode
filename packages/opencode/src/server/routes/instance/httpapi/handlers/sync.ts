@@ -1,4 +1,4 @@
-import { startWorkspaceSyncing } from "@/control-plane/workspace"
+import { Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
 import { Database } from "@/storage/db"
 import { SyncEvent } from "@/sync"
@@ -9,15 +9,20 @@ import { eq } from "drizzle-orm"
 import { lte } from "drizzle-orm"
 import { not } from "drizzle-orm"
 import { or } from "drizzle-orm"
-import { Effect } from "effect"
+import { Effect, Scope } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { HistoryPayload, ReplayPayload } from "../groups/sync"
 
 export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handlers) =>
   Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const scope = yield* Scope.Scope
+
     const start = Effect.fn("SyncHttpApi.start")(function* () {
-      startWorkspaceSyncing((yield* InstanceState.context).project.id)
+      yield* workspace
+        .startWorkspaceSyncing((yield* InstanceState.context).project.id)
+        .pipe(Effect.ignore, Effect.forkIn(scope))
       return true
     })
 

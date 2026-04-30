@@ -1,6 +1,5 @@
 import { Context, Effect, FiberMap, Layer, Schema, Stream } from "effect"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
-import { fn } from "@/util/fn"
 import { Database } from "@/storage/db"
 import { asc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
@@ -24,7 +23,6 @@ import { Session } from "@/session/session"
 import { SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
 import { errorData } from "@/util/error"
-import { makeRuntime } from "@/effect/run-service"
 import { waitEvent } from "./util"
 import { WorkspaceContext } from "./workspace-context"
 import { NonNegativeInt, withStatics } from "@/util/schema"
@@ -855,44 +853,6 @@ function route(url: string | URL, path: string) {
   next.search = ""
   next.hash = ""
   return next
-}
-
-const { runPromise, runSync } = makeRuntime(Service, defaultLayer)
-
-export const create = fn(CreateInput.zod, (input) => runPromise((svc) => svc.create(input)))
-
-export const sessionRestore = fn(SessionRestoreInput.zod, (input) => runPromise((svc) => svc.sessionRestore(input)))
-
-export function list(project: Project.Info) {
-  return Database.use((db) =>
-    db
-      .select()
-      .from(WorkspaceTable)
-      .where(eq(WorkspaceTable.project_id, project.id))
-      .all()
-      .map(fromRow)
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  )
-}
-
-export const get = fn(WorkspaceID.zod, (id) => runPromise((svc) => svc.get(id)))
-
-export const remove = fn(WorkspaceID.zod, (id) => runPromise((svc) => svc.remove(id)))
-
-export function status() {
-  return runSync((svc) => svc.status())
-}
-
-export function isSyncing(workspaceID: WorkspaceID) {
-  return runSync((svc) => svc.isSyncing(workspaceID))
-}
-
-export function waitForSync(workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) {
-  return runPromise((svc) => svc.waitForSync(workspaceID, state, signal))
-}
-
-export function startWorkspaceSyncing(projectID: ProjectID) {
-  void runPromise((svc) => svc.startWorkspaceSyncing(projectID))
 }
 
 export * as Workspace from "./workspace"

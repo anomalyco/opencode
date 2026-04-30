@@ -50,6 +50,7 @@ const it = testEffect(
     NodeHttpServer.layerTest,
     NodeServices.layer,
     Project.defaultLayer,
+    Workspace.defaultLayer,
     Socket.layerWebSocketConstructorGlobal,
   ),
 )
@@ -116,16 +117,17 @@ const syncResponse = (request: HttpServerRequest.HttpServerRequest) => {
 
 const createWorkspace = (input: { projectID: Project.Info["id"]; type: string; adaptor: WorkspaceAdaptor }) =>
   Effect.acquireRelease(
-    Effect.promise(async () => {
+    Effect.gen(function* () {
       registerAdaptor(input.projectID, input.type, input.adaptor)
-      return Workspace.create({
+      const workspace = yield* Workspace.Service
+      return yield* workspace.create({
         type: input.type,
         branch: null,
         extra: null,
         projectID: input.projectID,
       })
     }),
-    (workspace) => Effect.promise(() => Workspace.remove(workspace.id)).pipe(Effect.ignore),
+    (info) => Workspace.Service.use((workspace) => workspace.remove(info.id)).pipe(Effect.ignore),
   )
 
 const createRemoteWorkspace = (input: {
