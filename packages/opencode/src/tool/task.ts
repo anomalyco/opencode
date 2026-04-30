@@ -6,7 +6,10 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Effect, Schema } from "effect"
+
+const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_TASK_DEFAULT_TIMEOUT_MS || 10 * 60 * 1000
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): void
@@ -25,6 +28,9 @@ export const Parameters = Schema.Struct({
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  timeout: Schema.optional(Schema.Number).annotate({
+    description: `Optional timeout in milliseconds. If the subagent does not complete within this duration the task fails with a timeout error so the calling agent can retry with a larger timeout, narrow the scope, or fall back. Defaults to ${DEFAULT_TIMEOUT}ms when not specified.`,
+  }),
 })
 
 export const TaskTool = Tool.define(
@@ -131,22 +137,53 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
+            const timeout = params.timeout ?? DEFAULT_TIMEOUT
+            if (timeout < 0) {
+              return yield* Effect.fail(
+                new Error(`Invalid timeout value: ${timeout}. Timeout must be a positive number of milliseconds.`),
+              )
+            }
             const parts = yield* ops.resolvePromptParts(params.prompt)
-            const result = yield* ops.prompt({
-              messageID,
-              sessionID: nextSession.id,
-              model: {
-                modelID: model.modelID,
-                providerID: model.providerID,
-              },
-              agent: next.name,
-              tools: {
-                ...(canTodo ? {} : { todowrite: false }),
-                ...(canTask ? {} : { task: false }),
-                ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
-              },
-              parts,
-            })
+            const outcome = yield* Effect.raceAll([
+              ops
+                .prompt({
+                  messageID,
+                  sessionID: nextSession.id,
+                  model: {
+                    modelID: model.modelID,
+                    providerID: model.providerID,
+                  },
+                  agent: next.name,
+                  tools: {
+                    ...(canTodo ? {} : { todowrite: false }),
+                    ...(canTask ? {} : { task: false }),
+                    ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
+                  },
+                  parts,
+                })
+                .pipe(Effect.map((result) => ({ kind: "ok" as const, result }))),
+              Effect.sleep(`${timeout} millis`).pipe(Effect.map(() => ({ kind: "timeout" as const }))),
+            ])
+
+            if (outcome.kind === "timeout") {
+              cancel()
+              return {
+                title: params.description,
+                metadata: {
+                  sessionId: nextSession.id,
+                  model,
+                },
+                output: [
+                  `task_id: ${nextSession.id} (for resuming if the timeout was premature)`,
+                  "",
+                  "<task_error>",
+                  `Subagent "${params.subagent_type}" did not complete within ${timeout}ms and was cancelled.`,
+                  `If this task legitimately needs more time, retry with a larger 'timeout' value (in milliseconds) or narrow the task scope.`,
+                  `If the subagent appears stalled (provider or network hang), do not retry indefinitely; report what you have to the user.`,
+                  "</task_error>",
+                ].join("\n"),
+              }
+            }
 
             return {
               title: params.description,
@@ -158,7 +195,7 @@ export const TaskTool = Tool.define(
                 `task_id: ${nextSession.id} (for resuming to continue this task if needed)`,
                 "",
                 "<task_result>",
-                result.parts.findLast((item) => item.type === "text")?.text ?? "",
+                outcome.result.parts.findLast((item) => item.type === "text")?.text ?? "",
                 "</task_result>",
               ].join("\n"),
             }
