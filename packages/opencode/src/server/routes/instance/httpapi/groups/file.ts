@@ -54,7 +54,7 @@ export const FileApi = HttpApi.make("file")
         ),
         HttpApiEndpoint.get("findFile", FilePaths.findFile, {
           query: FindFileQuery,
-          success: described(Schema.Array(Schema.String), "File paths"),
+          success: described(Schema.Array(File.SearchItem), "File search results"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "find.files",

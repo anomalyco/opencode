@@ -4,7 +4,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Git } from "@/git"
 import { Effect, Layer, Context, Schema, Scope } from "effect"
-import * as Stream from "effect/Stream"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
@@ -12,8 +11,9 @@ import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../project/instance"
 import * as Log from "@opencode-ai/core/util/log"
+import { Glob } from "@opencode-ai/core/util/glob"
 import { Protected } from "./protected"
-import { Ripgrep } from "./ripgrep"
+import { Fff } from "./fff"
 import { zod } from "@/util/effect-zod"
 import { NonNegativeInt, type DeepMutable, withStatics } from "@/util/schema"
 
@@ -37,6 +37,15 @@ export const Node = Schema.Struct({
   .annotate({ identifier: "FileNode" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type Node = DeepMutable<Schema.Schema.Type<typeof Node>>
+
+export const SearchItem = Schema.Struct({
+  path: Schema.String,
+  isDirectory: Schema.Boolean,
+  gitStatus: Schema.optional(Schema.String),
+})
+  .annotate({ identifier: "FileSearchItem" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type SearchItem = DeepMutable<Schema.Schema.Type<typeof SearchItem>>
 
 const Hunk = Schema.Struct({
   oldStart: NonNegativeInt,
@@ -328,7 +337,7 @@ export interface Interface {
     limit?: number
     dirs?: boolean
     type?: "file" | "directory"
-  }) => Effect.Effect<string[]>
+  }) => Effect.Effect<SearchItem[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/File") {}
@@ -337,7 +346,6 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const appFs = yield* AppFileSystem.Service
-    const rg = yield* Ripgrep.Service
     const git = yield* Git.Service
     const scope = yield* Scope.Scope
 
@@ -379,10 +387,13 @@ export const layer = Layer.effect(
 
         next.dirs = Array.from(dirs).toSorted()
       } else {
-        const files = yield* rg.files({ cwd: ctx.directory }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => [...chunk]),
-        )
+        const files = (yield* Effect.promise(() =>
+          Glob.scan("**/*", {
+            cwd: ctx.directory,
+            include: "file",
+            dot: true,
+          }),
+        )).toSorted((a, b) => a.localeCompare(b))
         const seen = new Set<string>()
         for (const file of files) {
           next.files.push(file)
@@ -619,19 +630,60 @@ export const layer = Layer.effect(
       dirs?: boolean
       type?: "file" | "directory"
     }) {
-      yield* ensure()
-      const { cache } = yield* InstanceState.get(state)
-
       const query = input.query.trim()
       const limit = input.limit ?? 100
       const kind = input.type ?? (input.dirs === false ? "file" : "all")
       log.info("search", { query, kind })
 
+      if (query && kind !== "directory") {
+        const ctx = yield* InstanceState.context
+        const fast = yield* Effect.promise(() =>
+          Fff.mixed({
+            query,
+            cwd: ctx.directory,
+            size: limit,
+          })
+            .then((out) => {
+              const seen = new Set<string>()
+              const items: SearchItem[] = []
+              for (const entry of out.items) {
+                const rel = entry.item.relativePath.replaceAll("\\", "/")
+                if (seen.has(rel)) continue
+                seen.add(rel)
+                if (entry.type === "file") {
+                  const gs = entry.item.gitStatus
+                  items.push({
+                    path: rel,
+                    isDirectory: false,
+                    gitStatus: gs && gs !== "clean" ? gs : undefined,
+                  })
+                } else {
+                  items.push({
+                    path: rel.endsWith("/") ? rel : rel + "/",
+                    isDirectory: true,
+                  })
+                }
+              }
+              return items.slice(0, limit)
+            })
+            .catch(() => [] as SearchItem[]),
+        )
+        if (fast.length) {
+          log.info("search", { query, kind, results: fast.length, mode: "fff" })
+          return fast
+        }
+      }
+
+      yield* ensure()
+      const { cache } = yield* InstanceState.get(state)
+
       const preferHidden = query.startsWith(".") || query.includes("/.")
 
       if (!query) {
-        if (kind === "file") return cache.files.slice(0, limit)
-        return sortHiddenLast(cache.dirs.toSorted(), preferHidden).slice(0, limit)
+        if (kind === "file") return cache.files.slice(0, limit).map((f) => ({ path: f, isDirectory: false }))
+        return sortHiddenLast(cache.dirs.toSorted(), preferHidden)
+          .slice(0, limit)
+          .map((d) => ({ path: d, isDirectory: true }))
       }
 
       const items = kind === "file" ? cache.files : kind === "directory" ? cache.dirs : [...cache.files, ...cache.dirs]
@@ -641,7 +693,7 @@ export const layer = Layer.effect(
       const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
 
       log.info("search", { query, kind, results: output.length })
-      return output
+      return output.map((p) => ({ path: p, isDirectory: p.endsWith("/") }))
     })
 
     log.info("init")
@@ -649,10 +701,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Ripgrep.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-)
+export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
 
 export * as File from "."

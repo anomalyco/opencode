@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { File } from "@/file"
-import { Ripgrep } from "@/file/ripgrep"
+import { Fff } from "@/file/fff"
 import { LSP } from "@/lsp/lsp"
 import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
@@ -14,14 +14,14 @@ export const FileRoutes = lazy(() =>
       "/find",
       describeRoute({
         summary: "Find text",
-        description: "Search for text patterns across files in the project using ripgrep.",
+        description: "Search for text patterns across files in the project.",
         operationId: "find.text",
         responses: {
           200: {
             description: "Matches",
             content: {
               "application/json": {
-                schema: resolver(Ripgrep.SearchMatch.zod.array()),
+                schema: resolver(Fff.Match.array()),
               },
             },
           },
@@ -33,13 +33,15 @@ export const FileRoutes = lazy(() =>
           pattern: z.string(),
         }),
       ),
-      async (c) =>
-        jsonRequest("FileRoutes.findText", c, function* () {
-          const pattern = c.req.valid("query").pattern
-          const svc = yield* Ripgrep.Service
-          const result = yield* svc.search({ cwd: Instance.directory, pattern, limit: 10 })
-          return result.items
-        }),
+      async (c) => {
+        const pattern = c.req.valid("query").pattern
+        const result = await Fff.search({
+          cwd: Instance.directory,
+          pattern,
+          limit: 10,
+        })
+        return c.json(result)
+      },
     )
     .get(
       "/find/file",
@@ -49,10 +51,10 @@ export const FileRoutes = lazy(() =>
         operationId: "find.files",
         responses: {
           200: {
-            description: "File paths",
+            description: "File search results",
             content: {
               "application/json": {
-                schema: resolver(z.string().array()),
+                schema: resolver(File.SearchItem.zod.array()),
               },
             },
           },

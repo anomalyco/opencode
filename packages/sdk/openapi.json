@@ -5569,7 +5569,7 @@
           }
         ],
         "summary": "Find text",
-        "description": "Search for text patterns across files in the project using ripgrep.",
+        "description": "Search for text patterns across files in the project.",
         "responses": {
           "200": {
             "description": "Matches",
@@ -5708,13 +5708,13 @@
         "description": "Search for files or directories by name or pattern in the project directory.",
         "responses": {
           "200": {
-            "description": "File paths",
+            "description": "File search results",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/FileSearchItem"
                   }
                 }
               }
@@ -13103,6 +13103,21 @@
           }
         },
         "required": ["url", "method", "instructions"]
+      },
+      "FileSearchItem": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "isDirectory": {
+            "type": "boolean"
+          },
+          "gitStatus": {
+            "type": "string"
+          }
+        },
+        "required": ["path", "isDirectory"]
       },
       "Symbol": {
         "type": "object",

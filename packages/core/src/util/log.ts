@@ -18,6 +18,11 @@ const keep = 10
 
 let level: Level = "INFO"
 
+/** Exposes internal log level at runtime */
+export function currentLevel() {
+  return level
+}
+
 function shouldLog(input: Level): boolean {
   return levelPriority[input] >= levelPriority[level]
 }

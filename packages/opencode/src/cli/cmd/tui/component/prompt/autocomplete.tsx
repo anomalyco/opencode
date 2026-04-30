@@ -63,6 +63,7 @@ export type AutocompleteOption = {
   disabled?: boolean
   description?: string
   isDirectory?: boolean
+  gitStatus?: string
   onSelect?: () => void
   path?: string
 }
@@ -295,36 +296,24 @@ export function Autocomplete(props: {
 
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
-      // Get files from SDK
       const result = await sdk.client.find.files({
         query: baseQuery,
       })
 
       const options: AutocompleteOption[] = []
 
-      // Add file options
       if (!result.error && result.data) {
-        const sortedFiles = result.data.sort((a, b) => {
-          const aScore = frecency.getFrecency(a)
-          const bScore = frecency.getFrecency(b)
-          if (aScore !== bScore) return bScore - aScore
-          const aDepth = a.split("/").length
-          const bDepth = b.split("/").length
-          if (aDepth !== bDepth) return aDepth - bDepth
-          return a.localeCompare(b)
-        })
-
         const width = props.anchor().width - 4
         options.push(
-          ...sortedFiles.map((item): AutocompleteOption => {
-            const { filename, url, part } = createFilePart(item, lineRange)
+          ...result.data.map((item): AutocompleteOption => {
+            const { filename, part } = createFilePart(item.path, lineRange)
 
-            const isDir = item.endsWith("/")
             return {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
-              isDirectory: isDir,
-              path: item,
+              isDirectory: item.isDirectory,
+              gitStatus: item.gitStatus,
+              path: item.path,
               onSelect: () => {
                 insertPart(filename, part)
               },
@@ -443,6 +432,12 @@ export function Autocomplete(props: {
 
     if (files.loading && prev && prev.length > 0) {
       return prev
+    }
+
+    // fff already returns frecency-ranked fuzzy results, so for file search
+    // just pass them through directly instead of re-ranking with fuzzysort
+    if (store.visible === "@" && filesValue && filesValue.length > 0) {
+      return filesValue
     }
 
     const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
@@ -688,7 +683,6 @@ export function Autocomplete(props: {
         >
           {(option, index) => (
             <box
-              paddingLeft={1}
               paddingRight={1}
               backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
@@ -705,6 +699,14 @@ export function Autocomplete(props: {
               }}
               onMouseUp={() => select()}
             >
+              <text
+                fg={
+                  option().gitStatus ? (option().gitStatus === "modified" ? theme.warning : theme.diffAdded) : undefined
+                }
+                flexShrink={0}
+              >
+                {option().gitStatus ? "▎" : " "}
+              </text>
               <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option().display}
               </text>

@@ -14,6 +14,8 @@ export interface FilteredListProps<T> {
   sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
   onSelect?: (value: T | undefined, index: number) => void
   noInitialSelection?: boolean
+  stale?: boolean
+  fuzzy?: boolean | ((filter: string) => boolean)
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
@@ -30,11 +32,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     async ({ filter, items }) => {
       const query = filter ?? ""
       const needle = query.toLowerCase()
+      const fuzzy = typeof props.fuzzy === "function" ? props.fuzzy(query) : (props.fuzzy ?? true)
       const all = (await Promise.resolve(items)) || []
       const result = pipe(
         all,
         (x) => {
-          if (!needle) return x
+          if (!needle || !fuzzy) return x
           if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
             return fuzzysort.go(needle, x).map((x) => x.target) as T[]
           }
@@ -51,8 +54,9 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   )
 
   const flat = createMemo(() => {
+    const groups = props.stale === false && grouped.loading ? empty : grouped.latest || []
     return pipe(
-      grouped.latest || [],
+      groups,
       flatMap((x) => x.items),
     )
   })

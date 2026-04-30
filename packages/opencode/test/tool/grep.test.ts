@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { GrepTool } from "../../src/tool/grep"
@@ -7,19 +8,17 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
-import { Ripgrep } from "../../src/file/ripgrep"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  Layer.mergeAll(
-    CrossSpawnSpawner.defaultLayer,
-    AppFileSystem.defaultLayer,
-    Ripgrep.defaultLayer,
-    Truncate.defaultLayer,
-    Agent.defaultLayer,
-  ),
+  Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
 )
+
+async function write(file: string, body: string) {
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  await fs.writeFile(file, body)
+}
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -57,7 +56,7 @@ describe("tool.grep", () => {
   it.live("no matches returns correct output", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => Bun.write(path.join(dir, "test.txt"), "hello world"))
+        yield* Effect.promise(() => write(path.join(dir, "test.txt"), "hello world"))
         const info = yield* GrepTool
         const grep = yield* info.init()
         const result = yield* grep.execute(
@@ -76,7 +75,7 @@ describe("tool.grep", () => {
   it.live("finds matches in tmp instance", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => Bun.write(path.join(dir, "test.txt"), "line1\nline2\nline3"))
+        yield* Effect.promise(() => write(path.join(dir, "test.txt"), "line1\nline2\nline3"))
         const info = yield* GrepTool
         const grep = yield* info.init()
         const result = yield* grep.execute(
@@ -91,23 +90,40 @@ describe("tool.grep", () => {
     ),
   )
 
-  it.live("supports exact file paths", () =>
+  it.live("broadens multi-word query when exact has no match", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
-        const file = path.join(dir, "test.txt")
-        yield* Effect.promise(() => Bun.write(file, "line1\nline2\nline3"))
+        yield* Effect.promise(() => write(path.join(dir, "test.txt"), "upload completed\n"))
         const info = yield* GrepTool
         const grep = yield* info.init()
         const result = yield* grep.execute(
           {
-            pattern: "line2",
-            path: file,
+            pattern: "prepare upload",
+            path: dir,
           },
           ctx,
         )
-        expect(result.metadata.matches).toBe(1)
-        expect(result.output).toContain(file)
-        expect(result.output).toContain("Line 2: line2")
+        expect(result.metadata.matches).toBeGreaterThan(0)
+        expect(result.output).toContain("Broadened query")
+      }),
+    ),
+  )
+
+  it.live("suggests path when content has no match", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => write(path.join(dir, "src", "server", "auth.ts"), "export const token = 1\n"))
+        const info = yield* GrepTool
+        const grep = yield* info.init()
+        const result = yield* grep.execute(
+          {
+            pattern: "src/server/auth.ts",
+            path: dir,
+          },
+          ctx,
+        )
+        expect(result.metadata.matches).toBe(0)
+        expect(result.output).toContain("relevant file path")
       }),
     ),
   )

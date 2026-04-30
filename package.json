@@ -98,6 +98,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
+    "@ff-labs/fff-bun": "0.6.4",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",

@@ -2007,6 +2007,12 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type FileSearchItem = {
+  path: string
+  isDirectory: boolean
+  gitStatus?: string
+}
+
 export type Symbol = {
   name: string
   kind: number
@@ -4716,9 +4722,9 @@ export type FindFilesData = {
 
 export type FindFilesResponses = {
   /**
-   * File paths
+   * File search results
    */
-  200: Array<string>
+  200: Array<FileSearchItem>
 }
 
 export type FindFilesResponse = FindFilesResponses[keyof FindFilesResponses]

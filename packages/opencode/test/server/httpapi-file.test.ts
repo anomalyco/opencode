@@ -69,7 +69,7 @@ describe("file HttpApi", () => {
     expect(await text.json()).toContainEqual(expect.objectContaining({ line_number: 1 }))
 
     expect(files.status).toBe(200)
-    expect(await files.json()).toContain("hello.txt")
+    expect(await files.json()).toContainEqual(expect.objectContaining({ path: "hello.txt" }))
 
     expect(symbols.status).toBe(200)
     expect(await symbols.json()).toEqual([])
