@@ -229,22 +229,22 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     content: string
   }>>([])
 
-  const skillsLoading = createSignal(false)
+  const [skillsLoading, setSkillsLoading] = createSignal(false)
 
   createEffect(() => {
     if (!props.shown()) return
     if (skillsLoading()) return
 
-    skillsLoading(true)
+    setSkillsLoading(true)
     sdk.client.app.skills({ directory: sync.directory })
       .then((res) => {
-        if (res.ok) setSkills(res.value)
+        setSkills(res.data ?? [])
       })
       .catch(() => {
         // Handle error silently - skills will remain empty
       })
       .finally(() => {
-        skillsLoading(false)
+        setSkillsLoading(false)
       })
   })
 
