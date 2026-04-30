@@ -32,7 +32,7 @@ import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { authorizationLayer } from "./middleware/authorization"
+import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
 import { eventRoute } from "./event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
@@ -55,8 +55,9 @@ import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/w
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
+import type { Predicate } from "effect/Predicate"
 
-export const context = Context.empty() as Context.Context<unknown>
+export const context = Context.makeUnsafe<unknown>(new Map())
 
 const runtime = HttpRouter.middleware()(
   Effect.succeed((effect) =>
@@ -97,13 +98,30 @@ const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
 )
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
   Layer.provide([
-    authorizationLayer,
+    authorizationLayer.pipe(Layer.provide(ServerAuthConfig.defaultLayer)),
     workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
     instanceContextLayer,
   ]),
 )
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
+  Layer.provide(
+    HttpRouter.cors({
+      maxAge: 86_400,
+      allowedOrigins: ((input) => {
+        return (
+          !input ||
+          input.startsWith("http://localhost:") ||
+          input.startsWith("http://127.0.0.1:") ||
+          input.startsWith("oc://renderer") ||
+          input === "tauri://localhost" ||
+          input === "http://tauri.localhost" ||
+          input === "https://tauri.localhost" ||
+          /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)
+        )
+      }) as Predicate<string> as any,
+    }),
+  ),
   Layer.provide([
     runtime,
     Account.defaultLayer,

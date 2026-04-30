@@ -2,11 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
 import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
-import { FileApi, FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
+import { FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
 import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/global"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
+import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
+import { ConfigProvider, Layer } from "effect"
+import { HttpRouter } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
@@ -30,7 +33,26 @@ function app(input?: { password?: string; username?: string }) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
   Flag.OPENCODE_SERVER_PASSWORD = input?.password
   Flag.OPENCODE_SERVER_USERNAME = input?.username
-  return Server.Default().app
+
+  const handler = HttpRouter.toWebHandler(
+    ExperimentalHttpApiServer.routes.pipe(
+      Layer.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            OPENCODE_SERVER_PASSWORD: input?.password,
+            OPENCODE_SERVER_USERNAME: input?.username,
+          }),
+        ),
+      ),
+    ),
+    { disableLogger: true },
+  ).handler
+  return {
+    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
+    request(input: string | URL | Request, init?: RequestInit) {
+      return this.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
+    },
+  }
 }
 
 function openApiRouteKeys(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], unknown>>> }) {
@@ -94,9 +116,9 @@ type RequestBody = {
   required?: boolean
 }
 
-function parameterKey(param: unknown) {
-  if (!param || typeof param !== "object" || !("in" in param) || !("name" in param)) return
-  if (typeof param.in !== "string" || typeof param.name !== "string") return
+function parameterKey(param: unknown): string | undefined {
+  if (!param || typeof param !== "object" || !("in" in param) || !("name" in param)) return undefined
+  if (typeof param.in !== "string" || typeof param.name !== "string") return undefined
   return `${param.in}:${param.name}:${"required" in param && param.required === true}`
 }
 
@@ -105,27 +127,29 @@ function parameterSchema(input: {
   path: string
   method: (typeof methods)[number]
   name: string
-}) {
+}): unknown {
   const param = input.spec.paths[input.path]?.[input.method]?.parameters?.find(
     (param) => !!param && typeof param === "object" && "name" in param && param.name === input.name,
   )
-  if (!param || typeof param !== "object" || !("schema" in param)) return
+  if (!param || typeof param !== "object" || !("schema" in param)) return undefined
   return param.schema
 }
 
 function requestBodyKey(spec: OpenApiSpec, body: unknown) {
   if (!body || typeof body !== "object" || !("content" in body)) return ""
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Guarded above; test helper only needs this OpenAPI subset.
   const requestBody = body as RequestBody
   return JSON.stringify({
     required: requestBody.required === true,
     content: Object.entries(requestBody.content ?? {})
-      .map(([type, value]) => [type, requestBodySchemaKind(spec, value.schema)])
-      .sort(),
+      .map(([type, value]) => [type, requestBodySchemaKind(spec, value.schema)] as const)
+      .sort(([left], [right]) => left.localeCompare(right)),
   })
 }
 
 function requestBodySchemaKind(spec: OpenApiSpec, schema: OpenApiSchema | undefined) {
   if (!schema) return ""
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- `$ref` lookup is constrained to OpenAPI schema components in this test helper.
   const resolved = (
     schema.$ref ? spec.components?.schemas?.[schema.$ref.replace("#/components/schemas/", "")] : schema
   ) as OpenApiSchema | undefined
@@ -142,6 +166,7 @@ function responseContentTypes(input: {
 }) {
   const responses = input.spec.paths[input.path]?.[input.method]?.responses
   if (!responses || typeof responses !== "object" || !(input.status in responses)) return []
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Guarded dynamic OpenAPI response lookup.
   const response = (responses as Record<string, unknown>)[input.status]
   if (!response || typeof response !== "object" || !("content" in response)) return []
   const content = (response as { content?: unknown }).content

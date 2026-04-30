@@ -1,0 +1,167 @@
+import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from "effect/unstable/http"
+import * as Socket from "effect/unstable/socket/Socket"
+import { mkdir } from "node:fs/promises"
+import path from "node:path"
+import { registerAdaptor } from "../../src/control-plane/adaptors"
+import type { WorkspaceAdaptor } from "../../src/control-plane/types"
+import { Workspace } from "../../src/control-plane/workspace"
+import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
+import { Instance } from "../../src/project/instance"
+import { Project } from "../../src/project/project"
+import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
+import { workspaceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
+import { resetDatabase } from "../fixture/db"
+import { tmpdirScoped } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+
+const testStateLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+    yield* Effect.promise(() => resetDatabase())
+    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
+        await Instance.disposeAll()
+        await resetDatabase()
+      }),
+    )
+  }),
+)
+
+const it = testEffect(
+  Layer.mergeAll(testStateLayer, NodeHttpServer.layerTest, NodeServices.layer, Project.defaultLayer),
+)
+
+const instanceContextTestLayer = instanceRouterMiddleware
+  .combine(workspaceRouterMiddleware)
+  .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+
+const localAdaptor = (directory: string): WorkspaceAdaptor => ({
+  name: "Local Test",
+  description: "Create a local test workspace",
+  configure: (info) => ({ ...info, name: "local-test", directory }),
+  create: async () => {
+    await mkdir(directory, { recursive: true })
+  },
+  async remove() {},
+  target: () => ({ type: "local" as const, directory }),
+})
+
+const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
+  Effect.acquireRelease(
+    Effect.promise(async () => {
+      registerAdaptor(input.projectID, input.type, localAdaptor(input.directory))
+      return Workspace.create({
+        type: input.type,
+        branch: null,
+        extra: null,
+        projectID: input.projectID,
+      })
+    }),
+    (workspace) => Effect.promise(() => Workspace.remove(workspace.id)).pipe(Effect.ignore),
+  )
+
+const probeInstanceContext = Effect.gen(function* () {
+  const instance = yield* InstanceRef
+  const workspaceID = yield* WorkspaceRef
+  return yield* HttpServerResponse.json({
+    directory: instance?.directory,
+    worktree: instance?.worktree,
+    projectID: instance?.project.id,
+    workspaceID,
+  })
+})
+
+const serveProbe = (probePath: HttpRouter.PathInput = "/probe") =>
+  HttpRouter.add("GET", probePath, probeInstanceContext).pipe(
+    Layer.provide(instanceContextTestLayer),
+    HttpRouter.serve,
+    Layer.build,
+  )
+
+describe("HttpApi instance context middleware", () => {
+  it.live("provides instance context from the routed directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      yield* serveProbe()
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent(dir)}`)
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({
+        directory: dir,
+        worktree: dir,
+        projectID: project.project.id,
+      })
+    }),
+  )
+
+  it.live("falls back to the raw directory when URI decoding fails", () =>
+    Effect.gen(function* () {
+      yield* serveProbe()
+
+      const response = yield* HttpClient.get("/probe?directory=%25E0%25A4%25A")
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: path.join(process.cwd(), "%E0%A4%A"),
+      })
+    }),
+  )
+
+  it.live("provides selected workspace id on control-plane routes", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-local")
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "instance-context-workspace-ref",
+        directory: workspaceDir,
+      })
+      yield* serveProbe("/session")
+
+      const response = yield* HttpClientRequest.get(`/session?workspace=${workspace.id}`).pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", dir),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: dir,
+        workspaceID: workspace.id,
+      })
+    }),
+  )
+
+  it.live("uses workspace routing output instead of raw directory hints", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-local")
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "instance-context-routing-output",
+        directory: workspaceDir,
+      })
+      yield* serveProbe()
+
+      const response = yield* HttpClientRequest.get(`/probe?workspace=${workspace.id}`).pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", dir),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: workspaceDir,
+        workspaceID: workspace.id,
+      })
+    }),
+  )
+})
