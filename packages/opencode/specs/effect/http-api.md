@@ -12,14 +12,16 @@ Plan for replacing instance Hono route implementations with Effect `HttpApi` whi
 
 ## Current State
 
-- `OPENCODE_EXPERIMENTAL_HTTPAPI` gates the bridge. Default behavior still uses Hono.
-- The bridge mounts selected paths in `server/routes/instance/index.ts` before legacy Hono routes.
-- Legacy Hono routes remain for default behavior and for `hono-openapi` SDK generation.
-- `HttpApi` auth is independent of Hono auth.
-- `Authorization` is attached in each route module, not centrally wrapped in `server.ts`.
+- `OPENCODE_EXPERIMENTAL_HTTPAPI` selects the backend at server startup. Default is still `hono`.
+- `server/backend.ts` picks one of `effect-httpapi` or `hono`; `server.ts` builds either a pure Effect `HttpApi` web handler or the legacy Hono app accordingly. The earlier in-Hono "bridge" model has been replaced by this fork-at-startup.
+- Legacy Hono routes remain mounted for the `hono` backend and remain the source for `hono-openapi` SDK generation.
+- An Effect `HttpApi` OpenAPI surface exists (`OpenApi.fromApi(PublicApi)` in `cli/cmd/generate.ts --httpapi`, `OPENCODE_SDK_OPENAPI=httpapi` in `packages/sdk/js/script/build.ts`) but is opt-in. The default SDK generation is still Hono.
+- `httpapi/public.ts` carries the Hono-compat normalization for the Effect-generated OpenAPI surface (auth scheme strip, request-body required flag, optional `null` arms, `BadRequestError` / `NotFoundError` remap, `$ref` self-cycle fix, `auth_token` query injection). Today's Effect-generated SDK is not byte-identical to the Hono-generated SDK — see Phase 4.
+- Auth is centrally configured for the Effect backend via Effect `Config` (`refactor: use Effect config for HttpApi authorization`, `Fix HttpApi raw route authorization`) rather than re-attached in each route module.
 - Auth supports Basic auth and the legacy `auth_token` query parameter through `HttpApiSecurity.apiKey`.
 - Instance context is provided by `httpapi/server.ts` using `directory`, `workspace`, and `x-opencode-directory`.
 - `Observability.layer` is provided in the Effect route layer and deduplicated through the shared `memoMap`.
+- CORS middleware is wired into both backends (`feat(httpapi): add CORS middleware to instance routes`).
 
 ## Migration Rules
 
@@ -122,10 +124,19 @@ Keep large or stateful groups for later:
 
 Hono routes cannot be deleted while `hono-openapi` is the source of SDK generation.
 
+Status: the Effect `HttpApi` OpenAPI surface is **implemented and opt-in** (`bun dev generate --httpapi`, `OPENCODE_SDK_OPENAPI=httpapi`). Default SDK generation still uses Hono. `httpapi/public.ts` applies the Hono-compat normalization layer to the Effect output. Diff against the Hono-generated spec still shows real gaps that must be closed before the SDK can flip:
+
+- Branded-type `pattern` constraints on ID schemas are not propagated to the Effect output (~169 missing).
+- Per-property `description` annotations are not propagated through `Schema.Struct` to the Effect output (~107 missing).
+- `Event.*` and `SyncEvent.*` component names use dotted form in Hono and PascalCase in Effect (~50 differences, breaks SDK type names).
+- Effect's component deduper emits numbered duplicates (`Session9`, `SyncEvent.session.updated.11`) that need a name-collision fix.
+- Cosmetic-only diffs (`additionalProperties: false`, `const` vs `enum`, MAX_SAFE_INTEGER `maximum`, `propertyNames`) can be normalized in `public.ts` if they would otherwise change SDK output.
+
 Required before route deletion:
 
-- Generate the public OpenAPI surface from Effect `HttpApi` for ported routes.
+- Close the diff above so Effect-generated SDK output matches the Hono-generated SDK output for every retained path.
 - Keep operation IDs, schemas, status codes, and SDK type names stable unless the change is intentional.
+- Flip `packages/sdk/js/script/build.ts` default to `httpapi` and regenerate.
 - Compare generated SDK output against `dev` for every route group deletion.
 - Remove Hono OpenAPI stubs only after Effect OpenAPI is the SDK source for those paths.
 
@@ -365,25 +376,26 @@ Prefer smaller PRs from here so route behavior and SDK/OpenAPI fallout stays rev
 8. [x] Bridge session read routes: list, status, get, children, todo, diff, messages.
 9. [x] Bridge session lifecycle mutation routes: create, delete, update, fork, abort.
 10. [x] Bridge remaining session mutation and prompt routes.
-11. [ ] Replace event SSE with non-Hono Effect HTTP.
-12. [x] Replace pty websocket/control routes with non-Hono Effect HTTP.
-13. [x] Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer.
-14. [ ] Switch OpenAPI/SDK generation to Effect routes and compare SDK output.
-15. [ ] Flip ported JSON routes default-on, keep a short fallback, then delete replaced Hono route files.
+11. [ ] Replace event SSE with non-Hono Effect HTTP. The Effect backend has a raw Effect HTTP `httpapi/event.ts`; the Hono backend still uses `hono/streaming` `streamSSE`. Either port Hono `/event` to raw Effect HTTP for the fallback window, or skip and delete it together with Hono in step 15.
+12. [x] Replace pty websocket/control routes with non-Hono Effect HTTP for the Effect backend. Hono `pty.ts` remains in the Hono backend.
+13. [x] Replace tui bridge routes or explicitly isolate them behind a non-Hono compatibility layer for the Effect backend. Hono `tui.ts` remains in the Hono backend.
+14. [ ] Switch OpenAPI/SDK generation to Effect routes and compare SDK output. Effect path is implemented and opt-in via `--httpapi` / `OPENCODE_SDK_OPENAPI=httpapi`. Close the schema-shape gaps in `public.ts` (branded `pattern`, per-property `description`, `Event.*` / `SyncEvent.*` naming, dedup collisions), then flip `packages/sdk/js/script/build.ts` default.
+15. [ ] Flip `backend.ts` default from `hono` to `effect-httpapi`, keep `OPENCODE_EXPERIMENTAL_HTTPAPI` (or its inverse) as a short fallback flag, then delete replaced Hono route files.
 
 ## Checklist
 
 - [x] Add first `HttpApi` JSON route slices.
-- [x] Bridge selected `HttpApi` routes into Hono behind `OPENCODE_EXPERIMENTAL_HTTPAPI`.
+- [x] Bridge selected `HttpApi` routes behind `OPENCODE_EXPERIMENTAL_HTTPAPI`. (Now backend-fork-at-startup rather than in-Hono path mounting.)
 - [x] Reuse existing Effect services in handlers.
 - [x] Provide auth, instance lookup, and observability in the Effect route layer.
-- [x] Attach auth middleware in route modules.
+- [x] Centralize auth via Effect `Config` for the Effect backend.
 - [x] Support `auth_token` as a query security scheme.
 - [x] Add bridge-level auth and instance tests.
 - [x] Complete exact Hono route inventory.
 - [x] Resolve implemented-but-unmounted route groups.
 - [x] Port remaining top-level JSON reads.
-- [ ] Generate SDK/OpenAPI from Effect routes.
-- [ ] Flip ported JSON routes to default-on with fallback.
+- [x] Implement Effect `HttpApi` OpenAPI generation behind `--httpapi` / `OPENCODE_SDK_OPENAPI=httpapi`.
+- [ ] Close Effect-vs-Hono OpenAPI schema-shape gaps and flip the SDK generator default.
+- [ ] Flip the runtime backend default from `hono` to `effect-httpapi`, with a short fallback flag.
 - [ ] Delete replaced Hono route implementations.
-- [ ] Replace SSE/websocket/streaming Hono routes with non-Hono implementations.
+- [ ] Replace SSE/websocket/streaming Hono routes with non-Hono implementations (or remove with the rest of Hono).
