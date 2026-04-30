@@ -1,6 +1,5 @@
-import { Effect, Encoding, Layer, Redacted, Schema } from "effect"
+import { Config, Effect, Encoding, Layer, Option, Redacted, Schema } from "effect"
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
-import { Flag } from "@opencode-ai/core/flag/flag"
 
 class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
   "Unauthorized",
@@ -24,17 +23,23 @@ const emptyCredential = {
   password: Redacted.make(""),
 }
 
+const authConfig = Config.all({
+  password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
+  username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
+})
+
 function validateCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
   credential: { readonly username: string; readonly password: typeof emptyCredential.password },
+  config: Config.Success<typeof authConfig>,
 ) {
   return Effect.gen(function* () {
-    if (!Flag.OPENCODE_SERVER_PASSWORD) return yield* effect
+    if (Option.isNone(config.password) || config.password.value === "") return yield* effect
 
-    if (credential.username !== (Flag.OPENCODE_SERVER_USERNAME ?? "opencode")) {
+    if (credential.username !== config.username) {
       return yield* new Unauthorized({ message: "Unauthorized" })
     }
-    if (Redacted.value(credential.password) !== Flag.OPENCODE_SERVER_PASSWORD) {
+    if (Redacted.value(credential.password) !== config.password.value) {
       return yield* new Unauthorized({ message: "Unauthorized" })
     }
     return yield* effect
@@ -59,13 +64,16 @@ function decodeCredential(input: string) {
     )
 }
 
-export const authorizationLayer = Layer.succeed(
+export const authorizationLayer = Layer.effect(
   Authorization,
-  Authorization.of({
-    basic: (effect, { credential }) => validateCredential(effect, credential),
-    authToken: (effect, { credential }) =>
-      Effect.gen(function* () {
-        return yield* validateCredential(effect, yield* decodeCredential(Redacted.value(credential)))
-      }),
+  Effect.gen(function* () {
+    const config = yield* authConfig
+    return Authorization.of({
+      basic: (effect, { credential }) => validateCredential(effect, credential, config),
+      authToken: (effect, { credential }) =>
+        Effect.gen(function* () {
+          return yield* validateCredential(effect, yield* decodeCredential(Redacted.value(credential)), config)
+        }),
+    })
   }),
 )
