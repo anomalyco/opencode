@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Shell } from "../../src/shell/shell"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
+import { which } from "../../src/util/which"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
   const prev = process.env.SHELL
@@ -39,6 +40,20 @@ describe("shell", () => {
     expect(Shell.posix("C:/tools/pwsh.exe")).toBe(false)
   })
 
+  test("falls back when configured shell cannot be resolved", async () => {
+    await withShell(undefined, async () => {
+      const preferred = Shell.preferred()
+      const acceptable = Shell.acceptable()
+      expect(Shell.preferred("opencode-missing-shell")).toBe(preferred)
+      expect(Shell.acceptable("opencode-missing-shell")).toBe(acceptable)
+    })
+  })
+
+  test("falls back for terminal-only acceptable shells", () => {
+    expect(Shell.name(Shell.acceptable("fish"))).not.toBe("fish")
+    expect(Shell.name(Shell.acceptable("nu"))).not.toBe("nu")
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
@@ -62,8 +77,19 @@ describe("shell", () => {
       })
     })
 
+    test("resolves bare bash to Git Bash before PATH", async () => {
+      const bash = Shell.gitbash()
+      if (!bash) return
+      expect(Shell.acceptable("bash")).toBe(bash)
+      expect(Shell.preferred("bash")).toBe(bash)
+      await withShell("bash", async () => {
+        expect(Shell.acceptable()).toBe(bash)
+        expect(Shell.preferred()).toBe(bash)
+      })
+    })
+
     test("resolves bare PowerShell shells", async () => {
-      const shell = Bun.which("pwsh") || Bun.which("powershell")
+      const shell = which("pwsh") || which("powershell")
       if (!shell) return
       await withShell(path.win32.basename(shell), async () => {
         expect(Shell.preferred()).toBe(shell)

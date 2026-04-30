@@ -1,9 +1,11 @@
 import z from "zod"
-import { and, Database, eq } from "../storage"
+import { and } from "drizzle-orm"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
-import { Log } from "../util"
-import { Flag } from "@/flag/flag"
+import * as Log from "@opencode-ai/core/util/log"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { which } from "../util/which"
@@ -11,10 +13,11 @@ import { ProjectID } from "./schema"
 import { Effect, Layer, Path, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, withStatics } from "@/util/schema"
+import { serviceUse } from "@/effect/service-use"
 
 const log = Log.create({ service: "project" })
 
@@ -33,9 +36,9 @@ const ProjectCommands = Schema.Struct({
 })
 
 const ProjectTime = Schema.Struct({
-  created: Schema.Number,
-  updated: Schema.Number,
-  initialized: Schema.optional(Schema.Number),
+  created: NonNegativeInt,
+  updated: NonNegativeInt,
+  initialized: Schema.optional(NonNegativeInt),
 })
 
 export const Info = Schema.Struct({
@@ -53,14 +56,20 @@ export const Info = Schema.Struct({
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
-  Updated: BusEvent.define("project.updated", Info.zod),
+  Updated: BusEvent.define("project.updated", Info),
 }
 
 type Row = typeof ProjectTable.$inferSelect
 
 export function fromRow(row: Row): Info {
   const icon =
-    row.icon_url || row.icon_color ? { url: row.icon_url ?? undefined, color: row.icon_color ?? undefined } : undefined
+    row.icon_url || row.icon_url_override || row.icon_color
+      ? {
+          url: row.icon_url ?? undefined,
+          override: row.icon_url_override ?? undefined,
+          color: row.icon_color ?? undefined,
+        }
+      : undefined
   return {
     id: row.id,
     worktree: row.worktree,
@@ -84,6 +93,15 @@ export const UpdateInput = z.object({
   commands: zod(ProjectCommands).optional(),
 })
 export type UpdateInput = z.infer<typeof UpdateInput>
+
+export const UpdatePayload = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
+})
+  .annotate({ identifier: "ProjectUpdateInput" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
 // ---------------------------------------------------------------------------
 // Effect service
@@ -161,7 +179,7 @@ export const layer: Layer.Layer<
     const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
         Effect.map((x) => x.trim()),
-        Effect.map(ProjectID.make),
+        Effect.map((x) => ProjectID.make(x)),
         Effect.catch(() => Effect.void),
       )
     })
@@ -289,6 +307,7 @@ export const layer: Layer.Layer<
             vcs: result.vcs ?? null,
             name: result.name,
             icon_url: result.icon?.url,
+            icon_url_override: result.icon?.override,
             icon_color: result.icon?.color,
             time_created: result.time.created,
             time_updated: result.time.updated,
@@ -303,6 +322,7 @@ export const layer: Layer.Layer<
               vcs: result.vcs ?? null,
               name: result.name,
               icon_url: result.icon?.url,
+              icon_url_override: result.icon?.override,
               icon_color: result.icon?.color,
               time_updated: result.time.updated,
               time_initialized: result.time.initialized,
@@ -365,6 +385,7 @@ export const layer: Layer.Layer<
           .set({
             name: input.name,
             icon_url: input.icon?.url,
+            icon_url_override: input.icon?.override,
             icon_color: input.icon?.color,
             commands: input.commands,
             time_updated: Date.now(),
@@ -465,6 +486,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(NodePath.layer),
 )
 
+export const use = serviceUse(Service)
+
 export function list() {
   return Database.use((db) =>
     db
@@ -486,3 +509,5 @@ export function setInitialized(id: ProjectID) {
     db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
   )
 }
+
+export * as Project from "./project"

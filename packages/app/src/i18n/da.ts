@@ -226,7 +226,7 @@ export const dict = {
   "common.default": "Standard",
   "common.attachment": "vedhæftning",
 
-  "prompt.placeholder.shell": "Indtast shell-kommando...",
+  "prompt.placeholder.shell": "Indtast shell-kommando... {{example}}",
   "prompt.placeholder.normal": 'Spørg om hvad som helst... "{{example}}"',
   "prompt.placeholder.simple": "Spørg om hvad som helst...",
   "prompt.placeholder.summarizeComments": "Opsummér kommentarer…",
@@ -800,8 +800,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Hent indhold fra en URL",
   "settings.permissions.tool.websearch.title": "Websøgning",
   "settings.permissions.tool.websearch.description": "Søg på nettet",
-  "settings.permissions.tool.codesearch.title": "Kodesøgning",
-  "settings.permissions.tool.codesearch.description": "Søg kode på nettet",
   "settings.permissions.tool.external_directory.title": "Ekstern mappe",
   "settings.permissions.tool.external_directory.description": "Få adgang til filer uden for projektmappen",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",

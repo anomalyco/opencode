@@ -227,7 +227,7 @@ export const dict = {
   "common.default": "Predeterminado",
   "common.attachment": "adjunto",
 
-  "prompt.placeholder.shell": "Introduce comando de shell...",
+  "prompt.placeholder.shell": "Introduce comando de shell... {{example}}",
   "prompt.placeholder.normal": 'Pregunta cualquier cosa... "{{example}}"',
   "prompt.placeholder.simple": "Pregunta cualquier cosa...",
   "prompt.placeholder.summarizeComments": "Resumir comentarios…",
@@ -813,8 +813,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Obtener contenido de una URL",
   "settings.permissions.tool.websearch.title": "Búsqueda Web",
   "settings.permissions.tool.websearch.description": "Buscar en la web",
-  "settings.permissions.tool.codesearch.title": "Búsqueda de Código",
-  "settings.permissions.tool.codesearch.description": "Buscar código en la web",
   "settings.permissions.tool.external_directory.title": "Directorio Externo",
   "settings.permissions.tool.external_directory.description": "Acceder a archivos fuera del directorio del proyecto",
   "settings.permissions.tool.doom_loop.title": "Bucle Infinito",

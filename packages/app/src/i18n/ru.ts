@@ -227,7 +227,7 @@ export const dict = {
   "common.default": "По умолчанию",
   "common.attachment": "вложение",
 
-  "prompt.placeholder.shell": "Введите команду оболочки...",
+  "prompt.placeholder.shell": "Введите команду оболочки... {{example}}",
   "prompt.placeholder.normal": 'Спросите что угодно... "{{example}}"',
   "prompt.placeholder.simple": "Спросите что угодно...",
   "prompt.placeholder.summarizeComments": "Суммировать комментарии…",
@@ -808,8 +808,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Получение контента по URL",
   "settings.permissions.tool.websearch.title": "Web Search",
   "settings.permissions.tool.websearch.description": "Поиск в интернете",
-  "settings.permissions.tool.codesearch.title": "Code Search",
-  "settings.permissions.tool.codesearch.description": "Поиск кода в интернете",
   "settings.permissions.tool.external_directory.title": "Внешняя директория",
   "settings.permissions.tool.external_directory.description": "Доступ к файлам вне директории проекта",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",

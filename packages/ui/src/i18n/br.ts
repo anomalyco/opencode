@@ -95,7 +95,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Buscar Web",
   "ui.tool.websearch": "Pesquisa na Web",
-  "ui.tool.codesearch": "Pesquisa de Código",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Tarefas",
