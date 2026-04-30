@@ -93,18 +93,15 @@ async function waitForFile(file: string, timeout = 3_000) {
 // Test layer
 // ---------------------------------------------------------------------------
 
-const testGlobal = Layer.succeed(
-  Global.Service,
-  Global.Service.of({
-    home: os.homedir(),
-    data: os.tmpdir(),
-    cache: os.tmpdir(),
-    config: os.tmpdir(),
-    state: os.tmpdir(),
-    bin: os.tmpdir(),
-    log: os.tmpdir(),
-  }),
-)
+const testGlobal = Global.layerWith({
+  home: os.homedir(),
+  data: os.tmpdir(),
+  cache: os.tmpdir(),
+  config: os.tmpdir(),
+  state: os.tmpdir(),
+  bin: os.tmpdir(),
+  log: os.tmpdir(),
+})
 
 const testLayer = EffectFlock.layer.pipe(Layer.provide(testGlobal), Layer.provide(AppFileSystem.defaultLayer))
 
