@@ -22,3 +22,4 @@
 | [bump-script-encoding-fix](./bump-script-encoding-fix/) | done | bump-installer-version.ps1 加 UTF-8 BOM 修中文 placeholder 乱码(PS 5.1 源解析陷阱)|
 | [macos-右键选区-修复](./macos-右键选区-修复/) | done | macOS WKWebView 文字上右键选区丢失 — 选区历史栈挑最长 + overlay div 替代 stale 的 CSS Custom Highlight + 关闭菜单时统一清原生/Pierre 选区 |
 | [加聊天-option-enter](./加聊天-option-enter/) | done | 文件查看器"+ 添加到聊天窗口"对话框 macOS 加 Option+Enter 提交快捷键 + 底部提示文案平台化(Tiny) |
+| [macos-pack-installer](./macos-pack-installer/) | done | macOS 一键打 .app/.dmg 脚本(pack-installer.sh + bump-installer-version.sh)+ icon.icns 加 .gitignore + 4 个 sh +x 权限(Tiny) |
