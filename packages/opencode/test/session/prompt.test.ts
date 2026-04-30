@@ -1944,7 +1944,7 @@ it.live(
             .pipe(Effect.forkChild)
 
           // The run should finish successfully on its own because the first LLM call stops,
-          // executes the tool, then the loop checks for "wrap" interrupt and breaks gracefully!
+          // executes the tool, then the loop checks for "waitingSteer" interrupt and breaks gracefully!
           const exit = yield* Fiber.await(run)
           
           expect(Exit.isSuccess(exit)).toBe(true)

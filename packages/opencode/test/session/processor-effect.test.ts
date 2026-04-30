@@ -928,9 +928,9 @@ it.live("session.processor effect tests allow graceful steer interrupt", () =>
         }
         
         // State should be busy, because loop continues on graceful exit!
-        // The loop sets to busy unless current status is steer or wrap.
-        // Wait, the status should STILL be steer!
-        expect(state).toMatchObject({ type: "steer" })
+        // The loop sets to busy unless current status is haltingSteer or waitingSteer.
+        // Wait, the status should STILL be haltingSteer!
+        expect(state).toMatchObject({ type: "haltingSteer" })
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),

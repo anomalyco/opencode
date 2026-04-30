@@ -386,4 +386,62 @@ describe("prompt submit worktree selection", () => {
     expect(queuedEditID).toBe("test-edit-id")
     expect(cleared).toBe(true)
   })
+
+  test("sendFollowupDraft sets session_status accurately for followupModes", async () => {
+    const { sendFollowupDraft } = await import("./submit")
+    let syncData: any = undefined
+    
+    const client = clientFor("/repo/worktree-a")
+    const sync = {
+      set: (key: string, id: string, data: any) => {
+        if (key === "session_status") {
+          syncData = data
+        }
+      },
+      session: {
+        optimistic: { remove: () => {}, add: () => {} }
+      }
+    } as any
+    const globalSync = {
+      child: () => [undefined, sync.set]
+    } as any
+
+    await sendFollowupDraft({
+      client: client as any,
+      globalSync,
+      sync,
+      draft: {
+        sessionID: "session-1",
+        sessionDirectory: "/repo/worktree-a",
+        prompt: [{ type: "text", content: "test", start: 0, end: 4 }],
+        context: [],
+        agent: "build",
+        model: { providerID: "provider", modelID: "model" },
+        isSteer: true,
+      },
+      optimisticBusy: true,
+      before: () => true,
+    })
+
+    expect(syncData).toEqual({ type: "haltingSteer" })
+    
+    await sendFollowupDraft({
+      client: client as any,
+      globalSync,
+      sync,
+      draft: {
+        sessionID: "session-1",
+        sessionDirectory: "/repo/worktree-a",
+        prompt: [{ type: "text", content: "test", start: 0, end: 4 }],
+        context: [],
+        agent: "build",
+        model: { providerID: "provider", modelID: "model" },
+        followupMode: "waitingSteer",
+      },
+      optimisticBusy: true,
+      before: () => true,
+    })
+
+    expect(syncData).toEqual({ type: "waitingSteer" })
+  })
 })
