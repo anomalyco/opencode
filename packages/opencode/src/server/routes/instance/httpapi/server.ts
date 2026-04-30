@@ -1,6 +1,7 @@
 import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
+import * as Socket from "effect/unstable/socket/Socket"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
@@ -31,7 +32,7 @@ import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { authorizationLayer } from "./auth"
+import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
 import { eventRoute } from "./event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
@@ -49,12 +50,14 @@ import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
 import { workspaceHandlers } from "./handlers/workspace"
-import { instanceContextLayer, instanceRouterLayer } from "./instance-context"
+import { instanceContextLayer, instanceRouterMiddleware } from "./middleware/instance-context"
+import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
+import type { Predicate } from "effect/Predicate"
 
-export const context = Context.empty() as Context.Context<unknown>
+export const context = Context.makeUnsafe<unknown>(new Map())
 
 const runtime = HttpRouter.middleware()(
   Effect.succeed((effect) =>
@@ -86,12 +89,39 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   ]),
 )
 
-const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(Layer.provide(instanceRouterLayer))
+const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
+  Layer.provide(
+    instanceRouterMiddleware
+      .combine(workspaceRouterMiddleware)
+      .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
+  ),
+)
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
-  Layer.provide([authorizationLayer, instanceContextLayer]),
+  Layer.provide([
+    authorizationLayer.pipe(Layer.provide(ServerAuthConfig.defaultLayer)),
+    workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
+    instanceContextLayer,
+  ]),
 )
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
+  Layer.provide(
+    HttpRouter.cors({
+      maxAge: 86_400,
+      allowedOrigins: ((input) => {
+        return (
+          !input ||
+          input.startsWith("http://localhost:") ||
+          input.startsWith("http://127.0.0.1:") ||
+          input.startsWith("oc://renderer") ||
+          input === "tauri://localhost" ||
+          input === "http://tauri.localhost" ||
+          input === "https://tauri.localhost" ||
+          /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)
+        )
+      }) as Predicate<string> as any,
+    }),
+  ),
   Layer.provide([
     runtime,
     Account.defaultLayer,
