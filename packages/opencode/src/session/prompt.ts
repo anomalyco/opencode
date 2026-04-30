@@ -361,7 +361,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       model: Provider.Model
       session: Session.Info
       tools?: Record<string, boolean>
-      processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+      processor?: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
       bypassAgentCheck: boolean
       messages: MessageV2.WithParts[]
     }) {
@@ -369,35 +369,40 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const tools: Record<string, AITool> = {}
       const run = yield* runner()
       const promptOps = yield* ops()
+      // Compaction passes no processor only to build cache-aligned tool definitions.
+      const processor = input.processor
+      const messageID = input.processor?.message.id ?? MessageID.ascending()
 
       const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
         sessionID: input.session.id,
         abort: options.abortSignal!,
-        messageID: input.processor.message.id,
+        messageID,
         callID: options.toolCallId,
         extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
         agent: input.agent.name,
         messages: input.messages,
-        metadata: (val) =>
-          input.processor.updateToolCall(options.toolCallId, (match) => {
-            if (!["running", "pending"].includes(match.state.status)) return match
-            return {
-              ...match,
-              state: {
-                title: val.title,
-                metadata: val.metadata,
-                status: "running",
-                input: args,
-                time: { start: Date.now() },
-              },
-            }
-          }),
+        metadata: processor
+          ? (val) =>
+              processor.updateToolCall(options.toolCallId, (match) => {
+                if (!["running", "pending"].includes(match.state.status)) return match
+                return {
+                  ...match,
+                  state: {
+                    title: val.title,
+                    metadata: val.metadata,
+                    status: "running",
+                    input: args,
+                    time: { start: Date.now() },
+                  },
+                }
+              })
+          : () => Effect.void,
         ask: (req) =>
           permission
             .ask({
               ...req,
               sessionID: input.session.id,
-              tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+              tool: { messageID, callID: options.toolCallId },
               ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
             })
             .pipe(Effect.orDie),
@@ -428,7 +433,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     ...attachment,
                     id: PartID.ascending(),
                     sessionID: ctx.sessionID,
-                    messageID: input.processor.message.id,
+                    messageID,
                   })),
                 }
                 yield* plugin.trigger(
@@ -436,8 +441,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
                   output,
                 )
-                if (options.abortSignal?.aborted) {
-                  yield* input.processor.completeToolCall(options.toolCallId, output)
+                if (options.abortSignal?.aborted && processor) {
+                  yield* processor.completeToolCall(options.toolCallId, output)
                 }
                 return output
               }),
@@ -511,12 +516,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   ...attachment,
                   id: PartID.ascending(),
                   sessionID: ctx.sessionID,
-                  messageID: input.processor.message.id,
+                  messageID,
                 })),
                 content: result.content,
               }
-              if (opts.abortSignal?.aborted) {
-                yield* input.processor.completeToolCall(opts.toolCallId, output)
+              if (opts.abortSignal?.aborted && processor) {
+                yield* processor.completeToolCall(opts.toolCallId, output)
               }
               return output
             }),
@@ -525,6 +530,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
 
       return tools
+    })
+
+    const resolveStreamContext = Effect.fn("SessionPrompt.resolveStreamContext")(function* (input: {
+      agent: Agent.Info
+      model: Provider.Model
+      session: Session.Info
+      processor?: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+      tools?: Record<string, boolean>
+      bypassAgentCheck: boolean
+      messages: MessageV2.WithParts[]
+    }) {
+      const [resolvedTools, [skills, env, instructions]] = yield* Effect.all([
+        resolveTools(input),
+        Effect.all([
+          sys.skills(input.agent),
+          Effect.sync(() => sys.environment(input.model)),
+          instruction.system().pipe(Effect.orDie),
+        ]),
+      ])
+      const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+      return { system, tools: resolvedTools }
     })
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
@@ -1339,12 +1365,56 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
 
           if (task?.type === "compaction") {
+            const compactionAgentInfo = yield* agents.get("compaction")
+            const compactionModel = compactionAgentInfo?.model
+              ? yield* provider.getModel(compactionAgentInfo.model.providerID, compactionAgentInfo.model.modelID)
+              : model
+            const originalUser = msgs.findLast(
+              (m): m is MessageV2.WithParts & { info: MessageV2.User } =>
+                m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"),
+            )
+            const canReusePrefix =
+              originalUser?.info.format?.type !== "json_schema" &&
+              model.id === compactionModel.id &&
+              model.providerID === compactionModel.providerID
+
+            let resolved:
+              | {
+                  agent: Agent.Info
+                  system: string[]
+                  tools: Record<string, AITool>
+                  user: MessageV2.User
+                }
+              | undefined
+            if (canReusePrefix) {
+              const originalAgent = originalUser ? yield* agents.get(originalUser.info.agent) : undefined
+              if (originalAgent && originalUser) {
+                const bypassAgentCheck = originalUser.parts.some((p) => p.type === "agent")
+                const ctx = yield* resolveStreamContext({
+                  agent: originalAgent,
+                  model,
+                  session,
+                  processor: undefined,
+                  tools: originalUser.info.tools,
+                  bypassAgentCheck,
+                  messages: msgs,
+                })
+                resolved = {
+                  agent: originalAgent,
+                  ...ctx,
+                  tools: ctx.tools,
+                  user: originalUser.info,
+                }
+              }
+            }
+
             const result = yield* compaction.process({
               messages: msgs,
               parentID: lastUser.id,
               sessionID,
               auto: task.auto,
               overflow: task.overflow,
+              resolved,
             })
             if (result === "stop") break
             continue
@@ -1397,28 +1467,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-            const tools = yield* resolveTools({
-              agent,
-              session,
-              model,
-              tools: lastUser.tools,
-              processor: handle,
-              bypassAgentCheck,
-              messages: msgs,
-            })
-
-            if (lastUser.format?.type === "json_schema") {
-              tools["StructuredOutput"] = createStructuredOutputTool({
-                schema: lastUser.format.schema,
-                onSuccess(output) {
-                  structured = output
-                },
-              })
-            }
-
-            if (step === 1)
-              yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
-
             if (step > 1 && lastFinished) {
               for (const m of msgs) {
                 if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
@@ -1439,15 +1487,33 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-              sys.skills(agent),
-              Effect.sync(() => sys.environment(model)),
-              instruction.system().pipe(Effect.orDie),
+            const [{ tools, system }, modelMsgs] = yield* Effect.all([
+              resolveStreamContext({
+                agent,
+                model,
+                session,
+                processor: handle,
+                tools: lastUser.tools,
+                bypassAgentCheck,
+                messages: msgs,
+              }),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+
+            if (lastUser.format?.type === "json_schema") {
+              tools["StructuredOutput"] = createStructuredOutputTool({
+                schema: lastUser.format.schema,
+                onSuccess(output) {
+                  structured = output
+                },
+              })
+              system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            }
+
+            if (step === 1)
+              yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
+
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1784,6 +1850,7 @@ export function createStructuredOutputTool(input: {
     },
   })
 }
+
 const bashRegex = /!`([^`]+)`/g
 // Match [Image N] as single token, quoted strings, or non-space sequences
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi

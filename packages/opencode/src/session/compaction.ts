@@ -18,6 +18,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { fn } from "@/util/fn"
+import { type Tool as AITool } from "ai"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -88,6 +89,13 @@ type CompletedCompaction = {
   userIndex: number
   assistantIndex: number
   summary: string | undefined
+}
+
+type ResolvedContext = {
+  agent: Agent.Info
+  system: string[]
+  tools: Record<string, AITool>
+  user: MessageV2.User
 }
 
 function summaryText(message: MessageV2.WithParts) {
@@ -193,6 +201,7 @@ export interface Interface {
     sessionID: SessionID
     auto: boolean
     overflow?: boolean
+    resolved?: ResolvedContext
   }) => Effect.Effect<"continue" | "stop">
   readonly create: (input: {
     sessionID: SessionID
@@ -346,6 +355,7 @@ export const layer: Layer.Layer<
       sessionID: SessionID
       auto: boolean
       overflow?: boolean
+      resolved?: ResolvedContext
     }) {
       const parent = input.messages.findLast((m) => m.info.id === input.parentID)
       if (!parent || parent.info.role !== "user") {
@@ -379,17 +389,19 @@ export const layer: Layer.Layer<
         }
       }
 
-      const agent = yield* agents.get("compaction")
-      const model = agent.model
-        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
+      const compactionAgent = yield* agents.get("compaction")
+      const fallbackModel = compactionAgent.model
+        ? yield* provider.getModel(compactionAgent.model.providerID, compactionAgent.model.modelID)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+      const resolved = input.resolved
+      const model = fallbackModel
       const cfg = yield* config.get()
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
-      const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
       const previousSummary = prior.at(-1)?.summary
+      const hidden = resolved ? undefined : new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
       const selected = yield* select({
-        messages: history.filter((_, index) => !hidden.has(index)),
+        messages: hidden ? history.filter((_, index) => !hidden.has(index)) : history,
         cfg,
         model,
       })
@@ -402,10 +414,11 @@ export const layer: Layer.Layer<
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
-        stripMedia: true,
-        toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
-      })
+      const modelMessages = yield* MessageV2.toModelMessagesEffect(
+        msgs,
+        model,
+        resolved ? undefined : { stripMedia: true, toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS },
+      )
       const ctx = yield* InstanceState.context
       const msg: MessageV2.Assistant = {
         id: MessageID.ascending(),
@@ -439,21 +452,43 @@ export const layer: Layer.Layer<
         sessionID: input.sessionID,
         model,
       })
-      const result = yield* processor.process({
-        user: userMessage,
-        agent,
-        sessionID: input.sessionID,
-        tools: {},
-        system: [],
-        messages: [
-          ...modelMessages,
-          {
-            role: "user",
-            content: [{ type: "text", text: nextPrompt }],
-          },
-        ],
-        model,
-      })
+      const currentSession = resolved ? yield* session.get(input.sessionID) : undefined
+      const result = yield* processor.process(
+        resolved
+          ? {
+              user: resolved.user,
+              agent: resolved.agent,
+              sessionID: input.sessionID,
+              permission: currentSession?.permission,
+              parentSessionID: currentSession?.parentID,
+              system: resolved.system,
+              messages: [
+                ...modelMessages,
+                {
+                  role: "user",
+                  content: [{ type: "text", text: nextPrompt }],
+                },
+              ],
+              tools: resolved.tools,
+              model,
+              toolChoice: "none",
+            }
+          : {
+              user: userMessage,
+              agent: compactionAgent,
+              sessionID: input.sessionID,
+              tools: {},
+              system: [],
+              messages: [
+                ...modelMessages,
+                {
+                  role: "user",
+                  content: [{ type: "text", text: nextPrompt }],
+                },
+              ],
+              model,
+            },
+      )
 
       if (result === "compact") {
         processor.message.error = new MessageV2.ContextOverflowError({
