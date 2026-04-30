@@ -129,6 +129,14 @@ Required before route deletion:
 - Compare generated SDK output against `dev` for every route group deletion.
 - Remove Hono OpenAPI stubs only after Effect OpenAPI is the SDK source for those paths.
 
+V2 cleanup once SDK compatibility no longer needs the legacy Hono contract:
+
+- Remove `public.ts` compatibility transforms that hide honest `HttpApi` metadata, including auth `securitySchemes`, per-route `security`, and generated `401` responses.
+- Stop remapping built-in `HttpApi` error schemas back to legacy Hono `BadRequestError` / `NotFoundError` components if V2 clients can consume the actual Effect error shape.
+- Prefer the direct `HttpApi` OpenAPI output for request/response bodies and named component schemas instead of rewriting it to match Hono generator quirks.
+- Keep schema fixes that describe the actual wire format, but delete transforms that only preserve legacy SDK type names or inline-vs-ref shape.
+- Re-evaluate `auth_token` as an OpenAPI security scheme rather than a hand-injected query parameter once clients can consume the V2 spec.
+
 ### 5. Make HttpApi Default For JSON Routes
 
 After JSON parity and SDK generation are covered:

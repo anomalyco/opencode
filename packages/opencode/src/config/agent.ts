@@ -26,8 +26,8 @@ const AgentSchema = Schema.StructWithRest(
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
     }),
-    temperature: Schema.optional(Schema.Number),
-    top_p: Schema.optional(Schema.Number),
+    temperature: Schema.optional(Schema.Finite),
+    top_p: Schema.optional(Schema.Finite),
     prompt: Schema.optional(Schema.String),
     tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
       description: "@deprecated Use 'permission' field instead",

@@ -11,7 +11,6 @@ import { toJsonSchema } from "../../src/util/effect-zod"
 
 import { Parameters as ApplyPatch } from "../../src/tool/apply_patch"
 import { Parameters as Bash } from "../../src/tool/bash"
-import { Parameters as CodeSearch } from "../../src/tool/codesearch"
 import { Parameters as Edit } from "../../src/tool/edit"
 import { Parameters as Glob } from "../../src/tool/glob"
 import { Parameters as Grep } from "../../src/tool/grep"
@@ -37,7 +36,6 @@ describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
     test("apply_patch", () => expect(toJsonSchema(ApplyPatch)).toMatchSnapshot())
     test("bash", () => expect(toJsonSchema(Bash)).toMatchSnapshot())
-    test("codesearch", () => expect(toJsonSchema(CodeSearch)).toMatchSnapshot())
     test("edit", () => expect(toJsonSchema(Edit)).toMatchSnapshot())
     test("glob", () => expect(toJsonSchema(Glob)).toMatchSnapshot())
     test("grep", () => expect(toJsonSchema(Grep)).toMatchSnapshot())
@@ -82,21 +80,6 @@ describe("tool parameters", () => {
     })
     test("rejects missing command", () => {
       expect(accepts(Bash, { description: "list" })).toBe(false)
-    })
-  })
-
-  describe("codesearch", () => {
-    test("accepts query; tokensNum defaults to 5000", () => {
-      expect(parse(CodeSearch, { query: "hooks" })).toEqual({ query: "hooks", tokensNum: 5000 })
-    })
-    test("accepts override tokensNum", () => {
-      expect(parse(CodeSearch, { query: "hooks", tokensNum: 10000 }).tokensNum).toBe(10000)
-    })
-    test("rejects tokensNum under 1000", () => {
-      expect(accepts(CodeSearch, { query: "x", tokensNum: 500 })).toBe(false)
-    })
-    test("rejects tokensNum over 50000", () => {
-      expect(accepts(CodeSearch, { query: "x", tokensNum: 60000 })).toBe(false)
     })
   })
 
