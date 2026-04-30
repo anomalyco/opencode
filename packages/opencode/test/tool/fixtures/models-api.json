@@ -11544,6 +11544,23 @@
         "cost": { "input": 0.6, "output": 3, "cache_read": 0.08 },
         "limit": { "context": 262144, "output": 65536 }
       },
+      "kimi-k2.6": {
+        "id": "kimi-k2.6",
+        "name": "Kimi K2.6",
+        "family": "kimi",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "interleaved": { "field": "reasoning_content" },
+        "temperature": true,
+        "knowledge": "2025-01",
+        "release_date": "2026-03-15",
+        "last_updated": "2026-03-15",
+        "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0.32, "output": 1.34, "cache_read": 0.054 },
+        "limit": { "context": 262144, "output": 65536 }
+      },
       "mimo-v2-omni-free": {
         "id": "mimo-v2-omni-free",
         "name": "MiMo V2 Omni Free",
@@ -64090,6 +64107,23 @@
         "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
         "open_weights": true,
         "cost": { "input": 0.6, "output": 3, "cache_read": 0.1 },
+        "limit": { "context": 262144, "output": 65536 }
+      },
+      "kimi-k2.6": {
+        "id": "kimi-k2.6",
+        "name": "Kimi K2.6",
+        "family": "kimi",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "interleaved": { "field": "reasoning_content" },
+        "temperature": true,
+        "knowledge": "2025-01",
+        "release_date": "2026-03-15",
+        "last_updated": "2026-03-15",
+        "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0.32, "output": 1.34, "cache_read": 0.054 },
         "limit": { "context": 262144, "output": 65536 }
       },
       "minimax-m2.7": {

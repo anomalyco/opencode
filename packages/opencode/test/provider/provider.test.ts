@@ -312,6 +312,46 @@ test("custom provider with npm package", async () => {
   })
 })
 
+test("custom Kimi openai-compatible model defaults interleaved reasoning field", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-provider": {
+              name: "Custom Provider",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://api.custom.com/v1",
+              models: {
+                "kimi-k2.6": {
+                  name: "Kimi K2.6",
+                },
+                "kimi-k2.5": {
+                  name: "Kimi K2.5",
+                },
+              },
+              options: {
+                apiKey: "custom-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      const provider = providers[ProviderID.make("custom-provider")]
+      expect(provider.models["kimi-k2.6"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+      expect(provider.models["kimi-k2.5"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+    },
+  })
+})
+
 test("custom DeepSeek openai-compatible model defaults interleaved reasoning field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

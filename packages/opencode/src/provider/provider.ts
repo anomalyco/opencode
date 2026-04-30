@@ -1201,7 +1201,7 @@ const layer: Layer.Layer<
                 interleaved:
                   model.interleaved ??
                   existingModel?.capabilities.interleaved ??
-                  (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
+                  (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && (apiID.includes("deepseek") || apiID.includes("kimi-k2"))
                     ? { field: "reasoning_content" }
                     : false),
               },
