@@ -1,69 +1,68 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Agent } from "../../src/agent/agent"
-import { Instance } from "../../src/project/instance"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { SystemPrompt } from "../../src/session/system"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
-function load<A>(dir: string, fn: (svc: Agent.Interface) => Effect.Effect<A>) {
-  return Effect.runPromise(provideInstance(dir)(Agent.Service.use(fn)).pipe(Effect.provide(Agent.defaultLayer)))
-}
+const it = testEffect(Layer.mergeAll(Agent.defaultLayer, SystemPrompt.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
 describe("session.system", () => {
-  test("skills output is sorted by name and stable across calls", async () => {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        for (const [name, description] of [
+  it.live("skills output is sorted by name and stable across calls", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* Effect.all(
+        [
           ["zeta-skill", "Zeta skill."],
           ["alpha-skill", "Alpha skill."],
           ["middle-skill", "Middle skill."],
-        ]) {
-          const skillDir = path.join(dir, ".opencode", "skill", name)
-          await Bun.write(
-            path.join(skillDir, "SKILL.md"),
-            `---
+        ].map(([name, description]) =>
+          Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", name, "SKILL.md"),
+              `---
 name: ${name}
 description: ${description}
 ---
 
 # ${name}
 `,
-          )
-        }
-      },
-    })
+            ),
+          ),
+        ),
+        { discard: true },
+      )
 
-    const home = process.env.OPENCODE_TEST_HOME
-    process.env.OPENCODE_TEST_HOME = tmp.path
+      const home = process.env.OPENCODE_TEST_HOME
+      process.env.OPENCODE_TEST_HOME = dir
 
-    try {
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const build = await load(tmp.path, (svc) => svc.get("build"))
-          const runSkills = Effect.gen(function* () {
-            const svc = yield* SystemPrompt.Service
-            return yield* svc.skills(build!)
-          }).pipe(Effect.provide(SystemPrompt.defaultLayer))
+      try {
+        yield* Effect.gen(function* () {
+          const build = yield* Agent.Service.use((svc) => svc.get("build"))
+          if (!build) yield* Effect.fail(new NamedError.Unknown({ message: "missing build agent" }))
 
-          const first = await Effect.runPromise(runSkills)
-          const second = await Effect.runPromise(runSkills)
+          const skills = SystemPrompt.Service.use((svc) => svc.skills(build))
+
+          const first = yield* skills
+          const second = yield* skills
+          const output = first ?? (yield* Effect.fail(new NamedError.Unknown({ message: "missing skills output" })))
 
           expect(first).toBe(second)
 
-          const alpha = first!.indexOf("<name>alpha-skill</name>")
-          const middle = first!.indexOf("<name>middle-skill</name>")
-          const zeta = first!.indexOf("<name>zeta-skill</name>")
+          const alpha = output.indexOf("<name>alpha-skill</name>")
+          const middle = output.indexOf("<name>middle-skill</name>")
+          const zeta = output.indexOf("<name>zeta-skill</name>")
 
           expect(alpha).toBeGreaterThan(-1)
           expect(middle).toBeGreaterThan(alpha)
           expect(zeta).toBeGreaterThan(middle)
-        },
-      })
-    } finally {
-      process.env.OPENCODE_TEST_HOME = home
-    }
-  })
+        }).pipe(provideInstance(dir))
+      } finally {
+        process.env.OPENCODE_TEST_HOME = home
+      }
+    }),
+  )
 })
