@@ -11,7 +11,8 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
-import { displayName, sortedRootSessions, workspaceKey } from "./helpers"
+import { displayName, sortedRootSessions } from "./helpers"
+import { pathKey } from "@/utils/path-key"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -224,7 +225,7 @@ const ProjectPreviewPanel = (props: {
       >
         <Show
           when={
-            props.dirs().find((directory) => workspaceKey(directory) === workspaceKey(props.ctx.currentDir())) ??
+            props.dirs().find((directory) => pathKey(directory) === pathKey(props.ctx.currentDir())) ??
             props.project.worktree
           }
         >

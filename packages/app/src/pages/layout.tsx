@@ -436,20 +436,20 @@ export default function Layout(props: ParentProps) {
 
       const unsub = globalSDK.event.listen((e) => {
         if (e.details?.type === "worktree.ready") {
-          if (state.busyWorkspaces[workspaceKey(e.name)]) {
+          if (state.busyWorkspaces[pathKey(e.name)]) {
             setBusy(e.name, false)
           } else {
-            pendingWorktreeEvents.set(workspaceKey(e.name), "ready")
+            pendingWorktreeEvents.set(pathKey(e.name), "ready")
           }
           WorktreeState.ready(e.name)
           return
         }
 
         if (e.details?.type === "worktree.failed") {
-          if (state.busyWorkspaces[workspaceKey(e.name)]) {
+          if (state.busyWorkspaces[pathKey(e.name)]) {
             setBusy(e.name, false)
           } else {
-            pendingWorktreeEvents.set(workspaceKey(e.name), "failed")
+            pendingWorktreeEvents.set(pathKey(e.name), "failed")
           }
           WorktreeState.failed(e.name, e.details.properties?.message ?? language.t("common.requestFailed"))
           return
