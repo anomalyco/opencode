@@ -168,6 +168,7 @@ export function Prompt(props: PromptProps) {
   const textareaKeybindings = useTextareaKeybindings()
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
+  const attachmentStyleId = syntax().getStyleId("extmark.attachment")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
@@ -556,7 +557,7 @@ export function Prompt(props: PromptProps) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
-        styleId = fileStyleId
+        styleId = part.mime.startsWith("image/") || part.mime === "application/pdf" ? attachmentStyleId : fileStyleId
       } else if (part.type === "agent" && part.source) {
         start = part.source.start
         end = part.source.end
@@ -945,7 +946,7 @@ export function Prompt(props: PromptProps) {
       start: extmarkStart,
       end: extmarkEnd,
       virtual: true,
-      styleId: fileStyleId,
+      styleId: attachmentStyleId,
       typeId: promptPartTypeId,
     })
 

@@ -1278,7 +1278,10 @@ function UserMessage(props: {
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const borderColor = createMemo(() => (hover() ? color() : theme.backgroundElement))
+  const hasText = createMemo(() => Boolean(text()))
+  const messageColor = createMemo(() => (hover() ? color() : theme.textMuted))
+  const [barHeight, setBarHeight] = createSignal(1)
+  const bar = createMemo(() => Array.from({ length: Math.max(1, barHeight()) }, () => "┃").join("\n"))
   const bubbleMaxWidth = createMemo(() =>
     Math.min(Math.max(1, ctx.width), Math.max(12, Math.min(ctx.width - 4, Math.floor(ctx.width * 0.78)))),
   )
@@ -1300,9 +1303,10 @@ function UserMessage(props: {
             onMouseUp={props.onMouseUp}
             flexDirection="row"
             alignItems="flex-start"
-            border={["left"]}
-            customBorderChars={SplitBorder.customBorderChars}
-            borderColor={borderColor()}
+            renderBefore={function () {
+              const el = this as BoxRenderable
+              if (el.height !== barHeight()) setBarHeight(el.height)
+            }}
             gap={1}
             paddingTop={0}
             paddingBottom={0}
@@ -1311,11 +1315,14 @@ function UserMessage(props: {
             flexShrink={0}
             maxWidth={bubbleMaxWidth()}
           >
-            <text fg={hover() ? color() : theme.textMuted}>›</text>
+            <text fg={messageColor()}>{bar()}</text>
+            <text fg={messageColor()}>›</text>
             <box flexDirection="column" flexShrink={1} paddingRight={1}>
-              <text fg={theme.backgroundElement}>{text()}</text>
+              <Show when={hasText()}>
+                <text fg={messageColor()}>{text()}</text>
+              </Show>
               <Show when={files().length}>
-                <box flexDirection="row" paddingBottom={queued() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
+                <box flexDirection="row" paddingBottom={queued() ? 1 : 0} paddingTop={hasText() ? 1 : 0} gap={1} flexWrap="wrap">
                   <For each={files()}>
                     {(file, index) => {
                       const bg = createMemo(() => {
@@ -1406,6 +1413,19 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user()!.time.created
   })
 
+  const indicatorColor = createMemo(() => {
+    const value = color()
+    if (
+      value.r === theme.textMuted.r &&
+      value.g === theme.textMuted.g &&
+      value.b === theme.textMuted.b &&
+      value.a === theme.textMuted.a
+    ) {
+      return theme.text
+    }
+    return value
+  })
+
   const liveDuration = createMemo(() => {
     if (!working()) return 0
     if (!user()?.time) return 0
@@ -1480,7 +1500,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <Show
                 when={working()}
                 fallback={
-                  <span style={{ fg: props.message.error?.name === "MessageAbortedError" ? theme.textMuted : color() }}>
+                  <span style={{ fg: props.message.error?.name === "MessageAbortedError" ? theme.textMuted : indicatorColor() }}>
                     •{" "}
                   </span>
                 }
@@ -1488,7 +1508,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 <For each={[0, 1, 2]}>
                   {(index) => (
                     <>
-                      <span style={{ fg: activityFrame() === index ? color() : theme.textMuted }}>•</span>
+                      <span style={{ fg: activityFrame() === index ? indicatorColor() : theme.textMuted }}>•</span>
                       <Show when={index < 2}>
                         <span style={{ fg: theme.textMuted }}> </span>
                       </Show>

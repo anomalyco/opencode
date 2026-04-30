@@ -770,6 +770,12 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
+      scope: ["extmark.attachment"],
+      style: {
+        foreground: theme.warning,
+      },
+    },
+    {
       scope: ["extmark.agent"],
       style: {
         foreground: theme.secondary,
