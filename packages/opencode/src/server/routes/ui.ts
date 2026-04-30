@@ -98,6 +98,8 @@ export function serveUIEffect(request: HttpServerRequest.HttpServerRequest) {
       }),
     )
     const headers = new Headers(response.headers as HeadersInit)
+    headers.delete("content-encoding")
+    headers.delete("content-length")
 
     if (response.headers["content-type"]?.includes("text/html")) {
       const body = yield* response.text
