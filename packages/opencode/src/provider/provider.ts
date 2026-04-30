@@ -201,11 +201,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const env = yield* dep.env()
       const auth = yield* dep.auth(provider.id)
       const resource = iife(() => {
-        const name =
-          provider.options?.resourceName ||
-          (auth?.type === "api" && auth.metadata?.resourceName) ||
-          env["AZURE_RESOURCE_NAME"]
-        if (typeof name === "string" && name.trim() !== "") return name
+        return [
+          provider.options?.resourceName,
+          auth?.type === "api" ? auth.metadata?.resourceName : undefined,
+          env["AZURE_RESOURCE_NAME"],
+        ].find((name) => typeof name === "string" && name.trim() !== "")
       })
 
       if (!resource && !provider.options?.baseURL) {
