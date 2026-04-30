@@ -3,9 +3,13 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { registerAdaptor } from "../../src/control-plane/adaptors"
+import type { WorkspaceAdaptor } from "../../src/control-plane/types"
+import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instance } from "../../src/project/instance"
+import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
@@ -22,6 +26,7 @@ import { it } from "../lib/effect"
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
+const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
 function app(experimental = true) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
@@ -77,6 +82,28 @@ function createTextMessage(directory: string, sessionID: SessionID, text: string
   )
 }
 
+const localAdaptor = (directory: string): WorkspaceAdaptor => ({
+  name: "Local Test",
+  description: "Create a local test workspace",
+  configure: (info) => ({ ...info, name: "local-test", directory }),
+  create: async () => {
+    await mkdir(directory, { recursive: true })
+  },
+  async remove() {},
+  target: () => ({ type: "local" as const, directory }),
+})
+
+const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
+  Effect.promise(async () => {
+    registerAdaptor(input.projectID, input.type, localAdaptor(input.directory))
+    return Workspace.create({
+      type: input.type,
+      branch: null,
+      extra: null,
+      projectID: input.projectID,
+    })
+  })
+
 function request(path: string, init?: RequestInit) {
   return Effect.promise(async () => app().request(path, init))
 }
@@ -108,6 +135,7 @@ function withTmp<A, E, R>(
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
+  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await Instance.disposeAll()
   await resetDatabase()
 })
@@ -222,6 +250,40 @@ describe("session HttpApi", () => {
             headers,
           }),
         ).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
+    "persists selected workspace id when creating a session",
+    withTmp({ git: true, config: { formatter: false, lsp: false, share: "disabled" } }, (tmp) =>
+      Effect.gen(function* () {
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+        const project = yield* Project.use.fromDirectory(tmp.path).pipe(Effect.provide(Project.defaultLayer))
+        const workspace = yield* createLocalWorkspace({
+          projectID: project.project.id,
+          type: "session-create-workspace",
+          directory: path.join(tmp.path, ".workspace-local"),
+        })
+
+        const created = yield* requestJson<Session.Info>(`${SessionPaths.create}?workspace=${workspace.id}`, {
+          method: "POST",
+          headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
+          body: JSON.stringify({ title: "workspace session" }),
+        })
+
+        expect(created).toMatchObject({ id: created.id, workspaceID: workspace.id })
+        expect(
+          yield* Effect.sync(() =>
+            Database.use((db) =>
+              db
+                .select({ workspaceID: SessionTable.workspace_id })
+                .from(SessionTable)
+                .where(eq(SessionTable.id, created.id))
+                .get(),
+            ),
+          ),
+        ).toEqual({ workspaceID: workspace.id })
       }),
     ),
   )
