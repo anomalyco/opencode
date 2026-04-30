@@ -14,6 +14,13 @@ const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+const ALLOWED_MODELS = new Set([
+  "gpt-5.5",
+  "gpt-5.2",
+  "gpt-5.3-codex",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+])
 
 interface PkceCodes {
   verifier: string
@@ -358,49 +365,44 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 
 export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
   return {
+    provider: {
+      id: "openai",
+      async models(provider, ctx) {
+        if (ctx.auth?.type !== "oauth") return provider.models
+
+        return Object.fromEntries(
+          Object.entries(provider.models)
+            .filter(([, model]) => {
+              if (ALLOWED_MODELS.has(model.api.id)) return true
+              const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
+              return match ? parseFloat(match[1]) > 5.4 : false
+            })
+            .map(([modelID, model]) => [
+              modelID,
+              {
+                ...model,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cache: { read: 0, write: 0 },
+                },
+                limit: model.id.includes("gpt-5.5")
+                  ? {
+                      context: 400_000,
+                      input: 272_000,
+                      output: 128_000,
+                    }
+                  : model.limit,
+              },
+            ]),
+        )
+      },
+    },
     auth: {
       provider: "openai",
-      async loader(getAuth, provider) {
+      async loader(getAuth) {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
-
-        // Filter models to only allowed Codex models for OAuth
-        const allowedModels = new Set([
-          "gpt-5.1-codex",
-          "gpt-5.1-codex-max",
-          "gpt-5.1-codex-mini",
-          "gpt-5.2",
-          "gpt-5.2-codex",
-          "gpt-5.3-codex",
-          "gpt-5.4",
-          "gpt-5.4-mini",
-        ])
-        for (const [modelId, model] of Object.entries(provider.models)) {
-          if (modelId.includes("codex")) continue
-          if (allowedModels.has(model.api.id)) continue
-          const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
-          if (match && parseFloat(match[1]) > 5.4) continue
-          delete provider.models[modelId]
-        }
-
-        // Zero out costs for Codex (included with ChatGPT subscription)
-        for (const model of Object.values(provider.models)) {
-          model.cost = {
-            input: 0,
-            output: 0,
-            cache: { read: 0, write: 0 },
-          }
-
-          // gpt-5.5 models temporarily have restricted context window size for codex plans
-          if (model.id.includes("gpt-5.5")) {
-            model.limit = {
-              context: 400_000,
-              //@ts-expect-error incorrect type for v1 sdk but works
-              input: 272_000,
-              output: 128_000,
-            }
-          }
-        }
 
         return {
           apiKey: OAUTH_DUMMY_KEY,
