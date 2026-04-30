@@ -7,6 +7,7 @@ import { proxy } from "hono/proxy"
 import { getMimeType } from "hono/utils/mime"
 import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
+import { ProxyUtil } from "../proxy-util"
 
 const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   ? Promise.resolve(null)
@@ -15,6 +16,7 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
 
 const DEFAULT_CSP =
   "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
+const UI_UPSTREAM = new URL("https://app.opencode.ai")
 
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
@@ -44,6 +46,10 @@ function proxyResponseHeaders(headers: Record<string, string>) {
   return result
 }
 
+function upstreamURL(path: string) {
+  return new URL(path, UI_UPSTREAM).toString()
+}
+
 export async function serveUI(request: Request) {
   const embeddedWebUI = await embeddedUIPromise
   const path = new URL(request.url).pathname
@@ -62,12 +68,9 @@ export async function serveUI(request: Request) {
     return Response.json({ error: "Not Found" }, { status: 404 })
   }
 
-  const response = await proxy(`https://app.opencode.ai${path}`, {
+  const response = await proxy(upstreamURL(path), {
     raw: request,
-    headers: {
-      ...Object.fromEntries(request.headers.entries()),
-      host: "app.opencode.ai",
-    },
+    headers: ProxyUtil.headers(request, { host: UI_UPSTREAM.host }),
   })
   const match = response.headers.get("content-type")?.includes("text/html")
     ? themePreloadHash(await response.clone().text())
@@ -98,11 +101,8 @@ export function serveUIEffect(request: HttpServerRequest.HttpServerRequest) {
     }
 
     const response = yield* HttpClient.execute(
-      HttpClientRequest.make(request.method)(`https://app.opencode.ai${path}`, {
-        headers: {
-          ...request.headers,
-          host: "app.opencode.ai",
-        },
+      HttpClientRequest.make(request.method)(upstreamURL(path), {
+        headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }),
         body: requestBody(request),
       }),
     )
