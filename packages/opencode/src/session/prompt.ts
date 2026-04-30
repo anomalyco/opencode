@@ -216,7 +216,7 @@ export const layer = Layer.effect(
           model: mdl,
           sessionID: input.session.id,
           retries: 2,
-          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
+          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...(msgs ?? [])],
         })
         .pipe(
           Stream.filter(LLMEvent.is.textDelta),

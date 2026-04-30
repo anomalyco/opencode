@@ -415,7 +415,7 @@ export const layer = Layer.effect(
         tools: {},
         system: [],
         messages: [
-          ...modelMessages,
+          ...(modelMessages ?? []),
           {
             role: "user",
             content: [{ type: "text", text: nextPrompt }],
