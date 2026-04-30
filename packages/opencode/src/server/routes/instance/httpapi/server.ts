@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
@@ -31,6 +31,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
+import { isAllowedCorsOrigin } from "@/server/cors"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
 import { eventRoute } from "./event"
@@ -55,7 +56,6 @@ import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/w
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
-import type { Predicate } from "effect/Predicate"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -68,6 +68,11 @@ const runtime = HttpRouter.middleware()(
     }),
   ),
 ).layer
+
+const cors = HttpRouter.middleware(HttpMiddleware.cors({
+  allowedOrigins: isAllowedCorsOrigin,
+  maxAge: 86_400,
+}), { global: true })
 
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
@@ -105,24 +110,8 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
 )
 
 export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
-  Layer.provide(
-    HttpRouter.cors({
-      maxAge: 86_400,
-      allowedOrigins: ((input) => {
-        return (
-          !input ||
-          input.startsWith("http://localhost:") ||
-          input.startsWith("http://127.0.0.1:") ||
-          input.startsWith("oc://renderer") ||
-          input === "tauri://localhost" ||
-          input === "http://tauri.localhost" ||
-          input === "https://tauri.localhost" ||
-          /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)
-        )
-      }) as Predicate<string> as any,
-    }),
-  ),
   Layer.provide([
+    cors,
     runtime,
     Account.defaultLayer,
     Agent.defaultLayer,
