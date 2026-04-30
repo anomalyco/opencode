@@ -12,12 +12,25 @@ type MarkedInstance = {
 
 const disposeAfterResponse = new WeakMap<object, MarkedInstance>()
 
+const mark = (ctx: InstanceContext) =>
+  Effect.gen(function* () {
+    return { ctx, workspaceID: yield* WorkspaceRef }
+  })
+
+const restoreMarked = <A>(marked: MarkedInstance, fn: () => A) =>
+  Effect.promise(() =>
+    WorkspaceContext.provide({
+      workspaceID: marked.workspaceID,
+      fn: () => Instance.restore(marked.ctx, fn),
+    }),
+  )
+
 export const markInstanceForDisposal = (ctx: InstanceContext) =>
   Effect.gen(function* () {
-    const workspaceID = yield* WorkspaceRef
+    const marked = yield* mark(ctx)
     return yield* HttpEffect.appendPreResponseHandler((request, response) =>
       Effect.sync(() => {
-        disposeAfterResponse.set(request.source, { ctx, workspaceID })
+        disposeAfterResponse.set(request.source, marked)
         return response
       }),
     )
@@ -25,19 +38,9 @@ export const markInstanceForDisposal = (ctx: InstanceContext) =>
 
 export const markInstanceForReload = (ctx: InstanceContext, next: Parameters<typeof Instance.reload>[0]) =>
   Effect.gen(function* () {
-    const workspaceID = yield* WorkspaceRef
+    const marked = yield* mark(ctx)
     return yield* HttpEffect.appendPreResponseHandler((_request, response) =>
-      Effect.as(
-        Effect.uninterruptible(
-          Effect.promise(() =>
-            WorkspaceContext.provide({
-              workspaceID,
-              fn: () => Instance.restore(ctx, () => Instance.reload(next)),
-            }),
-          ),
-        ),
-        response,
-      ),
+      Effect.as(Effect.uninterruptible(restoreMarked(marked, () => Instance.reload(next))), response),
     )
   })
 
@@ -48,13 +51,6 @@ export const disposeMiddleware: HttpMiddleware.HttpMiddleware = (effect) =>
     const marked = disposeAfterResponse.get(request.source)
     if (!marked) return response
     disposeAfterResponse.delete(request.source)
-    yield* Effect.uninterruptible(
-      Effect.promise(() =>
-        WorkspaceContext.provide({
-          workspaceID: marked.workspaceID,
-          fn: () => Instance.restore(marked.ctx, () => Instance.dispose()),
-        }),
-      ),
-    )
+    yield* Effect.uninterruptible(restoreMarked(marked, () => Instance.dispose()))
     return response
   })
