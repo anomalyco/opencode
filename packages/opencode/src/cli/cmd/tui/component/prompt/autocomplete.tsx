@@ -651,11 +651,7 @@ export function Autocomplete(props: {
             >
               <text
                 fg={
-                  option().gitStatus
-                    ? option().gitStatus === "modified"
-                      ? theme.warning
-                      : theme.diffAdded
-                    : undefined
+                  option().gitStatus ? (option().gitStatus === "modified" ? theme.warning : theme.diffAdded) : undefined
                 }
                 flexShrink={0}
               >

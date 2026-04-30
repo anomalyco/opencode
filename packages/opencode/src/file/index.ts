@@ -11,7 +11,7 @@ import path from "path"
 import z from "zod"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
-import { Glob } from "../util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 import { Log } from "../util"
 import { Fff } from "./fff"
 import { Protected } from "./protected"
@@ -396,15 +396,13 @@ export const layer = Layer.effect(
 
         next.dirs = Array.from(dirs).toSorted()
       } else {
-        const files = (
-          yield* Effect.promise(() =>
-            Glob.scan("**/*", {
-              cwd: ctx.directory,
-              include: "file",
-              dot: true,
-            }),
-          )
-        ).toSorted((a, b) => a.localeCompare(b))
+        const files = (yield* Effect.promise(() =>
+          Glob.scan("**/*", {
+            cwd: ctx.directory,
+            include: "file",
+            dot: true,
+          }),
+        )).toSorted((a, b) => a.localeCompare(b))
         const seen = new Set<string>()
         for (const file of files) {
           next.files.push(file)
@@ -712,9 +710,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-)
+export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Git.defaultLayer))
 
 export * as File from "."

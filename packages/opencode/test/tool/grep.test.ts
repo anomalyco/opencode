@@ -12,12 +12,7 @@ import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  Layer.mergeAll(
-    CrossSpawnSpawner.defaultLayer,
-    AppFileSystem.defaultLayer,
-    Truncate.defaultLayer,
-    Agent.defaultLayer,
-  ),
+  Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
 )
 
 async function write(file: string, body: string) {
@@ -117,9 +112,7 @@ describe("tool.grep", () => {
   it.live("suggests path when content has no match", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() =>
-          write(path.join(dir, "src", "server", "auth.ts"), "export const token = 1\n"),
-        )
+        yield* Effect.promise(() => write(path.join(dir, "src", "server", "auth.ts"), "export const token = 1\n"))
         const info = yield* GrepTool
         const grep = yield* info.init()
         const result = yield* grep.execute(

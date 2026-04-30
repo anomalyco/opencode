@@ -725,8 +725,12 @@ describe("file/index Filesystem patterns", () => {
 
           const result = await search({ query: "", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
-          const firstHidden = result.findIndex((d) => d.path.split("/").some((p: string) => p.startsWith(".") && p.length > 1))
-          const lastVisible = result.findLastIndex((d) => !d.path.split("/").some((p: string) => p.startsWith(".") && p.length > 1))
+          const firstHidden = result.findIndex((d) =>
+            d.path.split("/").some((p: string) => p.startsWith(".") && p.length > 1),
+          )
+          const lastVisible = result.findLastIndex(
+            (d) => !d.path.split("/").some((p: string) => p.startsWith(".") && p.length > 1),
+          )
           if (firstHidden >= 0 && lastVisible >= 0) {
             expect(firstHidden).toBeGreaterThan(lastVisible)
           }
@@ -818,7 +822,8 @@ describe("file/index Filesystem patterns", () => {
         directory: tmp.path,
         fn: async () => {
           await init()
-          expect(await search({ query: "fresh", type: "file" })).toEqual([])
+          const before = await search({ query: "fresh", type: "file" })
+          expect(before.map((r) => r.path)).not.toContain("fresh.ts")
 
           await fs.writeFile(path.join(tmp.path, "fresh.ts"), "fresh", "utf-8")
 

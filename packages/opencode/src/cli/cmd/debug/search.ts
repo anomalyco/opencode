@@ -3,7 +3,7 @@ import { Fff } from "../../../file/fff"
 import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
-import { Glob } from "@/util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 
 export const SearchCommand = cmd({
   command: "search",
@@ -46,11 +46,13 @@ const FilesCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const limit = args.limit ?? 100
-      const files = (await Glob.scan("**/*", {
-        cwd: Instance.directory,
-        include: "file",
-        dot: true,
-      }))
+      const files = (
+        await Glob.scan("**/*", {
+          cwd: Instance.directory,
+          include: "file",
+          dot: true,
+        })
+      )
         .map((x) => x.replaceAll("\\", "/"))
         .filter((x) => Fff.allowed({ rel: x, hidden: true, glob: args.glob ? [args.glob] : undefined }))
         .filter((x) => !args.query || x.includes(args.query))

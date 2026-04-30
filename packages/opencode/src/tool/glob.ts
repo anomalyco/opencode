@@ -3,7 +3,7 @@ import z from "zod"
 import { Effect } from "effect"
 import { InstanceState } from "@/effect"
 import { Fff } from "../file/fff"
-import { Glob } from "../util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
@@ -50,10 +50,10 @@ function allowed(pattern: string, rel: string) {
   return Glob.match(pattern, file)
 }
 
-function pick(items: { relativePath: string }[]) {
+function pick(items: { relativePath: string }[], cwd: string) {
   return items
     .map((item) => ({
-      path: item.relativePath,
+      path: path.resolve(cwd, item.relativePath),
       rel: norm(item.relativePath),
     }))
     .filter((item) => !hidden(item.rel))
@@ -139,7 +139,7 @@ export const GlobTool = Tool.define(
         )
 
         let fallback = false
-        let rows = pick(first.items).filter((row) => allowed(params.pattern, row.rel))
+        let rows = pick(first.items, dir).filter((row) => allowed(params.pattern, row.rel))
         if (!rows.length) {
           const list = words(params.pattern)
           if (list.length >= 3) {
@@ -152,7 +152,7 @@ export const GlobTool = Tool.define(
                 current: path.join(dir, ".opencode"),
               }),
             )
-            rows = pick(next.items).filter((row) => allowed(params.pattern, row.rel))
+            rows = pick(next.items, dir).filter((row) => allowed(params.pattern, row.rel))
           }
         }
         if (!rows.length) {

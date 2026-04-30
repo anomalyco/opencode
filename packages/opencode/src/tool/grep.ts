@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { InstanceState } from "@/effect"
 import { Fff } from "../file/fff"
 import type { GrepMode } from "@ff-labs/fff-bun"
-import { Glob } from "../util/glob"
+import { Glob } from "@opencode-ai/shared/util/glob"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./grep.txt"
 import * as Tool from "./tool"
@@ -312,7 +312,9 @@ export const GrepTool = Tool.define(
 
         if (over || cut) {
           out.push("")
-          out.push(`(Results truncated: showing first ${shown} results. Consider using a more specific path or pattern.)`)
+          out.push(
+            `(Results truncated: showing first ${shown} results. Consider using a more specific path or pattern.)`,
+          )
         }
 
         return {

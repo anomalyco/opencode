@@ -1,4 +1,3 @@
-import fs from "fs/promises"
 import path from "path"
 import {
   FileFinder,
@@ -12,10 +11,9 @@ import {
 } from "@ff-labs/fff-bun"
 import z from "zod"
 import { Global } from "../global"
-import { Instance } from "../project/instance"
-import { Filesystem } from "../util/filesystem"
-import { Glob } from "../util/glob"
-import { Log } from "../util/log"
+import { Glob } from "@opencode-ai/shared/util/glob"
+import { Filesystem, Log } from "../util"
+import { registerDisposer } from "../effect/instance-registry"
 
 export namespace Fff {
   export const Match = z.object({
@@ -38,71 +36,95 @@ export namespace Fff {
     ),
   })
 
-  const state = Instance.state(
-    async () => ({
-      map: new Map<string, FileFinder>(),
-      pending: new Map<string, Promise<FileFinder>>(),
-    }),
-    async (state) => {
-      for (const pick of state.map.values()) pick.destroy()
-    },
-  )
+  const state = {
+    map: new Map<string, FileFinder>(),
+    // keep the state of the already indexed fff pickers
+    // to avoid asking if it is finished scanned every time
+    ready: new Set<string>(),
+  }
+
+  registerDisposer(async (directory) => {
+    const dir = Filesystem.resolve(directory)
+    const pick = state.map.get(dir)
+    if (!pick) return
+    state.map.delete(dir)
+    state.ready.delete(dir)
+
+    try {
+      pick.destroy()
+    } catch {}
+  })
 
   const root = path.join(Global.Path.cache, "fff")
 
-  async function dbs() {
-    await fs.mkdir(root, { recursive: true })
-    // fff databases are global across the file system
+  function key(dir: string) {
+    return Buffer.from(dir).toString("base64url")
+  }
+
+  function dbs(dir: string) {
+    const id = key(dir)
     return {
-      frecency: path.join(root, "frecency.mdb"),
-      history: path.join(root, "history.mdb"),
+      frecency: path.join(root, `${id}.frecency.mdb`),
+      history: path.join(root, `${id}.history.mdb`),
     }
   }
 
-  export async function picker(cwd: string) {
+  export function picker(cwd: string) {
     const dir = Filesystem.resolve(cwd)
-    const memo = await state()
-    const cached = memo.map.get(dir)
+    const cached = state.map.get(dir)
     if (cached) return cached
 
-    const wait = memo.pending.get(dir)
-    if (wait) return wait
+    const files = dbs(dir)
+    const base = Log.file()
+    const logfile = path.join(Global.Path.log, base ? "fff-" + path.basename(base) : "fff.log")
+    const result = FileFinder.create({
+      aiMode: true,
+      basePath: dir,
+      frecencyDbPath: files.frecency,
+      historyDbPath: files.history,
+      logFilePath: logfile,
+      // fff uses the same log level
+      logLevel: Log.currentLevel().toLowerCase() as "debug" | "info" | "warn" | "error",
+      // if there is second project opened within the same sesion - disable
+      // viertual memory mapping, the memory mapping address space is finite, so we
+      // don't want to blow user's computer (the limit depends on repo size)
+      cacheBudgetMaxFiles: state.map.size > 0 ? 0 : undefined,
+    })
 
-    const next = (async () => {
-      const files = await dbs()
-      const base = Log.file()
-      const logfile = path.join(Global.Path.log, base ? "fff-" + path.basename(base) : "fff.log")
-      const result = FileFinder.create({
-        aiMode: true,
-        basePath: dir,
-        frecencyDbPath: files.frecency,
-        historyDbPath: files.history,
-        logFilePath: logfile,
-        logLevel: Log.currentLevel().toLowerCase() as "debug" | "info" | "warn" | "error",
-        // if there is second project opened within the same sesion - disable
-        // content mapping, the memory mapping address space is finite, so we
-        // don't want to blow user's computer (the limit depends on repo size)
-        cacheBudgetMaxFiles: memo.map.size > 0 ? 0 : undefined,
-      })
-      if (!result.ok) throw new Error(result.error)
-      // we do not syncrhnously wait for the results here to not block anything
-      // fff will do the indexing in the background and will automatically
-      // become available
-      const pick = result.value
-      memo.map.set(dir, pick)
-      return pick
-    })()
+    if (!result.ok) throw new Error(result.error)
+    const pick = result.value
+    state.map.set(dir, pick)
+    return pick
+  }
 
-    memo.pending.set(dir, next)
-    try {
-      return await next
-    } finally {
-      if (memo.pending.get(dir) === next) memo.pending.delete(dir)
+  const FFF_WAIT_INTERVAL = 25
+  async function waitScan(picker: FileFinder, timeoutMs: number) {
+    const start = Date.now()
+
+    // becuase fff is a native library it doesn't touches event loop, so
+    // poll for picker to be ready for returning the data if it is still scanning
+    while (picker.isScanning()) {
+      if (Date.now() - start >= timeoutMs) throw new Error("fff scan timeout")
+      await new Promise<void>((resolve) => setTimeout(resolve, FFF_WAIT_INTERVAL))
     }
+  }
+
+  async function open(cwd: string) {
+    const dir = Filesystem.resolve(cwd)
+    const pick = picker(cwd)
+
+    if (!state.ready.has(dir)) {
+      await waitScan(pick, 5000)
+      state.ready.add(dir)
+    } else {
+      pick.scanFiles()
+      if (pick.isScanning()) await waitScan(pick, 5000)
+    }
+    return pick
   }
 
   export async function files(input: { cwd: string; query: string; page?: number; size?: number; current?: string }) {
-    const fff = await picker(input.cwd)
+    const fff = await open(input.cwd)
     const out = fff.fileSearch(input.query, {
       pageIndex: input.page ?? 0,
       pageSize: input.size ?? 100,
@@ -113,7 +135,7 @@ export namespace Fff {
   }
 
   export async function mixed(input: { cwd: string; query: string; page?: number; size?: number; current?: string }) {
-    const fff = await picker(input.cwd)
+    const fff = await open(input.cwd)
     const out = fff.mixedSearch(input.query, {
       pageIndex: input.page ?? 0,
       pageSize: input.size ?? 100,
@@ -133,7 +155,7 @@ export namespace Fff {
     budget?: number
     cursor?: GrepCursor | null
   }) {
-    const pick = await picker(input.cwd)
+    const pick = await open(input.cwd)
     const out = pick.grep(input.query, {
       mode: input.mode,
       maxMatchesPerFile: input.max,
