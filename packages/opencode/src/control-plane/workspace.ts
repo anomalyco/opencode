@@ -101,10 +101,13 @@ export class SyncHttpError extends Schema.TaggedErrorClass<SyncHttpError>()("Wor
   body: Schema.optional(Schema.String),
 }) {}
 
-export class WorkspaceNotFoundError extends Schema.TaggedErrorClass<WorkspaceNotFoundError>()("WorkspaceNotFoundError", {
-  message: Schema.String,
-  workspaceID: WorkspaceID,
-}) {}
+export class WorkspaceNotFoundError extends Schema.TaggedErrorClass<WorkspaceNotFoundError>()(
+  "WorkspaceNotFoundError",
+  {
+    message: Schema.String,
+    workspaceID: WorkspaceID,
+  },
+) {}
 
 export class SessionEventsNotFoundError extends Schema.TaggedErrorClass<SessionEventsNotFoundError>()(
   "WorkspaceSessionEventsNotFoundError",

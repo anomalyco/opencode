@@ -170,7 +170,11 @@ function recordedAdaptor(input: {
         return input.configure?.(info) ?? info
       },
       async create(info, env, from) {
-        calls.create.push({ info: structuredClone(info), env: { ...env }, from: from ? structuredClone(from) : undefined })
+        calls.create.push({
+          info: structuredClone(info),
+          env: { ...env },
+          from: from ? structuredClone(from) : undefined,
+        })
         await input.create?.(info, env, from)
       },
       async remove(info) {
@@ -279,12 +283,18 @@ function insertProject(id: ProjectID, worktree: string) {
 }
 
 function attachSessionToWorkspace(sessionID: SessionID, workspaceID: WorkspaceID) {
-  Database.use((db) => db.update(SessionTable).set({ workspace_id: workspaceID }).where(eq(SessionTable.id, sessionID)).run())
+  Database.use((db) =>
+    db.update(SessionTable).set({ workspace_id: workspaceID }).where(eq(SessionTable.id, sessionID)).run(),
+  )
 }
 
 function sessionSequence(sessionID: SessionID) {
   return Database.use((db) =>
-    db.select({ seq: EventSequenceTable.seq }).from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, sessionID)).get(),
+    db
+      .select({ seq: EventSequenceTable.seq })
+      .from(EventSequenceTable)
+      .where(eq(EventSequenceTable.aggregate_id, sessionID))
+      .get(),
   )?.seq
 }
 
@@ -308,7 +318,9 @@ function replaceSessionEvents(sessionID: SessionID, count: number) {
     db.delete(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, sessionID)).run()
     if (count === 0) return
 
-    db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: count - 1 }).run()
+    db.insert(EventSequenceTable)
+      .values({ aggregate_id: sessionID, seq: count - 1 })
+      .run()
     db.insert(EventTable)
       .values(
         Array.from({ length: count }, (_, i) => ({
@@ -522,43 +534,46 @@ describe("workspace-old CRUD", () => {
   it.live("remote create connects to routed event and history endpoints", () => {
     const calls: FetchCall[] = []
     return Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const bodyText = yield* req.text
-        const call = {
-          url: new URL(req.url, "http://localhost"),
-          method: req.method,
-          headers: new Headers(req.headers),
-          bodyText,
-          json: bodyText ? JSON.parse(bodyText) : undefined,
-        }
-        calls.push(call)
-        if (call.url.pathname === "/base/global/event") return HttpServerResponse.fromWeb(eventStreamResponse([], false))
-        if (call.url.pathname === "/base/sync/history") return yield* HttpServerResponse.json([])
-        return HttpServerResponse.text("unexpected", { status: 500 })
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance((dir) =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-          const workspace = yield* WorkspaceOld.Service
-        const type = unique("remote-create")
-        const recorded = remoteAdaptor(`${url}/base/?ignored=1#hash`, { directory: dir })
-        registerAdaptor(Instance.project.id, type, recorded.adaptor)
-
-          const info = yield* workspace.create({ type, branch: null, projectID: Instance.project.id, extra: null })
-
-        expect(calls.map((call) => `${call.method} ${call.url.pathname}${call.url.search}${call.url.hash}`)).toEqual([
-          "GET /base/global/event",
-          "POST /base/sync/history",
-        ])
-        expect(calls[1].json).toEqual({})
-          expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("connected")
-          expect(yield* workspace.isSyncing(info.id)).toBe(true)
-
-          yield* workspace.remove(info.id)
-          expect(yield* workspace.isSyncing(info.id)).toBe(false)
-          expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const bodyText = yield* req.text
+          const call = {
+            url: new URL(req.url, "http://localhost"),
+            method: req.method,
+            headers: new Headers(req.headers),
+            bodyText,
+            json: bodyText ? JSON.parse(bodyText) : undefined,
+          }
+          calls.push(call)
+          if (call.url.pathname === "/base/global/event")
+            return HttpServerResponse.fromWeb(eventStreamResponse([], false))
+          if (call.url.pathname === "/base/sync/history") return yield* HttpServerResponse.json([])
+          return HttpServerResponse.text("unexpected", { status: 500 })
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const type = unique("remote-create")
+            const recorded = remoteAdaptor(`${url}/base/?ignored=1#hash`, { directory: dir })
+            registerAdaptor(Instance.project.id, type, recorded.adaptor)
+
+            const info = yield* workspace.create({ type, branch: null, projectID: Instance.project.id, extra: null })
+
+            expect(
+              calls.map((call) => `${call.method} ${call.url.pathname}${call.url.search}${call.url.hash}`),
+            ).toEqual(["GET /base/global/event", "POST /base/sync/history"])
+            expect(calls[1].json).toEqual({})
+            expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("connected")
+            expect(yield* workspace.isSyncing(info.id)).toBe(true)
+
+            yield* workspace.remove(info.id)
+            expect(yield* workspace.isSyncing(info.id)).toBe(false)
+            expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
+          }),
         { git: true },
       )
     })
@@ -651,11 +666,16 @@ describe("workspace-old sync state", () => {
       insertWorkspace(withoutSession)
       registerAdaptor(Instance.project.id, withSessionType, localAdaptor(withSessionDir).adaptor)
       registerAdaptor(Instance.project.id, withoutSessionType, localAdaptor(withoutSessionDir).adaptor)
-      attachSessionToWorkspace((await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))).id, withSession.id)
+      attachSessionToWorkspace(
+        (await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))).id,
+        withSession.id,
+      )
 
       WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
 
-      await eventually(() => expect(WorkspaceOld.status().find((item) => item.workspaceID === withSession.id)?.status).toBe("connected"))
+      await eventually(() =>
+        expect(WorkspaceOld.status().find((item) => item.workspaceID === withSession.id)?.status).toBe("connected"),
+      )
       expect(WorkspaceOld.status().find((item) => item.workspaceID === withoutSession.id)?.status).toBeUndefined()
       await WorkspaceOld.remove(withSession.id)
       await WorkspaceOld.remove(withoutSession.id)
@@ -667,12 +687,21 @@ describe("workspace-old sync state", () => {
       const type = unique("missing-local")
       const info = workspaceInfo(Instance.project.id, type)
       insertWorkspace(info)
-      registerAdaptor(Instance.project.id, type, localAdaptor(path.join(dir, "missing-target"), { createDir: false }).adaptor)
-      attachSessionToWorkspace((await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))).id, info.id)
+      registerAdaptor(
+        Instance.project.id,
+        type,
+        localAdaptor(path.join(dir, "missing-target"), { createDir: false }).adaptor,
+      )
+      attachSessionToWorkspace(
+        (await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))).id,
+        info.id,
+      )
 
       WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
 
-      await eventually(() => expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBe("error"))
+      await eventually(() =>
+        expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBe("error"),
+      )
       expect(await WorkspaceOld.isSyncing(info.id)).toBe(false)
       await WorkspaceOld.remove(info.id)
     })
@@ -688,12 +717,17 @@ describe("workspace-old sync state", () => {
         await fs.mkdir(target, { recursive: true })
         insertWorkspace(info)
         registerAdaptor(Instance.project.id, type, localAdaptor(target).adaptor)
-        attachSessionToWorkspace((await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))).id, info.id)
+        attachSessionToWorkspace(
+          (await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))).id,
+          info.id,
+        )
 
         WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
         WorkspaceOld.startWorkspaceSyncing(Instance.project.id)
 
-        await eventually(() => expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBe("connected"))
+        await eventually(() =>
+          expect(WorkspaceOld.status().find((item) => item.workspaceID === info.id)?.status).toBe("connected"),
+        )
         expect(
           captured.events.filter(
             (event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Status.type,
@@ -709,56 +743,65 @@ describe("workspace-old sync state", () => {
   it.live("remote start emits disconnected, connecting, and connected then refuses duplicate listeners", () => {
     const calls: FetchCall[] = []
     return Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const bodyText = yield* req.text
-        const call = {
-          url: new URL(req.url, "http://localhost"),
-          method: req.method,
-          headers: new Headers(req.headers),
-          bodyText,
-          json: bodyText ? JSON.parse(bodyText) : undefined,
-        }
-        calls.push(call)
-        if (call.url.pathname === "/sync/global/event") return HttpServerResponse.fromWeb(eventStreamResponse())
-        if (call.url.pathname === "/sync/sync/history") return HttpServerResponse.fromWeb(Response.json([]))
-        return HttpServerResponse.text("unexpected", { status: 500 })
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance(() =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-          const workspace = yield* WorkspaceOld.Service
-          const sessionSvc = yield* SessionNs.Service
-        const captured = captureGlobalEvents()
-        try {
-          const type = unique("remote-start")
-          const info = workspaceInfo(Instance.project.id, type)
-          insertWorkspace(info)
-          registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/sync`).adaptor)
-          attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
-
-          yield* workspace.startWorkspaceSyncing(Instance.project.id)
-          yield* eventuallyEffect(Effect.gen(function* () {
-            expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("connected")
-          }))
-          yield* workspace.startWorkspaceSyncing(Instance.project.id)
-          yield* Effect.sleep("25 millis")
-
-          expect(
-            captured.events
-              .filter((event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Status.type)
-              .map((event) => event.payload.properties.status),
-          ).toEqual(["disconnected", "connecting", "connected"])
-          expect(calls.filter((call) => call.url.pathname === "/sync/global/event")).toHaveLength(1)
-          expect(calls.filter((call) => call.url.pathname === "/sync/sync/history")).toHaveLength(1)
-          expect(yield* workspace.isSyncing(info.id)).toBe(true)
-
-          yield* workspace.remove(info.id)
-          expect(yield* workspace.isSyncing(info.id)).toBe(false)
-        } finally {
-          captured.dispose()
-        }
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const bodyText = yield* req.text
+          const call = {
+            url: new URL(req.url, "http://localhost"),
+            method: req.method,
+            headers: new Headers(req.headers),
+            bodyText,
+            json: bodyText ? JSON.parse(bodyText) : undefined,
+          }
+          calls.push(call)
+          if (call.url.pathname === "/sync/global/event") return HttpServerResponse.fromWeb(eventStreamResponse())
+          if (call.url.pathname === "/sync/sync/history") return HttpServerResponse.fromWeb(Response.json([]))
+          return HttpServerResponse.text("unexpected", { status: 500 })
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const captured = captureGlobalEvents()
+            try {
+              const type = unique("remote-start")
+              const info = workspaceInfo(Instance.project.id, type)
+              insertWorkspace(info)
+              registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/sync`).adaptor)
+              attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+              yield* eventuallyEffect(
+                Effect.gen(function* () {
+                  expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe(
+                    "connected",
+                  )
+                }),
+              )
+              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+              yield* Effect.sleep("25 millis")
+
+              expect(
+                captured.events
+                  .filter(
+                    (event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Status.type,
+                  )
+                  .map((event) => event.payload.properties.status),
+              ).toEqual(["disconnected", "connecting", "connected"])
+              expect(calls.filter((call) => call.url.pathname === "/sync/global/event")).toHaveLength(1)
+              expect(calls.filter((call) => call.url.pathname === "/sync/sync/history")).toHaveLength(1)
+              expect(yield* workspace.isSyncing(info.id)).toBe(true)
+
+              yield* workspace.remove(info.id)
+              expect(yield* workspace.isSyncing(info.id)).toBe(false)
+            } finally {
+              captured.dispose()
+            }
+          }),
         { git: true },
       )
     })
@@ -766,31 +809,36 @@ describe("workspace-old sync state", () => {
 
   it.live("remote connection HTTP failures set error and clear syncing", () =>
     Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        if (new URL(req.url, "http://localhost").pathname === "/failed/global/event")
-          return HttpServerResponse.text("nope", { status: 503 })
-        return HttpServerResponse.fromWeb(Response.json([]))
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance(() =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const type = unique("remote-connect-fail")
-        const info = workspaceInfo(Instance.project.id, type)
-        insertWorkspace(info)
-        registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/failed`).adaptor)
-        attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
-
-        yield* workspace.startWorkspaceSyncing(Instance.project.id)
-
-        yield* eventuallyEffect(Effect.gen(function* () {
-          expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
-        }))
-        expect(yield* workspace.isSyncing(info.id)).toBe(false)
-        yield* workspace.remove(info.id)
+          const req = yield* HttpServerRequest.HttpServerRequest
+          if (new URL(req.url, "http://localhost").pathname === "/failed/global/event")
+            return HttpServerResponse.text("nope", { status: 503 })
+          return HttpServerResponse.fromWeb(Response.json([]))
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const type = unique("remote-connect-fail")
+            const info = workspaceInfo(Instance.project.id, type)
+            insertWorkspace(info)
+            registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/failed`).adaptor)
+            attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+            yield* workspace.startWorkspaceSyncing(Instance.project.id)
+
+            yield* eventuallyEffect(
+              Effect.gen(function* () {
+                expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
+              }),
+            )
+            expect(yield* workspace.isSyncing(info.id)).toBe(false)
+            yield* workspace.remove(info.id)
+          }),
         { git: true },
       )
     }),
@@ -798,32 +846,39 @@ describe("workspace-old sync state", () => {
 
   it.live("remote history HTTP failures set error", () =>
     Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const url = new URL(req.url, "http://localhost")
-        if (url.pathname === "/history-failed/global/event") return HttpServerResponse.fromWeb(eventStreamResponse([], false))
-        if (url.pathname === "/history-failed/sync/history") return HttpServerResponse.text("history failed", { status: 500 })
-        return HttpServerResponse.fromWeb(Response.json([]))
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance(() =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const type = unique("remote-history-fail")
-        const info = workspaceInfo(Instance.project.id, type)
-        insertWorkspace(info)
-        registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/history-failed`).adaptor)
-        attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
-
-        yield* workspace.startWorkspaceSyncing(Instance.project.id)
-
-        yield* eventuallyEffect(Effect.gen(function* () {
-          expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
-        }))
-        expect(yield* workspace.isSyncing(info.id)).toBe(false)
-        yield* workspace.remove(info.id)
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(req.url, "http://localhost")
+          if (url.pathname === "/history-failed/global/event")
+            return HttpServerResponse.fromWeb(eventStreamResponse([], false))
+          if (url.pathname === "/history-failed/sync/history")
+            return HttpServerResponse.text("history failed", { status: 500 })
+          return HttpServerResponse.fromWeb(Response.json([]))
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const type = unique("remote-history-fail")
+            const info = workspaceInfo(Instance.project.id, type)
+            insertWorkspace(info)
+            registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/history-failed`).adaptor)
+            attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+            yield* workspace.startWorkspaceSyncing(Instance.project.id)
+
+            yield* eventuallyEffect(
+              Effect.gen(function* () {
+                expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
+              }),
+            )
+            expect(yield* workspace.isSyncing(info.id)).toBe(false)
+            yield* workspace.remove(info.id)
+          }),
         { git: true },
       )
     }),
@@ -834,60 +889,67 @@ describe("workspace-old sync state", () => {
     let historySessionID: SessionID | undefined
     let historyNextSeq = 0
     return Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const bodyText = yield* req.text
-        const url = new URL(req.url, "http://localhost")
-        if (url.pathname === "/history/global/event") return HttpServerResponse.fromWeb(eventStreamResponse())
-        if (url.pathname === "/history/sync/history") {
-          historyBodies.push(bodyText ? JSON.parse(bodyText) : undefined)
-          return HttpServerResponse.fromWeb(
-            Response.json([
-              {
-                id: `evt_${unique("history")}`,
-                aggregate_id: historySessionID!,
-                seq: historyNextSeq,
-                type: sessionUpdatedType(),
-                data: { sessionID: historySessionID!, info: { title: "from history" } },
-              },
-            ]),
-          )
-        }
-        return HttpServerResponse.text("unexpected", { status: 500 })
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance(() =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const captured = captureGlobalEvents()
-        try {
-          const type = unique("history-replay")
-          const info = workspaceInfo(Instance.project.id, type)
-          insertWorkspace(info)
-          registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/history`).adaptor)
-          const session = yield* sessionSvc.create({ title: "before history" })
-          attachSessionToWorkspace(session.id, info.id)
-          historySessionID = session.id
-          historyNextSeq = (sessionSequence(session.id) ?? -1) + 1
-
-          yield* workspace.startWorkspaceSyncing(Instance.project.id)
-
-          yield* eventuallyEffect(Effect.gen(function* () {
-            expect((yield* sessionSvc.get(session.id)).title).toBe("from history")
-          }))
-          expect(historyBodies).toEqual([{ [session.id]: historyNextSeq - 1 }])
-          expect(
-            captured.events.some(
-              (event) =>
-                event.workspace === info.id && event.payload.type === "sync" && event.payload.syncEvent.seq === historyNextSeq,
-            ),
-          ).toBe(true)
-          yield* workspace.remove(info.id)
-        } finally {
-          captured.dispose()
-        }
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const bodyText = yield* req.text
+          const url = new URL(req.url, "http://localhost")
+          if (url.pathname === "/history/global/event") return HttpServerResponse.fromWeb(eventStreamResponse())
+          if (url.pathname === "/history/sync/history") {
+            historyBodies.push(bodyText ? JSON.parse(bodyText) : undefined)
+            return HttpServerResponse.fromWeb(
+              Response.json([
+                {
+                  id: `evt_${unique("history")}`,
+                  aggregate_id: historySessionID!,
+                  seq: historyNextSeq,
+                  type: sessionUpdatedType(),
+                  data: { sessionID: historySessionID!, info: { title: "from history" } },
+                },
+              ]),
+            )
+          }
+          return HttpServerResponse.text("unexpected", { status: 500 })
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const captured = captureGlobalEvents()
+            try {
+              const type = unique("history-replay")
+              const info = workspaceInfo(Instance.project.id, type)
+              insertWorkspace(info)
+              registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/history`).adaptor)
+              const session = yield* sessionSvc.create({ title: "before history" })
+              attachSessionToWorkspace(session.id, info.id)
+              historySessionID = session.id
+              historyNextSeq = (sessionSequence(session.id) ?? -1) + 1
+
+              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+
+              yield* eventuallyEffect(
+                Effect.gen(function* () {
+                  expect((yield* sessionSvc.get(session.id)).title).toBe("from history")
+                }),
+              )
+              expect(historyBodies).toEqual([{ [session.id]: historyNextSeq - 1 }])
+              expect(
+                captured.events.some(
+                  (event) =>
+                    event.workspace === info.id &&
+                    event.payload.type === "sync" &&
+                    event.payload.syncEvent.seq === historyNextSeq,
+                ),
+              ).toBe(true)
+              yield* workspace.remove(info.id)
+            } finally {
+              captured.dispose()
+            }
+          }),
         { git: true },
       )
     })
@@ -895,56 +957,70 @@ describe("workspace-old sync state", () => {
 
   it.live("SSE forwards non-heartbeat events and ignores heartbeats", () =>
     Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const url = new URL(req.url, "http://localhost")
-        if (url.pathname === "/sse-forward/global/event")
-          return HttpServerResponse.fromWeb(
-            eventStreamResponse(
-              [
-                { directory: "remote-dir", project: "remote-project", payload: { type: "server.heartbeat" } },
-                {
-                  directory: "remote-dir",
-                  project: "remote-project",
-                  payload: { type: "custom.remote", properties: { ok: true } },
-                },
-              ],
-              false,
-            ),
-          )
-        if (url.pathname === "/sse-forward/sync/history") return HttpServerResponse.fromWeb(Response.json([]))
-        return HttpServerResponse.text("unexpected", { status: 500 })
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance(() =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const captured = captureGlobalEvents()
-        try {
-          const type = unique("sse-forward")
-          const info = workspaceInfo(Instance.project.id, type)
-          insertWorkspace(info)
-          registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/sse-forward`).adaptor)
-          attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
-
-          yield* workspace.startWorkspaceSyncing(Instance.project.id)
-
-          yield* eventuallyEffect(Effect.sync(() =>
-            expect(captured.events.some((event) => event.workspace === info.id && event.payload.type === "custom.remote"))
-              .toBe(true),
-          ))
-          expect(captured.events.some((event) => event.workspace === info.id && event.payload.type === "server.heartbeat")).toBe(
-            false,
-          )
-          expect(
-            captured.events.find((event) => event.workspace === info.id && event.payload.type === "custom.remote"),
-          ).toMatchObject({ directory: "remote-dir", project: "remote-project", payload: { properties: { ok: true } } })
-          yield* workspace.remove(info.id)
-        } finally {
-          captured.dispose()
-        }
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(req.url, "http://localhost")
+          if (url.pathname === "/sse-forward/global/event")
+            return HttpServerResponse.fromWeb(
+              eventStreamResponse(
+                [
+                  { directory: "remote-dir", project: "remote-project", payload: { type: "server.heartbeat" } },
+                  {
+                    directory: "remote-dir",
+                    project: "remote-project",
+                    payload: { type: "custom.remote", properties: { ok: true } },
+                  },
+                ],
+                false,
+              ),
+            )
+          if (url.pathname === "/sse-forward/sync/history") return HttpServerResponse.fromWeb(Response.json([]))
+          return HttpServerResponse.text("unexpected", { status: 500 })
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const captured = captureGlobalEvents()
+            try {
+              const type = unique("sse-forward")
+              const info = workspaceInfo(Instance.project.id, type)
+              insertWorkspace(info)
+              registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/sse-forward`).adaptor)
+              attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+
+              yield* eventuallyEffect(
+                Effect.sync(() =>
+                  expect(
+                    captured.events.some(
+                      (event) => event.workspace === info.id && event.payload.type === "custom.remote",
+                    ),
+                  ).toBe(true),
+                ),
+              )
+              expect(
+                captured.events.some(
+                  (event) => event.workspace === info.id && event.payload.type === "server.heartbeat",
+                ),
+              ).toBe(false)
+              expect(
+                captured.events.find((event) => event.workspace === info.id && event.payload.type === "custom.remote"),
+              ).toMatchObject({
+                directory: "remote-dir",
+                project: "remote-project",
+                payload: { properties: { ok: true } },
+              })
+              yield* workspace.remove(info.id)
+            } finally {
+              captured.dispose()
+            }
+          }),
         { git: true },
       )
     }),
@@ -954,65 +1030,73 @@ describe("workspace-old sync state", () => {
     let sseSessionID: SessionID | undefined
     let sseNextSeq = 0
     return Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const url = new URL(req.url, "http://localhost")
-        if (url.pathname === "/sse-sync/global/event")
-          return HttpServerResponse.fromWeb(
-            eventStreamResponse(
-              [
-                {
-                  directory: "remote-dir",
-                  project: "remote-project",
-                  payload: {
-                    type: "sync",
-                    syncEvent: {
-                      id: `evt_${unique("sse")}`,
-                      aggregateID: sseSessionID!,
-                      seq: sseNextSeq,
-                      type: sessionUpdatedType(),
-                      data: { sessionID: sseSessionID!, info: { title: "from sse" } },
+      yield* HttpServer.serveEffect()(
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(req.url, "http://localhost")
+          if (url.pathname === "/sse-sync/global/event")
+            return HttpServerResponse.fromWeb(
+              eventStreamResponse(
+                [
+                  {
+                    directory: "remote-dir",
+                    project: "remote-project",
+                    payload: {
+                      type: "sync",
+                      syncEvent: {
+                        id: `evt_${unique("sse")}`,
+                        aggregateID: sseSessionID!,
+                        seq: sseNextSeq,
+                        type: sessionUpdatedType(),
+                        data: { sessionID: sseSessionID!, info: { title: "from sse" } },
+                      },
                     },
                   },
-                },
-              ],
-              false,
-            ),
-          )
-        if (url.pathname === "/sse-sync/sync/history") return HttpServerResponse.fromWeb(Response.json([]))
-        return HttpServerResponse.text("unexpected", { status: 500 })
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance(() =>
-        Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const captured = captureGlobalEvents()
-        try {
-          const type = unique("sse-sync")
-          const info = workspaceInfo(Instance.project.id, type)
-          insertWorkspace(info)
-          registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/sse-sync`).adaptor)
-          const session = yield* sessionSvc.create({ title: "before sse" })
-          attachSessionToWorkspace(session.id, info.id)
-          sseSessionID = session.id
-          sseNextSeq = (sessionSequence(session.id) ?? -1) + 1
-
-          yield* workspace.startWorkspaceSyncing(Instance.project.id)
-
-          yield* eventuallyEffect(Effect.gen(function* () {
-            expect((yield* sessionSvc.get(session.id)).title).toBe("from sse")
-          }))
-          expect(
-            captured.events.some(
-              (event) => event.workspace === info.id && event.payload.type === "sync" && event.payload.syncEvent.seq === sseNextSeq,
-            ),
-          ).toBe(true)
-          yield* workspace.remove(info.id)
-        } finally {
-          captured.dispose()
-        }
+                ],
+                false,
+              ),
+            )
+          if (url.pathname === "/sse-sync/sync/history") return HttpServerResponse.fromWeb(Response.json([]))
+          return HttpServerResponse.text("unexpected", { status: 500 })
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const captured = captureGlobalEvents()
+            try {
+              const type = unique("sse-sync")
+              const info = workspaceInfo(Instance.project.id, type)
+              insertWorkspace(info)
+              registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/sse-sync`).adaptor)
+              const session = yield* sessionSvc.create({ title: "before sse" })
+              attachSessionToWorkspace(session.id, info.id)
+              sseSessionID = session.id
+              sseNextSeq = (sessionSequence(session.id) ?? -1) + 1
+
+              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+
+              yield* eventuallyEffect(
+                Effect.gen(function* () {
+                  expect((yield* sessionSvc.get(session.id)).title).toBe("from sse")
+                }),
+              )
+              expect(
+                captured.events.some(
+                  (event) =>
+                    event.workspace === info.id &&
+                    event.payload.type === "sync" &&
+                    event.payload.syncEvent.seq === sseNextSeq,
+                ),
+              ).toBe(true)
+              yield* workspace.remove(info.id)
+            } finally {
+              captured.dispose()
+            }
+          }),
         { git: true },
       )
     })
@@ -1031,8 +1115,12 @@ describe("workspace-old waitForSync", () => {
       const sessionID = SessionID.descending("ses_wait_done")
       Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 4 }).run())
 
-      await expect(WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_done"), { [sessionID]: 4 })).resolves.toBeUndefined()
-      await expect(WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_done_2"), { [sessionID]: 3 })).resolves.toBeUndefined()
+      await expect(
+        WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_done"), { [sessionID]: 4 }),
+      ).resolves.toBeUndefined()
+      await expect(
+        WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_done_2"), { [sessionID]: 3 }),
+      ).resolves.toBeUndefined()
     })
   })
 
@@ -1084,23 +1172,23 @@ describe("workspace-old waitForSync", () => {
       )
       abort.abort(reason)
 
-      await expect(waited).rejects.toMatchObject({ _tag: "WorkspaceSyncAbortedError", message: reason.message, cause: reason })
+      await expect(waited).rejects.toMatchObject({
+        _tag: "WorkspaceSyncAbortedError",
+        message: reason.message,
+        cause: reason,
+      })
     })
   })
 
-  test(
-    "times out with the requested fence in the error message",
-    async () => {
-      await withInstance(async () => {
-        const sessionID = SessionID.descending("ses_wait_timeout")
+  test("times out with the requested fence in the error message", async () => {
+    await withInstance(async () => {
+      const sessionID = SessionID.descending("ses_wait_timeout")
 
-        await expect(
-          WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }),
-        ).rejects.toThrow(`Timed out waiting for sync fence: {"${sessionID}":1}`)
-      })
-    },
-    7000,
-  )
+      await expect(
+        WorkspaceOld.waitForSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }),
+      ).rejects.toThrow(`Timed out waiting for sync fence: {"${sessionID}":1}`)
+    })
+  }, 7000)
 })
 
 describe("workspace-old sessionRestore", () => {
@@ -1132,75 +1220,84 @@ describe("workspace-old sessionRestore", () => {
   it.live("posts remote replay batches of 10, emits progress, and includes the workspace update event", () => {
     const replay: FetchCall[] = []
     return Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const bodyText = yield* req.text
-        const call = {
-          url: new URL(req.url, "http://localhost"),
-          method: req.method,
-          headers: new Headers(req.headers),
-          bodyText,
-          json: bodyText ? JSON.parse(bodyText) : undefined,
-        }
-        if (call.url.pathname === "/restore/sync/replay") {
-          replay.push(call)
-          return HttpServerResponse.fromWeb(Response.json({ ok: true }))
-        }
-        return HttpServerResponse.text("unexpected", { status: 500 })
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance((dir) =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const captured = captureGlobalEvents()
-        try {
-          const type = unique("restore-remote")
-          const info = workspaceInfo(Instance.project.id, type, { directory: dir })
-          insertWorkspace(info)
-          registerAdaptor(
-            Instance.project.id,
-            type,
-            remoteAdaptor(`${url}/restore/?ignored=1#hash`, {
-              directory: dir,
-              headers: { authorization: "Bearer restore" },
-            }).adaptor,
-          )
-          const session = yield* sessionSvc.create({ title: "restore remote" })
-          replaceSessionEvents(session.id, 24)
-
-          const result = yield* workspace.sessionRestore({ workspaceID: info.id, sessionID: session.id })
-
-          expect(result).toEqual({ total: 3 })
-          expect(replay).toHaveLength(3)
-          expect(replay.map((call) => call.url.pathname + call.url.search + call.url.hash)).toEqual([
-            "/restore/sync/replay",
-            "/restore/sync/replay",
-            "/restore/sync/replay",
-          ])
-          expect(replay.every((call) => call.headers.get("authorization") === "Bearer restore")).toBe(true)
-          expect(replay.every((call) => call.headers.get("content-type") === "application/json")).toBe(true)
-          expect(replay.map((call) => (call.json as { events: unknown[] }).events.length)).toEqual([10, 10, 5])
-          expect(replay.map((call) => (call.json as { directory: string }).directory)).toEqual([dir, dir, dir])
-          expect(
-            replay.flatMap((call) => (call.json as { events: Array<{ seq: number }> }).events.map((event) => event.seq)),
-          ).toEqual(Array.from({ length: 25 }, (_, i) => i))
-          expect((replay[2].json as { events: Array<{ seq: number; type: string; data: unknown }> }).events.at(-1)).toMatchObject({
-            seq: 24,
-            type: sessionUpdatedType(),
-            data: { sessionID: session.id, info: { workspaceID: info.id } },
-          })
-          expect((yield* sessionSvc.get(session.id)).workspaceID).toBe(info.id)
-          expect(
-            captured.events
-              .filter((event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Restore.type)
-              .map((event) => event.payload.properties.step),
-          ).toEqual([0, 1, 2, 3])
-          yield* workspace.remove(info.id)
-        } finally {
-          captured.dispose()
-        }
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const bodyText = yield* req.text
+          const call = {
+            url: new URL(req.url, "http://localhost"),
+            method: req.method,
+            headers: new Headers(req.headers),
+            bodyText,
+            json: bodyText ? JSON.parse(bodyText) : undefined,
+          }
+          if (call.url.pathname === "/restore/sync/replay") {
+            replay.push(call)
+            return HttpServerResponse.fromWeb(Response.json({ ok: true }))
+          }
+          return HttpServerResponse.text("unexpected", { status: 500 })
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const captured = captureGlobalEvents()
+            try {
+              const type = unique("restore-remote")
+              const info = workspaceInfo(Instance.project.id, type, { directory: dir })
+              insertWorkspace(info)
+              registerAdaptor(
+                Instance.project.id,
+                type,
+                remoteAdaptor(`${url}/restore/?ignored=1#hash`, {
+                  directory: dir,
+                  headers: { authorization: "Bearer restore" },
+                }).adaptor,
+              )
+              const session = yield* sessionSvc.create({ title: "restore remote" })
+              replaceSessionEvents(session.id, 24)
+
+              const result = yield* workspace.sessionRestore({ workspaceID: info.id, sessionID: session.id })
+
+              expect(result).toEqual({ total: 3 })
+              expect(replay).toHaveLength(3)
+              expect(replay.map((call) => call.url.pathname + call.url.search + call.url.hash)).toEqual([
+                "/restore/sync/replay",
+                "/restore/sync/replay",
+                "/restore/sync/replay",
+              ])
+              expect(replay.every((call) => call.headers.get("authorization") === "Bearer restore")).toBe(true)
+              expect(replay.every((call) => call.headers.get("content-type") === "application/json")).toBe(true)
+              expect(replay.map((call) => (call.json as { events: unknown[] }).events.length)).toEqual([10, 10, 5])
+              expect(replay.map((call) => (call.json as { directory: string }).directory)).toEqual([dir, dir, dir])
+              expect(
+                replay.flatMap((call) =>
+                  (call.json as { events: Array<{ seq: number }> }).events.map((event) => event.seq),
+                ),
+              ).toEqual(Array.from({ length: 25 }, (_, i) => i))
+              expect(
+                (replay[2].json as { events: Array<{ seq: number; type: string; data: unknown }> }).events.at(-1),
+              ).toMatchObject({
+                seq: 24,
+                type: sessionUpdatedType(),
+                data: { sessionID: session.id, info: { workspaceID: info.id } },
+              })
+              expect((yield* sessionSvc.get(session.id)).workspaceID).toBe(info.id)
+              expect(
+                captured.events
+                  .filter(
+                    (event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Restore.type,
+                  )
+                  .map((event) => event.payload.properties.step),
+              ).toEqual([0, 1, 2, 3])
+              yield* workspace.remove(info.id)
+            } finally {
+              captured.dispose()
+            }
+          }),
         { git: true },
       )
     })
@@ -1209,35 +1306,40 @@ describe("workspace-old sessionRestore", () => {
   it.live("remote restore sends an empty directory string when the workspace directory is null", () => {
     const replay: FetchCall[] = []
     return Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const bodyText = yield* req.text
-        replay.push({
-          url: new URL(req.url, "http://localhost"),
-          method: req.method,
-          headers: new Headers(req.headers),
-          bodyText,
-          json: bodyText ? JSON.parse(bodyText) : undefined,
-        })
-        return HttpServerResponse.fromWeb(Response.json({ ok: true }))
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance(() =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const type = unique("restore-null-dir")
-        const info = workspaceInfo(Instance.project.id, type, { directory: null })
-        insertWorkspace(info)
-        registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/null-dir`, { directory: null }).adaptor)
-        const session = yield* sessionSvc.create({ title: "null dir" })
-        replaceSessionEvents(session.id, 0)
-
-        expect(yield* workspace.sessionRestore({ workspaceID: info.id, sessionID: session.id })).toEqual({ total: 1 })
-        expect((replay[0].json as { directory: string }).directory).toBe("")
-        expect((replay[0].json as { events: unknown[] }).events).toHaveLength(1)
-        yield* workspace.remove(info.id)
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const bodyText = yield* req.text
+          replay.push({
+            url: new URL(req.url, "http://localhost"),
+            method: req.method,
+            headers: new Headers(req.headers),
+            bodyText,
+            json: bodyText ? JSON.parse(bodyText) : undefined,
+          })
+          return HttpServerResponse.fromWeb(Response.json({ ok: true }))
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const type = unique("restore-null-dir")
+            const info = workspaceInfo(Instance.project.id, type, { directory: null })
+            insertWorkspace(info)
+            registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/null-dir`, { directory: null }).adaptor)
+            const session = yield* sessionSvc.create({ title: "null dir" })
+            replaceSessionEvents(session.id, 0)
+
+            expect(yield* workspace.sessionRestore({ workspaceID: info.id, sessionID: session.id })).toEqual({
+              total: 1,
+            })
+            expect((replay[0].json as { directory: string }).directory).toBe("")
+            expect((replay[0].json as { events: unknown[] }).events).toHaveLength(1)
+            yield* workspace.remove(info.id)
+          }),
         { git: true },
       )
     })
@@ -1246,48 +1348,55 @@ describe("workspace-old sessionRestore", () => {
   it.live("remote restore failures include status and body and do not emit completed batch progress", () => {
     const replay: FetchCall[] = []
     return Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const bodyText = yield* req.text
-        replay.push({
-          url: new URL(req.url, "http://localhost"),
-          method: req.method,
-          headers: new Headers(req.headers),
-          bodyText,
-          json: bodyText ? JSON.parse(bodyText) : undefined,
-        })
-        return HttpServerResponse.text("replay failed", { status: 503 })
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance((dir) =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const captured = captureGlobalEvents()
-        try {
-          const type = unique("restore-remote-fail")
-          const info = workspaceInfo(Instance.project.id, type, { directory: dir })
-          insertWorkspace(info)
-          registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/fail`, { directory: dir }).adaptor)
-          const session = yield* sessionSvc.create({ title: "restore fail" })
-          replaceSessionEvents(session.id, 11)
-
-          const error = yield* Effect.flip(workspace.sessionRestore({ workspaceID: info.id, sessionID: session.id }))
-          expect((error as Error).message).toContain(
-            `Failed to replay session ${session.id} into workspace ${info.id}: HTTP 503 replay failed`,
-          )
-
-          expect(replay).toHaveLength(1)
-          expect(
-            captured.events
-              .filter((event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Restore.type)
-              .map((event) => event.payload.properties.step),
-          ).toEqual([0])
-          yield* workspace.remove(info.id)
-        } finally {
-          captured.dispose()
-        }
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const bodyText = yield* req.text
+          replay.push({
+            url: new URL(req.url, "http://localhost"),
+            method: req.method,
+            headers: new Headers(req.headers),
+            bodyText,
+            json: bodyText ? JSON.parse(bodyText) : undefined,
+          })
+          return HttpServerResponse.text("replay failed", { status: 503 })
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const captured = captureGlobalEvents()
+            try {
+              const type = unique("restore-remote-fail")
+              const info = workspaceInfo(Instance.project.id, type, { directory: dir })
+              insertWorkspace(info)
+              registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/fail`, { directory: dir }).adaptor)
+              const session = yield* sessionSvc.create({ title: "restore fail" })
+              replaceSessionEvents(session.id, 11)
+
+              const error = yield* Effect.flip(
+                workspace.sessionRestore({ workspaceID: info.id, sessionID: session.id }),
+              )
+              expect((error as Error).message).toContain(
+                `Failed to replay session ${session.id} into workspace ${info.id}: HTTP 503 replay failed`,
+              )
+
+              expect(replay).toHaveLength(1)
+              expect(
+                captured.events
+                  .filter(
+                    (event) => event.workspace === info.id && event.payload.type === WorkspaceOld.Event.Restore.type,
+                  )
+                  .map((event) => event.payload.properties.step),
+              ).toEqual([0])
+              yield* workspace.remove(info.id)
+            } finally {
+              captured.dispose()
+            }
+          }),
         { git: true },
       )
     })
@@ -1310,7 +1419,9 @@ describe("workspace-old sessionRestore", () => {
         const info = workspaceInfo(Instance.project.id, type, { directory: dir })
         insertWorkspace(info)
         registerAdaptor(Instance.project.id, type, localAdaptor(dir).adaptor)
-        const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({ title: "restore local" })))
+        const session = await AppRuntime.runPromise(
+          SessionNs.Service.use((svc) => svc.create({ title: "restore local" })),
+        )
         replaceSessionEvents(session.id, 20)
 
         expect(await WorkspaceOld.sessionRestore({ workspaceID: info.id, sessionID: session.id })).toEqual({ total: 3 })
@@ -1318,7 +1429,9 @@ describe("workspace-old sessionRestore", () => {
         expect(fetchCallCount).toBe(0)
         expect(replayAll).toHaveBeenCalledTimes(3)
         expect(replayAll.mock.calls.map((call) => call[0].length)).toEqual([10, 10, 1])
-        expect((await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.get(session.id)))).workspaceID).toBe(info.id)
+        expect((await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.get(session.id)))).workspaceID).toBe(
+          info.id,
+        )
         expect(eventRows(session.id).map((row) => row.seq)).toEqual(Array.from({ length: 21 }, (_, i) => i))
         expect(
           captured.events
@@ -1335,55 +1448,60 @@ describe("workspace-old sessionRestore", () => {
   it.live("session restore includes real message and part events in sequence order", () => {
     const replay: FetchCall[] = []
     return Effect.gen(function* () {
-      yield* HttpServer.serveEffect()(Effect.gen(function* () {
-        const req = yield* HttpServerRequest.HttpServerRequest
-        const bodyText = yield* req.text
-        replay.push({
-          url: new URL(req.url, "http://localhost"),
-          method: req.method,
-          headers: new Headers(req.headers),
-          bodyText,
-          json: bodyText ? JSON.parse(bodyText) : undefined,
-        })
-        return HttpServerResponse.fromWeb(Response.json({ ok: true }))
-      }))
-      const url = yield* serverUrl()
-      yield* provideTmpdirInstance((dir) =>
+      yield* HttpServer.serveEffect()(
         Effect.gen(function* () {
-        const workspace = yield* WorkspaceOld.Service
-        const sessionSvc = yield* SessionNs.Service
-        const type = unique("restore-real-events")
-        const info = workspaceInfo(Instance.project.id, type, { directory: dir })
-        insertWorkspace(info)
-        registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/real`, { directory: dir }).adaptor)
-        const session = yield* sessionSvc.create({ title: "real events" })
-        for (let i = 0; i < 3; i++) {
-          const msg = yield* sessionSvc.updateMessage({
-            id: MessageID.ascending(),
-            role: "user",
-            sessionID: session.id,
-            agent: "build",
-            model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
-            time: { created: Date.now() },
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const bodyText = yield* req.text
+          replay.push({
+            url: new URL(req.url, "http://localhost"),
+            method: req.method,
+            headers: new Headers(req.headers),
+            bodyText,
+            json: bodyText ? JSON.parse(bodyText) : undefined,
           })
-          yield* sessionSvc.updatePart({
-            id: PartID.ascending(),
-            sessionID: session.id,
-            messageID: msg.id,
-            type: "text",
-            text: `message ${i}`,
-          })
-        }
-        const before = eventRows(session.id)
-
-        expect(yield* workspace.sessionRestore({ workspaceID: info.id, sessionID: session.id })).toEqual({ total: 1 })
-
-        const posted = (replay[0].json as { events: Array<{ seq: number; type: string }> }).events
-        expect(posted.map((event) => event.seq)).toEqual([...before.map((row) => row.seq), before.at(-1)!.seq + 1])
-        expect(posted.map((event) => event.type).slice(0, -1)).toEqual(before.map((row) => row.type))
-        expect(posted.at(-1)?.type).toBe(sessionUpdatedType())
-        yield* workspace.remove(info.id)
+          return HttpServerResponse.fromWeb(Response.json({ ok: true }))
         }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const workspace = yield* WorkspaceOld.Service
+            const sessionSvc = yield* SessionNs.Service
+            const type = unique("restore-real-events")
+            const info = workspaceInfo(Instance.project.id, type, { directory: dir })
+            insertWorkspace(info)
+            registerAdaptor(Instance.project.id, type, remoteAdaptor(`${url}/real`, { directory: dir }).adaptor)
+            const session = yield* sessionSvc.create({ title: "real events" })
+            for (let i = 0; i < 3; i++) {
+              const msg = yield* sessionSvc.updateMessage({
+                id: MessageID.ascending(),
+                role: "user",
+                sessionID: session.id,
+                agent: "build",
+                model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
+                time: { created: Date.now() },
+              })
+              yield* sessionSvc.updatePart({
+                id: PartID.ascending(),
+                sessionID: session.id,
+                messageID: msg.id,
+                type: "text",
+                text: `message ${i}`,
+              })
+            }
+            const before = eventRows(session.id)
+
+            expect(yield* workspace.sessionRestore({ workspaceID: info.id, sessionID: session.id })).toEqual({
+              total: 1,
+            })
+
+            const posted = (replay[0].json as { events: Array<{ seq: number; type: string }> }).events
+            expect(posted.map((event) => event.seq)).toEqual([...before.map((row) => row.seq), before.at(-1)!.seq + 1])
+            expect(posted.map((event) => event.type).slice(0, -1)).toEqual(before.map((row) => row.type))
+            expect(posted.at(-1)?.type).toBe(sessionUpdatedType())
+            yield* workspace.remove(info.id)
+          }),
         { git: true },
       )
     })

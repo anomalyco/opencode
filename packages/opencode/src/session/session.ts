@@ -595,7 +595,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
         path: sessionPath(ctx.worktree, ctx.directory),
         title: input?.title,
         permission: input?.permission,
-        workspaceID: workspace,
+        workspaceID: input?.workspaceID ?? workspace,
       })
     })
 

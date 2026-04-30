@@ -1,4 +1,3 @@
-import { EffectBridge } from "@/effect/bridge"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { handlePtyInput } from "@/pty/input"
@@ -23,16 +22,11 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
     })
 
     const create = Effect.fn("PtyHttpApi.create")(function* (ctx: { payload: typeof Pty.CreateInput.Type }) {
-      const bridge = yield* EffectBridge.make()
-      return yield* Effect.promise(() =>
-        bridge.promise(
-          pty.create({
-            ...ctx.payload,
-            args: ctx.payload.args ? [...ctx.payload.args] : undefined,
-            env: ctx.payload.env ? { ...ctx.payload.env } : undefined,
-          }),
-        ),
-      )
+      return yield* pty.create({
+        ...ctx.payload,
+        args: ctx.payload.args ? [...ctx.payload.args] : undefined,
+        env: ctx.payload.env ? { ...ctx.payload.env } : undefined,
+      })
     })
 
     const get = Effect.fn("PtyHttpApi.get")(function* (ctx: { params: { ptyID: PtyID } }) {
@@ -68,52 +62,60 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
   }),
 )
 
-export const ptyConnectRoute = HttpRouter.add(
-  "GET",
-  PtyPaths.connect,
+export const ptyConnectRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const pty = yield* Pty.Service
-    const params = yield* HttpRouter.schemaPathParams(Params)
-    if (!(yield* pty.get(params.ptyID))) return HttpServerResponse.empty({ status: 404 })
+    yield* router.add(
+      "GET",
+      PtyPaths.connect,
+      Effect.gen(function* () {
+        const params = yield* HttpRouter.schemaPathParams(Params)
+        if (!(yield* pty.get(params.ptyID))) return HttpServerResponse.empty({ status: 404 })
 
-    const query = yield* HttpServerRequest.schemaSearchParams(CursorQuery)
-    const parsedCursor = query.cursor === undefined ? undefined : Number(query.cursor)
-    const cursor =
-      parsedCursor !== undefined && Number.isSafeInteger(parsedCursor) && parsedCursor >= -1 ? parsedCursor : undefined
-    const socket = yield* Effect.orDie((yield* HttpServerRequest.HttpServerRequest).upgrade)
-    const write = yield* socket.writer
-    let closed = false
-    const adapter = {
-      get readyState() {
-        return closed ? 3 : 1
-      },
-      send: (data: string | Uint8Array | ArrayBuffer) => {
-        if (closed) return
-        Effect.runFork(
-          write(data instanceof ArrayBuffer ? new Uint8Array(data) : data).pipe(Effect.catch(() => Effect.void)),
-        )
-      },
-      close: (code?: number, reason?: string) => {
-        if (closed) return
-        closed = true
-        Effect.runFork(write(new Socket.CloseEvent(code, reason)).pipe(Effect.catch(() => Effect.void)))
-      },
-    }
-    const handler = yield* pty.connect(params.ptyID, adapter, cursor)
-    if (!handler) return HttpServerResponse.empty()
-
-    yield* socket
-      .runRaw((message) => handlePtyInput(handler, message))
-      .pipe(
-        Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
-        Effect.ensuring(
-          Effect.sync(() => {
+        const query = yield* HttpServerRequest.schemaSearchParams(CursorQuery)
+        const parsedCursor = query.cursor === undefined ? undefined : Number(query.cursor)
+        const cursor =
+          parsedCursor !== undefined && Number.isSafeInteger(parsedCursor) && parsedCursor >= -1
+            ? parsedCursor
+            : undefined
+        const socket = yield* Effect.orDie((yield* HttpServerRequest.HttpServerRequest).upgrade)
+        const write = yield* socket.writer
+        const services = yield* Effect.context()
+        const writeScoped = (effect: Effect.Effect<void, unknown>) => {
+          Effect.runForkWith(services)(effect.pipe(Effect.catch(() => Effect.void)))
+        }
+        let closed = false
+        const adapter = {
+          get readyState() {
+            return closed ? 3 : 1
+          },
+          send: (data: string | Uint8Array | ArrayBuffer) => {
+            if (closed) return
+            writeScoped(write(data instanceof ArrayBuffer ? new Uint8Array(data) : data))
+          },
+          close: (code?: number, reason?: string) => {
+            if (closed) return
             closed = true
-            handler.onClose()
-          }),
-        ),
-        Effect.orDie,
-      )
-    return HttpServerResponse.empty()
-  }).pipe(Effect.provide(Pty.defaultLayer)),
+            writeScoped(write(new Socket.CloseEvent(code, reason)))
+          },
+        }
+        const handler = yield* pty.connect(params.ptyID, adapter, cursor)
+        if (!handler) return HttpServerResponse.empty()
+
+        yield* socket
+          .runRaw((message) => handlePtyInput(handler, message))
+          .pipe(
+            Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+            Effect.ensuring(
+              Effect.sync(() => {
+                closed = true
+                handler.onClose()
+              }),
+            ),
+            Effect.orDie,
+          )
+        return HttpServerResponse.empty()
+      }),
+    )
+  }),
 )

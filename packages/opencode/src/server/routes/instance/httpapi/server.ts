@@ -22,15 +22,20 @@ import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
 import { Question } from "@/question"
 import { Session } from "@/session/session"
+import { SessionCompaction } from "@/session/compaction"
+import { SessionPrompt } from "@/session/prompt"
+import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
+import { SessionShare } from "@/share/session"
 import { Skill } from "@/skill"
 import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
+import { Workspace } from "@/control-plane/workspace"
 import { isAllowedCorsOrigin } from "@/server/cors"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
@@ -134,6 +139,10 @@ export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
     Question.defaultLayer,
     Ripgrep.defaultLayer,
     Session.defaultLayer,
+    SessionCompaction.defaultLayer,
+    SessionPrompt.defaultLayer,
+    SessionRevert.defaultLayer,
+    SessionShare.defaultLayer,
     SessionRunState.defaultLayer,
     SessionStatus.defaultLayer,
     SessionSummary.defaultLayer,
@@ -141,6 +150,7 @@ export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
     Todo.defaultLayer,
     ToolRegistry.defaultLayer,
     Vcs.defaultLayer,
+    Workspace.defaultLayer,
     Worktree.defaultLayer,
     Bus.layer,
     HttpServer.layerServices,
