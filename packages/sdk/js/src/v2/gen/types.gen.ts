@@ -988,6 +988,306 @@ export type EventSessionDeleted = {
   }
 }
 
+export type PromptSource = {
+  start: number
+  end: number
+  text: string
+}
+
+export type PromptFileAttachment = {
+  uri: string
+  mime: string
+  name?: string
+  description?: string
+  source?: PromptSource
+}
+
+export type PromptAgentAttachment = {
+  name: string
+  source?: PromptSource
+}
+
+export type Prompt = {
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+}
+
+export type EventSessionNextPrompted = {
+  type: "session.next.prompted"
+  properties: {
+    timestamp: number
+    sessionID: string
+    id: string
+    prompt: Prompt
+  }
+}
+
+export type EventSessionNextSynthetic = {
+  type: "session.next.synthetic"
+  properties: {
+    timestamp: number
+    sessionID: string
+    id: string
+    text: string
+  }
+}
+
+export type EventSessionNextStepStarted = {
+  type: "session.next.step.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    id: string
+    agent: string
+    model: {
+      id: string
+      providerID: string
+      variant?: string
+    }
+    snapshot?: string
+  }
+}
+
+export type EventSessionNextStepEnded = {
+  type: "session.next.step.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    finish: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
+    snapshot?: string
+  }
+}
+
+export type EventSessionNextTextStarted = {
+  type: "session.next.text.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+  }
+}
+
+export type EventSessionNextTextDelta = {
+  type: "session.next.text.delta"
+  properties: {
+    timestamp: number
+    sessionID: string
+    delta: string
+  }
+}
+
+export type EventSessionNextTextEnded = {
+  type: "session.next.text.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    text: string
+  }
+}
+
+export type EventSessionNextReasoningStarted = {
+  type: "session.next.reasoning.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    reasoningID: string
+  }
+}
+
+export type EventSessionNextReasoningDelta = {
+  type: "session.next.reasoning.delta"
+  properties: {
+    timestamp: number
+    sessionID: string
+    reasoningID: string
+    delta: string
+  }
+}
+
+export type EventSessionNextReasoningEnded = {
+  type: "session.next.reasoning.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    reasoningID: string
+    text: string
+  }
+}
+
+export type EventSessionNextToolInputStarted = {
+  type: "session.next.tool.input.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    name: string
+  }
+}
+
+export type EventSessionNextToolInputDelta = {
+  type: "session.next.tool.input.delta"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    delta: string
+  }
+}
+
+export type EventSessionNextToolInputEnded = {
+  type: "session.next.tool.input.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    text: string
+  }
+}
+
+export type EventSessionNextToolCalled = {
+  type: "session.next.tool.called"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    tool: string
+    input: {
+      [key: string]: unknown
+    }
+    provider: {
+      executed: boolean
+      metadata?: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
+export type ToolTextContent = {
+  type: "text"
+  text: string
+}
+
+export type ToolFileContent = {
+  type: "file"
+  uri: string
+  mime: string
+  name?: string
+}
+
+export type EventSessionNextToolProgress = {
+  type: "session.next.tool.progress"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<ToolTextContent | ToolFileContent>
+  }
+}
+
+export type EventSessionNextToolSuccess = {
+  type: "session.next.tool.success"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<ToolTextContent | ToolFileContent>
+    provider: {
+      executed: boolean
+      metadata?: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
+export type EventSessionNextToolError = {
+  type: "session.next.tool.error"
+  properties: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    error: {
+      type: string
+      message: string
+    }
+    provider: {
+      executed: boolean
+      metadata?: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
+export type SessionNextRetryError = {
+  message: string
+  statusCode?: number
+  isRetryable: boolean
+  responseHeaders?: {
+    [key: string]: string
+  }
+  responseBody?: string
+  metadata?: {
+    [key: string]: string
+  }
+}
+
+export type EventSessionNextRetried = {
+  type: "session.next.retried"
+  properties: {
+    timestamp: number
+    sessionID: string
+    attempt: number
+    error: SessionNextRetryError
+  }
+}
+
+export type EventSessionNextCompactionStarted = {
+  type: "session.next.compaction.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    id: string
+    reason: "auto" | "manual"
+  }
+}
+
+export type EventSessionNextCompactionDelta = {
+  type: "session.next.compaction.delta"
+  properties: {
+    timestamp: number
+    sessionID: string
+    text: string
+  }
+}
+
+export type EventSessionNextCompactionEnded = {
+  type: "session.next.compaction.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    text: string
+    include?: string
+  }
+}
+
 export type SyncEventMessageUpdated = {
   type: "sync"
   name: "message.updated.1"
@@ -1106,6 +1406,340 @@ export type SyncEventSessionDeleted = {
   }
 }
 
+export type SyncEventSessionNextPrompted = {
+  type: "sync"
+  name: "session.next.prompted.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    id: string
+    prompt: Prompt
+  }
+}
+
+export type SyncEventSessionNextSynthetic = {
+  type: "sync"
+  name: "session.next.synthetic.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    id: string
+    text: string
+  }
+}
+
+export type SyncEventSessionNextStepStarted = {
+  type: "sync"
+  name: "session.next.step.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    id: string
+    agent: string
+    model: {
+      id: string
+      providerID: string
+      variant?: string
+    }
+    snapshot?: string
+  }
+}
+
+export type SyncEventSessionNextStepEnded = {
+  type: "sync"
+  name: "session.next.step.ended.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    finish: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
+    snapshot?: string
+  }
+}
+
+export type SyncEventSessionNextTextStarted = {
+  type: "sync"
+  name: "session.next.text.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+  }
+}
+
+export type SyncEventSessionNextTextDelta = {
+  type: "sync"
+  name: "session.next.text.delta.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    delta: string
+  }
+}
+
+export type SyncEventSessionNextTextEnded = {
+  type: "sync"
+  name: "session.next.text.ended.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    text: string
+  }
+}
+
+export type SyncEventSessionNextReasoningStarted = {
+  type: "sync"
+  name: "session.next.reasoning.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    reasoningID: string
+  }
+}
+
+export type SyncEventSessionNextReasoningDelta = {
+  type: "sync"
+  name: "session.next.reasoning.delta.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    reasoningID: string
+    delta: string
+  }
+}
+
+export type SyncEventSessionNextReasoningEnded = {
+  type: "sync"
+  name: "session.next.reasoning.ended.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    reasoningID: string
+    text: string
+  }
+}
+
+export type SyncEventSessionNextToolInputStarted = {
+  type: "sync"
+  name: "session.next.tool.input.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    name: string
+  }
+}
+
+export type SyncEventSessionNextToolInputDelta = {
+  type: "sync"
+  name: "session.next.tool.input.delta.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    delta: string
+  }
+}
+
+export type SyncEventSessionNextToolInputEnded = {
+  type: "sync"
+  name: "session.next.tool.input.ended.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    text: string
+  }
+}
+
+export type SyncEventSessionNextToolCalled = {
+  type: "sync"
+  name: "session.next.tool.called.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    tool: string
+    input: {
+      [key: string]: unknown
+    }
+    provider: {
+      executed: boolean
+      metadata?: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
+export type SyncEventSessionNextToolProgress = {
+  type: "sync"
+  name: "session.next.tool.progress.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<ToolTextContent | ToolFileContent>
+  }
+}
+
+export type SyncEventSessionNextToolSuccess = {
+  type: "sync"
+  name: "session.next.tool.success.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    structured: {
+      [key: string]: unknown
+    }
+    content: Array<ToolTextContent | ToolFileContent>
+    provider: {
+      executed: boolean
+      metadata?: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
+export type SyncEventSessionNextToolError = {
+  type: "sync"
+  name: "session.next.tool.error.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    callID: string
+    error: {
+      type: string
+      message: string
+    }
+    provider: {
+      executed: boolean
+      metadata?: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
+export type SyncEventSessionNextRetried = {
+  type: "sync"
+  name: "session.next.retried.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    attempt: number
+    error: SessionNextRetryError
+  }
+}
+
+export type SyncEventSessionNextCompactionStarted = {
+  type: "sync"
+  name: "session.next.compaction.started.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    id: string
+    reason: "auto" | "manual"
+  }
+}
+
+export type SyncEventSessionNextCompactionDelta = {
+  type: "sync"
+  name: "session.next.compaction.delta.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    text: string
+  }
+}
+
+export type SyncEventSessionNextCompactionEnded = {
+  type: "sync"
+  name: "session.next.compaction.ended.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    text: string
+    include?: string
+  }
+}
+
 export type GlobalEvent = {
   directory: string
   project?: string
@@ -1158,6 +1792,27 @@ export type GlobalEvent = {
     | EventSessionCreated
     | EventSessionUpdated
     | EventSessionDeleted
+    | EventSessionNextPrompted
+    | EventSessionNextSynthetic
+    | EventSessionNextStepStarted
+    | EventSessionNextStepEnded
+    | EventSessionNextTextStarted
+    | EventSessionNextTextDelta
+    | EventSessionNextTextEnded
+    | EventSessionNextReasoningStarted
+    | EventSessionNextReasoningDelta
+    | EventSessionNextReasoningEnded
+    | EventSessionNextToolInputStarted
+    | EventSessionNextToolInputDelta
+    | EventSessionNextToolInputEnded
+    | EventSessionNextToolCalled
+    | EventSessionNextToolProgress
+    | EventSessionNextToolSuccess
+    | EventSessionNextToolError
+    | EventSessionNextRetried
+    | EventSessionNextCompactionStarted
+    | EventSessionNextCompactionDelta
+    | EventSessionNextCompactionEnded
     | SyncEventMessageUpdated
     | SyncEventMessageRemoved
     | SyncEventMessagePartUpdated
@@ -1165,6 +1820,27 @@ export type GlobalEvent = {
     | SyncEventSessionCreated
     | SyncEventSessionUpdated
     | SyncEventSessionDeleted
+    | SyncEventSessionNextPrompted
+    | SyncEventSessionNextSynthetic
+    | SyncEventSessionNextStepStarted
+    | SyncEventSessionNextStepEnded
+    | SyncEventSessionNextTextStarted
+    | SyncEventSessionNextTextDelta
+    | SyncEventSessionNextTextEnded
+    | SyncEventSessionNextReasoningStarted
+    | SyncEventSessionNextReasoningDelta
+    | SyncEventSessionNextReasoningEnded
+    | SyncEventSessionNextToolInputStarted
+    | SyncEventSessionNextToolInputDelta
+    | SyncEventSessionNextToolInputEnded
+    | SyncEventSessionNextToolCalled
+    | SyncEventSessionNextToolProgress
+    | SyncEventSessionNextToolSuccess
+    | SyncEventSessionNextToolError
+    | SyncEventSessionNextRetried
+    | SyncEventSessionNextCompactionStarted
+    | SyncEventSessionNextCompactionDelta
+    | SyncEventSessionNextCompactionEnded
 }
 
 /**
@@ -2007,6 +2683,165 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type SessionMessageUser = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  text: string
+  files?: Array<PromptFileAttachment>
+  agents?: Array<PromptAgentAttachment>
+  type: "user"
+}
+
+export type SessionMessageSynthetic = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+  sessionID: string
+  text: string
+  type: "synthetic"
+}
+
+export type SessionMessageAssistantText = {
+  type: "text"
+  text: string
+}
+
+export type SessionMessageAssistantReasoning = {
+  type: "reasoning"
+  id: string
+  text: string
+}
+
+export type SessionMessageToolStatePending = {
+  status: "pending"
+  input: string
+}
+
+export type SessionMessageToolStateRunning = {
+  status: "running"
+  input: {
+    [key: string]: unknown
+  }
+  structured: {
+    [key: string]: unknown
+  }
+  content: Array<ToolTextContent | ToolFileContent>
+}
+
+export type SessionMessageToolStateCompleted = {
+  status: "completed"
+  input: {
+    [key: string]: unknown
+  }
+  attachments?: Array<PromptFileAttachment>
+  content: Array<ToolTextContent | ToolFileContent>
+  structured: {
+    [key: string]: unknown
+  }
+}
+
+export type SessionMessageToolStateError = {
+  status: "error"
+  input: {
+    [key: string]: unknown
+  }
+  content: Array<ToolTextContent | ToolFileContent>
+  structured: {
+    [key: string]: unknown
+  }
+  error: {
+    type: string
+    message: string
+  }
+}
+
+export type SessionMessageAssistantTool = {
+  type: "tool"
+  id: string
+  name: string
+  provider?: {
+    executed: boolean
+    metadata?: {
+      [key: string]: unknown
+    }
+  }
+  state:
+    | SessionMessageToolStatePending
+    | SessionMessageToolStateRunning
+    | SessionMessageToolStateCompleted
+    | SessionMessageToolStateError
+  time: {
+    created: number
+    ran?: number
+    completed?: number
+    pruned?: number
+  }
+}
+
+export type SessionMessageAssistant = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    completed?: number
+  }
+  type: "assistant"
+  agent: string
+  model: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  snapshot?: {
+    start?: string
+    end?: string
+  }
+  finish?: string
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  error?: string
+}
+
+export type SessionMessageCompaction = {
+  type: "compaction"
+  reason: "auto" | "manual"
+  summary: string
+  include?: string
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+}
+
+export type SessionMessage =
+  | SessionMessageUser
+  | SessionMessageSynthetic
+  | SessionMessageAssistant
+  | SessionMessageCompaction
+
 export type Symbol = {
   name: string
   kind: number
@@ -2101,6 +2936,27 @@ export type Event =
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
+  | EventSessionNextPrompted
+  | EventSessionNextSynthetic
+  | EventSessionNextStepStarted
+  | EventSessionNextStepEnded
+  | EventSessionNextTextStarted
+  | EventSessionNextTextDelta
+  | EventSessionNextTextEnded
+  | EventSessionNextReasoningStarted
+  | EventSessionNextReasoningDelta
+  | EventSessionNextReasoningEnded
+  | EventSessionNextToolInputStarted
+  | EventSessionNextToolInputDelta
+  | EventSessionNextToolInputEnded
+  | EventSessionNextToolCalled
+  | EventSessionNextToolProgress
+  | EventSessionNextToolSuccess
+  | EventSessionNextToolError
+  | EventSessionNextRetried
+  | EventSessionNextCompactionStarted
+  | EventSessionNextCompactionDelta
+  | EventSessionNextCompactionEnded
 
 export type McpStatusConnected = {
   status: "connected"
@@ -4663,6 +5519,40 @@ export type SyncHistoryListResponses = {
 }
 
 export type SyncHistoryListResponse = SyncHistoryListResponses[keyof SyncHistoryListResponses]
+
+export type V2SessionMessagesData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/api/session/{sessionID}/message"
+}
+
+export type V2SessionMessagesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type V2SessionMessagesError = V2SessionMessagesErrors[keyof V2SessionMessagesErrors]
+
+export type V2SessionMessagesResponses = {
+  /**
+   * List of v2 session messages
+   */
+  200: Array<SessionMessage>
+}
+
+export type V2SessionMessagesResponse = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
 
 export type FindTextData = {
   body?: never
