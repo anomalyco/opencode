@@ -146,7 +146,10 @@ export const layer = Layer.effect(
         return exists && connections.get(workspaceID)?.status !== "error"
       })
 
-    const connectSSE = Effect.fn("Workspace.connectSSE")(function* (url: URL | string, headers: HeadersInit | undefined) {
+    const connectSSE = Effect.fn("Workspace.connectSSE")(function* (
+      url: URL | string,
+      headers: HeadersInit | undefined,
+    ) {
       const response = yield* http.execute(
         HttpClientRequest.get(route(url, "/global/event"), {
           headers: new Headers(headers),
@@ -381,27 +384,6 @@ export const layer = Layer.effect(
     const stopSync = Effect.fn("Workspace.stopSync")(function* (id: WorkspaceID) {
       yield* FiberMap.remove(syncFibers, id)
       connections.delete(id)
-    })
-
-    const startWorkspaceSyncingInternal = Effect.fn("Workspace.startWorkspaceSyncingInternal")(function* (
-      projectID: ProjectID,
-    ) {
-      const spaces = yield* db((db) =>
-        db
-          .select({ workspace: WorkspaceTable })
-          .from(WorkspaceTable)
-          .innerJoin(SessionTable, eq(SessionTable.workspace_id, WorkspaceTable.id))
-          .where(eq(WorkspaceTable.project_id, projectID))
-          .all(),
-      )
-
-      yield* Effect.forEach(
-        new Map(spaces.map((row) => [row.workspace.id, row.workspace])).values(),
-        (row) => startSync(fromRow(row)),
-        {
-          discard: true,
-        },
-      )
     })
 
     const create = Effect.fn("Workspace.create")(function* (input: CreateInput) {
@@ -704,7 +686,20 @@ export const layer = Layer.effect(
     })
 
     const startWorkspaceSyncing = Effect.fn("Workspace.startWorkspaceSyncing")(function* (projectID: ProjectID) {
-      yield* startWorkspaceSyncingInternal(projectID)
+      // This session table join makes this query only return
+      // workspaces that have sessions
+      const spaces = yield* db((db) =>
+        db
+          .selectDistinct({ workspace: WorkspaceTable })
+          .from(WorkspaceTable)
+          .innerJoin(SessionTable, eq(SessionTable.workspace_id, WorkspaceTable.id))
+          .where(eq(WorkspaceTable.project_id, projectID))
+          .all(),
+      )
+
+      for (const row of spaces) {
+        yield* startSync(fromRow(row.workspace)).pipe(Effect.forkDetach)
+      }
     })
 
     return Service.of({
