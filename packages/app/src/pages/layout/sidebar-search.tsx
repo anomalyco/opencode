@@ -18,20 +18,20 @@ export const SidebarSearch = (props: {
 
   return (
     <div data-component="sidebar-search" class="pt-2">
-      <DropdownMenu placement="bottom-end" gutter={6}>
-        <div class="relative">
-          <div class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-icon-weak">
-            <Icon name="magnifying-glass" size="small" />
-          </div>
-          <input
-            type="text"
-            value={props.query()}
-            onInput={(event) => props.setQuery(event.currentTarget.value)}
-            placeholder={label(props.scope())}
-            aria-label={language.t("sidebar.search.placeholder")}
-            class="w-full h-8 pl-7 pr-8 box-border rounded-md border border-border-weak-base bg-surface-panel text-13-regular text-text-strong placeholder:text-text-weak focus:outline-none focus:border-border-base"
-          />
-          <div class="absolute inset-y-0 right-1 flex items-center">
+      <div class="relative">
+        <div class="pointer-events-none absolute inset-y-0 left-2 flex items-center text-icon-weak">
+          <Icon name="magnifying-glass" size="small" />
+        </div>
+        <input
+          type="text"
+          value={props.query()}
+          onInput={(event) => props.setQuery(event.currentTarget.value)}
+          placeholder={label(props.scope())}
+          aria-label={language.t("sidebar.search.placeholder")}
+          class="w-full h-8 pl-7 pr-8 box-border rounded-md border border-border-weak-base bg-surface-panel text-13-regular text-text-strong placeholder:text-text-weak focus:outline-none focus:border-border-base"
+        />
+        <div class="absolute inset-y-0 right-1 flex items-center">
+          <DropdownMenu placement="bottom-end" gutter={6}>
             <DropdownMenu.Trigger
               as={IconButton}
               icon="chevron-down"
@@ -40,19 +40,19 @@ export const SidebarSearch = (props: {
               class="size-6 rounded-md"
               aria-label={label(props.scope())}
             />
-          </div>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content class="min-w-48">
+                <DropdownMenu.Item onSelect={() => props.setScope("current")}>
+                  <DropdownMenu.ItemLabel>{label("current")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => props.setScope("all")}>
+                  <DropdownMenu.ItemLabel>{label("all")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu>
         </div>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content class="min-w-[var(--kb-popper-anchor-width)]">
-            <DropdownMenu.Item onSelect={() => props.setScope("current")}>
-              <DropdownMenu.ItemLabel>{label("current")}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onSelect={() => props.setScope("all")}>
-              <DropdownMenu.ItemLabel>{label("all")}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu>
+      </div>
     </div>
   )
 }

@@ -10,6 +10,13 @@ const IMAGE_EXTS = new Map([
   ["png", "image/png"],
   ["webp", "image/webp"],
 ])
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+const XLS_MIME = "application/vnd.ms-excel"
+const SPREADSHEET_MIMES = new Set([XLSX_MIME, XLS_MIME])
+const SPREADSHEET_EXTS = new Map([
+  ["xlsx", XLSX_MIME],
+  ["xls", XLS_MIME],
+])
 const TEXT_MIMES = new Set([
   "application/json",
   "application/ld+json",
@@ -54,9 +61,10 @@ export async function attachmentMime(file: File) {
   const type = kind(file.type)
   if (IMAGE_MIMES.has(type)) return type
   if (type === "application/pdf") return type
+  if (SPREADSHEET_MIMES.has(type)) return type
 
   const suffix = ext(file.name)
-  const fallback = IMAGE_EXTS.get(suffix) ?? (suffix === "pdf" ? "application/pdf" : undefined)
+  const fallback = IMAGE_EXTS.get(suffix) ?? SPREADSHEET_EXTS.get(suffix) ?? (suffix === "pdf" ? "application/pdf" : undefined)
   if ((!type || type === "application/octet-stream") && fallback) return fallback
 
   if (textMime(type)) return "text/plain"

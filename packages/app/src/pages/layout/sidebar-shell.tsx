@@ -28,10 +28,9 @@ export const SidebarContent = (props: {
   settingsLabel: Accessor<string>
   settingsKeybind: Accessor<string | undefined>
   onOpenSettings: () => void
-  helpLabel: Accessor<string>
-  onOpenHelp: () => void
   renderPanel: () => JSX.Element
 }): JSX.Element => {
+  const showRail = createMemo(() => props.projects().length > 1)
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
   let panel: HTMLDivElement | undefined
@@ -63,9 +62,11 @@ export const SidebarContent = (props: {
             <DragDropSensors />
             <ConstrainDragXAxis />
             <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
-              <SortableProvider ids={props.projects().map((p) => p.worktree)}>
-                <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
-              </SortableProvider>
+              <Show when={showRail()}>
+                <SortableProvider ids={props.projects().map((p) => p.worktree)}>
+                  <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
+                </SortableProvider>
+              </Show>
               <Tooltip
                 placement={placement()}
                 value={
@@ -99,15 +100,6 @@ export const SidebarContent = (props: {
               aria-label={props.settingsLabel()}
             />
           </TooltipKeybind>
-          <Tooltip placement={placement()} value={props.helpLabel()}>
-            <IconButton
-              icon="help"
-              variant="ghost"
-              size="large"
-              onClick={props.onOpenHelp}
-              aria-label={props.helpLabel()}
-            />
-          </Tooltip>
         </div>
       </div>
 

@@ -2033,7 +2033,19 @@ export default function Layout(props: ParentProps) {
     const empty = createMemo(() => !params.dir && layout.projects.list().length === 0)
     const [searchQuery, setSearchQuery] = createSignal("")
     const [searchScope, setSearchScope] = createSignal<SidebarSearchScope>("current")
-    const normalizedQuery = createMemo(() => searchQuery().trim().toLowerCase())
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = createSignal("")
+
+    createEffect(() => {
+      const raw = searchQuery()
+      if (raw === "") {
+        setDebouncedSearchQuery("")
+        return
+      }
+      const timer = setTimeout(() => setDebouncedSearchQuery(raw), 150)
+      onCleanup(() => clearTimeout(timer))
+    })
+
+    const normalizedQuery = createMemo(() => debouncedSearchQuery().trim().toLowerCase())
     const searching = createMemo(() => normalizedQuery().length > 0)
     const matchesQuery = (session: Session) => {
       const q = normalizedQuery()
@@ -2049,8 +2061,19 @@ export default function Layout(props: ParentProps) {
           : [project()].filter((p): p is LocalProject => !!p)
       return projects
         .map((p) => {
-          const [store] = globalSync.child(p.worktree, { bootstrap: false })
-          const sessions = sortedRootSessions(store, now).filter(matchesQuery)
+          const dirs = workspaceIds(p)
+          const seen = new Set<string>()
+          const sessions: Session[] = []
+          for (const dir of dirs) {
+            const [dirStore] = globalSync.child(dir, { bootstrap: false })
+            for (const s of sortedRootSessions(dirStore, now)) {
+              if (seen.has(s.id)) continue
+              if (matchesQuery(s)) {
+                seen.add(s.id)
+                sessions.push(s)
+              }
+            }
+          }
           return { project: p, sessions }
         })
         .filter((group) => group.sessions.length > 0)
@@ -2335,26 +2358,26 @@ export default function Layout(props: ParentProps) {
                       {language.t("workspace.new")}
                     </Button>
                   </div>
-                  <div class="relative flex-1 min-h-0">
-                    <DragDropProvider
-                      onDragStart={handleWorkspaceDragStart}
-                      onDragEnd={handleWorkspaceDragEnd}
-                      onDragOver={handleWorkspaceDragOver}
-                      collisionDetector={closestCenter}
-                    >
-                      <DragDropSensors />
-                      <ConstrainDragXAxis />
-                      <div
-                        ref={(el) => {
-                          if (!panelProps.mobile) scrollContainerRef = el
-                        }}
-                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
-                      >
-                        <SortableProvider ids={workspaces()}>
-                          <For each={workspaces()}>
-                            {(directory) => (
-                              <Show when={project()}>
-                                {(p) => (
+                  <Show when={project()}>
+                    {(p) => (
+                      <div class="relative flex-1 min-h-0">
+                        <DragDropProvider
+                          onDragStart={handleWorkspaceDragStart}
+                          onDragEnd={handleWorkspaceDragEnd}
+                          onDragOver={handleWorkspaceDragOver}
+                          collisionDetector={closestCenter}
+                        >
+                          <DragDropSensors />
+                          <ConstrainDragXAxis />
+                          <div
+                            ref={(el) => {
+                              if (!panelProps.mobile) scrollContainerRef = el
+                            }}
+                            class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+                          >
+                            <SortableProvider ids={workspaces()}>
+                              <For each={workspaces()}>
+                                {(directory) => (
                                   <SortableWorkspace
                                     ctx={workspaceSidebarCtx}
                                     directory={directory}
@@ -2363,20 +2386,20 @@ export default function Layout(props: ParentProps) {
                                     mobile={panelProps.mobile}
                                   />
                                 )}
-                              </Show>
-                            )}
-                          </For>
-                        </SortableProvider>
+                              </For>
+                            </SortableProvider>
+                          </div>
+                          <DragOverlay>
+                            <WorkspaceDragOverlay
+                              sidebarProject={sidebarProject}
+                              activeWorkspace={() => store.activeWorkspace}
+                              workspaceLabel={workspaceLabel}
+                            />
+                          </DragOverlay>
+                        </DragDropProvider>
                       </div>
-                      <DragOverlay>
-                        <WorkspaceDragOverlay
-                          sidebarProject={sidebarProject}
-                          activeWorkspace={() => store.activeWorkspace}
-                          workspaceLabel={workspaceLabel}
-                        />
-                      </DragOverlay>
-                    </DragDropProvider>
-                  </div>
+                    )}
+                  </Show>
                 </>
               </Show>
               </Show>
