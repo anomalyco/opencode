@@ -732,8 +732,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Buscar conteúdo de uma URL",
   "settings.permissions.tool.websearch.title": "Pesquisa Web",
   "settings.permissions.tool.websearch.description": "Pesquisar na web",
-  "settings.permissions.tool.codesearch.title": "Pesquisa de Código",
-  "settings.permissions.tool.codesearch.description": "Pesquisar código na web",
   "settings.permissions.tool.external_directory.title": "Diretório Externo",
   "settings.permissions.tool.external_directory.description": "Acessar arquivos fora do diretório do projeto",
   "settings.permissions.tool.doom_loop.title": "Loop Infinito",

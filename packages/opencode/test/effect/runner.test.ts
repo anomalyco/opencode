@@ -115,8 +115,16 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
-      const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("never"))).pipe(Effect.forkChild)
-      yield* Effect.sleep("10 millis")
+      const started = yield* Deferred.make<void>()
+      const fiber = yield* runner
+        .ensureRunning(
+          Effect.gen(function* () {
+            yield* Deferred.succeed(started, void 0)
+            return yield* Effect.never.pipe(Effect.as("never"))
+          }),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(started)
       expect(runner.busy).toBe(true)
       expect(runner.state._tag).toBe("Running")
 
@@ -331,6 +339,22 @@ describe("Runner", () => {
       expect(Exit.isFailure(shellExit)).toBe(true)
 
       yield* Deferred.succeed(gate, undefined).pipe(Effect.ignore)
+    }),
+  )
+
+  it.live(
+    "cancel does not mask shell defects",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("interrupted") })
+
+      const sh = yield* runner
+        .startShell(Effect.never.pipe(Effect.ensuring(Effect.die("boom")), Effect.as("ignored")))
+        .pipe(Effect.forkChild)
+      yield* Effect.sleep("10 millis")
+
+      yield* runner.cancel
+      expect(Exit.isFailure(yield* Fiber.await(sh))).toBe(true)
     }),
   )
 

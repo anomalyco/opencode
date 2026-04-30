@@ -294,4 +294,20 @@ export function payloads() {
     .toArray()
 }
 
+export function effectPayloads() {
+  return registry
+    .entries()
+    .map(([type, def]) =>
+      EffectSchema.Struct({
+        type: EffectSchema.Literal("sync"),
+        name: EffectSchema.Literal(type),
+        id: EffectSchema.String,
+        seq: EffectSchema.Finite,
+        aggregateID: EffectSchema.Literal(def.aggregate),
+        data: def.schema,
+      }).annotate({ identifier: `SyncEvent.${type}` }),
+    )
+    .toArray()
+}
+
 export * as SyncEvent from "."
