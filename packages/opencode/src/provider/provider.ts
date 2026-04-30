@@ -1466,10 +1466,13 @@ const layer: Layer.Layer<
           if (combined) opts.signal = combined
 
           // Strip openai itemId metadata following what codex does
-          if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+          if (
+            (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
+            opts.body &&
+            opts.method === "POST"
+          ) {
             const body = JSON.parse(opts.body as string)
-            const isAzure = model.providerID.includes("azure")
-            const keepIds = isAzure && body.store === true
+            const keepIds = body.store === true
             if (!keepIds && Array.isArray(body.input)) {
               for (const item of body.input) {
                 if ("id" in item) {

@@ -33,6 +33,7 @@ import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, skipToken, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
+import { directoryKey } from "./global-sync/utils"
 
 type GlobalStore = {
   ready: boolean
@@ -169,18 +170,20 @@ function createGlobalSync() {
 
   const queue = createRefreshQueue({
     paused,
+    key: directoryKey,
     bootstrap: () => queryClient.fetchQuery({ queryKey: ["bootstrap"] }),
     bootstrapInstance,
   })
 
   const sdkFor = (directory: string) => {
-    const cached = sdkCache.get(directory)
+    const key = directoryKey(directory)
+    const cached = sdkCache.get(key)
     if (cached) return cached
     const sdk = globalSDK.createClient({
       directory,
       throwOnError: true,
     })
-    sdkCache.set(directory, sdk)
+    sdkCache.set(key, sdk)
     return sdk
   }
 
@@ -192,23 +195,25 @@ function createGlobalSync() {
       void bootstrapInstance(directory)
     },
     onDispose: (directory) => {
-      queue.clear(directory)
-      sessionMeta.delete(directory)
-      sdkCache.delete(directory)
-      clearProviderRev(directory)
-      clearSessionPrefetchDirectory(directory)
+      const key = directoryKey(directory)
+      queue.clear(key)
+      sessionMeta.delete(key)
+      sdkCache.delete(key)
+      clearProviderRev(key)
+      clearSessionPrefetchDirectory(key)
     },
     translate: language.t,
     getSdk: sdkFor,
   })
 
   async function loadSessions(directory: string) {
-    const pending = sessionLoads.get(directory)
+    const key = directoryKey(directory)
+    const pending = sessionLoads.get(key)
     if (pending) return pending
 
-    children.pin(directory)
+    children.pin(key)
     const [store, setStore] = children.child(directory, { bootstrap: false })
-    const meta = sessionMeta.get(directory)
+    const meta = sessionMeta.get(key)
     if (meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
         limit: store.limit,
@@ -218,14 +223,14 @@ function createGlobalSync() {
         setStore("session", reconcile(next, { key: "id" }))
         cleanupDroppedSessionCaches(store, setStore, next, setSessionTodo)
       }
-      children.unpin(directory)
+      children.unpin(key)
       return
     }
 
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
     const promise = queryClient
       .fetchQuery({
-        ...loadSessionsQuery(directory),
+        ...loadSessionsQuery(key),
         queryFn: () =>
           loadRootSessionsWithFallback({
             directory,
@@ -255,7 +260,7 @@ function createGlobalSync() {
                 setStore("session", reconcile(sessions, { key: "id" }))
                 cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
               })
-              sessionMeta.set(directory, { limit })
+              sessionMeta.set(key, { limit })
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
@@ -270,23 +275,24 @@ function createGlobalSync() {
       })
       .then(() => {})
 
-    sessionLoads.set(directory, promise)
+    sessionLoads.set(key, promise)
     void promise.finally(() => {
-      sessionLoads.delete(directory)
-      children.unpin(directory)
+      sessionLoads.delete(key)
+      children.unpin(key)
     })
     return promise
   }
 
   async function bootstrapInstance(directory: string) {
-    if (!directory) return
-    const pending = booting.get(directory)
+    const key = directoryKey(directory)
+    if (!key) return
+    const pending = booting.get(key)
     if (pending) return pending
 
-    children.pin(directory)
+    children.pin(key)
     const promise = Promise.resolve().then(async () => {
       const child = children.ensureChild(directory)
-      const cache = children.vcsCache.get(directory)
+      const cache = children.vcsCache.get(key)
       if (!cache) return
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
@@ -307,16 +313,17 @@ function createGlobalSync() {
       })
     })
 
-    booting.set(directory, promise)
+    booting.set(key, promise)
     void promise.finally(() => {
-      booting.delete(directory)
-      children.unpin(directory)
+      booting.delete(key)
+      children.unpin(key)
     })
     return promise
   }
 
   const unsub = globalSDK.event.listen((e) => {
     const directory = e.name
+    const key = directoryKey(directory)
     const event = e.details
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
@@ -339,9 +346,9 @@ function createGlobalSync() {
       return
     }
 
-    const existing = children.children[directory]
+    const existing = children.children[key]
     if (!existing) return
-    children.mark(directory)
+    children.mark(key)
     const [store, setStore] = existing
     applyDirectoryEvent({
       event,
@@ -350,9 +357,9 @@ function createGlobalSync() {
       setStore,
       push: queue.push,
       setSessionTodo,
-      vcsCache: children.vcsCache.get(directory),
+      vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
-        void queryClient.fetchQuery(loadLspQuery(directory, sdkFor(directory)))
+        void queryClient.fetchQuery(loadLspQuery(key, sdkFor(directory)))
       },
     })
   })
@@ -363,7 +370,7 @@ function createGlobalSync() {
   })
   onCleanup(() => {
     for (const directory of Object.keys(children.children)) {
-      children.disposeDirectory(directory)
+      children.disposeDirectory(directoryKey(directory))
     }
   })
 

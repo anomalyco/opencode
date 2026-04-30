@@ -16,7 +16,9 @@ ariane-emory
 -danieljoshuanazareth
 -danieljoshuanazareth
 -davidbernat looks to be a clawdbot that spams team and sends super weird emails, doesnt appear to be a real person
+dmtrkovalenko
 edemaine
+fahreddinozcan
 -florianleibert
 fwang
 iamdavidhill
