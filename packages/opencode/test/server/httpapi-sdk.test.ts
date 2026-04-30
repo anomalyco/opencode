@@ -1,9 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { ConfigProvider, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
+import { HttpRouter } from "effect/unstable/http"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Instance } from "../../src/project/instance"
+import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { Server } from "../../src/server/server"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -33,7 +35,27 @@ function app(backend: Backend, input?: { password?: string; username?: string })
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = backend === "httpapi"
   Flag.OPENCODE_SERVER_PASSWORD = input?.password
   Flag.OPENCODE_SERVER_USERNAME = input?.username
-  return backend === "httpapi" ? Server.Default().app : Server.Legacy().app
+  if (backend === "legacy") return Server.Legacy().app
+
+  const handler = HttpRouter.toWebHandler(
+    ExperimentalHttpApiServer.routes.pipe(
+      Layer.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            OPENCODE_SERVER_PASSWORD: input?.password,
+            OPENCODE_SERVER_USERNAME: input?.username,
+          }),
+        ),
+      ),
+    ),
+    { disableLogger: true },
+  ).handler
+  return {
+    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
+    request(input: string | URL | Request, init?: RequestInit) {
+      return this.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
+    },
+  }
 }
 
 function client(
@@ -123,7 +145,7 @@ function firstEvent(open: () => Promise<{ stream: AsyncIterator<unknown> }>) {
 }
 
 function record(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+  return value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : {}
 }
 
 function array(value: unknown) {
