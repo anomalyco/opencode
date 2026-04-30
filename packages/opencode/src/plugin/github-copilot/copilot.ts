@@ -5,8 +5,8 @@ import { iife } from "@/util/iife"
 import * as Log from "@opencode-ai/core/util/log"
 import { setTimeout as sleep } from "node:timers/promises"
 import { CopilotModels } from "./models"
+import { AutoModelResolver } from "./auto-model"
 import { MessageV2 } from "@/session/message-v2"
-
 const log = Log.create({ service: "plugin.copilot" })
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
@@ -61,12 +61,29 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
       id: "github-copilot",
       async models(provider, ctx) {
         if (ctx.auth?.type !== "oauth") {
-          return Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model, base())]))
+          const result = Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, fix(model, base())]))
+          result["auto"] = {
+            id: "auto",
+            providerID: "github-copilot",
+            api: { id: "auto", url: base(), npm: "@ai-sdk/github-copilot" },
+            status: "active",
+            limit: { context: 128_000, input: 128_000, output: 16_384 },
+            capabilities: {
+              temperature: true, reasoning: true, attachment: true, toolcall: true,
+              input: { text: true, audio: false, image: true, video: false, pdf: false },
+              output: { text: true, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            family: "auto", name: "Auto",
+            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            options: {}, headers: {},
+            release_date: "1970-01-01", variants: {},
+          }
+          return result
         }
-
         const auth = ctx.auth
 
-        return CopilotModels.get(
+        const resolved = await CopilotModels.get(
           base(auth.enterpriseUrl),
           {
             Authorization: `Bearer ${auth.refresh}`,
@@ -79,13 +96,45 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             Object.entries(provider.models).map(([id, model]) => [id, fix(model, base(auth.enterpriseUrl))]),
           )
         })
-      },
+
+        const copilotBase = base(auth.enterpriseUrl)
+        resolved["auto"] = {
+          id: "auto",
+          providerID: "github-copilot",
+          api: {
+            id: "auto",
+            url: copilotBase,
+            npm: "@ai-sdk/github-copilot",
+          },
+          status: "active",
+          limit: { context: 128_000, input: 128_000, output: 16_384 },
+          capabilities: {
+            temperature: true,
+            reasoning: true,
+            attachment: true,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          family: "auto",
+          name: "Auto",
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          options: {},
+          headers: {},
+          release_date: "1970-01-01",
+          variants: {},
+        }
+
+        return resolved      },
     },
     auth: {
       provider: "github-copilot",
       async loader(getAuth) {
         const info = await getAuth()
         if (!info || info.type !== "oauth") return {}
+
+        const resolvers = new Map<string, AutoModelResolver>()
 
         return {
           apiKey: "",
@@ -94,9 +143,17 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             if (info.type !== "oauth") return fetch(request, init)
 
             const url = request instanceof URL ? request.href : typeof request === "string" ? request : request.url
+            const parsedBody = iife(() => {
+              try {
+                return typeof init?.body === "string" ? JSON.parse(init.body) : init?.body
+              } catch {
+                return undefined
+              }
+            })
+
             const { isVision, isAgent } = iife(() => {
               try {
-                const body = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body
+                const body = parsedBody
 
                 // Completions API
                 if (body?.messages && url.includes("completions")) {
@@ -159,16 +216,57 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               headers["Copilot-Vision-Request"] = "true"
             }
 
+            // Auto model resolution: rewrite model "auto" → resolved model + session token
+            let rewrittenBody: string | undefined
+            if (parsedBody && typeof parsedBody === "object" && parsedBody.model === "auto") {
+              try {
+                const baseUrl = base(info.enterpriseUrl)
+                const resolverKey = `${info.refresh}:${baseUrl}`
+                let resolver = resolvers.get(resolverKey)
+                if (!resolver) {
+                  resolver = new AutoModelResolver(info.refresh, baseUrl)
+                  resolvers.set(resolverKey, resolver)
+                }
+
+                const { model, sessionToken, apiBaseUrl } = await resolver.resolve()
+                parsedBody.model = model
+                headers["Copilot-Session-Token"] = sessionToken
+                // Keep OAuth token for Authorization; the session token goes in Copilot-Session-Token.
+                // The Copilot Chat API authenticates via OAuth Bearer + optional session token —
+                // NOT via the copilot_internal/v2/token that was used to fetch the session.
+
+                const rewrittenUrl = iife(() => {
+                  try {
+                    const next = new URL(url)
+                    const base = new URL(apiBaseUrl)
+                    next.protocol = base.protocol
+                    next.host = base.host
+                    return next.href
+                  } catch {
+                    return undefined
+                  }
+                })
+                rewrittenBody = JSON.stringify(parsedBody)
+                log.info("auto model resolved", { model, hasSessionToken: !!sessionToken })
+
+                if (rewrittenUrl) {
+                  request = rewrittenUrl
+                }
+              } catch (err) {
+                log.error("auto model resolution failed, falling back to raw 'auto'", { error: err })
+              }
+            }
+
             delete headers["x-api-key"]
             delete headers["authorization"]
 
             return fetch(request, {
               ...init,
+              body: rewrittenBody ?? init?.body,
               headers,
             })
           },
-        }
-      },
+        }      },
       methods: [
         {
           type: "oauth",
