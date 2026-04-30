@@ -3,16 +3,42 @@ import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../../fixture/fixture"
 import * as App from "../../../src/cli/cmd/tui/app"
-import { Rpc } from "@/util/rpc"
 import { UI } from "../../../src/cli/ui"
 import * as Timeout from "../../../src/util/timeout"
 import * as Network from "../../../src/cli/network"
 import * as Win32 from "../../../src/cli/cmd/tui/win32"
-import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 
 const stop = new Error("stop")
+const packageRoot = path.resolve(import.meta.dir, "../../..")
 const seen = {
   tui: [] as string[],
+}
+
+class TestWorker extends EventTarget {
+  onerror: Worker["onerror"] = null
+  onmessage: Worker["onmessage"] = null
+  onmessageerror: Worker["onmessageerror"] = null
+
+  postMessage(data: string) {
+    const parsed = JSON.parse(data)
+    if (!parsed || typeof parsed !== "object" || !("method" in parsed) || !("id" in parsed)) return
+    if (typeof parsed.method !== "string" || typeof parsed.id !== "number") return
+    const result =
+      parsed.method === "fetch"
+        ? { status: 200, headers: {}, body: "" }
+        : parsed.method === "server"
+          ? { url: "http://127.0.0.1" }
+          : parsed.method === "snapshot"
+            ? ""
+            : undefined
+    queueMicrotask(() => {
+      this.onmessage?.(
+        new MessageEvent("message", { data: JSON.stringify({ type: "rpc.result", result, id: parsed.id }) }),
+      )
+    })
+  }
+
+  terminate() {}
 }
 
 function setup() {
@@ -25,10 +51,6 @@ function setup() {
     if (input.directory) seen.tui.push(input.directory)
     throw stop
   })
-  spyOn(Rpc, "client").mockImplementation(() => ({
-    call: async () => ({ url: "http://127.0.0.1" }) as never,
-    on: () => () => {},
-  }))
   spyOn(UI, "error").mockImplementation(() => {})
   spyOn(Timeout, "withTimeout").mockImplementation((input) => input)
   spyOn(Network, "resolveNetworkOptions").mockResolvedValue({
@@ -71,7 +93,6 @@ describe("tui thread", () => {
 
   async function check(project?: string) {
     setup()
-    const cwd = process.cwd()
     const pwd = process.env.PWD
     const worker = globalThis.Worker
     const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
@@ -85,26 +106,26 @@ describe("tui thread", () => {
       configurable: true,
       value: true,
     })
-    globalThis.Worker = class extends EventTarget {
-      onerror = null
-      onmessage = null
-      onmessageerror = null
-      postMessage() {}
-      terminate() {}
-    } as unknown as typeof Worker
+    Object.defineProperty(globalThis, "Worker", { configurable: true, value: TestWorker })
 
     try {
       process.chdir(tmp.path)
       process.env.PWD = link
-      await expect(call(project)).rejects.toBe(stop)
+      let error: unknown
+      try {
+        await call(project)
+      } catch (caught) {
+        error = caught
+      }
+      expect(error).toBe(stop)
       expect(seen.tui[0]).toBe(tmp.path)
     } finally {
-      process.chdir(cwd)
+      process.chdir(packageRoot)
       if (pwd === undefined) delete process.env.PWD
       else process.env.PWD = pwd
       if (tty) Object.defineProperty(process.stdin, "isTTY", tty)
       else delete (process.stdin as { isTTY?: boolean }).isTTY
-      globalThis.Worker = worker
+      Object.defineProperty(globalThis, "Worker", { configurable: true, value: worker })
       await fs.rm(link, { recursive: true, force: true }).catch(() => undefined)
     }
   }

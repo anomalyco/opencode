@@ -1,27 +1,26 @@
-import { lazy } from "@/util/lazy"
 import type { ProjectID } from "@/project/schema"
 import type { WorkspaceAdaptor, WorkspaceAdaptorEntry } from "../types"
+import { WorktreeAdaptor } from "./worktree"
 
-const BUILTIN: Record<string, () => Promise<WorkspaceAdaptor>> = {
-  worktree: lazy(async () => (await import("./worktree")).WorktreeAdaptor),
+const BUILTIN: Record<string, WorkspaceAdaptor> = {
+  worktree: WorktreeAdaptor,
 }
 
 const state = new Map<ProjectID, Map<string, WorkspaceAdaptor>>()
 
-export async function getAdaptor(projectID: ProjectID, type: string): Promise<WorkspaceAdaptor> {
+export function getAdaptor(projectID: ProjectID, type: string): WorkspaceAdaptor {
   const custom = state.get(projectID)?.get(type)
   if (custom) return custom
 
   const builtin = BUILTIN[type]
-  if (builtin) return builtin()
+  if (builtin) return builtin
 
   throw new Error(`Unknown workspace adaptor: ${type}`)
 }
 
 export async function listAdaptors(projectID: ProjectID): Promise<WorkspaceAdaptorEntry[]> {
   const builtin = await Promise.all(
-    Object.entries(BUILTIN).map(async ([type, init]) => {
-      const adaptor = await init()
+    Object.entries(BUILTIN).map(async ([type, adaptor]) => {
       return {
         type,
         name: adaptor.name,

@@ -404,7 +404,7 @@ describe("HttpApi SDK", () => {
             lsp,
           }),
           project: { worktreeSelected: record(project.data).worktree === directory },
-          paths: { cwdSelected: record(paths.data).cwd === directory },
+          paths: { directorySelected: record(paths.data).directory === directory },
           file: record(file.data).content,
           hasProject: array(projects.data).length > 0,
           foundFile: JSON.stringify(findFiles.data).includes("hello.txt"),

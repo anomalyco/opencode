@@ -1,6 +1,7 @@
 import { EffectBridge } from "@/effect/bridge"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
+import { handlePtyInput } from "@/pty/input"
 import { Shell } from "@/shell/shell"
 import { Effect } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -102,9 +103,7 @@ export const ptyConnectRoute = HttpRouter.add(
     if (!handler) return HttpServerResponse.empty()
 
     yield* socket
-      .runRaw((message) => {
-        handler.onMessage(typeof message === "string" ? message : message.slice().buffer)
-      })
+      .runRaw((message) => handlePtyInput(handler, message))
       .pipe(
         Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
         Effect.ensuring(
