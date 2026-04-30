@@ -150,7 +150,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
     adaptor: localAdaptor(input.directory),
   })
 
-const listenRemoteHttp = <E, R>(
+const startRemoteWorkspaceHttpServer = <E, R>(
   handler: (request: ProxiedRequest) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
 ) =>
   listenAdditionalServer((request) =>
@@ -207,7 +207,7 @@ describe("HttpApi workspace routing middleware", () => {
       // This starts a second HTTP server that stands in for the opencode server
       // backing a remote workspace. The client below still calls the local test
       // server; only the middleware should call this server.
-      const remoteUrl = yield* listenRemoteHttp((request) => {
+      const remoteUrl = yield* startRemoteWorkspaceHttpServer((request) => {
         forwarded = request
         const url = requestURL(request)
         return HttpServerResponse.json(
