@@ -1,5 +1,5 @@
-import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
-import { formatPatch, structuredPatch } from "diff"
+import { Effect, Layer, ServiceMap, Scope } from "effect"
+import path from "path"
 import { Bus } from "@/bus"
 import z from "zod"
 import { Log } from "@/util/log"
@@ -126,17 +126,18 @@ const merge = (...lists: Git.Item[][]) => {
     }
   }
 
-  const state = Instance.state(
-    async () => {
-      if (Instance.project.vcs !== "git") {
-        return {
-          branch: async () => undefined,
-          info: async () => ({ branch: "", branches: [], worktrees: [] }),
-          unsubscribe: undefined,
-        }
-      }
-      let current = await currentBranch()
-      log.info("initialized", { branch: current })
+  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service> = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const git = yield* Git.Service
+      const scope = yield* Scope.Scope
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Vcs.state")((ctx) =>
+          Effect.gen(function* () {
+            if (ctx.project.vcs !== "git") {
+              return { current: undefined, root: undefined }
+            }
 
 const parseQuotedPath = (value: string) => {
   let out = ""
@@ -148,15 +149,81 @@ const parseQuotedPath = (value: string) => {
       continue
     }
 
-      return {
-        branch: async () => current,
-        info: snapshot,
-        unsubscribe,
-      }
-    },
-    async (state) => {
-      state.unsubscribe?.()
-    },
+            yield* Effect.acquireRelease(
+              Effect.sync(() =>
+                Bus.subscribe(
+                  FileWatcher.Event.Updated,
+                  Instance.bind(async (evt) => {
+                    if (!evt.properties.file.endsWith("HEAD")) return
+                    const next = await get()
+                    if (next === value.current) return
+                    log.info("branch changed", { from: value.current, to: next })
+                    value.current = next
+                    Bus.publish(Event.BranchUpdated, { branch: next })
+                  }),
+                ),
+              ),
+              (unsubscribe) => Effect.sync(unsubscribe),
+            )
+
+            return value
+          }),
+        ),
+      )
+
+      return Service.of({
+        init: Effect.fn("Vcs.init")(function* () {
+          yield* InstanceState.get(state).pipe(Effect.forkIn(scope))
+        }),
+        branch: Effect.fn("Vcs.branch")(function* () {
+          return yield* InstanceState.use(state, (x) => x.current)
+        }),
+        defaultBranch: Effect.fn("Vcs.defaultBranch")(function* () {
+          return yield* InstanceState.use(state, (x) => x.root?.name)
+        }),
+        info: Effect.fn("Vcs.info")(function* () {
+          const value = yield* InstanceState.get(state)
+          if (Instance.project.vcs !== "git") {
+            return {
+              branch: undefined,
+              default_branch: undefined,
+              branches: [],
+              worktrees: [],
+            }
+          }
+
+          const [branches, worktrees] = yield* Effect.all(
+            [branchList(git, Instance.worktree), worktreeList(git, Instance.worktree)],
+            { concurrency: 2 },
+          )
+
+          return {
+            branch: value.current,
+            default_branch: value.root?.name,
+            branches,
+            worktrees,
+          }
+        }),
+        diff: Effect.fn("Vcs.diff")(function* (mode: Mode) {
+          const value = yield* InstanceState.get(state)
+          if (Instance.project.vcs !== "git") return []
+          if (mode === "git") {
+            return yield* track(
+              fs,
+              git,
+              Instance.directory,
+              (yield* git.hasHead(Instance.directory)) ? "HEAD" : undefined,
+            )
+          }
+
+          if (!value.root) return []
+          if (value.current && value.current === value.root.name) return []
+          const ref = yield* git.mergeBase(Instance.directory, value.root.ref)
+          if (!ref) return []
+          return yield* compare(fs, git, Instance.directory, ref)
+        }),
+      })
+    }),
   )
 
   export async function init() {
