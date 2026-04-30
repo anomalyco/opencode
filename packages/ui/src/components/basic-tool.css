@@ -17,17 +17,13 @@
     max-width: calc(100% - 24px);
     min-width: 0;
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
   }
 
   [data-component="tool-trigger"]:not(:has([data-slot="basic-tool-tool-indicator"])) [data-slot="basic-tool-tool-trigger-content"] {
     max-width: 100%;
     width: 100%;
-  }
-
-  [data-component="tool-trigger"]:not(:has([data-slot="basic-tool-tool-indicator"])) [data-slot="basic-tool-tool-trigger-content"] {
-    max-width: 100%;
   }
 
   [data-slot="basic-tool-tool-indicator"] {
@@ -38,21 +34,6 @@
     justify-content: center;
     flex-shrink: 0;
     margin-right: 8px;
-
-    [data-component="spinner"] {
-      width: 16px;
-      height: 16px;
-    }
-  }
-
-  [data-slot="basic-tool-tool-spinner"] {
-    width: 16px;
-    height: 16px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--text-weak);
 
     [data-component="spinner"] {
       width: 16px;
@@ -72,21 +53,22 @@
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     width: auto;
     max-width: 100%;
     min-width: 0;
-    display: inline-flex;
-    align-items: center;
+    display: flex;
+    align-items: baseline;
     gap: 8px;
     justify-content: flex-start;
   }
 
   [data-slot="basic-tool-tool-info-main"] {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     align-items: baseline;
     gap: 8px;
-    min-width: 0;
     overflow: hidden;
   }
 
@@ -183,7 +165,7 @@
   width: 100%;
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 12px;
   border-radius: 6px;
@@ -203,7 +185,7 @@
   [data-slot="basic-tool-tool-info-main"] {
     flex: 1 1 auto;
     min-width: 0;
-    align-items: center;
+    align-items: baseline;
   }
 
   [data-component="task-tool-spinner"] {
@@ -229,6 +211,10 @@
     transition:
       opacity 0.15s ease,
       color 0.15s ease;
+
+    &:hover {
+      color: var(--icon-weak);
+    }
   }
 
   [data-component="task-tool-title"] {
@@ -241,10 +227,6 @@
     letter-spacing: var(--letter-spacing-normal);
     text-transform: capitalize;
     color: var(--border-interactive-base, var(--surface-interactive-base));
-  }
-
-  [data-slot="basic-tool-tool-subtitle"] {
-    color: var(--text-strong);
   }
 
   &:hover,
