@@ -69,7 +69,9 @@ export const layer = Layer.effect(
 
         return [
           "Skills provide specialized instructions and workflows for specific tasks.",
-          "Use the skill tool to load a skill when a task matches its description.",
+          "Use the skill tool when the user explicitly asks for a skill, or when the task clearly matches the skill's named domain and description.",
+          "For repository- or domain-specific skills, the task must be about that repository or domain.",
+          "Do not load a skill based only on generic workflow overlap, command names, or tool names in the skill description.",
           // the agents seem to ingest the information about skills a bit better if we present a more verbose
           // version of them here and a less verbose version in tool description, rather than vice versa.
           Skill.fmt(list, { verbose: true }),

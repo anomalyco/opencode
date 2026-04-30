@@ -248,14 +248,16 @@ export const layer: Layer.Layer<
       return [
         "Load a specialized skill that provides domain-specific instructions and workflows.",
         "",
-        "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
+        "Use this tool when the user explicitly asks for a skill, or when the task clearly matches the skill's named domain and description.",
+        "For repository- or domain-specific skills, the task must be about that repository or domain.",
+        "Do not load a skill based only on generic workflow overlap, command names, or tool names in the skill description.",
         "",
         "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
         "",
         'Tool output includes a `<skill_content name="...">` block with the loaded content.',
         "",
         "The following skills provide specialized sets of instructions for particular tasks",
-        "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
+        "Invoke this tool only for a clear skill match from the list below:",
         "",
         Skill.fmt(list, { verbose: false }),
       ].join("\n")
