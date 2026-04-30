@@ -34,12 +34,36 @@
 ### 1.2 分支命名规范
 
 ```
-feat/<语义清晰的名字>
+<type>/<name>
 ```
 
-- 名字反映**做什么**,不反映**谁做**(`feat/win-tri-env-appid` ✅ / `feat/laoli-task` ❌)
-- 中英混合 OK,语义清晰即可(对齐规范 v2 的 feat-id 命名风格)
-- **绝不复用**:`feat/A` 销毁后,新项目即使内容相关也用新名字(如 `feat/A-v2`、`feat/A-followup`)
+**type 部分(全小写)**:
+
+| type | 用途 |
+|---|---|
+| `feat` | 新功能 / 重构 / 大多数日常工作 |
+| `fix` | bug 修复(可独立时用,功能附带的 fix 仍走 feat) |
+| `chore` | 维护性改动(依赖更新等) |
+| `sync` | 上游同步(`sync/upstream-<日期>`) |
+| `hotfix` | 紧急修复(从 `ship-prod-<版本>` tag 切短命分支) |
+
+> **本项目 commit message 仍统一用 `[feat: <id>]` tag**,不引入 `[doc:]` `[fix:]` 等。type 前缀只用在分支名,不影响 commit tag。
+
+**name 部分,5 条硬规则**:
+
+1. **全小写** — `feat/win-tri-env-appid` ✅ / `feat/Win-Tri-Env-AppId` ❌
+2. **kebab-case**(中划线分词) — `feat/双端协作-sop` ✅ / `feat/双端协作_sop`(下划线)❌ / `feat/doubleEndCollab`(camelCase)❌
+3. **不用大写缩写** — `feat/双端协作-sop` ✅ / `feat/双端协作-SOP` ❌
+4. **中英混合 OK,英文部分必须小写**(对齐规范 v2 的 feat-id 命名风格)
+5. **名字反映"做什么"不反映"谁做"** — `feat/win-tri-env-appid` ✅ / `feat/laoli-task` ❌
+
+**为什么必须全小写?(行业常规)**
+
+Linux 默认 case-sensitive(`feat/SOP` 与 `feat/sop` 是两个分支),Windows / macOS HFS+ 默认 case-insensitive(同一分支)。三端协作时大小写不统一会出"幽灵分支":
+
+> **实战踩坑**(2026-04-30 立本规则的当天):本 SOP 首笔 commit 起初用了 `feat/双端协作-SOP`(大写),发现踩中规则,执行 `git branch -m feat/双端协作-SOP feat/双端协作-sop` 改小写时,Windows 下 git 直接报 `fatal: a branch named 'feat/双端协作-sop' already exists` —— 因为 case-insensitive FS 把两个名字视为同一分支。最终用两步法绕开(`git branch -m <中间名>` → `git branch -m <目标名>`)。**新分支起名时第一步就用小写,可省掉这个绕路**。
+
+**绝不复用**:`feat/A` 销毁后,新项目即使内容相关也用新名字(如 `feat/A-v2`、`feat/A-followup`)
 
 ### 1.3 反例:为什么不能复用
 
@@ -238,7 +262,7 @@ git push origin --delete feat/X            # 删远端
 | 合 dev 之后 | 通知对方"dev 更新了,记得 rebase" |
 | feat rebase 后强推 | 如果对方有 checkout 你的 feat(罕见),需告知"我刚 rebase 强推了 feat/X" |
 | dev 上发现冲突难解 | 不要硬上 —— 拉个语音或视频协商,谁来主、谁来让 |
-| 切分支策略变化 | 修改本 SOP 文档,commit message 标 `[doc: 双端协作-sop]`,改完通知对方 |
+| 切分支策略变化 | 修改本 SOP 文档,commit message 标 `[feat: 双端协作-sop]`(本项目统一 tag,不引入 `[doc:]`),改完通知对方 |
 
 ---
 
@@ -274,3 +298,4 @@ git push origin --delete feat/X            # 删远端
 | 版本 | 日期 | 修订内容 |
 |---|---|---|
 | v1.0 | 2026-04-30 | 初版立稿,起源于 v2 模型锁版后笑南追问"feat 合并后下个项目用同名还是新名"。结论:**feat 一次性容器,新项目新名字**。同笔加 5 处引用点(CLAUDE.md / 治理总纲 / 分支策略-v2/2-plan / docs/README / 改动日志) |
+| v1.1 | 2026-04-30 | 1.2 节扩"分支命名规范":加 type 前缀清单(feat/fix/chore/sync/hotfix)+ 5 条 name 硬规则(**全小写 + kebab-case**)+ 立规则当天踩坑实录(case-insensitive FS 上同名只大小写不同会冲突)。**第六节 `[doc:]` tag 改回 `[feat:]` 统一**(本项目 commit tag 仅用 `[feat:]`,不引入 `[doc:]`,理由:仓库历史 100% 一致性优先)。本笔 commit `[feat: 双端协作-sop]`(分支已对齐小写)|
