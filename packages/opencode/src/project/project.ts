@@ -17,6 +17,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
 import { NonNegativeInt, withStatics } from "@/util/schema"
+import { serviceUse } from "@/effect/service-use"
 
 const log = Log.create({ service: "project" })
 
@@ -178,7 +179,7 @@ export const layer: Layer.Layer<
     const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(pathSvc.join(dir, "opencode")).pipe(
         Effect.map((x) => x.trim()),
-        Effect.map(ProjectID.make),
+        Effect.map((x) => ProjectID.make(x)),
         Effect.catch(() => Effect.void),
       )
     })
@@ -484,6 +485,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
 )
+
+export const use = serviceUse(Service)
 
 export function list() {
   return Database.use((db) =>

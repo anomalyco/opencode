@@ -201,7 +201,7 @@ describe("HttpApi workspace routing middleware", () => {
   it.live("proxies remote workspace HTTP requests through the selected workspace target", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
+      const project = yield* Project.use.fromDirectory(dir)
       let forwarded: ProxiedRequest | undefined
 
       // This starts a second HTTP server that stands in for the opencode server
@@ -268,7 +268,7 @@ describe("HttpApi workspace routing middleware", () => {
   it.live("returns 503 when a remote workspace is not actively syncing", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
+      const project = yield* Project.use.fromDirectory(dir)
       const workspaceID = WorkspaceID.ascending("wrk_not_syncing")
       // Insert the row directly instead of Workspace.create. That gives the
       // middleware a valid remote workspace whose sync loop was never started.
@@ -302,7 +302,7 @@ describe("HttpApi workspace routing middleware", () => {
   it.live("proxies remote workspace WebSocket requests through the selected workspace target", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
+      const project = yield* Project.use.fromDirectory(dir)
       const remoteUrl = yield* listenRemoteWebSocket()
       const workspace = yield* createRemoteWorkspace({
         dir,
@@ -357,7 +357,7 @@ describe("HttpApi workspace routing middleware", () => {
   it.live("keeps control-plane routes local even when workspace is selected", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
+      const project = yield* Project.use.fromDirectory(dir)
 
       const workspaceDir = path.join(dir, ".workspace-local")
       const workspace = yield* createLocalWorkspace({
@@ -409,7 +409,7 @@ describe("HttpApi workspace routing middleware", () => {
   it.live("routes local workspace requests through WorkspaceRouteContext", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const project = yield* Project.Service.use((svc) => svc.fromDirectory(dir))
+      const project = yield* Project.use.fromDirectory(dir)
 
       const workspaceDir = path.join(dir, ".workspace-local")
       const workspace = yield* createLocalWorkspace({
