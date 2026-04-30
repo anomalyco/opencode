@@ -25,7 +25,6 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
 import { withStatics } from "@/util/schema"
-import { coerceNumericToolCallIds, transformSSEStream } from "@/util/coerce-tool-call-ids"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
