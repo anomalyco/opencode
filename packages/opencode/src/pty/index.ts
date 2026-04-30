@@ -5,7 +5,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import { lazy } from "@opencode-ai/core/util/lazy"
 import { Plugin } from "@/plugin"
-import { Instance } from "@/project/instance"
 import { Shell } from "@/shell/shell"
 import type { Proc } from "#pty"
 import * as Log from "@opencode-ai/core/util/log"
@@ -229,42 +228,38 @@ export const layer = Layer.effect(
         subscribers: new Map(),
       }
       s.sessions.set(id, session)
-      proc.onData(
-        Instance.bind((chunk) => {
-          session.cursor += chunk.length
+      proc.onData((chunk) => {
+        session.cursor += chunk.length
 
-          for (const [key, ws] of session.subscribers.entries()) {
-            if (ws.readyState !== 1) {
-              session.subscribers.delete(key)
-              continue
-            }
-            if (sock(ws) !== key) {
-              session.subscribers.delete(key)
-              continue
-            }
-            try {
-              ws.send(chunk)
-            } catch {
-              session.subscribers.delete(key)
-            }
+        for (const [key, ws] of session.subscribers.entries()) {
+          if (ws.readyState !== 1) {
+            session.subscribers.delete(key)
+            continue
           }
+          if (sock(ws) !== key) {
+            session.subscribers.delete(key)
+            continue
+          }
+          try {
+            ws.send(chunk)
+          } catch {
+            session.subscribers.delete(key)
+          }
+        }
 
-          session.buffer += chunk
-          if (session.buffer.length <= BUFFER_LIMIT) return
-          const excess = session.buffer.length - BUFFER_LIMIT
-          session.buffer = session.buffer.slice(excess)
-          session.bufferCursor += excess
-        }),
-      )
-      proc.onExit(
-        Instance.bind(({ exitCode }) => {
-          if (session.info.status === "exited") return
-          log.info("session exited", { id, exitCode })
-          session.info.status = "exited"
-          bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
-          bridge.fork(remove(id))
-        }),
-      )
+        session.buffer += chunk
+        if (session.buffer.length <= BUFFER_LIMIT) return
+        const excess = session.buffer.length - BUFFER_LIMIT
+        session.buffer = session.buffer.slice(excess)
+        session.bufferCursor += excess
+      })
+      proc.onExit(({ exitCode }) => {
+        if (session.info.status === "exited") return
+        log.info("session exited", { id, exitCode })
+        session.info.status = "exited"
+        bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
+        bridge.fork(remove(id))
+      })
       yield* bus.publish(Event.Created, { info })
       return info
     })

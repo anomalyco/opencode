@@ -190,13 +190,17 @@ test("useEditorContext resets selection when reconnecting", async () => {
     serverInfo: { name: "test", version: "0.0.0" },
   })
   expect(mounted.editor.selection()).toEqual({
-    text: "foo",
     filePath: path.join(startupDirectory, "file.ts"),
     source: "websocket",
-    selection: {
-      start: { line: 1, character: 1 },
-      end: { line: 1, character: 4 },
-    },
+    ranges: [
+      {
+        text: "foo",
+        selection: {
+          start: { line: 1, character: 1 },
+          end: { line: 1, character: 4 },
+        },
+      },
+    ],
   })
 
   mounted.editor.reconnect(startupDirectory)
