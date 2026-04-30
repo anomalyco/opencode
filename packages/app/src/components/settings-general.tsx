@@ -242,16 +242,16 @@ export const SettingsGeneral: Component = () => {
             data-action="settings-followup"
             options={[
               { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
-              { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
-              { value: "wrap", label: language.t("settings.general.row.followup.option.wrap") },
+              { value: "haltingSteer", label: language.t("settings.general.row.followup.option.steer") },
+              { value: "waitingSteer", label: language.t("settings.general.row.followup.option.wrap") },
             ]}
             current={{
-              value: settings.general.followup() ?? "steer",
-              label: language.t(`settings.general.row.followup.option.${settings.general.followup() ?? "steer"}` as const),
+              value: settings.general.followup() ?? "haltingSteer",
+              label: language.t(`settings.general.row.followup.option.${settings.general.followup() === "waitingSteer" ? "wrap" : settings.general.followup() === "queue" ? "queue" : "steer"}` as const),
             }}
             value={(o) => o.value}
             label={(o) => o.label}
-            onSelect={(option) => option && settings.general.setFollowup(option.value as "queue" | "steer" | "wrap")}
+            onSelect={(option) => option && settings.general.setFollowup(option.value as "queue" | "haltingSteer" | "waitingSteer")}
             variant="secondary"
             size="small"
             triggerVariant="settings"

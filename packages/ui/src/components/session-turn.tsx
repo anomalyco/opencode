@@ -369,8 +369,8 @@ export function SessionTurn(
   })
   const thinkingText = createMemo(() => {
     const s = status().type
-    if (s === "steer") return i18n.t("ui.sessionTurn.status.steering")
-    if (s === "wrap") return i18n.t("ui.sessionTurn.status.wrappingUp")
+    if (s === "haltingSteer") return i18n.t("ui.sessionTurn.status.steering")
+    if (s === "waitingSteer") return i18n.t("ui.sessionTurn.status.wrappingUp")
     return i18n.t("ui.sessionTurn.status.thinking")
   })
 
@@ -421,7 +421,7 @@ export function SessionTurn(
               <Show when={showThinking()}>
                 <div data-slot="session-turn-thinking">
                   <TextShimmer text={thinkingText()} />
-                  <Show when={!showReasoningSummaries() && status().type !== "steer" && status().type !== "wrap"}>
+                  <Show when={!showReasoningSummaries() && status().type !== "haltingSteer" && status().type !== "waitingSteer"}>
                     <TextReveal
                       text={reasoningHeading()}
                       class="session-turn-thinking-heading"

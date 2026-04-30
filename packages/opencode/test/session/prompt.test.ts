@@ -1933,7 +1933,7 @@ it.live(
           })
 
           // Signal wrap interrupt immediately so it's registered before the first loop finishes
-          yield* runState.requestInterrupt(session.id, "wrap")
+          yield* runState.requestInterrupt(session.id, "waitingSteer")
 
           const run = yield* prompt
             .prompt({

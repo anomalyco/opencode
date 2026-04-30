@@ -824,10 +824,10 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      const followupMode = kv.get("followup", "steer")
+      const followupMode = kv.get("followup", "haltingSteer")
       const isBusy = status().type !== "idle"
       
-      const isSteer = isBusy && followupMode === "steer"
+      const isSteer = isBusy && followupMode === "haltingSteer"
       
       if (isBusy && followupMode !== "queue" && store.queuedDrafts.length >= 1) {
         toast.show({
@@ -838,10 +838,10 @@ export function Prompt(props: PromptProps) {
         return false
       }
 
-      if (isBusy && followupMode === "steer") {
-        void sdk.client.session.interrupt({ sessionID, type: "steer" })
-      } else if (isBusy && followupMode === "wrap") {
-        void sdk.client.session.interrupt({ sessionID, type: "wrap" })
+      if (isBusy && followupMode === "haltingSteer") {
+        void sdk.client.session.interrupt({ sessionID, type: "haltingSteer" })
+      } else if (isBusy && followupMode === "waitingSteer") {
+        void sdk.client.session.interrupt({ sessionID, type: "waitingSteer" })
       }
 
       const payload = {
@@ -1095,7 +1095,7 @@ export function Prompt(props: PromptProps) {
                     const text = draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n")
                     const preview = text.length > 60 ? text.slice(0, 60).replace(/\n/g, " ") + "..." : text.replace(/\n/g, " ")
                     const mode = draft.followupMode ?? "queue"
-                    const prefix = mode === "steer" ? "Halt and steer:" : mode === "wrap" ? "Wait and steer:" : `[${i() + 1}] Queued:`
+                    const prefix = mode === "haltingSteer" ? "Halt and steer:" : mode === "waitingSteer" ? "Wait and steer:" : `[${i() + 1}] Queued:`
                     return (
                       <box flexDirection="row" gap={1}>
                         <text fg={theme.textMuted}>{prefix}</text>
@@ -1389,9 +1389,9 @@ export function Prompt(props: PromptProps) {
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>
                             {(() => {
-                              const mode = kv.get("followup", "steer")
-                              if (mode === "steer") return "Halt and Steer"
-                              if (mode === "wrap") return "Wait and Steer"
+                              const mode = kv.get("followup", "haltingSteer")
+                              if (mode === "haltingSteer") return "Halt and Steer"
+                              if (mode === "waitingSteer") return "Wait and Steer"
                               if (mode === "queue") return "Queue"
                               return "Halt and Steer"
                             })()}
@@ -1459,7 +1459,7 @@ export function Prompt(props: PromptProps) {
                     })
                     const steerMsg = createMemo(() => {
                       const s = status()
-                      if (s.type === "steer" || s.type === "wrap") return "Steering"
+                      if (s.type === "haltingSteer" || s.type === "waitingSteer") return "Steering"
                       return null
                     })
                     const message = createMemo(() => {

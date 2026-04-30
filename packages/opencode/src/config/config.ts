@@ -121,7 +121,7 @@ export const Info = Schema.Struct({
     description:
       "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
   }),
-  followup: Schema.optional(Schema.Literals(["queue", "steer", "wrap"])).annotate({
+  followup: Schema.optional(Schema.Literals(["queue", "haltingSteer", "waitingSteer"])).annotate({
     description: "Follow-up behavior: 'queue' to wait for all steps, 'steer' to halt and steer immediately, 'wrap' to wait for current step and steer",
   }),
   autoshare: Schema.optional(Schema.Boolean).annotate({

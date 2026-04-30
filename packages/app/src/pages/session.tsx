@@ -1563,7 +1563,7 @@ export default function Page() {
     if (!id) return false
     const mode = settings.general.followup()
     const isEditing = !!editID
-    if (!isEditing && (mode === "steer" || mode === "wrap") && queuedFollowups().length >= 1) return false
+    if (!isEditing && (mode === "haltingSteer" || mode === "waitingSteer") && queuedFollowups().length >= 1) return false
     return busy(id) && !composer.blocked() && !isChildSession()
   }
 
@@ -1587,7 +1587,7 @@ export default function Page() {
   const queueFollowup = (draft: FollowupDraft, editID?: string) => {
     const followupMode = settings.general.followup()
     draft.followupMode = followupMode
-    if (followupMode === "steer") {
+    if (followupMode === "haltingSteer") {
       draft.isSteer = true
     }
     
@@ -1605,11 +1605,11 @@ export default function Page() {
     setFollowup("failed", draft.sessionID, undefined)
     setFollowup("paused", draft.sessionID, undefined)
 
-    if (!editID && followupMode === "steer") {
+    if (!editID && followupMode === "haltingSteer") {
       // In steer mode, we request the agent to halt
       // The actual queued message will be sent automatically when the agent becomes idle
       void sdk.client.session.interrupt({ sessionID: draft.sessionID, type: followupMode })
-    } else if (!editID && followupMode === "wrap") {
+    } else if (!editID && followupMode === "waitingSteer") {
       void sdk.client.session.interrupt({ sessionID: draft.sessionID, type: followupMode })
     }
   }
@@ -1762,7 +1762,7 @@ export default function Page() {
     
     // In steer and wrap mode, we send the message immediately so the backend can 
     // pick it up cleanly in its next loop iteration without going idle.
-    if (!item.isSteer && item.followupMode !== "wrap") {
+    if (!item.isSteer && item.followupMode !== "waitingSteer") {
       if (busy(sessionID)) return
     }
 

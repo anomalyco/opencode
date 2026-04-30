@@ -258,14 +258,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     if (evt.ctrl && evt.name === "y") {
       if (evt.eventType === "release" || evt.eventType === "repeat") return
       
-      const current = kv.get("followup", "steer")
-      let next: "steer" | "wrap" | "queue" = "steer"
-      if (current === "steer") next = "wrap"
-      else if (current === "wrap") next = "queue"
+      const current = kv.get("followup", "haltingSteer")
+      let next: "haltingSteer" | "waitingSteer" | "queue" = "haltingSteer"
+      if (current === "haltingSteer") next = "waitingSteer"
+      else if (current === "waitingSteer") next = "queue"
       
       kv.set("followup", next)
       
-      const nextName = next === "steer" ? "Halt and Steer" : next === "wrap" ? "Wait and Steer" : "Queue"
+      const nextName = next === "haltingSteer" ? "Halt and Steer" : next === "waitingSteer" ? "Wait and Steer" : "Queue"
       toast.show({
         message: `Follow-Up mode: ${nextName}`,
         variant: "info",
@@ -615,23 +615,23 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     },
     {
       title: `Toggle follow-up mode (${
-        kv.get("followup", "steer") === "steer"
+        kv.get("followup", "haltingSteer") === "haltingSteer"
           ? "Halt and Steer"
-          : kv.get("followup", "steer") === "wrap"
+          : kv.get("followup", "haltingSteer") === "waitingSteer"
           ? "Wait and Steer"
           : "Queue"
       })`,
       keybind: "session_toggle_queue_mode",
       value: "session.toggle-queue-mode",
       onSelect: (dialog) => {
-        const current = kv.get("followup", "steer")
-        let next: "steer" | "wrap" | "queue" = "steer"
-        if (current === "steer") next = "wrap"
-        else if (current === "wrap") next = "queue"
+        const current = kv.get("followup", "haltingSteer")
+        let next: "haltingSteer" | "waitingSteer" | "queue" = "haltingSteer"
+        if (current === "haltingSteer") next = "waitingSteer"
+        else if (current === "waitingSteer") next = "queue"
         
         kv.set("followup", next)
         
-        const nextName = next === "steer" ? "Halt and Steer" : next === "wrap" ? "Wait and Steer" : "Queue"
+        const nextName = next === "haltingSteer" ? "Halt and Steer" : next === "waitingSteer" ? "Wait and Steer" : "Queue"
         toast.show({
           message: `Follow-Up mode: ${nextName}`,
           variant: "info",

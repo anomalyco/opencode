@@ -1022,7 +1022,7 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", z.object({ type: z.enum(["steer", "wrap", "clear"]) })),
+      validator("json", z.object({ type: z.enum(["haltingSteer", "waitingSteer", "clear"]) })),
       async (c) =>
         jsonRequest("SessionRoutes.interrupt", c, function* () {
           const sessionID = c.req.valid("param").sessionID

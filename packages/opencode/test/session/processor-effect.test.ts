@@ -905,7 +905,7 @@ it.live("session.processor effect tests allow graceful steer interrupt", () =>
         yield* Effect.sleep("250 millis")
         
         // Signal steer interrupt
-        yield* runState.requestInterrupt(chat.id, "steer")
+        yield* runState.requestInterrupt(chat.id, "haltingSteer")
 
         // Wait for the steer to be detected
         yield* Effect.sleep("200 millis")

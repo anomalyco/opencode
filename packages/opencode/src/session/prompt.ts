@@ -1319,7 +1319,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         while (true) {
           const currentStatus = yield* status.get(sessionID)
-          if (currentStatus?.type !== "steer" && currentStatus?.type !== "wrap") {
+          if (currentStatus?.type !== "haltingSteer" && currentStatus?.type !== "waitingSteer") {
             yield* status.set(sessionID, { type: "busy" })
           }
           yield* slog.info("loop", { step })
@@ -1522,11 +1522,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
 
             const interrupt = yield* state.getInterrupt(sessionID)
-            if (interrupt === "wrap") {
+            if (interrupt === "waitingSteer") {
               yield* state.clearInterrupt(sessionID)
               return "continue" as const
             }
-            if (interrupt === "steer") {
+            if (interrupt === "haltingSteer") {
               yield* state.clearInterrupt(sessionID)
               return "continue" as const
             }
@@ -1556,7 +1556,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
-      const type = input.followupMode === "steer" || input.followupMode === "wrap" ? input.followupMode : "busy"
+      const type = input.followupMode === "haltingSteer" || input.followupMode === "waitingSteer" ? input.followupMode : "busy"
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID), { type })
     })
 
@@ -1735,7 +1735,7 @@ export const PromptInput = Schema.Struct({
   agent: Schema.optional(Schema.String),
   noReply: Schema.optional(Schema.Boolean),
   isSteer: Schema.optional(Schema.Boolean),
-  followupMode: Schema.optional(Schema.Union([Schema.Literal("steer"), Schema.Literal("wrap"), Schema.Literal("queue")])),
+  followupMode: Schema.optional(Schema.Union([Schema.Literal("haltingSteer"), Schema.Literal("waitingSteer"), Schema.Literal("queue")])),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
     description:
       "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
@@ -1768,7 +1768,7 @@ export type PromptInput = Omit<Schema.Schema.Type<typeof PromptInput>, "parts"> 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
   isSteer: Schema.optional(Schema.Boolean),
-  followupMode: Schema.optional(Schema.Union([Schema.Literal("steer"), Schema.Literal("wrap"), Schema.Literal("queue")])),
+  followupMode: Schema.optional(Schema.Union([Schema.Literal("haltingSteer"), Schema.Literal("waitingSteer"), Schema.Literal("queue")])),
 }) {
   static readonly zod = zod(this)
 }

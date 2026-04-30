@@ -9,9 +9,9 @@ import { SessionStatus } from "./status"
 export interface Interface {
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly requestInterrupt: (sessionID: SessionID, type: "steer" | "wrap") => Effect.Effect<void>
+  readonly requestInterrupt: (sessionID: SessionID, type: "haltingSteer" | "waitingSteer") => Effect.Effect<void>
   readonly clearInterrupt: (sessionID: SessionID) => Effect.Effect<void>
-  readonly getInterrupt: (sessionID: SessionID) => Effect.Effect<"steer" | "wrap" | undefined>
+  readonly getInterrupt: (sessionID: SessionID) => Effect.Effect<"haltingSteer" | "waitingSteer" | undefined>
   readonly ensureRunning: (
     sessionID: SessionID,
     onInterrupt: Effect.Effect<MessageV2.WithParts>,
@@ -36,7 +36,7 @@ export const layer = Layer.effect(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
         const runners = new Map<SessionID, Runner.Runner<MessageV2.WithParts>>()
-        const interrupts = new Map<SessionID, "steer" | "wrap">()
+        const interrupts = new Map<SessionID, "haltingSteer" | "waitingSteer">()
         yield* Effect.addFinalizer(
           Effect.fnUntraced(function* () {
             yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {
@@ -92,13 +92,13 @@ export const layer = Layer.effect(
 
     const requestInterrupt = Effect.fn("SessionRunState.requestInterrupt")(function* (
       sessionID: SessionID,
-      type: "steer" | "wrap",
+      type: "haltingSteer" | "waitingSteer",
     ) {
       const data = yield* InstanceState.get(state)
       data.interrupts.set(sessionID, type)
       yield* status.set(sessionID, { type })
-      // We no longer call cancel(sessionID) for "steer" here.
-      // The stream processor will detect the "steer" interrupt, abort the stream,
+      // We no longer call cancel(sessionID) for "haltingSteer" here.
+      // The stream processor will detect the "haltingSteer" interrupt, abort the stream,
       // and let the existing runner gracefully read the new message on the next loop iteration.
     })
 

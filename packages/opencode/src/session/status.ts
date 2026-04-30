@@ -21,10 +21,10 @@ export const Info = Schema.Union([
     type: Schema.Literal("busy"),
   }),
   Schema.Struct({
-    type: Schema.Literal("steer"),
+    type: Schema.Literal("haltingSteer"),
   }),
   Schema.Struct({
-    type: Schema.Literal("wrap"),
+    type: Schema.Literal("waitingSteer"),
   }),
 ])
   .annotate({ identifier: "SessionStatus" })

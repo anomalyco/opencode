@@ -59,7 +59,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
   const setBusy = () => {
     if (!input.optimisticBusy) return
-    const type = input.draft.isSteer ? "steer" : input.draft.followupMode === "wrap" ? "wrap" : "busy"
+    const type = input.draft.isSteer ? "haltingSteer" : input.draft.followupMode === "waitingSteer" ? "waitingSteer" : "busy"
     setStore("session_status", input.draft.sessionID, { type })
   }
 

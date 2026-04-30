@@ -22,7 +22,7 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
-    followup: "queue" | "steer" | "wrap"
+    followup: "queue" | "haltingSteer" | "waitingSteer"
     showFileTree: boolean
     showNavigation: boolean
     showSearch: boolean
@@ -107,7 +107,7 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
-    followup: "steer",
+    followup: "haltingSteer",
     showFileTree: false,
     showNavigation: false,
     showSearch: false,
@@ -180,7 +180,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           () => store.general?.followup,
           defaultSettings.general.followup,
         ),
-        setFollowup(value: "queue" | "steer" | "wrap") {
+        setFollowup(value: "queue" | "haltingSteer" | "waitingSteer") {
           setStore("general", "followup", value)
         },
         showFileTree: withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree),

@@ -402,14 +402,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+q",
       onSelect: () => {
         const current = settings.general.followup()
-        if (current === "steer") settings.general.setFollowup("wrap")
-        else if (current === "wrap") settings.general.setFollowup("queue")
-        else settings.general.setFollowup("steer")
-        
-        showToast({
-          title: "Queue Mode Changed",
-          description: `Queue mode is now: ${settings.general.followup()}`,
-        })
+        if (current === "haltingSteer") settings.general.setFollowup("waitingSteer")
+        else if (current === "waitingSteer") settings.general.setFollowup("queue")
+        else settings.general.setFollowup("haltingSteer")
       },
     }),
     sessionCommand({

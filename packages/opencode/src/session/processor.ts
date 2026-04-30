@@ -220,7 +220,7 @@ export const layer: Layer.Layer<
         switch (value.type) {
           case "start": {
             const currentStatus = yield* status.get(ctx.sessionID)
-            if (currentStatus?.type !== "steer" && currentStatus?.type !== "wrap") {
+            if (currentStatus?.type !== "haltingSteer" && currentStatus?.type !== "waitingSteer") {
               yield* status.set(ctx.sessionID, { type: "busy" })
             }
             return
@@ -563,7 +563,7 @@ export const layer: Layer.Layer<
               Effect.gen(function* () {
                 while (true) {
                   yield* Effect.sleep("50 millis")
-                  if ((yield* runState.getInterrupt(ctx.sessionID)) === "steer") {
+                  if ((yield* runState.getInterrupt(ctx.sessionID)) === "haltingSteer") {
                     return
                   }
                 }
@@ -577,7 +577,7 @@ export const layer: Layer.Layer<
                   // Wait, if it's a steer interrupt, we DO NOT want to set the error!
                   // Setting the error will cause the loop to break.
                   const currentInterrupt = yield* runState.getInterrupt(ctx.sessionID)
-                  if (currentInterrupt === "steer") {
+                  if (currentInterrupt === "haltingSteer") {
                     // Do nothing, just let it cleanly abort
                   } else {
                     yield* halt(new DOMException("Aborted", "AbortError"))
