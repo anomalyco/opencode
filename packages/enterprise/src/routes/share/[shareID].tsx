@@ -14,11 +14,11 @@ import { iife } from "@opencode-ai/core/util/iife"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { DateTime } from "luxon"
-import { createStore } from "solid-js/store"
+
 import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
+
 import { FileSSR } from "@opencode-ai/ui/file-ssr"
 import { clientOnly } from "@solidjs/start"
 import { Meta, Title } from "@solidjs/meta"
@@ -180,9 +180,6 @@ export default function () {
                 <FileComponentProvider component={FileSSR}>
                   <DataProvider data={data()} directory={info().directory}>
                     {iife(() => {
-                      const [store, setStore] = createStore({
-                        messageId: undefined as string | undefined,
-                      })
                       const messages = createMemo(() =>
                         data().sessionID
                           ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
@@ -191,18 +188,8 @@ export default function () {
                           : [],
                       )
                       const firstUserMessage = createMemo(() => messages().at(0))
-                      const activeMessage = createMemo(
-                        () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
-                      )
-                      function setActiveMessage(message: UserMessage | undefined) {
-                        if (message) {
-                          setStore("messageId", message.id)
-                        } else {
-                          setStore("messageId", undefined)
-                        }
-                      }
-                      const provider = createMemo(() => activeMessage()?.model?.providerID)
-                      const modelID = createMemo(() => activeMessage()?.model?.modelID)
+                      const provider = createMemo(() => firstUserMessage()?.model?.providerID)
+                      const modelID = createMemo(() => firstUserMessage()?.model?.modelID)
                       const model = createMemo(() => data().model[data().sessionID]?.find((m) => m.id === modelID()))
                       const diffs = createMemo(() => data().session_diff[data().sessionID] ?? [])
                       const [diffStyle, setDiffStyle] = createSignal<"unified" | "split">("unified")
@@ -301,29 +288,25 @@ export default function () {
                                 >
                                   {title()}
                                 </div>
-                                <div class="flex items-start justify-start h-full min-h-0">
-                                  <Show when={messages().length > 1}>
-                                    <MessageNav
-                                      class="sticky top-0 shrink-0 py-2 pl-4"
-                                      messages={messages()}
-                                      current={activeMessage()}
-                                      size="compact"
-                                      onMessageSelect={setActiveMessage}
-                                    />
-                                  </Show>
-                                  <SessionTurn
-                                    sessionID={data().sessionID}
-                                    messageID={store.messageId ?? firstUserMessage()!.id!}
-                                    classes={{
-                                      root: "grow",
-                                      content: "flex flex-col justify-between",
-                                      container: "w-full pb-20 px-6",
-                                    }}
-                                  >
-                                    <div classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}>
-                                      <Logo class="w-58.5 opacity-12" />
-                                    </div>
-                                  </SessionTurn>
+                                <div class="flex-1 overflow-y-auto no-scrollbar px-6 min-h-0">
+                                  <div class="flex flex-col gap-15 items-start justify-start mt-4">
+                                    <For each={messages()}>
+                                      {(message) => (
+                                        <SessionTurn
+                                          sessionID={data().sessionID}
+                                          messageID={message.id}
+                                          classes={{
+                                            root: "grow",
+                                            content: "flex flex-col justify-between",
+                                            container: "w-full",
+                                          }}
+                                        />
+                                      )}
+                                    </For>
+                                  </div>
+                                  <div class="w-full flex items-center justify-center pt-20 pb-8 shrink-0">
+                                    <Logo class="w-58.5 opacity-12" />
+                                  </div>
                                 </div>
                               </div>
                               <Show when={diffs().length > 0}>
