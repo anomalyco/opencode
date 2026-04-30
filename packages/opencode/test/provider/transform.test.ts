@@ -2788,9 +2788,7 @@ describe("ProviderTransform.variants", () => {
       })
     })
 
-    // SKIP: upstream commit e2e7a8d72 (#23343) added `display: "summarized"` to the
-    // implementation but did not update this test's expected result. Tracked in #90.
-    test.skip("anthropic opus 4.7 returns adaptive reasoning options with xhigh", () => {
+    test("anthropic opus 4.7 returns adaptive reasoning options with xhigh", () => {
       const model = createMockModel({
         id: "bedrock/anthropic-claude-opus-4-7",
         providerID: "bedrock",
@@ -2802,16 +2800,21 @@ describe("ProviderTransform.variants", () => {
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh", "max"])
+      // upstream commit e2e7a8d72 (#23343) added display: "summarized" to opus-4-7
+      // adaptive reasoning configs but did not update this expected. Aligning here so
+      // the fork's CI is green; planned upstream PR will carry the same fix.
       expect(result.xhigh).toEqual({
         reasoningConfig: {
           type: "adaptive",
           maxReasoningEffort: "xhigh",
+          display: "summarized",
         },
       })
       expect(result.max).toEqual({
         reasoningConfig: {
           type: "adaptive",
           maxReasoningEffort: "max",
+          display: "summarized",
         },
       })
     })
