@@ -8,6 +8,33 @@
 
 ---
 
+
+
+## [macOS] 2026.4.30.2 — 2026-04-30 15:16
+
+**包含**(自 Win `2026.4.29.2` 后的 macOS 全部增量,首版 macOS prod):
+- `加聊天-option-enter`(`00b208eed`):文件查看器右键加聊天对话框 macOS 加 Option+Enter 提交快捷键 + 底部文案平台化(Tiny)
+- `macos-pack-installer`(`373195692` + `833335031` follow-up):macOS 一键打 `.app/.dmg` 脚本 + apply-icons.sh 现场生成的 `icon.icns` 入 `.gitignore` + 4 sh +x 权限 + pack-installer.sh build 后自动 mv `.dmg` 加 installer 版本号(对齐 Win `DeskFox-YYYY.M.D.N-setup.exe` 命名)
+- `office-installer-macos`(`fc69b462c`):LibreOffice 自动安装 macOS 适配 — DMG 下载 + hdiutil 挂载 + cp -R 到 `~/Applications` + soffice 检测路径(R4 override 第 4 笔本季,延续 `66c8fa523` 初版,wrapper 不可行论证见 changelog)
+- `prod-bundle-id-fix`(`7618346fe`):prod / beta 各加独立 Bundle ID override,prod 用 `ai.opencode.desktop`(无 `.dev`)修 macOS 26 应用程序网格搜不到的问题;三档 Bundle ID 独立可共存
+
+**配套要求**:首装 user 必须加 **"完全磁盘访问权限"**(系统设置 → 隐私与安全性)。原因:Bundle ID 改了 = macOS TCC 视为新应用,所有"文件夹访问"权限重置;Info.plist 又缺 `NSDownloadsFolderUsageDescription` 等声明,首次访问 `~/Downloads` 时不弹授权对话框,直接静默拒绝(EPERM)。**长期治理**:下笔加 Info.plist usage description 让对话框正常弹,届时装机零额外步骤。
+
+**installer**:`packages/desktop/src-tauri/target/release/bundle/dmg/DeskFox-2026.4.30.2_aarch64.dmg`(49,263,424 bytes)
+
+**user 验收**:✅ 装到 `/Applications/DeskFox.app`(Bundle ID 验证 `ai.opencode.desktop` 干净)+ 加完全磁盘访问权限后,项目重新加载,文件 / 会话正常;应用程序网格搜 "desk" 可见 DeskFox
+
+**上游 baseline**:1.14.21(沿用,`package.json` 不动避开上游冲突;dmg 文件名走 fork 自己的 installer 版本号 `2026.4.30.2`,.app 内部 `CFBundleShortVersionString` 仍是 1.14.21)
+
+---
+
+## [macOS] 2026.4.30.1 — 2026-04-30 13:01(已废弃,未 ship)
+
+**废弃原因**:Bundle ID 沿用 base `tauri.conf.json` 的 `ai.opencode.desktop.dev`(prod.json 当时未 override identifier),macOS 26 应用程序网格搜索把 `.dev` 后缀 Bundle ID 当开发版隐藏 — 网格里图标可见但搜索栏过滤掉,不可接受。当天 push `7618346fe` 修复后重打 `2026.4.30.2`,本版 dmg 已被 `2026.4.30.2` 覆盖 / 不分发。
+
+详见 `docs/features/prod-bundle-id-fix/3-changelog.md`。
+
+---
 ## [Windows] 2026.4.29.2 — 2026-04-29 21:56
 
 **包含**:
