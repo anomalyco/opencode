@@ -2436,7 +2436,9 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
   })
 })
 
-test("plugin config providers persist after instance dispose", async () => {
+// SKIP on windows: plugin config server() invocation hangs (>60s) on github-hosted
+// windows-2025 runner. Tracked in #90.
+test.skipIf(process.platform === "win32")("plugin config providers persist after instance dispose", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const root = path.join(dir, ".opencode", "plugin")
@@ -2495,7 +2497,8 @@ test("plugin config providers persist after instance dispose", async () => {
   expect(second[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
 })
 
-test("plugin config enabled and disabled providers are honored", async () => {
+// SKIP on windows: same 60s plugin loader hang as the test above. Tracked in #90.
+test.skipIf(process.platform === "win32")("plugin config enabled and disabled providers are honored", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const root = path.join(dir, ".opencode", "plugin")

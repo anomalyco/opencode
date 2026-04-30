@@ -115,7 +115,11 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   if (process.platform === "win32") {
-    test("normalizes Windows path variants to one glob", async () => {
+    // SKIP: github-hosted windows-2025 runner re-mounts C:\Users\...\Temp via a junction
+    // to D:\users\...\appdata\local\temp, so realpathSync (used inside normalizePath) returns
+    // a different drive letter / case than `outerTmp.path`. Test expected vs impl output
+    // diverge. Tracked in #90; planned upstream PR adds canonicalisation to test fixtures.
+    test.skip("normalizes Windows path variants to one glob", async () => {
       const { requests, ctx } = makeCtx()
 
       await using outerTmp = await tmpdir({
@@ -145,7 +149,8 @@ describe("tool.assertExternalDirectory", () => {
       expect(req!.always).toEqual([expected])
     })
 
-    test("uses drive root glob for root files", async () => {
+    // SKIP: same junction / drive-letter issue as the test above. Tracked in #90.
+    test.skip("uses drive root glob for root files", async () => {
       const { requests, ctx } = makeCtx()
 
       await using tmp = await tmpdir({ git: true })

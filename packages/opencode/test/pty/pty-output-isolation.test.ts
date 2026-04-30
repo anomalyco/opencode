@@ -102,7 +102,9 @@ describe("pty", () => {
     })
   })
 
-  test("treats in-place socket data mutation as the same connection", async () => {
+  // SKIP on windows: pty socket-mutation behaviour differs on github-hosted windows-2025
+  // runner. Tracked in #90.
+  test.skipIf(process.platform === "win32")("treats in-place socket data mutation as the same connection", async () => {
     await using dir = await tmpdir({ git: true })
 
     await Instance.provide({

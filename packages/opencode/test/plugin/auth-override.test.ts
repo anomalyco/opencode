@@ -8,7 +8,9 @@ import { ProviderAuth } from "../../src/provider"
 import { ProviderID } from "../../src/provider/schema"
 
 describe("plugin.auth-override", () => {
-  test("user plugin overrides built-in github-copilot auth", async () => {
+  // SKIP on windows: bun's TS plugin import via pathToFileURL hangs (>30s) on github-hosted
+  // windows-2025 runner. Tracked in #90.
+  test.skipIf(process.platform === "win32")("user plugin overrides built-in github-copilot auth", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const pluginDir = path.join(dir, ".opencode", "plugin")
