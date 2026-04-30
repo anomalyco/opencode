@@ -227,6 +227,7 @@
       "name": "@opencode-ai/desktop-electron",
       "version": "1.14.21",
       "dependencies": {
+        "@opencode-ai/telemetry": "workspace:*",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "electron-context-menu": "4.1.2",
@@ -564,6 +565,21 @@
         "storybook-solidjs-vite": "^10.0.9",
         "typescript": "catalog:",
         "vite": "catalog:",
+      },
+    },
+    "packages/telemetry": {
+      "name": "@opencode-ai/telemetry",
+      "version": "0.0.0",
+      "dependencies": {
+        "semver": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@types/semver": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/ui": {
@@ -1571,6 +1587,8 @@
     "@opencode-ai/slack": ["@opencode-ai/slack@workspace:packages/slack"],
 
     "@opencode-ai/storybook": ["@opencode-ai/storybook@workspace:packages/storybook"],
+
+    "@opencode-ai/telemetry": ["@opencode-ai/telemetry@workspace:packages/telemetry"],
 
     "@opencode-ai/ui": ["@opencode-ai/ui@workspace:packages/ui"],
 
