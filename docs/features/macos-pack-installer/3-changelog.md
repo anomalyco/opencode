@@ -78,7 +78,7 @@ Tiny 级,远在 500 阈值内。无 large-diff,无 override(`packages/branding/s
 
 ## Follow-up:dmg 文件名重命名(2026-04-30,与首版 prod 同日落地)
 
-**关联 commit**: 待回填(follow-up)
+**关联 commit**: `833335031`
 **触发**:首版 prod 打 `2026.4.30.1` 时发现 dmg 文件名是 `DeskFox_1.14.21_aarch64.dmg` — 1.14.21 是 `package.json`(上游 contract)的 version,不是 installer 版本号。Win 端走 Inno Setup `.iss` 独立 bump 名字干净(`DeskFox-2026.4.29.2-setup.exe`),Mac 端这个 mismatch 是首版 ship 时漏掉的一环。
 
 **改动**:`pack-installer.sh` 在 build 后、report 前加一段 rename:用 bash parameter expansion 解析 tauri 命名格式 `<productName>_<package.json version>_<arch>.dmg`,mv 成 `<productName>-<installer version>_<arch>.dmg`(productName 含空格也 OK,如 "DeskFox Beta")。
