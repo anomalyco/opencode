@@ -604,7 +604,7 @@ export const GithubRunCommand = cmd({
               `${response}\n\nTriggered by ${triggerType}${footer({ image: true })}`,
             )
             if (pr) {
-              console.log(`Created PR #${pr}`)
+              console.log(`Created PR #${pr.number}: ${pr.url}`)
             } else {
               console.log("Skipped PR creation (no new commits)")
             }
@@ -676,7 +676,8 @@ export const GithubRunCommand = cmd({
               `${response}\n\nCloses #${issueId}${footer({ image: true })}`,
             )
             if (pr) {
-              await createComment(`Created PR #${pr}${footer({ image: true })}`)
+              console.log(`Created PR #${pr.number}: ${pr.url}`)
+              await createComment(`Created PR [#${pr.number}](${pr.url})${footer({ image: true })}`)
             } else {
               await createComment(`${response}${footer({ image: true })}`)
             }
@@ -1327,7 +1328,7 @@ export const GithubRunCommand = cmd({
         })
       }
 
-      async function createPR(base: string, branch: string, title: string, body: string): Promise<number | null> {
+      async function createPR(base: string, branch: string, title: string, body: string): Promise<{ number: number; url: string } | null> {
         console.log("Creating pull request...")
 
         // Check if an open PR already exists for this head→base combination
@@ -1344,8 +1345,9 @@ export const GithubRunCommand = cmd({
           )
 
           if (existing.data.length > 0) {
-            console.log(`PR #${existing.data[0].number} already exists for branch ${branch}`)
-            return existing.data[0].number
+            const pr = existing.data[0]
+            console.log(`PR #${pr.number} already exists for branch ${branch}: ${pr.html_url}`)
+            return { number: pr.number, url: pr.html_url }
           }
         } catch (e) {
           // If the check fails, proceed to create - we'll get a clear error if a PR already exists
@@ -1371,7 +1373,8 @@ export const GithubRunCommand = cmd({
               body,
             }),
           )
-          return pr.data.number
+          console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`)
+          return { number: pr.data.number, url: pr.data.html_url }
         } catch (e: unknown) {
           // Handle "No commits between X and Y" validation error from GitHub.
           // This can happen when the branch was pushed but has no new commits

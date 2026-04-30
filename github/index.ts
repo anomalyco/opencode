@@ -197,13 +197,13 @@ try {
     if (await branchIsDirty()) {
       const summary = await summarize(response)
       await pushToNewBranch(summary, branch)
-      const pr = await createPR(
+      const prUrl = await createPR(
         repoData.data.default_branch,
         branch,
         summary,
         `${response}\n\nCloses #${useIssueId()}${footer({ image: true })}`,
       )
-      await updateComment(`Created PR #${pr}${footer({ image: true })}`)
+      await updateComment(`[Created PR](${prUrl})${footer({ image: true })}`)
     } else {
       await updateComment(`${response}${footer({ image: true })}`)
     }
@@ -808,7 +808,8 @@ async function createPR(base: string, branch: string, title: string, body: strin
     title: truncatedTitle,
     body,
   })
-  return pr.data.number
+  console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`)
+  return pr.data.html_url
 }
 
 function footer(opts?: { image?: boolean }) {
