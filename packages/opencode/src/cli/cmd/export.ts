@@ -1,5 +1,5 @@
 import type { Argv } from "yargs"
-import { Session } from "../../session"
+import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { cmd } from "./cmd"

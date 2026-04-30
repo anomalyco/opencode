@@ -789,8 +789,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "從 URL 取得內容",
   "settings.permissions.tool.websearch.title": "Web Search",
   "settings.permissions.tool.websearch.description": "搜尋網頁",
-  "settings.permissions.tool.codesearch.title": "Code Search",
-  "settings.permissions.tool.codesearch.description": "在網路上搜尋程式碼",
   "settings.permissions.tool.external_directory.title": "外部目錄",
   "settings.permissions.tool.external_directory.description": "存取專案目錄之外的檔案",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
