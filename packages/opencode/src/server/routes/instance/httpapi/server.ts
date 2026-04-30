@@ -31,6 +31,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
+import { Workspace } from "@/control-plane/workspace"
 import { isAllowedCorsOrigin } from "@/server/cors"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
@@ -141,6 +142,7 @@ export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
     Todo.defaultLayer,
     ToolRegistry.defaultLayer,
     Vcs.defaultLayer,
+    Workspace.defaultLayer,
     Worktree.defaultLayer,
     Bus.layer,
     HttpServer.layerServices,
