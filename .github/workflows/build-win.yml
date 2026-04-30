@@ -1,0 +1,49 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:  # 手动点击运行
+  push:               # 推送代码时自动运行
+    branches: [main, dev]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装 Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 安装依赖
+        run: bun install
+
+      - name: 打包 Windows 安装包
+        run: |
+          cd packages/desktop-electron
+          bun run build --win
+        continue-on-error: true
+
+      - name: 备用打包方式（直接调用 electron-builder）
+        run: |
+          cd packages/desktop-electron
+          npx electron-builder --win --publish never
+        continue-on-error: true
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-win-installer
+          path: |
+            packages/desktop-electron/dist/*.exe
+            packages/desktop-electron/dist/*.msi
+            packages/desktop/dist/*.exe
+            packages/desktop/src-tauri/target/release/bundle/nsis/*.exe
