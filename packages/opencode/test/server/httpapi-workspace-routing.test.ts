@@ -102,19 +102,9 @@ const remoteAdaptor = (directory: string, url: string, headers?: HeadersInit): W
 })
 
 const eventStreamResponse = () =>
-  HttpServerResponse.fromWeb(
-    new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            new TextEncoder().encode('data: {"payload":{"type":"server.connected","properties":{}}}\n\n'),
-          )
-          controller.close()
-        },
-      }),
-      { headers: { "content-type": "text/event-stream" } },
-    ),
-  )
+  HttpServerResponse.text('data: {"payload":{"type":"server.connected","properties":{}}}\n\n', {
+    contentType: "text/event-stream",
+  })
 
 const syncResponse = (request: HttpServerRequest.HttpServerRequest) => {
   const url = requestURL(request)
