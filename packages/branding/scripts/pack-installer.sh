@@ -67,11 +67,35 @@ if [[ "$BUILD_EXIT" -ne 0 ]]; then
     exit "$BUILD_EXIT"
 fi
 
+APP_PATH="$REPO_ROOT/packages/desktop/src-tauri/target/release/bundle/macos"
+DMG_DIR="$REPO_ROOT/packages/desktop/src-tauri/target/release/bundle/dmg"
+
+# 2.5 Rename .dmg with installer version
+# Tauri 出的 .dmg 文件名取自 package.json 的 version(上游 contract,不能改)。
+# 导致名字带的是上游版本(1.14.21)而非 installer 版本(YYYY.M.D.N)。
+# 这里把它 mv 成 installer 版本号命名,与 Win 的 DeskFox-YYYY.M.D.N-setup.exe 对齐。
+# 文件内部 CFBundleShortVersionString 仍是上游版本(改它要动 package.json 会跟上游冲突)。
+if [[ -n "$NEW_VERSION" && -d "$DMG_DIR" ]]; then
+    for dmg in "$DMG_DIR"/*.dmg; do
+        [[ -f "$dmg" ]] || continue
+        base=$(basename "$dmg")
+        # Tauri 命名规则:<productName>_<package.json version>_<arch>.dmg
+        # productName 可能含空格(如 "DeskFox Beta"),用 bash parameter expansion 不依赖 IFS
+        without_ext="${base%.dmg}"
+        arch_part="${without_ext##*_}"           # 取最后 _ 之后(arch,如 aarch64)
+        rest="${without_ext%_*}"                  # 去掉 _arch
+        product_part="${rest%_*}"                 # 再去掉 _<oldver>(剩 productName)
+        new_name="${product_part}-${NEW_VERSION}_${arch_part}.dmg"
+        if [[ "$base" != "$new_name" ]]; then
+            mv "$dmg" "$DMG_DIR/$new_name"
+            echo "[pack] renamed: $base → $new_name"
+        fi
+    done
+fi
+
 # 3. Report artifacts
 echo ""
 echo "=== Step 3: artifacts ==="
-APP_PATH="$REPO_ROOT/packages/desktop/src-tauri/target/release/bundle/macos"
-DMG_DIR="$REPO_ROOT/packages/desktop/src-tauri/target/release/bundle/dmg"
 BIN_PATH="$REPO_ROOT/packages/desktop/src-tauri/target/release/DeskFox"
 
 echo "[pack] installer ready:"
