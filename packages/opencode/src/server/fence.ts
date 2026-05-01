@@ -1,9 +1,12 @@
 import type { MiddlewareHandler } from "hono"
-import { Database, inArray } from "@/storage"
+import { Database } from "@/storage/db"
+import { inArray } from "drizzle-orm"
 import { EventSequenceTable } from "@/sync/event.sql"
 import { Workspace } from "@/control-plane/workspace"
 import type { WorkspaceID } from "@/control-plane/schema"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Effect } from "effect"
 
 const HEADER = "x-opencode-sync"
 type State = Record<string, number>
@@ -53,16 +56,22 @@ export function parse(headers: Headers) {
   ) as State
 }
 
+export function waitEffect(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
+  return Effect.gen(function* () {
+    log.info("waiting for state", {
+      workspaceID,
+      state,
+    })
+    yield* Workspace.Service.use((workspace) => workspace.waitForSync(workspaceID, state, signal))
+    log.info("state fully synced", {
+      workspaceID,
+      state,
+    })
+  })
+}
+
 export async function wait(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
-  log.info("waiting for state", {
-    workspaceID,
-    state,
-  })
-  await Workspace.waitForSync(workspaceID, state, signal)
-  log.info("state fully synced", {
-    workspaceID,
-    state,
-  })
+  await AppRuntime.runPromise(waitEffect(workspaceID, state, signal))
 }
 
 export const FenceMiddleware: MiddlewareHandler = async (c, next) => {
