@@ -1,6 +1,6 @@
 # Hướng dẫn dùng fork opencode + Langfuse
 
-Fork: https://github.com/viethungvili/opencode (upstream: `anomalyco/opencode`)
+Fork: https://github.com/vili-vn/opencode (upstream: `anomalyco/opencode`)
 Branches custom:
 - `custom/main` — integration branch, theo sát `dev` của upstream
 - `custom/langfuse-config` — feature branch chứa `opencode.jsonc` + `.env.example`
@@ -27,7 +27,7 @@ opencode --version    # verify
 
 # Clone fork (để pull update từ upstream)
 mkdir -p ~/code && cd ~/code
-git clone https://github.com/viethungvili/opencode.git
+git clone https://github.com/vili-vn/opencode.git
 cd opencode
 git remote add upstream https://github.com/anomalyco/opencode.git
 git checkout custom/langfuse-config
