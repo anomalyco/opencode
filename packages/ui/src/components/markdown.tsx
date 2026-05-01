@@ -573,6 +573,7 @@ function math(el: Element) {
 // Debounce delay before upgrading from fast parse to full parse (with shiki)
 const HIGHLIGHT_DEBOUNCE_MS = 600
 const HIGHLIGHT_IDLE_TIMEOUT_MS = 4_000
+const DOM_WARN_MS = 50
 
 export function Markdown(
   props: ComponentProps<"div"> & {
@@ -805,6 +806,7 @@ export function Markdown(
     const chunked = local.chunked
     const pane = isStreaming ? view(container) : null
     const before = isStreaming ? snap(pane) : undefined
+    const time = performance.now()
 
     if (isStreaming && prevHtml && content.length < prevHtml.length) {
       console.warn("[markdown] html rollback", {
@@ -817,7 +819,21 @@ export function Markdown(
     }
 
     const done = (mode: string) => {
+      const took = performance.now() - time
       container.dataset.html = content
+
+      if (took > DOM_WARN_MS) {
+        console.warn("[markdown] slow dom", {
+          key: local.cacheKey ?? "",
+          mode,
+          streaming: isStreaming,
+          text: local.text.length,
+          prev: prevHtml.length,
+          next: content.length,
+          nodes: container.childNodes.length,
+          took: Math.round(took),
+        })
+      }
 
       if (isStreaming && before) {
         const after = snap(pane)

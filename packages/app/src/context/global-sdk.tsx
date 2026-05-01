@@ -171,6 +171,13 @@ export function GlobalSDKProvider(props: ParentProps) {
       let attempt: AbortController | undefined
       let lastEventAt = Date.now()
       let heartbeat: ReturnType<typeof setTimeout> | undefined
+      // Suppress error logs during the cold-start race where extra-agent
+      // backends are still spawning. Once the stream has yielded at least
+      // one event we know the server is reachable, so subsequent failures
+      // are worth logging immediately.
+      let everConnected = false
+      let failedAttempts = 0
+      const LOG_ERROR_AFTER_FAILED_ATTEMPTS = 4
 
       const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
       const aborted = (error: unknown) => abortError.safeParse(error).success
@@ -262,6 +269,7 @@ export function GlobalSDKProvider(props: ParentProps) {
               onSseError: (error) => {
                 if (aborted(error) || streamErrorLogged) return
                 streamErrorLogged = true
+                if (!everConnected && failedAttempts < LOG_ERROR_AFTER_FAILED_ATTEMPTS) return
                 console.error("[global-sdk] event stream error", {
                   domain,
                   url,
@@ -275,6 +283,8 @@ export function GlobalSDKProvider(props: ParentProps) {
             for await (const event of events.stream) {
               resetHeartbeat()
               streamErrorLogged = false
+              everConnected = true
+              failedAttempts = 0
               const directory = event.directory ?? "global"
               const payload = event.payload
               const k = key(directory, payload)
@@ -297,7 +307,11 @@ export function GlobalSDKProvider(props: ParentProps) {
               await wait(0)
             }
           } catch (error) {
-            if (!aborted(error) && !streamErrorLogged) {
+            if (
+              !aborted(error) &&
+              !streamErrorLogged &&
+              (everConnected || failedAttempts >= LOG_ERROR_AFTER_FAILED_ATTEMPTS)
+            ) {
               streamErrorLogged = true
               console.error("[global-sdk] event stream error", {
                 domain,
@@ -310,6 +324,7 @@ export function GlobalSDKProvider(props: ParentProps) {
             abort.signal.removeEventListener("abort", onAbort)
             attempt = undefined
             clearHeartbeat()
+            failedAttempts++
           }
           if (abort.signal.aborted) return
           await wait(RECONNECT_DELAY_MS)

@@ -66,6 +66,8 @@ const idle = { type: "idle" as const }
 const estimatedTurnHeight = 680
 const windowOverscan = 1600
 const windowThreshold = 24
+const SCROLL_WARN_MS = 16
+const MEASURE_WARN_MS = 24
 
 type MathMode = "turn" | "markdown"
 
@@ -527,23 +529,7 @@ export function MessageTimeline(props: {
         const root = viewport
         if (!root) return
         if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
-        const prevTop = root.scrollTop
         root.scrollTop = root.scrollHeight
-        const after = snap(root)
-        const jump = Math.round(root.scrollTop - prevTop)
-        if (Math.abs(jump) > 24 || after.top < prevTop - 24) {
-          console.warn("[timeline] live window scroll write", {
-            jump,
-            before,
-            after,
-            prev,
-            next,
-            live: props.live,
-            bottom: props.scroll.bottom,
-            current: props.currentMessageId,
-            target: targetId,
-          })
-        }
         props.onScheduleScrollState(root)
       })
       return
@@ -692,8 +678,17 @@ export function MessageTimeline(props: {
       if (!root) return
       if (!isWorking()) return
       if (!props.live && !props.scroll.bottom) return
+      const time = performance.now()
       root.scrollTop = root.scrollHeight
       props.onScheduleScrollState(root)
+      const took = performance.now() - time
+      if (took > SCROLL_WARN_MS) {
+        console.warn("[timeline] slow scroll lock", {
+          height: Math.round(root.scrollHeight),
+          top: Math.round(root.scrollTop),
+          took: Math.round(took),
+        })
+      }
       bottomFrame = requestAnimationFrame(step)
     }
 
@@ -725,8 +720,17 @@ export function MessageTimeline(props: {
       if (!root) return
       if (!isWorking()) return
       if (!props.live && !props.scroll.bottom) return
+      const time = performance.now()
       root.scrollTop = root.scrollHeight
       props.onScheduleScrollState(root)
+      const took = performance.now() - time
+      if (took > SCROLL_WARN_MS) {
+        console.warn("[timeline] slow mutation scroll", {
+          height: Math.round(root.scrollHeight),
+          top: Math.round(root.scrollTop),
+          took: Math.round(took),
+        })
+      }
     }
     const schedule = () => {
       if (queued) return
@@ -2197,12 +2201,22 @@ export function MessageTimeline(props: {
     let raf: number | undefined
 
     const measure = () => {
+      const time = performance.now()
       const next = rootRef?.offsetHeight
       if (!next) return
       const prev = turnHeights.get(item.messageID)
       if (prev !== undefined && Math.abs(prev - next) <= 1) return
       turnHeights.set(item.messageID, next)
       scheduleWindow()
+      const took = performance.now() - time
+      if (took > MEASURE_WARN_MS) {
+        console.warn("[timeline] slow measure", {
+          msg: item.messageID,
+          height: Math.round(next),
+          prev: prev === undefined ? undefined : Math.round(prev),
+          took: Math.round(took),
+        })
+      }
     }
 
     createEffect(() => {

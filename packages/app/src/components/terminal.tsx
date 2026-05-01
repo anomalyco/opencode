@@ -613,6 +613,24 @@ export const Terminal = (props: TerminalProps) => {
         socket.addEventListener("close", handleClose)
       }
 
+      probe.control({
+        disconnect: () => {
+          if (!ws) return
+          ws.close(4_000, "e2e")
+        },
+      })
+
+      // Persisted PTY ids can outlive the server (e.g. after a sidecar
+      // restart). Probe via REST first so a stale id triggers `clone()` via
+      // `onConnectError` instead of producing a noisy WebSocket 404 in the
+      // browser console before our retry loop catches it.
+      if (await gone()) {
+        if (disposed) return
+        fail(new Error("pty no longer exists"))
+        return
+      }
+      if (disposed) return
+
       open()
     }
 
