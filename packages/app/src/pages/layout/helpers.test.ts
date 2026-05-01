@@ -14,8 +14,8 @@ import {
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
-  workspaceKey,
 } from "./helpers"
+import { pathKey } from "@/utils/path-key"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -104,16 +104,16 @@ describe("layout deep links", () => {
 
 describe("layout workspace helpers", () => {
   test("normalizes trailing slash in workspace key", () => {
-    expect(workspaceKey("/tmp/demo///")).toBe("/tmp/demo")
-    expect(workspaceKey("C:\\tmp\\demo\\\\")).toBe("C:/tmp/demo")
+    expect(String(pathKey("/tmp/demo///"))).toBe("/tmp/demo")
+    expect(String(pathKey("C:\\tmp\\demo\\\\"))).toBe("C:/tmp/demo")
   })
 
   test("preserves posix and drive roots in workspace key", () => {
-    expect(workspaceKey("/")).toBe("/")
-    expect(workspaceKey("///")).toBe("/")
-    expect(workspaceKey("C:\\")).toBe("C:/")
-    expect(workspaceKey("C://")).toBe("C:/")
-    expect(workspaceKey("C:///")).toBe("C:/")
+    expect(String(pathKey("/"))).toBe("/")
+    expect(String(pathKey("///"))).toBe("/")
+    expect(String(pathKey("C:\\"))).toBe("C:/")
+    expect(String(pathKey("C://"))).toBe("C:/")
+    expect(String(pathKey("C:///"))).toBe("C:/")
   })
 
   test("keeps local first while preserving known order", () => {

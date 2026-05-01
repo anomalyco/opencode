@@ -11,9 +11,9 @@ void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return Server.Default().app
+function app(experimental = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 
 async function readFirstChunk(response: Response) {
@@ -44,5 +44,14 @@ describe("event HttpApi bridge", () => {
     expect(response.headers.get("x-accel-buffering")).toBe("no")
     expect(response.headers.get("x-content-type-options")).toBe("nosniff")
     expect(await readFirstChunk(response)).toContain('data: {"type":"server.connected","properties":{}}\n\n')
+  })
+
+  test("matches legacy first event frame", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
+    const legacy = await app(false).request(EventPaths.event, { headers })
+    const effect = await app(true).request(EventPaths.event, { headers })
+
+    expect(await readFirstChunk(effect)).toBe(await readFirstChunk(legacy))
   })
 })
