@@ -68,7 +68,7 @@ function fallback(part: ToolPart) {
     ("title" in state && state.title ? state.title : undefined) ||
     (input && typeof input === "object" && Object.keys(input).length > 0 ? JSON.stringify(input) : "Unknown")
   inline({
-    icon: "⚙",
+    icon: "[mcp]",
     title: `${part.tool} ${title}`,
   })
 }

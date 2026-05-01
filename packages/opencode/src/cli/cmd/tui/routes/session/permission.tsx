@@ -392,7 +392,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             }
 
             return {
-              icon: "⚙",
+              icon: "[mcp]",
               title: `Call tool ${permission}`,
               body: (
                 <box paddingLeft={1}>

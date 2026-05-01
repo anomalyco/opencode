@@ -1316,13 +1316,15 @@ function UserMessage(props: {
             maxWidth={bubbleMaxWidth()}
           >
             <text fg={messageColor()}>{bar()}</text>
-            <text fg={messageColor()}>›</text>
+            <box flexShrink={0} paddingLeft={1} paddingRight={1}>
+              <text fg={messageColor()}>›</text>
+            </box>
             <box flexDirection="column" flexShrink={1} paddingRight={1}>
               <Show when={hasText()}>
                 <text fg={messageColor()}>{text()}</text>
               </Show>
               <Show when={files().length}>
-                <box flexDirection="row" paddingBottom={queued() ? 1 : 0} paddingTop={hasText() ? 1 : 0} gap={1} flexWrap="wrap">
+                <box flexDirection="row" paddingBottom={queued() ? 1 : 0} paddingTop={0} gap={1} flexWrap="wrap">
                   <For each={files()}>
                     {(file, index) => {
                       const bg = createMemo(() => {
@@ -1722,7 +1724,7 @@ function GenericTool(props: ToolProps<any>) {
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
+        <InlineTool icon="[mcp]" pending="Writing command..." complete={true} part={props.part}>
           {props.tool} {input(props.input)}
         </InlineTool>
       }
@@ -1887,9 +1889,15 @@ function BlockTool(props: {
 
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
+  const ctx = use()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const isError = createMemo(() => props.part.state.status === "error")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  const command = createMemo(() => props.input.command?.trim() ?? "")
+  const commandSummary = createMemo(() => {
+    const available = Math.max(20, ctx.width - 14)
+    return compactText(command(), available)
+  })
   const [expanded, setExpanded] = createSignal(false)
   const hasOutput = createMemo(() => output().length > 0)
   const showOutput = createMemo(() => hasOutput() && (isError() || expanded()))
@@ -1905,12 +1913,12 @@ function Bash(props: ToolProps<typeof BashTool>) {
       <InlineTool
         icon="$"
         pending="Writing command..."
-        complete={props.input.command}
+        complete={command()}
         part={props.part}
         spinner={isRunning()}
         onClick={hasOutput() ? () => setExpanded((prev) => !prev) : undefined}
       >
-        {props.input.command}
+        {commandSummary()}
         <Show when={hasOutput()}>
           <span style={{ fg: theme.textMuted }}> ...</span>
         </Show>
@@ -2354,6 +2362,12 @@ function input(input: Record<string, any>, omit?: string[]): string {
   })
   if (primitives.length === 0) return ""
   return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
+}
+
+function compactText(input: string | undefined, max: number): string {
+  const value = input?.replace(/\s+/g, " ").trim() ?? ""
+  if (!value) return ""
+  return Locale.truncate(value, Math.max(1, max))
 }
 
 function filetype(input?: string) {
