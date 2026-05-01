@@ -1,0 +1,20 @@
+// Custom opencode config for the viethungvili fork.
+// - Enables OpenTelemetry export (consumed by Langfuse via OTLP env vars).
+// - Pre-registers DeepSeek as the default provider/model.
+// Secrets (API keys, Langfuse auth) live in env vars — see .env.example.
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "openTelemetry": true
+  },
+  "model": "deepseek/deepseek-v4-flash",
+  "provider": {
+    "deepseek": {
+      "models": {
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash"
+        }
+      }
+    }
+  }
+}
