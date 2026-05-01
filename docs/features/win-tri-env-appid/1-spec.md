@@ -19,7 +19,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | **Mac**(已落地) | ✅ 可同机共存 | 三档独立 Bundle ID(`ai.deskfox.app[.beta/.dev]`)|
 | **Win**(本次前) | ❌ 后装替换先装 | `DeskFox.iss` 单一固定 GUID |
 
-笑南反馈:在 mac 上能并存测试三档,win 不行 → 想让 win 也补齐这个能力(参考"应用身份命名规则"讨论)。
+DeskFox官方反馈:在 mac 上能并存测试三档,win 不行 → 想让 win 也补齐这个能力(参考"应用身份命名规则"讨论)。
 
 ## 三、验收标准
 

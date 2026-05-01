@@ -24,9 +24,9 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 - A5. `bun.lock` auto-merge 不可信 → 合完 `bun install` 重生
 - A6. pre-push 跑 `bun typecheck` → 合完先本地验过再 push
 
-### 决策点(笑南拍板,共 4 条)
+### 决策点(DeskFox官方拍板,共 4 条)
 - B1+B2. github/dev 幽灵分支 + origin 双 push → **临时改单推 gitee,github 后置**
-- B3. 改动规则 4.3 节"禁止直 push 到 dev" → **正式废除**(hook 从未实装,v2 模型本意就是笑南本人直推)
+- B3. 改动规则 4.3 节"禁止直 push 到 dev" → **正式废除**(hook 从未实装,v2 模型本意就是DeskFox官方本人直推)
 - B5. mac 端协作通知 → **已通知**(切换中 mac 端暂停推 dev/feat)
 - B6. feat 上 22 个 feat-id 是否 ready 入 dev → **全 done,可合**
 
@@ -41,8 +41,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | # | 动作 | commit / tag | 备注 |
 |---|---|---|---|
 | 1 | 起 spec 草稿(第七节风险 + 5 个决策点) | `2149569cf` | feat 上,中文文件名 |
-| 2 | 加附录 C(开源 PR 安全模型) | spec 内 v0.2 | 源于笑南"陌生人能直接合 PR 吗"提问 |
-| 3 | 加附录 D(三档环境与分支模型关系) | spec 内 v0.3 | 源于笑南"是不是要对应 3 个分支"提问 |
+| 2 | 加附录 C(开源 PR 安全模型) | spec 内 v0.2 | 源于DeskFox官方"陌生人能直接合 PR 吗"提问 |
+| 3 | 加附录 D(三档环境与分支模型关系) | spec 内 v0.3 | 源于DeskFox官方"是不是要对应 3 个分支"提问 |
 | 4 | Bundle ID 命名规则升级为应用身份命名规则(扩 Win) | `00c9bcd4e` | 同步立 `feat/win-tri-env-appid` 的规划 |
 | 5 | 决策落实:HANDOFF / mac 通知 / origin 双 push / 4.3 节废除 | `098d50d72` | spec v0.4 + `改动规则.md` 4.3 节加废除说明 |
 | 6 | push origin feat(只推 gitee) | — | typecheck 全过 |

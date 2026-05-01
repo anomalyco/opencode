@@ -12,27 +12,27 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 ---
 
-## 讨论引导(给笑南 — 先看这两个)
+## 讨论引导(给DeskFox官方 — 先看这两个)
 
 ### 关注点 1:第七节 风险 4(hook 与 dev push 冲突)
 
 - `docs/governance/改动规则.md` 节 4.3 写过"禁止直 push 到 main/master/dev"
-- 切换到"dev 稳定主干"模型后,笑南要直 push dev,会被 hook 拦
-- 决策:① 改 hook(允许笑南本人推 dev) ② 或者全走 PR-based
+- 切换到"dev 稳定主干"模型后,DeskFox官方要直 push dev,会被 hook 拦
+- 决策:① 改 hook(允许DeskFox官方本人推 dev) ② 或者全走 PR-based
 - **这个不解决,切换那一步执行不了**
-- 📌 这条 hook 拦的是"笑南自己手滑直 push",不是"防陌生人"。陌生人进不来的原理见 **附录 C**。所以放开 hook 不会因此对陌生人开门。
+- 📌 这条 hook 拦的是"DeskFox官方自己手滑直 push",不是"防陌生人"。陌生人进不来的原理见 **附录 C**。所以放开 hook 不会因此对陌生人开门。
 
 ### 关注点 2:第四节 5 个决策点
 
 - 切换时机(4.1)/ 合上游时机(4.2)/ 安全告警时机(4.3)/ 老 feat 处置(4.4)/ 协作流程(4.5)
-- 都是清单选择题,笑南勾一遍,就有完整实施 checklist 了
+- 都是清单选择题,DeskFox官方勾一遍,就有完整实施 checklist 了
 
 ### 接下来怎么走
 
-笑南扫一遍文档(尤其第 1-4 节核心 + 第 7 节风险),我们对着商量:
+DeskFox官方扫一遍文档(尤其第 1-4 节核心 + 第 7 节风险),我们对着商量:
 
 - 方案本身有没有调整
-- 5 个决策点笑南怎么勾
+- 5 个决策点DeskFox官方怎么勾
 - hook 与 dev push 怎么处理
 
 ---
@@ -59,7 +59,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 - ❌ **上游升级越拖越难**:漂移已 282 笔,再不合下次合就更恐怖
 - ❌ **CLAUDE.md 模型与现实不一致**:CLAUDE.md 写"dev 跟随 upstream/dev",但实际上根本没跟随,文档撒谎
 
-### 1.3 笑南提出的两种方案
+### 1.3 DeskFox官方提出的两种方案
 
 | 方案 | 说明 | 评分 |
 |---|---|---|
@@ -100,9 +100,9 @@ dev (DeskFox 稳定主干)  ← 只接收"已验证过"的内容
 | 分支 | 长短命 | 谁碰 | 干什么 |
 |---|---|---|---|
 | `upstream/dev` | 永久,只读 | 没人写 | sst/opencode 上游,只 fetch |
-| `sync/upstream-<日期>` | 短命(1 天到 1 周)| 笑南 | 季度 / 按需吸收上游,验证后合回 dev |
-| `dev`(本地 + origin)| 永久 | 笑南 | 稳定主干,ship installer 的来源 |
-| `feat/<name>` | 短命(几天到几周)| 笑南 / 协作者 | 单个新功能,做完合回 dev |
+| `sync/upstream-<日期>` | 短命(1 天到 1 周)| DeskFox官方 | 季度 / 按需吸收上游,验证后合回 dev |
+| `dev`(本地 + origin)| 永久 | DeskFox官方 | 稳定主干,ship installer 的来源 |
+| `feat/<name>` | 短命(几天到几周)| DeskFox官方 / 协作者 | 单个新功能,做完合回 dev |
 
 ### 2.2 核心原则
 
@@ -124,10 +124,10 @@ dev (DeskFox 稳定主干)  ← 只接收"已验证过"的内容
 | HANDOFF md 处置(2026-04-30) | 删除(任务已结,主仓 commit `41817499d` 已 push 完成) |
 | **B5 mac 端协作通知**(2026-04-30) | ✅ 已通知李哲暂停推 dev / feat,等切换稳定 |
 | **B1+B2 github 双 push**(2026-04-30) | 临时把 origin 的 github push URL 去除,**只推 gitee**;github/dev 幽灵分支后置处理(切换稳定后再决定 force push / 删除 / 保留) |
-| **B3 改动规则.md 4.3 节**(2026-04-30) | ✅ 正式废除"禁止直 push 到 main/dev/master"。理由:hook 从未实装该规则,且 v2 模型本意就是笑南本人直推 dev。详见 [`docs/governance/改动规则.md`](../../governance/改动规则.md) 4.3 节废除说明 |
+| **B3 改动规则.md 4.3 节**(2026-04-30) | ✅ 正式废除"禁止直 push 到 main/dev/master"。理由:hook 从未实装该规则,且 v2 模型本意就是DeskFox官方本人直推 dev。详见 [`docs/governance/改动规则.md`](../../governance/改动规则.md) 4.3 节废除说明 |
 | **远端主仓调整**(后续) | GitHub 升为主仓(`origin`),Gitee 改为镜像(`gitee`)。背景:项目定位开源 + 全球贡献者,GitHub 是唯一可行的协作平台;Gitee 由后台定时从 GitHub 自动同步,国内用户 clone 走 Gitee,贡献走 GitHub。国内 push 走 SSH + 本地代理。 |
 
-## 四、决策(待笑南最终敲定)
+## 四、决策(待DeskFox官方最终敲定)
 
 ### 4.1 切换时机
 
@@ -259,9 +259,9 @@ git push origin dev
 | 切换 dev 后 mac 端不知情,继续推 feat 旧分支 | 中 | 先告知 mac 端 + 在仓库 README 标注新分支策略 |
 | 合上游 282 笔产生大量冲突 | 中-高 | 走 sync 分支,坏了 git reset --hard 撤回,不影响 dev |
 | 切换后 ship 流程没适配新 dev | 低 | 切换前先在 dev 跑一次完整 build + 出 installer 验证 |
-| dev 上 push 被 pre-push hook 拦(写了"禁止直 push 到 dev") | 高 | **需要先改 hook**,允许笑南本人推 dev,或者临时关掉 |
+| dev 上 push 被 pre-push hook 拦(写了"禁止直 push 到 dev") | 高 | **需要先改 hook**,允许DeskFox官方本人推 dev,或者临时关掉 |
 
-> ⚠️ **风险 4 是切换前必须处理的**。`docs/governance/改动规则.md` 节 4.3 写"禁止直 push 到 main/master/dev",这条是按 GitFlow 思路写的(假设走 PR)。新模型下笑南需要直接 push dev,要么改 hook,要么改成 PR-based。
+> ⚠️ **风险 4 是切换前必须处理的**。`docs/governance/改动规则.md` 节 4.3 写"禁止直 push 到 main/master/dev",这条是按 GitFlow 思路写的(假设走 PR)。新模型下DeskFox官方需要直接 push dev,要么改 hook,要么改成 PR-based。
 
 ### 7.2 回滚方法
 
@@ -287,7 +287,7 @@ git push origin dev
 
 ## 九、附录 B:CLAUDE.md 哪些段需要同步更新
 
-如笑南敲定本方案,以下 CLAUDE.md 段落需要改(单独立 feat 处理):
+如DeskFox官方敲定本方案,以下 CLAUDE.md 段落需要改(单独立 feat 处理):
 
 1. **元原则**段不变(三件事不变)
 2. **R1-R4** 不变
@@ -301,8 +301,8 @@ git push origin dev
 
 ## 附录 C:开源仓库 PR 安全模型(陌生人能做什么 / 不能做什么)
 
-> 起草于 2026-04-30,源于笑南讨论中提问"陌生人提交修改进来会直接合并吗"。
-> 结论先行:**陌生人不可能直接合并到本仓,绝对不会**。仓库主人(笑南)不点 Merge,改动就永远停在 PR 页面进不来。
+> 起草于 2026-04-30,源于DeskFox官方讨论中提问"陌生人提交修改进来会直接合并吗"。
+> 结论先行:**陌生人不可能直接合并到本仓,绝对不会**。仓库主人(DeskFox官方)不点 Merge,改动就永远停在 PR 页面进不来。
 
 ### C.1 陌生人能做的最多就是
 
@@ -311,21 +311,21 @@ git push origin dev
 
 类比:陌生人在你家门口按门铃,你不开门就进不来。
 
-### C.2 真正会让陌生人有写权限的几种情况(都需要笑南主动操作)
+### C.2 真正会让陌生人有写权限的几种情况(都需要DeskFox官方主动操作)
 
 | 情况 | 风险 |
 |---|---|
-| 把对方加为 **Collaborator**(仓库 Settings 里手动添加) | 高 — 他能直接 push,权限跟笑南一样 |
+| 把对方加为 **Collaborator**(仓库 Settings 里手动添加) | 高 — 他能直接 push,权限跟DeskFox官方一样 |
 | 装了 auto-merge 机器人(Mergify、Dependabot auto-merge) | 看配置,默认都很保守 |
 | 仓库 transfer / 加到 organization 给了 admin | 高 |
 
-**没主动做以上任何一件 → 陌生人只能在 PR 页面等笑南点头。**
+**没主动做以上任何一件 → 陌生人只能在 PR 页面等DeskFox官方点头。**
 
 ### C.3 与本文档"hook 与 dev push"问题的关系
 
-- pre-push hook(`docs/governance/改动规则.md` 4.3)拦的是 **笑南自己本地手滑**,防止误操作直推主干
+- pre-push hook(`docs/governance/改动规则.md` 4.3)拦的是 **DeskFox官方自己本地手滑**,防止误操作直推主干
 - **不是**防陌生人 — 平台层面陌生人本来就进不来
-- 所以"放开 hook 让笑南本人能推 dev"**不会因此降低对外安全性**,只是放宽了对自己的限制
+- 所以"放开 hook 让DeskFox官方本人能推 dev"**不会因此降低对外安全性**,只是放宽了对自己的限制
 
 ### C.4 额外保险(可选,小项目用不上)
 
@@ -334,7 +334,7 @@ GitHub **Branch Protection Rules**(Settings → Branches)可以给 dev 加规则
 - ❌ "必须经过 PR 才能合(禁止直 push)" — 这条会跟 v2 模型"切到 dev 直 push"冲突,**别开**
 - ❌ "必须有 N 个人 review 才能合" — 单人项目用不上
 
-**结论**:笑南不点 merge,谁都合不进来,默认就够安全。
+**结论**:DeskFox官方不点 merge,谁都合不进来,默认就够安全。
 
 ---
 
@@ -404,9 +404,9 @@ DeskFox 现状(2026-04-30):没有 prod 用户基数(自用 + 朋友 + 小范围)
 
 | 版本 | 日期 | 修订内容 | 修订人 |
 |---|---|---|---|
-| v0.1(草稿) | 2026-04-30 | 初版起草,讨论稿状态 | Claude(代笔,待笑南审定) |
-| v0.2(草稿) | 2026-04-30 | 加"讨论引导"段(关注点 1/2 + 接下来怎么走)+ 附录 C(开源 PR 安全模型,源于笑南讨论提问)| Claude |
+| v0.1(草稿) | 2026-04-30 | 初版起草,讨论稿状态 | Claude(代笔,待DeskFox官方审定) |
+| v0.2(草稿) | 2026-04-30 | 加"讨论引导"段(关注点 1/2 + 接下来怎么走)+ 附录 C(开源 PR 安全模型,源于DeskFox官方讨论提问)| Claude |
 | v0.3(草稿) | 2026-04-30 | 加附录 D(三档环境与分支模型的关系)+ 动作计划 #5 补 `feat/win-tri-env-appid`(Win 三档 AppId,v2 切换之后立刻做)+ 动作计划 #1 修正(ship 调研确认只有 .2 一笔)| Claude |
 | v0.4(草稿) | 2026-04-30 | 第三节"决策已敲定"补 4 条:HANDOFF 删除 / B5 mac 协作通知 / B1+B2 origin 双 push 改单推 gitee / B3 改动规则 4.3 节正式废除(同笔改 `docs/governance/改动规则.md` 4.3 节加废除说明)| Claude |
-| **v1.0(锁版)** | 2026-04-30 | 笑南讨论锁版 → 切换执行完成(merge feat → dev `fae01d2a8`)→ status: draft 改 done | Claude |
+| **v1.0(锁版)** | 2026-04-30 | DeskFox官方讨论锁版 → 切换执行完成(merge feat → dev `fae01d2a8`)→ status: draft 改 done | Claude |
 | **v1.1** | 2026-04-30 | 远端主仓调整:GitHub 升 `origin`(主仓),Gitee 降 `gitee`(镜像)。因项目定位开源 + 全球贡献者,GitHub 是唯一可行协作平台 | Claude |

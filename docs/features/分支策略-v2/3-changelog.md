@@ -119,7 +119,7 @@ git push origin dev
 
 ## 六、重大经验
 
-1. **"先 spec 后切换"模式有效**:同日完成 spec 起草 + 讨论 + 切换执行,中间笑南三轮提问把附录 C / D / 附录 D-Win 全补出来了 — 提问驱动文档收口比一次性写完更扎实。
+1. **"先 spec 后切换"模式有效**:同日完成 spec 起草 + 讨论 + 切换执行,中间DeskFox官方三轮提问把附录 C / D / 附录 D-Win 全补出来了 — 提问驱动文档收口比一次性写完更扎实。
 2. **merge commit 走 `--no-verify` 是合理的**:pre-commit 4.1 黑名单 hook 是为"普通 commit 偷渡"设计,merge commit 不引入新改动,不应重复拦截。本次没有计入 override-blacklist 季度配额。
 3. **远端单推 gitee 的临时方案是对的**:本来双推 origin 会因 github/dev divergent 半成功半失败,临时单推规避所有 noise,后续单独处理 github 端更干净。
 4. **bun.lock auto-merge 这次居然正确**:不能依赖,但 `bun install` 后 no changes 验证它是对的。下次合并仍要无条件重生。
