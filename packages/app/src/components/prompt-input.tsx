@@ -67,6 +67,8 @@ import { Popover } from "@opencode-ai/ui/popover"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { merge, value } from "./prompt-input/expand"
+import { SessionPickerPopover } from "./prompt-input/session-picker"
+import { type SessionHistoryEntry } from "@/context/session-history"
 import { working as sessionWorking } from "@/pages/session/session-working"
 import { createInputUndoEntry, createInputUndoState, recordInputUndo, stepInputUndo } from "./prompt-input/input-undo"
 import { workspaceKey } from "@/pages/layout/helpers"
@@ -1474,6 +1476,54 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }, 120)
   }
 
+  const insertTextAtCursor = (raw: string) => {
+    const text = raw.replace(/\r\n?/g, "\n")
+    if (!text) return
+    const base = prompt.current()
+    const baseValue = value(base)
+    const cursor =
+      editorRef && document.activeElement && editorRef.contains(document.activeElement)
+        ? getCursorPosition(editorRef)
+        : promptLength(base)
+    const before = baseValue.slice(0, cursor)
+    const after = baseValue.slice(cursor)
+    const leadPad = before.length > 0 && !before.endsWith("\n") ? "\n" : ""
+    const tailPad = after.length > 0 && !after.startsWith("\n") ? "\n" : ""
+    const insertion = `${leadPad}${text}${tailPad}`
+    const merged = `${before}${insertion}${after}`
+    const next = merge(merged, base)
+    const newCursor = cursor + insertion.length
+    closePopover()
+    resetHistoryNavigation(true)
+    syncInputUndo(next, newCursor)
+    prompt.set(next, newCursor)
+    queueScroll()
+    schedulePrediction()
+    requestAnimationFrame(() => {
+      editorRef?.focus()
+      setCursorPosition(editorRef, newCursor)
+      queueScroll()
+    })
+  }
+
+  const buildSessionRefXml = (entry: SessionHistoryEntry) => {
+    const xmlEscape = (s: string) =>
+      s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    const project = (getFilename(entry.directory) || entry.directory || "").trim()
+    const title = (entry.title ?? "").trim()
+    return [
+      "<opencode-session>",
+      `  <project>${xmlEscape(project)}</project>`,
+      `  <id>${xmlEscape(entry.id)}</id>`,
+      `  <title>${xmlEscape(title)}</title>`,
+      "</opencode-session>",
+    ].join("\n")
+  }
+
+  const insertSessionRef = (entry: SessionHistoryEntry) => {
+    insertTextAtCursor(buildSessionRefXml(entry))
+  }
+
   const expand = () => {
     const base = prompt.current()
     dialog.show(() => (
@@ -2094,6 +2144,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     aria-pressed={read()}
                   />
                 </Tooltip>
+                <Show when={!!extraAgentIntegration()}>
+                  <Tooltip placement="top" value={language.t("prompt.action.insertSession")}>
+                    <SessionPickerPopover
+                      onSelect={insertSessionRef}
+                      ariaLabel={language.t("prompt.action.insertSession")}
+                      headerText={language.t("prompt.session.menuTitle")}
+                      emptyText={language.t("prompt.session.empty")}
+                      triggerStyle={control()}
+                      placement="top-end"
+                    />
+                  </Tooltip>
+                </Show>
               </div>
             </div>
           </DockShellForm>

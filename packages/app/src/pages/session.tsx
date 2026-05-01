@@ -39,6 +39,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { useSessionHistory } from "@/context/session-history"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
@@ -55,6 +56,7 @@ import {
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { isExtraAgentDirectory } from "@/pages/layout/extra-agents"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { working } from "@/pages/session/session-working"
@@ -99,6 +101,7 @@ export default function Page() {
   const navigate = useNavigate()
   const sdk = useSDK()
   const settings = useSettings()
+  const sessionHistory = useSessionHistory()
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
@@ -219,9 +222,25 @@ export default function Page() {
   }
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const isChildSession = createMemo(() => !!info()?.parentID)
-  const diffs = createMemo(() => (params.id ? list(sync.data.session_diff[params.id]) : []))
-  const canReview = createMemo(() => !!sync.project)
+
+  // Track visited opencode sessions in a global history list so the
+  // extra-agent (GenericAgent / Hermes / OpenClaw) prompt-input picker can
+  // surface them later. Skip extra-agent directories — only real opencode
+  // sessions belong in this list.
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    const directory = info()?.directory
+    if (!directory) return
+    if (isExtraAgentDirectory(directory)) return
+    const title = info()?.title ?? ""
+    sessionHistory.record({ id, title, directory })
+  })
+
+  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
+  const hasSessionReview = createMemo(() => sessionCount() > 0)
+  const canReview = createMemo(() => !!params.id)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
     tabs,
