@@ -1,9 +1,11 @@
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
-import { listAdaptors } from "@/control-plane/adaptors"
+import { Effect } from "effect"
+import { listAdapters } from "@/control-plane/adapters"
 import { Workspace } from "@/control-plane/workspace"
-import { WorkspaceAdaptorEntry } from "@/control-plane/types"
+import { AppRuntime } from "@/effect/app-runtime"
+import { WorkspaceAdapterEntry } from "@/control-plane/types"
 import { zodObject } from "@/util/effect-zod"
 import { Instance } from "@/project/instance"
 import { errors } from "../../error"
@@ -16,24 +18,24 @@ const log = Log.create({ service: "server.workspace" })
 export const WorkspaceRoutes = lazy(() =>
   new Hono()
     .get(
-      "/adaptor",
+      "/adapter",
       describeRoute({
-        summary: "List workspace adaptors",
-        description: "List all available workspace adaptors for the current project.",
-        operationId: "experimental.workspace.adaptor.list",
+        summary: "List workspace adapters",
+        description: "List all available workspace adapters for the current project.",
+        operationId: "experimental.workspace.adapter.list",
         responses: {
           200: {
-            description: "Workspace adaptors",
+            description: "Workspace adapters",
             content: {
               "application/json": {
-                schema: resolver(z.array(zodObject(WorkspaceAdaptorEntry))),
+                schema: resolver(z.array(zodObject(WorkspaceAdapterEntry))),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json(await listAdaptors(Instance.project.id))
+        return c.json(await listAdapters(Instance.project.id))
       },
     )
     .post(
@@ -62,10 +64,14 @@ export const WorkspaceRoutes = lazy(() =>
       ),
       async (c) => {
         const body = c.req.valid("json") as Omit<Workspace.CreateInput, "projectID">
-        const workspace = await Workspace.create({
-          projectID: Instance.project.id,
-          ...body,
-        })
+        const workspace = await AppRuntime.runPromise(
+          Workspace.Service.use((svc) =>
+            svc.create({
+              projectID: Instance.project.id,
+              ...body,
+            }),
+          ),
+        )
         return c.json(workspace)
       },
     )
@@ -87,7 +93,7 @@ export const WorkspaceRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(Workspace.list(Instance.project))
+        return c.json(await AppRuntime.runPromise(Workspace.Service.use((svc) => svc.list(Instance.project))))
       },
     )
     .get(
@@ -108,8 +114,11 @@ export const WorkspaceRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const ids = new Set(Workspace.list(Instance.project).map((item) => item.id))
-        return c.json(Workspace.status().filter((item) => ids.has(item.workspaceID)))
+        const result = await AppRuntime.runPromise(
+          Workspace.Service.use((svc) => Effect.all([svc.list(Instance.project), svc.status()])),
+        )
+        const ids = new Set(result[0].map((item) => item.id))
+        return c.json(result[1].filter((item) => ids.has(item.workspaceID)))
       },
     )
     .delete(
@@ -138,7 +147,7 @@ export const WorkspaceRoutes = lazy(() =>
       ),
       async (c) => {
         const { id } = c.req.valid("param")
-        return c.json(await Workspace.remove(id))
+        return c.json(await AppRuntime.runPromise(Workspace.Service.use((svc) => svc.remove(id))))
       },
     )
     .post(
@@ -174,10 +183,14 @@ export const WorkspaceRoutes = lazy(() =>
           directory: Instance.directory,
         })
         try {
-          const result = await Workspace.sessionRestore({
-            workspaceID: id,
-            ...body,
-          })
+          const result = await AppRuntime.runPromise(
+            Workspace.Service.use((svc) =>
+              svc.sessionRestore({
+                workspaceID: id,
+                ...body,
+              }),
+            ),
+          )
           log.info("session restore route complete", {
             workspaceID: id,
             sessionID: body.sessionID,

@@ -452,6 +452,8 @@ export const dict = {
   "error.page.description": "加载应用程序时发生错误。",
   "error.page.details.label": "错误详情",
   "error.page.action.restart": "重启",
+  "error.page.action.report": "上报错误",
+  "error.page.action.reported": "错误已上报",
   "error.page.action.checking": "检查中...",
   "error.page.action.checkUpdates": "检查更新",
   "error.page.action.updateTo": "更新到 {{version}}",
