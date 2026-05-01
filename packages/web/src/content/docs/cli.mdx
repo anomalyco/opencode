@@ -575,6 +575,7 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_CONFIG_DIR`                 | string  | Path to config directory                          |
 | `OPENCODE_CONFIG_CONTENT`             | string  | Inline json config content                        |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                   |
+| `OPENCODE_ALWAYS_NOTIFY_UPDATE`       | boolean | Always show the new-version notification          |
 | `OPENCODE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                       |
 | `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates          |
 | `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                   |
@@ -585,6 +586,11 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Disable reading from `.claude` (prompt + skills)  |
 | `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`             |
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                  |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS`    | boolean | Disable loading skills from `.claude` and `.agents` |
+| `OPENCODE_DISABLE_PROJECT_CONFIG`     | boolean | Ignore project-level `opencode.json` / `.opencode/` |
+| `OPENCODE_DISABLE_EMBEDDED_WEB_UI`    | boolean | Disable the embedded web UI served by `opencode serve` |
+| `OPENCODE_PURE`                       | boolean | Run without external plugins or installed skills |
+| `OPENCODE_MODELS_PATH`                | string  | Local path to a `models.dev` JSON dump            |
 | `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Disable fetching models from remote sources       |
 | `OPENCODE_DISABLE_MOUSE`              | boolean | Disable mouse capture in the TUI                  |
 | `OPENCODE_FAKE_VCS`                   | string  | Fake VCS provider for testing purposes            |
