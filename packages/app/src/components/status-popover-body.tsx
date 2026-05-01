@@ -255,7 +255,9 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   )
 
   const projectSkills = createMemo(() =>
-    skills().filter((s) => s.location.includes(".opencode/skills"))
+    skills().filter((s) =>
+      !s.location.includes(".claude/skills") && !s.location.includes(".agents/skills")
+    )
   )
 
   const skillsCount = createMemo(() => skills().length)
