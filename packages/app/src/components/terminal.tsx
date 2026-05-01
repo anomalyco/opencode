@@ -601,6 +601,17 @@ export const Terminal = (props: TerminalProps) => {
         },
       })
 
+      // Persisted PTY ids can outlive the server (e.g. after a sidecar
+      // restart). Probe via REST first so a stale id triggers `clone()` via
+      // `onConnectError` instead of producing a noisy WebSocket 404 in the
+      // browser console before our retry loop catches it.
+      if (await gone()) {
+        if (disposed) return
+        fail(new Error("pty no longer exists"))
+        return
+      }
+      if (disposed) return
+
       open()
     }
 
