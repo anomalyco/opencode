@@ -258,6 +258,18 @@ describe("HttpApi server", () => {
     })
   })
 
+  test("matches SDK-affecting request schema details", () => {
+    const effect = effectOpenApi()
+    const sessionUpdate = effect.paths["/session/{sessionID}"]?.patch?.requestBody
+    const sessionUpdateSchema =
+      typeof sessionUpdate === "object" && sessionUpdate && "content" in sessionUpdate
+        ? sessionUpdate.content?.["application/json"]?.schema
+        : undefined
+    const sessionUpdateProperties = sessionUpdateSchema?.properties as Record<string, OpenApiSchema> | undefined
+    const time = sessionUpdateProperties?.time
+    expect(time?.properties?.archived).toEqual({ type: "number" })
+  })
+
   test("documents event routes as server-sent events", () => {
     const effect = effectOpenApi()
 
