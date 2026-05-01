@@ -447,6 +447,8 @@ export const dict = {
   "error.page.description": "เกิดข้อผิดพลาดระหว่างการโหลดแอปพลิเคชัน",
   "error.page.details.label": "รายละเอียดข้อผิดพลาด",
   "error.page.action.restart": "รีสตาร์ท",
+  "error.page.action.report": "รายงานข้อผิดพลาด",
+  "error.page.action.reported": "รายงานข้อผิดพลาดแล้ว",
   "error.page.action.checking": "กำลังตรวจสอบ...",
   "error.page.action.checkUpdates": "ตรวจสอบการอัปเดต",
   "error.page.action.updateTo": "อัปเดตเป็น {{version}}",

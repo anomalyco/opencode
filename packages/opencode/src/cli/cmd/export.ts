@@ -245,10 +245,7 @@ export const ExportCommand = cmd({
           output: process.stderr,
         })
 
-        const sessions = []
-        for await (const session of Session.list()) {
-          sessions.push(session)
-        }
+        const sessions = await AppRuntime.runPromise(Session.Service.use((svc) => svc.list()))
 
         if (sessions.length === 0) {
           prompts.log.error("No sessions found", {
