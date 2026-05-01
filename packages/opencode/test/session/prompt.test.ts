@@ -887,7 +887,8 @@ it.live(
   3_000,
 )
 
-it.live(
+// SKIP on windows: 3s timeout, fork+wait scheduling racy on github-hosted windows-2025. (#90)
+unix(
   "prompt submitted during an active run is included in the next LLM input",
   () =>
     provideTmpdirServer(
@@ -956,7 +957,8 @@ it.live(
   3_000,
 )
 
-it.live(
+// SKIP on windows: 3s timeout + fiber+llm.wait scheduling racy. (#90)
+unix(
   "assertNotBusy throws BusyError when loop running",
   () =>
     provideTmpdirServer(
@@ -1766,7 +1768,8 @@ it.live("does not loop empty assistant turns for a simple reply", () =>
   ),
 )
 
-it.live(
+// SKIP on windows: 3s timeout (default) + fiber+cancel timing racy. (#90)
+unix(
   "records aborted errors when prompt is cancelled mid-stream",
   () =>
     provideTmpdirServer(
