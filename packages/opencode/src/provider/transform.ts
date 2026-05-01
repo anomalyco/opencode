@@ -214,12 +214,11 @@ function normalizeMessages(
     })
   }
 
-  const isQwen = model.id.toLowerCase().includes("qwen") || model.api.id.toLowerCase().includes("qwen")
   const preserveReasoningInContent =
     _options?.preserveReasoningInContent === true ||
     (model.options as any)?.preserveReasoningInContent === true
 
-  if (isQwen || preserveReasoningInContent) {
+  if (preserveReasoningInContent) {
     msgs = msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")

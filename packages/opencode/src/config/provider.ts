@@ -53,7 +53,16 @@ export const Model = Schema.Struct({
   provider: Schema.optional(
     Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
   ),
-  options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
+  options: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({
+        preserveReasoningInContent: Schema.optional(Schema.Boolean).annotate({
+          description: "When true, formats reasoning history as <thinking> tags within the content instead of using reasoning_content (required for Qwen3.6 preserve_thinking)."
+        })
+      }),
+      [Schema.Record(Schema.String, Schema.Any)]
+    )
+  ),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   variants: Schema.optional(
     Schema.Record(
