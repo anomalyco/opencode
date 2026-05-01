@@ -11,6 +11,12 @@
 
 
 
+## [Windows] 2026.5.1.2 - 2026-05-01 22:20
+
+(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
+
+---
+
 ## [Windows] 2026.5.1.1 - 2026-05-01 14:21
 
 (待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
