@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Config, Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
+import { Server } from "../../src/server/server"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../fixture/db"
@@ -59,6 +60,32 @@ describe("HttpApi CORS", () => {
       expect(response.status).toBe(204)
       expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3000")
       expect(response.headers["access-control-allow-headers"]).toBe("authorization")
+    }),
+  )
+
+  it.live("uses custom CORS origins passed to the server", () =>
+    Effect.gen(function* () {
+      const listener = yield* Effect.acquireRelease(
+        Effect.promise(() =>
+          Server.listen({ hostname: "127.0.0.1", port: 0, cors: ["https://custom.example"] }),
+        ),
+        (listener) => Effect.promise(() => listener.stop(true)),
+      )
+
+      const response = yield* Effect.promise(() =>
+        fetch(new URL(InstancePaths.path, listener.url), {
+          method: "OPTIONS",
+          headers: {
+            origin: "https://custom.example",
+            "access-control-request-method": "GET",
+            "access-control-request-headers": "authorization",
+          },
+        }),
+      )
+
+      expect(response.status).toBe(204)
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://custom.example")
+      expect(response.headers.get("access-control-allow-headers")).toBe("authorization")
     }),
   )
 })

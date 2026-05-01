@@ -38,7 +38,7 @@ import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { Workspace } from "@/control-plane/workspace"
-import { isAllowedCorsOrigin } from "@/server/cors"
+import { isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
 import { serveUIEffect } from "@/server/routes/ui"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { ServerAuthConfig, authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
@@ -77,13 +77,14 @@ const runtime = HttpRouter.middleware()(
   ),
 ).layer
 
-const cors = HttpRouter.middleware(
-  HttpMiddleware.cors({
-    allowedOrigins: isAllowedCorsOrigin,
-    maxAge: 86_400,
-  }),
-  { global: true },
-)
+const cors = (corsOptions?: CorsOptions) =>
+  HttpRouter.middleware(
+    HttpMiddleware.cors({
+      allowedOrigins: (origin) => isAllowedCorsOrigin(origin, corsOptions),
+      maxAge: 86_400,
+    }),
+    { global: true },
+  )
 
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
 const instanceRouterLayer = authorizationRouterMiddleware
@@ -130,55 +131,67 @@ const uiRoute = HttpRouter.use((router) =>
   }),
 ).pipe(Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))))
 
-export const routes = Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
-  Layer.provide([
-    cors,
-    runtime,
-    Account.defaultLayer,
-    Agent.defaultLayer,
-    Auth.defaultLayer,
-    Command.defaultLayer,
-    Config.defaultLayer,
-    File.defaultLayer,
-    Format.defaultLayer,
-    LSP.defaultLayer,
-    Installation.defaultLayer,
-    MCP.defaultLayer,
-    Permission.defaultLayer,
-    Project.defaultLayer,
-    ProviderAuth.defaultLayer,
-    Provider.defaultLayer,
-    Pty.defaultLayer,
-    Question.defaultLayer,
-    Ripgrep.defaultLayer,
-    Session.defaultLayer,
-    SessionCompaction.defaultLayer,
-    SessionPrompt.defaultLayer,
-    SessionRevert.defaultLayer,
-    SessionShare.defaultLayer,
-    SessionRunState.defaultLayer,
-    SessionStatus.defaultLayer,
-    SessionSummary.defaultLayer,
-    SyncEvent.defaultLayer,
-    Skill.defaultLayer,
-    Todo.defaultLayer,
-    ToolRegistry.defaultLayer,
-    Vcs.defaultLayer,
-    Workspace.defaultLayer,
-    Worktree.defaultLayer,
-    Bus.layer,
-    AppFileSystem.defaultLayer,
-    FetchHttpClient.layer,
-    HttpServer.layerServices,
-  ]),
-  Layer.provideMerge(Observability.layer),
-)
+export function createRoutes(corsOptions?: CorsOptions) {
+  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
+    Layer.provide([
+      cors(corsOptions),
+      runtime,
+      Account.defaultLayer,
+      Agent.defaultLayer,
+      Auth.defaultLayer,
+      Command.defaultLayer,
+      Config.defaultLayer,
+      File.defaultLayer,
+      Format.defaultLayer,
+      LSP.defaultLayer,
+      Installation.defaultLayer,
+      MCP.defaultLayer,
+      Permission.defaultLayer,
+      Project.defaultLayer,
+      ProviderAuth.defaultLayer,
+      Provider.defaultLayer,
+      Pty.defaultLayer,
+      Question.defaultLayer,
+      Ripgrep.defaultLayer,
+      Session.defaultLayer,
+      SessionCompaction.defaultLayer,
+      SessionPrompt.defaultLayer,
+      SessionRevert.defaultLayer,
+      SessionShare.defaultLayer,
+      SessionRunState.defaultLayer,
+      SessionStatus.defaultLayer,
+      SessionSummary.defaultLayer,
+      SyncEvent.defaultLayer,
+      Skill.defaultLayer,
+      Todo.defaultLayer,
+      ToolRegistry.defaultLayer,
+      Vcs.defaultLayer,
+      Workspace.defaultLayer,
+      Worktree.defaultLayer,
+      Bus.layer,
+      AppFileSystem.defaultLayer,
+      FetchHttpClient.layer,
+      HttpServer.layerServices,
+    ]),
+    Layer.provideMerge(Observability.layer),
+  )
+}
 
-export const webHandler = lazy(() =>
+export const routes = createRoutes()
+
+const defaultWebHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {
     memoMap,
     middleware: disposeMiddleware,
   }),
 )
+
+export function webHandler(corsOptions?: CorsOptions) {
+  if (!corsOptions?.cors?.length) return defaultWebHandler()
+  return HttpRouter.toWebHandler(createRoutes(corsOptions), {
+    memoMap,
+    middleware: disposeMiddleware,
+  })
+}
 
 export * as ExperimentalHttpApiServer from "./server"
