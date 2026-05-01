@@ -19,6 +19,21 @@ import { ReadTool } from "../../tool/read"
 import { WebFetchTool } from "../../tool/webfetch"
 import { EditTool } from "../../tool/edit"
 import { WriteTool } from "../../tool/write"
+
+const MIME_MAP: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  bmp: "image/bmp", webp: "image/webp", ico: "image/x-icon", tif: "image/tiff",
+  tiff: "image/tiff", svg: "image/svg+xml", svgz: "image/svg+xml", avif: "image/avif",
+  apng: "image/apng", jxl: "image/jxl", heic: "image/heic", heif: "image/heif",
+  mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", avi: "video/x-msvideo",
+  mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac",
+  pdf: "application/pdf",
+}
+
+function resolveMime(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase().slice(1)
+  return MIME_MAP[ext] ?? "text/plain"
+}
 import { WebSearchTool } from "../../tool/websearch"
 import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
@@ -320,7 +335,7 @@ export const RunCommand = cmd({
           process.exit(1)
         }
 
-        const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : "text/plain"
+        const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : resolveMime(resolvedPath)
 
         files.push({
           type: "file",
