@@ -79,6 +79,12 @@ if ($needBuild) {
     } else {
         throw "[deskfox] sidecar build failed: no fresh binary in packages/opencode/dist/{opencode-windows-x64,opencode-windows-x64-baseline}/bin/. Hint: check bun build output, RUST_TARGET env, and clash/network"
     }
+    # CI 干净 checkout 时 sidecars/ 目录可能不存在(本地有是因为之前 build 过留下),Copy-Item 不会自动建父目录
+    $sidecarDir = Split-Path -Parent $sidecarPath
+    if (-not (Test-Path $sidecarDir)) {
+        New-Item -ItemType Directory -Force -Path $sidecarDir | Out-Null
+        Write-Output "[deskfox] created missing sidecars/ dir: $sidecarDir"
+    }
     Copy-Item -Force $srcBin $sidecarPath
     $size = (Get-Item $sidecarPath).Length
     Write-Output "[deskfox] sidecar updated: $sidecarPath ($size bytes)"
