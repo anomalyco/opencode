@@ -189,7 +189,9 @@ export function createChildStoreManager(input: {
             get provider_ready() {
               return !providerQuery.isLoading
             },
-            provider: { all: [], connected: [], default: {} },
+            get provider() {
+              return providerQuery.data ?? { all: [], connected: [], default: {} }
+            },
             config: {},
             get path() {
               if (pathQuery.isLoading || !pathQuery.data)
