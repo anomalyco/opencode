@@ -362,6 +362,23 @@ The model ID in your OpenCode config uses the format `provider/model-id`. For ex
 
 ---
 
+### Variant
+
+Use the `variant` config to set a default model variant for this agent. Variants are provider-specific reasoning effort presets (for example `high`, `max`, or `minimal`) and only apply when the agent is running on its own configured `model` — switching to another model resets the variant.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514",
+      "variant": "high"
+    }
+  }
+}
+```
+
+---
+
 ### Tools (deprecated)
 
 `tools` is **deprecated**. Prefer the agent's [`permission`](#permissions) field for new configs, updates and more fine-grained control.
