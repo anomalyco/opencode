@@ -37,8 +37,8 @@ export const smartRouterHooks: Hooks = {
 // Stats are fetched from hermes via /stats endpoint
 // This is called by monitoring dashboards
 export async function getSmartRouterStats(hermesUrl?: string) {
-  // Default to local hermes
-  const baseUrl = hermesUrl ?? "http://localhost:8642"
+  // Default to deployed hermes endpoint
+  const baseUrl = hermesUrl ?? "https://hermes.tusker.net.au/v1"
   
   try {
     const response = await fetch(`${baseUrl}/stats`)
