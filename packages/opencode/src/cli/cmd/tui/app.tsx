@@ -1,7 +1,7 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
-import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
+import { createCliRenderer, MouseButton, RGBA, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
   Switch,
@@ -79,6 +79,10 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
     autoFocus: false,
     openConsoleOnError: false,
     useMouse: mouseEnabled,
+    // Default to a transparent backdrop so transparent custom themes don't show
+    // an opaque flash before the theme finishes loading. The active theme's
+    // background is applied via theme.tsx once it's resolved.
+    backgroundColor: RGBA.fromInts(0, 0, 0, 0),
     consoleOptions: {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
@@ -877,7 +881,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     <box
       width={dimensions().width}
       height={dimensions().height}
-      backgroundColor={theme.background}
+      // While the user's selected theme is still loading async, leave the root
+      // box transparent rather than painting the opencode-default fallback's
+      // opaque background; otherwise transparent custom themes show an opaque
+      // backdrop until the user manually toggles themes.
+      backgroundColor={themeState.isActiveResolved() ? theme.background : RGBA.fromInts(0, 0, 0, 0)}
       onMouseDown={(evt) => {
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return

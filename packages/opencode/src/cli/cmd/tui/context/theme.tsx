@@ -428,6 +428,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     createEffect(() => {
+      // Skip syncing the renderer background while the user's selected theme is
+      // still loading async (e.g. a custom theme in ~/.config/opencode/themes).
+      // Otherwise we'd briefly paint the opencode-default fallback's opaque
+      // background, leaving leftover opaque cells when the actual theme is
+      // transparent.
+      if (!store.themes[store.active]) return
       renderer.setBackgroundColor(values().background)
     })
 
@@ -475,6 +481,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       },
       get ready() {
         return store.ready
+      },
+      // True once the currently-active theme is loaded into the store.
+      // Default-bundled themes are present from the first render; custom
+      // themes only become loaded after the async file walk finishes.
+      isActiveResolved() {
+        return store.themes[store.active] !== undefined
       },
     }
   },
