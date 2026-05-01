@@ -75,6 +75,8 @@ Trenutna lista modela uključuje:
 - **Qwen3.5 Plus**
 - **Qwen3.6 Plus**
 - **MiniMax M2.7**
+- **DeepSeek V4 Pro**
+- **DeepSeek V4 Flash**
 
 Lista modela se može mijenjati dok testiramo i dodajemo nove.
 
@@ -92,28 +94,32 @@ Ograničenja su definisana u dolarskoj vrijednosti. To znači da vaš stvarni br
 
 Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca korištenja Go pretplate:
 
-| Model         | zahtjeva na 5 sati | zahtjeva sedmično | zahtjeva mjesečno |
-| ------------- | ------------------ | ----------------- | ----------------- |
-| GLM-5.1       | 880                | 2,150             | 4,300             |
-| GLM-5         | 1,150              | 2,880             | 5,750             |
-| Kimi K2.5     | 1,850              | 4,630             | 9,250             |
-| Kimi K2.6     | 1,150              | 2,880             | 5,750             |
-| MiMo-V2-Pro   | 1,290              | 3,225             | 6,450             |
-| MiMo-V2-Omni  | 2,150              | 5,450             | 10,900            |
-| MiMo-V2.5-Pro | 1,290              | 3,225             | 6,450             |
-| MiMo-V2.5     | 2,150              | 5,450             | 10,900            |
-| Qwen3.6 Plus  | 3,300              | 8,200             | 16,300            |
-| MiniMax M2.7  | 3,400              | 8,500             | 17,000            |
-| MiniMax M2.5  | 6,300              | 15,900            | 31,800            |
-| Qwen3.5 Plus  | 10,200             | 25,200            | 50,500            |
+| Model              | zahtjeva na 5 sati | zahtjeva sedmično | zahtjeva mjesečno |
+| ------------------ | ------------------ | ----------------- | ----------------- |
+| GLM-5.1            | 880                | 2,150             | 4,300             |
+| GLM-5              | 1,150              | 2,880             | 5,750             |
+| Kimi K2.5          | 1,850              | 4,630             | 9,250             |
+| Kimi K2.6          | 1,150              | 2,880             | 5,750             |
+| MiMo-V2-Pro        | 1,290              | 3,225             | 6,450             |
+| MiMo-V2-Omni       | 2,150              | 5,450             | 10,900            |
+| MiMo-V2.5-Pro      | 1,290              | 3,225             | 6,450             |
+| MiMo-V2.5 (≤ 256K) | 2,150              | 5,450             | 10,900            |
+| MiniMax M2.7       | 3,400              | 8,500             | 17,000            |
+| MiniMax M2.5       | 6,300              | 15,900            | 31,800            |
+| Qwen3.6 Plus       | 3,300              | 8,200             | 16,300            |
+| Qwen3.5 Plus       | 10,200             | 25,200            | 50,500            |
+| DeepSeek V4 Pro    | 3,450              | 8,550             | 17,150            |
+| DeepSeek V4 Flash  | 31,650             | 79,050            | 158,150           |
 
 Procjene se zasnivaju na zapaženim prosječnim obrascima zahtjeva:
 
 - GLM-5/5.1 — 700 ulaznih (input), 52,000 keširanih, 150 izlaznih (output) tokena po zahtjevu
 - Kimi K2.5/K2.6 — 870 ulaznih, 55,000 keširanih, 200 izlaznih tokena po zahtjevu
+- DeepSeek V4 Pro — 750 ulaznih, 82,000 keširanih, 290 izlaznih tokena po zahtjevu
+- DeepSeek V4 Flash — 790 ulaznih, 68,000 keširanih, 280 izlaznih tokena po zahtjevu
 - MiniMax M2.7/M2.5 — 300 ulaznih, 55,000 keširanih, 125 izlaznih tokena po zahtjevu
-- Qwen3.5 Plus — 410 input, 47,000 cached, 140 output tokens per request
-- Qwen3.6 Plus — 500 input, 57,000 cached, 190 output tokens per request
+- Qwen3.5 Plus — 410 ulaznih, 47,000 keširanih, 140 izlaznih tokena po zahtjevu
+- Qwen3.6 Plus — 500 ulaznih, 57,000 keširanih, 190 izlaznih tokena po zahtjevu
 - MiMo-V2-Pro — 350 ulaznih, 41,000 keširanih, 250 izlaznih tokena po zahtjevu
 - MiMo-V2-Omni — 1000 ulaznih, 60,000 keširanih, 140 izlaznih tokena po zahtjevu
 - MiMo-V2.5-Pro — 350 ulaznih, 41,000 keširanih, 250 izlaznih tokena po zahtjevu
@@ -141,24 +147,36 @@ nakon što dostignete ograničenja upotrebe umjesto blokiranja zahtjeva.
 
 Također možete pristupiti Go modelima putem sljedećih API endpointa.
 
-| Model         | Model ID      | Endpoint                                         | AI SDK Paket                |
-| ------------- | ------------- | ------------------------------------------------ | --------------------------- |
-| GLM-5.1       | glm-5.1       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5         | glm-5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5     | kimi-k2.5     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.6     | kimi-k2.6     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Pro   | mimo-v2-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Omni  | mimo-v2-omni  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5-Pro | mimo-v2.5-pro | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2.5     | mimo-v2.5     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiniMax M2.7  | minimax-m2.7  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.5  | minimax-m2.5  | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| Qwen3.6 Plus  | qwen3.6-plus  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
-| Qwen3.5 Plus  | qwen3.5-plus  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Model             | Model ID          | Endpoint                                         | AI SDK Paket                |
+| ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro       | mimo-v2-pro       | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni      | mimo-v2-omni      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro     | mimo-v2.5-pro     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5         | mimo-v2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
+| Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 
 [Model id](/docs/config/#models) u vašoj OpenCode konfiguraciji
 koristi format `opencode-go/<model-id>`. Na primjer, za Kimi K2.6, koristili biste
 `opencode-go/kimi-k2.6` u svojoj konfiguraciji.
+
+---
+
+### Modeli
+
+Pun spisak dostupnih modela i njihovih metapodataka možete preuzeti na:
+
+```
+https://opencode.ai/zen/go/v1/models
+```
 
 ---
 

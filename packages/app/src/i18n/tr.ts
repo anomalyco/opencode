@@ -232,7 +232,7 @@ export const dict = {
   "common.default": "Varsayılan",
   "common.attachment": "ek",
 
-  "prompt.placeholder.shell": "Kabuk komutu girin...",
+  "prompt.placeholder.shell": "Kabuk komutu girin... {{example}}",
   "prompt.placeholder.normal": 'Bir şeyler sorun... "{{example}}"',
   "prompt.placeholder.simple": "Bir şeyler sorun...",
   "prompt.placeholder.summarizeComments": "Yorumları özetle…",
@@ -816,8 +816,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Bir URL'den içerik getir",
   "settings.permissions.tool.websearch.title": "Web Ara",
   "settings.permissions.tool.websearch.description": "Web'de ara",
-  "settings.permissions.tool.codesearch.title": "Kod Ara",
-  "settings.permissions.tool.codesearch.description": "Web'de kod ara",
   "settings.permissions.tool.external_directory.title": "Harici Dizin",
   "settings.permissions.tool.external_directory.description": "Proje dizini dışındaki dosyalara eriş",
   "settings.permissions.tool.doom_loop.title": "Sonsuz Döngü",

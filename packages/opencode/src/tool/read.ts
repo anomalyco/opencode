@@ -1,13 +1,13 @@
-import z from "zod"
-import { Effect, Option, Scope } from "effect"
+import { Effect, Option, Schema, Scope } from "effect"
+import { NonNegativeInt } from "@/util/schema"
 import { createReadStream } from "fs"
 import * as path from "path"
 import { createInterface } from "readline"
 import * as Tool from "./tool"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { LSP } from "../lsp"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
-import { Instance } from "../project/instance"
+import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isImageAttachment, isPdfAttachment, sniffAttachmentMime } from "@/util/media"
@@ -19,10 +19,19 @@ const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 
-const parameters = z.object({
-  filePath: z.string().describe("The absolute path to the file or directory to read"),
-  offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),
-  limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
+// `offset` and `limit` were originally `z.coerce.number()` — the runtime
+// coercion was useful when the tool was called from a shell but serves no
+// purpose in the LLM tool-call path (the model emits typed JSON). The JSON
+// Schema output is identical (`type: "number"`), so the LLM view is
+// unchanged; purely CLI-facing uses must now send numbers rather than strings.
+export const Parameters = Schema.Struct({
+  filePath: Schema.String.annotate({ description: "The absolute path to the file or directory to read" }),
+  offset: Schema.optional(NonNegativeInt).annotate({
+    description: "The line number to start reading from (1-indexed)",
+  }),
+  limit: Schema.optional(NonNegativeInt).annotate({
+    description: "The maximum number of lines to read (defaults to 2000)",
+  }),
 })
 
 export const ReadTool = Tool.define(
@@ -140,19 +149,23 @@ export const ReadTool = Tool.define(
       return nonPrintableCount / bytes.length > 0.3
     }
 
-    const run = Effect.fn("ReadTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
+    const run = Effect.fn("ReadTool.execute")(function* (
+      params: Schema.Schema.Type<typeof Parameters>,
+      ctx: Tool.Context,
+    ) {
       if (params.offset !== undefined && params.offset < 1) {
         return yield* Effect.fail(new Error("offset must be greater than or equal to 1"))
       }
 
+      const instance = yield* InstanceState.context
       let filepath = params.filePath
       if (!path.isAbsolute(filepath)) {
-        filepath = path.resolve(Instance.directory, filepath)
+        filepath = path.resolve(instance.directory, filepath)
       }
       if (process.platform === "win32") {
         filepath = AppFileSystem.normalizePath(filepath)
       }
-      const title = path.relative(Instance.worktree, filepath)
+      const title = path.relative(instance.worktree, filepath)
 
       const stat = yield* fs.stat(filepath).pipe(
         Effect.catchIf(
@@ -275,8 +288,9 @@ export const ReadTool = Tool.define(
 
     return {
       description: DESCRIPTION,
-      parameters,
-      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context) => run(params, ctx).pipe(Effect.orDie),
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+        run(params, ctx).pipe(Effect.orDie),
     }
   }),
 )

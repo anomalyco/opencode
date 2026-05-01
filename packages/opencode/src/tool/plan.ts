@@ -1,9 +1,8 @@
-import z from "zod"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Question } from "../question"
-import { Session } from "../session"
+import { Session } from "@/session/session"
 import { MessageV2 } from "../session/message-v2"
 import { Provider } from "../provider"
 import { Instance } from "../project/instance"
@@ -117,6 +116,8 @@ function getLastModel(sessionID: SessionID) {
   return undefined
 }
 
+export const Parameters = Schema.Struct({})
+
 export const PlanExitTool = Tool.define(
   "plan_exit",
   Effect.gen(function* () {
@@ -127,9 +128,10 @@ export const PlanExitTool = Tool.define(
 
     return {
       description: EXIT_DESCRIPTION,
-      parameters: z.object({}),
+      parameters: Parameters,
       execute: (_params: {}, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const instance = yield* InstanceState.context
           const info = yield* session.get(ctx.sessionID)
           const planPath = Session.plan(info)
           const plan = path.relative(Instance.worktree, planPath)

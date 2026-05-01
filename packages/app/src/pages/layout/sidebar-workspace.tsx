@@ -3,8 +3,8 @@ import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "so
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { createMediaQuery } from "@solid-primitives/media"
-import { base64Encode } from "@opencode-ai/shared/util/encode"
-import { getFilename } from "@opencode-ai/shared/util/path"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { Button } from "@opencode-ai/ui/button"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -16,8 +16,9 @@ import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { loadSessionsQuery, useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { pathKey } from "@/utils/path-key"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
-import { sortedRootSessions, workspaceKey } from "./helpers"
+import { sortedRootSessions } from "./helpers"
 import { useQuery } from "@tanstack/solid-query"
 
 type InlineEditorComponent = (props: {
@@ -309,7 +310,7 @@ export const SortableWorkspace = (props: {
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
   const local = createMemo(() => props.directory === props.project.worktree)
-  const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
+  const active = createMemo(() => pathKey(props.ctx.currentDir()) === pathKey(props.directory))
   const workspaceValue = createMemo(() => {
     const branch = workspaceStore.vcs?.branch
     const name = branch ?? getFilename(props.directory)

@@ -247,7 +247,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.meta.description":
-    "Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7에 대해 넉넉한 5시간 요청 한도를 제공합니다.",
+    "Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash에 대해 넉넉한 5시간 요청 한도를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
@@ -299,7 +299,7 @@ export const dict = {
   "go.problem.item2": "넉넉한 한도와 안정적인 액세스",
   "go.problem.item3": "가능한 한 많은 프로그래머를 위해 제작됨",
   "go.problem.item4":
-    "GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7 포함",
+    "GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash 포함",
   "go.how.title": "Go 작동 방식",
   "go.how.body": "Go는 첫 달 $5, 이후 $10/월로 시작합니다. OpenCode 또는 어떤 에이전트와도 함께 사용할 수 있습니다.",
   "go.how.step1.title": "계정 생성",
@@ -323,7 +323,7 @@ export const dict = {
   "go.faq.a2": "Go에는 넉넉한 한도와 안정적인 액세스를 제공하는 아래 모델이 포함됩니다.",
   "go.faq.q3": "Go는 Zen과 같은가요?",
   "go.faq.a3":
-    "아니요. Zen은 종량제인 반면, Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공합니다.",
+    "아니요. Zen은 종량제인 반면, Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공합니다.",
   "go.faq.q4": "Go 비용은 얼마인가요?",
   "go.faq.a4.p1.beforePricing": "Go 비용은",
   "go.faq.a4.p1.pricingLink": "첫 달 $5",
@@ -346,7 +346,7 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7를 포함하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash를 포함하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
 
   "zen.api.error.rateLimitExceeded": "속도 제한을 초과했습니다. 나중에 다시 시도해 주세요.",
   "zen.api.error.modelNotSupported": "{{model}} 모델은 지원되지 않습니다",

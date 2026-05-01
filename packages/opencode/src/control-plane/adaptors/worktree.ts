@@ -1,28 +1,34 @@
-import z from "zod"
-import { AppRuntime } from "@/effect/app-runtime"
-import { Worktree } from "@/worktree"
+import { Schema } from "effect"
 import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
 
-const WorktreeConfig = z.object({
-  name: WorkspaceInfo.shape.name,
-  branch: WorkspaceInfo.shape.branch.unwrap(),
-  directory: WorkspaceInfo.shape.directory.unwrap(),
+const WorktreeConfig = Schema.Struct({
+  name: WorkspaceInfo.fields.name,
+  branch: Schema.String,
+  directory: Schema.String,
 })
+const decodeWorktreeConfig = Schema.decodeUnknownSync(WorktreeConfig)
+
+async function loadWorktree() {
+  const [{ AppRuntime }, { Worktree }] = await Promise.all([import("@/effect/app-runtime"), import("@/worktree")])
+  return { AppRuntime, Worktree }
+}
 
 export const WorktreeAdaptor: WorkspaceAdaptor = {
   name: "Worktree",
   description: "Create a git worktree",
   async configure(info) {
-    const worktree = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
+    const { AppRuntime, Worktree } = await loadWorktree()
+    const next = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
     return {
       ...info,
-      name: worktree.name,
-      branch: worktree.branch,
-      directory: worktree.directory,
+      name: next.name,
+      branch: next.branch,
+      directory: next.directory,
     }
   },
   async create(info) {
-    const config = WorktreeConfig.parse(info)
+    const { AppRuntime, Worktree } = await loadWorktree()
+    const config = decodeWorktreeConfig(info)
     await AppRuntime.runPromise(
       Worktree.Service.use((svc) =>
         svc.createFromInfo({
@@ -34,11 +40,12 @@ export const WorktreeAdaptor: WorkspaceAdaptor = {
     )
   },
   async remove(info) {
-    const config = WorktreeConfig.parse(info)
+    const { AppRuntime, Worktree } = await loadWorktree()
+    const config = decodeWorktreeConfig(info)
     await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove({ directory: config.directory })))
   },
   target(info) {
-    const config = WorktreeConfig.parse(info)
+    const config = decodeWorktreeConfig(info)
     return {
       type: "local",
       directory: config.directory,

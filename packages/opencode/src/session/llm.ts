@@ -1,27 +1,27 @@
-import { Provider } from "@/provider"
-import { Log } from "@/util"
+import { Provider } from "@/provider/provider"
+import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
-import { ProviderTransform } from "@/provider"
-import { Config } from "@/config"
-import { Instance } from "@/project/instance"
+import { ProviderTransform } from "@/provider/transform"
+import { Config } from "@/config/config"
+import { InstanceState } from "@/effect/instance-state"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { Bus } from "@/bus"
-import { Wildcard } from "@/util"
+import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
-import { InstallationVersion } from "@/installation/version"
-import { EffectBridge } from "@/effect"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { EffectBridge } from "@/effect/bridge"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
@@ -268,7 +268,7 @@ const live: Layer.Layer<
 
         const bridge = yield* EffectBridge.make()
         const approvedToolsForSession = new Set<string>()
-        workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
+        workflowModel.approvalHandler = InstanceState.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
           // Auto-approve tools that were already approved in this session
           // (prevents infinite approval loops for server-side MCP tools)
@@ -330,6 +330,10 @@ const live: Layer.Layer<
           })
         : undefined
 
+      const opencodeProjectID = input.model.providerID.startsWith("opencode")
+        ? (yield* InstanceState.context).project.id
+        : undefined
+
       return streamText({
         onError(error) {
           l.error("stream error", {
@@ -369,10 +373,11 @@ const live: Layer.Layer<
         headers: {
           ...(input.model.providerID.startsWith("opencode")
             ? {
-                "x-opencode-project": Instance.project.id,
+                "x-opencode-project": opencodeProjectID,
                 "x-opencode-session": input.sessionID,
                 "x-opencode-request": input.user.id,
                 "x-opencode-client": Flag.OPENCODE_CLIENT,
+                "User-Agent": `opencode/${InstallationVersion}`,
               }
             : {
                 "x-session-affinity": input.sessionID,
