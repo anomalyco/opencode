@@ -22,23 +22,26 @@ const log = Log.create({ service: "smart_router_plugin" })
 
 // Hook implementations
 export const smartRouterHooks: Hooks = {
-  "chat.params": async (_input, _output) => {
+  "chat.params": async (input, output) => {
     // All smart routing is handled by hermes-agent
-    // OpenCode just passes through - no modification needed
+    // OpenCode just passes through
+    return output
   },
 
-  "chat.headers": async (_input, output) => {
+  "chat.headers": async (input, output) => {
     // Signal that requests should use hermes's smart routing
-    // Modify output.headers in place
-    output.headers["x-smart-routing"] = "hermes"
+    return {
+      ...output,
+      "x-smart-routing": "hermes",  // Tell hermes to handle routing
+    }
   },
 }
 
 // Stats are fetched from hermes via /stats endpoint
 // This is called by monitoring dashboards
 export async function getSmartRouterStats(hermesUrl?: string) {
-  // Default to deployed hermes endpoint
-  const baseUrl = hermesUrl ?? "https://hermes.tusker.net.au/v1"
+  // Default to local hermes
+  const baseUrl = hermesUrl ?? "http://localhost:8642"
   
   try {
     const response = await fetch(`${baseUrl}/stats`)
