@@ -57,14 +57,18 @@ export interface Interface {
 }
 
 type ToolCall = {
-  partID: MessageV2.ToolPart["id"]
-  messageID: MessageV2.ToolPart["messageID"]
-  sessionID: MessageV2.ToolPart["sessionID"]
+  partID?: MessageV2.ToolPart["id"]
+  messageID?: MessageV2.ToolPart["messageID"]
+  sessionID?: MessageV2.ToolPart["sessionID"]
+  toolName: string
   done: Deferred.Deferred<void>
+  raw: string
+  providerExecuted?: boolean
 }
 
 interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
+  deferredCallIDs: Set<string>
   shouldBreak: boolean
   snapshot: string | undefined
   blocked: boolean
@@ -115,6 +119,7 @@ export const layer: Layer.Layer<
         sessionID: input.sessionID,
         model: input.model,
         toolcalls: {},
+        deferredCallIDs: new Set(),
         shouldBreak: false,
         snapshot: initialSnapshot,
         blocked: false,
@@ -134,12 +139,14 @@ export const layer: Layer.Layer<
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
         delete ctx.toolcalls[toolCallID]
+        ctx.deferredCallIDs.delete(toolCallID)
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
 
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
         if (!call) return
+        if (!call.partID || !call.messageID || !call.sessionID) return
         const part = yield* session.getPart({
           partID: call.partID,
           messageID: call.messageID,
@@ -150,6 +157,31 @@ export const layer: Layer.Layer<
           return
         }
         return { call, part }
+      })
+
+      const mergeToolMetadata = (...values: Array<Record<string, unknown> | undefined>) => {
+        const metadata = Object.assign({}, ...values)
+        if (Object.keys(metadata).length === 0) return
+        return metadata
+      }
+
+      const recentMatchingToolParts = Effect.fn("SessionProcessor.recentMatchingToolParts")(function* (input: {
+        tool: string
+        args: Record<string, any>
+      }) {
+        const messages = yield* MessageV2.filterCompactedEffect(ctx.sessionID)
+        const lastUserIndex = messages.findLastIndex((msg) => msg.info.role === "user")
+        return messages
+          .slice(lastUserIndex + 1)
+          .flatMap((msg) => msg.parts)
+          .filter(
+            (part): part is MessageV2.ToolPart =>
+              part.type === "tool" &&
+              part.tool === input.tool &&
+              part.state.status !== "pending" &&
+              JSON.stringify(part.state.input) === JSON.stringify(input.args),
+          )
+          .slice(-DOOM_LOOP_THRESHOLD)
       })
 
       const updateToolCall = Effect.fn("SessionProcessor.updateToolCall")(function* (
@@ -260,6 +292,23 @@ export const layer: Layer.Layer<
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
+            const done = ctx.toolcalls[value.id]?.done ?? (yield* Deferred.make<void>())
+            ctx.toolcalls[value.id] = {
+              ...ctx.toolcalls[value.id],
+              done,
+              toolName: value.toolName,
+              raw: ctx.toolcalls[value.id]?.raw ?? "",
+              providerExecuted: value.providerExecuted,
+            }
+            const { defer } = yield* plugin.trigger(
+              "tool.stream.start",
+              { tool: value.toolName, callID: value.id, sessionID: ctx.assistantMessage.sessionID, messageID: ctx.assistantMessage.id },
+              { defer: false },
+            )
+            if (defer) {
+              ctx.deferredCallIDs.add(value.id)
+              return
+            }
             const part = yield* session.updatePart({
               id: ctx.toolcalls[value.id]?.partID ?? PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -271,15 +320,69 @@ export const layer: Layer.Layer<
               metadata: value.providerExecuted ? { providerExecuted: true } : undefined,
             } satisfies MessageV2.ToolPart)
             ctx.toolcalls[value.id] = {
-              done: yield* Deferred.make<void>(),
+              ...ctx.toolcalls[value.id],
               partID: part.id,
               messageID: part.messageID,
               sessionID: part.sessionID,
             }
             return
 
-          case "tool-input-delta":
+          case "tool-input-delta": {
+            const current = ctx.toolcalls[value.id]
+            if (!current) return
+            if (!ctx.deferredCallIDs.has(value.id)) return
+            const deltaOut = yield* plugin.trigger(
+              "tool.stream.delta",
+              { tool: current.toolName, callID: value.id, raw: current.raw, delta: value.delta },
+              { raw: current.raw + value.delta } as {
+                raw: string
+                input?: unknown
+                display?: { tool: string; args: Record<string, unknown>; metadata?: Record<string, unknown> }
+              },
+            )
+            ctx.toolcalls[value.id] = { ...current, raw: deltaOut.raw }
+            if (!current.partID) {
+              if (deltaOut.input === undefined) return
+              const routedTool = deltaOut.display?.tool ?? current.toolName
+              const routedInput = deltaOut.display?.args ?? (isRecord(deltaOut.input) ? deltaOut.input : {})
+              const part = yield* session.updatePart({
+                id: PartID.ascending(),
+                messageID: ctx.assistantMessage.id,
+                sessionID: ctx.assistantMessage.sessionID,
+                type: "tool",
+                tool: routedTool,
+                callID: value.id,
+                state: { status: "pending", input: routedInput, raw: deltaOut.raw },
+                metadata: mergeToolMetadata(
+                  current.providerExecuted ? { providerExecuted: true } : undefined,
+                  deltaOut.display?.metadata,
+                ),
+              } satisfies MessageV2.ToolPart)
+              ctx.toolcalls[value.id] = {
+                ...ctx.toolcalls[value.id],
+                partID: part.id,
+                messageID: part.messageID,
+                sessionID: part.sessionID,
+              }
+              return
+            }
+            yield* updateToolCall(value.id, (match) => {
+              if (match.state.status !== "pending") return match
+              return {
+                ...match,
+                ...(deltaOut.display ? { tool: deltaOut.display.tool } : {}),
+                metadata: deltaOut.display?.metadata
+                  ? mergeToolMetadata(match.metadata, deltaOut.display.metadata)
+                  : match.metadata,
+                state: {
+                  ...match.state,
+                  ...(deltaOut.display ? { input: deltaOut.display.args } : {}),
+                  raw: deltaOut.raw,
+                },
+              }
+            })
             return
+          }
 
           case "tool-input-end":
             return
@@ -288,43 +391,72 @@ export const layer: Layer.Layer<
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
-            yield* updateToolCall(value.toolCallId, (match) => ({
+            const resolveOut = yield* plugin.trigger(
+              "tool.stream.resolve",
+              { tool: value.toolName, callID: value.toolCallId, args: value.input },
+              { tool: value.toolName, args: value.input ?? {} } as {
+                tool: string
+                args: Record<string, unknown>
+                metadata?: Record<string, unknown>
+              },
+            )
+            const updated = yield* updateToolCall(value.toolCallId, (match) => ({
               ...match,
-              tool: value.toolName,
+              tool: resolveOut.tool,
               state: {
                 ...match.state,
                 status: "running",
-                input: value.input,
+                input: resolveOut.args,
                 time: { start: Date.now() },
               },
-              metadata: match.metadata?.providerExecuted
-                ? { ...value.providerMetadata, providerExecuted: true }
-                : value.providerMetadata,
+              metadata: mergeToolMetadata(
+                value.providerMetadata,
+                match.metadata?.providerExecuted ? { providerExecuted: true } : undefined,
+                resolveOut.metadata,
+              ),
             }))
-
-            const parts = MessageV2.parts(ctx.assistantMessage.id)
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
-
-            if (
-              recentParts.length !== DOOM_LOOP_THRESHOLD ||
-              !recentParts.every(
-                (part) =>
-                  part.type === "tool" &&
-                  part.tool === value.toolName &&
-                  part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(value.input),
-              )
-            ) {
-              return
+            if (!updated) {
+              const current = ctx.toolcalls[value.toolCallId]
+              const part = yield* session.updatePart({
+                id: current?.partID ?? PartID.ascending(),
+                messageID: ctx.assistantMessage.id,
+                sessionID: ctx.assistantMessage.sessionID,
+                type: "tool",
+                tool: resolveOut.tool,
+                callID: value.toolCallId,
+                state: {
+                  status: "running",
+                  input: resolveOut.args,
+                  time: { start: Date.now() },
+                },
+                metadata: mergeToolMetadata(
+                  value.providerMetadata,
+                  current?.providerExecuted ? { providerExecuted: true } : undefined,
+                  resolveOut.metadata,
+                ),
+              } satisfies MessageV2.ToolPart)
+              ctx.toolcalls[value.toolCallId] = {
+                done: current?.done ?? (yield* Deferred.make<void>()),
+                partID: part.id,
+                messageID: part.messageID,
+                sessionID: part.sessionID,
+                toolName: value.toolName,
+                raw: current?.raw ?? "",
+                providerExecuted: current?.providerExecuted,
+              }
             }
+
+            const recentParts = yield* recentMatchingToolParts({ tool: resolveOut.tool, args: resolveOut.args })
+
+            if (recentParts.length !== DOOM_LOOP_THRESHOLD) return
 
             const agent = yield* agents.get(ctx.assistantMessage.agent)
             yield* permission.ask({
               permission: "doom_loop",
-              patterns: [value.toolName],
+              patterns: [resolveOut.tool],
               sessionID: ctx.assistantMessage.sessionID,
-              metadata: { tool: value.toolName, input: value.input },
-              always: [value.toolName],
+              metadata: { tool: resolveOut.tool, input: resolveOut.args },
+              always: [resolveOut.tool],
               ruleset: agent.permission,
             })
             return

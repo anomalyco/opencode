@@ -330,4 +330,34 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Called when a streaming tool call begins. A plugin can set `defer: true`
+   * to suppress immediate ToolPart creation and instead drive it from
+   * `tool.stream.delta` once the input is parseable.
+   */
+  "tool.stream.start"?: (
+    input: { tool: string; callID: string; sessionID: string; messageID: string },
+    output: { defer: boolean },
+  ) => Promise<void>
+  /**
+   * Called for each streaming input delta of a deferred tool call.
+   * Plugins accumulate `raw` and resolve `input` / `display` once the JSON
+   * is complete enough to parse.
+   */
+  "tool.stream.delta"?: (
+    input: { tool: string; callID: string; raw: string; delta: string },
+    output: {
+      raw: string
+      input?: unknown
+      display?: { tool: string; args: Record<string, unknown>; metadata?: Record<string, unknown> }
+    },
+  ) => Promise<void>
+  /**
+   * Called when a complete tool call is received (non-streaming path or after
+   * streaming completes). Plugins may rewrite `tool` and `args` for display.
+   */
+  "tool.stream.resolve"?: (
+    input: { tool: string; callID: string; args: unknown },
+    output: { tool: string; args: Record<string, unknown>; metadata?: Record<string, unknown> },
+  ) => Promise<void>
 }
