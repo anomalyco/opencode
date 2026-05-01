@@ -6,13 +6,24 @@ const log = Log.create({ service: "mdns" })
 let bonjour: Bonjour | undefined
 let currentPort: number | undefined
 
+// mDNS service instance names must be unique on the network. Using a fixed
+// `opencode-<port>` collides when two instances on the same LAN run on the
+// same port even with different `--mdns-domain` values. Derive the name from
+// the configured domain so distinct domains produce distinct service names.
+export function serviceName(port: number, domain?: string): string {
+  const host = (domain ?? "opencode.local").trim()
+  const stripped = host.replace(/\.local\.?$/i, "").replace(/\./g, "-")
+  const prefix = stripped || "opencode"
+  return `${prefix}-${port}`
+}
+
 export function publish(port: number, domain?: string) {
   if (currentPort === port) return
   if (bonjour) unpublish()
 
   try {
     const host = domain ?? "opencode.local"
-    const name = `opencode-${port}`
+    const name = serviceName(port, domain)
     bonjour = new Bonjour()
     const service = bonjour.publish({
       name,
