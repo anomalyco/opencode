@@ -1352,60 +1352,25 @@ export const layer = Layer.effect(
         })),
       }
 
-        function isProviderAllowed(providerID: ProviderID): boolean {
-          if (enabled && !enabled.has(providerID)) return false
-          if (disabled.has(providerID)) return false
-          return true
-        }
-
-        for (const hook of plugins) {
-          const p = hook.provider
-          const models = p?.models
-          if (!p || !models) continue
-
-          const providerID = ProviderID.make(p.id)
-          if (disabled.has(providerID)) continue
-
-          const provider = database[providerID]
-          if (!provider) continue
-          const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
-
-          provider.models = yield* Effect.promise(async () => {
-            const next = await models(toPublicInfo(provider), { auth: pluginAuth })
-            return Object.fromEntries(
-              Object.entries(next).map(([id, model]) => [
-                id,
-                {
-                  ...model,
-                  id: ModelID.make(id),
-                  providerID,
-                },
-              ]),
-            )
-          })
-        }
-
-        // extend database from config
-        for (const [providerID, provider] of configProviders) {
-          const existing = database[providerID]
-          const parsed: Info = {
-            id: ProviderID.make(providerID),
-            name: provider.name ?? existing?.name ?? providerID,
-            env: provider.env ?? existing?.env ?? [],
-            options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
-            source: "config",
-            models: existing?.models ?? {},
-          }
-
-          for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-            const existingModel = parsed.models[model.id ?? modelID]
-            const apiID = model.id ?? existingModel?.api.id ?? modelID
-            const apiNpm =
-              model.provider?.npm ??
-              provider.npm ??
-              existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible",
+      for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+        const existingModel = parsed.models[model.id ?? modelID]
+        const apiID = model.id ?? existingModel?.api.id ?? modelID
+        const apiNpm =
+          model.provider?.npm ??
+          provider.npm ??
+          existingModel?.api.npm ??
+          modelsDev[providerID]?.npm ??
+          "@ai-sdk/openai-compatible"
+        const name = iife(() => {
+          if (model.name) return model.name
+          if (model.id && model.id !== modelID) return modelID
+          return existingModel?.name ?? modelID
+        })
+        const parsedModel: Model = {
+          id: ModelID.make(modelID),
+          api: {
+            id: apiID,
+            npm: apiNpm,
             url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
@@ -1430,7 +1395,12 @@ export const layer = Layer.effect(
               video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
               pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
-            interleaved: model.interleaved ?? false,
+            interleaved:
+              model.interleaved ??
+              existingModel?.capabilities.interleaved ??
+              (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.toLowerCase().includes("deepseek")
+                ? { field: "reasoning_content" }
+                : false),
           },
           cost: {
             input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,

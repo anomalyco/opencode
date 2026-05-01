@@ -1069,6 +1069,41 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
 })
 
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
+  const deepseekModel = {
+    id: ModelID.make("deepseek/deepseek-chat"),
+    providerID: ProviderID.make("deepseek"),
+    api: {
+      id: "deepseek-chat",
+      url: "https://api.deepseek.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DeepSeek Chat",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: {
+        field: "reasoning_content",
+      },
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2023-04-01",
+  } as any
+
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
       {
@@ -1085,44 +1120,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       },
     ] as any[]
 
-    const result = ProviderTransform.message(
-      msgs,
-      {
-        id: ModelID.make("deepseek/deepseek-chat"),
-        providerID: ProviderID.make("deepseek"),
-        api: {
-          id: "deepseek-chat",
-          url: "https://api.deepseek.com",
-          npm: "@ai-sdk/openai-compatible",
-        },
-        name: "DeepSeek Chat",
-        capabilities: {
-          temperature: true,
-          reasoning: true,
-          attachment: false,
-          toolcall: true,
-          input: { text: true, audio: false, image: false, video: false, pdf: false },
-          output: { text: true, audio: false, image: false, video: false, pdf: false },
-          interleaved: {
-            field: "reasoning_content",
-          },
-        },
-        cost: {
-          input: 0.001,
-          output: 0.002,
-          cache: { read: 0.0001, write: 0.0002 },
-        },
-        limit: {
-          context: 128000,
-          output: 8192,
-        },
-        status: "active",
-        options: {},
-        headers: {},
-        release_date: "2023-04-01",
-      },
-      {},
-    )
+    const result = ProviderTransform.message(msgs, deepseekModel, {})
 
     expect(result).toHaveLength(1)
     expect(result[0].content).toEqual([
@@ -1134,6 +1132,102 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
+  })
+
+  test("DeepSeek emits empty reasoning_content when the assistant produced no reasoning", () => {
+    // Follow-up tool calls regress with HTTP 400 unless the field is echoed back,
+    // even as an empty string.
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "" },
+            {
+              type: "tool-call",
+              toolCallId: "test",
+              toolName: "bash",
+              input: { command: "echo hello" },
+            },
+          ],
+        },
+      ] as any[],
+      deepseekModel,
+      {},
+    )
+
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("")
+  })
+
+  test("DeepSeek preserves an existing reasoning_content across repeated transforms", () => {
+    // After the first pass the reasoning lives in providerOptions, not in
+    // content. Re-running the transform must not blow that field away.
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Done" }],
+          providerOptions: {
+            openaiCompatible: {
+              reasoning_content: "Stored thinking",
+            },
+          },
+        },
+      ] as any[],
+      deepseekModel,
+      {},
+    )
+
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Stored thinking")
+  })
+
+  test("Reasoning models without an interleaved.field config do not get reasoning_content injected", () => {
+    // Guard rail: only providers that explicitly configure `interleaved.field`
+    // (DeepSeek-style openai-compatible) should pick up the reasoning_content
+    // echo. OpenAI o1/o3, Claude reasoning, Gemini thinking — all reasoning=true
+    // — must stay untouched so we don't pollute their providerOptions.
+    const openaiReasoningModel = {
+      id: ModelID.make("openai/o1-mini"),
+      providerID: ProviderID.make("openai"),
+      api: {
+        id: "o1-mini",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: "OpenAI o1-mini",
+      capabilities: {
+        temperature: false,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 128000, output: 65536 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2024-09-12",
+    } as any
+
+    const result = ProviderTransform.message(
+      [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "internal thought" },
+            { type: "text", text: "Answer" },
+          ],
+        },
+      ] as any[],
+      openaiReasoningModel,
+      {},
+    )
+
+    expect((result[0].providerOptions as any)?.openai?.reasoning_content).toBeUndefined()
+    expect((result[0].providerOptions as any)?.openaiCompatible?.reasoning_content).toBeUndefined()
   })
 
   test("Non-DeepSeek providers leave reasoning content unchanged", () => {
