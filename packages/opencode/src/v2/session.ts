@@ -17,22 +17,7 @@ export type Delivery = Schema.Schema.Type<typeof Delivery>
 
 export const DefaultDelivery = "immediate" satisfies Delivery
 
-export const Info = Schema.Struct({
-  id: SessionID,
-  slug: Schema.String,
-  projectID: ProjectID,
-  workspaceID: optionalOmitUndefined(WorkspaceID),
-  directory: Schema.String,
-  path: optionalOmitUndefined(Schema.String),
-  parentID: optionalOmitUndefined(SessionID),
-  summary: optionalOmitUndefined(Summary),
-  share: optionalOmitUndefined(Share),
-  title: Schema.String,
-  version: Schema.String,
-  time: Time,
-  permission: optionalOmitUndefined(Permission.Ruleset),
-  revert: optionalOmitUndefined(Revert),
-}).annotate({ identifier: "Session" })
+export const Info = Schema.Struct({}).annotate({ identifier: "Session" })
 
 export interface Interface {
   readonly list: (input: {
