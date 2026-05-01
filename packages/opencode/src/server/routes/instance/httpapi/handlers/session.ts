@@ -19,7 +19,7 @@ import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Cause, Effect, Schema } from "effect"
+import { Cause, Effect, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
@@ -61,6 +61,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
     const bus = yield* Bus.Service
+    const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
       const instance = yield* InstanceState.context
@@ -279,24 +280,17 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
     }) {
-      const instance = yield* InstanceState.context
-      const workspace = yield* InstanceState.workspaceID
-      yield* Effect.sync(() =>
-        Effect.runFork(
-          promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
-            Effect.provideService(InstanceRef, instance),
-            Effect.provideService(WorkspaceRef, workspace),
-            Effect.catchCause((cause) =>
-              Effect.gen(function* () {
-                yield* Effect.logError("prompt_async failed", { sessionID: ctx.params.sessionID, cause })
-                yield* bus.publish(Session.Event.Error, {
-                  sessionID: ctx.params.sessionID,
-                  error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
-                })
-              }),
-            ),
-          ),
+      yield* promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            yield* Effect.logError("prompt_async failed", { sessionID: ctx.params.sessionID, cause })
+            yield* bus.publish(Session.Event.Error, {
+              sessionID: ctx.params.sessionID,
+              error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
+            })
+          }),
         ),
+        Effect.forkIn(scope, { startImmediately: true }),
       )
       return HttpApiSchema.NoContent.make()
     })
