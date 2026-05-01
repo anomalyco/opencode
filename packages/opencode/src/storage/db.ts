@@ -48,6 +48,13 @@ type Client = SQLiteBunDatabase
 
 type Journal = { sql: string; timestamp: number; name: string }[]
 
+// Drizzle's migrate overloads trigger expensive variance checks here; narrow to the journal overload we actually use.
+const migrateFromJournal = migrate as unknown as (db: SQLiteBunDatabase, entries: Journal) => void
+
+function applyMigrations(db: SQLiteBunDatabase, entries: Journal) {
+  migrateFromJournal(db, entries)
+}
+
 function time(tag: string) {
   const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
   if (!match) return 0
@@ -108,7 +115,7 @@ export const Client = lazy(() => {
         item.sql = "select 1;"
       }
     }
-    migrate(db, entries)
+    applyMigrations(db, entries)
   }
 
   return db
