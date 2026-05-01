@@ -452,6 +452,8 @@ export const dict = {
   "error.page.description": "Uygulama yüklenirken bir hata oluştu.",
   "error.page.details.label": "Hata Detayları",
   "error.page.action.restart": "Yeniden Başlat",
+  "error.page.action.report": "Hatayı Bildir",
+  "error.page.action.reported": "Hata Bildirildi",
   "error.page.action.checking": "Kontrol ediliyor...",
   "error.page.action.checkUpdates": "Güncellemeleri kontrol et",
   "error.page.action.updateTo": "{{version}} sürümüne güncelle",

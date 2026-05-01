@@ -1,15 +1,24 @@
 import { afterEach, describe, expect } from "bun:test"
+import { mkdir } from "node:fs/promises"
+import path from "node:path"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { registerAdaptor } from "../../src/control-plane/adaptors"
+import type { WorkspaceAdaptor } from "../../src/control-plane/types"
+import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instance } from "../../src/project/instance"
+import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
+import { Database } from "@/storage/db"
+import { SessionTable } from "@/session/session.sql"
 import * as Log from "@opencode-ai/core/util/log"
+import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
@@ -17,10 +26,11 @@ import { it } from "../lib/effect"
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
+const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return Server.Default().app
+function app(experimental = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 
 function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
@@ -72,8 +82,36 @@ function createTextMessage(directory: string, sessionID: SessionID, text: string
   )
 }
 
+const localAdaptor = (directory: string): WorkspaceAdaptor => ({
+  name: "Local Test",
+  description: "Create a local test workspace",
+  configure: (info) => ({ ...info, name: "local-test", directory }),
+  create: async () => {
+    await mkdir(directory, { recursive: true })
+  },
+  async remove() {},
+  target: () => ({ type: "local" as const, directory }),
+})
+
+const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
+  Effect.gen(function* () {
+    registerAdaptor(input.projectID, input.type, localAdaptor(input.directory))
+    return yield* Workspace.Service.use((svc) =>
+      svc.create({
+        type: input.type,
+        branch: null,
+        extra: null,
+        projectID: input.projectID,
+      }),
+    ).pipe(Effect.provide(Workspace.defaultLayer))
+  })
+
 function request(path: string, init?: RequestInit) {
   return Effect.promise(async () => app().request(path, init))
+}
+
+function requestWithBackend(experimental: boolean, path: string, init?: RequestInit) {
+  return Effect.promise(async () => app(experimental).request(path, init))
 }
 
 function json<T>(response: Response) {
@@ -99,6 +137,7 @@ function withTmp<A, E, R>(
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
+  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await Instance.disposeAll()
   await resetDatabase()
 })
@@ -213,6 +252,129 @@ describe("session HttpApi", () => {
             headers,
           }),
         ).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
+    "persists selected workspace id when creating a session",
+    withTmp({ git: true, config: { formatter: false, lsp: false, share: "disabled" } }, (tmp) =>
+      Effect.gen(function* () {
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+        const project = yield* Project.use.fromDirectory(tmp.path).pipe(Effect.provide(Project.defaultLayer))
+        const workspace = yield* createLocalWorkspace({
+          projectID: project.project.id,
+          type: "session-create-workspace",
+          directory: path.join(tmp.path, ".workspace-local"),
+        })
+
+        const created = yield* requestJson<Session.Info>(`${SessionPaths.create}?workspace=${workspace.id}`, {
+          method: "POST",
+          headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
+          body: JSON.stringify({ title: "workspace session" }),
+        })
+
+        expect(created).toMatchObject({ id: created.id, workspaceID: workspace.id })
+        expect(
+          yield* Effect.sync(() =>
+            Database.use((db) =>
+              db
+                .select({ workspaceID: SessionTable.workspace_id })
+                .from(SessionTable)
+                .where(eq(SessionTable.id, created.id))
+                .get(),
+            ),
+          ),
+        ).toEqual({ workspaceID: workspace.id })
+      }),
+    ),
+  )
+
+  it.live(
+    "matches legacy archived timestamp validation",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
+        const legacy = yield* createSession(tmp.path, { title: "legacy" })
+        const effect = yield* createSession(tmp.path, { title: "effect" })
+        const body = JSON.stringify({ time: { archived: -1 } })
+
+        const legacyResponse = yield* requestWithBackend(
+          false,
+          pathFor(SessionPaths.update, { sessionID: legacy.id }),
+          {
+            method: "PATCH",
+            headers,
+            body,
+          },
+        )
+        expect(legacyResponse.status).toBe(200)
+        expect((yield* json<Session.Info>(legacyResponse)).time.archived).toBe(-1)
+
+        const effectResponse = yield* requestWithBackend(true, pathFor(SessionPaths.update, { sessionID: effect.id }), {
+          method: "PATCH",
+          headers,
+          body,
+        })
+        expect(effectResponse.status).toBe(legacyResponse.status)
+        expect((yield* json<Session.Info>(effectResponse)).time.archived).toBe(-1)
+      }),
+    ),
+  )
+
+  it.live(
+    "matches legacy project-scoped path and directory precedence",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const currentDir = path.join(tmp.path, "packages", "opencode", "src")
+        yield* Effect.promise(() => mkdir(currentDir, { recursive: true }))
+
+        const pathSession = yield* createSession(currentDir)
+        const pathlessSession = yield* createSession(currentDir)
+        yield* Effect.sync(() =>
+          Database.use((db) =>
+            db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, pathlessSession.id)).run(),
+          ),
+        )
+
+        const query = new URLSearchParams({
+          scope: "project",
+          path: "packages/opencode/src",
+          directory: currentDir,
+        })
+        const headers = { "x-opencode-directory": tmp.path }
+        const legacy = (yield* json<Session.Info[]>(
+          yield* requestWithBackend(false, `${SessionPaths.list}?${query}`, { headers }),
+        )).map((item) => item.id)
+        const effect = (yield* json<Session.Info[]>(
+          yield* requestWithBackend(true, `${SessionPaths.list}?${query}`, { headers }),
+        )).map((item) => item.id)
+
+        expect(legacy).toContain(pathSession.id)
+        expect(legacy).not.toContain(pathlessSession.id)
+        expect(effect).toEqual(legacy)
+      }),
+    ),
+  )
+
+  it.live(
+    "matches legacy paginated message link headers",
+    withTmp({ git: true, config: { formatter: false, lsp: false } }, (tmp) =>
+      Effect.gen(function* () {
+        const headers = { "x-opencode-directory": tmp.path }
+        const session = yield* createSession(tmp.path, { title: "messages" })
+        yield* createTextMessage(tmp.path, session.id, "first")
+        yield* createTextMessage(tmp.path, session.id, "second")
+        const route = `${pathFor(SessionPaths.messages, { sessionID: session.id })}?limit=1`
+
+        const legacy = yield* requestWithBackend(false, route, { headers })
+        const effect = yield* requestWithBackend(true, route, { headers })
+
+        expect(effect.headers.get("x-next-cursor")).toBe(legacy.headers.get("x-next-cursor"))
+        expect(effect.headers.get("link")).toBe(legacy.headers.get("link"))
+        expect(effect.headers.get("access-control-expose-headers")).toBe(
+          legacy.headers.get("access-control-expose-headers"),
+        )
       }),
     ),
   )
