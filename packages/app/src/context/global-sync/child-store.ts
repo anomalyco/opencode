@@ -1,4 +1,4 @@
-import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
+import { createEffect, createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { OpencodeClient, VcsInfo } from "@opencode-ai/sdk/v2/client"
@@ -187,7 +187,7 @@ export function createChildStoreManager(input: {
             projectMeta: initialMeta,
             icon: initialIcon,
             get provider_ready() {
-              return providerQuery.isLoading
+              return !providerQuery.isLoading
             },
             provider: { all: [], connected: [], default: {} },
             config: {},
@@ -207,13 +207,13 @@ export function createChildStoreManager(input: {
             permission: {},
             question: {},
             get mcp_ready() {
-              return mcpQuery.isLoading
+              return !mcpQuery.isLoading
             },
             get mcp() {
               return mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
             },
             get lsp_ready() {
-              return lspQuery.isLoading
+              return !lspQuery.isLoading
             },
             get lsp() {
               return lspQuery.isLoading ? [] : (lspQuery.data ?? [])
@@ -225,6 +225,12 @@ export function createChildStoreManager(input: {
           })
           children[key] = child
           disposers.set(key, dispose)
+
+          createEffect(() => {
+            const data = providerQuery.data
+            if (!data) return
+            child[1]("provider", data)
+          })
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
