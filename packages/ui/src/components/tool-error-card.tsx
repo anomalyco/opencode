@@ -14,6 +14,7 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
   defaultOpen?: boolean
   subtitle?: string
   href?: string
+  onHrefClick?: (event: MouseEvent) => void
 }
 
 export function ToolErrorCard(props: ToolErrorCardProps) {
@@ -24,7 +25,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   })
   const open = () => state.open
   const copied = () => state.copied
-  const [split, rest] = splitProps(props, ["tool", "error", "title", "defaultOpen", "subtitle", "href"])
+  const [split, rest] = splitProps(props, ["tool", "error", "defaultOpen", "subtitle", "href", "onHrefClick"])
   const name = createMemo(() => {
     if (split.title) return split.title
     const map: Record<string, string> = {
@@ -101,7 +102,15 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         data-slot="basic-tool-tool-subtitle"
                         class="clickable subagent-link"
                         href={split.href!}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          // Always preventDefault: a same-origin <a> default
+                          // navigation reloads the entire desktop webview and
+                          // re-triggers the startup shell.
+                          e.stopPropagation()
+                          e.preventDefault()
+                          if (e.button !== 0) return
+                          split.onHrefClick?.(e)
+                        }}
                       >
                         {subtitle()}
                       </a>

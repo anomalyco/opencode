@@ -1388,6 +1388,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   defaultOpen={props.defaultOpen}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
+                  onHrefClick={() => {
+                    const id = taskId()
+                    if (!id) return
+                    data.navigateToSession?.(id)
+                  }}
                 />
               )
             })()}
@@ -1960,18 +1965,17 @@ ToolRegistry.register({
       return undefined
     })
 
-    const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
-    const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
-
-    const open = () => {
-      const id = childSessionId()
-      if (!id) return
-      if (data.navigateToSession) {
-        data.navigateToSession(id)
-        return
-      }
-      const value = href()
-      if (value) window.location.assign(value)
+    const handleLinkClick = (e: MouseEvent) => {
+      // Always preventDefault: a same-origin <a> default navigation reloads
+      // the entire document in the desktop webview, which re-triggers the
+      // startup shell. If SPA navigation is unavailable, we'd rather no-op
+      // than full-reload.
+      e.stopPropagation()
+      e.preventDefault()
+      if (e.button !== 0) return
+      const sessionId = childSessionId()
+      if (!sessionId) return
+      data.navigateToSession?.(sessionId)
     }
 
     return (
