@@ -23,7 +23,7 @@ OpenCode has a list of keybinds that you can customize through `tui.json`.
     "session_list": "<leader>l",
     "session_timeline": "<leader>g",
     "session_fork": "none",
-    "session_rename": "none",
+    "session_rename": "ctrl+r",
     "session_share": "none",
     "session_unshare": "none",
     "session_interrupt": "escape",
@@ -104,6 +104,13 @@ OpenCode has a list of keybinds that you can customize through `tui.json`.
   }
 }
 ```
+
+:::note
+On Windows, the defaults for `input_undo` and `terminal_suspend` are different:
+
+- `input_undo` defaults to `ctrl+z,ctrl+-,super+z` (the `ctrl+z` binding is added because Windows terminals do not support POSIX suspend).
+- `terminal_suspend` is forced to `none` because native Windows terminals do not support POSIX suspend.
+:::
 
 ---
 
