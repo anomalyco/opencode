@@ -102,6 +102,7 @@ export namespace ModelsDev {
     "llama",
     "kimi",
     "qwen",
+    "glm",
   ]
 
   function isAllowedModel(name: string): boolean {

@@ -1701,7 +1701,7 @@ export namespace Provider {
     return runPromise((svc) => svc.defaultModel())
   }
 
-  const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro", "kimi", "deepseek", "gml-5"]
+  const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro", "kimi", "deepseek", "glm-5"]
   export function sort<T extends { id: string }>(models: T[]) {
     return sortBy(
       models,
