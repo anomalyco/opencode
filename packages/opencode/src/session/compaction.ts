@@ -405,6 +405,7 @@ export const layer: Layer.Layer<
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
         stripMedia: true,
         toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
+        stripReasoning: true,
       })
       const ctx = yield* InstanceState.context
       const msg: MessageV2.Assistant = {
