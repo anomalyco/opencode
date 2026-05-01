@@ -6,7 +6,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show, untrack } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
@@ -233,12 +233,12 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
 
   createEffect(() => {
     if (!props.shown()) return
-    if (skillsLoading()) return
+    if (untrack(skillsLoading)) return
 
     setSkillsLoading(true)
     sdk.client.app.skills({ directory: sync.directory })
       .then((res) => {
-        setSkills(res.data ?? [])
+        if (res.ok) setSkills(res.value)
       })
       .catch(() => {
         // Handle error silently - skills will remain empty
