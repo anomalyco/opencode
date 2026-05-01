@@ -9,6 +9,7 @@ import { FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
 import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/global"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
+import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { MessageID, PartID } from "../../src/session/schema"
 import { Session } from "@/session/session"
@@ -121,6 +122,7 @@ describe("HttpApi JSON parity", () => {
           yield* Effect.forEach(
             [
               { label: "global.health", path: GlobalPaths.health, headers: {} },
+              { label: "global.config", path: GlobalPaths.config, headers: {} },
               { label: "instance.path", path: InstancePaths.path, headers },
               { label: "instance.vcs", path: InstancePaths.vcs, headers },
               { label: "instance.vcsDiff", path: `${InstancePaths.vcsDiff}?mode=git`, headers },
@@ -135,7 +137,11 @@ describe("HttpApi JSON parity", () => {
               { label: "project.current", path: "/project/current", headers },
               { label: "provider.list", path: "/provider", headers },
               { label: "provider.auth", path: "/provider/auth", headers },
+              { label: "permission.list", path: "/permission", headers },
+              { label: "question.list", path: "/question", headers },
               { label: "mcp.status", path: McpPaths.status, headers },
+              { label: "pty.shells", path: PtyPaths.shells, headers },
+              { label: "pty.list", path: PtyPaths.list, headers },
               { label: "file.list", path: `${FilePaths.list}?${new URLSearchParams({ path: "." })}`, headers },
               {
                 label: "file.content",
@@ -162,6 +168,7 @@ describe("HttpApi JSON parity", () => {
               { label: "experimental.consoleOrgs", path: ExperimentalPaths.consoleOrgs, headers },
               { label: "experimental.toolIDs", path: ExperimentalPaths.toolIDs, headers },
               { label: "experimental.worktree", path: ExperimentalPaths.worktree, headers },
+              { label: "experimental.resource", path: ExperimentalPaths.resource, headers },
             ],
             (input) => expectJsonParity({ ...input, legacy, httpapi }),
             { concurrency: 1 },
