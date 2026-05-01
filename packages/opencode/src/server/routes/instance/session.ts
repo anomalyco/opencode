@@ -13,7 +13,7 @@ import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
-import { Effect } from "effect"
+import { Cause, Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Command } from "@/command"
@@ -983,6 +983,56 @@ export const SessionRoutes = lazy(() =>
           const svc = yield* SessionPrompt.Service
           return yield* svc.command({ ...body, sessionID })
         }),
+    )
+    .post(
+      "/:sessionID/command_async",
+      describeRoute({
+        summary: "Send async command",
+        description:
+          "Send a new command to a session asynchronously, starting the session if needed and returning immediately with 204. Subscribe to Session.Event.Error filtered by sessionID before posting to receive background failures.",
+        operationId: "session.command_async",
+        responses: {
+          204: {
+            description: "Command accepted",
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator("json", zodObject(SessionPrompt.CommandInput).omit({ sessionID: true })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json") as Omit<SessionPrompt.CommandInput, "sessionID">
+        // c is only used to build OTel span attributes (method, url, params), all read
+        // synchronously before this handler returns, so there is no post-204 access to c.
+        void runRequest(
+          "SessionRoutes.command_async",
+          c,
+          SessionPrompt.Service.use((svc) => svc.command({ ...body, sessionID })).pipe(
+            Effect.catchCause((cause) => {
+              const err = Cause.squash(cause)
+              log.error("command_async failed", { sessionID, error: err })
+              return Bus.Service.use((bus) =>
+                bus.publish(Session.Event.Error, {
+                  sessionID,
+                  error: new NamedError.Unknown({
+                    message: err instanceof Error ? err.message : String(err),
+                  }).toObject(),
+                }),
+              )
+            }),
+          ),
+        ).catch((err) => {
+          log.error("command_async failed", { sessionID, error: err })
+        })
+
+        return c.body(null, 204)
+      },
     )
     .post(
       "/:sessionID/shell",
