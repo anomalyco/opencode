@@ -215,6 +215,49 @@ function normalizeMessages(
   }
 
   if (
+    model.api.npm === "@ai-sdk/amazon-bedrock" &&
+    !model.api.id.includes("anthropic") &&
+    !model.api.id.includes("mistral")
+  ) {
+    const keys = ["bedrock", model.providerID]
+    const strip = (opts: Record<string, unknown> | undefined): Record<string, unknown> | undefined => {
+      if (!opts) return opts
+      let out = opts
+      for (const k of keys) {
+        const bucket = out[k] as Record<string, unknown> | undefined
+        if (bucket?.cachePoint) {
+          const { cachePoint: _, ...rest } = bucket
+          out = { ...out, [k]: Object.keys(rest).length > 0 ? rest : undefined }
+        }
+      }
+      return out
+    }
+    return msgs.map((msg) => {
+      let content = msg.content
+      if (msg.role === "assistant" && Array.isArray(content)) {
+        content = content.filter(
+          (part) =>
+            (part as { type: string }).type !== "reasoning" &&
+            (part as { type: string }).type !== "redacted-reasoning",
+        ) as typeof content
+        if (content.length === 0)
+          content = [{ type: "text" as const, text: "..." }] as typeof content
+      }
+      if (Array.isArray(content)) {
+        content = content.map((part) => {
+          const p = part as { providerOptions?: Record<string, unknown> }
+          const cleaned = strip(p.providerOptions)
+          return cleaned !== p.providerOptions ? { ...part, providerOptions: cleaned } : part
+        }) as typeof content
+      }
+      const cleaned = strip(msg.providerOptions as Record<string, unknown> | undefined)
+      if (content !== msg.content || cleaned !== msg.providerOptions)
+        return { ...msg, content, providerOptions: cleaned } as typeof msg
+      return msg
+    })
+  }
+
+  if (
     typeof model.capabilities.interleaved === "object" &&
     model.capabilities.interleaved.field &&
     model.api.npm !== "@openrouter/ai-sdk-provider"
@@ -679,7 +722,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             {
               reasoningConfig: {
                 type: "adaptive",
-                maxReasoningEffort: effort,
+                maxReasoningEffort: effort === "xhigh" ? "max" : effort,
                 ...(model.api.id.includes("opus-4-7") || model.api.id.includes("opus-4.7")
                   ? { display: "summarized" }
                   : {}),
