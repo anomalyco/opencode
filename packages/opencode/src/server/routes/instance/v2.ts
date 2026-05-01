@@ -1,6 +1,5 @@
 import { WorkspaceID } from "@/control-plane/schema"
 import { SessionID } from "@/session/schema"
-import { Session } from "@/session/session"
 import { SessionMessage } from "@/v2/session-message"
 import { SessionV2 } from "@/v2/session"
 import { zod } from "@/util/effect-zod"
@@ -32,7 +31,7 @@ const SessionCursor = Schema.Struct({
 type SessionCursor = typeof SessionCursor.Type
 
 const SessionsResponse = Schema.Struct({
-  items: Schema.Array(Session.Info),
+  items: Schema.Array(SessionV2.Info),
   cursor: Schema.Struct({
     previous: Schema.String.pipe(Schema.optional),
     next: Schema.String.pipe(Schema.optional),
@@ -59,7 +58,7 @@ const decodeSessionCursor = Schema.decodeUnknownSync(SessionCursor)
 
 const sessionCursor = {
   encode(
-    session: Session.Info,
+    session: SessionV2.Info,
     order: "asc" | "desc",
     direction: "previous" | "next",
     filters: Pick<SessionCursor, "directory" | "path" | "workspaceID" | "roots" | "start" | "search">,

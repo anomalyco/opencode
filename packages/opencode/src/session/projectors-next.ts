@@ -5,7 +5,7 @@ import { SessionMessageUpdater } from "@/v2/session-message-updater"
 import { SessionEvent } from "@/v2/session-event"
 import * as DateTime from "effect/DateTime"
 import { SyncEvent } from "@/sync"
-import { SessionMessageTable } from "./session.sql"
+import { SessionMessageTable, SessionTable } from "./session.sql"
 import type { SessionID } from "./schema"
 import { Schema } from "effect"
 
@@ -96,6 +96,28 @@ function update(db: Database.TxOrDb, event: SessionEvent.Event) {
 }
 
 export default [
+  SyncEvent.project(SessionEvent.AgentSwitched.Sync, (db, data) => {
+    db.update(SessionTable)
+      .set({
+        agent: data.agent,
+        time_updated: DateTime.toEpochMillis(data.timestamp),
+      })
+      .where(eq(SessionTable.id, data.sessionID))
+      .run()
+  }),
+  SyncEvent.project(SessionEvent.ModelSwitched.Sync, (db, data) => {
+    db.update(SessionTable)
+      .set({
+        model: {
+          id: data.id,
+          providerID: data.providerID,
+          variant: data.variant,
+        },
+        time_updated: DateTime.toEpochMillis(data.timestamp),
+      })
+      .where(eq(SessionTable.id, data.sessionID))
+      .run()
+  }),
   SyncEvent.project(SessionEvent.Prompted.Sync, (db, data) => {
     update(db, { type: "session.next.prompted", data })
   }),

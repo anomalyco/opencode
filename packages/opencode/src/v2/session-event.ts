@@ -5,6 +5,7 @@ import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
 export { FileAttachment }
 import { ToolOutput } from "./tool-output"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 export const ID = Event.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -22,6 +23,28 @@ const Base = {
   timestamp: Schema.DateTimeUtcFromMillis,
   sessionID: SessionID,
 }
+
+export const AgentSwitched = Event.define({
+  type: "session.next.agent.switched",
+  aggregate: "sessionID",
+  version: 1,
+  schema: {
+    ...Base,
+    agent: Schema.String,
+  },
+})
+
+export const ModelSwitched = Event.define({
+  type: "session.next.model.switched",
+  aggregate: "sessionID",
+  version: 1,
+  schema: {
+    ...Base,
+    id: ModelID,
+    providerID: ProviderID,
+    variant: Schema.String.pipe(Schema.optional),
+  },
+})
 
 export const Prompted = Event.define({
   type: "session.next.prompted",
@@ -308,6 +331,8 @@ export namespace Compaction {
 
 export const All = Schema.Union(
   [
+    AgentSwitched,
+    ModelSwitched,
     Prompted,
     Synthetic,
     Step.Started,

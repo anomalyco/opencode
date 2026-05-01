@@ -1,6 +1,5 @@
 import { WorkspaceID } from "@/control-plane/schema"
 import { SessionID } from "@/session/schema"
-import { Session } from "@/session/session"
 import { SessionMessage } from "@/v2/session-message"
 import { Prompt } from "@/v2/session-prompt"
 import { SessionV2 } from "@/v2/session"
@@ -64,7 +63,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
         }),
       ]).annotate({ identifier: "V2SessionsQuery" }),
       success: Schema.Struct({
-        items: Schema.Array(Session.Info),
+        items: Schema.Array(SessionV2.Info),
         cursor: Schema.Struct({
           previous: Schema.String.pipe(Schema.optional),
           next: Schema.String.pipe(Schema.optional),

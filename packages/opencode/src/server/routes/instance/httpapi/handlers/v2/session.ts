@@ -1,5 +1,4 @@
 import { WorkspaceID } from "@/control-plane/schema"
-import { Session } from "@/session/session"
 import { SessionV2 } from "@/v2/session"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
@@ -8,7 +7,7 @@ import { InstanceHttpApi } from "../../api"
 const DefaultSessionsLimit = 50
 
 const SessionCursor = Schema.Struct({
-  id: Session.Info.fields.id,
+  id: SessionV2.Info.fields.id,
   time: Schema.Number,
   order: Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")]),
   direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
@@ -25,7 +24,7 @@ const decodeCursor = Schema.decodeUnknownSync(SessionCursor)
 
 const sessionCursor = {
   encode(
-    session: Session.Info,
+    session: SessionV2.Info,
     order: "asc" | "desc",
     direction: "previous" | "next",
     filters: Pick<SessionCursor, "directory" | "path" | "workspaceID" | "roots" | "start" | "search">,

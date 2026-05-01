@@ -1,14 +1,16 @@
 import { SessionMessageTable, SessionTable } from "@/session/session.sql"
-import type { SessionID } from "@/session/schema"
-import type { WorkspaceID } from "@/control-plane/schema"
+import { SessionID } from "@/session/schema"
+import { WorkspaceID } from "@/control-plane/schema"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/storage/db"
 import * as Database from "@/storage/db"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { SessionMessage } from "./session-message"
 import type { Prompt } from "./session-prompt"
-import { Session } from "@/session/session"
-import { SessionPrompt } from "@/session/prompt"
 import type { Event } from "./event"
+import { ProjectID } from "@/project/schema"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { SessionEvent } from "./session-event"
+import { SyncEvent } from "@/sync"
 
 export const Delivery = Schema.Union([Schema.Literal("immediate"), Schema.Literal("deferred")]).annotate({
   identifier: "Session.Delivery",
@@ -17,7 +19,38 @@ export type Delivery = Schema.Schema.Type<typeof Delivery>
 
 export const DefaultDelivery = "immediate" satisfies Delivery
 
-export const Info = Schema.Struct({}).annotate({ identifier: "Session" })
+export class Info extends Schema.Class<Info>("Session.Info")({
+  id: SessionID,
+  parentID: SessionID.pipe(Schema.optional),
+  projectID: ProjectID,
+  workspaceID: WorkspaceID.pipe(Schema.optional),
+  path: Schema.String.pipe(Schema.optional),
+  agent: Schema.String.pipe(Schema.optional),
+  model: Schema.Struct({
+    id: ModelID,
+    providerID: ProviderID,
+    variant: Schema.String.pipe(Schema.optional),
+  }).pipe(Schema.optional),
+  time: Schema.Struct({
+    created: Schema.DateTimeUtcFromMillis,
+    updated: Schema.DateTimeUtcFromMillis,
+    archived: Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+  }),
+  title: Schema.String,
+  /*
+  slug: Schema.String,
+  directory: Schema.String,
+  path: optionalOmitUndefined(Schema.String),
+  parentID: optionalOmitUndefined(SessionID),
+  summary: optionalOmitUndefined(Summary),
+  share: optionalOmitUndefined(Share),
+  title: Schema.String,
+  version: Schema.String,
+  time: Time,
+  permission: optionalOmitUndefined(Permission.Ruleset),
+  revert: optionalOmitUndefined(Revert),
+  */
+}) {}
 
 export interface Interface {
   readonly list: (input: {
@@ -34,7 +67,7 @@ export interface Interface {
       time: number
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<Session.Info[], never>
+  }) => Effect.Effect<Info[], never>
   readonly messages: (input: {
     sessionID: SessionID
     limit?: number
@@ -51,6 +84,13 @@ export interface Interface {
     prompt: Prompt
     delivery?: Delivery
   }) => Effect.Effect<SessionMessage.User, never>
+  readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
+  readonly switchModel: (input: {
+    sessionID: SessionID
+    id: ModelID
+    providerID: ProviderID
+    variant?: string
+  }) => Effect.Effect<void, never>
   readonly compact: (sessionID: SessionID) => Effect.Effect<void, never>
   readonly wait: (sessionID: SessionID) => Effect.Effect<void, never>
 }
@@ -60,10 +100,34 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const prompt = yield* SessionPrompt.Service
     const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
+
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type })
+
+    function fromRow(row: typeof SessionTable.$inferSelect): Info {
+      return {
+        id: SessionID.make(row.id),
+        projectID: ProjectID.make(row.project_id),
+        workspaceID: row.workspace_id ? WorkspaceID.make(row.workspace_id) : undefined,
+        title: row.title,
+        parentID: row.parent_id ? SessionID.make(row.parent_id) : undefined,
+        path: row.path ?? "",
+        agent: row.agent ?? undefined,
+        model: row.model
+          ? {
+              id: ModelID.make(row.model.id),
+              providerID: ProviderID.make(row.model.providerID),
+              variant: row.model.variant,
+            }
+          : undefined,
+        time: {
+          created: DateTime.makeUnsafe(row.time_created),
+          updated: DateTime.makeUnsafe(row.time_updated),
+          archived: row.time_archived ? DateTime.makeUnsafe(row.time_archived) : undefined,
+        },
+      }
+    }
 
     const result: Interface = {
       list: Effect.fn("V2Session.list")(function* (input) {
@@ -103,7 +167,7 @@ export const layer = Layer.effect(
           )
 
         const rows = input.limit === undefined ? query.all() : query.limit(input.limit).all()
-        return (direction === "previous" ? rows.toReversed() : rows).map((row) => Session.fromRow(row))
+        return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
       }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
         const direction = input.cursor?.direction ?? "next"
@@ -146,18 +210,33 @@ export const layer = Layer.effect(
         })
         return rows.map((row) => decode(row))
       }),
-      prompt: Effect.fn("V2Session.prompt")(function* (input) {
-        const delivery = input.delivery ?? DefaultDelivery
+      prompt: Effect.fn("V2Session.prompt")(function* (_input) {
         return {} as any
       }),
-      compact: Effect.fn("V2Session.compact")(function* (sessionID) {}),
-      wait: Effect.fn("V2Session.wait")(function* (sessionID) {}),
+      switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
+        SyncEvent.run(SessionEvent.AgentSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+          agent: input.agent,
+        })
+      }),
+      switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
+        SyncEvent.run(SessionEvent.ModelSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+          id: input.id,
+          providerID: input.providerID,
+          variant: input.variant,
+        })
+      }),
+      compact: Effect.fn("V2Session.compact")(function* (_sessionID) {}),
+      wait: Effect.fn("V2Session.wait")(function* (_sessionID) {}),
     }
 
     return Service.of(result)
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(SessionPrompt.defaultLayer))
+export const defaultLayer = layer
 
 export * as SessionV2 from "./session"

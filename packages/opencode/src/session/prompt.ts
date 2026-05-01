@@ -57,6 +57,9 @@ import { SessionEvent } from "@/v2/session-event"
 import { AgentAttachment, FileAttachment, Source } from "@/v2/session-prompt"
 import { SyncEvent } from "@/sync"
 import * as DateTime from "effect/DateTime"
+import { eq } from "@/storage/db"
+import * as Database from "@/storage/db"
+import { SessionTable } from "./session.sql"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -926,6 +929,34 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
         system: input.system,
         format: input.format,
+      }
+
+      const current = Database.use((db) =>
+        db
+          .select({ agent: SessionTable.agent, model: SessionTable.model })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get(),
+      )
+      if (current?.agent !== info.agent) {
+        SyncEvent.run(SessionEvent.AgentSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          agent: info.agent,
+        })
+      }
+      if (
+        current?.model?.providerID !== info.model.providerID ||
+        current.model.id !== info.model.modelID ||
+        current.model.variant !== info.model.variant
+      ) {
+        SyncEvent.run(SessionEvent.ModelSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          id: info.model.modelID,
+          providerID: info.model.providerID,
+          variant: info.model.variant,
+        })
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
