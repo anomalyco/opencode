@@ -194,8 +194,7 @@ export function resolveZedDbPath() {
 
 function scoreZedWorkspace(workspacePaths: string | null, cwd: string) {
   return zedWorkspacePaths(workspacePaths).reduce((score, item) => {
-    if (pathContains(item, cwd)) return Math.max(score, 2)
-    if (pathContains(cwd, item)) return Math.max(score, 1)
+    if (pathContains(item, cwd)) return Math.max(score, path.resolve(item).length)
     return score
   }, 0)
 }
