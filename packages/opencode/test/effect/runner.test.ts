@@ -263,14 +263,25 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
-      const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("x"))).pipe(Effect.forkChild)
-      yield* Effect.sleep("10 millis")
+      const started = yield* Deferred.make<void>()
+      const fiber = yield* runner
+        .ensureRunning(
+          Effect.gen(function* () {
+            yield* Deferred.succeed(started, undefined)
+            return yield* Effect.never.pipe(Effect.as("x"))
+          }),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(started).pipe(Effect.timeout("250 millis"))
+      yield* Effect.gen(function* () {
+        while (runner.state._tag !== "Running") yield* Effect.yieldNow
+      }).pipe(Effect.timeout("250 millis"))
 
       const exit = yield* runner.startShell(Effect.succeed("nope")).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
 
       yield* runner.cancel
-      yield* Fiber.await(fiber)
+      yield* Fiber.await(fiber).pipe(Effect.timeout("250 millis"))
     }),
   )
 
