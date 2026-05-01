@@ -1,6 +1,7 @@
 # DeskFox Privacy Policy
 
 > **Version**: v1.0 (final) | **Effective**: 2026-05-01
+> **Canonical published URL**: https://deskfox.ai/privacy (until the site is live, this markdown file in the source repository is the authoritative source)
 > **Applies to**: DeskFox v2026.4.29.2 and later (the "Usage Statistics" and "Update Check" sections describe behavior that has been live since this version, see Section 3)
 > **Related**: [`docs/installer-versions.md`](../installer-versions.md) / 中文版: [`隐私协议.md`](./隐私协议.md) / Open-source license: [`LICENSE`](../../LICENSE)
 > **Language priority**: This policy is published in both Chinese and English. **In case of conflict between the two versions, the Chinese version prevails**; this English version is provided for reference only.
