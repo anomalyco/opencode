@@ -1,0 +1,36 @@
+name: custom-ci
+
+# Fork-only CI: runs on custom/* branches and PRs targeting them.
+# Uses GitHub-hosted ubuntu-latest (no blacksmith runner dependency).
+# Path-filtered to skip pure docs/config commits where typecheck adds nothing.
+
+on:
+  push:
+    branches:
+      - "custom/**"
+  pull_request:
+    branches:
+      - "custom/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run typecheck
+        run: bun typecheck
