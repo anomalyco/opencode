@@ -1,7 +1,5 @@
-// quota.tsx — 在 session prompt 右侧显示 Copilot premium request 配额。
-// 支持两种 auth 来源：
-//  1. github-proxy（type:"api"，metadata.proxyUrl + key 走 /copilot/quota）
-//  2. github-copilot（type:"oauth"，refresh token 走 GitHub /copilot_internal/user）
+// quota.tsx — 在 session prompt 右侧显示 GitHub Copilot premium request 配额。
+// 数据源：github-copilot OAuth refresh token → GitHub /copilot_internal/user。
 //
 // 重要：opentui Slot 在初始渲染时若返回空内容，会永久跳过本插件。
 // 因此组件在数据就绪前显示 "⊘ …" 占位。
@@ -36,11 +34,7 @@ function QuotaView(props: { api: TuiPluginApi }) {
     const actual = q.entitlement - q.remaining
     const pct = Math.round((actual / Math.max(q.entitlement, 1)) * 100)
     setTone(pct > 30 ? "success" : pct > 10 ? "warning" : "error")
-    if (q.accounts_total > 0) {
-      setLabel(`[${q.accounts_active}/${q.accounts_total} | ${actual}/${q.entitlement}]`)
-    } else {
-      setLabel(`⊘ ${actual}/${q.entitlement}`)
-    }
+    setLabel(`⊘ ${actual}/${q.entitlement}`)
   }
 
   // 启动：读 auth → 首次拉取

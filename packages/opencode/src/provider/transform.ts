@@ -664,7 +664,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
       if (adaptiveEfforts) {
         let efforts = [...adaptiveEfforts]
-        if (model.providerID === "github-copilot" || model.providerID === "github-proxy") {
+        if (model.providerID === "github-copilot") {
           if (model.api.id.includes("opus-4.7")) {
             efforts = ["medium"]
           }

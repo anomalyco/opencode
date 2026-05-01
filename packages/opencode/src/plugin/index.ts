@@ -14,7 +14,6 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "@/session/session"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
-import { GithubProxyAuthPlugin } from "./github-proxy/proxy"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
@@ -58,7 +57,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pl
 const INTERNAL_PLUGINS: PluginInstance[] = [
   CodexAuthPlugin,
   CopilotAuthPlugin,
-  GithubProxyAuthPlugin,
   GitlabAuthPlugin,
   PoeAuthPlugin,
   CloudflareWorkersAuthPlugin,

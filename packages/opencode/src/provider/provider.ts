@@ -197,15 +197,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         options: {},
       }),
-    "github-proxy": () =>
-      Effect.succeed({
-        autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
-        },
-        options: {},
-      }),
     azure: Effect.fnUntraced(function* (provider: Info) {
       const env = yield* dep.env()
       const resource = iife(() => {
@@ -1635,7 +1626,7 @@ const layer: Layer.Layer<
       if (providerID.startsWith("opencode")) {
         priority = ["gpt-5-nano"]
       }
-      if (providerID.startsWith("github-copilot") || providerID.startsWith("github-proxy")) {
+      if (providerID.startsWith("github-copilot")) {
         priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
       }
       for (const item of priority) {
