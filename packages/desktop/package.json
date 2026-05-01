@@ -15,6 +15,7 @@
   "dependencies": {
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@sentry/solid": "catalog:",
     "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@tauri-apps/api": "^2",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@actions/artifact": "4.0.0",
+    "@sentry/vite-plugin": "catalog:",
     "@tauri-apps/cli": "^2",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",

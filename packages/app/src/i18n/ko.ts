@@ -401,6 +401,8 @@ export const dict = {
   "error.page.description": "애플리케이션을 로드하는 동안 오류가 발생했습니다.",
   "error.page.details.label": "오류 세부 정보",
   "error.page.action.restart": "다시 시작",
+  "error.page.action.report": "오류 신고",
+  "error.page.action.reported": "오류가 신고됨",
   "error.page.action.checking": "확인 중...",
   "error.page.action.checkUpdates": "업데이트 확인",
   "error.page.action.updateTo": "{{version}} 버전으로 업데이트",

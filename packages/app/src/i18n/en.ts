@@ -465,6 +465,8 @@ export const dict = {
   "error.page.description": "An error occurred while loading the application.",
   "error.page.details.label": "Error Details",
   "error.page.action.restart": "Restart",
+  "error.page.action.report": "Report Error",
+  "error.page.action.reported": "Error Reported",
   "error.page.action.checking": "Checking...",
   "error.page.action.checkUpdates": "Check for updates",
   "error.page.action.updateTo": "Update to {{version}}",

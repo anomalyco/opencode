@@ -14,6 +14,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Global } from "@opencode-ai/core/global"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
@@ -587,6 +588,7 @@ export const BashTool = Tool.define(
 
         return {
           description: DESCRIPTION.replaceAll("${directory}", instance.directory)
+            .replaceAll("${tmp}", Global.Path.tmp)
             .replaceAll("${os}", process.platform)
             .replaceAll("${shell}", name)
             .replaceAll("${chaining}", chain)

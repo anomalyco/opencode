@@ -3,7 +3,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
-import { mergeDeep, pipe } from "remeda"
+import { mergeDeep } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -28,6 +28,10 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 type Result = Awaited<ReturnType<typeof streamText>>
+
+// Avoid re-instantiating remeda's deep merge types in this hot LLM path; the runtime behavior is still mergeDeep.
+const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
+  mergeDeep(target, source ?? {}) as Record<string, any>
 
 export type StreamInput = {
   user: MessageV2.User
@@ -134,12 +138,7 @@ const live: Layer.Layer<
             sessionID: input.sessionID,
             providerOptions: item.options,
           })
-      const options: Record<string, any> = pipe(
-        base,
-        mergeDeep(input.model.options),
-        mergeDeep(input.agent.options),
-        mergeDeep(variant),
-      )
+      const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
       if (isOpenaiOauth) {
         options.instructions = system.join("\n")
       }

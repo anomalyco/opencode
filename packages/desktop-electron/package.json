@@ -38,6 +38,8 @@
     "@lydell/node-pty": "catalog:",
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@sentry/solid": "catalog:",
+    "@sentry/vite-plugin": "catalog:",
     "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
