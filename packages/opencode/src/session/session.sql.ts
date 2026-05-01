@@ -24,6 +24,7 @@ export const SessionTable = sqliteTable(
     parent_id: text().$type<SessionID>(),
     slug: text().notNull(),
     directory: text().notNull(),
+    path: text(),
     title: text().notNull(),
     version: text().notNull(),
     share_url: text(),

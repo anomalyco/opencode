@@ -2,8 +2,8 @@ import { generateSpecs } from "hono-openapi"
 import { Hono } from "hono"
 import { adapter } from "#hono"
 import { lazy } from "@/util/lazy"
-import { Log } from "@/util"
-import { Flag } from "@/flag/flag"
+import * as Log from "@opencode-ai/core/util/log"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { WorkspaceID } from "@/control-plane/schema"
 import { MDNS } from "./mdns"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
@@ -16,6 +16,9 @@ import { GlobalRoutes } from "./routes/global"
 import { WorkspaceRouterMiddleware } from "./workspace"
 import { InstanceMiddleware } from "./routes/instance/middleware"
 import { WorkspaceRoutes } from "./routes/control/workspace"
+import { ExperimentalHttpApiServer } from "./routes/instance/httpapi/server"
+import * as ServerBackend from "./backend"
+import type { CorsOptions } from "./cors"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -31,13 +34,74 @@ export type Listener = {
   stop: (close?: boolean) => Promise<void>
 }
 
-export const Default = lazy(() => create({}))
+type ServerApp = {
+  fetch(request: Request): Response | Promise<Response>
+  request(input: string | URL | Request, init?: RequestInit): Response | Promise<Response>
+}
 
-function create(opts: { cors?: string[] }) {
+type ListenOptions = CorsOptions & {
+  port: number
+  hostname: string
+  mdns?: boolean
+  mdnsDomain?: string
+}
+
+const DefaultHono = lazy(() =>
+  withBackend({ backend: "hono", reason: "stable" }, createHono({}, { backend: "hono", reason: "stable" })),
+)
+const DefaultHttpApi = lazy(() => createDefaultHttpApi())
+
+function select() {
+  return ServerBackend.select()
+}
+
+export const backend = select
+
+export const Default = () => {
+  const selected = select()
+  return selected.backend === "effect-httpapi" ? DefaultHttpApi() : DefaultHono()
+}
+
+function create(opts: ListenOptions) {
+  const selected = select()
+  return selected.backend === "effect-httpapi"
+    ? withBackend(selected, createHttpApi(opts))
+    : withBackend(selected, createHono(opts, selected))
+}
+
+export function Legacy(opts: CorsOptions = {}) {
+  return withBackend({ backend: "hono", reason: "explicit" }, createHono(opts, { backend: "hono", reason: "explicit" }))
+}
+
+function createDefaultHttpApi() {
+  return withBackend(select(), createHttpApi())
+}
+
+function withBackend<T extends { app: ServerApp; runtime: unknown }>(selection: ServerBackend.Selection, built: T) {
+  log.info("server backend selected", ServerBackend.attributes(selection))
+  return built
+}
+
+function createHttpApi(corsOptions?: CorsOptions) {
+  const handler = ExperimentalHttpApiServer.webHandler(corsOptions).handler
+  const app: ServerApp = {
+    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
+    request(input, init) {
+      return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
+    },
+  }
+  return {
+    app,
+    runtime: adapter.createFetch(app),
+  }
+}
+
+function createHono(opts: CorsOptions, selection: ServerBackend.Selection = ServerBackend.force(select(), "hono")) {
+  const backendAttributes = ServerBackend.attributes(selection)
   const app = new Hono()
     .onError(ErrorMiddleware)
     .use(AuthMiddleware)
-    .use(LoggerMiddleware)
+    .use(LoggerMiddleware(backendAttributes))
     .use(CompressionMiddleware)
     .use(CorsMiddleware(opts))
     .route("/global", GlobalRoutes())
@@ -54,16 +118,17 @@ function create(opts: { cors?: string[] }) {
     }
   }
 
+  const workspaceApp = new Hono()
+  const workspaceLegacyApp = new Hono()
+    .use(InstanceMiddleware())
+    .route("/experimental/workspace", WorkspaceRoutes())
+    .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket))
+  workspaceApp.route("/", workspaceLegacyApp)
+
   return {
     app: app
       .route("/", ControlPlaneRoutes())
-      .route(
-        "/",
-        new Hono()
-          .use(InstanceMiddleware())
-          .route("/experimental/workspace", WorkspaceRoutes())
-          .use(WorkspaceRouterMiddleware(runtime.upgradeWebSocket)),
-      )
+      .route("/", workspaceApp)
       .route("/", InstanceRoutes(runtime.upgradeWebSocket))
       .route("/", UIRoutes()),
     runtime,
@@ -75,7 +140,7 @@ export async function openapi() {
   // hono-openapi can see describeRoute metadata (`.route()` wraps
   // handlers when the sub-app has a custom errorHandler, which
   // strips the metadata symbol).
-  const { app } = create({})
+  const { app } = createHono({})
   const result = await generateSpecs(app, {
     documentation: {
       info: {
@@ -91,13 +156,7 @@ export async function openapi() {
 
 export let url: URL
 
-export async function listen(opts: {
-  port: number
-  hostname: string
-  mdns?: boolean
-  mdnsDomain?: string
-  cors?: string[]
-}): Promise<Listener> {
+export async function listen(opts: ListenOptions): Promise<Listener> {
   const built = create(opts)
   const server = await built.runtime.listen(opts)
 

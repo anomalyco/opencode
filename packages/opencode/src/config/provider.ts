@@ -1,8 +1,6 @@
 import { Schema } from "effect"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
-
-const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
+import { PositiveInt, withStatics } from "@/util/schema"
 
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),
@@ -23,25 +21,25 @@ export const Model = Schema.Struct({
   ),
   cost: Schema.optional(
     Schema.Struct({
-      input: Schema.Number,
-      output: Schema.Number,
-      cache_read: Schema.optional(Schema.Number),
-      cache_write: Schema.optional(Schema.Number),
+      input: Schema.Finite,
+      output: Schema.Finite,
+      cache_read: Schema.optional(Schema.Finite),
+      cache_write: Schema.optional(Schema.Finite),
       context_over_200k: Schema.optional(
         Schema.Struct({
-          input: Schema.Number,
-          output: Schema.Number,
-          cache_read: Schema.optional(Schema.Number),
-          cache_write: Schema.optional(Schema.Number),
+          input: Schema.Finite,
+          output: Schema.Finite,
+          cache_read: Schema.optional(Schema.Finite),
+          cache_write: Schema.optional(Schema.Finite),
         }),
       ),
     }),
   ),
   limit: Schema.optional(
     Schema.Struct({
-      context: Schema.Number,
-      input: Schema.optional(Schema.Number),
-      output: Schema.Number,
+      context: Schema.Finite,
+      input: Schema.optional(Schema.Finite),
+      output: Schema.Finite,
     }),
   ),
   modalities: Schema.optional(
@@ -70,7 +68,7 @@ export const Model = Schema.Struct({
   ),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 
-export class Info extends Schema.Class<Info>("ProviderConfig")({
+export const Info = Schema.Struct({
   api: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
   env: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
@@ -107,8 +105,9 @@ export class Info extends Schema.Class<Info>("ProviderConfig")({
     ),
   ),
   models: Schema.optional(Schema.Record(Schema.String, Model)),
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "ProviderConfig" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
 export * as ConfigProvider from "./provider"

@@ -1,34 +1,34 @@
-import { Cause, Duration, Effect, Layer, Schedule, Semaphore, Context, Stream } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import z from "zod"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { InstanceState } from "@/effect"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { Hash } from "@opencode-ai/shared/util/hash"
-import { Config } from "../config"
-import { Global } from "../global"
-import { Log } from "../util"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { InstanceState } from "@/effect/instance-state"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { Config } from "@/config/config"
+import { Global } from "@opencode-ai/core/global"
+import * as Log from "@opencode-ai/core/util/log"
+import { NonNegativeInt, withStatics } from "@/util/schema"
+import { zod } from "@/util/effect-zod"
 
-export const Patch = z.object({
-  hash: z.string(),
-  files: z.string().array(),
+export const Patch = Schema.Struct({
+  hash: Schema.String,
+  files: Schema.mutable(Schema.Array(Schema.String)),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Patch = typeof Patch.Type
+
+export const FileDiff = Schema.Struct({
+  file: Schema.String,
+  patch: Schema.String,
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
+  status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
 })
-export type Patch = z.infer<typeof Patch>
-
-export const FileDiff = z
-  .object({
-    file: z.string(),
-    patch: z.string(),
-    additions: z.number(),
-    deletions: z.number(),
-    status: z.enum(["added", "deleted", "modified"]).optional(),
-  })
-  .meta({
-    ref: "SnapshotFileDiff",
-  })
-export type FileDiff = z.infer<typeof FileDiff>
+  .annotate({ identifier: "SnapshotFileDiff" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type FileDiff = typeof FileDiff.Type
 
 const log = Log.create({ service: "snapshot" })
 const prune = "7.days"

@@ -45,8 +45,8 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
-import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/shared/util/path"
-import { checksum } from "@opencode-ai/shared/util/encode"
+import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { checksum } from "@opencode-ai/core/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { Spinner } from "./spinner"
@@ -354,12 +354,6 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
       return {
         icon: "window-cursor",
         title: i18n.t("ui.tool.websearch"),
-        subtitle: input.query,
-      }
-    case "codesearch":
-      return {
-        icon: "code",
-        title: i18n.t("ui.tool.codesearch"),
         subtitle: input.query,
       }
     case "task": {
@@ -1700,32 +1694,6 @@ ToolRegistry.register({
         icon="window-cursor"
         trigger={{
           title: i18n.t("ui.tool.websearch"),
-          subtitle: query(),
-          subtitleClass: "exa-tool-query",
-        }}
-      >
-        <ExaOutput output={props.output} />
-      </BasicTool>
-    )
-  },
-})
-
-ToolRegistry.register({
-  name: "codesearch",
-  render(props) {
-    const i18n = useI18n()
-    const query = createMemo(() => {
-      const value = props.input.query
-      if (typeof value !== "string") return ""
-      return value
-    })
-
-    return (
-      <BasicTool
-        {...props}
-        icon="code"
-        trigger={{
-          title: i18n.t("ui.tool.codesearch"),
           subtitle: query(),
           subtitleClass: "exa-tool-query",
         }}

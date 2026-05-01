@@ -269,7 +269,10 @@ const RULES: Rule[] = [
   },
 
   {
-    file: "packages/opencode/src/global/index.ts",
+    // upstream v1.14.x で packages/opencode/src/global/index.ts を packages/core/src/global.ts
+    // に移動 (refactor: rename shared package to core, #24309 + core: move Global module to
+    // @opencode-ai/core for centralized path management)
+    file: "packages/core/src/global.ts",
     find: `const app = "opencode"`,
     replace: `const app = "securecode"`,
   },

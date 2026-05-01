@@ -1,5 +1,10 @@
 name: "Setup Bun"
 description: "Setup Bun with caching and install dependencies"
+inputs:
+  install-flags:
+    description: "Additional flags to pass to 'bun install'"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -46,8 +51,8 @@ runs:
         # e.g. ./patches/ for standard-openapi
         # https://github.com/oven-sh/bun/issues/28147
         if [ "$RUNNER_OS" = "Windows" ]; then
-          bun install --linker hoisted
+          bun install --linker hoisted ${{ inputs.install-flags }}
         else
-          bun install
+          bun install ${{ inputs.install-flags }}
         fi
       shell: bash
