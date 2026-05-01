@@ -1479,7 +1479,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               parentSessionID: session.parentID,
               system,
               messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
-              nativeMessages: msgs,
+              // The native bridge consumes MessageV2 history. The AI SDK path
+              // appends a synthetic MAX_STEPS assistant ModelMessage below;
+              // until native supports that extra shape, fall back for parity.
+              nativeMessages: isLastStep ? undefined : msgs,
               tools,
               nativeTools,
               model,

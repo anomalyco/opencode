@@ -41,6 +41,7 @@ export type RequestInput = {
   readonly tools?: ReadonlyArray<Tool.Def>
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   readonly generation?: LLM.RequestInput["generation"]
+  readonly headers?: Record<string, string>
   readonly metadata?: Record<string, unknown>
   readonly native?: Record<string, unknown>
 }
@@ -236,13 +237,15 @@ export const request = Effect.fn("LLMNative.request")(function* (input: RequestI
       modelID: input.model.id,
     })
   }
+  const headers = { ...model.headers, ...input.headers }
+  const requestModel = Object.keys(headers).length === 0 ? model : LLM.model({ ...model, headers })
   // Cache hints, tool-id scrubbing, and other adapter-aware patches live in
   // `@opencode-ai/llm`'s `ProviderPatch` registry. Callers wire them in at
   // `client({ adapters, patches: ProviderPatch.defaults })` time so the
   // bridge stays focused on shape conversion.
   return LLM.request({
     id: input.id,
-    model,
+    model: requestModel,
     system: input.system?.filter((part) => part.trim() !== "").map(LLM.system) ?? [],
     messages: (yield* Effect.forEach(input.messages, lowerMessage)).flat(),
     tools: input.tools?.map((tool) => toolDefinition({ model: input.model, tool })) ?? [],

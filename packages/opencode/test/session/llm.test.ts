@@ -14,8 +14,9 @@ import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
-import { SessionID, MessageID } from "../../src/session/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 async function getModel(providerID: ProviderID, modelID: ModelID) {
   return AppRuntime.runPromise(
@@ -907,6 +908,140 @@ describe("session.llm.stream", () => {
         expect(body.top_p).toBe(0.9)
       },
     })
+  })
+
+  test("falls back to AI SDK when native message conversion is unsupported", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("anthropic", "claude-opus-4-6")
+    const model = source.model
+    const chunks = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg-native-fallback",
+          model: model.id,
+          usage: {
+            input_tokens: 3,
+            cache_creation_input_tokens: null,
+            cache_read_input_tokens: null,
+          },
+        },
+      },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hello" } },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+        usage: {
+          input_tokens: 3,
+          output_tokens: 2,
+          cache_creation_input_tokens: null,
+          cache_read_input_tokens: null,
+        },
+      },
+      { type: "message_stop" },
+    ]
+    const request = waitRequest("/messages", createEventResponse(chunks))
+    const originalNative = Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE
+    Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE = true
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              enabled_providers: ["anthropic"],
+              provider: {
+                anthropic: {
+                  name: "Anthropic",
+                  env: ["ANTHROPIC_API_KEY"],
+                  npm: "@ai-sdk/anthropic",
+                  api: "https://api.anthropic.com/v1",
+                  models: {
+                    [model.id]: model,
+                  },
+                  options: {
+                    apiKey: "test-anthropic-key",
+                    baseURL: `${server.url.origin}/v1`,
+                  },
+                },
+              },
+            }),
+          )
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
+          const sessionID = SessionID.make("session-test-native-fallback")
+          const agent = {
+            name: "test",
+            mode: "primary",
+            options: {},
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          } satisfies Agent.Info
+          const user = {
+            id: MessageID.make("user-native-fallback"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id },
+          } satisfies MessageV2.User
+          const nativeMessageID = MessageID.ascending()
+
+          await drain({
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            nativeMessages: [
+              {
+                info: {
+                  id: nativeMessageID,
+                  sessionID,
+                  role: "user",
+                  time: { created: 1 },
+                  agent: agent.name,
+                  model: { providerID: ProviderID.make("anthropic"), modelID: resolved.id },
+                },
+                parts: [
+                  {
+                    id: PartID.ascending(),
+                    sessionID,
+                    messageID: nativeMessageID,
+                    type: "step-start",
+                  },
+                ],
+              },
+            ],
+            tools: {},
+          })
+
+          const capture = await request
+          expect(capture.url.pathname.endsWith("/messages")).toBe(true)
+          expect(capture.body.messages).toEqual([
+            {
+              role: "user",
+              content: [{ type: "text", text: "Hello", cache_control: { type: "ephemeral" } }],
+            },
+          ])
+        },
+      })
+    } finally {
+      Flag.OPENCODE_EXPERIMENTAL_LLM_NATIVE = originalNative
+    }
   })
 
   test("sends anthropic tool_use blocks with tool_result immediately after them", async () => {

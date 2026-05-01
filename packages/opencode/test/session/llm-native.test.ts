@@ -123,7 +123,7 @@ const targetArray = (value: unknown, key: string) => isRecord(value) && Array.is
 
 describe("LLMNative.request", () => {
   it.effect("builds a text-only native LLM request", () => Effect.gen(function* () {
-    const mdl = model()
+    const mdl = model({ headers: { "x-model": "model", "x-override": "model" } })
     const provider = ProviderTest.info({ id: ProviderID.openai, key: "openai-key" }, mdl)
     const userID = MessageID.ascending()
     const assistantID = MessageID.ascending()
@@ -134,6 +134,7 @@ describe("LLMNative.request", () => {
       model: mdl,
       system: ["You are concise.", ""],
       generation: { maxTokens: 123, temperature: 0.2, topP: 0.9 },
+      headers: { "x-request": "request", "x-override": "request" },
       messages: [
         userMessage(mdl, userID, [textPart(userID, "ignored", { ignored: true }), textPart(userID, "Hello")]),
         assistantMessage(mdl, assistantID, userID, [textPart(assistantID, "Hi")]),
@@ -147,6 +148,7 @@ describe("LLMNative.request", () => {
         provider: "openai",
         protocol: "openai-responses",
         apiKey: "openai-key",
+        headers: { "x-model": "model", "x-request": "request", "x-override": "request" },
       },
       system: [{ type: "text", text: "You are concise." }],
       generation: { maxTokens: 123, temperature: 0.2, topP: 0.9 },
