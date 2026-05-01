@@ -738,20 +738,23 @@ export function Prompt(props: PromptProps) {
     const messageID = MessageID.ascending()
     let inputText = store.prompt.input
 
-    // Expand pasted text inline before submitting
+    // Expand pasted text inline before submitting.
+    // 用虚拟文本字符串内容定位、从右向左替换；不依赖 extmark.start/end 偏移
+    // 在用户编辑后是否被 opentui 准确追踪（实测会出现偏移漂移导致 hint 字符残留）。
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
     const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
 
     for (const extmark of sortedExtmarks) {
       const partIndex = store.extmarkToPartIndex.get(extmark.id)
-      if (partIndex !== undefined) {
-        const part = store.prompt.parts[partIndex]
-        if (part?.type === "text" && part.text) {
-          const before = inputText.slice(0, extmark.start)
-          const after = inputText.slice(extmark.end)
-          inputText = before + part.text + after
-        }
-      }
+      if (partIndex === undefined) continue
+      const part = store.prompt.parts[partIndex]
+      if (part?.type !== "text" || !part.text) continue
+      const virtualText = part.source?.text?.value
+      if (!virtualText) continue
+      // lastIndexOf 配合 high→low 遍历，保证多个相同 hint 时一一对应
+      const idx = inputText.lastIndexOf(virtualText)
+      if (idx === -1) continue
+      inputText = inputText.slice(0, idx) + part.text + inputText.slice(idx + virtualText.length)
     }
 
     // Filter out text parts (pasted content) since they're now expanded inline
