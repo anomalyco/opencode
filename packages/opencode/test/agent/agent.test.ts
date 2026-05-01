@@ -123,6 +123,59 @@ test("scout agent allows repo cloning and repo cache reads", async () => {
   })
 })
 
+test("reference config creates scout-backed subagents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      reference: {
+        effect: "github.com/effect/effect-smol",
+        effectFull: {
+          repository: "Effect-TS/effect",
+          branch: "main",
+        },
+        localdocs: "../docs",
+        localdocsFull: {
+          path: "../local-docs",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const effect = await load(tmp.path, (svc) => svc.get("effect"))
+      const effectFull = await load(tmp.path, (svc) => svc.get("effectFull"))
+      const local = await load(tmp.path, (svc) => svc.get("localdocs"))
+      const localFull = await load(tmp.path, (svc) => svc.get("localdocsFull"))
+
+      expect(effect).toBeDefined()
+      expect(effect?.mode).toBe("subagent")
+      expect(effect?.prompt).toContain("Repository: github.com/effect/effect-smol")
+      expect(evalPerm(effect, "repo_clone")).toBe("allow")
+
+      expect(effectFull).toBeDefined()
+      expect(effectFull?.mode).toBe("subagent")
+      expect(effectFull?.prompt).toContain("Repository: Effect-TS/effect")
+      expect(effectFull?.prompt).toContain("Branch/ref: main")
+      expect(evalPerm(effectFull, "repo_clone")).toBe("allow")
+
+      expect(local).toBeDefined()
+      expect(local?.mode).toBe("subagent")
+      expect(local?.prompt).toContain(`Local directory: ${path.resolve(tmp.path, "../docs")}`)
+      expect(
+        Permission.evaluate(
+          "external_directory",
+          path.join(path.resolve(tmp.path, "../docs"), "README.md"),
+          local!.permission,
+        ).action,
+      ).toBe("allow")
+
+      expect(localFull).toBeDefined()
+      expect(localFull?.mode).toBe("subagent")
+      expect(localFull?.prompt).toContain(`Local directory: ${path.resolve(tmp.path, "../local-docs")}`)
+    },
+  })
+})
+
 test("general agent denies todo tools", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

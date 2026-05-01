@@ -14,6 +14,9 @@ export const Parameters = Schema.Struct({
   refresh: Schema.optional(Schema.Boolean).annotate({
     description: "When true, fetches the latest remote state into the managed cache",
   }),
+  branch: Schema.optional(Schema.String).annotate({
+    description: "Branch or ref to clone and inspect",
+  }),
 })
 
 type Metadata = {
@@ -26,16 +29,19 @@ type Metadata = {
   branch?: string
 }
 
-function statusForRepository(input: { reuse: boolean; refresh?: boolean }) {
+function statusForRepository(input: { reuse: boolean; refresh?: boolean; branchMatches?: boolean }) {
   if (!input.reuse) return "cloned" as const
+  if (input.branchMatches === false) return "refreshed" as const
   if (input.refresh) return "refreshed" as const
   return "cached" as const
 }
 
 function resetTarget(input: {
+  requestedBranch?: string
   remoteHead: { code: number; stdout: string }
   branch: { code: number; stdout: string }
 }) {
+  if (input.requestedBranch) return `origin/${input.requestedBranch}`
   if (input.remoteHead.code === 0 && input.remoteHead.stdout) {
     return input.remoteHead.stdout.replace(/^refs\/remotes\//, "")
   }
@@ -43,6 +49,14 @@ function resetTarget(input: {
     return `origin/${input.branch.stdout}`
   }
   return "HEAD"
+}
+
+function validateBranch(branch: string) {
+  if (!/^[A-Za-z0-9/_.-]+$/.test(branch) || branch.startsWith("-") || branch.includes("..")) {
+    throw new Error(
+      "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
+    )
+  }
 }
 
 export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSystem.Service | Git.Service>(
@@ -57,7 +71,9 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSys
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const reference = parseRepositoryReference(params.repository)
-          if (!reference) throw new Error("Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand")
+          if (!reference)
+            throw new Error("Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand")
+          if (params.branch) validateBranch(params.branch)
 
           const repository = reference.label
           const remote = reference.remote
@@ -73,6 +89,7 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSys
               remote,
               path: localPath,
               refresh: Boolean(params.refresh),
+              branch: params.branch,
             },
           })
 
@@ -87,37 +104,74 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSys
                 const origin = hasGitDir
                   ? yield* git.run(["config", "--get", "remote.origin.url"], { cwd: localPath })
                   : undefined
-                const originReference = origin?.exitCode === 0 ? parseRepositoryReference(origin.text().trim()) : undefined
-                const reuse = hasGitDir && Boolean(originReference && sameRepositoryReference(originReference, cloneTarget))
+                const originReference =
+                  origin?.exitCode === 0 ? parseRepositoryReference(origin.text().trim()) : undefined
+                const reuse =
+                  hasGitDir && Boolean(originReference && sameRepositoryReference(originReference, cloneTarget))
                 if (exists && !reuse) {
                   yield* fs.remove(localPath, { recursive: true }).pipe(Effect.orDie)
                 }
 
-                const status = statusForRepository({ reuse, refresh: params.refresh })
+                const currentBranch = hasGitDir ? yield* git.branch(localPath) : undefined
+                const status = statusForRepository({
+                  reuse,
+                  refresh: params.refresh,
+                  branchMatches: params.branch ? currentBranch === params.branch : undefined,
+                })
 
                 if (status === "cloned") {
-                  const clone = yield* git.run(["clone", "--depth", "100", remote, localPath], { cwd: path.dirname(localPath) })
+                  const clone = yield* git.run(
+                    [
+                      "clone",
+                      "--depth",
+                      "100",
+                      ...(params.branch ? ["--branch", params.branch] : []),
+                      remote,
+                      localPath,
+                    ],
+                    { cwd: path.dirname(localPath) },
+                  )
                   if (clone.exitCode !== 0) {
-                    throw new Error(clone.stderr.toString().trim() || clone.text().trim() || `Failed to clone ${repository}`)
+                    throw new Error(
+                      clone.stderr.toString().trim() || clone.text().trim() || `Failed to clone ${repository}`,
+                    )
                   }
                 }
 
                 if (status === "refreshed") {
                   const fetch = yield* git.run(["fetch", "--all", "--prune"], { cwd: localPath })
                   if (fetch.exitCode !== 0) {
-                    throw new Error(fetch.stderr.toString().trim() || fetch.text().trim() || `Failed to refresh ${repository}`)
+                    throw new Error(
+                      fetch.stderr.toString().trim() || fetch.text().trim() || `Failed to refresh ${repository}`,
+                    )
+                  }
+
+                  if (params.branch) {
+                    const checkout = yield* git.run(["checkout", "-B", params.branch, `origin/${params.branch}`], {
+                      cwd: localPath,
+                    })
+                    if (checkout.exitCode !== 0) {
+                      throw new Error(
+                        checkout.stderr.toString().trim() ||
+                          checkout.text().trim() ||
+                          `Failed to checkout ${params.branch}`,
+                      )
+                    }
                   }
 
                   const remoteHead = yield* git.run(["symbolic-ref", "refs/remotes/origin/HEAD"], { cwd: localPath })
                   const branch = yield* git.run(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: localPath })
                   const target = resetTarget({
+                    requestedBranch: params.branch,
                     remoteHead: { code: remoteHead.exitCode, stdout: remoteHead.text().trim() },
                     branch: { code: branch.exitCode, stdout: branch.text().trim() },
                   })
 
                   const reset = yield* git.run(["reset", "--hard", target], { cwd: localPath })
                   if (reset.exitCode !== 0) {
-                    throw new Error(reset.stderr.toString().trim() || reset.text().trim() || `Failed to reset ${repository}`)
+                    throw new Error(
+                      reset.stderr.toString().trim() || reset.text().trim() || `Failed to reset ${repository}`,
+                    )
                   }
                 }
 
