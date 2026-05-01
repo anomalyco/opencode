@@ -34,11 +34,11 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
 function SkillItem(props: { skill: { name: string; description: string } }) {
   return (
     <div class="group relative flex items-center gap-2 w-full px-2 py-1 hover:bg-surface-raised-base-hover rounded-md cursor-default">
-      <div class="size-1.5 rounded-full shrink-0 bg-icon-info-base" />
+      <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
       <span class="text-14-regular text-text-base truncate">{props.skill.name}</span>
 
       {/* Tooltip on hover */}
-      <div class="absolute left-0 top-full mt-1 hidden group-hover:block z-50">
+      <div class="absolute left-full top-0 ml-2 hidden group-hover:block z-[100] pointer-events-none">
         <div class="bg-surface-raised-base border border-border-base rounded-md p-2 shadow-lg w-48">
           <div class="text-14-regular text-text-base font-medium">{props.skill.name}</div>
           <div class="text-12-regular text-text-muted mt-1">{props.skill.description}</div>
@@ -269,7 +269,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
       <Tabs
         aria-label={language.t("status.popover.ariaLabel")}
-        class="tabs bg-background-strong rounded-xl overflow-hidden"
+        class="tabs bg-background-strong rounded-xl"
         data-component="tabs"
         data-active="servers"
         defaultValue="servers"
@@ -484,7 +484,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                 {/* Global Skills Section */}
                 <Show when={globalSkills().length > 0}>
                   <div class="text-12-regular text-text-muted mb-2">
-                    🌍 {language.t("status.popover.skills.global")}
+                    {language.t("status.popover.skills.global")}
                   </div>
                   <For each={globalSkills()}>
                     {(skill) => <SkillItem skill={skill} />}
@@ -494,7 +494,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                 {/* Project Skills Section */}
                 <Show when={projectSkills().length > 0}>
                   <div class="text-12-regular text-text-muted mb-2 mt-4">
-                    📁 {language.t("status.popover.skills.project")}
+                    {language.t("status.popover.skills.project")}
                   </div>
                   <For each={projectSkills()}>
                     {(skill) => <SkillItem skill={skill} />}

@@ -11,49 +11,49 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "24"
 
       - name: Install dependencies
         run: bun install
+        timeout-minutes: 15
 
-      - name: Ensure native directory exists
-        run: mkdir -p packages/desktop-electron/native
+      - name: Build CLI (Windows x64)
+        run: bun ./packages/opencode/script/build.ts --single --skip-install
+        env:
+          OPENCODE_CHANNEL: dev
+        timeout-minutes: 10
+
+      - name: Copy CLI binary to Tauri sidecar folder
         shell: bash
+        run: |
+          mkdir -p packages/desktop/src-tauri/sidecars
+          cp packages/opencode/dist/opencode-windows-x64/bin/opencode.exe \
+             packages/desktop/src-tauri/sidecars/opencode-cli-x86_64-pc-windows-msvc.exe
 
-      - name: Prepare desktop-electron
-        run: bun ./scripts/prepare.ts
-        working-directory: packages/desktop-electron
-        env:
-          OPENCODE_CHANNEL: dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
-      - name: Build desktop-electron
-        run: bun run build
-        working-directory: packages/desktop-electron
-        env:
-          OPENCODE_CHANNEL: dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+          shared-key: x86_64-pc-windows-msvc
 
-      - name: Package with electron-builder (NSIS installer)
-        run: npx electron-builder --win --config electron-builder.config.ts --publish never
-        working-directory: packages/desktop-electron
+      - name: Build Tauri desktop (NSIS installer)
+        working-directory: packages/desktop
+        run: bun run tauri build --target x86_64-pc-windows-msvc --verbose
         timeout-minutes: 30
-        env:
-          OPENCODE_CHANNEL: dev
 
-      - name: Upload installer
+      - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
           name: opencode-desktop-win-x64-installer
-          path: |
-            packages/desktop-electron/dist/*.exe
-            packages/desktop-electron/dist/*.yml
+          path: packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/
