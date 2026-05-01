@@ -28,15 +28,45 @@ const PositionSchema = z.object({
   character: z.number(),
 })
 
-const EditorSelectionSchema = z.object({
+const EditorSelectionRangeSchema = z.object({
   text: z.string(),
-  filePath: z.string(),
-  source: z.enum(["websocket", "zed"]).optional(),
   selection: z.object({
     start: PositionSchema,
     end: PositionSchema,
   }),
 })
+
+const EditorSelectionSchema = z
+  .union([
+    z.object({
+      filePath: z.string(),
+      source: z.enum(["websocket", "zed"]).optional(),
+      ranges: z.array(EditorSelectionRangeSchema).min(1),
+    }),
+    z.object({
+      text: z.string(),
+      filePath: z.string(),
+      source: z.enum(["websocket", "zed"]).optional(),
+      selection: z.object({
+        start: PositionSchema,
+        end: PositionSchema,
+      }),
+    }),
+  ])
+  .transform((value) =>
+    "ranges" in value
+      ? value
+      : {
+          filePath: value.filePath,
+          source: value.source,
+          ranges: [
+            {
+              text: value.text,
+              selection: value.selection,
+            },
+          ],
+        },
+  )
 
 const EditorMentionSchema = z.object({
   filePath: z.string(),
@@ -262,6 +292,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         return store.selection
       },
       clearSelection() {
+        lastZedSelectionKey = undefined
         setStore("selection", undefined)
       },
       onMention(listener: (mention: EditorMention) => void) {
@@ -352,15 +383,17 @@ function readEditorLockFile(filePath: string): EditorLockFile | undefined {
   }
 }
 
-function editorSelectionKey(selection: EditorSelection | undefined) {
+export function editorSelectionKey(selection: EditorSelection | undefined) {
   if (!selection) return ""
   return [
     selection.filePath,
-    selection.selection.start.line,
-    selection.selection.start.character,
-    selection.selection.end.line,
-    selection.selection.end.character,
-    selection.text,
+    ...selection.ranges.flatMap((range) => [
+      range.selection.start.line,
+      range.selection.start.character,
+      range.selection.end.line,
+      range.selection.end.character,
+      range.text,
+    ]),
   ].join("\0")
 }
 

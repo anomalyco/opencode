@@ -16,7 +16,7 @@ import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
 import { serviceUse } from "@/effect/service-use"
 
 const log = Log.create({ service: "project" })
@@ -24,13 +24,13 @@ const log = Log.create({ service: "project" })
 const ProjectVcs = Schema.Literal("git")
 
 const ProjectIcon = Schema.Struct({
-  url: Schema.optional(Schema.String),
-  override: Schema.optional(Schema.String),
-  color: Schema.optional(Schema.String),
+  url: optionalOmitUndefined(Schema.String),
+  override: optionalOmitUndefined(Schema.String),
+  color: optionalOmitUndefined(Schema.String),
 })
 
 const ProjectCommands = Schema.Struct({
-  start: Schema.optional(
+  start: optionalOmitUndefined(
     Schema.String.annotate({ description: "Startup script to run when creating a new workspace (worktree)" }),
   ),
 })
@@ -38,16 +38,16 @@ const ProjectCommands = Schema.Struct({
 const ProjectTime = Schema.Struct({
   created: NonNegativeInt,
   updated: NonNegativeInt,
-  initialized: Schema.optional(NonNegativeInt),
+  initialized: optionalOmitUndefined(NonNegativeInt),
 })
 
 export const Info = Schema.Struct({
   id: ProjectID,
   worktree: Schema.String,
-  vcs: Schema.optional(ProjectVcs),
-  name: Schema.optional(Schema.String),
-  icon: Schema.optional(ProjectIcon),
-  commands: Schema.optional(ProjectCommands),
+  vcs: optionalOmitUndefined(ProjectVcs),
+  name: optionalOmitUndefined(Schema.String),
+  icon: optionalOmitUndefined(ProjectIcon),
+  commands: optionalOmitUndefined(ProjectCommands),
   time: ProjectTime,
   sandboxes: Schema.Array(Schema.String),
 })
