@@ -234,7 +234,7 @@ export function Session() {
     return false
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentPadding = tuiConfig.content_padding ?? 2
+  const contentPadding = tuiConfig.content_padding
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - contentPadding * 2)
   const providers = createMemo(() => Model.index(sync.data.provider))
 

@@ -34,7 +34,7 @@ const KeymapLeaderTimeout = Schema.Int.check(Schema.isGreaterThan(0)).annotate({
 })
 
 export const ContentPadding = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(20)).annotate({
-  description: "Horizontal padding (in columns) for the main content area (default: 2)",
+  description: "Horizontal padding (in columns) for the main content area",
 })
 
 const TuiAttentionSounds = Schema.Struct({
@@ -79,5 +79,5 @@ export const TuiInfo = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
-  content_padding: Schema.optional(ContentPadding),
+  content_padding: Schema.optionalWith(ContentPadding, { default: () => 2 }),
 })
