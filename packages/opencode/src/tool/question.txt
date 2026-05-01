@@ -1,10 +1,7 @@
-Use this tool when you need to ask the user questions during execution. This allows you to:
-1. Gather user preferences or requirements
-2. Clarify ambiguous instructions
-3. Get decisions on implementation choices as you work
-4. Offer choices to the user about what direction to take.
+Ask the user questions during execution for preferences, clarification, implementation decisions, or direction choices.
 
-Usage notes:
-- When `custom` is enabled (default), a "Type your own answer" option is added automatically; don't include "Other" or catch-all options
-- Answers are returned as arrays of labels; set `multiple: true` to allow selecting more than one
-- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
+# Rules
+- With `custom` enabled, a free-form answer option is added automatically; do not add "Other" or catch-all options.
+- Answers return as an array of labels.
+- Set `multiple: true` for multi-select.
+- Put the recommended option first and add `(Recommended)` to its label.
