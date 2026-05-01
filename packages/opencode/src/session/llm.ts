@@ -397,6 +397,24 @@ const live: Layer.Layer<
                 }
                 return args.params
               },
+              async wrapStream({ doStream }) {
+                const result = await doStream()
+                const started = new Set<string>()
+                const fix = new TransformStream({
+                  transform(chunk, controller) {
+                    if (chunk.type === "reasoning-start") started.add(chunk.id)
+                    if (
+                      (chunk.type === "reasoning-delta" || chunk.type === "reasoning-end") &&
+                      !started.has(chunk.id)
+                    ) {
+                      started.add(chunk.id)
+                      controller.enqueue({ type: "reasoning-start", id: chunk.id })
+                    }
+                    controller.enqueue(chunk)
+                  },
+                })
+                return { ...result, stream: result.stream.pipeThrough(fix) }
+              },
             },
           ],
         }),
