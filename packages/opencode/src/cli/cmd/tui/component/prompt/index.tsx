@@ -565,7 +565,7 @@ export function Prompt(props: PromptProps) {
         : undefined
     input.traits = {
       capture,
-      suspend: !!props.disabled || store.mode === "shell",
+      suspend: !!props.disabled,
       status: store.mode === "shell" ? "SHELL" : undefined,
     }
   })
