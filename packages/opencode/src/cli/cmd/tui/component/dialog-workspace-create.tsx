@@ -10,7 +10,7 @@ import { errorMessage } from "@/util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 
-type Adaptor = {
+type Adapter = {
   type: string
   name: string
   description: string
@@ -108,26 +108,26 @@ export function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) =
   const sdk = useSDK()
   const toast = useToast()
   const [creating, setCreating] = createSignal<string>()
-  const [adaptors, setAdaptors] = createSignal<Adaptor[]>()
+  const [adapters, setAdapters] = createSignal<Adapter[]>()
 
   onMount(() => {
     dialog.setSize("medium")
     void (async () => {
       const dir = sync.path.directory || sdk.directory
-      const url = new URL("/experimental/workspace/adaptor", sdk.url)
+      const url = new URL("/experimental/workspace/adapter", sdk.url)
       if (dir) url.searchParams.set("directory", dir)
       const res = await sdk
         .fetch(url)
-        .then((x) => x.json() as Promise<Adaptor[]>)
+        .then((x) => x.json() as Promise<Adapter[]>)
         .catch(() => undefined)
       if (!res) {
         toast.show({
-          message: "Failed to load workspace adaptors",
+          message: "Failed to load workspace adapters",
           variant: "error",
         })
         return
       }
-      setAdaptors(res)
+      setAdapters(res)
     })()
   })
 
@@ -142,13 +142,13 @@ export function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) =
         },
       ]
     }
-    const list = adaptors()
+    const list = adapters()
     if (!list) {
       return [
         {
           title: "Loading workspaces...",
           value: "loading" as const,
-          description: "Fetching available workspace adaptors",
+          description: "Fetching available workspace adapters",
         },
       ]
     }

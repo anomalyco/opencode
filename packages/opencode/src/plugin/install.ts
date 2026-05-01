@@ -9,7 +9,7 @@ import {
 
 import * as ConfigPaths from "@/config/paths"
 import { Global } from "@opencode-ai/core/global"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { isRecord } from "@/util/record"
 

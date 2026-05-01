@@ -1,21 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
+import { Server } from "../../src/server/server"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return InstanceRoutes(websocket)
+function app(experimental = true) {
+  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
+  return experimental ? Server.Default().app : Server.Legacy().app
 }
 
 async function readFirstChunk(response: Response) {
@@ -46,5 +44,14 @@ describe("event HttpApi bridge", () => {
     expect(response.headers.get("x-accel-buffering")).toBe("no")
     expect(response.headers.get("x-content-type-options")).toBe("nosniff")
     expect(await readFirstChunk(response)).toContain('data: {"type":"server.connected","properties":{}}\n\n')
+  })
+
+  test("matches legacy first event frame", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
+    const legacy = await app(false).request(EventPaths.event, { headers })
+    const effect = await app(true).request(EventPaths.event, { headers })
+
+    expect(await readFirstChunk(effect)).toBe(await readFirstChunk(legacy))
   })
 })

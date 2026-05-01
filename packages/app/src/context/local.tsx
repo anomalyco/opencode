@@ -382,7 +382,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
-            variant: msg.model.variant ?? null,
+            variant: msg.model?.variant ?? null,
           })
         },
       },
