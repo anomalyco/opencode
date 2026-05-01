@@ -36,7 +36,9 @@
 #define AppPublisher   "DeskFox"
 #define AppExeName     "DeskFox.exe"
 #define ReleaseDir     "..\..\desktop\src-tauri\target\release"
-#define IconFile       "..\src\assets\icons\prod\icon.ico"
+; IconFile 按 AppEnv 走,跟 AppId/AppName 三档身份一致 — 否则 dev/beta build 时会找不到 prod 的 icon.ico
+; (icon.ico 由 apply-icons.ps1 -Env <env> 现场生成到对应 env 子目录,被 .gitignore 不进 git)
+#define IconFile       "..\src\assets\icons\" + AppEnv + "\icon.ico"
 
 [Setup]
 AppId={#AppId}
