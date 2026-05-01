@@ -248,16 +248,19 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
       })
   })
 
+  const matchLocation = (location: string, pattern: string) =>
+    location.replace(/\\/g, "/").includes(pattern)
+
   const globalSkills = createMemo(() =>
     skills().filter((s) =>
-      s.location.includes(".claude/skills") ||
-      s.location.includes(".agents/skills") ||
-      s.location.includes(".config/opencode/skills")
+      matchLocation(s.location, ".claude/skills") ||
+      matchLocation(s.location, ".agents/skills") ||
+      matchLocation(s.location, ".config/opencode/skills")
     )
   )
 
   const projectSkills = createMemo(() =>
-    skills().filter((s) => s.location.includes(".opencode/skills"))
+    skills().filter((s) => matchLocation(s.location, ".opencode/skills"))
   )
 
   const skillsCount = createMemo(() => skills().length)
