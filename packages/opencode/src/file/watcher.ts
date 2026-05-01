@@ -10,7 +10,6 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Git } from "@/git"
-import { Instance } from "@/project/instance"
 import { lazy } from "@/util/lazy"
 import { Config } from "@/config/config"
 import { FileIgnore } from "./ignore"
@@ -76,25 +75,27 @@ export const layer = Layer.effect(
         function* () {
           if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return
 
-          log.info("init", { directory: Instance.directory })
+          const ctx = yield* InstanceState.context
+
+          log.info("init", { directory: ctx.directory })
 
           const backend = getBackend()
           if (!backend) {
-            log.error("watcher backend not supported", { directory: Instance.directory, platform: process.platform })
+            log.error("watcher backend not supported", { directory: ctx.directory, platform: process.platform })
             return
           }
 
           const w = watcher()
           if (!w) return
 
-          log.info("watcher backend", { directory: Instance.directory, platform: process.platform, backend })
+          log.info("watcher backend", { directory: ctx.directory, platform: process.platform, backend })
 
           const subs: ParcelWatcher.AsyncSubscription[] = []
           yield* Effect.addFinalizer(() =>
             Effect.promise(() => Promise.allSettled(subs.map((sub) => sub.unsubscribe()))),
           )
 
-          const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
+          const cb: ParcelWatcher.SubscribeCallback = InstanceState.bind((err, evts) => {
             if (err) return
             for (const evt of evts) {
               if (evt.type === "create") void Bus.publish(Event.Updated, { file: evt.path, event: "add" })
@@ -122,19 +123,18 @@ export const layer = Layer.effect(
           const cfgIgnores = cfg.watcher?.ignore ?? []
 
           if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-            yield* subscribe(Instance.directory, [
+            yield* subscribe(ctx.directory, [
               ...FileIgnore.PATTERNS,
               ...cfgIgnores,
-              ...protecteds(Instance.directory),
+              ...protecteds(ctx.directory),
             ])
           }
 
-          if (Instance.project.vcs === "git") {
+          if (ctx.project.vcs === "git") {
             const result = yield* git.run(["rev-parse", "--git-dir"], {
-              cwd: Instance.project.worktree,
+              cwd: ctx.worktree,
             })
-            const vcsDir =
-              result.exitCode === 0 ? path.resolve(Instance.project.worktree, result.text().trim()) : undefined
+            const vcsDir = result.exitCode === 0 ? path.resolve(ctx.worktree, result.text().trim()) : undefined
             if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                 (entry) => entry !== "HEAD",
