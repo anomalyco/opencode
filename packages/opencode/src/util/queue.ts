@@ -18,15 +18,54 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
   }
 }
 
-export async function work<T>(concurrency: number, items: T[], fn: (item: T) => Promise<void>) {
+export interface WorkOptions {
+  signal?: AbortSignal
+}
+
+export interface WorkResult<T> {
+  item: T
+  status: "fulfilled" | "rejected"
+  error?: Error
+}
+
+export async function work<T>(
+  concurrency: number,
+  items: T[],
+  fn: (item: T) => Promise<void>,
+  options?: WorkOptions,
+): Promise<WorkResult<T>[]> {
+  const results: WorkResult<T>[] = []
   const pending = [...items]
-  await Promise.all(
-    Array.from({ length: concurrency }, async () => {
-      while (true) {
-        const item = pending.pop()
-        if (item === undefined) return
+  const signal = options?.signal
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      if (signal?.aborted) return
+
+      const item = pending.shift()
+      if (item === undefined) return
+
+      try {
         await fn(item)
+        results.push({ item, status: "fulfilled" })
+      } catch (err) {
+        results.push({
+          item,
+          status: "rejected",
+          error: err instanceof Error ? err : new Error(String(err)),
+        })
       }
-    }),
-  )
+    }
+  })
+
+  if (signal) {
+    signal.addEventListener("abort", () => {
+      for (const worker of workers) {
+        worker.catch(() => {})
+      }
+    })
+  }
+
+  await Promise.all(workers)
+  return results
 }
