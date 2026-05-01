@@ -548,21 +548,24 @@ export const layer: Layer.Layer<
           // BEFORE the stream starts. This catches overflow even when the
           // provider doesn't report accurate token counts or silently accepts
           // overflows (e.g., z.ai, some OpenAI-compatible providers).
-          const preStreamPayload = JSON.stringify([
-            ...(streamInput.system ?? []).map((s: unknown) => s),
-            ...streamInput.messages,
-          ])
-          const preStreamTokens = Token.estimate(preStreamPayload)
-          const contextLimit = input.model.limit.context || 128_000
-          const compactionThreshold = Math.floor(contextLimit * 0.85)
-          if (preStreamTokens >= compactionThreshold) {
-            ctx.needsCompaction = true
-            slog.info("proactive compaction triggered", {
-              estimatedTokens: preStreamTokens,
-              threshold: compactionThreshold,
-              contextLimit,
-            })
-            return "compact" as const
+          // Skipped when the model doesn't report a context limit (0).
+          const contextLimit = input.model.limit.context
+          if (contextLimit > 0) {
+            const preStreamPayload = JSON.stringify([
+              ...(streamInput.system ?? []).map((s: unknown) => s),
+              ...streamInput.messages,
+            ])
+            const preStreamTokens = Token.estimate(preStreamPayload)
+            const compactionThreshold = Math.floor(contextLimit * 0.85)
+            if (preStreamTokens >= compactionThreshold) {
+              ctx.needsCompaction = true
+              slog.info("proactive compaction triggered", {
+                estimatedTokens: preStreamTokens,
+                threshold: compactionThreshold,
+                contextLimit,
+              })
+              return "compact" as const
+            }
           }
 
           yield* Effect.gen(function* () {
