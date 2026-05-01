@@ -43,6 +43,7 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import { useTuiConfig } from "@tui/context/tui-config"
 
 export type PromptProps = {
   sessionID?: string
@@ -106,6 +107,9 @@ export function Prompt(props: PromptProps) {
   const keybind = useKeybind()
   const local = useLocal()
   const args = useArgs()
+  const tuiConfig = useTuiConfig()
+  let lastExitAttempt = 0
+  const EXIT_CONFIRM_WINDOW_MS = 2000
   const sdk = useSDK()
   const editor = useEditorContext()
   const route = useRoute()
@@ -1108,6 +1112,19 @@ export function Prompt(props: PromptProps) {
                 }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
+                    if (tuiConfig.confirm_exit) {
+                      const now = Date.now()
+                      if (now - lastExitAttempt > EXIT_CONFIRM_WINDOW_MS) {
+                        lastExitAttempt = now
+                        toast.show({
+                          variant: "info",
+                          message: "Press again to exit",
+                          duration: EXIT_CONFIRM_WINDOW_MS,
+                        })
+                        e.preventDefault()
+                        return
+                      }
+                    }
                     await exit()
                     // Don't preventDefault - let textarea potentially handle the event
                     e.preventDefault()

@@ -24,6 +24,12 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  confirm_exit: z
+    .boolean()
+    .optional()
+    .describe(
+      "Require pressing the app_exit keybind (e.g. Ctrl+C) twice within 2s to exit, to avoid accidental quits (default: false)",
+    ),
 })
 
 export const TuiInfo = z
