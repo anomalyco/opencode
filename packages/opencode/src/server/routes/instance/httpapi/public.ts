@@ -28,6 +28,131 @@ type OpenApiSpec = {
   paths?: Record<string, OpenApiPathItem>
 }
 
+const MethodOrder = ["get", "post", "put", "delete", "patch"] as const
+
+const LegacyOperationOrder = [
+  ["get", "/global/health"],
+  ["get", "/global/event"],
+  ["get", "/global/config"],
+  ["patch", "/global/config"],
+  ["post", "/global/dispose"],
+  ["post", "/global/upgrade"],
+  ["put", "/auth/{providerID}"],
+  ["delete", "/auth/{providerID}"],
+  ["post", "/log"],
+  ["get", "/experimental/workspace/adaptor"],
+  ["get", "/experimental/workspace"],
+  ["post", "/experimental/workspace"],
+  ["get", "/experimental/workspace/status"],
+  ["delete", "/experimental/workspace/{id}"],
+  ["post", "/experimental/workspace/{id}/session-restore"],
+  ["get", "/project"],
+  ["get", "/project/current"],
+  ["post", "/project/git/init"],
+  ["patch", "/project/{projectID}"],
+  ["get", "/pty/shells"],
+  ["get", "/pty"],
+  ["post", "/pty"],
+  ["get", "/pty/{ptyID}"],
+  ["put", "/pty/{ptyID}"],
+  ["delete", "/pty/{ptyID}"],
+  ["get", "/pty/{ptyID}/connect"],
+  ["get", "/config"],
+  ["patch", "/config"],
+  ["get", "/config/providers"],
+  ["get", "/experimental/console"],
+  ["get", "/experimental/console/orgs"],
+  ["post", "/experimental/console/switch"],
+  ["get", "/experimental/tool/ids"],
+  ["get", "/experimental/tool"],
+  ["get", "/experimental/worktree"],
+  ["post", "/experimental/worktree"],
+  ["delete", "/experimental/worktree"],
+  ["post", "/experimental/worktree/reset"],
+  ["get", "/experimental/session"],
+  ["get", "/experimental/resource"],
+  ["get", "/session"],
+  ["post", "/session"],
+  ["get", "/session/status"],
+  ["get", "/session/{sessionID}"],
+  ["delete", "/session/{sessionID}"],
+  ["patch", "/session/{sessionID}"],
+  ["get", "/session/{sessionID}/children"],
+  ["get", "/session/{sessionID}/todo"],
+  ["post", "/session/{sessionID}/init"],
+  ["post", "/session/{sessionID}/fork"],
+  ["post", "/session/{sessionID}/abort"],
+  ["post", "/session/{sessionID}/share"],
+  ["delete", "/session/{sessionID}/share"],
+  ["get", "/session/{sessionID}/diff"],
+  ["post", "/session/{sessionID}/summarize"],
+  ["get", "/session/{sessionID}/message"],
+  ["post", "/session/{sessionID}/message"],
+  ["get", "/session/{sessionID}/message/{messageID}"],
+  ["delete", "/session/{sessionID}/message/{messageID}"],
+  ["delete", "/session/{sessionID}/message/{messageID}/part/{partID}"],
+  ["patch", "/session/{sessionID}/message/{messageID}/part/{partID}"],
+  ["post", "/session/{sessionID}/prompt_async"],
+  ["post", "/session/{sessionID}/command"],
+  ["post", "/session/{sessionID}/shell"],
+  ["post", "/session/{sessionID}/revert"],
+  ["post", "/session/{sessionID}/unrevert"],
+  ["post", "/session/{sessionID}/permissions/{permissionID}"],
+  ["post", "/permission/{requestID}/reply"],
+  ["get", "/permission"],
+  ["get", "/question"],
+  ["post", "/question/{requestID}/reply"],
+  ["post", "/question/{requestID}/reject"],
+  ["get", "/provider"],
+  ["get", "/provider/auth"],
+  ["post", "/provider/{providerID}/oauth/authorize"],
+  ["post", "/provider/{providerID}/oauth/callback"],
+  ["post", "/sync/start"],
+  ["post", "/sync/replay"],
+  ["post", "/sync/history"],
+  ["get", "/find"],
+  ["get", "/find/file"],
+  ["get", "/find/symbol"],
+  ["get", "/file"],
+  ["get", "/file/content"],
+  ["get", "/file/status"],
+  ["get", "/event"],
+  ["get", "/mcp"],
+  ["post", "/mcp"],
+  ["post", "/mcp/{name}/auth"],
+  ["delete", "/mcp/{name}/auth"],
+  ["post", "/mcp/{name}/auth/callback"],
+  ["post", "/mcp/{name}/auth/authenticate"],
+  ["post", "/mcp/{name}/connect"],
+  ["post", "/mcp/{name}/disconnect"],
+  ["post", "/tui/append-prompt"],
+  ["post", "/tui/open-help"],
+  ["post", "/tui/open-sessions"],
+  ["post", "/tui/open-themes"],
+  ["post", "/tui/open-models"],
+  ["post", "/tui/submit-prompt"],
+  ["post", "/tui/clear-prompt"],
+  ["post", "/tui/execute-command"],
+  ["post", "/tui/show-toast"],
+  ["post", "/tui/publish"],
+  ["post", "/tui/select-session"],
+  ["get", "/tui/control/next"],
+  ["post", "/tui/control/response"],
+  ["post", "/instance/dispose"],
+  ["get", "/path"],
+  ["get", "/vcs"],
+  ["get", "/vcs/diff"],
+  ["get", "/command"],
+  ["get", "/agent"],
+  ["get", "/skill"],
+  ["get", "/lsp"],
+  ["get", "/formatter"],
+] as const
+
+const LegacyOperationRank = new Map(
+  LegacyOperationOrder.map(([method, path], index) => [`${method.toUpperCase()} ${path}`, index]),
+)
+
 type OpenApiSchema = {
   $ref?: string
   additionalProperties?: OpenApiSchema | boolean
@@ -173,7 +298,38 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
       for (const param of operation.parameters) normalizeParameter(param, `${method.toUpperCase()} ${path}`)
     }
   }
+  orderLegacyOperations(spec)
   return input
+}
+
+function orderLegacyOperations(spec: OpenApiSpec) {
+  if (!spec.paths) return
+  spec.paths = Object.fromEntries(
+    Object.entries(spec.paths)
+      .map(([path, item], index) => [path, orderLegacyPathItem(path, item), index] as const)
+      .sort((left, right) => firstOperationRank(left[0], left[2]) - firstOperationRank(right[0], right[2]))
+      .map(([path, item]) => [path, item]),
+  )
+}
+
+function firstOperationRank(path: string, fallback: number) {
+  return Math.min(
+    ...MethodOrder.map(
+      (method) => LegacyOperationRank.get(`${method.toUpperCase()} ${path}`) ?? Number.MAX_SAFE_INTEGER,
+    ),
+    Number.MAX_SAFE_INTEGER + fallback,
+  )
+}
+
+function orderLegacyPathItem(path: string, item: OpenApiPathItem) {
+  return Object.fromEntries(
+    Object.entries(item).sort(([left], [right]) => operationRank(path, left) - operationRank(path, right)),
+  ) as OpenApiPathItem
+}
+
+function operationRank(path: string, method: string) {
+  const fallback = MethodOrder.indexOf(method as (typeof MethodOrder)[number])
+  return LegacyOperationRank.get(`${method.toUpperCase()} ${path}`) ?? Number.MAX_SAFE_INTEGER + fallback
 }
 
 function addLegacyErrorSchemas(spec: OpenApiSpec) {
@@ -347,6 +503,16 @@ function normalizeLegacyErrorResponses(operation: OpenApiOperation) {
 function normalizeLegacyOperation(operation: OpenApiOperation, path: string, method: string) {
   if (path === "/experimental/console/switch" && method === "post") delete operation.responses?.["400"]
   if (path === "/pty/{ptyID}" && method === "put") delete operation.responses?.["404"]
+  if (path === "/mcp/{name}/auth" && method === "post") {
+    if (operation.responses) {
+      operation.responses["400"] = legacyErrorResponse("MCP server does not support OAuth", "McpUnsupportedOAuthError")
+    }
+    const schema = operation.responses?.["200"]?.content?.["application/json"]?.schema
+    if (schema?.properties) {
+      delete schema.properties.oauthState
+      schema.required = schema.required?.filter((item) => item !== "oauthState")
+    }
+  }
   if ((path !== "/session/{sessionID}/message" && path !== "/session/{sessionID}/command") || method !== "post") return
   const response = operation.responses?.["200"]?.content?.["application/json"]
   if (!response) return
@@ -371,7 +537,10 @@ function isBuiltInErrorResponse(response: OpenApiResponse, name: "BadRequest" | 
   return response.description === name || isRefResponse(response, `EffectHttpApiError${name}`)
 }
 
-function legacyErrorResponse(description: string, name: "BadRequestError" | "NotFoundError"): OpenApiResponse {
+function legacyErrorResponse(
+  description: string,
+  name: "BadRequestError" | "NotFoundError" | "McpUnsupportedOAuthError",
+): OpenApiResponse {
   return {
     description,
     content: {
@@ -431,7 +600,7 @@ function stripOptionalNull(schema: OpenApiSchema): OpenApiSchema {
   if (isEmptyObjectUnion(schema)) return { type: "object", properties: {} }
   const options = flattenOptions(schema.anyOf ?? schema.oneOf)
   if (options) {
-    const withoutNull = options.filter((item) => item.type !== "null")
+    const withoutNull = options.filter((item) => item.type !== "null" && !isSpecialNumberLiteral(item))
     if (withoutNull.length === 1) return stripOptionalNull(withoutNull[0])
     if (schema.anyOf) schema.anyOf = withoutNull.map(stripOptionalNull)
     if (schema.oneOf) schema.oneOf = withoutNull.map(stripOptionalNull)
@@ -456,6 +625,13 @@ function stripOptionalNull(schema: OpenApiSchema): OpenApiSchema {
     schema.additionalProperties = stripOptionalNull(schema.additionalProperties)
   }
   return schema
+}
+
+function isSpecialNumberLiteral(schema: OpenApiSchema) {
+  return (
+    schema.type === "string" &&
+    schema.enum?.every((item) => item === "NaN" || item === "Infinity" || item === "-Infinity")
+  )
 }
 
 function isEmptyObjectUnion(schema: OpenApiSchema) {

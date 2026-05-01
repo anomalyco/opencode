@@ -63,6 +63,12 @@ function openApiRouteKeys(spec: { paths: Record<string, Partial<Record<(typeof m
     .sort()
 }
 
+function openApiOperationKeys(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], unknown>>> }) {
+  return Object.entries(spec.paths).flatMap(([path, item]) =>
+    methods.filter((method) => item[method]).map((method) => `${method.toUpperCase()} ${path}`),
+  )
+}
+
 function openApiParameters(spec: { paths: Record<string, Partial<Record<(typeof methods)[number], Operation>>> }) {
   return Object.fromEntries(
     Object.entries(spec.paths).flatMap(([path, item]) =>
@@ -213,6 +219,10 @@ describe("HttpApi server", () => {
     expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
   })
 
+  test("matches generated OpenAPI operation order", async () => {
+    expect(openApiOperationKeys(effectOpenApi())).toEqual(openApiOperationKeys(await Server.openapi()))
+  })
+
   test("matches generated OpenAPI route parameters", async () => {
     const hono = openApiParameters(await Server.openapi())
     const effect = openApiParameters(effectOpenApi())
@@ -256,6 +266,28 @@ describe("HttpApi server", () => {
       minimum: 0,
       maximum: Number.MAX_SAFE_INTEGER,
     })
+  })
+
+  test("matches SDK-affecting request and response schema details", () => {
+    const effect = effectOpenApi()
+    const sessionUpdate = effect.paths["/session/{sessionID}"]?.patch?.requestBody
+    const sessionUpdateSchema =
+      typeof sessionUpdate === "object" && sessionUpdate && "content" in sessionUpdate
+        ? sessionUpdate.content?.["application/json"]?.schema
+        : undefined
+    const sessionUpdateProperties = sessionUpdateSchema?.properties as Record<string, OpenApiSchema> | undefined
+    const time = sessionUpdateProperties?.time
+    expect(time?.properties?.archived).toEqual({ type: "number" })
+
+    const mcpAuth = effect.paths["/mcp/{name}/auth"]?.post?.responses
+    const mcpAuthResponses = mcpAuth as
+      | Record<string, { description?: string; content?: Record<string, { schema?: OpenApiSchema }> }>
+      | undefined
+    const mcpAuthResponse = mcpAuthResponses?.["200"]
+    expect(mcpAuthResponse?.content?.["application/json"]?.schema?.properties).toEqual({
+      authorizationUrl: { type: "string" },
+    })
+    expect(mcpAuthResponses?.["400"]?.description).toBe("MCP server does not support OAuth")
   })
 
   test("documents event routes as server-sent events", () => {
