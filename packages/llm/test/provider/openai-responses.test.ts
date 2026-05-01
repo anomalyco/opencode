@@ -202,7 +202,7 @@ describe("OpenAI Responses adapter", () => {
         { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
         {
           type: "request-finish",
-          reason: "stop",
+          reason: "tool-calls",
           usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6, native: { input_tokens: 5, output_tokens: 1 } },
         },
       ])

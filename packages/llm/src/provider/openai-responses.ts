@@ -138,6 +138,7 @@ const { encodeTarget, decodeTarget, decodeChunk } = ProviderShared.codecs({
 
 interface ParserState {
   readonly tools: Record<string, ProviderShared.ToolAccumulator>
+  readonly hasFunctionCall: boolean
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -235,11 +236,12 @@ const mapUsage = (usage: OpenAIResponsesUsage | undefined) => {
   })
 }
 
-const mapFinishReason = (chunk: OpenAIResponsesChunk): FinishReason => {
-  if (chunk.type === "response.completed") return "stop"
-  if (chunk.response?.incomplete_details?.reason === "max_output_tokens") return "length"
-  if (chunk.response?.incomplete_details?.reason === "content_filter") return "content-filter"
-  return "unknown"
+const mapFinishReason = (chunk: OpenAIResponsesChunk, hasFunctionCall: boolean): FinishReason => {
+  const reason = chunk.response?.incomplete_details?.reason
+  if (reason === undefined || reason === null) return hasFunctionCall ? "tool-calls" : "stop"
+  if (reason === "max_output_tokens") return "length"
+  if (reason === "content_filter") return "content-filter"
+  return hasFunctionCall ? "tool-calls" : "unknown"
 }
 
 const pushToolDelta = (tools: Record<string, ProviderShared.ToolAccumulator>, itemId: string, delta: string) =>
@@ -321,6 +323,7 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
 
     if (chunk.type === "response.output_item.added" && chunk.item?.type === "function_call" && chunk.item.id) {
       return [{
+        hasFunctionCall: state.hasFunctionCall,
         tools: {
           ...state.tools,
           [chunk.item.id]: {
@@ -334,14 +337,17 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
 
     if (chunk.type === "response.function_call_arguments.delta" && chunk.item_id && chunk.delta) {
       const current = yield* pushToolDelta(state.tools, chunk.item_id, chunk.delta)
-      return [{ tools: { ...state.tools, [chunk.item_id]: current } }, [
+      return [{ hasFunctionCall: state.hasFunctionCall, tools: { ...state.tools, [chunk.item_id]: current } }, [
         { type: "tool-input-delta" as const, id: current.id, name: current.name, text: chunk.delta },
       ]] as const
     }
 
     if (chunk.type === "response.output_item.done" && chunk.item?.type === "function_call") {
       const events = yield* finishToolCall(state.tools, chunk.item)
-      return [{ tools: withoutTool(state.tools, chunk.item.id) }, events] as const
+      return [{
+        hasFunctionCall: events.length > 0 ? true : state.hasFunctionCall,
+        tools: withoutTool(state.tools, chunk.item.id),
+      }, events] as const
     }
 
     if (chunk.type === "response.output_item.done" && chunk.item && isHostedToolItem(chunk.item)) {
@@ -349,7 +355,7 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
     }
 
     if (chunk.type === "response.completed" || chunk.type === "response.incomplete") {
-      return [state, [{ type: "request-finish" as const, reason: mapFinishReason(chunk), usage: mapUsage(chunk.response?.usage) }]] as const
+      return [state, [{ type: "request-finish" as const, reason: mapFinishReason(chunk, state.hasFunctionCall), usage: mapUsage(chunk.response?.usage) }]] as const
     }
 
     if (chunk.type === "error") {
@@ -377,7 +383,7 @@ export const protocol = Protocol.define<
   encode: encodeTarget,
   redact: (target) => target,
   decode: decodeChunk,
-  initial: () => ({ tools: {} }),
+  initial: () => ({ hasFunctionCall: false, tools: {} }),
   process: processChunk,
   streamReadError: "Failed to read OpenAI Responses stream",
 })
