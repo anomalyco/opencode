@@ -117,7 +117,7 @@ export const createOpenReviewFile = (input: {
         input.openTab(tab)
         input.setActive(tab)
       }
-      if (maybePromise instanceof Promise) maybePromise.then(open)
+      if (maybePromise instanceof Promise) void maybePromise.then(open)
       else open()
     })
   }

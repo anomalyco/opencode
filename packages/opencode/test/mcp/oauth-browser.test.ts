@@ -1,11 +1,13 @@
 import { test, expect, mock, beforeEach } from "bun:test"
 import { EventEmitter } from "events"
+import { Effect } from "effect"
+import type { MCP as MCPNS } from "../../src/mcp/index"
 
 // Track open() calls and control failure behavior
 let openShouldFail = false
 let openCalledWith: string | undefined
 
-mock.module("open", () => ({
+void mock.module("open", () => ({
   default: async (url: string) => {
     openCalledWith = url
 
@@ -37,7 +39,7 @@ const transportCalls: Array<{
 }> = []
 
 // Mock the transport constructors
-mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     url: string
     authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
@@ -63,7 +65,7 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   },
 }))
 
-mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
   SSEClientTransport: class MockSSE {
     constructor(url: URL) {
       transportCalls.push({
@@ -79,7 +81,7 @@ mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
 }))
 
 // Mock the MCP SDK Client to trigger OAuth flow
-mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class MockClient {
     async connect(transport: { start: () => Promise<void> }) {
       await transport.start()
@@ -88,7 +90,7 @@ mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 }))
 
 // Mock UnauthorizedError in the auth module
-mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
+void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
 }))
 
@@ -100,10 +102,12 @@ beforeEach(() => {
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
+const { AppRuntime } = await import("../../src/effect/app-runtime")
 const { Bus } = await import("../../src/bus")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
+const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
 test("BrowserOpenFailed event is published when open() throws", async () => {
   await using tmp = await tmpdir({
@@ -136,7 +140,12 @@ test("BrowserOpenFailed event is published when open() throws", async () => {
       // Run authenticate with a timeout to avoid waiting forever for the callback
       // Attach a handler immediately so callback shutdown rejections
       // don't show up as unhandled between tests.
-      const authPromise = MCP.authenticate("test-oauth-server").catch(() => undefined)
+      const authPromise = AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const mcp = yield* service
+          return yield* mcp.authenticate("test-oauth-server")
+        }),
+      ).catch(() => undefined)
 
       // Config.get() can be slow in tests, so give it plenty of time.
       await new Promise((resolve) => setTimeout(resolve, 2_000))
@@ -185,7 +194,12 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
       })
 
       // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-2").catch(() => undefined)
+      const authPromise = AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const mcp = yield* service
+          return yield* mcp.authenticate("test-oauth-server-2")
+        }),
+      ).catch(() => undefined)
 
       // Config.get() can be slow in tests; also covers the ~500ms open() error-detection window.
       await new Promise((resolve) => setTimeout(resolve, 2_000))
@@ -230,7 +244,12 @@ test("open() is called with the authorization URL", async () => {
       openCalledWith = undefined
 
       // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-3").catch(() => undefined)
+      const authPromise = AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const mcp = yield* service
+          return yield* mcp.authenticate("test-oauth-server-3")
+        }),
+      ).catch(() => undefined)
 
       // Config.get() can be slow in tests; also covers the ~500ms open() error-detection window.
       await new Promise((resolve) => setTimeout(resolve, 2_000))

@@ -11,6 +11,8 @@ const dir = path.resolve(__dirname, "..")
 
 process.chdir(dir)
 
+await import("./generate.ts")
+
 // Load migrations from migration directories
 const migrationDirs = (
   await fs.promises.readdir(path.join(dir, "migration"), {
@@ -44,12 +46,16 @@ console.log(`Loaded ${migrations.length} migrations`)
 await Bun.build({
   target: "node",
   entrypoints: ["./src/node.ts"],
-  outdir: "./dist",
+  outdir: "./dist/node",
   format: "esm",
-  external: ["jsonc-parser"],
+  sourcemap: "linked",
+  external: ["jsonc-parser", "@lydell/node-pty"],
   define: {
     OPENCODE_MIGRATIONS: JSON.stringify(migrations),
     OPENCODE_CHANNEL: `'${Script.channel}'`,
+  },
+  files: {
+    "opencode-web-ui.gen.ts": "",
   },
 })
 

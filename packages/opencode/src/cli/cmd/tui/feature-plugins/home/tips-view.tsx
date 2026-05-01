@@ -1,4 +1,4 @@
-import { For } from "solid-js"
+import { createMemo, For } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
@@ -30,9 +30,12 @@ function parse(tip: string): TipPart[] {
   return parts
 }
 
-export function Tips() {
+const NO_MODELS_TIP = "Run {highlight}/connect{/highlight} to add an AI provider and start coding"
+
+export function Tips(props: { connected?: boolean }) {
   const theme = useTheme().theme
-  const parts = parse(TIPS[Math.floor(Math.random() * TIPS.length)])
+  const randomTip = TIPS[Math.floor(Math.random() * TIPS.length)]
+  const parts = createMemo(() => parse(props.connected === false ? NO_MODELS_TIP : randomTip))
 
   return (
     <box flexDirection="row" maxWidth="100%">
@@ -40,7 +43,7 @@ export function Tips() {
         ● Tip{" "}
       </text>
       <text flexShrink={1}>
-        <For each={parts}>
+        <For each={parts()}>
           {(part) => <span style={{ fg: part.highlight ? theme.text : theme.textMuted }}>{part.text}</span>}
         </For>
       </text>
@@ -55,7 +58,7 @@ const TIPS = [
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public link to your conversation at opencode.ai",
-  "Drag and drop images into the terminal to add them as context",
+  "Drag and drop images or PDFs into the terminal to add them as context",
   "Press {highlight}Ctrl+V{/highlight} to paste images from your clipboard into the prompt",
   "Press {highlight}Ctrl+X E{/highlight} or {highlight}/editor{/highlight} to compose messages in your external editor",
   "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
@@ -148,5 +151,7 @@ const TIPS = [
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   "Run {highlight}/help{/highlight} or {highlight}Ctrl+X H{/highlight} to show the help dialog",
   "Use {highlight}/rename{/highlight} to rename the current session",
-  "Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell",
+  ...(process.platform === "win32"
+    ? ["Press {highlight}Ctrl+Z{/highlight} to undo changes in your prompt"]
+    : ["Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell"]),
 ]

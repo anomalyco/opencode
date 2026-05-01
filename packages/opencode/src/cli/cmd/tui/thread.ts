@@ -5,17 +5,23 @@ import { type rpc } from "./worker"
 import path from "path"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
-import { Log } from "@/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
-import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
-import { TuiConfig } from "@/config/tui"
-import { Instance } from "@/project/instance"
 import { writeHeapSnapshot } from "v8"
+import { TuiConfig } from "./config/tui"
+import {
+  OPENCODE_PROCESS_ROLE,
+  OPENCODE_RUN_ID,
+  ensureRunID,
+  sanitizedProcessEnv,
+} from "@opencode-ai/core/util/opencode-process"
+import { validateSession } from "./validate-session"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -43,9 +49,10 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
 
 function createEventSource(client: RpcClient): EventSource {
   return {
-    on: (handler) => client.on<Event>("event", handler),
-    setWorkspace: (workspaceID) => {
-      void client.call("setWorkspace", { workspaceID })
+    subscribe: async (handler) => {
+      return client.on<GlobalEvent>("global.event", (e) => {
+        handler(e)
+      })
     },
   }
 }
@@ -62,6 +69,12 @@ async function input(value?: string) {
   if (!value) return piped
   if (!piped) return value
   return piped + "\n" + value
+}
+
+export function resolveThreadDirectory(project?: string, envPWD = process.env.PWD, cwd = process.cwd()) {
+  const root = Filesystem.resolve(envPWD ?? cwd)
+  if (project) return Filesystem.resolve(path.isAbsolute(project) ? project : path.join(root, project))
+  return Filesystem.resolve(cwd)
 }
 
 export const TuiThreadCommand = cmd({
@@ -117,10 +130,7 @@ export const TuiThreadCommand = cmd({
 
       // Resolve relative --project paths from PWD, then use the real cwd after
       // chdir so the thread and worker share the same directory key.
-      const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
-      const next = args.project
-        ? Filesystem.resolve(path.isAbsolute(args.project) ? args.project : path.join(root, args.project))
-        : Filesystem.resolve(process.cwd())
+      const next = resolveThreadDirectory(args.project)
       const file = await target()
       try {
         process.chdir(next)
@@ -129,19 +139,27 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+      const env = sanitizedProcessEnv({
+        [OPENCODE_PROCESS_ROLE]: "worker",
+        [OPENCODE_RUN_ID]: ensureRunID(),
+      })
 
       const worker = new Worker(file, {
-        env: Object.fromEntries(
-          Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        ),
+        env,
       })
       worker.onerror = (e) => {
-        Log.Default.error(e)
+        Log.Default.error("thread error", {
+          message: e.message,
+          filename: e.filename,
+          lineno: e.lineno,
+          colno: e.colno,
+          error: e.error,
+        })
       }
 
       const client = Rpc.client<typeof rpc>(worker)
       const error = (e: unknown) => {
-        Log.Default.error(e)
+        Log.Default.error("process error", { error: errorMessage(e) })
       }
       const reload = () => {
         client.call("reload", undefined).catch((err) => {
@@ -170,12 +188,9 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await Instance.provide({
-        directory: cwd,
-        fn: () => TuiConfig.get(),
-      })
+      const config = await TuiConfig.get()
 
-      const network = await resolveNetworkOptions(args)
+      const network = resolveNetworkOptionsNoConfig(args)
       const external =
         process.argv.includes("--port") ||
         process.argv.includes("--hostname") ||
@@ -195,6 +210,19 @@ export const TuiThreadCommand = cmd({
             fetch: createWorkerFetch(client),
             events: createEventSource(client),
           }
+
+      try {
+        await validateSession({
+          url: transport.url,
+          sessionID: args.session,
+          directory: cwd,
+          fetch: transport.fetch,
+        })
+      } catch (error) {
+        UI.error(errorMessage(error))
+        process.exitCode = 1
+        return
+      }
 
       setTimeout(() => {
         client.call("checkUpgrade", { directory: cwd }).catch(() => {})
@@ -230,3 +258,4 @@ export const TuiThreadCommand = cmd({
     process.exit(0)
   },
 })
+// scratch

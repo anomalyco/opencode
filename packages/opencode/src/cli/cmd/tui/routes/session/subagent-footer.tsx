@@ -59,7 +59,7 @@ export function SubagentFooter() {
   const keybind = useKeybind()
   const command = useCommandDialog()
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
-  const dimensions = useTerminalDimensions()
+  useTerminalDimensions()
 
   return (
     <box flexShrink={0}>

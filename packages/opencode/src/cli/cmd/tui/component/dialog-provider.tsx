@@ -11,9 +11,10 @@ import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
-import { Clipboard } from "@tui/util/clipboard"
+import * as Clipboard from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
-import { CONSOLE_MANAGED_ICON, isConsoleManagedProvider } from "@tui/util/provider-origin"
+import { isConsoleManagedProvider } from "@tui/util/provider-origin"
+import { useConnected } from "./use-connected"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -30,6 +31,7 @@ export function createDialogProviderOptions() {
   const sdk = useSDK()
   const toast = useToast()
   const { theme } = useTheme()
+  const onboarded = useConnected()
   const options = createMemo(() => {
     return pipe(
       sync.data.provider_next.all,
@@ -49,11 +51,7 @@ export function createDialogProviderOptions() {
           }[provider.id],
           footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
           category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
-          gutter: consoleManaged ? (
-            <text fg={theme.textMuted}>{CONSOLE_MANAGED_ICON}</text>
-          ) : connected ? (
-            <text fg={theme.success}>✓</text>
-          ) : undefined,
+          gutter: connected && onboarded() ? () => <text fg={theme.success}>✓</text> : undefined,
           async onSelect() {
             if (consoleManaged) return
 
@@ -129,7 +127,15 @@ export function createDialogProviderOptions() {
               }
             }
             if (method.type === "api") {
-              return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+              let metadata: Record<string, string> | undefined
+              if (method.prompts?.length) {
+                const value = await PromptsMethod({ dialog, prompts: method.prompts })
+                if (!value) return
+                metadata = value
+              }
+              return dialog.replace(() => (
+                <ApiMethod providerID={provider.id} title={method.label} metadata={metadata} />
+              ))
             }
           },
         }
@@ -249,6 +255,7 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  metadata?: Record<string, string>
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
@@ -293,6 +300,7 @@ function ApiMethod(props: ApiMethodProps) {
           auth: {
             type: "api",
             key: value,
+            ...(props.metadata ? { metadata: props.metadata } : {}),
           },
         })
         await sdk.client.instance.dispose()

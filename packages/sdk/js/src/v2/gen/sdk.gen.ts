@@ -29,11 +29,15 @@ import type {
   ExperimentalConsoleSwitchOrgResponses,
   ExperimentalResourceListResponses,
   ExperimentalSessionListResponses,
+  ExperimentalWorkspaceAdapterListResponses,
   ExperimentalWorkspaceCreateErrors,
   ExperimentalWorkspaceCreateResponses,
   ExperimentalWorkspaceListResponses,
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
+  ExperimentalWorkspaceSessionRestoreErrors,
+  ExperimentalWorkspaceSessionRestoreResponses,
+  ExperimentalWorkspaceStatusResponses,
   FileListResponses,
   FilePartInput,
   FilePartSource,
@@ -49,7 +53,6 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
-  GlobalSyncEventSubscribeResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeResponses,
@@ -102,6 +105,7 @@ import type {
   PtyListResponses,
   PtyRemoveErrors,
   PtyRemoveResponses,
+  PtyShellsResponses,
   PtyUpdateErrors,
   PtyUpdateResponses,
   QuestionAnswer,
@@ -155,12 +159,12 @@ import type {
   SessionUnshareResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
-  SkillDisableErrors,
-  SkillDisableResponses,
-  SkillEnableErrors,
-  SkillEnableResponses,
-  SkillStatusResponses,
   SubtaskPartInput,
+  SyncHistoryListErrors,
+  SyncHistoryListResponses,
+  SyncReplayErrors,
+  SyncReplayResponses,
+  SyncStartResponses,
   TextPartInput,
   ToolIdsErrors,
   ToolIdsResponses,
@@ -237,20 +241,6 @@ class HeyApiRegistry<T> {
 
   set(value: T, key?: string): void {
     this.instances.set(key ?? this.defaultKey, value)
-  }
-}
-
-export class SyncEvent extends HeyApiClient {
-  /**
-   * Subscribe to global sync events
-   *
-   * Get global sync events
-   */
-  public subscribe<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).sse.get<GlobalSyncEventSubscribeResponses, unknown, ThrowOnError>({
-      url: "/global/sync-event",
-      ...options,
-    })
   }
 }
 
@@ -351,11 +341,6 @@ export class Global extends HeyApiClient {
         ...params.headers,
       },
     })
-  }
-
-  private _syncEvent?: SyncEvent
-  get syncEvent(): SyncEvent {
-    return (this._syncEvent ??= new SyncEvent({ client: this.client }))
   }
 
   private _config?: Config
@@ -467,6 +452,36 @@ export class App extends HeyApiClient {
   }
 
   /**
+   * List agents
+   *
+   * Get a list of all available AI agents in the OpenCode system.
+   */
+  public agents<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AppAgentsResponses, unknown, ThrowOnError>({
+      url: "/agent",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * List skills
    *
    * Get a list of all available skills in the OpenCode system.
@@ -495,13 +510,15 @@ export class App extends HeyApiClient {
       ...params,
     })
   }
+}
 
+export class Adapter extends HeyApiClient {
   /**
-   * List agents
+   * List workspace adapters
    *
-   * Get a list of all available AI agents in the OpenCode system.
+   * List all available workspace adapters for the current project.
    */
-  public agents<ThrowOnError extends boolean = false>(
+  public list<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
@@ -519,11 +536,403 @@ export class App extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<AppAgentsResponses, unknown, ThrowOnError>({
-      url: "/agent",
+    return (options?.client ?? this.client).get<ExperimentalWorkspaceAdapterListResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/adapter",
       ...options,
       ...params,
     })
+  }
+}
+
+export class Workspace extends HeyApiClient {
+  /**
+   * List workspaces
+   *
+   * List all workspaces.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalWorkspaceListResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create workspace
+   *
+   * Create a workspace for the current project.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      id?: string
+      type?: string
+      branch?: string | null
+      extra?: unknown | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "id" },
+            { in: "body", key: "type" },
+            { in: "body", key: "branch" },
+            { in: "body", key: "extra" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalWorkspaceCreateResponses,
+      ExperimentalWorkspaceCreateErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/workspace",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Workspace status
+   *
+   * Get connection status for workspaces in the current project.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalWorkspaceStatusResponses, unknown, ThrowOnError>({
+      url: "/experimental/workspace/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove workspace
+   *
+   * Remove an existing workspace.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ExperimentalWorkspaceRemoveResponses,
+      ExperimentalWorkspaceRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/workspace/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Restore session into workspace
+   *
+   * Replay a session's sync events into the target workspace in batches.
+   */
+  public sessionRestore<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalWorkspaceSessionRestoreResponses,
+      ExperimentalWorkspaceSessionRestoreErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/workspace/{id}/session-restore",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _adapter?: Adapter
+  get adapter(): Adapter {
+    return (this._adapter ??= new Adapter({ client: this.client }))
+  }
+}
+
+export class Console extends HeyApiClient {
+  /**
+   * Get active Console provider metadata
+   *
+   * Get the active Console org name and the set of provider IDs managed by that Console org.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalConsoleGetResponses, unknown, ThrowOnError>({
+      url: "/experimental/console",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List switchable Console orgs
+   *
+   * Get the available Console orgs across logged-in accounts, including the current active org.
+   */
+  public listOrgs<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalConsoleListOrgsResponses, unknown, ThrowOnError>({
+      url: "/experimental/console/orgs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Switch active Console org
+   *
+   * Persist a new active Console account/org selection for the current local OpenCode state.
+   */
+  public switchOrg<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      accountID?: string
+      orgID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "accountID" },
+            { in: "body", key: "orgID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ExperimentalConsoleSwitchOrgResponses, unknown, ThrowOnError>({
+      url: "/experimental/console/switch",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Session extends HeyApiClient {
+  /**
+   * List sessions
+   *
+   * Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      roots?: boolean | "true" | "false"
+      start?: number
+      cursor?: number
+      search?: string
+      limit?: number
+      archived?: boolean | "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "start" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "search" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "archived" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalSessionListResponses, unknown, ThrowOnError>({
+      url: "/experimental/session",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Resource extends HeyApiClient {
+  /**
+   * Get MCP resources
+   *
+   * Get all available MCP resources from connected servers. Optionally filter by name.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalResourceListResponses, unknown, ThrowOnError>({
+      url: "/experimental/resource",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Experimental extends HeyApiClient {
+  private _workspace?: Workspace
+  get workspace(): Workspace {
+    return (this._workspace ??= new Workspace({ client: this.client }))
+  }
+
+  private _console?: Console
+  get console(): Console {
+    return (this._console ??= new Console({ client: this.client }))
+  }
+
+  private _session?: Session
+  get session(): Session {
+    return (this._session ??= new Session({ client: this.client }))
+  }
+
+  private _resource?: Resource
+  get resource(): Resource {
+    return (this._resource ??= new Resource({ client: this.client }))
   }
 }
 
@@ -672,6 +1081,36 @@ export class Project extends HeyApiClient {
 }
 
 export class Pty extends HeyApiClient {
+  /**
+   * List available shells
+   *
+   * Get a list of available shells on the system.
+   */
+  public shells<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PtyShellsResponses, unknown, ThrowOnError>({
+      url: "/pty/shells",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * List PTY sessions
    *
@@ -989,320 +1428,6 @@ export class Config2 extends HeyApiClient {
   }
 }
 
-export class Console extends HeyApiClient {
-  /**
-   * Get active Console provider metadata
-   *
-   * Get the active Console org name and the set of provider IDs managed by that Console org.
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ExperimentalConsoleGetResponses, unknown, ThrowOnError>({
-      url: "/experimental/console",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * List switchable Console orgs
-   *
-   * Get the available Console orgs across logged-in accounts, including the current active org.
-   */
-  public listOrgs<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ExperimentalConsoleListOrgsResponses, unknown, ThrowOnError>({
-      url: "/experimental/console/orgs",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Switch active Console org
-   *
-   * Persist a new active Console account/org selection for the current local OpenCode state.
-   */
-  public switchOrg<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      accountID?: string
-      orgID?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "accountID" },
-            { in: "body", key: "orgID" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<ExperimentalConsoleSwitchOrgResponses, unknown, ThrowOnError>({
-      url: "/experimental/console/switch",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Workspace extends HeyApiClient {
-  /**
-   * List workspaces
-   *
-   * List all workspaces.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ExperimentalWorkspaceListResponses, unknown, ThrowOnError>({
-      url: "/experimental/workspace",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Create workspace
-   *
-   * Create a workspace for the current project.
-   */
-  public create<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      id?: string
-      type?: string
-      branch?: string | null
-      extra?: unknown | null
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "id" },
-            { in: "body", key: "type" },
-            { in: "body", key: "branch" },
-            { in: "body", key: "extra" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      ExperimentalWorkspaceCreateResponses,
-      ExperimentalWorkspaceCreateErrors,
-      ThrowOnError
-    >({
-      url: "/experimental/workspace",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Remove workspace
-   *
-   * Remove an existing workspace.
-   */
-  public remove<ThrowOnError extends boolean = false>(
-    parameters: {
-      id: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "id" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<
-      ExperimentalWorkspaceRemoveResponses,
-      ExperimentalWorkspaceRemoveErrors,
-      ThrowOnError
-    >({
-      url: "/experimental/workspace/{id}",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Session extends HeyApiClient {
-  /**
-   * List sessions
-   *
-   * Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      roots?: boolean
-      start?: number
-      cursor?: number
-      search?: string
-      limit?: number
-      archived?: boolean
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { in: "query", key: "roots" },
-            { in: "query", key: "start" },
-            { in: "query", key: "cursor" },
-            { in: "query", key: "search" },
-            { in: "query", key: "limit" },
-            { in: "query", key: "archived" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ExperimentalSessionListResponses, unknown, ThrowOnError>({
-      url: "/experimental/session",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Resource extends HeyApiClient {
-  /**
-   * Get MCP resources
-   *
-   * Get all available MCP resources from connected servers. Optionally filter by name.
-   */
-  public list<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<ExperimentalResourceListResponses, unknown, ThrowOnError>({
-      url: "/experimental/resource",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class Experimental extends HeyApiClient {
-  private _console?: Console
-  get console(): Console {
-    return (this._console ??= new Console({ client: this.client }))
-  }
-
-  private _workspace?: Workspace
-  get workspace(): Workspace {
-    return (this._workspace ??= new Workspace({ client: this.client }))
-  }
-
-  private _session?: Session
-  get session(): Session {
-    return (this._session ??= new Session({ client: this.client }))
-  }
-
-  private _resource?: Resource
-  get resource(): Resource {
-    return (this._resource ??= new Resource({ client: this.client }))
-  }
-}
-
 export class Tool extends HeyApiClient {
   /**
    * List tool IDs
@@ -1522,7 +1647,9 @@ export class Session2 extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      roots?: boolean
+      scope?: "project"
+      path?: string
+      roots?: boolean | "true" | "false"
       start?: number
       search?: string
       limit?: number
@@ -1536,6 +1663,8 @@ export class Session2 extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "scope" },
+            { in: "query", key: "path" },
             { in: "query", key: "roots" },
             { in: "query", key: "start" },
             { in: "query", key: "search" },
@@ -1699,6 +1828,7 @@ export class Session2 extends HeyApiClient {
       directory?: string
       workspace?: string
       title?: string
+      permission?: PermissionRuleset
       time?: {
         archived?: number
       }
@@ -1714,6 +1844,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "title" },
+            { in: "body", key: "permission" },
             { in: "body", key: "time" },
           ],
         },
@@ -2915,13 +3046,54 @@ export class Provider extends HeyApiClient {
   }
 }
 
-export class Skill extends HeyApiClient {
+export class History extends HeyApiClient {
   /**
-   * Get skill status
+   * List sync events
    *
-   * Get the runtime status of all discovered skills.
+   * List sync events for all aggregates. Keys are aggregate IDs the client already knows about, values are the last known sequence ID. Events with seq > value are returned for those aggregates. Aggregates not listed in the input get their full history.
    */
-  public status<ThrowOnError extends boolean = false>(
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      body?: {
+        [key: string]: number
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SyncHistoryListResponses, SyncHistoryListErrors, ThrowOnError>({
+      url: "/sync/history",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Sync extends HeyApiClient {
+  /**
+   * Start workspace sync
+   *
+   * Start sync loops for workspaces in the current project that have active sessions.
+   */
+  public start<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
       workspace?: string
@@ -2939,23 +3111,32 @@ export class Skill extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<SkillStatusResponses, unknown, ThrowOnError>({
-      url: "/skill/status",
+    return (options?.client ?? this.client).post<SyncStartResponses, unknown, ThrowOnError>({
+      url: "/sync/start",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Enable skill
+   * Replay sync events
    *
-   * Enable a discovered skill for the current instance.
+   * Validate and replay a complete sync event history.
    */
-  public enable<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
+  public replay<ThrowOnError extends boolean = false>(
+    parameters?: {
+      query_directory?: string
       workspace?: string
+      body_directory?: string
+      events?: Array<{
+        id: string
+        aggregateID: string
+        seq: number
+        type: string
+        data: {
+          [key: string]: unknown
+        }
+      }>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2964,50 +3145,37 @@ export class Skill extends HeyApiClient {
       [
         {
           args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
             { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "events" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).post<SkillEnableResponses, SkillEnableErrors, ThrowOnError>({
-      url: "/skill/{name}/enable",
+    return (options?.client ?? this.client).post<SyncReplayResponses, SyncReplayErrors, ThrowOnError>({
+      url: "/sync/replay",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
-  /**
-   * Disable skill
-   *
-   * Disable a discovered skill for the current instance.
-   */
-  public disable<ThrowOnError extends boolean = false>(
-    parameters: {
-      name: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "name" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<SkillDisableResponses, SkillDisableErrors, ThrowOnError>({
-      url: "/skill/{name}/disable",
-      ...options,
-      ...params,
-    })
+  private _history?: History
+  get history(): History {
+    return (this._history ??= new History({ client: this.client }))
   }
 }
 
@@ -4212,6 +4380,11 @@ export class OpencodeClient extends HeyApiClient {
     return (this._app ??= new App({ client: this.client }))
   }
 
+  private _experimental?: Experimental
+  get experimental(): Experimental {
+    return (this._experimental ??= new Experimental({ client: this.client }))
+  }
+
   private _project?: Project
   get project(): Project {
     return (this._project ??= new Project({ client: this.client }))
@@ -4225,11 +4398,6 @@ export class OpencodeClient extends HeyApiClient {
   private _config?: Config2
   get config(): Config2 {
     return (this._config ??= new Config2({ client: this.client }))
-  }
-
-  private _experimental?: Experimental
-  get experimental(): Experimental {
-    return (this._experimental ??= new Experimental({ client: this.client }))
   }
 
   private _tool?: Tool
@@ -4267,9 +4435,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._provider ??= new Provider({ client: this.client }))
   }
 
-  private _skill?: Skill
-  get skill(): Skill {
-    return (this._skill ??= new Skill({ client: this.client }))
+  private _sync?: Sync
+  get sync(): Sync {
+    return (this._sync ??= new Sync({ client: this.client }))
   }
 
   private _find?: Find
