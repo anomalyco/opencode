@@ -557,6 +557,27 @@ Note that disabling snapshots means changes made by the agent cannot be rolled b
 
 ---
 
+### Skills
+
+You can register additional skill folder paths or remote skill URLs through the `skills` option. This is in addition to the [default discovery locations](/docs/skills) (`.opencode/skills/`, `~/.config/opencode/skills/`, `.claude/skills/`, `.agents/skills/`).
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "paths": ["~/work/shared-skills"],
+    "urls": ["https://example.com/.well-known/skills/"]
+  }
+}
+```
+
+- `paths` - Extra directories to scan for `SKILL.md` files.
+- `urls` - URLs that publish skills (typically `.well-known/skills/`).
+
+[Learn more about skills](/docs/skills).
+
+---
+
 ### Autoupdate
 
 OpenCode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
