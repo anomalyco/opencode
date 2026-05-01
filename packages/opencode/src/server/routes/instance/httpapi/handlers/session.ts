@@ -1,5 +1,5 @@
 import * as InstanceState from "@/effect/instance-state"
-import { EffectBridge } from "@/effect/bridge"
+import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { Command } from "@/command"
@@ -259,15 +259,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
     }) {
-      const bridge = yield* EffectBridge.make()
+      const instance = yield* InstanceState.context
+      const workspace = yield* InstanceState.workspaceID
       return HttpServerResponse.stream(
         Stream.fromEffect(
-          bridge.run(
-            promptSvc.prompt({
-              ...ctx.payload,
-              sessionID: ctx.params.sessionID,
-            }),
-          ),
+          promptSvc.prompt({
+            ...ctx.payload,
+            sessionID: ctx.params.sessionID,
+          }).pipe(Effect.provideService(InstanceRef, instance), Effect.provideService(WorkspaceRef, workspace)),
         ).pipe(
           Stream.map((message) => JSON.stringify(message)),
           Stream.encodeText,
@@ -280,10 +279,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
     }) {
-      const bridge = yield* EffectBridge.make()
-      yield* Effect.sync(() => {
-        bridge.fork(
+      const instance = yield* InstanceState.context
+      const workspace = yield* InstanceState.workspaceID
+      yield* Effect.sync(() =>
+        Effect.runFork(
           promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
+            Effect.provideService(InstanceRef, instance),
+            Effect.provideService(WorkspaceRef, workspace),
             Effect.catchCause((cause) =>
               Effect.gen(function* () {
                 yield* Effect.logError("prompt_async failed", { sessionID: ctx.params.sessionID, cause })
@@ -294,8 +296,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
               }),
             ),
           ),
-        )
-      })
+        ),
+      )
       return HttpApiSchema.NoContent.make()
     })
 
