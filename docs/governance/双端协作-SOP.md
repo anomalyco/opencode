@@ -1,7 +1,7 @@
 # 双端协作 SOP — feat 分支生命周期 + Win/Mac 协作流程
 
 > **状态**:活规则,2026-04-30 起生效
-> **适用范围**:DeskFox(opencode-fork)分支策略 v2 模型下,Win 端(DeskFox官方)与 Mac 端(李哲)双端协作的日常开发流程
+> **适用范围**:DeskFox(opencode-fork)分支策略 v2 模型下,Win 端(DeskFox官方)与 Mac 端(DeskFox 协作方)双端协作的日常开发流程
 > **前置阅读**:[`docs/features/分支策略-v2/1-spec.md`](../features/分支策略-v2/1-spec.md)(v2 模型本身)
 > **作者视角**:本文用大白话写,面向**非研发的项目主理人**和**协作 agent**;命令直接给可复制的形式
 
@@ -79,7 +79,7 @@ Linux 默认 case-sensitive(`feat/SOP` 与 `feat/sop` 是两个分支),Windows /
 
 ---
 
-## 二、单人开发流程(DeskFox官方或李哲一人独立工作时)
+## 二、单人开发流程(DeskFox官方或DeskFox 协作方一人独立工作时)
 
 ### 2.1 完整 5 步
 
@@ -119,12 +119,12 @@ git push origin --delete feat/<新名字>      # 删远端
 
 ---
 
-## 三、双端同时开发流程(DeskFox官方 + 李哲)
+## 三、双端同时开发流程(DeskFox官方 + DeskFox 协作方)
 
 ### 3.1 场景假设
 
 - DeskFox官方在 Win 端开 `feat/win-tri-env-appid`(以下简称 feat/A)
-- 李哲在 Mac 端开 `feat/macos-icon-fix`(以下简称 feat/B)
+- DeskFox 协作方在 Mac 端开 `feat/macos-icon-fix`(以下简称 feat/B)
 - 两人**同时进行**,各自推自己的 feat 到 origin
 
 ### 3.2 协作流程图
@@ -152,7 +152,7 @@ git push origin --delete feat/<新名字>      # 删远端
 
 通过微信 / 飞书 / 任何渠道同步:
 - DeskFox官方:"我开 `feat/win-tri-env-appid`"
-- 李哲:"我开 `feat/macos-icon-fix`"
+- DeskFox 协作方:"我开 `feat/macos-icon-fix`"
 
 **绝不能重名**(即使是同一个语义,也要协商谁主、谁副)。
 
@@ -164,10 +164,10 @@ git push origin --delete feat/<新名字>      # 删远端
 
 **Step 4:谁先做完谁先合(假设DeskFox官方先)**
 
-DeskFox官方走完单人流程的 Step 3-5(rebase + 合 dev + 删分支),**完成后通知李哲**:
+DeskFox官方走完单人流程的 Step 3-5(rebase + 合 dev + 删分支),**完成后通知DeskFox 协作方**:
 > "dev 更新了,我合了 feat/A,你 rebase 一下。"
 
-**Step 5:后合的人(李哲)必须先 rebase 跟上 dev,再合**
+**Step 5:后合的人(DeskFox 协作方)必须先 rebase 跟上 dev,再合**
 
 ```bash
 git fetch origin
@@ -254,7 +254,7 @@ git push origin --delete feat/X            # 删远端
 
 **不要**直接把 feat/A 改名为 feat/A1 然后再切个 feat/A2 出来 —— 这会让两个 feat 共享 base,违反"一个 feat 一件事"原则。
 
-### 5.4 dev 上的小补丁(DeskFox官方 / 李哲都允许直推 dev)
+### 5.4 dev 上的小补丁(DeskFox官方 / DeskFox 协作方都允许直推 dev)
 
 **适用情形**(且仅限这些):
 
@@ -331,4 +331,4 @@ git push origin dev
 |---|---|---|
 | v1.0 | 2026-04-30 | 初版立稿,起源于 v2 模型锁版后DeskFox官方追问"feat 合并后下个项目用同名还是新名"。结论:**feat 一次性容器,新项目新名字**。同笔加 5 处引用点(CLAUDE.md / 治理总纲 / 分支策略-v2/2-plan / docs/README / 改动日志) |
 | v1.1 | 2026-04-30 | 1.2 节扩"分支命名规范":加 type 前缀清单(feat/fix/chore/sync/hotfix)+ 5 条 name 硬规则(**全小写 + kebab-case**)+ 立规则当天踩坑实录(case-insensitive FS 上同名只大小写不同会冲突)。**第六节 `[doc:]` tag 改回 `[feat:]` 统一**(本项目 commit tag 仅用 `[feat:]`,不引入 `[doc:]`,理由:仓库历史 100% 一致性优先)。本笔 commit `[feat: 双端协作-sop]`(分支已对齐小写)|
-| v1.2 | 2026-04-30 | review 后补丁(7 处):① 1.2 节末加"文件名大小写不在本 SOP 范围"+ 双向交叉引用 → [`改动规则.md` 4.4 节](./改动规则.md#44-大小写冲突检查跨平台);② 新增 **5.4 节"dev 上的小补丁"** 明确 typo/错别字/commit message 回填等小补丁DeskFox官方 / 李哲都允许直推 dev,边界 + 操作 + 反例 + 同日上限 3 笔;③ CLAUDE.md 同笔修复两处 stale 描述(`feat/win-tri-env-appid` 已落地 `21c3f80f9`,R3 段 + 文档链路表);④ CLAUDE.md 默认仓库约定段补"<name> 全小写 + kebab-case"短规则(指向本节);⑤ 改动规则 4.4 节加交叉引用回本 1.2 节(双向引用闭环)|
+| v1.2 | 2026-04-30 | review 后补丁(7 处):① 1.2 节末加"文件名大小写不在本 SOP 范围"+ 双向交叉引用 → [`改动规则.md` 4.4 节](./改动规则.md#44-大小写冲突检查跨平台);② 新增 **5.4 节"dev 上的小补丁"** 明确 typo/错别字/commit message 回填等小补丁DeskFox官方 / DeskFox 协作方都允许直推 dev,边界 + 操作 + 反例 + 同日上限 3 笔;③ CLAUDE.md 同笔修复两处 stale 描述(`feat/win-tri-env-appid` 已落地 `21c3f80f9`,R3 段 + 文档链路表);④ CLAUDE.md 默认仓库约定段补"<name> 全小写 + kebab-case"短规则(指向本节);⑤ 改动规则 4.4 节加交叉引用回本 1.2 节(双向引用闭环)|

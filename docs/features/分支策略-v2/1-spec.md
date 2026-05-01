@@ -122,7 +122,7 @@ dev (DeskFox 稳定主干)  ← 只接收"已验证过"的内容
 | feat 分支策略 | 单功能短命分支,做完合回 dev |
 | ship 必打 tag | ✅ 每次 ship installer 在 dev 打 `ship-<版本>` tag |
 | HANDOFF md 处置(2026-04-30) | 删除(任务已结,主仓 commit `41817499d` 已 push 完成) |
-| **B5 mac 端协作通知**(2026-04-30) | ✅ 已通知李哲暂停推 dev / feat,等切换稳定 |
+| **B5 mac 端协作通知**(2026-04-30) | ✅ 已通知DeskFox 协作方暂停推 dev / feat,等切换稳定 |
 | **B1+B2 github 双 push**(2026-04-30) | 临时把 origin 的 github push URL 去除,**只推 gitee**;github/dev 幽灵分支后置处理(切换稳定后再决定 force push / 删除 / 保留) |
 | **B3 改动规则.md 4.3 节**(2026-04-30) | ✅ 正式废除"禁止直 push 到 main/dev/master"。理由:hook 从未实装该规则,且 v2 模型本意就是DeskFox官方本人直推 dev。详见 [`docs/governance/改动规则.md`](../../governance/改动规则.md) 4.3 节废除说明 |
 | **远端主仓调整**(后续) | GitHub 升为主仓(`origin`),Gitee 改为镜像(`gitee`)。背景:项目定位开源 + 全球贡献者,GitHub 是唯一可行的协作平台;Gitee 由后台定时从 GitHub 自动同步,国内用户 clone 走 Gitee,贡献走 GitHub。国内 push 走 SSH + 本地代理。 |

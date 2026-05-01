@@ -88,13 +88,13 @@ git reset --hard pre-strategy-v2-2026-04-30
 git push origin dev --force-with-lease  # ⚠️ 单人项目可,多人时要先通知
 ```
 
-**风险**:会丢李哲那 4 笔 telemetry(`5933abf9b` 之前的 telemetry 包),需要事后 cherry-pick 回来。
+**风险**:会丢DeskFox 协作方那 4 笔 telemetry(`5933abf9b` 之前的 telemetry 包),需要事后 cherry-pick 回来。
 
-### 场景 B:只想撤回 merge,保留 dev 上的李哲 4 笔
+### 场景 B:只想撤回 merge,保留 dev 上的DeskFox 协作方 4 笔
 
 ```bash
 git checkout dev
-git revert -m 1 fae01d2a8  # -m 1 表示保留第一 parent(李哲那条线)
+git revert -m 1 fae01d2a8  # -m 1 表示保留第一 parent(DeskFox 协作方那条线)
 git push origin dev
 ```
 

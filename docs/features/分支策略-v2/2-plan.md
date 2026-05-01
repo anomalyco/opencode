@@ -48,7 +48,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | 6 | push origin feat(只推 gitee) | — | typecheck 全过 |
 | 7 | 打兜底 tag `pre-strategy-v2-2026-04-30` | tag → `098d50d72` | 出问题一键回滚 |
 | 8 | 补 ship tag `ship-prod-2026.4.29.2` | tag → `e6faf1132` | 历史 ship 补登记 |
-| 9 | checkout dev → 同步 origin/dev | local dev → `5933abf9b` | fast-forward 拿李哲 4 笔 telemetry |
+| 9 | checkout dev → 同步 origin/dev | local dev → `5933abf9b` | fast-forward 拿DeskFox 协作方 4 笔 telemetry |
 | 10 | **merge --no-ff feat → dev** | `fae01d2a8` | 187 文件 / +19721 / -221 |
 | 11 | .gitignore 冲突解决 | merge commit 内 | secrets 段 + obsidian/installer 段都保留 |
 | 12 | bun install 重生 lockfile | (no changes) | auto-merge 这次正好正确 |
