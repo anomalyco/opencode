@@ -33,17 +33,9 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
 
 function SkillItem(props: { skill: { name: string; description: string } }) {
   return (
-    <div class="group relative flex items-center gap-2 w-full px-2 py-1 hover:bg-surface-raised-base-hover rounded-md cursor-default">
+    <div class="flex items-center gap-2 w-full px-2 py-1 rounded-md">
       <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
       <span class="text-14-regular text-text-base truncate">{props.skill.name}</span>
-
-      {/* Tooltip on hover */}
-      <div class="absolute left-full top-0 ml-2 hidden group-hover:block z-[100] pointer-events-none">
-        <div class="bg-surface-raised-base border border-border-base rounded-md p-2 shadow-lg w-48">
-          <div class="text-14-regular text-text-base font-medium">{props.skill.name}</div>
-          <div class="text-12-regular text-text-muted mt-1">{props.skill.description}</div>
-        </div>
-      </div>
     </div>
   )
 }

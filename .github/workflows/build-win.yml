@@ -49,7 +49,7 @@ jobs:
 
       - name: Build Tauri desktop (NSIS installer)
         working-directory: packages/desktop
-        run: bun run tauri build --target x86_64-pc-windows-msvc --verbose
+        run: bun run tauri build --target x86_64-pc-windows-msvc --verbose --config ./src-tauri/tauri.prod.conf.json
         timeout-minutes: 30
 
       - name: Upload NSIS installer
