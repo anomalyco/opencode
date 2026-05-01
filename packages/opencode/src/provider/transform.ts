@@ -154,6 +154,7 @@ export namespace ProviderTransform {
 
     if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
       const field = model.capabilities.interleaved.field
+      const sdk = sdkKey(model.api.npm) ?? "openaiCompatible"
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
@@ -162,24 +163,26 @@ export namespace ProviderTransform {
           // Filter out reasoning parts from content
           const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-          if (reasoningText) {
-            return {
-              ...msg,
-              content: filteredContent,
-              providerOptions: {
-                ...msg.providerOptions,
-                openaiCompatible: {
-                  ...(msg.providerOptions as any)?.openaiCompatible,
-                  [field]: reasoningText,
-                },
-              },
-            }
-          }
+          // DeepSeek-style openai-compatible providers require the reasoning field
+          // to be echoed back on every assistant message — even an empty string —
+          // so follow-up tool-call requests don't 400. The DeepSeek normalize block
+          // above also synthesizes an empty reasoning part on every assistant
+          // message, so on a re-transform `reasoningText` is "" and we have to fall
+          // back to whatever a previous pass already attached to providerOptions.
+          const existing = (msg.providerOptions as any)?.[sdk]?.[field]
+          const existingText = typeof existing === "string" ? existing : ""
+          const resolvedText = reasoningText || existingText
 
           return {
             ...msg,
             content: filteredContent,
+            providerOptions: {
+              ...msg.providerOptions,
+              [sdk]: {
+                ...(msg.providerOptions as any)?.[sdk],
+                [field]: resolvedText,
+              },
+            },
           }
         }
 

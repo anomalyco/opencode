@@ -1049,6 +1049,13 @@ export namespace Provider {
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existingModel = parsed.models[model.id ?? modelID]
+        const apiID = model.id ?? existingModel?.api.id ?? modelID
+        const apiNpm =
+          model.provider?.npm ??
+          provider.npm ??
+          existingModel?.api.npm ??
+          modelsDev[providerID]?.npm ??
+          "@ai-sdk/openai-compatible"
         const name = iife(() => {
           if (model.name) return model.name
           if (model.id && model.id !== modelID) return modelID
@@ -1057,13 +1064,8 @@ export namespace Provider {
         const parsedModel: Model = {
           id: ModelID.make(modelID),
           api: {
-            id: model.id ?? existingModel?.api.id ?? modelID,
-            npm:
-              model.provider?.npm ??
-              provider.npm ??
-              existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible",
+            id: apiID,
+            npm: apiNpm,
             url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
@@ -1088,7 +1090,12 @@ export namespace Provider {
               video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
               pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
-            interleaved: model.interleaved ?? false,
+            interleaved:
+              model.interleaved ??
+              existingModel?.capabilities.interleaved ??
+              (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.toLowerCase().includes("deepseek")
+                ? { field: "reasoning_content" }
+                : false),
           },
           cost: {
             input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
