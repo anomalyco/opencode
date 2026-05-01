@@ -8,6 +8,8 @@ import { lazy } from "../../util/lazy"
 import { AsyncQueue } from "../../util/queue"
 
 const log = Log.create({ service: "server" })
+const QUEUE_WARN_MS = 20
+const EVENT_SIZE_WARN = 32 * 1024
 
 export const EventRoutes = lazy(() =>
   new Hono().get(
@@ -62,7 +64,17 @@ export const EventRoutes = lazy(() =>
         }
 
         const unsub = Bus.subscribeAll((event) => {
-          q.push(JSON.stringify(event))
+          const time = performance.now()
+          const data = JSON.stringify(event)
+          q.push(data)
+          const took = performance.now() - time
+          if (took > QUEUE_WARN_MS || data.length > EVENT_SIZE_WARN) {
+            log.warn("slow event enqueue", {
+              type: event.type,
+              size: data.length,
+              took: Math.round(took),
+            })
+          }
           if (event.type === Bus.InstanceDisposed.type) {
             stop()
           }

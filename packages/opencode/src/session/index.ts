@@ -37,6 +37,9 @@ import { iife } from "@/util/iife"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+  const PART_WARN_MS = 40
+  const DELTA_WARN_MS = 20
+  const PART_SIZE_WARN = 32 * 1024
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
@@ -676,12 +679,35 @@ export namespace Session {
 
   const UpdatePartInput = MessageV2.Part
 
+  function partSize(part: MessageV2.Part) {
+    if (part.type === "text" || part.type === "reasoning") return part.text.length
+    if (part.type !== "tool") return 0
+    const state = part.state
+    if ("output" in state && typeof state.output === "string") return state.output.length
+    if ("raw" in state && typeof state.raw === "string") return state.raw.length
+    if ("error" in state && typeof state.error === "string") return state.error.length
+    return 0
+  }
+
   export const updatePart = fn(UpdatePartInput, async (part) => {
+    const time = performance.now()
     SyncEvent.run(MessageV2.Event.PartUpdated, {
       sessionID: part.sessionID,
       part: structuredClone(part),
       time: Date.now(),
     })
+    const took = performance.now() - time
+    const size = partSize(part)
+    if (took > PART_WARN_MS || size > PART_SIZE_WARN) {
+      log.warn("slow part update", {
+        sessionID: part.sessionID,
+        messageID: part.messageID,
+        partID: part.id,
+        type: part.type,
+        size,
+        took: Math.round(took),
+      })
+    }
     return part
   })
 
@@ -694,7 +720,19 @@ export namespace Session {
       delta: z.string(),
     }),
     async (input) => {
+      const time = performance.now()
       Bus.publish(MessageV2.Event.PartDelta, input)
+      const took = performance.now() - time
+      if (took > DELTA_WARN_MS || input.delta.length > PART_SIZE_WARN) {
+        log.warn("slow part delta", {
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          partID: input.partID,
+          field: input.field,
+          size: input.delta.length,
+          took: Math.round(took),
+        })
+      }
     },
   )
 
