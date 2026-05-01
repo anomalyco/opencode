@@ -478,6 +478,21 @@ This setting applies across all interfaces: TUI, CLI (`opencode run`), desktop a
 
 ---
 
+### Username
+
+You can override the username displayed next to your messages with the `username` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "username": "alex"
+}
+```
+
+When unset, OpenCode uses the operating system username it picks up at startup.
+
+---
+
 ### Sharing
 
 You can configure the [share](/docs/share) feature through the `share` option.
