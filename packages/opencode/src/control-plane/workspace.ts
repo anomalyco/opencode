@@ -1,6 +1,5 @@
 import { Context, Effect, FiberMap, Layer, Schema, Stream } from "effect"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
-import { fn } from "@/util/fn"
 import { Database } from "@/storage/db"
 import { asc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
@@ -17,14 +16,13 @@ import { Filesystem } from "@/util/filesystem"
 import { ProjectID } from "@/project/schema"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { WorkspaceTable } from "./workspace.sql"
-import { getAdaptor } from "./adaptors"
+import { getAdapter } from "./adapters"
 import { type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
 import { WorkspaceID } from "./schema"
 import { Session } from "@/session/session"
 import { SessionTable } from "@/session/session.sql"
 import { SessionID } from "@/session/schema"
 import { errorData } from "@/util/error"
-import { makeRuntime } from "@/effect/run-service"
 import { waitEvent } from "./util"
 import { WorkspaceContext } from "./workspace-context"
 import { NonNegativeInt, withStatics } from "@/util/schema"
@@ -171,6 +169,7 @@ export const layer = Layer.effect(
     const auth = yield* Auth.Service
     const session = yield* Session.Service
     const http = yield* HttpClient.HttpClient
+    const sync = yield* SyncEvent.Service
     const connections = new Map<WorkspaceID, ConnectionStatus>()
     const syncFibers = yield* FiberMap.make<WorkspaceID, void, SyncLoopError>()
 
@@ -309,30 +308,35 @@ export const layer = Layer.effect(
         events: events.length,
       })
 
-      yield* Effect.sync(() =>
-        WorkspaceContext.provide({
+      yield* Effect.promise(async () => {
+        await WorkspaceContext.provide({
           workspaceID: space.id,
-          fn: () => {
-            for (const event of events) {
-              SyncEvent.replay(
-                {
-                  id: event.id,
-                  aggregateID: event.aggregate_id,
-                  seq: event.seq,
-                  type: event.type,
-                  data: event.data,
-                },
-                { publish: true },
-              )
-            }
+          async fn() {
+            await Effect.runPromise(
+              Effect.forEach(
+                events,
+                (event) =>
+                  sync.replay(
+                    {
+                      id: event.id,
+                      aggregateID: event.aggregate_id,
+                      seq: event.seq,
+                      type: event.type,
+                      data: event.data,
+                    },
+                    { publish: true },
+                  ),
+                { discard: true },
+              ),
+            )
           },
-        }),
-      )
+        })
+      })
     })
 
     const syncWorkspaceLoop = Effect.fn("Workspace.syncWorkspaceLoop")(function* (space: Info) {
-      const adaptor = getAdaptor(space.projectID, space.type)
-      const target = yield* Effect.promise(() => Promise.resolve(adaptor.target(space)))
+      const adapter = getAdapter(space.projectID, space.type)
+      const target = yield* Effect.promise(() => Promise.resolve(adapter.target(space)))
 
       if (target.type === "local") return
 
@@ -363,16 +367,28 @@ export const layer = Layer.effect(
           setStatus(space.id, "connected")
 
           yield* parseSSE(stream, (evt) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
+              if (!evt || typeof evt !== "object" || !("payload" in evt)) return
+              const payload = evt.payload as { type?: string; syncEvent?: SyncEvent.SerializedEvent }
+              if (payload.type === "server.heartbeat") return
+
+              if (payload.type === "sync" && payload.syncEvent) {
+                const failed = yield* sync.replay(payload.syncEvent).pipe(
+                  Effect.as(false),
+                  Effect.catchCause((error) =>
+                    Effect.sync(() => {
+                      log.info("failed to replay global event", {
+                        workspaceID: space.id,
+                        error,
+                      })
+                      return true
+                    }),
+                  ),
+                )
+                if (failed) return
+              }
+
               try {
-                if (!evt || typeof evt !== "object" || !("payload" in evt)) return
-                const payload = evt.payload as { type?: string; syncEvent?: SyncEvent.SerializedEvent }
-                if (payload.type === "server.heartbeat") return
-
-                if (payload.type === "sync" && payload.syncEvent) {
-                  SyncEvent.replay(payload.syncEvent)
-                }
-
                 const event = evt as { directory?: string; project?: string; payload: unknown }
                 GlobalBus.emit("event", {
                   directory: event.directory,
@@ -380,10 +396,10 @@ export const layer = Layer.effect(
                   workspace: space.id,
                   payload: event.payload,
                 })
-              } catch (err) {
+              } catch (error) {
                 log.info("failed to replay global event", {
                   workspaceID: space.id,
-                  error: err,
+                  error,
                 })
               }
             }),
@@ -403,8 +419,8 @@ export const layer = Layer.effect(
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
       if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) return
 
-      const adaptor = getAdaptor(space.projectID, space.type)
-      const target = yield* Effect.promise(() => Promise.resolve(adaptor.target(space)))
+      const adapter = getAdapter(space.projectID, space.type)
+      const target = yield* Effect.promise(() => Promise.resolve(adapter.target(space)))
 
       if (target.type === "local") {
         setStatus(space.id, (yield* Effect.promise(() => Filesystem.exists(target.directory))) ? "connected" : "error")
@@ -442,9 +458,9 @@ export const layer = Layer.effect(
 
     const create = Effect.fn("Workspace.create")(function* (input: CreateInput) {
       const id = WorkspaceID.ascending(input.id)
-      const adaptor = getAdaptor(input.projectID, input.type)
+      const adapter = getAdapter(input.projectID, input.type)
       const config = yield* Effect.promise(() =>
-        Promise.resolve(adaptor.configure({ ...input, id, name: Slug.create(), directory: null })),
+        Promise.resolve(adapter.configure({ ...input, id, name: Slug.create(), directory: null })),
       )
 
       const info: Info = {
@@ -480,7 +496,7 @@ export const layer = Layer.effect(
         OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
       }
 
-      yield* Effect.promise(() => adaptor.create(config, env))
+      yield* Effect.promise(() => adapter.create(config, env))
       yield* Effect.all(
         [
           waitEvent({
@@ -515,17 +531,15 @@ export const layer = Layer.effect(
             workspaceID: input.workspaceID,
           })
 
-        const adaptor = getAdaptor(space.projectID, space.type)
-        const target = yield* Effect.promise(() => Promise.resolve(adaptor.target(space)))
+        const adapter = getAdapter(space.projectID, space.type)
+        const target = yield* Effect.promise(() => Promise.resolve(adapter.target(space)))
 
-        yield* Effect.sync(() =>
-          SyncEvent.run(Session.Event.Updated, {
-            sessionID: input.sessionID,
-            info: {
-              workspaceID: input.workspaceID,
-            },
-          }),
-        )
+        yield* sync.run(Session.Event.Updated, {
+          sessionID: input.sessionID,
+          info: {
+            workspaceID: input.workspaceID,
+          },
+        })
 
         const rows = yield* db((db) =>
           db
@@ -595,7 +609,7 @@ export const layer = Layer.effect(
           })
 
           if (target.type === "local") {
-            SyncEvent.replayAll(events)
+            yield* sync.replayAll(events)
             log.info("session restore batch replayed locally", {
               workspaceID: input.workspaceID,
               sessionID: input.sessionID,
@@ -712,12 +726,12 @@ export const layer = Layer.effect(
       const info = fromRow(row)
       yield* Effect.catch(
         Effect.gen(function* () {
-          const adaptor = getAdaptor(info.projectID, row.type)
-          yield* Effect.tryPromise(() => Promise.resolve(adaptor.remove(info)))
+          const adapter = getAdapter(info.projectID, row.type)
+          yield* Effect.tryPromise(() => Promise.resolve(adapter.remove(info)))
         }),
         () =>
           Effect.sync(() => {
-            log.error("adaptor not available when removing workspace", { type: row.type })
+            log.error("adapter not available when removing workspace", { type: row.type })
           }),
       )
 
@@ -814,6 +828,7 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Session.defaultLayer),
+  Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
 )
 
@@ -855,44 +870,6 @@ function route(url: string | URL, path: string) {
   next.search = ""
   next.hash = ""
   return next
-}
-
-const { runPromise, runSync } = makeRuntime(Service, defaultLayer)
-
-export const create = fn(CreateInput.zod, (input) => runPromise((svc) => svc.create(input)))
-
-export const sessionRestore = fn(SessionRestoreInput.zod, (input) => runPromise((svc) => svc.sessionRestore(input)))
-
-export function list(project: Project.Info) {
-  return Database.use((db) =>
-    db
-      .select()
-      .from(WorkspaceTable)
-      .where(eq(WorkspaceTable.project_id, project.id))
-      .all()
-      .map(fromRow)
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  )
-}
-
-export const get = fn(WorkspaceID.zod, (id) => runPromise((svc) => svc.get(id)))
-
-export const remove = fn(WorkspaceID.zod, (id) => runPromise((svc) => svc.remove(id)))
-
-export function status() {
-  return runSync((svc) => svc.status())
-}
-
-export function isSyncing(workspaceID: WorkspaceID) {
-  return runSync((svc) => svc.isSyncing(workspaceID))
-}
-
-export function waitForSync(workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) {
-  return runPromise((svc) => svc.waitForSync(workspaceID, state, signal))
-}
-
-export function startWorkspaceSyncing(projectID: ProjectID) {
-  void runPromise((svc) => svc.startWorkspaceSyncing(projectID))
 }
 
 export * as Workspace from "./workspace"

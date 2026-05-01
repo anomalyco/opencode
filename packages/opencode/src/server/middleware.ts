@@ -11,7 +11,7 @@ import { basicAuth } from "hono/basic-auth"
 import { cors } from "hono/cors"
 import { compress } from "hono/compress"
 import * as ServerBackend from "./backend"
-import { isAllowedCorsOrigin } from "./cors"
+import { isAllowedCorsOrigin, type CorsOptions } from "./cors"
 
 const log = Log.create({ service: "server" })
 
@@ -67,7 +67,7 @@ export function LoggerMiddleware(backendAttributes: ServerBackend.Attributes): M
   }
 }
 
-export function CorsMiddleware(opts?: { cors?: string[] }): MiddlewareHandler {
+export function CorsMiddleware(opts?: CorsOptions): MiddlewareHandler {
   return cors({
     maxAge: 86_400,
     origin(input) {

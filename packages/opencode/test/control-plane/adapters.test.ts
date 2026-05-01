@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { getAdaptor, registerAdaptor } from "../../src/control-plane/adaptors"
+import { getAdapter, registerAdapter } from "../../src/control-plane/adapters"
 import { ProjectID } from "../../src/project/schema"
 import type { WorkspaceInfo } from "../../src/control-plane/types"
 
@@ -15,7 +15,7 @@ function info(projectID: WorkspaceInfo["projectID"], type: string): WorkspaceInf
   }
 }
 
-function adaptor(dir: string) {
+function adapter(dir: string) {
   return {
     name: dir,
     description: dir,
@@ -33,19 +33,19 @@ function adaptor(dir: string) {
   }
 }
 
-describe("control-plane/adaptors", () => {
-  test("isolates custom adaptors by project", async () => {
+describe("control-plane/adapters", () => {
+  test("isolates custom adapters by project", async () => {
     const type = `demo-${Math.random().toString(36).slice(2)}`
     const one = ProjectID.make(`project-${Math.random().toString(36).slice(2)}`)
     const two = ProjectID.make(`project-${Math.random().toString(36).slice(2)}`)
-    registerAdaptor(one, type, adaptor("/one"))
-    registerAdaptor(two, type, adaptor("/two"))
+    registerAdapter(one, type, adapter("/one"))
+    registerAdapter(two, type, adapter("/two"))
 
-    expect(await (await getAdaptor(one, type)).target(info(one, type))).toEqual({
+    expect(await (await getAdapter(one, type)).target(info(one, type))).toEqual({
       type: "local",
       directory: "/one",
     })
-    expect(await (await getAdaptor(two, type)).target(info(two, type))).toEqual({
+    expect(await (await getAdapter(two, type)).target(info(two, type))).toEqual({
       type: "local",
       directory: "/two",
     })
@@ -54,16 +54,16 @@ describe("control-plane/adaptors", () => {
   test("latest install wins within a project", async () => {
     const type = `demo-${Math.random().toString(36).slice(2)}`
     const id = ProjectID.make(`project-${Math.random().toString(36).slice(2)}`)
-    registerAdaptor(id, type, adaptor("/one"))
+    registerAdapter(id, type, adapter("/one"))
 
-    expect(await (await getAdaptor(id, type)).target(info(id, type))).toEqual({
+    expect(await (await getAdapter(id, type)).target(info(id, type))).toEqual({
       type: "local",
       directory: "/one",
     })
 
-    registerAdaptor(id, type, adaptor("/two"))
+    registerAdapter(id, type, adapter("/two"))
 
-    expect(await (await getAdaptor(id, type)).target(info(id, type))).toEqual({
+    expect(await (await getAdapter(id, type)).target(info(id, type))).toEqual({
       type: "local",
       directory: "/two",
     })

@@ -3,7 +3,7 @@ import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
 import { zod } from "@/util/effect-zod"
 import { namedSchemaError } from "@/util/named-schema-error"
-import { withStatics } from "@/util/schema"
+import { optionalOmitUndefined, withStatics } from "@/util/schema"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
 import { Array as Arr, Effect, Layer, Record, Result, Context, Schema } from "effect"
@@ -18,14 +18,14 @@ const TextPrompt = Schema.Struct({
   type: Schema.Literal("text"),
   key: Schema.String,
   message: Schema.String,
-  placeholder: Schema.optional(Schema.String),
-  when: Schema.optional(When),
+  placeholder: optionalOmitUndefined(Schema.String),
+  when: optionalOmitUndefined(When),
 })
 
 const SelectOption = Schema.Struct({
   label: Schema.String,
   value: Schema.String,
-  hint: Schema.optional(Schema.String),
+  hint: optionalOmitUndefined(Schema.String),
 })
 
 const SelectPrompt = Schema.Struct({
@@ -33,7 +33,7 @@ const SelectPrompt = Schema.Struct({
   key: Schema.String,
   message: Schema.String,
   options: Schema.Array(SelectOption),
-  when: Schema.optional(When),
+  when: optionalOmitUndefined(When),
 })
 
 const Prompt = Schema.Union([TextPrompt, SelectPrompt])
@@ -41,7 +41,7 @@ const Prompt = Schema.Union([TextPrompt, SelectPrompt])
 export class Method extends Schema.Class<Method>("ProviderAuthMethod")({
   type: Schema.Literals(["oauth", "api"]),
   label: Schema.String,
-  prompts: Schema.optional(Schema.Array(Prompt)),
+  prompts: optionalOmitUndefined(Schema.Array(Prompt)),
 }) {
   static readonly zod = zod(this)
 }
@@ -135,23 +135,25 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
           item.methods.map((method) => ({
             type: method.type,
             label: method.label,
-            prompts: method.prompts?.map((prompt) => {
-              if (prompt.type === "select") {
+            ...(method.prompts && {
+              prompts: method.prompts.map((prompt) => {
+                if (prompt.type === "select") {
+                  return {
+                    type: "select" as const,
+                    key: prompt.key,
+                    message: prompt.message,
+                    options: prompt.options,
+                    ...(prompt.when && { when: prompt.when }),
+                  }
+                }
                 return {
-                  type: "select" as const,
+                  type: "text" as const,
                   key: prompt.key,
                   message: prompt.message,
-                  options: prompt.options,
-                  when: prompt.when,
+                  ...(prompt.placeholder && { placeholder: prompt.placeholder }),
+                  ...(prompt.when && { when: prompt.when }),
                 }
-              }
-              return {
-                type: "text" as const,
-                key: prompt.key,
-                message: prompt.message,
-                placeholder: prompt.placeholder,
-                when: prompt.when,
-              }
+              }),
             }),
           })),
         ),

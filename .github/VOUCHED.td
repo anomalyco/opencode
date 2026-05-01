@@ -32,6 +32,7 @@ rekram1-node
 -ricardo-m-l
 -robinmordasiewicz
 rubdos
+-saisharan0103 spamming ai prs
 shantur
 simonklee
 -spider-yamet clawdbot/llm psychosis, spam pinging the team

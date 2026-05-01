@@ -13,7 +13,7 @@ const { Flag } = await import("@opencode-ai/core/flag/flag")
 const { Plugin } = await import("../../src/plugin/index")
 const { Workspace } = await import("../../src/control-plane/workspace")
 const { Instance } = await import("../../src/project/instance")
-const it = testEffect(Layer.mergeAll(Plugin.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(Layer.mergeAll(Plugin.defaultLayer, Workspace.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
 const experimental = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
@@ -34,7 +34,7 @@ afterAll(() => {
 })
 
 describe("plugin.workspace", () => {
-  it.live("plugin can install a workspace adaptor", () =>
+  it.live("plugin can install a workspace adapter", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         const type = `plug-${Math.random().toString(36).slice(2)}`
@@ -48,7 +48,7 @@ describe("plugin.workspace", () => {
               "export default async ({ experimental_workspace }) => {",
               `  experimental_workspace.register(${JSON.stringify(type)}, {`,
               '    name: "plug",',
-              '    description: "plugin workspace adaptor",',
+              '    description: "plugin workspace adapter",',
               "    configure(input) {",
               `      return { ...input, name: "plug", branch: "plug/main", directory: ${JSON.stringify(space)} }`,
               "    },",
@@ -83,14 +83,13 @@ describe("plugin.workspace", () => {
 
         const plugin = yield* Plugin.Service
         yield* plugin.init()
-        const info = yield* Effect.promise(() =>
-          Workspace.create({
-            type,
-            branch: null,
-            extra: { key: "value" },
-            projectID: Instance.project.id,
-          }),
-        )
+        const workspace = yield* Workspace.Service
+        const info = yield* workspace.create({
+          type,
+          branch: null,
+          extra: { key: "value" },
+          projectID: Instance.project.id,
+        })
 
         expect(info.type).toBe(type)
         expect(info.name).toBe("plug")
