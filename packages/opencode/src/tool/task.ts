@@ -120,51 +120,51 @@ export const TaskTool = Tool.defineEffect(
         SessionPrompt.cancel(nextSession.id)
       }
 
-      return yield* Effect.acquireUseRelease(
-        Effect.sync(() => {
-          ctx.abort.addEventListener("abort", cancel)
-        }),
-        () =>
-          Effect.gen(function* () {
-            const parts = yield* Effect.promise(() => SessionPrompt.resolvePromptParts(params.prompt))
-            const result = yield* Effect.promise(() =>
-              SessionPrompt.prompt({
-                messageID,
-                sessionID: nextSession.id,
-                model: {
-                  modelID: model.modelID,
-                  providerID: model.providerID,
-                },
-                agent: next.name,
-                tools: {
-                  ...(canTodo ? {} : { todowrite: false }),
-                  ...(canTask ? {} : { task: false }),
-                  ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
-                },
-                parts,
-              }),
-            )
+      // Add abort listener to cancel child session when parent is aborted
+      const abortHandler = () => {
+        cancel()
+      }
+      ctx.abort.addEventListener("abort", abortHandler)
 
-            return {
-              title: params.description,
-              metadata: {
-                sessionId: nextSession.id,
-                model,
+      try {
+        return yield* Effect.gen(function* () {
+          const parts = yield* Effect.promise(() => SessionPrompt.resolvePromptParts(params.prompt))
+          const result = yield* Effect.promise(() =>
+            SessionPrompt.prompt({
+              messageID,
+              sessionID: nextSession.id,
+              model: {
+                modelID: model.modelID,
+                providerID: model.providerID,
               },
-              output: [
-                `task_id: ${nextSession.id} (for resuming to continue this task if needed)`,
-                "",
-                "<task_result>",
-                result.parts.findLast((item) => item.type === "text")?.text ?? "",
-                "</task_result>",
-              ].join("\n"),
-            }
-          }),
-        () =>
-          Effect.sync(() => {
-            ctx.abort.removeEventListener("abort", cancel)
-          }),
-      )
+              agent: next.name,
+              tools: {
+                ...(canTodo ? {} : { todowrite: false }),
+                ...(canTask ? {} : { task: false }),
+                ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
+              },
+              parts,
+            }),
+          )
+
+          return {
+            title: params.description,
+            metadata: {
+              sessionId: nextSession.id,
+              model,
+            },
+            output: [
+              `task_id: ${nextSession.id} (for resuming to continue this task if needed)`,
+              "",
+              "<task_result>",
+              result.parts.findLast((item) => item.type === "text")?.text ?? "",
+              "</task_result>",
+            ].join("\n"),
+          }
+        })
+      } finally {
+        ctx.abort.removeEventListener("abort", abortHandler)
+      }
     })
 
     return {

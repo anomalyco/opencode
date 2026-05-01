@@ -1,7 +1,7 @@
 ---
 mode: primary
 hidden: true
-model: opencode/minimax-m2.5
+model: hermes-gateway/hermes-triage
 color: "#44BA81"
 tools:
   "*": false

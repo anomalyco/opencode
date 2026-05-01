@@ -1,7 +1,7 @@
 ---
 description: Translate content for a specified locale while preserving technical terms
 mode: subagent
-model: opencode/gpt-5.4
+model: hermes-gateway/hermes-translator
 ---
 
 You are a professional translator and localization specialist.
