@@ -14,6 +14,7 @@
     "version:sync": "bun ./script/sync-version.ts",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
+    "postinstall": "bun ./script/patch-ghostty.ts",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"

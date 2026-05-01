@@ -53,6 +53,35 @@ export const Font = () => {
           descent-override: 25%;
           line-gap-override: 1%;
         }
+        /*
+         * The IBM Plex Mono assets above are symlinks to the BlexMonoNerdFontMono
+         * binaries (which include the full Nerd Font glyph set). Re-declare them
+         * under a Nerd-Font-flavored family name so Ghostty's terminal renderer,
+         * which scans the font chain via /nerd|powerline/i to pick a glyph-aware
+         * font for cell metrics, finds a match. The browser dedupes by URL so
+         * this adds no extra network or memory cost.
+         */
+        @font-face {
+          font-family: "BlexMono Nerd Font Mono";
+          src: url("${ibmPlexMonoRegular}") format("woff2");
+          font-display: swap;
+          font-style: normal;
+          font-weight: 400;
+        }
+        @font-face {
+          font-family: "BlexMono Nerd Font Mono";
+          src: url("${ibmPlexMonoMedium}") format("woff2");
+          font-display: swap;
+          font-style: normal;
+          font-weight: 500;
+        }
+        @font-face {
+          font-family: "BlexMono Nerd Font Mono";
+          src: url("${ibmPlexMonoBold}") format("woff2");
+          font-display: swap;
+          font-style: normal;
+          font-weight: 700;
+        }
       `}</Style>
       <Show when={typeof location === "undefined" || location.protocol !== "file:"}>
         <Link rel="preload" href={inter} as="font" type="font/woff2" crossorigin="anonymous" />
