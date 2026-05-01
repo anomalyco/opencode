@@ -997,6 +997,7 @@ const tui: TuiPlugin = async (api) => {
         const sessionID = currentSessionID(api)
         if (!sessionID) return
         api.route.navigate(route, { sessionID })
+        api.ui.dialog.clear()
       },
     },
   ])
