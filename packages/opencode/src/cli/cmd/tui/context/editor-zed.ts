@@ -12,6 +12,9 @@ const ZedEditorRowSchema = z.object({
   workspace_paths: z.string().nullable(),
   timestamp: z.string(),
   buffer_path: z.string().nullable(),
+})
+
+const ZedSelectionRowSchema = z.object({
   selection_start: z.number().nullable(),
   selection_end: z.number().nullable(),
 })
@@ -24,6 +27,7 @@ const utf8 = new TextEncoder()
 
 type ZedEditorRow = z.infer<typeof ZedEditorRowSchema>
 type ZedActiveEditorRow = ZedEditorRow & { item_kind: "Editor"; editor_id: number }
+type ZedSelectionRow = z.infer<typeof ZedSelectionRowSchema>
 
 export type ZedSelectionResult =
   | { type: "selection"; selection: EditorSelection }
@@ -36,7 +40,21 @@ export async function resolveZedSelection(dbPath: string, cwd = process.cwd()): 
 
   const row = active.row
   if (!row.buffer_path) return { type: "empty" }
-  if (row.selection_start == null || row.selection_end == null) return { type: "unavailable" }
+
+  const selections = queryZedEditorSelections(dbPath, row)
+  if (selections.type !== "selections") return selections
+  const byteRanges = selections.selections
+    .flatMap((selection) => {
+      if (selection.selection_start == null || selection.selection_end == null) return []
+      return [
+        {
+          start: Math.min(selection.selection_start, selection.selection_end),
+          end: Math.max(selection.selection_start, selection.selection_end),
+        },
+      ]
+    })
+    .sort((left, right) => left.start - right.start || left.end - right.end)
+  if (byteRanges.length === 0) return { type: "unavailable" }
 
   const contents = queryZedEditorContents(dbPath, row)
   const text =
@@ -47,16 +65,21 @@ export async function resolveZedSelection(dbPath: string, cwd = process.cwd()): 
           .catch(() => undefined)
   if (text == null) return { type: "unavailable" }
 
-  const startOffset = utf8ByteOffsetToStringIndex(text, Math.min(row.selection_start, row.selection_end))
-  const endOffset = utf8ByteOffsetToStringIndex(text, Math.max(row.selection_start, row.selection_end))
+  const ranges = byteRanges.map((range) => {
+    const startOffset = utf8ByteOffsetToStringIndex(text, range.start)
+    const endOffset = utf8ByteOffsetToStringIndex(text, range.end)
+    return {
+      text: text.slice(startOffset, endOffset),
+      selection: offsetsToSelection(text, startOffset, endOffset),
+    }
+  })
 
   return {
     type: "selection",
     selection: {
-      text: text.slice(startOffset, endOffset),
       filePath: row.buffer_path,
       source: "zed",
-      selection: offsetsToSelection(text, startOffset, endOffset),
+      ranges,
     },
   }
 }
@@ -73,14 +96,11 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
           i.workspace_id as workspace_id,
           w.paths as workspace_paths,
           w.timestamp as timestamp,
-          e.buffer_path as buffer_path,
-          s.start as selection_start,
-          s.end as selection_end
+          e.buffer_path as buffer_path
         from items i
         join panes p on p.pane_id = i.pane_id and p.workspace_id = i.workspace_id
         join workspaces w on w.workspace_id = i.workspace_id
         left join editors e on e.item_id = i.item_id and e.workspace_id = i.workspace_id
-        left join editor_selections s on s.editor_id = e.item_id and s.workspace_id = e.workspace_id
         where i.active = 1 and p.active = 1
         order by w.timestamp desc`,
       )
@@ -101,6 +121,34 @@ function queryZedActiveEditor(dbPath: string, cwd: string) {
     if (row.item_kind !== "Editor") return { type: "unavailable" as const }
     if (!isZedActiveEditorRow(row)) return { type: "empty" as const }
     return { type: "row" as const, row }
+  } catch {
+    return { type: "unavailable" as const }
+  } finally {
+    db?.close()
+  }
+}
+
+function queryZedEditorSelections(dbPath: string, row: ZedActiveEditorRow) {
+  let db: Database | undefined
+  try {
+    db = new Database(dbPath, { readonly: true })
+    const raw = db
+      .query(
+        `select
+          start as selection_start,
+          end as selection_end
+        from editor_selections
+        where editor_id = $editorID and workspace_id = $workspaceID`,
+      )
+      .all({ $editorID: row.editor_id, $workspaceID: row.workspace_id })
+
+    const selections = raw.flatMap((selection) => {
+      const parsed = ZedSelectionRowSchema.safeParse(selection)
+      return parsed.success ? [parsed.data] : []
+    })
+
+    if (raw.length > 0 && selections.length === 0) return { type: "unavailable" as const }
+    return { type: "selections" as const, selections }
   } catch {
     return { type: "unavailable" as const }
   } finally {

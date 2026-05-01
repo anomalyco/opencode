@@ -1,7 +1,8 @@
 import { Context, Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
@@ -22,18 +23,26 @@ import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
 import { Question } from "@/question"
 import { Session } from "@/session/session"
+import { SessionCompaction } from "@/session/compaction"
+import { SessionPrompt } from "@/session/prompt"
+import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
+import { SessionShare } from "@/share/session"
 import { Skill } from "@/skill"
+import { SyncEvent } from "@/sync"
 import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
 import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
+import { Workspace } from "@/control-plane/workspace"
+import { isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
+import { serveUIEffect } from "@/server/routes/ui"
 import { InstanceHttpApi, RootHttpApi } from "./api"
-import { ServerAuthConfig, authorizationLayer } from "./middleware/authorization"
-import { eventRoute } from "./event"
+import { ServerAuthConfig, authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
+import { EventApi, eventHandlers } from "./event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
 import { experimentalHandlers } from "./handlers/experimental"
@@ -55,7 +64,6 @@ import { workspaceRouterMiddleware, workspaceRoutingLayer } from "./middleware/w
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
-import type { Predicate } from "effect/Predicate"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -69,7 +77,24 @@ const runtime = HttpRouter.middleware()(
   ),
 ).layer
 
+const cors = (corsOptions?: CorsOptions) =>
+  HttpRouter.middleware(
+    HttpMiddleware.cors({
+      allowedOrigins: (origin) => isAllowedCorsOrigin(origin, corsOptions),
+      maxAge: 86_400,
+    }),
+    { global: true },
+  )
+
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(Layer.provide([controlHandlers, globalHandlers]))
+const instanceRouterLayer = authorizationRouterMiddleware
+  .combine(instanceRouterMiddleware)
+  .combine(workspaceRouterMiddleware)
+  .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal), Layer.provide(ServerAuthConfig.defaultLayer))
+const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
+  Layer.provide(eventHandlers),
+  Layer.provide(instanceRouterLayer),
+)
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
     configHandlers,
@@ -89,13 +114,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   ]),
 )
 
-const rawInstanceRoutes = Layer.mergeAll(eventRoute, ptyConnectRoute).pipe(
-  Layer.provide(
-    instanceRouterMiddleware
-      .combine(workspaceRouterMiddleware)
-      .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
-  ),
-)
+const rawInstanceRoutes = Layer.mergeAll(ptyConnectRoute).pipe(Layer.provide(instanceRouterLayer))
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
   Layer.provide([
     authorizationLayer.pipe(Layer.provide(ServerAuthConfig.defaultLayer)),
@@ -104,63 +123,76 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
   ]),
 )
 
-export const routes = Layer.mergeAll(rootApiRoutes, instanceRoutes).pipe(
-  Layer.provide(
-    HttpRouter.cors({
-      maxAge: 86_400,
-      allowedOrigins: ((input) => {
-        return (
-          !input ||
-          input.startsWith("http://localhost:") ||
-          input.startsWith("http://127.0.0.1:") ||
-          input.startsWith("oc://renderer") ||
-          input === "tauri://localhost" ||
-          input === "http://tauri.localhost" ||
-          input === "https://tauri.localhost" ||
-          /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)
-        )
-      }) as Predicate<string> as any,
-    }),
-  ),
-  Layer.provide([
-    runtime,
-    Account.defaultLayer,
-    Agent.defaultLayer,
-    Auth.defaultLayer,
-    Command.defaultLayer,
-    Config.defaultLayer,
-    File.defaultLayer,
-    Format.defaultLayer,
-    LSP.defaultLayer,
-    Installation.defaultLayer,
-    MCP.defaultLayer,
-    Permission.defaultLayer,
-    Project.defaultLayer,
-    ProviderAuth.defaultLayer,
-    Provider.defaultLayer,
-    Pty.defaultLayer,
-    Question.defaultLayer,
-    Ripgrep.defaultLayer,
-    Session.defaultLayer,
-    SessionRunState.defaultLayer,
-    SessionStatus.defaultLayer,
-    SessionSummary.defaultLayer,
-    Skill.defaultLayer,
-    Todo.defaultLayer,
-    ToolRegistry.defaultLayer,
-    Vcs.defaultLayer,
-    Worktree.defaultLayer,
-    Bus.layer,
-    HttpServer.layerServices,
-  ]),
-  Layer.provideMerge(Observability.layer),
-)
+const uiRoute = HttpRouter.use((router) =>
+  Effect.gen(function* () {
+    const fs = yield* AppFileSystem.Service
+    const client = yield* HttpClient.HttpClient
+    yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
+  }),
+).pipe(Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))))
 
-export const webHandler = lazy(() =>
+export function createRoutes(corsOptions?: CorsOptions) {
+  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
+    Layer.provide([
+      cors(corsOptions),
+      runtime,
+      Account.defaultLayer,
+      Agent.defaultLayer,
+      Auth.defaultLayer,
+      Command.defaultLayer,
+      Config.defaultLayer,
+      File.defaultLayer,
+      Format.defaultLayer,
+      LSP.defaultLayer,
+      Installation.defaultLayer,
+      MCP.defaultLayer,
+      Permission.defaultLayer,
+      Project.defaultLayer,
+      ProviderAuth.defaultLayer,
+      Provider.defaultLayer,
+      Pty.defaultLayer,
+      Question.defaultLayer,
+      Ripgrep.defaultLayer,
+      Session.defaultLayer,
+      SessionCompaction.defaultLayer,
+      SessionPrompt.defaultLayer,
+      SessionRevert.defaultLayer,
+      SessionShare.defaultLayer,
+      SessionRunState.defaultLayer,
+      SessionStatus.defaultLayer,
+      SessionSummary.defaultLayer,
+      SyncEvent.defaultLayer,
+      Skill.defaultLayer,
+      Todo.defaultLayer,
+      ToolRegistry.defaultLayer,
+      Vcs.defaultLayer,
+      Workspace.defaultLayer,
+      Worktree.defaultLayer,
+      Bus.layer,
+      AppFileSystem.defaultLayer,
+      FetchHttpClient.layer,
+      HttpServer.layerServices,
+    ]),
+    Layer.provideMerge(Observability.layer),
+  )
+}
+
+export const routes = createRoutes()
+
+const defaultWebHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {
     memoMap,
     middleware: disposeMiddleware,
   }),
 )
+
+export function webHandler(corsOptions?: CorsOptions) {
+  if (!corsOptions?.cors?.length) return defaultWebHandler()
+  return HttpRouter.toWebHandler(createRoutes(corsOptions), {
+    // Server-level CORS options are dynamic; don't reuse the default route layer memoized without them.
+    memoMap: Layer.makeMemoMapUnsafe(),
+    middleware: disposeMiddleware,
+  })
+}
 
 export * as ExperimentalHttpApiServer from "./server"
