@@ -12,6 +12,7 @@ import {
 import { Config } from "@/config/config"
 import { ConfigMCP } from "../config/mcp"
 import * as Log from "@opencode-ai/core/util/log"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { NamedError } from "@opencode-ai/core/util/error"
 import z from "zod/v4"
 import { Installation } from "../installation"
@@ -113,6 +114,19 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
 }
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
+
+// Anthropic and OpenAI tool calling APIs reject tool names longer than 64
+// characters; long MCP server names + tool names can exceed that and cause
+// requests to fail validation. Truncate deterministically with a short hash
+// suffix to keep keys unique across collisions.
+const MAX_TOOL_NAME_LENGTH = 64
+
+function buildToolKey(clientName: string, toolName: string): string {
+  const key = sanitize(clientName) + "_" + sanitize(toolName)
+  if (key.length <= MAX_TOOL_NAME_LENGTH) return key
+  const suffix = "_" + Hash.fast(key).slice(0, 8)
+  return key.slice(0, MAX_TOOL_NAME_LENGTH - suffix.length) + suffix
+}
 
 function remoteURL(key: string, value: string) {
   if (URL.canParse(value)) return new URL(value)
@@ -654,7 +668,16 @@ export const layer = Layer.effect(
 
             const timeout = entry?.timeout ?? defaultTimeout
             for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+              const full = sanitize(clientName) + "_" + sanitize(mcpTool.name)
+              const key = buildToolKey(clientName, mcpTool.name)
+              if (key !== full) {
+                log.warn("mcp tool name truncated to fit 64-char limit", {
+                  clientName,
+                  toolName: mcpTool.name,
+                  key,
+                })
+              }
+              result[key] = convertMcpTool(mcpTool, client, timeout)
             }
           }),
         { concurrency: "unbounded" },

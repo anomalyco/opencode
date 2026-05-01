@@ -704,6 +704,45 @@ test(
 )
 
 // ========================================================================
+// Test: long server/tool names are truncated to fit the 64-char limit (#3523)
+// ========================================================================
+
+test(
+  "tools() truncates tool keys longer than 64 chars while preserving uniqueness",
+  withInstance(
+    {
+      "very-long-mcp-server-name-that-pushes-tool-keys-past-the-limit": {
+        type: "local",
+        command: ["echo", "test"],
+      },
+    },
+    (mcp) =>
+      Effect.gen(function* () {
+        const serverName = "very-long-mcp-server-name-that-pushes-tool-keys-past-the-limit"
+        lastCreatedClientName = serverName
+        const serverState = getOrCreateClientState(serverName)
+        serverState.tools = [
+          { name: "alpha", description: "Tool alpha", inputSchema: { type: "object", properties: {} } },
+          { name: "bravo", description: "Tool bravo", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        yield* mcp.add(serverName, { type: "local", command: ["echo", "test"] })
+
+        const tools = yield* mcp.tools()
+        const keys = Object.keys(tools)
+
+        expect(keys.length).toBe(2)
+        for (const key of keys) {
+          expect(key.length).toBeLessThanOrEqual(64)
+          expect(key).toMatch(/^[a-zA-Z0-9_-]+$/)
+        }
+        // Both tools must produce distinct keys even after truncation.
+        expect(new Set(keys).size).toBe(2)
+      }),
+  ),
+)
+
+// ========================================================================
 // Test: transport leak — local stdio timeout (#19168)
 // ========================================================================
 
