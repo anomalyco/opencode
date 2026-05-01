@@ -37,6 +37,7 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { Heap } from "./cli/heap"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -100,6 +101,8 @@ const cli = yargs(args)
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
+
+    Heap.start()
 
     Log.create({ service: "startup" }).info("cli.bootstrap", {
       duration: Date.now() - start,
