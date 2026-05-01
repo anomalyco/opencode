@@ -1212,6 +1212,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         { message: info, parts },
       )
 
+      // Plugins may push parts asynchronously (after an await) without populating
+      // the framework-managed identifiers. Backfill them so downstream consumers
+      // (e.g. SyncEvent.run, sessions.updatePart) always have a valid sessionID,
+      // messageID, and id.
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i]
+        if (p.sessionID && p.messageID && p.id) continue
+        Object.assign(p, {
+          id: p.id ? PartID.make(p.id) : PartID.ascending(),
+          messageID: info.id,
+          sessionID: input.sessionID,
+        })
+      }
+
       const parsed = MessageV2.Info.zod.safeParse(info)
       if (!parsed.success) {
         log.error("invalid user message before save", {
