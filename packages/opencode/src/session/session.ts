@@ -26,7 +26,7 @@ import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "./message-v2"
-import { Instance } from "../project/instance"
+import { Instance, type InstanceContext } from "../project/instance"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
@@ -311,7 +311,7 @@ export const Event = {
   ),
 }
 
-export function plan(input: { slug: string; time: { created: number } }, instance = Instance.current) {
+export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
   const base = instance.project.vcs
     ? path.join(instance.worktree, ".opencode", "plans")
     : path.join(Global.Path.data, "plans")
