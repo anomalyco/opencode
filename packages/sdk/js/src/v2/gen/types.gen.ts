@@ -2430,19 +2430,19 @@ export type AppLogResponses = {
 
 export type AppLogResponse = AppLogResponses[keyof AppLogResponses]
 
-export type ExperimentalWorkspaceAdaptorListData = {
+export type ExperimentalWorkspaceAdapterListData = {
   body?: never
   path?: never
   query?: {
     directory?: string
     workspace?: string
   }
-  url: "/experimental/workspace/adaptor"
+  url: "/experimental/workspace/adapter"
 }
 
-export type ExperimentalWorkspaceAdaptorListResponses = {
+export type ExperimentalWorkspaceAdapterListResponses = {
   /**
-   * Workspace adaptors
+   * Workspace adapters
    */
   200: Array<{
     type: string
@@ -2451,8 +2451,8 @@ export type ExperimentalWorkspaceAdaptorListResponses = {
   }>
 }
 
-export type ExperimentalWorkspaceAdaptorListResponse =
-  ExperimentalWorkspaceAdaptorListResponses[keyof ExperimentalWorkspaceAdaptorListResponses]
+export type ExperimentalWorkspaceAdapterListResponse =
+  ExperimentalWorkspaceAdapterListResponses[keyof ExperimentalWorkspaceAdapterListResponses]
 
 export type ExperimentalWorkspaceListData = {
   body?: never
