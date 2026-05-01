@@ -152,6 +152,25 @@ export const layer: Layer.Layer<
         return { call, part }
       })
 
+      const recentMatchingToolParts = Effect.fn("SessionProcessor.recentMatchingToolParts")(function* (input: {
+        tool: string
+        args: Record<string, any>
+      }) {
+        const messages = yield* MessageV2.filterCompactedEffect(ctx.sessionID)
+        const lastUserIndex = messages.findLastIndex((msg) => msg.info.role === "user")
+        return messages
+          .slice(lastUserIndex + 1)
+          .flatMap((msg) => msg.parts)
+          .filter(
+            (part): part is MessageV2.ToolPart =>
+              part.type === "tool" &&
+              part.tool === input.tool &&
+              part.state.status !== "pending" &&
+              JSON.stringify(part.state.input) === JSON.stringify(input.args),
+          )
+          .slice(-DOOM_LOOP_THRESHOLD)
+      })
+
       const updateToolCall = Effect.fn("SessionProcessor.updateToolCall")(function* (
         toolCallID: string,
         update: (part: MessageV2.ToolPart) => MessageV2.ToolPart,
@@ -302,21 +321,9 @@ export const layer: Layer.Layer<
                 : value.providerMetadata,
             }))
 
-            const parts = MessageV2.parts(ctx.assistantMessage.id)
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+            const recentParts = yield* recentMatchingToolParts({ tool: value.toolName, args: value.input ?? {} })
 
-            if (
-              recentParts.length !== DOOM_LOOP_THRESHOLD ||
-              !recentParts.every(
-                (part) =>
-                  part.type === "tool" &&
-                  part.tool === value.toolName &&
-                  part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(value.input),
-              )
-            ) {
-              return
-            }
+            if (recentParts.length !== DOOM_LOOP_THRESHOLD) return
 
             const agent = yield* agents.get(ctx.assistantMessage.agent)
             yield* permission.ask({
