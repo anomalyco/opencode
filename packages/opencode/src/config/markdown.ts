@@ -17,11 +17,10 @@ export function shell(template: string) {
 // other coding agents like claude code allow invalid yaml in their
 // frontmatter, we need to fallback to a more permissive parser for those cases
 export function fallbackSanitization(content: string): string {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  const match = content.match(/^---(\r?\n)([\s\S]*?)(\r?\n)?^---[ \t]*(\r?\n|$)/m)
   if (!match) return content
 
-  const frontmatter = match[1]
-  const lines = frontmatter.split(/\r?\n/)
+  const lines = match[2].split(/\r?\n/)
   const result: string[] = []
 
   for (const line of lines) {
@@ -63,8 +62,8 @@ export function fallbackSanitization(content: string): string {
     result.push(line)
   }
 
-  const processed = result.join("\n")
-  return content.replace(frontmatter, () => processed)
+  const processed = result.join(match[1])
+  return content.replace(match[0], () => `---${match[1]}${processed}${match[3] ?? ""}---${match[4]}`)
 }
 
 export async function parse(filePath: string) {
@@ -72,6 +71,9 @@ export async function parse(filePath: string) {
 
   try {
     const md = matter(template)
+    const sanitized = fallbackSanitization(template)
+    // Retry sanitized frontmatter when gray-matter silently treated it as content.
+    if (Object.keys(md.data).length === 0 && sanitized !== template) return matter(sanitized)
     return md
   } catch {
     try {

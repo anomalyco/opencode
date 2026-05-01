@@ -1,5 +1,9 @@
 import { expect, test, describe } from "bun:test"
+import path from "path"
+import { mkdir } from "fs/promises"
+import { ConfigAgent } from "@/config/agent"
 import { ConfigMarkdown } from "@/config/markdown"
+import { tmpdir } from "../fixture/fixture"
 
 describe("ConfigMarkdown: normal template", () => {
   const template = `This is a @valid/path/to/a/file and it should also match at
@@ -224,5 +228,69 @@ describe("ConfigMarkdown: frontmatter has weird model id", async () => {
     expect(result.data["stuff"]).toBe("This is some stuff\n")
 
     expect(result.content.trim()).toBe("Strictly follow da rules")
+  })
+})
+
+describe("ConfigMarkdown: frontmatter with colon in value followed by other fields", async () => {
+  const result = await ConfigMarkdown.parse(import.meta.dir + "/fixtures/colon-in-value.md")
+
+  test("should preserve full description including colons", () => {
+    expect(result.data.description).toBe("Reviews changes: returns a verdict.")
+  })
+
+  test("should preserve subsequent mode field", () => {
+    expect(result.data.mode).toBe("subagent")
+  })
+
+  test("should preserve hidden field", () => {
+    expect(result.data.hidden).toBe(true)
+  })
+
+  test("should preserve model field", () => {
+    expect(result.data.model).toBe("anthropic/claude-sonnet-4-5")
+  })
+
+  test("should preserve temperature field", () => {
+    expect(result.data.temperature).toBe(0.2)
+  })
+
+  test("should preserve steps field", () => {
+    expect(result.data.steps).toBe(7)
+  })
+
+  test("should preserve nested permission fields", () => {
+    expect(result.data.permission.read).toBe("allow")
+    expect(result.data.permission.bash["npm test"]).toBe("allow")
+    expect(result.data.permission.bash["rm -rf *"]).toBe("deny")
+  })
+
+  test("should preserve body content", () => {
+    expect(result.content.trim()).toStartWith("You are the code review agent.")
+  })
+
+  test("should load colon in value config through ConfigAgent", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await mkdir(path.join(dir, "agent"))
+        await Bun.write(
+          path.join(dir, "agent", "code-reviewer.md"),
+          await Bun.file(import.meta.dir + "/fixtures/colon-in-value.md").text(),
+        )
+      },
+    })
+
+    const agent = (await ConfigAgent.load(tmp.path))["code-reviewer"]
+    if (!agent) throw new Error("Expected code-reviewer agent to load")
+    expect(agent.description).toBe("Reviews changes: returns a verdict.")
+    expect(agent.mode).toBe("subagent")
+    expect(agent.hidden).toBe(true)
+    expect(agent.prompt).toStartWith("You are the code review agent.")
+    expect(agent.prompt).not.toContain("---")
+    if (!agent.permission) throw new Error("Expected code-reviewer agent permissions to load")
+    expect(agent.permission.read).toBe("allow")
+    expect(agent.permission.bash).toEqual({
+      "npm test": "allow",
+      "rm -rf *": "deny",
+    })
   })
 })
