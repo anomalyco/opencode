@@ -1,6 +1,8 @@
 const opencodeOrigin = /^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/
 
-export function isAllowedCorsOrigin(input: string | undefined, opts?: { cors?: string[] }) {
+export type CorsOptions = { readonly cors?: ReadonlyArray<string> }
+
+export function isAllowedCorsOrigin(input: string | undefined, opts?: CorsOptions) {
   if (!input) return true
   if (input.startsWith("http://localhost:")) return true
   if (input.startsWith("http://127.0.0.1:")) return true

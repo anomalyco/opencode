@@ -26,7 +26,7 @@ import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "./message-v2"
-import { Instance } from "../project/instance"
+import type { InstanceContext } from "../project/instance"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
@@ -234,6 +234,16 @@ export const MessagesInput = Schema.Struct({
   sessionID: SessionID,
   limit: Schema.optional(NonNegativeInt),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ListInput = {
+  directory?: string
+  scope?: "project"
+  path?: string
+  workspaceID?: WorkspaceID
+  roots?: boolean
+  start?: number
+  search?: string
+  limit?: number
+}
 
 const CreatedEventSchema = Schema.Struct({
   sessionID: SessionID,
@@ -311,9 +321,9 @@ export const Event = {
   ),
 }
 
-export function plan(input: { slug: string; time: { created: number } }) {
-  const base = Instance.project.vcs
-    ? path.join(Instance.worktree, ".opencode", "plans")
+export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
+  const base = instance.project.vcs
+    ? path.join(instance.worktree, ".opencode", "plans")
     : path.join(Global.Path.data, "plans")
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }
@@ -390,6 +400,7 @@ export class BusyError extends Error {
 }
 
 export interface Interface {
+  readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly create: (input?: {
     parentID?: SessionID
     title?: string
@@ -496,6 +507,11 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
       return fromRow(row)
+    })
+
+    const list = Effect.fn("Session.list")(function* (input?: ListInput) {
+      const ctx = yield* InstanceState.context
+      return Array.from(listByProject({ projectID: ctx.project.id, ...(input ?? {}) }))
     })
 
     const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
@@ -731,6 +747,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     })
 
     return Service.of({
+      list,
       create,
       fork,
       touch,
@@ -762,23 +779,17 @@ export const defaultLayer = layer.pipe(
   Layer.provide(SyncEvent.defaultLayer),
 )
 
-export function* list(input?: {
-  directory?: string
-  scope?: "project"
-  path?: string
-  workspaceID?: WorkspaceID
-  roots?: boolean
-  start?: number
-  search?: string
-  limit?: number
-}) {
-  const project = Instance.project
-  const conditions = [eq(SessionTable.project_id, project.id)]
+function* listByProject(
+  input: ListInput & {
+    projectID: ProjectID
+  },
+) {
+  const conditions = [eq(SessionTable.project_id, input.projectID)]
 
-  if (input?.workspaceID) {
+  if (input.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
   }
-  if (input?.path !== undefined) {
+  if (input.path !== undefined) {
     if (input.path) {
       const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
 
@@ -788,22 +799,22 @@ export function* list(input?: {
           : or(...conds)!,
       )
     }
-  } else if (input?.scope !== "project" && !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-    if (input?.directory) {
+  } else if (input.scope !== "project" && !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+    if (input.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }
   }
-  if (input?.roots) {
+  if (input.roots) {
     conditions.push(isNull(SessionTable.parent_id))
   }
-  if (input?.start) {
+  if (input.start) {
     conditions.push(gte(SessionTable.time_updated, input.start))
   }
-  if (input?.search) {
+  if (input.search) {
     conditions.push(like(SessionTable.title, `%${input.search}%`))
   }
 
-  const limit = input?.limit ?? 100
+  const limit = input.limit ?? 100
 
   const rows = Database.use((db) =>
     db
