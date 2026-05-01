@@ -432,6 +432,7 @@ export function Prompt(props: PromptProps) {
         title: "Skills",
         value: "prompt.skills",
         category: "Prompt",
+        keybind: "skill_list",
         slash: {
           name: "skills",
         },
