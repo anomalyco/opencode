@@ -199,7 +199,7 @@ export namespace Provider {
         }
 
         return {
-          autoload: Object.keys(input.models).length > 0,
+          autoload: false,
           options: ok ? {} : { apiKey: "public" },
         }
       }),
@@ -1641,6 +1641,12 @@ export namespace Provider {
           return { providerID: entry.providerID, modelID: entry.modelID }
         }
 
+        const mammouth = s.providers[ProviderID.make("mammouth-ai")]
+        if (mammouth) {
+          const [model] = sort(Object.values(mammouth.models))
+          if (model) return { providerID: mammouth.id, modelID: model.id }
+        }
+
         const provider = Object.values(s.providers).find(
           (p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id),
         )
@@ -1695,7 +1701,7 @@ export namespace Provider {
     return runPromise((svc) => svc.defaultModel())
   }
 
-  const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
+  const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro", "kimi", "deepseek", "gml-5"]
   export function sort<T extends { id: string }>(models: T[]) {
     return sortBy(
       models,
