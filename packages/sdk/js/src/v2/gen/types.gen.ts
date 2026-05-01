@@ -4092,6 +4092,55 @@ export type SessionCommandResponses = {
 
 export type SessionCommandResponse = SessionCommandResponses[keyof SessionCommandResponses]
 
+export type SessionCommandAsyncData = {
+  body?: {
+    messageID?: string
+    agent?: string
+    model?: string
+    arguments: string
+    command: string
+    variant?: string
+    parts?: Array<{
+      id?: string
+      type: "file"
+      mime: string
+      filename?: string
+      url: string
+      source?: FilePartSource
+    }>
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/command_async"
+}
+
+export type SessionCommandAsyncErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCommandAsyncError = SessionCommandAsyncErrors[keyof SessionCommandAsyncErrors]
+
+export type SessionCommandAsyncResponses = {
+  /**
+   * Command accepted
+   */
+  204: void
+}
+
+export type SessionCommandAsyncResponse = SessionCommandAsyncResponses[keyof SessionCommandAsyncResponses]
+
 export type SessionShellData = {
   body?: {
     messageID?: string

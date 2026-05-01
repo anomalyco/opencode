@@ -87,6 +87,7 @@ export const CompressionMiddleware: MiddlewareHandler = (c, next) => {
   const path = c.req.path
   const method = c.req.method
   if (path === "/event" || path === "/global/event") return next()
-  if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return next()
+  // These POST routes respond with 204 (no body) or stream raw text; gzip is wasted CPU.
+  if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async|command_async)$/.test(path)) return next()
   return zipped(c, next)
 }
