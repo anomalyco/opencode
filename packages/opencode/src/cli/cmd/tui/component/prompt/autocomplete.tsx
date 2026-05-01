@@ -481,8 +481,10 @@ export function Autocomplete(props: {
   }
 
   function moveTo(next: number) {
+    if (store.selected === next) return
     setStore("selected", next)
     if (!scroll) return
+    if (store.input === "mouse") return
     const viewportHeight = Math.min(height(), options().length)
     const scrollBottom = scroll.scrollTop + viewportHeight
     if (next < scroll.scrollTop) {

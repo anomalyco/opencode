@@ -143,11 +143,18 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const selected = createMemo(() => flat()[store.selected])
 
   createEffect(
-    on([() => store.filter, () => props.current], ([filter, current]) => {
+    on([() => store.filter, () => props.current], ([filter, current], prevInput) => {
+      const prevFilter = prevInput ? prevInput[0] : undefined
+      const prevCurrent = prevInput ? prevInput[1] : undefined
+
       setTimeout(() => {
-        if (filter.length > 0) {
+        // Abort if the state changed while waiting in the timeout queue
+        // This breaks the infinite ping-pong reactivity loop when moving the mouse quickly
+        if (!isDeepEqual(props.current, current)) return
+
+        if (filter !== prevFilter && filter.length > 0) {
           moveTo(0, true)
-        } else if (current) {
+        } else if (!isDeepEqual(current, prevCurrent) && current) {
           const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
           if (currentIndex >= 0) {
             moveTo(currentIndex, true)
@@ -166,10 +173,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function moveTo(next: number, center = false) {
+    if (store.selected === next) return
     setStore("selected", next)
     const option = selected()
     if (option) props.onMove?.(option)
     if (!scroll) return
+    if (store.input === "mouse") return
     const target = scroll.getChildren().find((child) => {
       return child.id === JSON.stringify(selected()?.value)
     })
