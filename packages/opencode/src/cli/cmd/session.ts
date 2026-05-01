@@ -12,6 +12,7 @@ import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Instance } from "@/project/instance"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -91,7 +92,7 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
+      const sessions = [...Session.list({ projectID: Instance.project.id, roots: true, limit: args.maxCount })]
 
       if (sessions.length === 0) {
         return

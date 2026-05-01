@@ -26,7 +26,7 @@ import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "./message-v2"
-import { Instance, type InstanceContext } from "../project/instance"
+import type { InstanceContext } from "../project/instance"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
@@ -762,7 +762,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(SyncEvent.defaultLayer),
 )
 
-export function* list(input?: {
+export function* list(input: {
+  projectID: ProjectID
   directory?: string
   scope?: "project"
   path?: string
@@ -772,13 +773,12 @@ export function* list(input?: {
   search?: string
   limit?: number
 }) {
-  const project = Instance.project
-  const conditions = [eq(SessionTable.project_id, project.id)]
+  const conditions = [eq(SessionTable.project_id, input.projectID)]
 
-  if (input?.workspaceID) {
+  if (input.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
   }
-  if (input?.path !== undefined) {
+  if (input.path !== undefined) {
     if (input.path) {
       const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
 
@@ -788,22 +788,22 @@ export function* list(input?: {
           : or(...conds)!,
       )
     }
-  } else if (input?.scope !== "project" && !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-    if (input?.directory) {
+  } else if (input.scope !== "project" && !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+    if (input.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }
   }
-  if (input?.roots) {
+  if (input.roots) {
     conditions.push(isNull(SessionTable.parent_id))
   }
-  if (input?.start) {
+  if (input.start) {
     conditions.push(gte(SessionTable.time_updated, input.start))
   }
-  if (input?.search) {
+  if (input.search) {
     conditions.push(like(SessionTable.title, `%${input.search}%`))
   }
 
-  const limit = input?.limit ?? 100
+  const limit = input.limit ?? 100
 
   const rows = Database.use((db) =>
     db

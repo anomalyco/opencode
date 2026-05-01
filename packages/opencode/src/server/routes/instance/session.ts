@@ -27,6 +27,7 @@ import { zodObject } from "@/util/effect-zod"
 import { Bus } from "@/bus"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { jsonRequest, runRequest } from "./trace"
+import { Instance } from "@/project/instance"
 
 const log = Log.create({ service: "server" })
 
@@ -80,6 +81,7 @@ export const SessionRoutes = lazy(() =>
         const query = c.req.valid("query")
         const sessions: Session.Info[] = []
         for await (const session of Session.list({
+          projectID: Instance.project.id,
           directory: query.scope === "project" ? undefined : query.directory,
           path: query.path,
           roots: queryBoolean(query.roots),

@@ -8,6 +8,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Instance } from "@/project/instance"
 
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value
@@ -246,7 +247,7 @@ export const ExportCommand = cmd({
         })
 
         const sessions = []
-        for await (const session of Session.list()) {
+        for await (const session of Session.list({ projectID: Instance.project.id })) {
           sessions.push(session)
         }
 

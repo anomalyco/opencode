@@ -5,7 +5,6 @@ import { Bus } from "@/bus"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
-import { Instance } from "@/project/instance"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
@@ -65,18 +64,17 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
       const instance = yield* InstanceState.context
-      return Instance.restore(instance, () =>
-        Array.from(
-          Session.list({
-            directory: ctx.query.scope === "project" ? undefined : ctx.query.directory,
-            scope: ctx.query.scope,
-            path: ctx.query.path,
-            roots: ctx.query.roots,
-            start: ctx.query.start,
-            search: ctx.query.search,
-            limit: ctx.query.limit,
-          }),
-        ),
+      return Array.from(
+        Session.list({
+          projectID: instance.project.id,
+          directory: ctx.query.scope === "project" ? undefined : ctx.query.directory,
+          scope: ctx.query.scope,
+          path: ctx.query.path,
+          roots: ctx.query.roots,
+          start: ctx.query.start,
+          search: ctx.query.search,
+          limit: ctx.query.limit,
+        }),
       )
     })
 

@@ -55,7 +55,7 @@ describe("session.list", () => {
           fn: async () => svc.create({ title: "sibling" }),
         })
 
-        const ids = [...svc.list()].map((s) => s.id)
+        const ids = [...svc.list({ projectID: Instance.project.id })].map((s) => s.id)
         expect(ids).toContain(root.id)
         expect(ids).toContain(parent.id)
         expect(ids).toContain(current.id)
@@ -88,7 +88,9 @@ describe("session.list", () => {
           fn: async () => svc.create({ title: "sibling" }),
         })
 
-        const ids = [...svc.list({ directory: path.join(tmp.path, "packages", "opencode") })].map((s) => s.id)
+        const ids = [
+          ...svc.list({ projectID: Instance.project.id, directory: path.join(tmp.path, "packages", "opencode") }),
+        ].map((s) => s.id)
         expect(ids).not.toContain(root.id)
         expect(ids).not.toContain(parent.id)
         expect(ids).toContain(current.id)
@@ -124,7 +126,11 @@ describe("session.list", () => {
         })
 
         const pathIDs = [
-          ...svc.list({ directory: path.join(tmp.path, "packages", "app"), path: "packages/opencode/src" }),
+          ...svc.list({
+            projectID: Instance.project.id,
+            directory: path.join(tmp.path, "packages", "app"),
+            path: "packages/opencode/src",
+          }),
         ].map((s) => s.id)
         expect(pathIDs).not.toContain(parent.id)
         expect(pathIDs).toContain(current.id)
@@ -156,7 +162,11 @@ describe("session.list", () => {
         Database.use((db) => db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sibling.id)).run())
 
         const pathIDs = [
-          ...svc.list({ directory: path.join(tmp.path, "packages", "opencode", "src"), path: "packages/opencode/src" }),
+          ...svc.list({
+            projectID: Instance.project.id,
+            directory: path.join(tmp.path, "packages", "opencode", "src"),
+            path: "packages/opencode/src",
+          }),
         ].map((s) => s.id)
         expect(pathIDs).toContain(current.id)
         expect(pathIDs).not.toContain(sibling.id)
@@ -172,7 +182,7 @@ describe("session.list", () => {
         const root = await svc.create({ title: "root-session" })
         const child = await svc.create({ title: "child-session", parentID: root.id })
 
-        const sessions = [...svc.list({ roots: true })]
+        const sessions = [...svc.list({ projectID: Instance.project.id, roots: true })]
         const ids = sessions.map((s) => s.id)
 
         expect(ids).toContain(root.id)
@@ -189,7 +199,7 @@ describe("session.list", () => {
         await svc.create({ title: "new-session" })
         const futureStart = Date.now() + 86400000
 
-        const sessions = [...svc.list({ start: futureStart })]
+        const sessions = [...svc.list({ projectID: Instance.project.id, start: futureStart })]
         expect(sessions.length).toBe(0)
       },
     })
@@ -203,7 +213,7 @@ describe("session.list", () => {
         await svc.create({ title: "unique-search-term-abc" })
         await svc.create({ title: "other-session-xyz" })
 
-        const sessions = [...svc.list({ search: "unique-search" })]
+        const sessions = [...svc.list({ projectID: Instance.project.id, search: "unique-search" })]
         const titles = sessions.map((s) => s.title)
 
         expect(titles).toContain("unique-search-term-abc")
@@ -221,7 +231,7 @@ describe("session.list", () => {
         await svc.create({ title: "session-2" })
         await svc.create({ title: "session-3" })
 
-        const sessions = [...svc.list({ limit: 2 })]
+        const sessions = [...svc.list({ projectID: Instance.project.id, limit: 2 })]
         expect(sessions.length).toBe(2)
       },
     })
