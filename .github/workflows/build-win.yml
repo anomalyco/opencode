@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build Windows Desktop
 
 on:
   workflow_dispatch:
@@ -6,32 +6,54 @@ on:
     branches: [main, dev]
 
 jobs:
-  build:
+  build-desktop:
     runs-on: windows-latest
     timeout-minutes: 60
 
     steps:
-      - name: 拉取代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 安装 Bun
+      - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: 安装依赖
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
         run: bun install
 
-      - name: 构建独立可执行文件
-        run: |
-          cd packages/opencode
-          bun run script/build.ts --single --skip-install
+      - name: Ensure native directory exists
+        run: mkdir -p packages/desktop-electron/native
+        shell: bash
+
+      - name: Prepare desktop-electron
+        run: bun ./scripts/prepare.ts
+        working-directory: packages/desktop-electron
         env:
           OPENCODE_CHANNEL: dev
 
-      - name: 上传可执行文件
+      - name: Build desktop-electron
+        run: bun run build
+        working-directory: packages/desktop-electron
+        env:
+          OPENCODE_CHANNEL: dev
+
+      - name: Package with electron-builder (NSIS installer)
+        run: npx electron-builder --win --config electron-builder.config.ts --publish never
+        working-directory: packages/desktop-electron
+        timeout-minutes: 30
+        env:
+          OPENCODE_CHANNEL: dev
+
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-win-x64
-          path: packages/opencode/dist/opencode-windows-x64/bin/opencode.exe
-          if-no-files-found: error
+          name: opencode-desktop-win-x64-installer
+          path: |
+            packages/desktop-electron/dist/*.exe
+            packages/desktop-electron/dist/*.yml
