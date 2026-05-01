@@ -397,17 +397,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    // Automatically update model when agent changes
+    // Automatically update model and variant when agent changes
     createEffect(() => {
       const value = agent.current()
       if (!value) return
       if (value.model) {
-        if (isModelValid(value.model))
+        if (isModelValid(value.model)) {
           model.set({
             providerID: value.model.providerID,
             modelID: value.model.modelID,
           })
-        else
+          if (value.variant) model.variant.set(value.variant)
+        } else
           toast.show({
             variant: "warning",
             message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
