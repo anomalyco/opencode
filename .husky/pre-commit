@@ -17,7 +17,9 @@ set -e
 BLACKLIST_REGEX='^(packages/(console|containers|desktop-electron|docs|enterprise|extensions|function|identity|opencode|plugin|script|sdk|shared|slack|storybook|ui|web)/|packages/desktop/src-tauri/(tauri\..+\.conf\.json|build\.rs|capabilities/|icons/|entitlements\.plist)|\.github/|bunfig\.toml$|.*\.config\.(ts|js|mjs)$|^package\.json$|^bun\.lock$|^tsconfig\.json$|^flake\.lock$|^LICENSE$)'
 # 规范 v2(2026-04-27)豁免:注册型扩展点(provider-icons sprite/types)从黑名单豁免。
 # 理由:这俩本就是上游设计的"加新 provider"append-only 注册表,每次加 provider 必改,误报率太高。
-EXCEPTION_REGEX='^packages/ui/src/components/provider-icons/(sprite\.svg|types\.ts)$'
+# 2026-05-01 加 .github/workflows/*-deskfox.yml 豁免:fork-only CI workflow,文件名后缀强制
+# 必带 -deskfox(跟上游 workflow 0 重名),不存在"偷改上游 workflow"的风险。
+EXCEPTION_REGEX='^packages/ui/src/components/provider-icons/(sprite\.svg|types\.ts)$|^\.github/workflows/.*-deskfox\.yml$'
 SCRIPTS_ALLOWED='^scripts/install-hooks\.sh$'
 
 violations=$(git diff --cached --name-only | grep -E "$BLACKLIST_REGEX" | grep -vE "$EXCEPTION_REGEX" || true)
