@@ -1,0 +1,35 @@
+name: stats
+
+on:
+  schedule:
+    - cron: "0 12 * * *" # Run daily at 12:00 UTC
+  workflow_dispatch: # Allow manual trigger
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  stats:
+    if: github.repository == 'anomalyco/opencode'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run stats script
+        run: bun script/stats.ts
+
+      - name: Commit stats
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add STATS.md
+          git diff --staged --quiet || git commit -m "ignore: update download stats $(date -I)"
+          git push
+        env:
+          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}

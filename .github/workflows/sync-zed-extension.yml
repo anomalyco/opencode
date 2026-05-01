@@ -1,0 +1,35 @@
+name: "sync-zed-extension"
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  zed:
+    name: Release Zed Extension
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Get version tag
+        id: get_tag
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG=$(git tag --list 'v[0-9]*.*' --sort=-version:refname | head -n 1)
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Using tag: ${TAG}"
+
+      - name: Sync Zed extension
+        run: |
+          ./script/sync-zed.ts ${{ steps.get_tag.outputs.tag }}
+        env:
+          ZED_EXTENSIONS_PAT: ${{ secrets.ZED_EXTENSIONS_PAT }}
+          ZED_PR_PAT: ${{ secrets.ZED_PR_PAT }}
