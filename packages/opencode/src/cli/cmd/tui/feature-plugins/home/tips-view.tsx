@@ -51,13 +51,16 @@ export function Tips(props: { connected?: boolean }) {
   )
 }
 
-const TIPS = [
+// max visible length of a tip after stripping `{highlight}…{/highlight}` should be <= 69
+// "● Tip " + "TIPS[idx]" should fit in 75 width specified in parent component
+// otherwise it will strip the last word
+export const TIPS = [
   "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
   "Start a message with {highlight}!{/highlight} to run shell commands directly (e.g., {highlight}!ls -la{/highlight})",
   "Press {highlight}Tab{/highlight} to cycle between Build and Plan agents",
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
-  "Run {highlight}/share{/highlight} to create a public link to your conversation at opencode.ai",
+  "Run {highlight}/share{/highlight} to publish your conversation at opencode.ai",
   "Drag and drop images or PDFs into the terminal to add them as context",
   "Press {highlight}Ctrl+V{/highlight} to paste images from your clipboard into the prompt",
   "Press {highlight}Ctrl+X E{/highlight} or {highlight}/editor{/highlight} to compose messages in your external editor",
@@ -83,7 +86,7 @@ const TIPS = [
   "Switch to {highlight}Plan{/highlight} agent to get suggestions without making actual changes",
   "Use {highlight}@agent-name{/highlight} in prompts to invoke specialized subagents",
   "Press {highlight}Ctrl+X Right/Left{/highlight} to cycle through parent and child sessions",
-  "Create {highlight}opencode.json{/highlight} for server settings and {highlight}tui.json{/highlight} for TUI settings",
+  "Use {highlight}opencode.json{/highlight} for server config, {highlight}tui.json{/highlight} for TUI config",
   "Place TUI settings in {highlight}~/.config/opencode/tui.json{/highlight} for global config",
   "Add {highlight}$schema{/highlight} to your config for autocomplete in your editor",
   "Configure {highlight}model{/highlight} in config to set your default model",
@@ -125,7 +128,7 @@ const TIPS = [
   "Create JSON theme files in {highlight}.opencode/themes/{/highlight} directory",
   "Themes support dark/light variants for both modes",
   "Reference ANSI colors 0-255 in custom themes",
-  "Use {highlight}{env:VAR_NAME}{/highlight} syntax to reference environment variables in config",
+  "Use {highlight}{env:VAR_NAME}{/highlight} to reference env variables in config",
   "Use {highlight}{file:path}{/highlight} to include file contents in config values",
   "Use {highlight}instructions{/highlight} in config to load additional rules files",
   "Set agent {highlight}temperature{/highlight} from 0.0 (focused) to 1.0 (creative)",
@@ -143,9 +146,9 @@ const TIPS = [
   "Press {highlight}Ctrl+X G{/highlight} or {highlight}/timeline{/highlight} to jump to specific messages",
   "Press {highlight}Ctrl+X H{/highlight} to toggle code block visibility in messages",
   "Press {highlight}Ctrl+X S{/highlight} or {highlight}/status{/highlight} to see system status info",
-  "Enable {highlight}scroll_acceleration{/highlight} in {highlight}tui.json{/highlight} for smooth macOS-style scrolling",
+  "Enable {highlight}scroll_acceleration{/highlight} in {highlight}tui.json{/highlight} for smooth scrolling",
   "Toggle username display in chat via command palette ({highlight}Ctrl+P{/highlight})",
-  "Run {highlight}docker run -it --rm ghcr.io/anomalyco/opencode{/highlight} for containerized use",
+  "Use {highlight}docker run --rm ghcr.io/anomalyco/opencode{/highlight} for containerized use",
   "Use {highlight}/connect{/highlight} with OpenCode Zen for curated, tested models",
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
