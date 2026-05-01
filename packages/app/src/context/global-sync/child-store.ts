@@ -1,5 +1,5 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
-import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { createStore, produce, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { OpencodeClient, VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
@@ -34,6 +34,7 @@ export function createChildStoreManager(input: {
   const iconCache = new Map<string, IconCache>()
   const lifecycle = new Map<string, DirState>()
   const pins = new Map<string, number>()
+  const [bootstrapEnabled, setBootstrapEnabled] = createStore<Record<string, boolean>>({})
   const ownerPins = new WeakMap<object, Set<string>>()
   const disposers = new Map<string, () => void>()
 
@@ -107,6 +108,11 @@ export function createChildStoreManager(input: {
     metaCache.delete(key)
     iconCache.delete(key)
     lifecycle.delete(key)
+    setBootstrapEnabled(
+      produce((draft) => {
+        delete draft[key]
+      }),
+    )
     const dispose = disposers.get(key)
     if (dispose) {
       dispose()
@@ -175,10 +181,10 @@ export function createChildStoreManager(input: {
 
           const [pathQuery, mcpQuery, lspQuery, providerQuery] = useQueries(() => ({
             queries: [
-              loadPathQuery(key, sdk),
-              loadMcpQuery(key, sdk),
-              loadLspQuery(key, sdk),
-              loadProvidersQuery(key, sdk),
+              loadPathQuery(key, bootstrapEnabled[key] ? sdk : undefined),
+              loadMcpQuery(key, bootstrapEnabled[key] ? sdk : undefined),
+              loadLspQuery(key, bootstrapEnabled[key] ? sdk : undefined),
+              loadProvidersQuery(key, bootstrapEnabled[key] ? sdk : undefined),
             ],
           }))
 
@@ -261,9 +267,10 @@ export function createChildStoreManager(input: {
 
   function child(directory: string, options: ChildOptions = {}) {
     const key = directoryKey(directory)
+    const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap) setBootstrapEnabled(key, true)
     const childStore = ensureChild(directory)
     pinForOwner(key)
-    const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
     }
@@ -272,8 +279,9 @@ export function createChildStoreManager(input: {
 
   function peek(directory: string, options: ChildOptions = {}) {
     const key = directoryKey(directory)
-    const childStore = ensureChild(directory)
     const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap) setBootstrapEnabled(key, true)
+    const childStore = ensureChild(directory)
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
     }
