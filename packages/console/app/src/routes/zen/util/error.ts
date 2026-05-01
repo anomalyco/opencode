@@ -11,5 +11,6 @@ class LimitError extends Error {
     this.retryAfter = retryAfter
   }
 }
+export class RateLimitError extends LimitError {}
 export class FreeUsageLimitError extends LimitError {}
 export class SubscriptionUsageLimitError extends LimitError {}

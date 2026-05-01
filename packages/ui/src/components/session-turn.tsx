@@ -1,10 +1,15 @@
-import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
+import {
+  AssistantMessage,
+  type SnapshotFileDiff,
+  Message as MessageType,
+  Part as PartType,
+} from "@opencode-ai/sdk/v2/client"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 
-import { Binary } from "@opencode-ai/util/binary"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { Binary } from "@opencode-ai/core/util/binary"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
@@ -19,6 +24,7 @@ import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
+import { normalize } from "./session-diff"
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -104,7 +110,7 @@ function partState(part: PartType, showReasoningSummaries: boolean) {
 function clean(value: string) {
   return value
     .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/[*_~]+/g, "")
     .trim()
 }
@@ -163,7 +169,7 @@ export function SessionTurn(
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyDiffs: FileDiff[] = []
+  const emptyDiffs: SnapshotFileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
@@ -232,7 +238,7 @@ export function SessionTurn(
 
     const seen = new Set<string>()
     return files
-      .reduceRight<FileDiff[]>((result, diff) => {
+      .reduceRight<SnapshotFileDiff[]>((result, diff) => {
         if (seen.has(diff.file)) return result
         seen.add(diff.file)
         result.push(diff)
@@ -261,14 +267,12 @@ export function SessionTurn(
       if (!msg) return emptyAssistant
 
       const messages = allMessages() ?? emptyMessages
-      const index = messageIndex()
-      if (index < 0) return emptyAssistant
+      if (messageIndex() < 0) return emptyAssistant
 
       const result: AssistantMessage[] = []
-      for (let i = index + 1; i < messages.length; i++) {
+      for (let i = 0; i < messages.length; i++) {
         const item = messages[i]
         if (!item) continue
-        if (item.role === "user") break
         if (item.role === "assistant" && item.parentID === msg.id) result.push(item as AssistantMessage)
       }
       return result
@@ -307,6 +311,7 @@ export function SessionTurn(
     const msg = error()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
     if (msg === undefined || msg === null) return ""
+    // oxlint-disable-next-line no-base-to-string -- msg is unknown from error data, coercion is intentional
     return unwrap(String(msg))
   })
 
@@ -441,12 +446,13 @@ export function SessionTurn(
                   <div data-component="session-turn-diffs-content">
                     <Accordion
                       multiple
-                      style={{ "--sticky-accordion-offset": "40px" }}
+                      style={{ "--sticky-accordion-offset": "44px" }}
                       value={expanded()}
                       onChange={(value) => setState("expanded", Array.isArray(value) ? value : value ? [value] : [])}
                     >
                       <For each={visible()}>
                         {(diff) => {
+                          const view = normalize(diff)
                           const active = createMemo(() => expanded().includes(diff.file))
                           const [shown, setShown] = createSignal(false)
 
@@ -495,12 +501,7 @@ export function SessionTurn(
                               <Accordion.Content>
                                 <Show when={shown()}>
                                   <div data-slot="session-turn-diff-view" data-scrollable>
-                                    <Dynamic
-                                      component={fileComponent}
-                                      mode="diff"
-                                      before={{ name: diff.file, contents: diff.before }}
-                                      after={{ name: diff.file, contents: diff.after }}
-                                    />
+                                    <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
                                   </div>
                                 </Show>
                               </Accordion.Content>

@@ -11,11 +11,11 @@ import { Tooltip } from "./tooltip"
 import { ScrollView } from "./scroll-view"
 import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { checksum } from "@opencode-ai/core/util/encode"
 import { createEffect, createMemo, For, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
+import { type FileContent, type SnapshotFileDiff, type VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
@@ -23,6 +23,7 @@ import { mediaKindFromPath } from "../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
 import { createLineCommentController } from "./line-comment-annotations"
 import type { LineCommentEditorProps } from "./line-comment"
+import { normalize, text, type ViewDiff } from "./session-diff"
 
 const MAX_DIFF_CHANGED_LINES = 500
 const REVIEW_MOUNT_MARGIN = 300
@@ -61,7 +62,28 @@ export type SessionReviewCommentActions = {
 
 export type SessionReviewFocus = { file: string; id: string }
 
-type ReviewDiff = FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> }
+type ReviewDiff = (SnapshotFileDiff | VcsFileDiff) & { preloaded?: PreloadMultiFileDiffResult<any> }
+type Item = ViewDiff & { preloaded?: PreloadMultiFileDiffResult<any> }
+
+function diff(value: unknown): value is ReviewDiff {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  if (!("file" in value) || typeof value.file !== "string") return false
+  if (!("additions" in value) || typeof value.additions !== "number") return false
+  if (!("deletions" in value) || typeof value.deletions !== "number") return false
+  if ("patch" in value && value.patch !== undefined && typeof value.patch !== "string") return false
+  if ("before" in value && value.before !== undefined && typeof value.before !== "string") return false
+  if ("after" in value && value.after !== undefined && typeof value.after !== "string") return false
+  if (!("status" in value) || value.status === undefined) return true
+  return value.status === "added" || value.status === "deleted" || value.status === "modified"
+}
+
+function list(value: unknown): ReviewDiff[] {
+  if (Array.isArray(value) && value.every(diff)) return value
+  if (Array.isArray(value)) return value.filter(diff)
+  if (diff(value)) return [value]
+  if (!value || typeof value !== "object") return []
+  return Object.values(value).filter(diff)
+}
 
 export interface SessionReviewProps {
   title?: JSX.Element
@@ -155,8 +177,10 @@ export const SessionReview = (props: SessionReviewProps) => {
   const opened = () => store.opened
 
   const open = () => props.open ?? store.open
-  const files = createMemo(() => props.diffs.map((diff) => diff.file))
-  const diffs = createMemo(() => new Map(props.diffs.map((diff) => [diff.file, diff] as const)))
+  const items = createMemo<Item[]>(() =>
+    list(props.diffs).map((diff) => ({ ...normalize(diff), preloaded: diff.preloaded })),
+  )
+  const files = createMemo(() => items().map((diff) => diff.file))
   const grouped = createMemo(() => {
     const next = new Map<string, SessionReviewComment[]>()
     for (const comment of props.comments ?? []) {
@@ -246,10 +270,10 @@ export const SessionReview = (props: SessionReviewProps) => {
 
   const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
 
-  const selectionPreview = (diff: FileDiff, range: SelectedLineRange) => {
+  const selectionPreview = (diff: ViewDiff, range: SelectedLineRange) => {
     const side = selectionSide(range)
-    const contents = side === "deletions" ? diff.before : diff.after
-    if (typeof contents !== "string" || contents.length === 0) return undefined
+    const contents = text(diff, side)
+    if (contents.length === 0) return undefined
 
     return previewSelectedLines(contents, range)
   }
@@ -359,10 +383,12 @@ export const SessionReview = (props: SessionReviewProps) => {
           <Show when={hasDiffs()} fallback={props.empty}>
             <div class="pb-6">
               <Accordion multiple value={open()} onChange={handleChange}>
-                <For each={props.diffs}>
+                <For each={items()}>
                   {(diff) => {
-                    let wrapper: HTMLDivElement | undefined
                     const file = diff.file
+
+                    // binary files have empty diffs that we can't render
+                    const diffCanRender = () => diff.additions !== 0 || diff.deletions !== 0
 
                     const expanded = createMemo(() => open().includes(file))
                     const mounted = createMemo(() => expanded() && (!!store.visible[file] || pinned(file)))
@@ -371,8 +397,8 @@ export const SessionReview = (props: SessionReviewProps) => {
                     const comments = createMemo(() => grouped().get(file) ?? [])
                     const commentedLines = createMemo(() => comments().map((c) => c.selection))
 
-                    const beforeText = () => (typeof diff.before === "string" ? diff.before : "")
-                    const afterText = () => (typeof diff.after === "string" ? diff.after : "")
+                    const beforeText = () => text(diff, "deletions")
+                    const afterText = () => text(diff, "additions")
                     const changedLines = () => diff.additions + diff.deletions
                     const mediaKind = createMemo(() => mediaKindFromPath(file))
 
@@ -472,14 +498,14 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                     return (
                       <Accordion.Item
-                        value={file}
+                        value={diffCanRender() ? file : null!}
                         id={diffId(file)}
                         data-file={file}
                         data-slot="session-review-accordion-item"
                         data-selected={props.focusedFile === file ? "" : undefined}
                       >
                         <StickyAccordionHeader>
-                          <Accordion.Trigger>
+                          <Accordion.Trigger disabled={!diffCanRender()} class="cursor-default">
                             <div data-slot="session-review-trigger-content">
                               <div data-slot="session-review-file-info">
                                 <FileIcon node={{ path: file, type: "file" }} />
@@ -488,7 +514,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
                                   </Show>
                                   <span data-slot="session-review-filename">{getFilename(file)}</span>
-                                  <Show when={props.onViewFile}>
+                                  <Show when={props.onViewFile && diffCanRender()}>
                                     <Tooltip value={openFileLabel()} placement="top" gutter={4}>
                                       <button
                                         data-slot="session-review-view-button"
@@ -529,9 +555,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     <DiffChanges changes={diff} />
                                   </Match>
                                 </Switch>
-                                <span data-slot="session-review-diff-chevron">
-                                  <Icon name="chevron-down" size="small" />
-                                </span>
+                                <Show when={diffCanRender()}>
+                                  <span data-slot="session-review-diff-chevron">
+                                    <Icon name="chevron-down" size="small" />
+                                  </span>
+                                </Show>
                               </div>
                             </div>
                           </Accordion.Trigger>
@@ -540,7 +568,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                           <div
                             data-slot="session-review-diff-wrapper"
                             ref={(el) => {
-                              wrapper = el
                               anchors.set(file, el)
                               nodes.set(file, el)
                               queue()
@@ -581,6 +608,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <Dynamic
                                     component={fileComponent}
                                     mode="diff"
+                                    fileDiff={diff.fileDiff}
                                     preloadedDiff={diff.preloaded}
                                     diffStyle={diffStyle()}
                                     onRendered={() => {
@@ -596,20 +624,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     renderHoverUtility={props.onLineComment ? commentsUi.renderHoverUtility : undefined}
                                     selectedLines={selectedLines()}
                                     commentedLines={commentedLines()}
-                                    before={{
-                                      name: file,
-                                      contents: typeof diff.before === "string" ? diff.before : "",
-                                    }}
-                                    after={{
-                                      name: file,
-                                      contents: typeof diff.after === "string" ? diff.after : "",
-                                    }}
                                     media={{
                                       mode: "auto",
                                       path: file,
-                                      before: diff.before,
-                                      after: diff.after,
-                                      readFile: props.readFile,
+                                      deleted: diff.status === "deleted",
+                                      readFile: diff.status === "deleted" ? undefined : props.readFile,
                                     }}
                                   />
                                 </Match>
