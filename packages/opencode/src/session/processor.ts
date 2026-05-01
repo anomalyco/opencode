@@ -179,6 +179,7 @@ export const layer: Layer.Layer<
               part.type === "tool" &&
               part.tool === input.tool &&
               part.state.status !== "pending" &&
+              // Tool args here are JSON-decoded from the provider stream, so key order is stable for repeated calls.
               JSON.stringify(part.state.input) === JSON.stringify(input.args),
           )
           .slice(-DOOM_LOOP_THRESHOLD)

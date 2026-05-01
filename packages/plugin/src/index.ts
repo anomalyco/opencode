@@ -342,7 +342,8 @@ export interface Hooks {
   /**
    * Called for each streaming input delta of a deferred tool call.
    * Plugins accumulate `raw` and resolve `input` / `display` once the JSON
-   * is complete enough to parse.
+   * is complete enough to parse. Returning `input` for the first time creates
+   * the lazy ToolPart; later deltas update that existing part.
    */
   "tool.stream.delta"?: (
     input: { tool: string; callID: string; raw: string; delta: string },
