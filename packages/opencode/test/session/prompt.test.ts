@@ -1213,7 +1213,9 @@ unix(
   30_000,
 )
 
-it.live(
+// SKIP on windows: shell + loop scheduling test, sleep 0.2 inside 3s timeout is racy on
+// github-hosted windows-2025. Switch to `unix` helper which auto-skips on win32. (#90)
+unix(
   "loop waits while shell runs and starts after shell exits",
   () =>
     provideTmpdirServer(
@@ -1251,7 +1253,8 @@ it.live(
   3_000,
 )
 
-it.live(
+// SKIP on windows: same shell + loop scheduling pattern as above. (#90)
+unix(
   "shell completion resumes queued loop callers",
   () =>
     provideTmpdirServer(

@@ -1344,7 +1344,9 @@ describe("session.compaction.process", () => {
     })
   })
 
-  test("stops quickly when aborted during retry backoff", async () => {
+  // SKIP on windows: shell timing test, github-hosted windows-2025 runner is too slow for
+  // 3s timeout. Same root cause as #90.
+  test.skipIf(process.platform === "win32")("stops quickly when aborted during retry backoff", async () => {
     const stub = llm()
     const ready = defer()
     stub.push(

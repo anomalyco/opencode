@@ -102,7 +102,10 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-describe("provider HttpApi", () => {
+// SKIP entire describe on windows: test loads a plugin via file:// from a tmpdir; same
+// root cause as plugin.loader.shared / plugin.trigger / plugin.workspace which all hang
+// >30s on github-hosted windows-2025 runner. Tracked in #90.
+describe.skipIf(process.platform === "win32")("provider HttpApi", () => {
   it.live(
     "matches legacy OAuth authorize response shapes",
     withProviderProject((dir) =>
