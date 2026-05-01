@@ -187,6 +187,8 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  V2SessionListErrors,
+  V2SessionListResponses,
   V2SessionMessagesErrors,
   V2SessionMessagesResponses,
   VcsDiffResponses,
@@ -3183,6 +3185,50 @@ export class Sync extends HeyApiClient {
 
 export class Session3 extends HeyApiClient {
   /**
+   * List v2 sessions
+   *
+   * Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      limit?: number
+      cursor?: string
+      order?: "asc" | "desc"
+      path?: string
+      roots?: "true" | "false"
+      start?: number
+      search?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "order" },
+            { in: "query", key: "path" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "start" },
+            { in: "query", key: "search" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionListResponses, V2SessionListErrors, ThrowOnError>({
+      url: "/api/session",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get v2 session messages
    *
    * Retrieve projected v2 messages for a session directly from the message database.
@@ -3194,6 +3240,7 @@ export class Session3 extends HeyApiClient {
       workspace?: string
       limit?: number
       cursor?: string
+      order?: "asc" | "desc"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3207,6 +3254,7 @@ export class Session3 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "limit" },
             { in: "query", key: "cursor" },
+            { in: "query", key: "order" },
           ],
         },
       ],

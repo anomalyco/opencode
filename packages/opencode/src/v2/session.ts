@@ -1,6 +1,7 @@
-import { SessionMessageTable } from "@/session/session.sql"
+import { SessionMessageTable, SessionTable } from "@/session/session.sql"
 import type { SessionID } from "@/session/schema"
-import { and, asc, desc, eq, gt, inArray, lt, or } from "@/storage/db"
+import type { WorkspaceID } from "@/control-plane/schema"
+import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/storage/db"
 import * as Database from "@/storage/db"
 import { Context, Effect, Layer, Schema } from "effect"
 import { SessionMessage } from "./session-message"
@@ -17,13 +18,29 @@ export type Delivery = Schema.Schema.Type<typeof Delivery>
 export const DefaultDelivery = "immediate" satisfies Delivery
 
 export interface Interface {
+  readonly list: (input: {
+    limit?: number
+    order?: "asc" | "desc"
+    directory?: string
+    path?: string
+    workspaceID?: WorkspaceID
+    roots?: boolean
+    start?: number
+    search?: string
+    cursor?: {
+      id: SessionID
+      time: number
+      direction: "previous" | "next"
+    }
+  }) => Effect.Effect<Session.Info[], never>
   readonly messages: (input: {
     sessionID: SessionID
     limit?: number
-    from?: "start" | "end"
+    order?: "asc" | "desc"
     cursor?: {
       id: SessionMessage.ID
       time: number
+      direction: "previous" | "next"
     }
   }) => Effect.Effect<SessionMessage.Message[], never>
   readonly prompt: (input: {
@@ -47,10 +64,53 @@ export const layer = Layer.effect(
       decodeMessage({ ...row.data, id: row.id, type: row.type })
 
     const result: Interface = {
+      list: Effect.fn("V2Session.list")(function* (input) {
+        const direction = input.cursor?.direction ?? "next"
+        let order = input.order ?? "desc"
+        // Query the adjacent rows in reverse, then flip them back into the requested order below.
+        if (direction === "previous" && order === "asc") order = "desc"
+        if (direction === "previous" && order === "desc") order = "asc"
+        const conditions: SQL[] = []
+        if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
+        if (input.path)
+          conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
+        if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
+        if (input.roots) conditions.push(isNull(SessionTable.parent_id))
+        if (input.start) conditions.push(gte(SessionTable.time_created, input.start))
+        if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+        if (input.cursor) {
+          conditions.push(
+            order === "asc"
+              ? or(
+                  gt(SessionTable.time_created, input.cursor.time),
+                  and(eq(SessionTable.time_created, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
+                )!
+              : or(
+                  lt(SessionTable.time_created, input.cursor.time),
+                  and(eq(SessionTable.time_created, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
+                )!,
+          )
+        }
+        const query = Database.Client()
+          .select()
+          .from(SessionTable)
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+          .orderBy(
+            order === "asc" ? asc(SessionTable.time_created) : desc(SessionTable.time_created),
+            order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
+          )
+
+        const rows = input.limit === undefined ? query.all() : query.limit(input.limit).all()
+        return (direction === "previous" ? rows.toReversed() : rows).map((row) => Session.fromRow(row))
+      }),
       messages: Effect.fn("V2Session.messages")(function* (input) {
-        const from = input.from ?? (input.limit === undefined && input.cursor === undefined ? "start" : "end")
+        const direction = input.cursor?.direction ?? "next"
+        let order = input.order ?? "desc"
+        // Query the adjacent rows in reverse, then flip them back into the requested order below.
+        if (direction === "previous" && order === "asc") order = "desc"
+        if (direction === "previous" && order === "desc") order = "asc"
         const boundary = input.cursor
-          ? from === "start"
+          ? order === "asc"
             ? or(
                 gt(SessionMessageTable.time_created, input.cursor.time),
                 and(
@@ -71,29 +131,16 @@ export const layer = Layer.effect(
           : eq(SessionMessageTable.session_id, input.sessionID)
 
         const rows = Database.use((db) => {
-          if (from === "start") {
-            const query = db
-              .select()
-              .from(SessionMessageTable)
-              .where(where)
-              .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
-            return input.limit === undefined ? query.all() : query.limit(input.limit).all()
-          }
-          const idsQuery = db
-            .select({ id: SessionMessageTable.id })
-            .from(SessionMessageTable)
-            .where(where)
-            .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
-          const ids = (input.limit === undefined ? idsQuery.all() : idsQuery.limit(input.limit).all()).map(
-            (row) => row.id,
-          )
-          if (ids.length === 0) return []
-          return db
+          const query = db
             .select()
             .from(SessionMessageTable)
-            .where(inArray(SessionMessageTable.id, ids))
-            .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
-            .all()
+            .where(where)
+            .orderBy(
+              order === "asc" ? asc(SessionMessageTable.time_created) : desc(SessionMessageTable.time_created),
+              order === "asc" ? asc(SessionMessageTable.id) : desc(SessionMessageTable.id),
+            )
+          const rows = input.limit === undefined ? query.all() : query.limit(input.limit).all()
+          return direction === "previous" ? rows.toReversed() : rows
         })
         return rows.map((row) => decode(row))
       }),

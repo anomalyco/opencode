@@ -2683,6 +2683,14 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type V2SessionsResponse = {
+  items: Array<Session>
+  cursor: {
+    previous?: string
+    next?: string
+  }
+}
+
 export type SessionMessageUser = {
   id: string
   metadata?: {
@@ -2845,8 +2853,8 @@ export type SessionMessage =
 export type V2SessionMessagesResponse = {
   items: Array<SessionMessage>
   cursor: {
-    before?: string
-    after?: string
+    previous?: string
+    next?: string
   }
 }
 
@@ -5528,6 +5536,41 @@ export type SyncHistoryListResponses = {
 
 export type SyncHistoryListResponse = SyncHistoryListResponses[keyof SyncHistoryListResponses]
 
+export type V2SessionListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    limit?: number
+    cursor?: string
+    order?: "asc" | "desc"
+    path?: string
+    roots?: "true" | "false"
+    start?: number
+    search?: string
+  }
+  url: "/api/session"
+}
+
+export type V2SessionListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type V2SessionListError = V2SessionListErrors[keyof V2SessionListErrors]
+
+export type V2SessionListResponses = {
+  /**
+   * List of v2 sessions
+   */
+  200: V2SessionsResponse
+}
+
+export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListResponses]
+
 export type V2SessionMessagesData = {
   body?: never
   path: {
@@ -5538,6 +5581,7 @@ export type V2SessionMessagesData = {
     workspace?: string
     limit?: number
     cursor?: string
+    order?: "asc" | "desc"
   }
   url: "/api/session/{sessionID}/message"
 }

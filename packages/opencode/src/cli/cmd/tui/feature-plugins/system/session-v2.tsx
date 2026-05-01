@@ -39,7 +39,8 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
   const dimensions = useTerminalDimensions()
   const { theme, syntax, subtleSyntax } = useTheme()
   const messages = createMemo(() => sync.data.messages[props.sessionID] ?? [])
-  const lastAssistant = createMemo(() => messages().findLast((message) => message.type === "assistant"))
+  const renderedMessages = createMemo(() => messages().toReversed())
+  const lastAssistant = createMemo(() => renderedMessages().findLast((message) => message.type === "assistant"))
 
   createEffect(() => {
     void sync.session.message.sync(props.sessionID)
@@ -67,7 +68,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
             <Show when={messages().length === 0}>
               <MissingData label="Messages" detail="No v2 messages loaded from useSyncV2 yet." />
             </Show>
-            <For each={messages()}>
+            <For each={renderedMessages()}>
               {(message, index) => (
                 <Switch>
                   <Match when={message.type === "user"}>
