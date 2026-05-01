@@ -8,7 +8,6 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Instance } from "@/project/instance"
 
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value
@@ -246,10 +245,7 @@ export const ExportCommand = cmd({
           output: process.stderr,
         })
 
-        const sessions = []
-        for await (const session of Session.list({ projectID: Instance.project.id })) {
-          sessions.push(session)
-        }
+        const sessions = await AppRuntime.runPromise(Session.Service.use((svc) => svc.list()))
 
         if (sessions.length === 0) {
           prompts.log.error("No sessions found", {

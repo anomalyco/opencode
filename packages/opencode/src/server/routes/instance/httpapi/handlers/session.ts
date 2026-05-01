@@ -63,19 +63,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
-      const instance = yield* InstanceState.context
-      return Array.from(
-        Session.list({
-          projectID: instance.project.id,
-          directory: ctx.query.scope === "project" ? undefined : ctx.query.directory,
-          scope: ctx.query.scope,
-          path: ctx.query.path,
-          roots: ctx.query.roots,
-          start: ctx.query.start,
-          search: ctx.query.search,
-          limit: ctx.query.limit,
-        }),
-      )
+      return yield* session.list({
+        directory: ctx.query.scope === "project" ? undefined : ctx.query.directory,
+        scope: ctx.query.scope,
+        path: ctx.query.path,
+        roots: ctx.query.roots,
+        start: ctx.query.start,
+        search: ctx.query.search,
+        limit: ctx.query.limit,
+      })
     })
 
     const status = Effect.fn("SessionHttpApi.status")(function* () {

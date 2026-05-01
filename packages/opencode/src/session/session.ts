@@ -234,6 +234,16 @@ export const MessagesInput = Schema.Struct({
   sessionID: SessionID,
   limit: Schema.optional(NonNegativeInt),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type ListInput = {
+  directory?: string
+  scope?: "project"
+  path?: string
+  workspaceID?: WorkspaceID
+  roots?: boolean
+  start?: number
+  search?: string
+  limit?: number
+}
 
 const CreatedEventSchema = Schema.Struct({
   sessionID: SessionID,
@@ -390,6 +400,7 @@ export class BusyError extends Error {
 }
 
 export interface Interface {
+  readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly create: (input?: {
     parentID?: SessionID
     title?: string
@@ -496,6 +507,11 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       const row = yield* db((d) => d.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
       return fromRow(row)
+    })
+
+    const list = Effect.fn("Session.list")(function* (input?: ListInput) {
+      const ctx = yield* InstanceState.context
+      return Array.from(listByProject({ projectID: ctx.project.id, ...(input ?? {}) }))
     })
 
     const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
@@ -731,6 +747,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     })
 
     return Service.of({
+      list,
       create,
       fork,
       touch,
@@ -762,16 +779,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(SyncEvent.defaultLayer),
 )
 
-export function* list(input: {
+function* listByProject(input: ListInput & {
   projectID: ProjectID
-  directory?: string
-  scope?: "project"
-  path?: string
-  workspaceID?: WorkspaceID
-  roots?: boolean
-  start?: number
-  search?: string
-  limit?: number
 }) {
   const conditions = [eq(SessionTable.project_id, input.projectID)]
 
