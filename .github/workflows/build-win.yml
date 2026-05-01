@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 60
 
     steps:
       - name: 拉取代码
@@ -24,7 +25,9 @@ jobs:
       - name: 构建独立可执行文件
         run: |
           cd packages/opencode
-          bun run script/build.ts --single
+          bun run script/build.ts --single --skip-install
+        env:
+          OPENCODE_CHANNEL: dev
 
       - name: 上传可执行文件
         uses: actions/upload-artifact@v4
