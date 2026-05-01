@@ -124,27 +124,26 @@ Tạo từ `.env.example`. Áp dụng khi chạy `bun run dev` từ source. Khi 
 
 ## 5. Workflow update fork từ upstream
 
-Định kỳ kéo code mới về fork:
+> ⚠️ **KHÔNG push tới fork's `dev`**. Upstream có ~10 workflow trigger trên push tới `dev` (`publish.yml`, `deploy.yml`, `containers.yml`, `release-github-action.yml`, `storybook.yml`, `nix-eval.yml`, `nix-hashes.yml`, `docs-locale-sync.yml`, `generate.yml`, `test.yml`, `typecheck.yml`). Nếu bạn push fork's `dev`, tất cả chạy đồng loạt — rác CI, có thể fail vì thiếu secrets. Dev của fork giữ nguyên (hoặc bỏ luôn) — sync chỉ cần `upstream/dev` trên local.
+
+Định kỳ kéo code mới về fork qua **custom branches**, không qua `dev`:
 
 ```bash
 cd ~/code/opencode
 git fetch upstream
 
-# Sync dev với upstream
-git checkout dev
-git merge upstream/dev
-git push origin dev
-
-# Đẩy custom/main theo dev
+# Đưa custom/main lên ngang upstream/dev (rebase hoặc fast-forward)
 git checkout custom/main
-git merge dev
-git push origin custom/main
+git rebase upstream/dev          # hoặc: git reset --hard upstream/dev nếu chưa có commit riêng
+git push -f origin custom/main   # CHỈ push tới custom/* — không đụng dev
 
-# Rebase custom/langfuse-config (và các branch custom khác) lên custom/main
+# Rebase các feature branch custom lên custom/main
 git checkout custom/langfuse-config
 git rebase custom/main
 git push -f origin custom/langfuse-config
 ```
+
+`upstream` remote local đã được khoá `--push no-push-allowed` → nếu lỡ `git push upstream` thì git fail ngay lập tức, không thể leak code lên anomalyco/opencode.
 
 Khi muốn thêm feature custom mới: tách branch từ `custom/main`:
 
@@ -152,6 +151,50 @@ Khi muốn thêm feature custom mới: tách branch từ `custom/main`:
 git checkout -b custom/<feature> custom/main
 # ... commit ...
 git push -u origin custom/<feature>
+```
+
+---
+
+## 5b. CI trên fork
+
+### Workflow custom của fork
+
+[.github/workflows/custom-ci.yml](.github/workflows/custom-ci.yml) chạy `bun typecheck` trên mọi push + PR vào `custom/**`. Dùng GitHub-hosted `ubuntu-latest` (không phụ thuộc blacksmith runner của upstream). Đây là CI duy nhất bạn cần cho công việc thường ngày.
+
+Theo dõi:
+```bash
+gh run list -R vili-vn/opencode -L 10
+gh run watch <run-id> -R vili-vn/opencode
+```
+
+### Nếu lỡ push tới `dev` (workflows upstream sẽ register)
+
+Sau lần push đầu tiên tới fork's `dev`, các workflow nguy hiểm sẽ register trong GitHub. Disable hàng loạt:
+
+```bash
+for wf in publish.yml deploy.yml containers.yml release-github-action.yml \
+          publish-github-action.yml publish-vscode.yml storybook.yml \
+          docs-locale-sync.yml docs-update.yml nix-eval.yml nix-hashes.yml \
+          generate.yml beta.yml stats.yml notify-discord.yml \
+          sync-zed-extension.yml close-issues.yml close-stale-prs.yml \
+          compliance-close.yml daily-issues-recap.yml daily-pr-recap.yml \
+          duplicate-issues.yml triage.yml pr-management.yml pr-standards.yml \
+          vouch-check-issue.yml vouch-check-pr.yml vouch-manage-by-issue.yml \
+          opencode.yml review.yml; do
+  gh api -X PUT repos/vili-vn/opencode/actions/workflows/$wf/disable 2>/dev/null && echo "disabled $wf"
+done
+```
+
+Giữ active: `custom-ci.yml`, `typecheck.yml`, `test.yml` (nếu muốn full suite trên dev).
+
+### Đảm bảo không leak code lên upstream
+
+```bash
+git remote -v        # upstream phải có "no-push-allowed (push)"
+```
+Nếu thấy URL thật ở dòng push của upstream, chạy lại:
+```bash
+git remote set-url --push upstream no-push-allowed
 ```
 
 ---
