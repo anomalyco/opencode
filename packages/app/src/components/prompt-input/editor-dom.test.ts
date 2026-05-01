@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createTextFragment, getCursorPosition, getNodeLength, getTextLength, setCursorPosition } from "./editor-dom"
+import {
+  createSkillTokenElement,
+  createTextFragment,
+  getCursorPosition,
+  getNodeLength,
+  getTextLength,
+  setCursorPosition,
+} from "./editor-dom"
 
 describe("prompt-input editor dom", () => {
   test("createTextFragment preserves newlines with consecutive br nodes", () => {
@@ -93,6 +100,24 @@ describe("prompt-input editor dom", () => {
 
     setCursorPosition(container, 3)
     expect(getCursorPosition(container)).toBe(3)
+
+    container.remove()
+  })
+
+  test("skill token element keeps raw text and counts as editable text", () => {
+    const container = document.createElement("div")
+    const skill = createSkillTokenElement("/summarize")
+    container.appendChild(document.createTextNode("a"))
+    container.appendChild(skill)
+    container.appendChild(document.createTextNode("b"))
+    document.body.appendChild(container)
+
+    expect(skill.textContent).toBe("/summarize")
+    expect(skill.dataset.type).toBe("skill")
+    expect(getTextLength(container)).toBe(12)
+
+    setCursorPosition(container, 4)
+    expect(getCursorPosition(container)).toBe(4)
 
     container.remove()
   })

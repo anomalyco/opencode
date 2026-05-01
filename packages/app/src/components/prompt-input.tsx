@@ -35,7 +35,16 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
-import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
+import {
+  createSkillTokenElement,
+  createTextFragment,
+  getCursorPosition,
+  setCursorPosition,
+  setRangeEdge,
+  isPillElement,
+  isSkillTokenElement,
+  SKILL_TOKEN_TYPE,
+} from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
@@ -56,6 +65,7 @@ import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
 import { loadAgentsQuery, loadProvidersQuery } from "@/context/global-sync/bootstrap"
+import { leadingSkillCommandToken, type SkillCommandToken } from "@opencode-ai/core/util/skill-token"
 
 interface PromptInputProps {
   class?: string
@@ -527,6 +537,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (cursor !== null) setCursorPosition(editorRef, cursor)
   }
 
+  const skillTokenForParts = (parts: Prompt) => {
+    if (store.mode !== "normal" || parts.length === 0) return
+    const firstPart = parts[0]
+    if (firstPart.type !== "text") return
+    return leadingSkillCommandToken(firstPart.content, syncedCommands())
+  }
+
+  const skillTokenDecorationMatches = (parts: Prompt) => {
+    const token = skillTokenForParts(parts)
+    const firstChild = editorRef.firstChild as HTMLElement | null
+    const hasSkillElement = firstChild?.nodeType === Node.ELEMENT_NODE && firstChild.dataset?.type === SKILL_TOKEN_TYPE
+
+    if (!token) return !hasSkillElement
+    if (!hasSkillElement) return false
+    return firstChild.textContent === token.token
+  }
+
   createEffect(() => {
     params.id
     if (params.id) return
@@ -638,6 +665,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     return [...custom, ...builtin]
   })
+  const syncedCommands = createMemo(() => sync.data.command)
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
@@ -696,20 +724,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return false
       const el = node as HTMLElement
-      if (el.dataset.type === "file") return true
-      if (el.dataset.type === "agent") return true
+      if (isPillElement(el) || isSkillTokenElement(el)) return true
       return el.tagName === "BR"
     })
 
+  const appendTextWithSkillToken = (content: string, offset: number, token: SkillCommandToken | undefined) => {
+    if (!token || token.end <= offset || token.start >= offset + content.length) {
+      editorRef.appendChild(createTextFragment(content))
+      return
+    }
+
+    const start = Math.max(0, token.start - offset)
+    const end = Math.min(content.length, token.end - offset)
+    const before = content.slice(0, start)
+    const middle = content.slice(start, end)
+    const after = content.slice(end)
+
+    if (before) editorRef.appendChild(createTextFragment(before))
+    if (middle) editorRef.appendChild(createSkillTokenElement(middle))
+    if (after) editorRef.appendChild(createTextFragment(after))
+  }
+
   const renderEditor = (parts: Prompt) => {
     clearEditor()
+    const skillToken = skillTokenForParts(parts)
+    let offset = 0
+
     for (const part of parts) {
       if (part.type === "text") {
-        editorRef.appendChild(createTextFragment(part.content))
+        appendTextWithSkillToken(part.content, offset, skillToken)
+        offset += part.content.length
         continue
       }
       if (part.type === "file" || part.type === "agent") {
         editorRef.appendChild(createPill(part))
+        offset += part.content.length
       }
     }
 
@@ -751,24 +800,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const reconcile = (input: Prompt) => {
     if (mirror.input) {
       mirror.input = false
-      if (isNormalizedEditor()) return
+      if (isNormalizedEditor() && skillTokenDecorationMatches(input)) return
 
       renderEditorWithCursor(input)
       return
     }
 
     const dom = parseFromDOM()
-    if (isNormalizedEditor() && isPromptEqual(input, dom)) return
+    if (isNormalizedEditor() && isPromptEqual(input, dom) && skillTokenDecorationMatches(input)) return
 
     renderEditorWithCursor(input)
   }
 
   createEffect(
     on(
-      () => prompt.current(),
+      () => [prompt.current(), syncedCommands(), store.mode] as const,
       (parts) => {
         if (composing()) return
-        reconcile(parts.filter((part) => part.type !== "image"))
+        reconcile(parts[0].filter((part) => part.type !== "image"))
       },
     ),
   )
@@ -1361,6 +1410,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
+                "[&_[data-type=skill]]:text-text-interactive-base [&_[data-type=skill]]:font-bold": true,
                 "font-mono!": store.mode === "shell",
               }}
               style={{ "padding-bottom": space }}

@@ -1,4 +1,42 @@
 const MAX_BREAKS = 200
+export const SKILL_TOKEN_TYPE = "skill"
+
+export function createSkillTokenElement(content: string): HTMLSpanElement {
+  const span = document.createElement("span")
+  span.textContent = content
+  span.dataset.type = SKILL_TOKEN_TYPE
+  return span
+}
+
+export function isSkillTokenElement(node: Node) {
+  return node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === SKILL_TOKEN_TYPE
+}
+
+export function isPillElement(node: Node) {
+  return (
+    node.nodeType === Node.ELEMENT_NODE &&
+    ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+  )
+}
+
+function setRangeWithinText(range: Range, node: Node, offset: number, edge: "start" | "end"): boolean {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent ?? ""
+    if (edge === "start") range.setStart(node, Math.min(offset, text.length))
+    if (edge === "end") range.setEnd(node, Math.min(offset, text.length))
+    return true
+  }
+
+  let remaining = offset
+  for (let i = 0; i < node.childNodes.length; i++) {
+    const child = node.childNodes[i]
+    const length = getNodeLength(child)
+    if (remaining <= length) return setRangeWithinText(range, child, remaining, edge)
+    remaining -= length
+  }
+
+  return false
+}
 
 export function createTextFragment(content: string): DocumentFragment {
   const fragment = document.createDocumentFragment()
@@ -59,15 +97,26 @@ export function setCursorPosition(parent: HTMLElement, position: number) {
   while (node) {
     const length = getNodeLength(node)
     const isText = node.nodeType === Node.TEXT_NODE
-    const isPill =
-      node.nodeType === Node.ELEMENT_NODE &&
-      ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+    const isPill = isPillElement(node)
+    const isSkill = isSkillTokenElement(node)
     const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
     if (isText && remaining <= length) {
       const range = document.createRange()
       const selection = window.getSelection()
       range.setStart(node, remaining)
+      range.collapse(true)
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      return
+    }
+
+    if (isSkill && remaining <= length) {
+      const range = document.createRange()
+      const selection = window.getSelection()
+      if (!setRangeWithinText(range, node, remaining, "start")) {
+        range.setStartAfter(node)
+      }
       range.collapse(true)
       selection?.removeAllRanges()
       selection?.addRange(range)
@@ -124,15 +173,18 @@ export function setRangeEdge(parent: HTMLElement, range: Range, edge: "start" | 
   for (const node of nodes) {
     const length = getNodeLength(node)
     const isText = node.nodeType === Node.TEXT_NODE
-    const isPill =
-      node.nodeType === Node.ELEMENT_NODE &&
-      ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+    const isPill = isPillElement(node)
+    const isSkill = isSkillTokenElement(node)
     const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
     if (isText && remaining <= length) {
       if (edge === "start") range.setStart(node, remaining)
       if (edge === "end") range.setEnd(node, remaining)
       return
+    }
+
+    if (isSkill && remaining <= length) {
+      if (setRangeWithinText(range, node, remaining, edge)) return
     }
 
     if ((isPill || isBreak) && remaining <= length) {

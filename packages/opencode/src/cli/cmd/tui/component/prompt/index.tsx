@@ -43,6 +43,7 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import { leadingSkillCommandToken } from "@opencode-ai/core/util/skill-token"
 
 export type PromptProps = {
   sessionID?: string
@@ -195,9 +196,12 @@ export function Prompt(props: PromptProps) {
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
+  const skillStyleId = syntax().getStyleId("extmark.skill")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
+  const skillTokenTypeId = 1
   const event = useEvent()
+  const syncedCommands = createMemo(() => sync.data.command)
 
   event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
@@ -612,7 +616,30 @@ export function Prompt(props: PromptProps) {
         })
       }
     })
+    restoreSkillExtmark()
   }
+
+  function restoreSkillExtmark() {
+    if (store.mode !== "normal") return
+    const token = leadingSkillCommandToken(input.plainText, syncedCommands())
+    if (!token) return
+
+    input.extmarks.create({
+      start: token.start,
+      end: token.end,
+      virtual: true,
+      styleId: skillStyleId,
+      typeId: skillTokenTypeId,
+    })
+  }
+
+  createEffect(() => {
+    if (!input || input.isDestroyed) return
+    store.mode
+    store.prompt.input
+    syncedCommands()
+    restoreExtmarksFromParts(store.prompt.parts)
+  })
 
   function syncExtmarksWithPromptParts() {
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
