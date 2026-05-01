@@ -16,6 +16,7 @@
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/opencode fix-node-pty",
     "prepare": "husky",
+    "postinstall": "bun ./script/patch-ghostty.ts",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"
