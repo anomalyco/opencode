@@ -222,16 +222,6 @@ export const ReadTool = Tool.define(
 
       const mime = sniffAttachmentMime(sample, AppFileSystem.mimeType(filepath))
       const isImage = SUPPORTED_IMAGE_MIMES.has(mime)
-      const isUnsupportedImage =
-        !isImage && mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
-
-      if (isUnsupportedImage) {
-        return yield* Effect.fail(
-          new Error(
-            `Cannot read image: ${mime} is not a supported format. Supported image formats: JPEG, PNG, GIF, WebP.`,
-          ),
-        )
-      }
 
       if (isImage || isPdfAttachment(mime)) {
         const bytes = yield* fs.readFile(filepath)

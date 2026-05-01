@@ -441,36 +441,21 @@ root_type Monster;`
     }),
   )
 
-  it.live("rejects unsupported image formats like BMP", () =>
+  it.live("falls through unsupported image mime types to text", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
-      // minimal BMP file header
-      const bmp = Buffer.from("BM", "ascii")
-      yield* put(path.join(dir, "image.bmp"), bmp)
+      const cases = [
+        ["image.bmp", "BM text content"],
+        ["photo.tiff", "II text content"],
+        ["photo.avif", "avif text content"],
+      ] as const
 
-      const err = yield* fail(dir, { filePath: path.join(dir, "image.bmp") })
-      expect(err.message).toContain("image/bmp is not a supported format")
-      expect(err.message).toContain("JPEG, PNG, GIF, WebP")
-    }),
-  )
-
-  it.live("rejects unsupported image formats like TIFF", () =>
-    Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
-      yield* put(path.join(dir, "photo.tiff"), Buffer.from("II", "ascii"))
-
-      const err = yield* fail(dir, { filePath: path.join(dir, "photo.tiff") })
-      expect(err.message).toContain("is not a supported format")
-    }),
-  )
-
-  it.live("rejects unsupported image formats like AVIF", () =>
-    Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
-      yield* put(path.join(dir, "photo.avif"), Buffer.from([0x00, 0x00, 0x00, 0x1c]))
-
-      const err = yield* fail(dir, { filePath: path.join(dir, "photo.avif") })
-      expect(err.message).toContain("is not a supported format")
+      for (const item of cases) {
+        yield* put(path.join(dir, item[0]), item[1])
+        const result = yield* exec(dir, { filePath: path.join(dir, item[0]) })
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain(item[1])
+      }
     }),
   )
 })
