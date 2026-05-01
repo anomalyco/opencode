@@ -640,6 +640,27 @@ You can control context compaction behavior through the `compaction` option.
 
 ---
 
+### Tool output
+
+You can tune when tool output is truncated to disk through the `tool_output` option. When the captured output exceeds either limit, OpenCode writes the full text to the truncation directory and returns a preview to the model.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200
+  }
+}
+```
+
+Both fields are optional and accept positive integers:
+
+- `max_lines` - Maximum number of lines before the output is truncated. Defaults to `2000`.
+- `max_bytes` - Maximum size in bytes before the output is truncated. Defaults to `51200` (50 KiB).
+
+---
+
 ### Watcher
 
 You can configure file watcher ignore patterns through the `watcher` option.
