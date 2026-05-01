@@ -779,9 +779,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(SyncEvent.defaultLayer),
 )
 
-function* listByProject(input: ListInput & {
-  projectID: ProjectID
-}) {
+function* listByProject(
+  input: ListInput & {
+    projectID: ProjectID
+  },
+) {
   const conditions = [eq(SessionTable.project_id, input.projectID)]
 
   if (input.workspaceID) {
