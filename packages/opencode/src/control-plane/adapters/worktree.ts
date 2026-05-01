@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
+import { type WorkspaceAdapter, WorkspaceInfo } from "../types"
 
 const WorktreeConfig = Schema.Struct({
   name: WorkspaceInfo.fields.name,
@@ -13,7 +13,7 @@ async function loadWorktree() {
   return { AppRuntime, Worktree }
 }
 
-export const WorktreeAdaptor: WorkspaceAdaptor = {
+export const WorktreeAdapter: WorkspaceAdapter = {
   name: "Worktree",
   description: "Create a git worktree",
   async configure(info) {

@@ -34,7 +34,7 @@ afterAll(() => {
 })
 
 describe("plugin.workspace", () => {
-  it.live("plugin can install a workspace adaptor", () =>
+  it.live("plugin can install a workspace adapter", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         const type = `plug-${Math.random().toString(36).slice(2)}`
@@ -48,7 +48,7 @@ describe("plugin.workspace", () => {
               "export default async ({ experimental_workspace }) => {",
               `  experimental_workspace.register(${JSON.stringify(type)}, {`,
               '    name: "plug",',
-              '    description: "plugin workspace adaptor",',
+              '    description: "plugin workspace adapter",',
               "    configure(input) {",
               `      return { ...input, name: "plug", branch: "plug/main", directory: ${JSON.stringify(space)} }`,
               "    },",

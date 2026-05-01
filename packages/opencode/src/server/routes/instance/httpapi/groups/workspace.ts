@@ -1,5 +1,5 @@
 import { Workspace } from "@/control-plane/workspace"
-import { WorkspaceAdaptorEntry } from "@/control-plane/types"
+import { WorkspaceAdapterEntry } from "@/control-plane/types"
 import { NonNegativeInt } from "@/util/schema"
 import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -16,7 +16,7 @@ export const SessionRestoreResponse = Schema.Struct({
 })
 
 export const WorkspacePaths = {
-  adaptors: `${root}/adaptor`,
+  adapters: `${root}/adapter`,
   list: root,
   status: `${root}/status`,
   remove: `${root}/:id`,
@@ -27,13 +27,13 @@ export const WorkspaceApi = HttpApi.make("workspace")
   .add(
     HttpApiGroup.make("workspace")
       .add(
-        HttpApiEndpoint.get("adaptors", WorkspacePaths.adaptors, {
-          success: described(Schema.Array(WorkspaceAdaptorEntry), "Workspace adaptors"),
+        HttpApiEndpoint.get("adapters", WorkspacePaths.adapters, {
+          success: described(Schema.Array(WorkspaceAdapterEntry), "Workspace adapters"),
         }).annotateMerge(
           OpenApi.annotations({
-            identifier: "experimental.workspace.adaptor.list",
-            summary: "List workspace adaptors",
-            description: "List all available workspace adaptors for the current project.",
+            identifier: "experimental.workspace.adapter.list",
+            summary: "List workspace adapters",
+            description: "List all available workspace adapters for the current project.",
           }),
         ),
         HttpApiEndpoint.get("list", WorkspacePaths.list, {
