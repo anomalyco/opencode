@@ -18,6 +18,7 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
   version?: number
 }) {
   const Payload = Schema.Struct({
+    id: ID,
     metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
     type: Schema.Literal(input.type),
     data: Schema.Struct(input.schema),

@@ -32,6 +32,7 @@ import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
@@ -78,6 +79,10 @@ export function fromRow(row: SessionRow): Info {
     path: row.path ?? undefined,
     parentID: row.parent_id ?? undefined,
     title: row.title,
+    agent: row.agent ?? undefined,
+    model: row.model
+      ? { id: ModelID.make(row.model.id), providerID: ProviderID.make(row.model.providerID), variant: row.model.variant }
+      : undefined,
     version: row.version,
     summary,
     share,
@@ -102,6 +107,8 @@ export function toRow(info: Info) {
     directory: info.directory,
     path: info.path,
     title: info.title,
+    agent: info.agent,
+    model: info.model,
     version: info.version,
     share_url: info.share?.url,
     summary_additions: info.summary?.additions,
@@ -160,6 +167,12 @@ const Revert = Schema.Struct({
   diff: optionalOmitUndefined(Schema.String),
 })
 
+const Model = Schema.Struct({
+  id: ModelID,
+  providerID: ProviderID,
+  variant: optionalOmitUndefined(Schema.String),
+})
+
 export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
@@ -171,6 +184,8 @@ export const Info = Schema.Struct({
   summary: optionalOmitUndefined(Summary),
   share: optionalOmitUndefined(Share),
   title: Schema.String,
+  agent: optionalOmitUndefined(Schema.String),
+  model: optionalOmitUndefined(Model),
   version: Schema.String,
   time: Time,
   permission: optionalOmitUndefined(Permission.Ruleset),
@@ -201,6 +216,8 @@ export const CreateInput = Schema.optional(
   Schema.Struct({
     parentID: Schema.optional(SessionID),
     title: Schema.optional(Schema.String),
+    agent: Schema.optional(Schema.String),
+    model: Schema.optional(Model),
     permission: Schema.optional(Permission.Ruleset),
     workspaceID: Schema.optional(WorkspaceID),
   }),
@@ -272,6 +289,8 @@ const UpdatedInfo = Schema.Struct({
   summary: Schema.optional(Schema.NullOr(Summary)),
   share: Schema.optional(UpdatedShare),
   title: Schema.optional(Schema.NullOr(Schema.String)),
+  agent: Schema.optional(Schema.NullOr(Schema.String)),
+  model: Schema.optional(Schema.NullOr(Model)),
   version: Schema.optional(Schema.NullOr(Schema.String)),
   time: Schema.optional(UpdatedTime),
   permission: Schema.optional(Schema.NullOr(Permission.Ruleset)),
@@ -404,6 +423,8 @@ export interface Interface {
   readonly create: (input?: {
     parentID?: SessionID
     title?: string
+    agent?: string
+    model?: Schema.Schema.Type<typeof Model>
     permission?: Permission.Ruleset
     workspaceID?: WorkspaceID
   }) => Effect.Effect<Info>
@@ -464,6 +485,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
       title?: string
+      agent?: string
+      model?: Schema.Schema.Type<typeof Model>
       parentID?: SessionID
       workspaceID?: WorkspaceID
       directory: string
@@ -481,6 +504,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
         workspaceID: input.workspaceID,
         parentID: input.parentID,
         title: input.title ?? createDefaultTitle(!!input.parentID),
+        agent: input.agent,
+        model: input.model,
         permission: input.permission,
         time: {
           created: Date.now(),
@@ -591,6 +616,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     const create = Effect.fn("Session.create")(function* (input?: {
       parentID?: SessionID
       title?: string
+      agent?: string
+      model?: Schema.Schema.Type<typeof Model>
       permission?: Permission.Ruleset
       workspaceID?: WorkspaceID
     }) {
@@ -601,6 +628,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
         directory: ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),
         title: input?.title,
+        agent: input?.agent,
+        model: input?.model,
         permission: input?.permission,
         workspaceID: input?.workspaceID ?? workspace,
       })

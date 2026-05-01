@@ -10,7 +10,7 @@ import type { SessionID } from "./schema"
 import { Schema } from "effect"
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
-type SessionMessageData = NonNullable<typeof SessionMessageTable.$inferInsert["data"]>
+type SessionMessageData = NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>
 
 function encodeDateTimes(value: unknown): unknown {
   if (DateTime.isDateTime(value)) return DateTime.toEpochMillis(value)
@@ -96,7 +96,7 @@ function update(db: Database.TxOrDb, event: SessionEvent.Event) {
 }
 
 export default [
-  SyncEvent.project(SessionEvent.AgentSwitched.Sync, (db, data) => {
+  SyncEvent.project(SessionEvent.AgentSwitched.Sync, (db, data, event) => {
     db.update(SessionTable)
       .set({
         agent: data.agent,
@@ -104,8 +104,9 @@ export default [
       })
       .where(eq(SessionTable.id, data.sessionID))
       .run()
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.agent.switched", data })
   }),
-  SyncEvent.project(SessionEvent.ModelSwitched.Sync, (db, data) => {
+  SyncEvent.project(SessionEvent.ModelSwitched.Sync, (db, data, event) => {
     db.update(SessionTable)
       .set({
         model: {
@@ -117,59 +118,60 @@ export default [
       })
       .where(eq(SessionTable.id, data.sessionID))
       .run()
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.model.switched", data })
   }),
-  SyncEvent.project(SessionEvent.Prompted.Sync, (db, data) => {
-    update(db, { type: "session.next.prompted", data })
+  SyncEvent.project(SessionEvent.Prompted.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.prompted", data })
   }),
-  SyncEvent.project(SessionEvent.Synthetic.Sync, (db, data) => {
-    update(db, { type: "session.next.synthetic", data })
+  SyncEvent.project(SessionEvent.Synthetic.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.synthetic", data })
   }),
-  SyncEvent.project(SessionEvent.Step.Started.Sync, (db, data) => {
-    update(db, { type: "session.next.step.started", data })
+  SyncEvent.project(SessionEvent.Step.Started.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.started", data })
   }),
-  SyncEvent.project(SessionEvent.Step.Ended.Sync, (db, data) => {
-    update(db, { type: "session.next.step.ended", data })
+  SyncEvent.project(SessionEvent.Step.Ended.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.step.ended", data })
   }),
-  SyncEvent.project(SessionEvent.Text.Started.Sync, (db, data) => {
-    update(db, { type: "session.next.text.started", data })
+  SyncEvent.project(SessionEvent.Text.Started.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.text.started", data })
   }),
   SyncEvent.project(SessionEvent.Text.Delta.Sync, () => {}),
-  SyncEvent.project(SessionEvent.Text.Ended.Sync, (db, data) => {
-    update(db, { type: "session.next.text.ended", data })
+  SyncEvent.project(SessionEvent.Text.Ended.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.text.ended", data })
   }),
-  SyncEvent.project(SessionEvent.Tool.Input.Started.Sync, (db, data) => {
-    update(db, { type: "session.next.tool.input.started", data })
+  SyncEvent.project(SessionEvent.Tool.Input.Started.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.input.started", data })
   }),
   SyncEvent.project(SessionEvent.Tool.Input.Delta.Sync, () => {}),
-  SyncEvent.project(SessionEvent.Tool.Input.Ended.Sync, (db, data) => {
-    update(db, { type: "session.next.tool.input.ended", data })
+  SyncEvent.project(SessionEvent.Tool.Input.Ended.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.input.ended", data })
   }),
-  SyncEvent.project(SessionEvent.Tool.Called.Sync, (db, data) => {
-    update(db, { type: "session.next.tool.called", data })
+  SyncEvent.project(SessionEvent.Tool.Called.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.called", data })
   }),
-  SyncEvent.project(SessionEvent.Tool.Success.Sync, (db, data) => {
-    update(db, { type: "session.next.tool.success", data })
+  SyncEvent.project(SessionEvent.Tool.Success.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.success", data })
   }),
-  SyncEvent.project(SessionEvent.Tool.Error.Sync, (db, data) => {
-    update(db, { type: "session.next.tool.error", data })
+  SyncEvent.project(SessionEvent.Tool.Error.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.tool.error", data })
   }),
-  SyncEvent.project(SessionEvent.Reasoning.Started.Sync, (db, data) => {
-    update(db, { type: "session.next.reasoning.started", data })
+  SyncEvent.project(SessionEvent.Reasoning.Started.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.reasoning.started", data })
   }),
   SyncEvent.project(SessionEvent.Reasoning.Delta.Sync, () => {}),
-  SyncEvent.project(SessionEvent.Reasoning.Ended.Sync, (db, data) => {
-    update(db, { type: "session.next.reasoning.ended", data })
+  SyncEvent.project(SessionEvent.Reasoning.Ended.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.reasoning.ended", data })
   }),
-  SyncEvent.project(SessionEvent.Retried.Sync, (db, data) => {
-    update(db, { type: "session.next.retried", data })
+  SyncEvent.project(SessionEvent.Retried.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.retried", data })
   }),
-  SyncEvent.project(SessionEvent.Compaction.Started.Sync, (db, data) => {
-    update(db, { type: "session.next.compaction.started", data })
+  SyncEvent.project(SessionEvent.Compaction.Started.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.started", data })
   }),
-  SyncEvent.project(SessionEvent.Compaction.Delta.Sync, (db, data) => {
-    update(db, { type: "session.next.compaction.delta", data })
+  SyncEvent.project(SessionEvent.Compaction.Delta.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.delta", data })
   }),
-  SyncEvent.project(SessionEvent.Compaction.Ended.Sync, (db, data) => {
-    update(db, { type: "session.next.compaction.ended", data })
+  SyncEvent.project(SessionEvent.Compaction.Ended.Sync, (db, data, event) => {
+    update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.compaction.ended", data })
   }),
 ]

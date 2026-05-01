@@ -147,7 +147,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
     app.post(TuiPaths.selectSession, (c) => handler(c.req.raw, context))
     app.get(TuiPaths.controlNext, (c) => handler(c.req.raw, context))
     app.post(TuiPaths.controlResponse, (c) => handler(c.req.raw, context))
-    app.get(WorkspacePaths.adaptors, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.adapters, (c) => handler(c.req.raw, context))
     app.post(WorkspacePaths.list, (c) => handler(c.req.raw, context))
     app.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
     app.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))

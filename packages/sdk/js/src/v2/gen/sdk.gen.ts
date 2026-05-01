@@ -1695,6 +1695,12 @@ export class Session2 extends HeyApiClient {
       workspace?: string
       parentID?: string
       title?: string
+      agent?: string
+      model?: {
+        id: string
+        providerID: string
+        variant?: string
+      }
       permission?: PermissionRuleset
       workspaceID?: string
     },
@@ -1709,6 +1715,8 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "parentID" },
             { in: "body", key: "title" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
             { in: "body", key: "permission" },
             { in: "body", key: "workspaceID" },
           ],

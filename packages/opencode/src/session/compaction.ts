@@ -601,7 +601,6 @@ export const layer: Layer.Layer<
         overflow: input.overflow,
       })
       SyncEvent.run(SessionEvent.Compaction.Started.Sync, {
-        id: SessionEvent.ID.create(),
         sessionID: input.sessionID,
         timestamp: DateTime.makeUnsafe(Date.now()),
         reason: input.auto ? "auto" : "manual",

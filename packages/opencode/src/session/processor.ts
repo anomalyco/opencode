@@ -436,7 +436,6 @@ export const layer: Layer.Layer<
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               SyncEvent.run(SessionEvent.Step.Started.Sync, {
-                id: SessionEvent.ID.create(),
                 sessionID: ctx.sessionID,
                 agent: input.assistantMessage.agent,
                 model: {

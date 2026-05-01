@@ -12,11 +12,13 @@ import path from "path"
 import stripAnsi from "strip-ansi"
 import type {
   SessionMessage,
+  SessionMessageAgentSwitched,
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
   SessionMessageCompaction,
+  SessionMessageModelSwitched,
   SessionMessageSynthetic,
   SessionMessageUser,
   ToolFileContent,
@@ -87,6 +89,12 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
                   </Match>
                   <Match when={message.type === "compaction"}>
                     <CompactionMessage message={message as SessionMessageCompaction} />
+                  </Match>
+                  <Match when={message.type === "agent-switched"}>
+                    <AgentSwitchedMessage message={message as SessionMessageAgentSwitched} />
+                  </Match>
+                  <Match when={message.type === "model-switched"}>
+                    <ModelSwitchedMessage message={message as SessionMessageModelSwitched} />
                   </Match>
                   <Match when={true}>
                     <UnknownMessage message={message} />
@@ -209,6 +217,37 @@ function CompactionMessage(props: { message: SessionMessageCompaction }) {
       <Show when={props.message.summary}>
         <text fg={theme.textMuted}>{props.message.summary}</text>
       </Show>
+    </box>
+  )
+}
+
+function AgentSwitchedMessage(props: { message: SessionMessageAgentSwitched }) {
+  const { theme } = useTheme()
+  const local = useLocal()
+  return (
+    <box paddingLeft={3} marginTop={1} flexShrink={0}>
+      <text>
+        <span style={{ fg: local.agent.color(props.message.agent) }}>▣ </span>
+        <span style={{ fg: theme.textMuted }}>Switched agent to </span>
+        <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.agent)}</span>
+      </text>
+    </box>
+  )
+}
+
+function ModelSwitchedMessage(props: { message: SessionMessageModelSwitched }) {
+  const { theme } = useTheme()
+  const model = createMemo(() => {
+    const variant = props.message.model.variant ? `/${props.message.model.variant}` : ""
+    return `${props.message.model.providerID}/${props.message.model.id}${variant}`
+  })
+  return (
+    <box paddingLeft={3} marginTop={1} flexShrink={0}>
+      <text>
+        <span style={{ fg: theme.secondary }}>◇ </span>
+        <span style={{ fg: theme.textMuted }}>Switched model to </span>
+        <span style={{ fg: theme.text }}>{model()}</span>
+      </text>
     </box>
   )
 }

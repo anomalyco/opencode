@@ -7,9 +7,6 @@ export { FileAttachment }
 import { ToolOutput } from "./tool-output"
 import { ModelID, ProviderID } from "@/provider/schema"
 
-export const ID = Event.ID
-export type ID = Schema.Schema.Type<typeof ID>
-
 export const Source = Schema.Struct({
   start: NonNegativeInt,
   end: NonNegativeInt,
@@ -33,6 +30,7 @@ export const AgentSwitched = Event.define({
     agent: Schema.String,
   },
 })
+export type AgentSwitched = Schema.Schema.Type<typeof AgentSwitched>
 
 export const ModelSwitched = Event.define({
   type: "session.next.model.switched",
@@ -45,6 +43,7 @@ export const ModelSwitched = Event.define({
     variant: Schema.String.pipe(Schema.optional),
   },
 })
+export type ModelSwitched = Schema.Schema.Type<typeof ModelSwitched>
 
 export const Prompted = Event.define({
   type: "session.next.prompted",
@@ -52,7 +51,6 @@ export const Prompted = Event.define({
   version: 1,
   schema: {
     ...Base,
-    id: ID,
     prompt: Prompt,
   },
 })
@@ -63,7 +61,6 @@ export const Synthetic = Event.define({
   aggregate: "sessionID",
   schema: {
     ...Base,
-    id: ID,
     text: Schema.String,
   },
 })
@@ -75,7 +72,6 @@ export namespace Step {
     aggregate: "sessionID",
     schema: {
       ...Base,
-      id: ID,
       agent: Schema.String,
       model: Schema.Struct({
         id: Schema.String,
@@ -302,7 +298,6 @@ export namespace Compaction {
     aggregate: "sessionID",
     schema: {
       ...Base,
-      id: ID,
       reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
     },
   })

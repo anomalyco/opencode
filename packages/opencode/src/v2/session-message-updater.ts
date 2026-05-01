@@ -77,8 +77,12 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
     )
 
   SessionEvent.All.match(event, {
-    "session.next.agent.switched": () => {},
-    "session.next.model.switched": () => {},
+    "session.next.agent.switched": (event) => {
+      adapter.appendMessage(SessionMessage.AgentSwitched.fromEvent(event))
+    },
+    "session.next.model.switched": (event) => {
+      adapter.appendMessage(SessionMessage.ModelSwitched.fromEvent(event))
+    },
     "session.next.prompted": (event) => {
       adapter.appendMessage(SessionMessage.User.fromEvent(event))
     },

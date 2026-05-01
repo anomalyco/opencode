@@ -68,7 +68,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         case "session.next.prompted": {
           update(event.properties.sessionID, (draft) => {
             draft.push({
-              id: event.properties.id,
+              id: event.id,
               type: "user",
               text: event.properties.prompt.text,
               files: event.properties.prompt.files,
@@ -81,7 +81,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         case "session.next.synthetic":
           update(event.properties.sessionID, (draft) => {
             draft.push({
-              id: event.properties.id,
+              id: event.id,
               type: "synthetic",
               sessionID: event.properties.sessionID,
               text: event.properties.text,
@@ -94,7 +94,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
             const currentAssistant = activeAssistant(draft)
             if (currentAssistant) currentAssistant.time.completed = event.properties.timestamp
             draft.push({
-              id: event.properties.id,
+              id: event.id,
               type: "assistant",
               agent: event.properties.agent,
               model: event.properties.model,
@@ -224,7 +224,7 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
         case "session.next.compaction.started":
           update(event.properties.sessionID, (draft) => {
             draft.push({
-              id: event.properties.id,
+              id: event.id,
               type: "compaction",
               reason: event.properties.reason,
               summary: "",

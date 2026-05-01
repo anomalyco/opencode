@@ -6,6 +6,7 @@ import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { SyncEvent } from "@/sync"
 import { GlobalBus } from "@/bus/global"
+import { Bus } from "@/bus"
 import { AppRuntime } from "@/effect/app-runtime"
 import { AsyncQueue } from "@/util/queue"
 import { Instance } from "../../project/instance"
@@ -28,6 +29,7 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
     q.push(
       JSON.stringify({
         payload: {
+          id: Bus.createID(),
           type: "server.connected",
           properties: {},
         },
@@ -39,6 +41,7 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       q.push(
         JSON.stringify({
           payload: {
+            id: Bus.createID(),
             type: "server.heartbeat",
             properties: {},
           },
