@@ -50,6 +50,8 @@ export type ElectronAPI = {
     multiple?: boolean
     title?: string
     defaultPath?: string
+    accept?: string[]
+    extensions?: string[]
   }) => Promise<string | string[] | null>
   saveFilePicker: (opts?: { title?: string; defaultPath?: string }) => Promise<string | null>
   openLink: (url: string) => void

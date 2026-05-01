@@ -4,14 +4,17 @@ import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
-import { Locale } from "@/util/locale"
+import { Locale } from "@/util"
 
 export type DialogConfirmProps = {
   title: string
   message: string
   onConfirm?: () => void
   onCancel?: () => void
+  label?: string
 }
+
+export type DialogConfirmResult = boolean | undefined
 
 export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
@@ -45,20 +48,20 @@ export function DialogConfirm(props: DialogConfirmProps) {
         <text fg={theme.textMuted}>{props.message}</text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
-        <For each={["cancel", "confirm"]}>
+        <For each={["cancel", "confirm"] as const}>
           {(key) => (
             <box
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={key === store.active ? theme.primary : undefined}
-              onMouseUp={(evt) => {
+              onMouseUp={(_evt) => {
                 if (key === "confirm") props.onConfirm?.()
                 if (key === "cancel") props.onCancel?.()
                 dialog.clear()
               }}
             >
               <text fg={key === store.active ? theme.selectedListItemText : theme.textMuted}>
-                {Locale.titlecase(key)}
+                {Locale.titlecase(key === "cancel" ? (props.label ?? key) : key)}
               </text>
             </box>
           )}
@@ -68,8 +71,8 @@ export function DialogConfirm(props: DialogConfirmProps) {
   )
 }
 
-DialogConfirm.show = (dialog: DialogContext, title: string, message: string) => {
-  return new Promise<boolean>((resolve) => {
+DialogConfirm.show = (dialog: DialogContext, title: string, message: string, label?: string) => {
+  return new Promise<DialogConfirmResult>((resolve) => {
     dialog.replace(
       () => (
         <DialogConfirm
@@ -77,9 +80,10 @@ DialogConfirm.show = (dialog: DialogContext, title: string, message: string) => 
           message={message}
           onConfirm={() => resolve(true)}
           onCancel={() => resolve(false)}
+          label={label}
         />
       ),
-      () => resolve(false),
+      () => resolve(undefined),
     )
   })
 }

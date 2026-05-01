@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type {
-  FileDiff,
   Message,
   Part,
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
+  SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"
@@ -33,7 +33,7 @@ describe("app session cache", () => {
   test("dropSessionCaches clears orphaned parts without message rows", () => {
     const store: {
       session_status: Record<string, SessionStatus | undefined>
-      session_diff: Record<string, FileDiff[] | undefined>
+      session_diff: Record<string, SnapshotFileDiff[] | undefined>
       todo: Record<string, Todo[] | undefined>
       message: Record<string, Message[] | undefined>
       part: Record<string, Part[] | undefined>
@@ -64,7 +64,7 @@ describe("app session cache", () => {
     const m = msg("msg_1", "ses_1")
     const store: {
       session_status: Record<string, SessionStatus | undefined>
-      session_diff: Record<string, FileDiff[] | undefined>
+      session_diff: Record<string, SnapshotFileDiff[] | undefined>
       todo: Record<string, Todo[] | undefined>
       message: Record<string, Message[] | undefined>
       part: Record<string, Part[] | undefined>

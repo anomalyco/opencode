@@ -1,7 +1,7 @@
 ---
 description: Translate content for a specified locale while preserving technical terms
 mode: subagent
-model: opencode/gemini-3-pro
+model: opencode/gpt-5.4
 ---
 
 You are a professional translator and localization specialist.
@@ -594,7 +594,6 @@ OPENCODE_DISABLE_CLAUDE_CODE
 OPENCODE_DISABLE_CLAUDE_CODE_PROMPT
 OPENCODE_DISABLE_CLAUDE_CODE_SKILLS
 OPENCODE_DISABLE_DEFAULT_PLUGINS
-OPENCODE_DISABLE_FILETIME_CHECK
 OPENCODE_DISABLE_LSP_DOWNLOAD
 OPENCODE_DISABLE_MODELS_FETCH
 OPENCODE_DISABLE_PRUNE

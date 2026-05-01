@@ -81,6 +81,22 @@ $env:Path += ";$PWD"
 .\SecureCode.exe run "hello"
 ```
 
+After extracting the archive, run the bundled installer once to seed the
+SecureCode user config (branding plugin + LiteLLM endpoint template):
+
+```bash
+# from inside the extracted directory
+bash setup/install.sh
+```
+
+The installer:
+
+- copies `setup/acompany-branding.tsx` into `~/.config/securecode/plugins/` so the TUI shows the SecureCode wordmark.
+- seeds `~/.config/securecode/securecode.json` with the LiteLLM endpoint template (preserves an existing config).
+- seeds `~/.config/securecode/tui.json` so the branding plugin is loaded on start (preserves an existing config).
+
+Re-running the installer is safe: existing configs are kept and only the plugin is refreshed. Windows users can copy the files in `setup/` to `%APPDATA%\securecode\` manually.
+
 Prerequisites:
 
 - `git` should be available in your PATH.

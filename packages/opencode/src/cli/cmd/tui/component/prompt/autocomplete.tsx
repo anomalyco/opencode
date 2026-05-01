@@ -6,11 +6,13 @@ import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Sh
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
+import { getScrollAcceleration } from "../../util/scroll"
+import { useTuiConfig } from "../../context/tui-config"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
-import { Locale } from "@/util/locale"
+import { Locale } from "@/util"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
 
@@ -81,6 +83,7 @@ export function Autocomplete(props: {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
+  const tuiConfig = useTuiConfig()
 
   const [store, setStore] = createStore({
     index: 0,
@@ -108,7 +111,7 @@ export function Autocomplete(props: {
 
   const position = createMemo(() => {
     if (!store.visible) return { x: 0, y: 0, width: 0 }
-    const dims = dimensions()
+    dimensions()
     positionTick()
     const anchor = props.anchor()
     const parent = anchor.parent
@@ -247,7 +250,7 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
-            const baseDir = (sync.data.path.directory || process.cwd()).replace(/\/+$/, "")
+            const baseDir = (sync.path.directory || process.cwd()).replace(/\/+$/, "")
             const fullPath = `${baseDir}/${item}`
             const urlObj = pathToFileURL(fullPath)
             let filename = item
@@ -605,6 +608,7 @@ export function Autocomplete(props: {
   })
 
   let scroll: ScrollBoxRenderable
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   return (
     <box
@@ -622,6 +626,7 @@ export function Autocomplete(props: {
         backgroundColor={theme.backgroundMenu}
         height={height()}
         scrollbarOptions={{ visible: false }}
+        scrollAcceleration={scrollAcceleration()}
       >
         <Index
           each={options()}

@@ -151,23 +151,6 @@ Pesquise arquivos usando padrões glob como `**/*.js` ou `src/**/*.ts`. Retorna 
 
 ---
 
-### list
-
-Liste arquivos e diretórios em um determinado caminho.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Esta ferramenta lista o conteúdo do diretório. Aceita padrões glob para filtrar resultados.
-
----
-
 ### lsp (experimental)
 
 Interaja com seus servidores LSP configurados para obter recursos de inteligência de código, como definições, referências, informações de hover e hierarquia de chamadas.
@@ -241,27 +224,6 @@ Gerencie listas de tarefas durante sessões de codificação.
 ```
 
 Cria e atualiza listas de tarefas para acompanhar o progresso durante operações complexas. O LLM usa isso para organizar tarefas de múltiplas etapas.
-
-:::note
-Esta ferramenta está desativada para subagentes por padrão, mas você pode ativá-la manualmente. [Saiba mais](/docs/agents/#permissions)
-:::
-
----
-
-### todoread
-
-Leia listas de tarefas existentes.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "todoread": "allow"
-  }
-}
-```
-
-Lê o estado atual da lista de tarefas. Usado pelo LLM para acompanhar quais tarefas estão pendentes ou concluídas.
 
 :::note
 Esta ferramenta está desativada para subagentes por padrão, mas você pode ativá-la manualmente. [Saiba mais](/docs/agents/#permissions)
@@ -362,7 +324,7 @@ Servidores MCP (Model Context Protocol) permitem que você integre ferramentas e
 
 ## Internos
 
-Internamente, ferramentas como `grep`, `glob` e `list` usam [ripgrep](https://github.com/BurntSushi/ripgrep) por trás dos panos. Por padrão, o ripgrep respeita padrões `.gitignore`, o que significa que arquivos e diretórios listados em seu `.gitignore` serão excluídos de buscas e listagens.
+Internamente, ferramentas como `grep` e `glob` usam [ripgrep](https://github.com/BurntSushi/ripgrep) por trás dos panos. Por padrão, o ripgrep respeita padrões `.gitignore`, o que significa que arquivos e diretórios listados em seu `.gitignore` serão excluídos de buscas e listagens.
 
 ---
 

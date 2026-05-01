@@ -1,10 +1,12 @@
 import { EventEmitter } from "events"
 
+export type GlobalEvent = {
+  directory?: string
+  project?: string
+  workspace?: string
+  payload: any
+}
+
 export const GlobalBus = new EventEmitter<{
-  event: [
-    {
-      directory?: string
-      payload: any
-    },
-  ]
+  event: [GlobalEvent]
 }>()
