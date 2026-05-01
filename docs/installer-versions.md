@@ -1,4 +1,4 @@
-# DeskFox installer 版本日志
+﻿# DeskFox installer 版本日志
 
 > 版本号规则:`YYYY.M.D.N`(年.月.日.当天第几版,N 从 1 开始)
 > **Windows 和 macOS 各自独立 N 序列**(同一天 Win 打 1 次 + Mac 打 2 次,版本号分别为 [Windows] X.1 + [macOS] X.1, [macOS] X.2,**不共享计数器**)
@@ -10,6 +10,12 @@
 
 
 
+
+## [Windows] 2026.5.1.1 - 2026-05-01 14:21
+
+(待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
+
+---
 
 ## [macOS] 2026.4.30.3 — 2026-04-30 16:30
 
