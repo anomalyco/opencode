@@ -94,7 +94,7 @@ Importantly, **sync events automatically re-publish as bus events**. This makes 
 
 ### Event shape
 
-- The shape of the events are slightly different. A sync event has the `type`, `id`, `seq`, `aggregateID`, and `data` fields. A bus event has the `type` and `properties` fields. `data` and `properties` are largely the same thing. This conversion is automatically handled when the sync system re-published the event throught the bus.
+- The shape of the events are slightly different. A sync event has the `type`, `id`, `seq`, `aggregateID`, and `data` fields. A bus event has the `type` and `properties` fields. `data` and `properties` are largely the same thing. This conversion is automatically handled when the sync system re-published the event through the bus.
 
 The reason for this is because sync events need to track more information. I chose not to copy the `properties` naming to more clearly disambiguate the event types.
 
@@ -112,9 +112,9 @@ The system install projectors in `server/projectors.js`. It calls `SyncEvent.ini
 
 This allows you to "reshape" an event from the sync system before it's published to the bus. This should be avoided, but might be necessary for temporary backwards compat.
 
-The only time we use this is the `session.updated` event. Previously this event contained the entire session object. The sync even only contains the fields updated. We convert the event to contain to full object for backwards compatibility (but ideally we'd remove this).
+The only time we use this is the `session.updated` event. Previously this event contained the entire session object. The sync event only contains the fields updated. We convert the event to contain the full object for backwards compatibility (but ideally we'd remove this).
 
-It's very important that types are correct when working with events. Event definitions have a `schema` which carries the defintiion of the event shape (provided by a zod schema, inferred into a TypeScript type). Examples:
+It's very important that types are correct when working with events. Event definitions have a `schema` which carries the definition of the event shape (provided by a zod schema, inferred into a TypeScript type). Examples:
 
 ```ts
 // The schema from `Updated` typechecks the object correctly
