@@ -651,6 +651,71 @@ test("model options are merged from existing model", async () => {
   })
 })
 
+test("model prompt is merged from config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              models: {
+                "claude-sonnet-4-20250514": {
+                  prompt: "Use a concise local prompt.",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      expect(model.prompt).toBe("Use a concise local prompt.")
+    },
+  })
+})
+
+test("model prompt supports file substitution", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "local-prompt.txt"), "Use prompt from file.\n")
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              models: {
+                "claude-sonnet-4-20250514": {
+                  prompt: "{file:./local-prompt.txt}",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      expect(model.prompt).toBe("Use prompt from file.")
+    },
+  })
+})
+
 test("provider removed when all models filtered out", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

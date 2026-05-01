@@ -5,6 +5,7 @@ import { PositiveInt, withStatics } from "@/util/schema"
 export const Model = Schema.Struct({
   id: Schema.optional(Schema.String),
   name: Schema.optional(Schema.String),
+  prompt: Schema.optional(Schema.String),
   family: Schema.optional(Schema.String),
   release_date: Schema.optional(Schema.String),
   attachment: Schema.optional(Schema.Boolean),

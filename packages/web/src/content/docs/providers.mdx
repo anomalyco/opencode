@@ -2125,11 +2125,12 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
          "options": {
            "baseURL": "https://api.myprovider.com/v1"
          },
-         "models": {
-           "my-model-name": {
-             "name": "My Model Display Name"
-           }
-         }
+          "models": {
+            "my-model-name": {
+              "name": "My Model Display Name",
+              "prompt": "{file:./prompts/local-model.txt}"
+            }
+          }
        }
      }
    }
@@ -2137,9 +2138,10 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
    Here are the configuration options:
    - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers (for `/v1/chat/completions`). If your provider/model uses `/v1/responses`, use `@ai-sdk/openai`.
-   - **name**: Display name in UI.
-   - **models**: Available models.
-   - **options.baseURL**: API endpoint URL.
+    - **name**: Display name in UI.
+    - **models**: Available models.
+    - **models.*.prompt**: Optional system prompt for this model. Agent prompts still take precedence.
+    - **options.baseURL**: API endpoint URL.
    - **options.apiKey**: Optionally set the API key, if not using auth.
    - **options.headers**: Optionally set custom headers.
 

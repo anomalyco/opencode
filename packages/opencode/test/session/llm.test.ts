@@ -299,6 +299,161 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 }
 
 describe("session.llm.stream", () => {
+  test("uses model prompt when agent has no prompt", async () => {
+    const server = state.server
+    if (!server) throw new Error("Server not initialized")
+
+    const providerID = "vivgrid"
+    const modelID = "gemini-3.1-pro-preview"
+    const fixture = await loadFixture(providerID, modelID)
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+                models: {
+                  [fixture.model.id]: {
+                    prompt: "Use the configured model prompt.",
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(fixture.model.id))
+        const sessionID = SessionID.make("session-model-prompt")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("user-model-prompt"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: [],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const body = (await request).body
+        const messages = body.messages as Array<{ role: string; content: string }>
+        expect(messages[0]).toEqual({ role: "system", content: "Use the configured model prompt." })
+      },
+    })
+  })
+
+  test("agent prompt takes precedence over model prompt", async () => {
+    const server = state.server
+    if (!server) throw new Error("Server not initialized")
+
+    const providerID = "vivgrid"
+    const modelID = "gemini-3.1-pro-preview"
+    const fixture = await loadFixture(providerID, modelID)
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+                models: {
+                  [fixture.model.id]: {
+                    prompt: "Use the configured model prompt.",
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(fixture.model.id))
+        const sessionID = SessionID.make("session-agent-prompt")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          prompt: "Use the agent prompt.",
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("user-agent-prompt"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        await drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: [],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const body = (await request).body
+        const messages = body.messages as Array<{ role: string; content: string }>
+        expect(messages[0]).toEqual({ role: "system", content: "Use the agent prompt." })
+      },
+    })
+  })
+
   test("sends temperature, tokens, and reasoning options for openai-compatible models", async () => {
     const server = state.server
     if (!server) {

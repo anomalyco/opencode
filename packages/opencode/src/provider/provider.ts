@@ -895,6 +895,7 @@ export const Model = Schema.Struct({
   providerID: ProviderID,
   api: ProviderApiInfo,
   name: Schema.String,
+  prompt: optionalOmitUndefined(Schema.String),
   family: optionalOmitUndefined(Schema.String),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
@@ -991,6 +992,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     id: ModelID.make(model.id),
     providerID: ProviderID.make(provider.id),
     name: model.name,
+    prompt: undefined,
     family: model.family,
     api: {
       id: model.id,
@@ -1202,6 +1204,7 @@ const layer: Layer.Layer<
               },
               status: model.status ?? existingModel?.status ?? "active",
               name,
+              prompt: model.prompt ?? existingModel?.prompt,
               providerID: ProviderID.make(providerID),
               capabilities: {
                 temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,

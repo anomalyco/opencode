@@ -1328,6 +1328,7 @@ export type ProviderConfig = {
     [key: string]: {
       id?: string
       name?: string
+      prompt?: string
       family?: string
       release_date?: string
       attachment?: boolean
@@ -1757,6 +1758,7 @@ export type Model = {
     npm: string
   }
   name: string
+  prompt?: string
   family?: string
   capabilities: {
     temperature: boolean
