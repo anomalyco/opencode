@@ -11,15 +11,15 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/shared/util/path"
-import { retry } from "@opencode-ai/shared/util/retry"
+import { getFilename } from "@opencode-ai/core/util/path"
+import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions, skipToken } from "@tanstack/solid-query"
-import { loadSessionsQuery } from "../global-sync"
+import { loadMcpQuery } from "../global-sync"
 
 type GlobalStore = {
   ready: boolean
@@ -67,6 +67,62 @@ function runAll(list: Array<() => Promise<unknown>>) {
   return Promise.allSettled(list.map((item) => item()))
 }
 
+function showErrors(input: {
+  errors: unknown[]
+  title: string
+  translate: (key: string, vars?: Record<string, string | number>) => string
+  formatMoreCount: (count: number) => string
+}) {
+  if (input.errors.length === 0) return
+  const message = formatServerError(input.errors[0], input.translate)
+  const more = input.errors.length > 1 ? input.formatMoreCount(input.errors.length - 1) : ""
+  showToast({
+    variant: "error",
+    title: input.title,
+    description: message + more,
+  })
+}
+
+export const loadGlobalConfigQuery = (
+  sdk?: OpencodeClient,
+  transform?: (x: Awaited<ReturnType<OpencodeClient["global"]["config"]["get"]>>) => void,
+) =>
+  queryOptions({
+    queryKey: ["config"],
+    queryFn: sdk
+      ? () =>
+          retry(() =>
+            sdk.global.config.get().then((x) => {
+              transform?.(x)
+              return x.data!
+            }),
+          )
+      : skipToken,
+  })
+
+export const loadProjectsQuery = (
+  sdk?: OpencodeClient,
+  transform?: (x: Awaited<ReturnType<OpencodeClient["project"]["list"]>>["data"]) => void,
+) =>
+  queryOptions({
+    queryKey: ["project"],
+    queryFn: sdk
+      ? () =>
+          retry(() =>
+            sdk.project
+              .list()
+              .then((x) => {
+                return (x.data ?? [])
+                  .filter((p) => !!p?.id)
+                  .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+                  .slice()
+                  .sort((a, b) => cmp(a.id, b.id))
+              })
+              .then(transform),
+          )
+      : skipToken,
+  })
+
 export async function bootstrapGlobal(input: {
   globalSDK: OpencodeClient
   requestFailedTitle: string
@@ -75,53 +131,15 @@ export async function bootstrapGlobal(input: {
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
 }) {
-  const fast = [
-    () =>
-      retry(() =>
-        input.globalSDK.global.config.get().then((x) => {
-          input.setGlobalStore("config", x.data!)
-        }),
-      ),
-    () =>
-      input.queryClient.fetchQuery({
-        ...loadProvidersQuery(null),
-        queryFn: () =>
-          retry(() =>
-            input.globalSDK.provider.list().then((x) => {
-              input.setGlobalStore("provider", normalizeProviderList(x.data!))
-              return null
-            }),
-          ),
-      }),
-  ]
-
   const slow = [
+    () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.globalSDK)),
+    () => input.queryClient.fetchQuery(loadProvidersQuery(null, input.globalSDK)),
+    () => input.queryClient.fetchQuery(loadPathQuery(null, input.globalSDK)),
     () =>
-      retry(() =>
-        input.globalSDK.path.get().then((x) => {
-          input.setGlobalStore("path", x.data!)
-        }),
-      ),
-    () =>
-      retry(() =>
-        input.globalSDK.project.list().then((x) => {
-          const projects = (x.data ?? [])
-            .filter((p) => !!p?.id)
-            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
-            .slice()
-            .sort((a, b) => cmp(a.id, b.id))
-          input.setGlobalStore("project", projects)
-        }),
+      input.queryClient.fetchQuery(
+        loadProjectsQuery(input.globalSDK, (data) => input.setGlobalStore("project", data ?? [])),
       ),
   ]
-  await runAll(fast)
-  // showErrors({
-  //   errors: errors(await runAll(fast)),
-  //   title: input.requestFailedTitle,
-  //   translate: input.translate,
-  //   formatMoreCount: input.formatMoreCount,
-  // })
-  await waitForPaint()
   await runAll(slow)
   // showErrors({
   //   errors: errors(),
@@ -129,7 +147,6 @@ export async function bootstrapGlobal(input: {
   //   translate: input.translate,
   //   formatMoreCount: input.formatMoreCount,
   // })
-  input.setGlobalStore("ready", true)
 }
 
 function groupBySession<T extends { id: string; sessionID: string }>(input: T[]) {
@@ -180,11 +197,47 @@ function warmSessions(input: {
   ).then(() => undefined)
 }
 
-export const loadProvidersQuery = (directory: string | null) =>
-  queryOptions<null>({ queryKey: [directory, "providers"], queryFn: skipToken })
+export const loadProvidersQuery = (directory: string | null, sdk?: OpencodeClient) =>
+  queryOptions({
+    queryKey: [directory, "providers"],
+    queryFn: sdk ? () => retry(() => sdk.provider.list().then((x) => normalizeProviderList(x.data!))) : skipToken,
+  })
 
-export const loadAgentsQuery = (directory: string | null) =>
-  queryOptions<null>({ queryKey: [directory, "agents"], queryFn: skipToken })
+export const loadAgentsQuery = (
+  directory: string | null,
+  sdk?: OpencodeClient,
+  transform?: (x: Awaited<ReturnType<OpencodeClient["app"]["agents"]>>) => void,
+) =>
+  queryOptions({
+    queryKey: [directory, "agents"],
+    queryFn: sdk
+      ? () =>
+          retry(() =>
+            sdk.app.agents().then((x) => {
+              transform?.(x)
+              return x.data!
+            }),
+          )
+      : skipToken,
+  })
+
+export const loadPathQuery = (
+  directory: string | null,
+  sdk?: OpencodeClient,
+  transform?: (x: Awaited<ReturnType<OpencodeClient["path"]["get"]>>) => void,
+) =>
+  queryOptions<Path>({
+    queryKey: [directory, "path"],
+    queryFn: sdk
+      ? () =>
+          retry(() =>
+            sdk.path.get().then(async (x) => {
+              transform?.(x)
+              return x.data!
+            }),
+          )
+      : skipToken,
+  })
 
 export async function bootstrapDirectory(input: {
   directory: string
@@ -207,60 +260,33 @@ export async function bootstrapDirectory(input: {
   const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
   if (seededProject) input.setStore("project", seededProject)
   if (seededPath) input.setStore("path", seededPath)
-  if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
-    input.setStore("provider", input.global.provider)
-  }
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
-    input.setStore("config", input.global.config)
+    input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
-  if (loading || input.store.provider.all.length === 0) {
-    input.setStore("provider_ready", false)
-  }
-  input.setStore("mcp_ready", false)
-  input.setStore("mcp", {})
-  input.setStore("lsp_ready", false)
-  input.setStore("lsp", [])
   if (loading) input.setStore("status", "partial")
 
-  const fast = [() => Promise.resolve(input.loadSessions(input.directory))]
-
-  const errs = errors(await runAll(fast))
-  if (errs.length > 0) {
-    console.error("Failed to bootstrap instance", errs[0])
-    const project = getFilename(input.directory)
-    showToast({
-      variant: "error",
-      title: input.translate("toast.project.reloadFailed.title", { project }),
-      description: formatServerError(errs[0], input.translate),
-    })
-  }
-
+  const rev = (providerRev.get(input.directory) ?? 0) + 1
+  providerRev.set(input.directory, rev)
   ;(async () => {
     const slow = [
+      () => Promise.resolve(input.loadSessions(input.directory)),
       () =>
-        input.queryClient.ensureQueryData({
-          ...loadAgentsQuery(input.directory),
-          queryFn: () =>
-            retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))).then(
-              () => null,
-            ),
-        }),
-      () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
+        input.queryClient.ensureQueryData(
+          loadAgentsQuery(input.directory, input.sdk, (x) => input.setStore("agent", normalizeAgentList(x.data))),
+        ),
+      () =>
+        retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
       () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
-      () =>
-        seededProject
-          ? Promise.resolve()
-          : retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id)),
-      () =>
-        seededPath
-          ? Promise.resolve()
-          : retry(() =>
-              input.sdk.path.get().then((x) => {
-                input.setStore("path", x.data!)
-                const next = projectID(x.data?.directory ?? input.directory, input.global.project)
-                if (next) input.setStore("project", next)
-              }),
-            ),
+      !seededProject &&
+        (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
+      !seededPath &&
+        (() =>
+          input.queryClient.ensureQueryData(
+            loadPathQuery(input.directory, input.sdk, (x) => {
+              const next = projectID(x.data?.directory ?? input.directory, input.global.project)
+              if (next) input.setStore("project", next)
+            }),
+          )),
       () =>
         retry(() =>
           input.sdk.vcs.get().then((x) => {
@@ -323,14 +349,17 @@ export async function bootstrapDirectory(input: {
           }),
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
+      () => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk)),
       () =>
-        retry(() =>
-          input.sdk.mcp.status().then((x) => {
-            input.setStore("mcp", x.data!)
-            input.setStore("mcp_ready", true)
-          }),
-        ),
-    ]
+        input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
+          const project = getFilename(input.directory)
+          showToast({
+            variant: "error",
+            title: input.translate("toast.project.reloadFailed.title", { project }),
+            description: formatServerError(err, input.translate),
+          })
+        }),
+    ].filter(Boolean) as (() => Promise<any>)[]
 
     await waitForPaint()
     const slowErrs = errors(await runAll(slow))
@@ -344,29 +373,6 @@ export async function bootstrapDirectory(input: {
       })
     }
 
-    if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
-
-    const rev = (providerRev.get(input.directory) ?? 0) + 1
-    providerRev.set(input.directory, rev)
-    void input.queryClient.ensureQueryData({
-      ...loadSessionsQuery(input.directory),
-      queryFn: () =>
-        retry(() => input.sdk.provider.list())
-          .then((x) => {
-            if (providerRev.get(input.directory) !== rev) return
-            input.setStore("provider", normalizeProviderList(x.data!))
-            input.setStore("provider_ready", true)
-          })
-          .catch((err) => {
-            if (providerRev.get(input.directory) !== rev) console.error("Failed to refresh provider list", err)
-            const project = getFilename(input.directory)
-            showToast({
-              variant: "error",
-              title: input.translate("toast.project.reloadFailed.title", { project }),
-              description: formatServerError(err, input.translate),
-            })
-          })
-          .then(() => null),
-    })
+    if (loading && slowErrs.length === 0) input.setStore("status", "complete")
   })()
 }

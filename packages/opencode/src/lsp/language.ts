@@ -14,6 +14,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".cc": "cpp",
   ".c++": "cpp",
   ".cs": "csharp",
+  ".csx": "csharp",
   ".css": "css",
   ".d": "d",
   ".pas": "pascal",

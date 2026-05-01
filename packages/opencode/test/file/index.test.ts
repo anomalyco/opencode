@@ -5,7 +5,7 @@ import path from "path"
 import fs from "fs/promises"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {

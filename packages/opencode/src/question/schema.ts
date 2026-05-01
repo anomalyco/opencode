@@ -1,8 +1,7 @@
 import { Schema } from "effect"
-import z from "zod"
 
 import { Identifier } from "@/id/id"
-import { ZodOverride } from "@/util/effect-zod"
+import { zod, ZodOverride } from "@/util/effect-zod"
 import { Newtype } from "@/util/schema"
 
 export class QuestionID extends Newtype<QuestionID>()(
@@ -13,5 +12,5 @@ export class QuestionID extends Newtype<QuestionID>()(
     return this.make(Identifier.ascending("question", id))
   }
 
-  static readonly zod = Identifier.schema("question") as unknown as z.ZodType<QuestionID>
+  static readonly zod = zod(this)
 }

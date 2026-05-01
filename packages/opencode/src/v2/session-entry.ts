@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { NonNegativeInt } from "@/util/schema"
 import { SessionEvent } from "./session-event"
 
 export const ID = SessionEvent.ID
@@ -104,6 +105,24 @@ export class AssistantReasoning extends Schema.Class<AssistantReasoning>("Sessio
   text: Schema.String,
 }) {}
 
+export class AssistantRetry extends Schema.Class<AssistantRetry>("Session.Entry.Assistant.Retry")({
+  attempt: NonNegativeInt,
+  error: SessionEvent.RetryError,
+  time: Schema.Struct({
+    created: Schema.DateTimeUtc,
+  }),
+}) {
+  static fromEvent(event: SessionEvent.Retried) {
+    return new AssistantRetry({
+      attempt: event.attempt,
+      error: event.error,
+      time: {
+        created: event.timestamp,
+      },
+    })
+  }
+}
+
 export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
   Schema.toTaggedUnion("type"),
 )
@@ -113,14 +132,15 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
   ...Base,
   type: Schema.Literal("assistant"),
   content: AssistantContent.pipe(Schema.Array),
-  cost: Schema.Number.pipe(Schema.optional),
+  retries: AssistantRetry.pipe(Schema.Array, Schema.optional),
+  cost: Schema.Finite.pipe(Schema.optional),
   tokens: Schema.Struct({
-    input: Schema.Number,
-    output: Schema.Number,
-    reasoning: Schema.Number,
+    input: NonNegativeInt,
+    output: NonNegativeInt,
+    reasoning: NonNegativeInt,
     cache: Schema.Struct({
-      read: Schema.Number,
-      write: Schema.Number,
+      read: NonNegativeInt,
+      write: NonNegativeInt,
     }),
   }).pipe(Schema.optional),
   error: Schema.String.pipe(Schema.optional),
@@ -137,6 +157,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Entry.Assistant"
         created: event.timestamp,
       },
       content: [],
+      retries: [],
     })
   }
 }

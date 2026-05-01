@@ -12,9 +12,13 @@ adamdotdevin
 ariane-emory
 -atharvau AI review spamming literally every PR
 -borealbytes
+-carycooper777
 -danieljoshuanazareth
 -danieljoshuanazareth
+-davidbernat looks to be a clawdbot that spams team and sends super weird emails, doesnt appear to be a real person
+dmtrkovalenko
 edemaine
+fahreddinozcan
 -florianleibert
 fwang
 iamdavidhill
@@ -27,8 +31,10 @@ r44vc0rp
 rekram1-node
 -ricardo-m-l
 -robinmordasiewicz
+rubdos
 shantur
 simonklee
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
+-terisuke
 thdxr
 -toastythebot

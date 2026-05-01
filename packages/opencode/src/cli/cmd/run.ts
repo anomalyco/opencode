@@ -3,29 +3,28 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { Flag } from "../../flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
-import { Filesystem } from "../../util"
+import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
-import { Provider } from "../../provider"
+import { Provider } from "@/provider/provider"
 import { Agent } from "../../agent/agent"
 import { Permission } from "../../permission"
-import { Tool } from "../../tool"
+import { Tool } from "@/tool/tool"
 import { GlobTool } from "../../tool/glob"
 import { GrepTool } from "../../tool/grep"
 import { ReadTool } from "../../tool/read"
 import { WebFetchTool } from "../../tool/webfetch"
 import { EditTool } from "../../tool/edit"
 import { WriteTool } from "../../tool/write"
-import { CodeSearchTool } from "../../tool/codesearch"
 import { WebSearchTool } from "../../tool/websearch"
 import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
-import { Locale } from "../../util"
+import { Locale } from "@/util/locale"
 import { AppRuntime } from "@/effect/app-runtime"
 
 type ToolProps<T> = {
@@ -143,13 +142,6 @@ function edit(info: ToolProps<typeof EditTool>) {
     },
     diff,
   )
-}
-
-function codesearch(info: ToolProps<typeof CodeSearchTool>) {
-  inline({
-    icon: "◇",
-    title: `Exa Code Search "${info.input.query}"`,
-  })
 }
 
 function websearch(info: ToolProps<typeof WebSearchTool>) {
@@ -415,7 +407,6 @@ export const RunCommand = cmd({
           if (part.tool === "write") return write(props<typeof WriteTool>(part))
           if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
           if (part.tool === "edit") return edit(props<typeof EditTool>(part))
-          if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
           if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
           if (part.tool === "task") return task(props<typeof TaskTool>(part))
           if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))

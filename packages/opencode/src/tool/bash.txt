@@ -4,6 +4,8 @@ Be aware: OS: ${os}, Shell: ${shell}
 
 All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.
 
+Use `${tmp}` for temporary work outside the workspace. This directory has already been created, already exists, and is pre-approved for external directory access.
+
 IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
 
 Before executing the command, please follow these steps:
@@ -58,7 +60,7 @@ Git Safety Protocol:
 - NEVER skip hooks (--no-verify, --no-gpg-sign, etc) unless the user explicitly requests it
 - NEVER run force push to main/master, warn the user if they request it
 - Avoid git commit --amend. ONLY use --amend when ALL conditions are met:
-  (1) User explicitly requested amend, OR commit SUCCEEDED but pre-commit hook auto-modified files that need including
+  (1) User explicitly requested amend, OR the commit succeeded and pre-commit hooks auto-modified files that need including — verify by checking `git log` that HEAD is the new commit before amending
   (2) HEAD commit was created by you in this conversation (verify: git log -1 --format='%an %ae')
   (3) Commit has NOT been pushed to remote (verify: git status shows "Your branch is ahead")
 - CRITICAL: If commit FAILED or was REJECTED by hook, NEVER amend - fix the issue and create a NEW commit

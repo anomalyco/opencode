@@ -1,9 +1,9 @@
 export * as ConfigCommand from "./command"
 
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Schema } from "effect"
-import { NamedError } from "@opencode-ai/shared/util/error"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { Glob } from "@opencode-ai/core/util/glob"
 import { Bus } from "@/bus"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
@@ -36,7 +36,7 @@ export async function load(dir: string) {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
         : `Failed to parse command ${item}`
-      const { Session } = await import("@/session")
+      const { Session } = await import("@/session/session")
       void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
       log.error("failed to load command", { command: item, err })
       return undefined

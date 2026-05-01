@@ -27,6 +27,24 @@ function assistant() {
     type: "assistant",
     time: { created: time(0) },
     content: [],
+    retries: [],
+  })
+}
+
+function retryError(message: string) {
+  return new SessionEvent.RetryError({
+    message,
+    isRetryable: true,
+  })
+}
+
+function retry(attempt: number, message: string, created: number) {
+  return new SessionEntry.AssistantRetry({
+    attempt,
+    error: retryError(message),
+    time: {
+      created: time(created),
+    },
   })
 }
 
@@ -76,6 +94,12 @@ function tools(state: SessionEntryStepper.MemoryState) {
 
 function tool(state: SessionEntryStepper.MemoryState, callID: string) {
   return tools(state).find((x) => x.callID === callID)
+}
+
+function retriesOf(state: SessionEntryStepper.MemoryState) {
+  const entry = last(state)
+  if (!entry) return []
+  return entry.retries ?? []
 }
 
 function adapterStore() {
@@ -168,6 +192,33 @@ describe("session-entry-stepper", () => {
       ])
       expect(store.committed[0].time.completed).toEqual(time(7))
     })
+
+    test("aggregates retry events onto the current assistant", () => {
+      const store = adapterStore()
+      store.committed.push(assistant())
+
+      SessionEntryStepper.stepWith(
+        adapterFor(store),
+        SessionEvent.Retried.create({
+          attempt: 1,
+          error: retryError("rate limited"),
+          timestamp: time(1),
+        }),
+      )
+      SessionEntryStepper.stepWith(
+        adapterFor(store),
+        SessionEvent.Retried.create({
+          attempt: 2,
+          error: retryError("provider overloaded"),
+          timestamp: time(2),
+        }),
+      )
+
+      expect(store.committed[0]?.type).toBe("assistant")
+      if (store.committed[0]?.type !== "assistant") return
+
+      expect(store.committed[0].retries).toEqual([retry(1, "rate limited", 1), retry(2, "provider overloaded", 2)])
+    })
   })
 
   describe("memory", () => {
@@ -230,6 +281,21 @@ describe("session-entry-stepper", () => {
       )
 
       expect(reasons(state)).toEqual([{ type: "reasoning", text: "final" }])
+    })
+
+    test("stepWith through memory records retries", () => {
+      const state = active()
+
+      SessionEntryStepper.stepWith(
+        SessionEntryStepper.memory(state),
+        SessionEvent.Retried.create({
+          attempt: 1,
+          error: retryError("rate limited"),
+          timestamp: time(1),
+        }),
+      )
+
+      expect(retriesOf(state)).toEqual([retry(1, "rate limited", 1)])
     })
   })
 
