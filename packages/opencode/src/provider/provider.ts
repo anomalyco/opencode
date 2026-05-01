@@ -1002,9 +1002,9 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     options: {},
     cost: cost(model.cost),
     limit: {
-      context: model.limit.context,
-      input: model.limit.input,
-      output: model.limit.output,
+      context: model.limit?.context ?? 0,
+      input: model.limit?.input,
+      output: model.limit?.output ?? 0,
     },
     capabilities: {
       temperature: model.temperature ?? false,
