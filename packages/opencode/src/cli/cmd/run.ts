@@ -291,6 +291,10 @@ export const RunCommand = cmd({
         describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
         default: false,
       })
+      .option("timeout", {
+        type: "number",
+        describe: "abort the run if it has not finished after this many seconds",
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
@@ -627,24 +631,37 @@ export const RunCommand = cmd({
         process.exit(1)
       })
 
-      if (args.command) {
-        await sdk.session.command({
-          sessionID,
-          agent,
-          model: args.model,
-          command: args.command,
-          arguments: message,
-          variant: args.variant,
-        })
-      } else {
-        const model = args.model ? Provider.parseModel(args.model) : undefined
-        await sdk.session.prompt({
-          sessionID,
-          agent,
-          model,
-          variant: args.variant,
-          parts: [...files, { type: "text", text: message }],
-        })
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+      if (args.timeout && args.timeout > 0) {
+        timeoutHandle = setTimeout(() => {
+          UI.error(`Run timed out after ${args.timeout}s`)
+          // Best-effort abort; ignore failures so the timeout exit always wins.
+          sdk.session.abort({ sessionID }).catch(() => {})
+          process.exit(124)
+        }, args.timeout * 1000)
+      }
+      try {
+        if (args.command) {
+          await sdk.session.command({
+            sessionID,
+            agent,
+            model: args.model,
+            command: args.command,
+            arguments: message,
+            variant: args.variant,
+          })
+        } else {
+          const model = args.model ? Provider.parseModel(args.model) : undefined
+          await sdk.session.prompt({
+            sessionID,
+            agent,
+            model,
+            variant: args.variant,
+            parts: [...files, { type: "text", text: message }],
+          })
+        }
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle)
       }
     }
 
