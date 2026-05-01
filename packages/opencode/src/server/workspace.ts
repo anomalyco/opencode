@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
-import { getAdaptor } from "@/control-plane/adaptors"
+import { getAdapter } from "@/control-plane/adapters"
 import { WorkspaceID } from "@/control-plane/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Workspace } from "@/control-plane/workspace"
@@ -72,7 +72,9 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       return next()
     }
 
-    const workspace = await Workspace.get(WorkspaceID.make(workspaceID))
+    const workspace = await AppRuntime.runPromise(
+      Workspace.Service.use((svc) => svc.get(WorkspaceID.make(workspaceID))),
+    )
 
     if (!workspace) {
       return new Response(`Workspace not found: ${workspaceID}`, {
@@ -89,8 +91,8 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       return next()
     }
 
-    const adaptor = await getAdaptor(workspace.projectID, workspace.type)
-    const target = await adaptor.target(workspace)
+    const adapter = getAdapter(workspace.projectID, workspace.type)
+    const target = await adapter.target(workspace)
 
     if (target.type === "local") {
       return WorkspaceContext.provide({
