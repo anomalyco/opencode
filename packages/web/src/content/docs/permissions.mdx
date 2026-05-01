@@ -133,10 +133,12 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `edit` — all file modifications (covers `edit`, `write`, `patch`)
 - `glob` — file globbing (matches the glob pattern)
 - `grep` — content search (matches the regex pattern)
+- `list` — directory listing (matches the directory path)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
 - `task` — launching subagents (matches the subagent type)
 - `skill` — loading a skill (matches the skill name)
 - `lsp` — running LSP queries (currently non-granular)
+- `todowrite` — writing to the todo list
 - `question` — asking the user questions during execution
 - `webfetch` — fetching a URL (matches the URL)
 - `websearch` — web search (matches the query)
