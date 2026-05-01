@@ -83,6 +83,37 @@ describe("OpenAI Chat adapter", () => {
     }),
   )
 
+  it.effect("uses Azure api-key header for static OpenAI Chat keys", () =>
+    Effect.gen(function* () {
+      yield* LLMClient.make({ adapters: [OpenAIChat.adapter] })
+        .generate(
+          LLM.updateRequest(request, {
+            model: LLM.model({
+              ...model,
+              provider: "azure",
+              baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+              apiKey: "azure-key",
+              headers: { authorization: "Bearer stale" },
+            }),
+          }),
+        )
+        .pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(web.headers.get("api-key")).toBe("azure-key")
+                expect(web.headers.get("authorization")).toBeNull()
+                return input.respond(sseEvents(deltaChunk({}, "stop")), {
+                  headers: { "content-type": "text/event-stream" },
+                })
+              }),
+            ),
+          ),
+        )
+    }),
+  )
+
   it.effect("prepares assistant tool-call and tool-result messages", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [OpenAIChat.adapter] }).prepare(

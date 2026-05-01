@@ -62,6 +62,37 @@ describe("OpenAI Responses adapter", () => {
     }),
   )
 
+  it.effect("uses Azure api-key header for static OpenAI Responses keys", () =>
+    Effect.gen(function* () {
+      yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] })
+        .generate(
+          LLM.updateRequest(request, {
+            model: LLM.model({
+              ...model,
+              provider: "azure",
+              baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+              apiKey: "azure-key",
+              headers: { authorization: "Bearer stale" },
+            }),
+          }),
+        )
+        .pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                expect(web.headers.get("api-key")).toBe("azure-key")
+                expect(web.headers.get("authorization")).toBeNull()
+                return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                  headers: { "content-type": "text/event-stream" },
+                })
+              }),
+            ),
+          ),
+        )
+    }),
+  )
+
   it.effect("prepares function call and function output input items", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(

@@ -10,7 +10,8 @@ import type { LLMError, LLMRequest } from "./schema"
  * Most adapters use the default `Auth.bearer`, which reads
  * `request.model.apiKey` and sets `Authorization: Bearer ...`. Providers
  * that use a different header pick `Auth.apiKeyHeader(name)` (e.g.
- * Anthropic's `x-api-key`, Gemini's `x-goog-api-key`).
+ * Anthropic's `x-api-key`, Gemini's `x-goog-api-key`) or a provider-aware
+ * helper such as `Auth.openAI` for Azure OpenAI's static `api-key` header.
  *
  * Adapters that need per-request signing (AWS SigV4, future Vertex IAM,
  * future Azure AAD) implement `Auth` as a function that hashes the body,
@@ -51,6 +52,22 @@ const fromApiKey = (from: (apiKey: string) => Record<string, string>): Auth => (
  * Chat, and (with Bedrock-specific fallback) Bedrock Converse.
  */
 export const bearer: Auth = fromApiKey((key) => ({ authorization: `Bearer ${key}` }))
+
+/**
+ * OpenAI-compatible auth with Azure OpenAI's static API-key exception. Azure
+ * Entra/OAuth callers can still pre-set `authorization` and omit `apiKey`.
+ */
+export const openAI: Auth = ({ request, headers }) => {
+  const key = request.model.apiKey
+  if (!key) return Effect.succeed(headers)
+  if (request.model.provider === "azure") {
+    return Effect.succeed({
+      ...Object.fromEntries(Object.entries(headers).filter(([name]) => name.toLowerCase() !== "authorization")),
+      "api-key": key,
+    })
+  }
+  return Effect.succeed({ ...headers, authorization: `Bearer ${key}` })
+}
 
 /**
  * Set a custom header to `request.model.apiKey`. No-op when `model.apiKey`

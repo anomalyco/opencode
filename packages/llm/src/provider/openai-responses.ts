@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Adapter } from "../adapter"
+import { Auth } from "../auth"
 import { Endpoint } from "../endpoint"
 import { Framing } from "../framing"
 import { capabilities, model as llmModel, type ModelInput } from "../llm"
@@ -385,6 +386,7 @@ export const adapter = Adapter.fromProtocol({
   id: ADAPTER,
   protocol,
   endpoint: Endpoint.baseURL({ default: "https://api.openai.com/v1", path: "/responses" }),
+  auth: Auth.openAI,
   framing: Framing.sse,
 })
 
