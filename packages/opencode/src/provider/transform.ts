@@ -134,6 +134,24 @@ export namespace ProviderTransform {
       return result
     }
 
+    // Deepseek requires all assistant messages to have reasoning on them
+    if (model.api.id.includes("deepseek")) {
+      msgs = msgs.map((msg) => {
+        if (msg.role !== "assistant") return msg
+        if (Array.isArray(msg.content)) {
+          if (msg.content.some((part: any) => part.type === "reasoning")) return msg
+          return { ...msg, content: [...msg.content, { type: "reasoning", text: "" }] }
+        }
+        return {
+          ...msg,
+          content: [
+            ...(msg.content ? [{ type: "text" as const, text: msg.content }] : []),
+            { type: "reasoning" as const, text: "" },
+          ],
+        }
+      })
+    }
+
     if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
       const field = model.capabilities.interleaved.field
       return msgs.map((msg) => {
@@ -394,19 +412,25 @@ export namespace ProviderTransform {
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
   const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+  function anthropicAdaptiveEfforts(apiId: string): string[] | null {
+    if (["opus-4-7", "opus-4.7"].some((v) => apiId.includes(v))) {
+      return ["low", "medium", "high", "xhigh", "max"]
+    }
+    if (["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) => apiId.includes(v))) {
+      return ["low", "medium", "high", "max"]
+    }
+    return null
+  }
+
   export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
 
     const id = model.id.toLowerCase()
-    const isAnthropicAdaptive = ["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) =>
-      model.api.id.includes(v),
-    )
-    const adaptiveEfforts = ["low", "medium", "high", "max"]
+    const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
     if (
       id.includes("deepseek") ||
       id.includes("minimax") ||
       id.includes("glm") ||
-      id.includes("mistral") ||
       id.includes("kimi") ||
       // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
       id.includes("k2p5")
@@ -435,7 +459,7 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/gateway":
         if (model.id.includes("anthropic")) {
-          if (isAnthropicAdaptive) {
+          if (adaptiveEfforts) {
             return Object.fromEntries(
               adaptiveEfforts.map((effort) => [
                 effort,
@@ -530,8 +554,13 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
       case "venice-ai-sdk-provider":
       // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
-      case "@ai-sdk/openai-compatible":
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+      case "@ai-sdk/openai-compatible": {
+        const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+        if (model.api.id.includes("deepseek-v4")) {
+          efforts.push("max")
+        }
+        return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
+      }
 
       case "@ai-sdk/azure":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
@@ -586,7 +615,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/google-vertex/anthropic":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
 
-        if (isAnthropicAdaptive) {
+        if (adaptiveEfforts) {
           return Object.fromEntries(
             adaptiveEfforts.map((effort) => [
               effort,
@@ -617,7 +646,7 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/amazon-bedrock":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
-        if (isAnthropicAdaptive) {
+        if (adaptiveEfforts) {
           return Object.fromEntries(
             adaptiveEfforts.map((effort) => [
               effort,
@@ -700,7 +729,15 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/mistral":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
-        return {}
+        // https://docs.mistral.ai/capabilities/reasoning/adjustable
+        if (!model.capabilities.reasoning) return {}
+        // Only Mistral Small 4 and Medium 3.5 support reasoning
+        const MISTRAL_REASONING_IDS = ["mistral-small-2603", "mistral-small-latest", "mistral-medium-3.5"]
+        const mistralId = model.api.id.toLowerCase()
+        if (!MISTRAL_REASONING_IDS.some((rid) => mistralId.includes(rid))) return {}
+        return {
+          high: { reasoningEffort: "high" },
+        }
 
       case "@ai-sdk/cohere":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere
@@ -724,7 +761,7 @@ export namespace ProviderTransform {
 
       case "@jerome-benoit/sap-ai-provider-v2":
         if (model.api.id.includes("anthropic")) {
-          if (isAnthropicAdaptive) {
+          if (adaptiveEfforts) {
             return Object.fromEntries(
               adaptiveEfforts.map((effort) => [
                 effort,
@@ -782,6 +819,13 @@ export namespace ProviderTransform {
     providerOptions?: Record<string, any>
   }): Record<string, any> {
     const result: Record<string, any> = {}
+
+    if (
+      input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+      (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic")
+    ) {
+      result["toolStreaming"] = false
+    }
 
     // openai and providers using openai package should set store to false by default.
     if (
@@ -992,6 +1036,21 @@ export namespace ProviderTransform {
       }
     }
     */
+
+    if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
+      const sanitizeMoonshot = (obj: unknown): unknown => {
+        if (obj === null || typeof obj !== "object") return obj
+        if (Array.isArray(obj)) return obj.map(sanitizeMoonshot)
+        // Moonshot expands $ref before validation and rejects sibling keywords like description on the same node.
+        if ("$ref" in obj && typeof (obj as any).$ref === "string") return { $ref: (obj as any).$ref }
+        const result = Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value)]))
+        // MFJS does not support tuple-style `items` arrays; it requires one schema object for all array items.
+        if (Array.isArray((result as any).items)) (result as any).items = (result as any).items[0] ?? {}
+        return result
+      }
+
+      schema = sanitizeMoonshot(schema) as JSONSchema.BaseSchema | JSONSchema7
+    }
 
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {

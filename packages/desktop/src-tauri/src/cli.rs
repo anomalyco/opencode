@@ -524,6 +524,12 @@ pub fn spawn_command(
         // watchdog. This avoids shell rc side effects while still killing the sidecar if the
         // desktop parent disappears before RunEvent::Exit can run.
         let mut cmd = Command::new("/bin/sh");
+        // Start the supervisor (and therefore the sidecar) from $HOME instead of inheriting the
+        // Tauri bundle / launcher cwd. Mirrors upstream sst/opencode#22535 so any cwd-sensitive
+        // logic (path resolution, log placement, shell rc fallbacks) sees a sane working directory.
+        if let Ok(home) = app.path().home_dir() {
+            cmd.current_dir(home);
+        }
         cmd.arg("-c")
             .arg(UNIX_SUPERVISOR)
             .arg("opencode-supervisor");

@@ -144,6 +144,8 @@ export namespace Process {
   }
 
   export async function stop(proc: ChildProcess) {
+    if (proc.exitCode !== null || proc.signalCode !== null) return
+
     if (process.platform !== "win32" || !proc.pid) {
       proc.kill()
       return
