@@ -260,9 +260,6 @@ export async function bootstrapDirectory(input: {
   const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
   if (seededProject) input.setStore("project", seededProject)
   if (seededPath) input.setStore("path", seededPath)
-  if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
-    input.setStore("provider", input.global.provider)
-  }
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
     input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
@@ -354,17 +351,14 @@ export async function bootstrapDirectory(input: {
       () => Promise.resolve(input.loadSessions(input.directory)),
       () => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk)),
       () =>
-        input.queryClient
-          .fetchQuery(loadProvidersQuery(input.directory, input.sdk))
-          .then((d) => input.setStore("provider", d))
-          .catch((err) => {
-            const project = getFilename(input.directory)
-            showToast({
-              variant: "error",
-              title: input.translate("toast.project.reloadFailed.title", { project }),
-              description: formatServerError(err, input.translate),
-            })
-          }),
+        input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
+          const project = getFilename(input.directory)
+          showToast({
+            variant: "error",
+            title: input.translate("toast.project.reloadFailed.title", { project }),
+            description: formatServerError(err, input.translate),
+          })
+        }),
     ].filter(Boolean) as (() => Promise<any>)[]
 
     await waitForPaint()
