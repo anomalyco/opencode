@@ -7,8 +7,8 @@ import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from "e
 import * as Socket from "effect/unstable/socket/Socket"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { registerAdaptor } from "../../src/control-plane/adaptors"
-import type { WorkspaceAdaptor } from "../../src/control-plane/types"
+import { registerAdapter } from "../../src/control-plane/adapters"
+import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
 import { Instance } from "../../src/project/instance"
@@ -49,7 +49,7 @@ const instanceContextTestLayer = instanceRouterMiddleware
   .combine(workspaceRouterMiddleware)
   .layer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
 
-const localAdaptor = (directory: string): WorkspaceAdaptor => ({
+const localAdapter = (directory: string): WorkspaceAdapter => ({
   name: "Local Test",
   description: "Create a local test workspace",
   configure: (info) => ({ ...info, name: "local-test", directory }),
@@ -63,7 +63,7 @@ const localAdaptor = (directory: string): WorkspaceAdaptor => ({
 const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
   Effect.acquireRelease(
     Effect.gen(function* () {
-      registerAdaptor(input.projectID, input.type, localAdaptor(input.directory))
+      registerAdapter(input.projectID, input.type, localAdapter(input.directory))
       const workspace = yield* Workspace.Service
       return yield* workspace.create({
         type: input.type,

@@ -2,10 +2,10 @@ import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { Effect } from "effect"
-import { listAdaptors } from "@/control-plane/adaptors"
+import { listAdapters } from "@/control-plane/adapters"
 import { Workspace } from "@/control-plane/workspace"
 import { AppRuntime } from "@/effect/app-runtime"
-import { WorkspaceAdaptorEntry } from "@/control-plane/types"
+import { WorkspaceAdapterEntry } from "@/control-plane/types"
 import { zodObject } from "@/util/effect-zod"
 import { Instance } from "@/project/instance"
 import { errors } from "../../error"
@@ -18,24 +18,24 @@ const log = Log.create({ service: "server.workspace" })
 export const WorkspaceRoutes = lazy(() =>
   new Hono()
     .get(
-      "/adaptor",
+      "/adapter",
       describeRoute({
-        summary: "List workspace adaptors",
-        description: "List all available workspace adaptors for the current project.",
-        operationId: "experimental.workspace.adaptor.list",
+        summary: "List workspace adapters",
+        description: "List all available workspace adapters for the current project.",
+        operationId: "experimental.workspace.adapter.list",
         responses: {
           200: {
-            description: "Workspace adaptors",
+            description: "Workspace adapters",
             content: {
               "application/json": {
-                schema: resolver(z.array(zodObject(WorkspaceAdaptorEntry))),
+                schema: resolver(z.array(zodObject(WorkspaceAdapterEntry))),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json(await listAdaptors(Instance.project.id))
+        return c.json(await listAdapters(Instance.project.id))
       },
     )
     .post(

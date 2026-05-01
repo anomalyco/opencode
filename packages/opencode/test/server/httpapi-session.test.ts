@@ -3,8 +3,8 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { registerAdaptor } from "../../src/control-plane/adaptors"
-import type { WorkspaceAdaptor } from "../../src/control-plane/types"
+import { registerAdapter } from "../../src/control-plane/adapters"
+import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
@@ -82,7 +82,7 @@ function createTextMessage(directory: string, sessionID: SessionID, text: string
   )
 }
 
-const localAdaptor = (directory: string): WorkspaceAdaptor => ({
+const localAdapter = (directory: string): WorkspaceAdapter => ({
   name: "Local Test",
   description: "Create a local test workspace",
   configure: (info) => ({ ...info, name: "local-test", directory }),
@@ -95,7 +95,7 @@ const localAdaptor = (directory: string): WorkspaceAdaptor => ({
 
 const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
   Effect.gen(function* () {
-    registerAdaptor(input.projectID, input.type, localAdaptor(input.directory))
+    registerAdapter(input.projectID, input.type, localAdapter(input.directory))
     return yield* Workspace.Service.use((svc) =>
       svc.create({
         type: input.type,
