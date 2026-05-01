@@ -1,0 +1,211 @@
+# [fork-only] DeskFox release 自动化 — push ship-* tag 触发,build + 发 GitHub Release
+#
+# 触发方式:
+#   1. push tag `ship-prod-<version>` (例:ship-prod-2026.5.1.2)
+#      → build prod installer + 创建 draft Release(user 审查后手动发布)
+#   2. push tag `ship-beta-<version>`
+#      → build beta installer + 创建 draft Release
+#   3. workflow_dispatch (Actions UI 手动触发)
+#      → 只 archive 产物作 artifact,不发 Release(用于测试 workflow 本身)
+#
+# 前置流程(本地):
+#   1. .\packages\branding\scripts\bump-installer-version.ps1 -Platform Windows
+#      (改 .iss 的 AppVersion + docs/installer-versions.md 加 placeholder)
+#   2. 提交这次 bump:git add ...; git commit -m "..."
+#   3. 打 ship tag:git tag ship-prod-<bumped-version>
+#   4. push:git push origin <branch> --tags
+#   5. (本 workflow 自动接管,build + 发 draft Release)
+#   6. 在 docs/installer-versions.md 把 placeholder 填完整
+#   7. 在 GitHub UI 把 draft Release 转 publish
+#
+# 文件名规则(强制):*-deskfox.yml,跟上游 0 重名,pre-commit hook 自动豁免
+
+name: release-deskfox
+
+on:
+  push:
+    tags:
+      - 'ship-prod-*'
+      - 'ship-beta-*'
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'Build env'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - beta
+          - prod
+
+permissions:
+  contents: write    # 创建 GitHub Release 必需
+
+jobs:
+  build:
+    name: Build & Release (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Parse env / version / mode
+        id: meta
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $envName = '${{ inputs.env }}'
+            # dispatch 模式不对应 ship tag,用 run-N 做版本占位
+            $today = Get-Date -Format 'yyyy.M.d'
+            $version = "$today.dispatch$($env:GITHUB_RUN_NUMBER)"
+            $isRelease = 'false'
+            # dispatch 模式需要先把 .iss 里 AppVersion 改成这个占位版本号,否则 ISCC 出的文件名跟期望不符
+            $issPath = "packages/branding/installer/DeskFox.iss"
+            $iss = Get-Content $issPath -Raw -Encoding UTF8
+            $iss = $iss -replace '#define\s+AppVersion\s+"[^"]*"', "#define AppVersion `"$version`""
+            Set-Content -Path $issPath -Value $iss -Encoding UTF8 -NoNewline
+            Write-Host "[meta] dispatch mode: overrode .iss AppVersion to $version"
+          } else {
+            # tag format: ship-<env>-<version>, e.g. ship-prod-2026.5.1.2
+            $tag = '${{ github.ref_name }}'
+            if ($tag -match '^ship-(prod|beta)-(.+)$') {
+              $envName = $Matches[1]
+              $version = $Matches[2]
+              $isRelease = 'true'
+            } else {
+              throw "[meta] tag format must be ship-(prod|beta)-<version>: $tag"
+            }
+            # tag 模式假设 user 本地已 bump 并 commit,.iss 里的 AppVersion 应当与 tag version 一致
+            $issPath = "packages/branding/installer/DeskFox.iss"
+            $iss = Get-Content $issPath -Raw -Encoding UTF8
+            if ($iss -match '#define\s+AppVersion\s+"([^"]+)"') {
+              $issVersion = $Matches[1]
+              if ($issVersion -ne $version) {
+                throw "[meta] tag version ($version) 跟 .iss 里 AppVersion ($issVersion) 不一致 — 本地 bump 之后忘提交了?"
+              }
+              Write-Host "[meta] tag version 与 .iss AppVersion 一致: $version"
+            } else {
+              throw "[meta] .iss 里找不到 AppVersion"
+            }
+          }
+          "env=$envName"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$version"    | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "env=$envName / version=$version / is_release=$isRelease"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust (msvc)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\git
+            packages\desktop\src-tauri\target
+          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: Install Inno Setup (chocolatey)
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = "C:\ProgramData\chocolatey\bin\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe 装完没找到: $iscc"
+          }
+          Write-Host "[OK] ISCC.exe 就位"
+
+      - name: bun install
+        shell: bash
+        run: bun install
+
+      - name: Build DeskFox.exe
+        shell: pwsh
+        run: |
+          .\packages\branding\scripts\build-deskfox.ps1 -Env ${{ steps.meta.outputs.env }} -NoBundle
+
+      - name: Pack installer (-SkipBump)
+        shell: pwsh
+        run: |
+          .\packages\branding\scripts\pack-installer.ps1 -Env ${{ steps.meta.outputs.env }} -SkipBump -Version ${{ steps.meta.outputs.version }}
+
+      - name: Locate installer artifact
+        id: artifact
+        shell: pwsh
+        run: |
+          $envName = '${{ steps.meta.outputs.env }}'
+          $version = '${{ steps.meta.outputs.version }}'
+          $suffix = switch ($envName) { 'prod' {''}; 'beta' {'-Beta'}; 'dev' {'-Dev'} }
+          $rel = "packages/branding/installer/Output/DeskFox${suffix}-${version}-setup.exe"
+          if (-not (Test-Path $rel)) { throw "[artifact] 找不到 installer: $rel" }
+          $abs = (Resolve-Path $rel).Path
+          $size = (Get-Item $abs).Length
+          $mb = [math]::Round($size / 1MB, 2)
+          $hash = (Get-FileHash $abs -Algorithm SHA256).Hash
+          $filename = Split-Path -Leaf $abs
+          "path=$rel"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "filename=$filename" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "size_mb=$mb"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "sha256=$hash"       | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "[artifact] $filename ($mb MB) SHA256=$hash"
+
+      - name: Upload artifact (always — dispatch / tag 都上传)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deskfox-${{ steps.meta.outputs.env }}-${{ steps.meta.outputs.version }}
+          path: ${{ steps.artifact.outputs.path }}
+          retention-days: 30
+
+      - name: Create GitHub Release (draft, push-tag 模式才创建)
+        if: steps.meta.outputs.is_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: DeskFox ${{ steps.meta.outputs.version }}${{ steps.meta.outputs.env == 'beta' && ' (beta)' || '' }}
+          draft: true
+          body: |
+            ## DeskFox `${{ steps.meta.outputs.version }}` (${{ steps.meta.outputs.env }})
+
+            **commit**: `${{ github.sha }}`
+            **tag**: `${{ github.ref_name }}`
+
+            ### 安装包
+
+            - 文件:`${{ steps.artifact.outputs.filename }}`
+            - 大小:${{ steps.artifact.outputs.size_mb }} MB
+            - SHA256:`${{ steps.artifact.outputs.sha256 }}`
+
+            ### ⚠️ 安装提示
+
+            本安装包**未经数字签名**,Windows 首次运行会显示 SmartScreen 警告:
+
+            > **Windows 已保护你的电脑** — 未识别的发布者
+
+            点击 **更多信息 → 仍要运行** 即可正常安装。这是因为 fork 项目尚未配置代码签名证书,**不是恶意软件**。
+
+            ### 验证完整性
+
+            下载后 PowerShell 里跑:
+
+            ```powershell
+            Get-FileHash <下载路径>\${{ steps.artifact.outputs.filename }} -Algorithm SHA256
+            ```
+
+            输出的 Hash 应当与上方 SHA256 一致。
+          files: ${{ steps.artifact.outputs.path }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
