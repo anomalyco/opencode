@@ -55,23 +55,27 @@ function isBedrockClaude(model: Provider.Model) {
   return id.includes("anthropic") || id.includes("claude")
 }
 
-function hasBedrockThinkingSignature(part: Record<string, unknown>) {
+function hasBedrockThinkingReplayMetadata(part: Record<string, unknown>) {
   if (typeof part.signature === "string" && part.signature.length > 0) return true
   return [part.providerOptions, part.providerMetadata].some((metadata) => {
     if (!isRecord(metadata)) return false
     return ["bedrock", "amazon-bedrock"].some((key) => {
       const provider = metadata[key]
-      return isRecord(provider) && typeof provider.signature === "string" && provider.signature.length > 0
+      return (
+        isRecord(provider) &&
+        ((typeof provider.signature === "string" && provider.signature.length > 0) ||
+          (typeof provider.redactedData === "string" && provider.redactedData.length > 0))
+      )
     })
   })
 }
 
 function keepContentPart(part: unknown, model: Provider.Model) {
   if (!isRecord(part)) return true
-  if (part.type === "thinking") return isBedrockClaude(model) ? hasBedrockThinkingSignature(part) : true
+  if (part.type === "thinking") return isBedrockClaude(model) ? hasBedrockThinkingReplayMetadata(part) : true
   if (part.type !== "text" && part.type !== "reasoning") return true
   if (part.type === "text") return part.text !== ""
-  if (isBedrockClaude(model)) return hasBedrockThinkingSignature(part)
+  if (isBedrockClaude(model)) return hasBedrockThinkingReplayMetadata(part)
   return part.text !== ""
 }
 

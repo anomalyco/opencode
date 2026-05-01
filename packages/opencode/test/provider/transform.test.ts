@@ -1523,48 +1523,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     ])
   })
 
-  test("drops unsigned Bedrock thinking replay blocks without affecting direct Anthropic", () => {
-    const msgs = [
-      {
-        role: "assistant",
-        content: [
-          { type: "thinking", thinking: "Thinking without a signature" },
-          { type: "text", text: "Answer" },
-        ],
-      },
-    ] as unknown as ModelMessage[]
-
-    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-opus-4-7"), {})
-
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
-    expect(ProviderTransform.message(msgs, anthropicModel, {})[0].content).toEqual([
-      { type: "thinking", thinking: "Thinking without a signature" },
-      { type: "text", text: "Answer" },
-    ])
-  })
-
-  test("keeps signed Bedrock thinking replay blocks", () => {
-    const msgs = [
-      {
-        role: "assistant",
-        content: [
-          { type: "thinking", thinking: "Signed thinking", signature: "sig-thinking" },
-          { type: "text", text: "Answer" },
-        ],
-      },
-    ] as unknown as ModelMessage[]
-
-    const result = ProviderTransform.message(msgs, bedrock("anthropic.claude-opus-4-7"), {})
-
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toEqual([
-      { type: "thinking", thinking: "Signed thinking", signature: "sig-thinking" },
-      { type: "text", text: "Answer" },
-    ])
-  })
-
-  test("keeps signed Bedrock omitted-thinking replay blocks", () => {
+  test.each([
+    ["signed omitted-thinking", { signature: "sig-omitted" }],
+    ["redacted thinking", { redactedData: "encrypted-redacted-thinking" }],
+  ])("keeps Bedrock %s replay blocks", (_, bedrockMetadata) => {
     const msgs = [
       {
         role: "assistant",
@@ -1573,7 +1535,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
             type: "reasoning",
             text: "",
             providerOptions: {
-              bedrock: { signature: "sig-omitted" },
+              bedrock: bedrockMetadata,
             },
           },
           { type: "text", text: "Answer" },
@@ -1589,7 +1551,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
         type: "reasoning",
         text: "",
         providerOptions: {
-          bedrock: { signature: "sig-omitted" },
+          bedrock: bedrockMetadata,
         },
       },
       { type: "text", text: "Answer" },
