@@ -1,8 +1,9 @@
 import { Database } from "bun:sqlite"
-import { mkdir } from "node:fs/promises"
+import { mkdir, symlink } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
-import { expect, test } from "bun:test"
-import { offsetToPosition, resolveZedSelection } from "../../../src/cli/cmd/tui/context/editor-zed"
+import { expect, spyOn, test } from "bun:test"
+import { offsetToPosition, resolveZedDbPath, resolveZedSelection } from "../../../src/cli/cmd/tui/context/editor-zed"
 import { tmpdir } from "../../fixture/fixture"
 
 type ZedFixtureOptions = {
@@ -65,6 +66,23 @@ test("offsetToPosition converts Zed offsets to 1-based editor positions", () => 
     line: 2,
     character: 1,
   })
+})
+
+test("resolveZedDbPath skips candidates that cannot be stated", async () => {
+  await using tmp = await tmpdir()
+  const loop = path.join(tmp.path, "loop")
+  await symlink(loop, loop)
+  const home = spyOn(os, "homedir").mockImplementation(() => tmp.path)
+  const previous = process.env.OPENCODE_ZED_DB
+  process.env.OPENCODE_ZED_DB = loop
+
+  try {
+    expect(resolveZedDbPath()).toBeUndefined()
+  } finally {
+    if (previous === undefined) delete process.env.OPENCODE_ZED_DB
+    else process.env.OPENCODE_ZED_DB = previous
+    home.mockRestore()
+  }
 })
 
 test("resolveZedSelection returns active editor selection", async () => {

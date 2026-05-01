@@ -189,7 +189,15 @@ export function resolveZedDbPath() {
     path.join(os.homedir(), ".local", "share", "zed", "db", "0-stable", "db.sqlite"),
   ].filter((item): item is string => Boolean(item))
 
-  return candidates.find((item) => Filesystem.stat(item)?.isFile())
+  return candidates.find((item) => isFile(item))
+}
+
+function isFile(item: string) {
+  try {
+    return Filesystem.stat(item)?.isFile() === true
+  } catch {
+    return false
+  }
 }
 
 function scoreZedWorkspace(workspacePaths: string | null, cwd: string) {
