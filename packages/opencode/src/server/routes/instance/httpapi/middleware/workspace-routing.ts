@@ -9,7 +9,7 @@ import * as Fence from "@/server/fence"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/workspace"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer } from "effect"
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 
@@ -95,6 +95,7 @@ function resolveTarget(workspace: Workspace.Info): Effect.Effect<Target> {
 }
 
 function proxyRemote(
+  client: HttpClient.HttpClient,
   request: HttpServerRequest.HttpServerRequest,
   workspace: Workspace.Info,
   target: RemoteTarget,
@@ -111,7 +112,7 @@ function proxyRemote(
     const proxyURL = workspaceProxyURL(target.url, url)
     const headers = request.headers as Record<string, string>
     if (headers["upgrade"]?.toLowerCase() === "websocket") return yield* HttpApiProxy.websocket(request, proxyURL)
-    const response = yield* HttpApiProxy.http(proxyURL, target.headers, request)
+    const response = yield* HttpApiProxy.http(client, proxyURL, target.headers, request)
     const sync = Fence.parse(new Headers(response.headers))
     if (sync) {
       const syncFailure = yield* Fence.waitEffect(
@@ -163,18 +164,20 @@ function planRequest(
 }
 
 function routeWorkspace<E>(
+  client: HttpClient.HttpClient,
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
   plan: RequestPlan,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Socket.WebSocketConstructor | Workspace.Service> {
   return RequestPlan.$match(plan, {
     MissingWorkspace: ({ workspaceID }) => Effect.succeed(missingWorkspaceResponse(workspaceID)),
-    Remote: ({ request, workspace, target, url }) => proxyRemote(request, workspace, target, url),
+    Remote: ({ request, workspace, target, url }) => proxyRemote(client, request, workspace, target, url),
     Local: ({ directory, workspaceID }) =>
       effect.pipe(Effect.provideService(WorkspaceRouteContext, WorkspaceRouteContext.of({ directory, workspaceID }))),
   })
 }
 
 function routeHttpApiWorkspace<E>(
+  client: HttpClient.HttpClient,
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
@@ -188,7 +191,7 @@ function routeHttpApiWorkspace<E>(
       ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(Effect.catchDefect(() => Effect.void))
       : undefined
     const plan = yield* planRequest(request, session?.workspaceID)
-    return yield* routeWorkspace(effect, plan)
+    return yield* routeWorkspace(client, effect, plan)
   })
 }
 
@@ -197,8 +200,9 @@ export const workspaceRoutingLayer = Layer.effect(
   Effect.gen(function* () {
     const makeWebSocket = yield* Socket.WebSocketConstructor
     const workspace = yield* Workspace.Service
+    const client = yield* HttpClient.HttpClient
     return WorkspaceRoutingMiddleware.of((effect) =>
-      routeHttpApiWorkspace(effect).pipe(
+      routeHttpApiWorkspace(client, effect).pipe(
         Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
         Effect.provideService(Workspace.Service, workspace),
       ),
@@ -210,11 +214,12 @@ export const workspaceRouterMiddleware = HttpRouter.middleware<{ provides: Works
   Effect.gen(function* () {
     const makeWebSocket = yield* Socket.WebSocketConstructor
     const workspace = yield* Workspace.Service
+    const client = yield* HttpClient.HttpClient
     return (effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
         const plan = yield* planRequest(request)
-        return yield* routeWorkspace(effect, plan)
+        return yield* routeWorkspace(client, effect, plan)
       }).pipe(
         Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
         Effect.provideService(Workspace.Service, workspace),

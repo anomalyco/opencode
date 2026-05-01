@@ -79,7 +79,10 @@ export async function serveUI(request: Request) {
   return response
 }
 
-export function serveUIEffect(request: HttpServerRequest.HttpServerRequest) {
+export function serveUIEffect(
+  request: HttpServerRequest.HttpServerRequest,
+  services: { fs: AppFileSystem.Interface; client: HttpClient.HttpClient },
+) {
   return Effect.gen(function* () {
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI())
     const path = new URL(request.url, "http://localhost").pathname
@@ -88,18 +91,17 @@ export function serveUIEffect(request: HttpServerRequest.HttpServerRequest) {
       const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
       if (!match) return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 
-      const fs = yield* AppFileSystem.Service
-      if (yield* fs.existsSafe(match)) {
+      if (yield* services.fs.existsSafe(match)) {
         const mime = getMimeType(match) ?? "text/plain"
         const headers = new Headers({ "content-type": mime })
         if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-        return HttpServerResponse.raw(yield* fs.readFile(match), { headers })
+        return HttpServerResponse.raw(yield* services.fs.readFile(match), { headers })
       }
 
       return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
     }
 
-    const response = yield* HttpClient.execute(
+    const response = yield* services.client.execute(
       HttpClientRequest.make(request.method)(upstreamURL(path), {
         headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }),
         body: requestBody(request),
