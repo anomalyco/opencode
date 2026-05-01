@@ -6,10 +6,6 @@
       "packages/opencode/migration/*": "deny",
     },
   },
-  "reference": {
-    "effect": "github.com/effect/effect-smol",
-    "better-context": "github.com/davis7dotsh/better-context",
-  },
   "mcp": {},
   "tools": {
     "github-triage": false,
