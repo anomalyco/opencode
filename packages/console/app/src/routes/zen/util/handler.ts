@@ -101,12 +101,13 @@ export async function handler(
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
+    const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
       is_stream: isStream,
       session: sessionId,
       request: requestId,
       client: ocClient,
-      ...(model === "mimo-v2-pro-free" && JSON.stringify(body).length < 1000 ? { payload: JSON.stringify(body) } : {}),
+      user_agent: userAgent,
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
@@ -140,7 +141,10 @@ export async function handler(
       )
       validateModelSettings(billingSource, authInfo)
       updateProviderKey(authInfo, providerInfo)
-      logger.metric({ provider: providerInfo.id })
+      logger.metric({
+        provider: providerInfo.id,
+        "provider.model": providerInfo.model,
+      })
 
       const startTimestamp = Date.now()
       const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
@@ -148,12 +152,23 @@ export async function handler(
         providerInfo.modifyBody({
           ...createBodyConverter(opts.format, providerInfo.format)(body),
           model: providerInfo.model,
-          ...providerInfo.payloadModifier,
-          ...Object.fromEntries(
-            Object.entries(providerInfo.payloadMappings ?? {})
-              .map(([k, v]) => [k, input.request.headers.get(v)])
-              .filter(([_k, v]) => !!v),
-          ),
+          ...(() => {
+            const replacer = (obj: Record<string, any>): Record<string, any> =>
+              Object.fromEntries(
+                Object.entries(obj).flatMap(([k, v]) => {
+                  if (Array.isArray(v)) return [[k, v]]
+                  if (typeof v === "object") return [[k, replacer(v)]]
+                  if (v === "$ip") return [[k, ip]]
+                  if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                  if (v.startsWith("$header.")) {
+                    const headerValue = input.request.headers.get(v.slice(8))
+                    return headerValue ? [[k, headerValue]] : []
+                  }
+                  return [[k, v]]
+                }),
+              )
+            return replacer(providerInfo.payloadModifier ?? {})
+          })(),
         }),
       )
       logger.debug("REQUEST URL: " + reqUrl)
@@ -513,7 +528,6 @@ export async function handler(
           reqModel,
           providerModel: modelProvider.model,
           adjustCacheUsage: providerProps.adjustCacheUsage,
-          safetyIdentifier: modelProvider.safetyIdentifier ? ip : undefined,
           workspaceID: authInfo?.workspaceID,
         }
         if (format === "anthropic") return anthropicHelper(opts)

@@ -3,9 +3,9 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from "effect"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { Bus } from "../../src/bus"
-import { Config } from "../../src/config"
+import { Config } from "@/config/config"
 import { FileWatcher } from "../../src/file/watcher"
 import { Git } from "../../src/git"
 import { Instance } from "../../src/project/instance"
@@ -147,7 +147,7 @@ function ready(directory: string) {
 
 describeWatcher("FileWatcher", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("publishes root create, update, and delete events", async () => {
