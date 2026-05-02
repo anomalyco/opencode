@@ -54,6 +54,13 @@ import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
+import { SessionEvent } from "@/v2/session-event"
+import { AgentAttachment, FileAttachment, Source } from "@/v2/session-prompt"
+import { SyncEvent } from "@/sync"
+import * as DateTime from "effect/DateTime"
+import { eq } from "@/storage/db"
+import * as Database from "@/storage/db"
+import { SessionTable } from "./session.sql"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -925,6 +932,34 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         format: input.format,
       }
 
+      const current = Database.use((db) =>
+        db
+          .select({ agent: SessionTable.agent, model: SessionTable.model })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, input.sessionID))
+          .get(),
+      )
+      if (current?.agent !== info.agent) {
+        SyncEvent.run(SessionEvent.AgentSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          agent: info.agent,
+        })
+      }
+      if (
+        current?.model?.providerID !== info.model.providerID ||
+        current.model.id !== info.model.modelID ||
+        current.model.variant !== info.model.variant
+      ) {
+        SyncEvent.run(SessionEvent.ModelSwitched.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          id: info.model.modelID,
+          providerID: info.model.providerID,
+          variant: info.model.variant,
+        })
+      }
+
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
 
       type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
@@ -1241,6 +1276,69 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       yield* sessions.updateMessage(info)
       for (const part of parts) yield* sessions.updatePart(part)
+      const nextPrompt = parts.reduce(
+        (result, part) => {
+          if (part.type === "text") {
+            if (part.synthetic) result.synthetic.push(part.text)
+            else result.text.push(part.text)
+          }
+          if (part.type === "file") {
+            result.files.push(
+              new FileAttachment({
+                uri: part.url,
+                mime: part.mime,
+                name: part.filename,
+                source: part.source
+                  ? new Source({
+                      start: part.source.text.start,
+                      end: part.source.text.end,
+                      text: part.source.text.value,
+                    })
+                  : undefined,
+              }),
+            )
+          }
+          if (part.type === "agent") {
+            result.agents.push(
+              new AgentAttachment({
+                name: part.name,
+                source: part.source
+                  ? new Source({
+                      start: part.source.start,
+                      end: part.source.end,
+                      text: part.source.value,
+                    })
+                  : undefined,
+              }),
+            )
+          }
+          return result
+        },
+        {
+          text: [] as string[],
+          files: [] as FileAttachment[],
+          agents: [] as AgentAttachment[],
+          synthetic: [] as string[],
+        },
+      )
+      // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+      SyncEvent.run(SessionEvent.Prompted.Sync, {
+        sessionID: input.sessionID,
+        timestamp: DateTime.makeUnsafe(info.time.created),
+        prompt: {
+          text: nextPrompt.text.join("\n"),
+          files: nextPrompt.files,
+          agents: nextPrompt.agents,
+        },
+      })
+      for (const text of nextPrompt.synthetic) {
+        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+        SyncEvent.run(SessionEvent.Synthetic.Sync, {
+          sessionID: input.sessionID,
+          timestamp: DateTime.makeUnsafe(info.time.created),
+          text,
+        })
+      }
 
       return { info, parts }
     }, Effect.scoped)
