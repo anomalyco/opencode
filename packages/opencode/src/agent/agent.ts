@@ -11,6 +11,7 @@ import { ProviderTransform } from "../provider"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_IMAGE_DESCRIBE from "./prompt/image-describe.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -23,6 +24,7 @@ import { Effect, Context, Layer } from "effect"
 import { InstanceState } from "@/effect"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { sniffAttachmentMime } from "@/util/media"
 
 export const Info = z
   .object({
@@ -51,6 +53,12 @@ export const Info = z
   })
 export type Info = z.infer<typeof Info>
 
+export interface FileAnalysis {
+  filepath: string;
+  description: string;
+  mime: string;
+}
+
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Info[]>
@@ -58,7 +66,7 @@ export interface Interface {
   readonly generate: (input: {
     description: string
     model?: { providerID: ProviderID; modelID: ModelID }
-  }) => Effect.Effect<{
+}) => Effect.Effect<{
     identifier: string
     whenToUse: string
     systemPrompt: string
@@ -394,9 +402,9 @@ export const layer = Layer.effect(
           })
         }
 
-        return yield* Effect.promise(() => generateObject(params).then((r) => r.object))
-      }),
-    })
+return yield* Effect.promise(() => generateObject(params).then((r) => r.object))
+       }),
+      })
   }),
 )
 
@@ -407,5 +415,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(Skill.defaultLayer),
 )
+
+export { PROMPT_IMAGE_DESCRIBE }
 
 export * as Agent from "./agent"

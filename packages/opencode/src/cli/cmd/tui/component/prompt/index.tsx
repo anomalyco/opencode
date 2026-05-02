@@ -817,6 +817,7 @@ export function Prompt(props: PromptProps) {
           messageID,
           agent: agent.name,
           model: selectedModel,
+          imageModel: local.model.imageModel.current(),
           variant,
           parts: [
             ...editorParts,

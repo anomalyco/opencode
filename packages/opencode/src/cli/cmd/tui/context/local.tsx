@@ -119,12 +119,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        imageModel: {
+          providerID: string
+          modelID: string
+        } | undefined
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        imageModel: undefined,
       })
 
       const filePath = path.join(Global.Path.state, "model.json")
@@ -142,6 +147,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          imageModel: modelStore.imageModel,
         })
       }
 
@@ -150,6 +156,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+          if (x.imageModel && typeof x.imageModel === "object" && x.imageModel.providerID && x.imageModel.modelID) {
+            setModelStore("imageModel", x.imageModel)
+          }
         })
         .catch(() => {})
         .finally(() => {
@@ -236,6 +245,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
+        imageModel: {
+          current() {
+            const im = modelStore.imageModel
+            if (im && isModelValid(im)) return im
+            return undefined
+          },
+          set(model: { providerID: string; modelID: string }) {
+            if (!isModelValid(model)) {
+              toast.show({
+                message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                variant: "warning",
+                duration: 3000,
+              })
+              return
+            }
+            setModelStore("imageModel", model)
+            save()
+          },
+          clear() {
+            setModelStore("imageModel", undefined)
+            save()
+          },
+        },
         cycle(direction: 1 | -1) {
           const current = currentModel()
           if (!current) return

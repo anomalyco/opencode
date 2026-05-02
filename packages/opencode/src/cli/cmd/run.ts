@@ -27,6 +27,10 @@ import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util"
 import { AppRuntime } from "@/effect/app-runtime"
+import { isImageAttachment, sniffAttachmentMime } from "@/util/media"
+import { Effect } from "effect"
+import { generateObject } from "ai"
+import z from "zod"
 
 type ToolProps<T> = {
   input: Tool.InferParameters<T>
@@ -248,6 +252,10 @@ export const RunCommand = cmd({
         alias: ["m"],
         describe: "model to use in the format of provider/model",
       })
+      .option("image-model", {
+        type: "string",
+        describe: "model to use for analyzing images in the format of provider/model",
+      })
       .option("agent", {
         type: "string",
         describe: "agent to use",
@@ -317,27 +325,34 @@ export const RunCommand = cmd({
       }
     })()
 
-    const files: { type: "file"; url: string; filename: string; mime: string }[] = []
-    if (args.file) {
-      const list = Array.isArray(args.file) ? args.file : [args.file]
+     const files: { type: "file"; url: string; filename: string; mime: string }[] = []
+     const imageFiles: { filepath: string; mime: string }[] = []
+     
+     if (args.file) {
+       const list = Array.isArray(args.file) ? args.file : [args.file]
 
-      for (const filePath of list) {
-        const resolvedPath = path.resolve(process.cwd(), filePath)
-        if (!(await Filesystem.exists(resolvedPath))) {
-          UI.error(`File not found: ${filePath}`)
-          process.exit(1)
-        }
+       for (const filePath of list) {
+         const resolvedPath = path.resolve(process.cwd(), filePath)
+         if (!(await Filesystem.exists(resolvedPath))) {
+           UI.error(`File not found: ${filePath}`)
+           process.exit(1)
+         }
 
-        const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : "text/plain"
+         const mime = (await Filesystem.isDir(resolvedPath)) ? "application/x-directory" : "text/plain"
+         
+         // Check if this is an image file that needs analysis
+         if (isImageAttachment(mime)) {
+           imageFiles.push({ filepath: resolvedPath, mime })
+         }
 
-        files.push({
-          type: "file",
-          url: pathToFileURL(resolvedPath).href,
-          filename: path.basename(resolvedPath),
-          mime,
-        })
-      }
-    }
+         files.push({
+           type: "file",
+           url: pathToFileURL(resolvedPath).href,
+           filename: path.basename(resolvedPath),
+           mime,
+         })
+       }
+     }
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
@@ -405,30 +420,101 @@ export const RunCommand = cmd({
       }
     }
 
-    async function execute(sdk: OpencodeClient) {
-      function tool(part: ToolPart) {
-        try {
-          if (part.tool === "bash") return bash(props<typeof BashTool>(part))
-          if (part.tool === "glob") return glob(props<typeof GlobTool>(part))
-          if (part.tool === "grep") return grep(props<typeof GrepTool>(part))
-          if (part.tool === "read") return read(props<typeof ReadTool>(part))
-          if (part.tool === "write") return write(props<typeof WriteTool>(part))
-          if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
-          if (part.tool === "edit") return edit(props<typeof EditTool>(part))
-          if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
-          if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
-          if (part.tool === "task") return task(props<typeof TaskTool>(part))
-          if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
-          if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
-          return fallback(part)
-        } catch {
-          return fallback(part)
-        }
-      }
+async function execute(sdk: OpencodeClient) {
+       // Analyze image files and add their descriptions to the message
+       let enhancedMessage = message
+       if (imageFiles.length > 0) {
+         try {
+           const analysisResults: string[] = []
 
-      function emit(type: string, data: Record<string, unknown>) {
-        if (args.format === "json") {
-          process.stdout.write(JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL)
+           // Get the image model to use (custom or auto-detected)
+           let imageLanguage
+           if (args.imageModel) {
+             imageLanguage = await AppRuntime.runPromise(
+               Effect.gen(function* () {
+                 const svc = yield* Provider.Service
+                 const parsed = Provider.parseModel(args.imageModel!)
+                 const model = yield* svc.getModel(parsed.providerID, parsed.modelID)
+                 return yield* svc.getLanguage(model)
+               })
+             )
+           } else {
+             imageLanguage = await AppRuntime.runPromise(
+               Effect.gen(function* () {
+                 const svc = yield* Provider.Service
+                 const imageModel = yield* svc.getImageModel()
+                 if (!imageModel) {
+                   return undefined
+                 }
+                 const model = yield* svc.getModel(imageModel.providerID, imageModel.modelID)
+                 return yield* svc.getLanguage(model)
+               })
+             )
+           }
+
+           if (!imageLanguage) {
+             console.error("No image-capable model available for analyzing images")
+           } else {
+             for (const file of imageFiles) {
+               try {
+                 const buffer = await Bun.file(file.filepath).arrayBuffer()
+                 const base64 = Buffer.from(buffer).toString('base64')
+                 const mimeType = sniffAttachmentMime(new Uint8Array(buffer), file.mime)
+
+                 const result = await generateObject({
+                   temperature: 0.2,
+                   messages: [
+                     {
+                       role: "user",
+                       content: [
+                         { type: "text", text: "Please describe this image in detail:" },
+                         { type: "image", image: `data:${mimeType};base64,${base64}` },
+                       ],
+                     },
+                   ],
+                   model: imageLanguage,
+                   schema: z.object({
+                     description: z.string().describe("Detailed description of the image content"),
+                   }),
+                 })
+                 analysisResults.push(`Image ${path.basename(file.filepath)}: ${result.object.description}`)
+               } catch (e) {
+                 console.error(`Failed to analyze ${file.filepath}:`, e)
+               }
+             }
+           }
+
+           if (analysisResults.length > 0) {
+             enhancedMessage = `${message}\n\nImage analysis results:\n${analysisResults.join('\n')}`
+           }
+         } catch (e) {
+           console.error("Failed to analyze images:", e)
+         }
+       }
+
+       function tool(part: ToolPart) {
+         try {
+           if (part.tool === "bash") return bash(props<typeof BashTool>(part))
+           if (part.tool === "glob") return glob(props<typeof GlobTool>(part))
+           if (part.tool === "grep") return grep(props<typeof GrepTool>(part))
+           if (part.tool === "read") return read(props<typeof ReadTool>(part))
+           if (part.tool === "write") return write(props<typeof WriteTool>(part))
+           if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
+           if (part.tool === "edit") return edit(props<typeof EditTool>(part))
+           if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
+           if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
+           if (part.tool === "task") return task(props<typeof TaskTool>(part))
+           if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
+           if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
+           return fallback(part)
+         } catch {
+           return fallback(part)
+         }
+       }
+       
+       function emit(type: string, data: Record<string, unknown>) {
+         if (args.format === "json") {
+           process.stdout.write(JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL)
           return true
         }
         return false
@@ -645,16 +731,16 @@ export const RunCommand = cmd({
           arguments: message,
           variant: args.variant,
         })
-      } else {
-        const model = args.model ? Provider.parseModel(args.model) : undefined
-        await sdk.session.prompt({
-          sessionID,
-          agent,
-          model,
-          variant: args.variant,
-          parts: [...files, { type: "text", text: message }],
-        })
-      }
+       } else {
+         const model = args.model ? Provider.parseModel(args.model) : undefined
+         await sdk.session.prompt({
+           sessionID,
+           agent,
+           model,
+           variant: args.variant,
+           parts: [...files, { type: "text", text: enhancedMessage }],
+         })
+       }
     }
 
     if (args.attach) {

@@ -1,7 +1,7 @@
 import { Global } from "../../../global"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
-import { ConfigCommand } from "./config"
+import { ConfigCommand, ConfigSetCommand, ConfigShowCommand } from "./config"
 import { FileCommand } from "./file"
 import { LSPCommand } from "./lsp"
 import { RipgrepCommand } from "./ripgrep"

@@ -933,6 +933,7 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }>
+  readonly getImageModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID } | undefined>
 }
 
 interface State {
@@ -965,6 +966,13 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
     }
   }
   return result
+}
+
+function supportsImages(model: Model): boolean {
+  return !!(
+    model.capabilities.input?.image ||
+    model.capabilities.output?.image
+  )
 }
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
@@ -1646,41 +1654,54 @@ const layer: Layer.Layer<
       return undefined
     })
 
-    const defaultModel = Effect.fn("Provider.defaultModel")(function* () {
-      const cfg = yield* config.get()
-      if (cfg.model) return parseModel(cfg.model)
+     const defaultModel = Effect.fn("Provider.defaultModel")(function* () {
+       const cfg = yield* config.get()
+       if (cfg.model) return parseModel(cfg.model)
 
-      const s = yield* InstanceState.get(state)
-      const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
-        Effect.map((x): { providerID: ProviderID; modelID: ModelID }[] => {
-          if (!isRecord(x) || !Array.isArray(x.recent)) return []
-          return x.recent.flatMap((item) => {
-            if (!isRecord(item)) return []
-            if (typeof item.providerID !== "string") return []
-            if (typeof item.modelID !== "string") return []
-            return [{ providerID: ProviderID.make(item.providerID), modelID: ModelID.make(item.modelID) }]
-          })
-        }),
-        Effect.catch(() => Effect.succeed([] as { providerID: ProviderID; modelID: ModelID }[])),
-      )
-      for (const entry of recent) {
-        const provider = s.providers[entry.providerID]
-        if (!provider) continue
-        if (!provider.models[entry.modelID]) continue
-        return { providerID: entry.providerID, modelID: entry.modelID }
-      }
+       const s = yield* InstanceState.get(state)
+       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
+         Effect.map((x): { providerID: ProviderID; modelID: ModelID }[] => {
+           if (!isRecord(x) || !Array.isArray(x.recent)) return []
+           return x.recent.flatMap((item) => {
+             if (!isRecord(item)) return []
+             if (typeof item.providerID !== "string") return []
+             if (typeof item.modelID !== "string") return []
+             return [{ providerID: ProviderID.make(item.providerID), modelID: ModelID.make(item.modelID) }]
+           })
+         }),
+         Effect.catch(() => Effect.succeed([] as { providerID: ProviderID; modelID: ModelID }[])),
+       )
+       for (const entry of recent) {
+         const provider = s.providers[entry.providerID]
+         if (!provider) continue
+         if (!provider.models[entry.modelID]) continue
+         return { providerID: entry.providerID, modelID: entry.modelID }
+       }
 
-      const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
-      if (!provider) throw new Error("no providers found")
-      const [model] = sort(Object.values(provider.models))
-      if (!model) throw new Error("no models found")
-      return {
-        providerID: provider.id,
-        modelID: model.id,
-      }
-    })
+       const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+       if (!provider) throw new Error("no providers found")
+       const [model] = sort(Object.values(provider.models))
+       if (!model) throw new Error("no models found")
+       return {
+         providerID: provider.id,
+         modelID: model.id,
+       }
+     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+     const getImageModel = Effect.fn("Provider.getImageModel")(function* () {
+       const s = yield* InstanceState.get(state)
+       for (const [providerID, provider] of Object.entries(s.providers)) {
+         // Look for models that support images
+         for (const [modelID, model] of Object.entries(provider.models)) {
+           if (supportsImages(model)) {
+             return { providerID: ProviderID.make(providerID), modelID: ModelID.make(modelID) }
+           }
+         }
+       }
+       return undefined
+     })
+
+     return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, getImageModel })
   }),
 )
 

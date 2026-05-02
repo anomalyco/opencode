@@ -30,6 +30,7 @@ import { StartupLoading } from "@tui/component/startup-loading"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
+import { DialogImageModel } from "@tui/component/dialog-image-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
@@ -442,6 +443,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
+      },
+    },
+    {
+      title: "Switch image model",
+      value: "image_model.list",
+      keybind: "image_model_list",
+      category: "Agent",
+      slash: {
+        name: "image-models",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogImageModel />)
       },
     },
     {
