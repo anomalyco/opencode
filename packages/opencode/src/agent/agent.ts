@@ -16,6 +16,7 @@ import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
@@ -194,33 +195,37 @@ export const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
-          scout: {
-            name: "scout",
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                "*": "deny",
-                grep: "allow",
-                glob: "allow",
-                webfetch: "allow",
-                websearch: "allow",
-                codesearch: "allow",
-                read: "allow",
-                repo_clone: "allow",
-                repo_overview: "allow",
-                external_directory: {
-                  ...readonlyExternalDirectory,
-                  [path.join(Global.Path.repos, "*")]: "allow",
+          ...(Flag.OPENCODE_EXPERIMENTAL
+            ? {
+                scout: {
+                  name: "scout",
+                  permission: Permission.merge(
+                    defaults,
+                    Permission.fromConfig({
+                      "*": "deny",
+                      grep: "allow",
+                      glob: "allow",
+                      webfetch: "allow",
+                      websearch: "allow",
+                      codesearch: "allow",
+                      read: "allow",
+                      repo_clone: "allow",
+                      repo_overview: "allow",
+                      external_directory: {
+                        ...readonlyExternalDirectory,
+                        [path.join(Global.Path.repos, "*")]: "allow",
+                      },
+                    }),
+                    user,
+                  ),
+                  description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
+                  prompt: PROMPT_SCOUT,
+                  options: {},
+                  mode: "subagent" as const,
+                  native: true,
                 },
-              }),
-              user,
-            ),
-            description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
-            prompt: PROMPT_SCOUT,
-            options: {},
-            mode: "subagent",
-            native: true,
-          },
+              }
+            : {}),
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -335,33 +340,35 @@ export const layer = Layer.effect(
           ].join("\n\n")
         }
 
-        for (const [name, reference] of Object.entries(cfg.reference ?? {})) {
-          if (agents[name]) continue
-          const resolved = resolveReference(reference)
-          const localPath = resolved.kind === "local" ? resolved.path : undefined
-          agents[name] = {
-            name,
-            description:
-              resolved.kind === "local"
-                ? `Scout reference for local directory ${resolved.path}`
-                : `Scout reference for repository ${resolved.repository}`,
-            permission: Permission.merge(
-              agents.scout.permission,
-              Permission.fromConfig(
-                localPath
-                  ? {
-                      external_directory: {
-                        [localPath]: "allow",
-                        [path.join(localPath, "*")]: "allow",
-                      },
-                    }
-                  : {},
+        if (Flag.OPENCODE_EXPERIMENTAL) {
+          for (const [name, reference] of Object.entries(cfg.reference ?? {})) {
+            if (agents[name]) continue
+            const resolved = resolveReference(reference)
+            const localPath = resolved.kind === "local" ? resolved.path : undefined
+            agents[name] = {
+              name,
+              description:
+                resolved.kind === "local"
+                  ? `Scout reference for local directory ${resolved.path}`
+                  : `Scout reference for repository ${resolved.repository}`,
+              permission: Permission.merge(
+                agents.scout.permission,
+                Permission.fromConfig(
+                  localPath
+                    ? {
+                        external_directory: {
+                          [localPath]: "allow",
+                          [path.join(localPath, "*")]: "allow",
+                        },
+                      }
+                    : {},
+                ),
               ),
-            ),
-            prompt: referencePrompt(name, resolved),
-            options: { reference },
-            mode: "subagent",
-            native: false,
+              prompt: referencePrompt(name, resolved),
+              options: { reference },
+              mode: "subagent",
+              native: false,
+            }
           }
         }
 

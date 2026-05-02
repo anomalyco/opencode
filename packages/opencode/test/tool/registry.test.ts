@@ -5,18 +5,48 @@ import { Effect, Layer } from "effect"
 import { Instance } from "../../src/project/instance"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const node = CrossSpawnSpawner.defaultLayer
+const originalExperimental = Flag.OPENCODE_EXPERIMENTAL
 
 const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
 
 afterEach(async () => {
+  Flag.OPENCODE_EXPERIMENTAL = originalExperimental
   await Instance.disposeAll()
 })
 
 describe("tool.registry", () => {
+  it.live("hides repo research tools unless experimental", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        const ids = yield* registry.ids()
+
+        expect(ids).not.toContain("codesearch")
+        expect(ids).not.toContain("repo_clone")
+        expect(ids).not.toContain("repo_overview")
+      }),
+    ),
+  )
+
+  it.live("shows repo research tools when experimental", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        Flag.OPENCODE_EXPERIMENTAL = true
+        const registry = yield* ToolRegistry.Service
+        const ids = yield* registry.ids()
+
+        expect(ids).toContain("codesearch")
+        expect(ids).toContain("repo_clone")
+        expect(ids).toContain("repo_overview")
+      }),
+    ),
+  )
+
   it.live("loads tools from .opencode/tool (singular)", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
