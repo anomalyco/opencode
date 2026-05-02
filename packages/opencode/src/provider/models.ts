@@ -1,25 +1,14 @@
 import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
-import { Schema } from "effect"
+import { Context, Duration, Effect, Layer, ManagedRuntime, Option, Schedule, Schema } from "effect"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Installation } from "../installation"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { lazy } from "@/util/lazy"
-import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Hash } from "@opencode-ai/core/util/hash"
-
-// Try to import bundled snapshot (generated at build time)
-// Falls back to undefined in dev mode when snapshot doesn't exist
-/* @ts-ignore */
-
-const log = Log.create({ service: "models.dev" })
-const source = url()
-const filepath = path.join(
-  Global.Path.cache,
-  source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
-)
-const ttl = 5 * 60 * 1000
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { withTransientReadRetry } from "@/util/effect-http-client"
 
 const Cost = Schema.Struct({
   input: Schema.Finite,
@@ -101,76 +90,122 @@ export const Provider = Schema.Struct({
 
 export type Provider = Schema.Schema.Type<typeof Provider>
 
-function url() {
-  return Flag.OPENCODE_MODELS_URL || "https://models.dev"
+export interface Interface {
+  readonly get: () => Effect.Effect<Record<string, Provider>>
+  readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
-function fresh() {
-  return Date.now() - Number(Filesystem.stat(filepath)?.mtimeMs ?? 0) < ttl
-}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
-function skip(force: boolean) {
-  return !force && fresh()
-}
+export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClient.HttpClient> = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const fs = yield* AppFileSystem.Service
+    const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
 
-const fetchApi = async () => {
-  const result = await fetch(`${url()}/api.json`, {
-    headers: { "User-Agent": Installation.USER_AGENT },
-    signal: AbortSignal.timeout(10000),
-  })
-  return { ok: result.ok, text: await result.text() }
-}
+    const source = Flag.OPENCODE_MODELS_URL || "https://models.dev"
+    const filepath = path.join(
+      Global.Path.cache,
+      source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
+    )
+    const ttl = Duration.minutes(5)
+    const lockKey = `models-dev:${filepath}`
 
-export const Data = lazy(async () => {
-  const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
-  if (result) return result
-  // @ts-ignore
-  const snapshot = await import("./models-snapshot.js")
-    .then((m) => m.snapshot as Record<string, unknown>)
-    .catch(() => undefined)
-  if (snapshot) return snapshot
-  if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-  return Flock.withLock(`models-dev:${filepath}`, async () => {
-    const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
-    if (result) return result
-    const result2 = await fetchApi()
-    if (result2.ok) {
-      await Filesystem.write(filepath, result2.text).catch((e) => {
-        log.error("Failed to write models cache", { error: e })
-      })
-    }
-    return JSON.parse(result2.text)
-  })
-})
+    let cached: Record<string, Provider> | undefined
 
-export async function get() {
-  const result = await Data()
-  return result as Record<string, Provider>
-}
-
-export async function refresh(force = false) {
-  if (skip(force)) return Data.reset()
-  await Flock.withLock(`models-dev:${filepath}`, async () => {
-    if (skip(force)) return Data.reset()
-    const result = await fetchApi()
-    if (!result.ok) return
-    await Filesystem.write(filepath, result.text)
-    Data.reset()
-  }).catch((e) => {
-    log.error("Failed to fetch models.dev", {
-      error: e,
+    const fresh = Effect.fnUntraced(function* () {
+      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (!stat?.mtime) return false
+      const mtime = Option.isOption(stat.mtime) ? Number(Option.getOrElse(stat.mtime, () => new Date(0)).getTime()) : 0
+      return Date.now() - mtime < Duration.toMillis(ttl)
     })
-  })
-}
 
-if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
-  void refresh()
-  setInterval(
-    async () => {
-      await refresh()
-    },
-    60 * 1000 * 60,
-  ).unref()
-}
+    const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
+      return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
+        HttpClientRequest.setHeader("User-Agent", Installation.USER_AGENT),
+        http.execute,
+        Effect.flatMap((res) => res.text),
+        Effect.timeout("10 seconds"),
+      )
+    })
+
+    const loadFromDisk = Effect.fnUntraced(function* () {
+      return yield* fs
+        .readJson(Flag.OPENCODE_MODELS_PATH ?? filepath)
+        .pipe(Effect.catch(() => Effect.succeed(undefined))) as Effect.Effect<
+        Record<string, Provider> | undefined
+      >
+    })
+
+    const loadSnapshot = Effect.promise(async () => {
+      try {
+        // @ts-ignore — generated at build time, may not exist in dev
+        const m = await import("./models-snapshot.js")
+        return m.snapshot as Record<string, Provider> | undefined
+      } catch {
+        return undefined
+      }
+    })
+
+    const populate = Effect.fn("ModelsDev.populate")(function* () {
+      const fromDisk = yield* loadFromDisk()
+      if (fromDisk) return fromDisk
+      const snapshot = yield* loadSnapshot
+      if (snapshot) return snapshot
+      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+
+      // Cross-process file lock — Flock is the right primitive (in-process
+      // semaphores can't coordinate concurrent opencode CLIs writing the same cache).
+      return yield* Effect.promise(() =>
+        Flock.withLock(lockKey, async () => {
+          const text = await Effect.runPromise(fetchApi())
+          await Effect.runPromise(fs.writeWithDirs(filepath, text))
+          return JSON.parse(text) as Record<string, Provider>
+        }),
+      )
+    })
+
+    const get = Effect.fn("ModelsDev.get")(function* () {
+      if (cached) return cached
+      cached = yield* populate()
+      return cached
+    })
+
+    const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+      if (!force && (yield* fresh())) {
+        cached = undefined
+        return
+      }
+      yield* Effect.promise(() =>
+        Flock.withLock(lockKey, async () => {
+          const text = await Effect.runPromise(fetchApi())
+          await Effect.runPromise(fs.writeWithDirs(filepath, text))
+        }),
+      ).pipe(
+        Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
+        Effect.ignore,
+      )
+      cached = undefined
+    })
+
+    if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+      yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.fixed("60 minutes")), Effect.ignore))
+    }
+
+    return Service.of({ get, refresh })
+  }),
+)
+
+export const defaultLayer: Layer.Layer<Service> = layer.pipe(
+  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(AppFileSystem.defaultLayer),
+)
+
+// Promise-style compat for callers in Promise-context (Hono routes, legacy CLI handlers).
+// Uses the shared memoMap so this runtime's Service instance is shared with AppRuntime
+// — Effect callers that yield ModelsDev.Service see the same cache.
+const promiseRuntime = ManagedRuntime.make(defaultLayer, { memoMap })
+export const get = () => promiseRuntime.runPromise(Service.use((s) => s.get()))
+export const refresh = (force = false) => promiseRuntime.runPromise(Service.use((s) => s.refresh(force)))
 
 export * as ModelsDev from "./models"

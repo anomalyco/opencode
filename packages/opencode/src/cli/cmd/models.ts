@@ -26,8 +26,7 @@ export const ModelsCommand = effectCmd({
       }),
   handler: Effect.fn("Cli.models")(function* (args) {
     if (args.refresh) {
-      // followup: lift ModelsDev into an Effect Service so this drops the Effect.promise wrap.
-      yield* Effect.promise(() => ModelsDev.refresh(true))
+      yield* ModelsDev.Service.use((s) => s.refresh(true))
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
     }
 
