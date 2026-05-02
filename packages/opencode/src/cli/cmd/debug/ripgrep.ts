@@ -1,10 +1,10 @@
 import { EOL } from "os"
 import { Effect, Stream } from "effect"
-import { AppRuntime } from "../../../effect/app-runtime"
 import { Ripgrep } from "../../../file/ripgrep"
-import { Instance } from "../../../project/instance"
-import { bootstrap } from "../../bootstrap"
+import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
+import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceStore } from "@/project/instance-store"
 
 export const RipgrepCommand = cmd({
   command: "rg",
@@ -13,24 +13,25 @@ export const RipgrepCommand = cmd({
   async handler() {},
 })
 
-const TreeCommand = cmd({
+const TreeCommand = effectCmd({
   command: "tree",
   describe: "show file tree using ripgrep",
   builder: (yargs) =>
     yargs.option("limit", {
       type: "number",
     }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      const tree = await AppRuntime.runPromise(
-        Ripgrep.Service.use((svc) => svc.tree({ cwd: Instance.directory, limit: args.limit })),
-      )
+  handler: Effect.fn("Cli.debug.rg.tree")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const store = yield* InstanceStore.Service
+    return yield* Effect.gen(function* () {
+      const tree = yield* Effect.orDie(Ripgrep.Service.use((svc) => svc.tree({ cwd: ctx.directory, limit: args.limit })))
       process.stdout.write(tree + EOL)
-    })
-  },
+    }).pipe(Effect.ensuring(store.dispose(ctx)))
+  }),
 })
 
-const FilesCommand = cmd({
+const FilesCommand = effectCmd({
   command: "files",
   describe: "list files using ripgrep",
   builder: (yargs) =>
@@ -47,29 +48,29 @@ const FilesCommand = cmd({
         type: "number",
         description: "Limit number of results",
       }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      const files = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const rg = yield* Ripgrep.Service
-          return yield* rg
-            .files({
-              cwd: Instance.directory,
-              glob: args.glob ? [args.glob] : undefined,
-            })
-            .pipe(
-              Stream.take(args.limit ?? Infinity),
-              Stream.runCollect,
-              Effect.map((c) => [...c]),
-            )
-        }),
-      )
+  handler: Effect.fn("Cli.debug.rg.files")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const store = yield* InstanceStore.Service
+    return yield* Effect.gen(function* () {
+      const rg = yield* Ripgrep.Service
+      const files = yield* rg
+        .files({
+          cwd: ctx.directory,
+          glob: args.glob ? [args.glob] : undefined,
+        })
+        .pipe(
+          Stream.take(args.limit ?? Infinity),
+          Stream.runCollect,
+          Effect.map((c) => [...c]),
+          Effect.orDie,
+        )
       process.stdout.write(files.join(EOL) + EOL)
-    })
-  },
+    }).pipe(Effect.ensuring(store.dispose(ctx)))
+  }),
 })
 
-const SearchCommand = cmd({
+const SearchCommand = effectCmd({
   command: "search <pattern>",
   describe: "search file contents using ripgrep",
   builder: (yargs) =>
@@ -87,12 +88,15 @@ const SearchCommand = cmd({
         type: "number",
         description: "Limit number of results",
       }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      const results = await AppRuntime.runPromise(
+  handler: Effect.fn("Cli.debug.rg.search")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const store = yield* InstanceStore.Service
+    return yield* Effect.gen(function* () {
+      const results = yield* Effect.orDie(
         Ripgrep.Service.use((svc) =>
           svc.search({
-            cwd: Instance.directory,
+            cwd: ctx.directory,
             pattern: args.pattern,
             glob: args.glob as string[] | undefined,
             limit: args.limit,
@@ -100,6 +104,6 @@ const SearchCommand = cmd({
         ),
       )
       process.stdout.write(JSON.stringify(results.items, null, 2) + EOL)
-    })
-  },
+    }).pipe(Effect.ensuring(store.dispose(ctx)))
+  }),
 })
