@@ -1,7 +1,7 @@
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
-import { effectCmd } from "../effect-cmd"
+import { CliError, effectCmd } from "../effect-cmd"
 import { Database } from "@/storage/db"
 import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
 import { InstanceRef } from "@/effect/instance-ref"
@@ -88,11 +88,12 @@ export const ImportCommand = effectCmd({
       demandOption: true,
     }),
   handler: Effect.fn("Cli.import")(function* (args) {
+    // effectCmd always provides InstanceRef via InstanceStore.Service.provide; this is an invariant.
     const ctx = yield* InstanceRef
-    if (!ctx) return
+    if (!ctx) return yield* Effect.die("InstanceRef not provided")
     const store = yield* InstanceStore.Service
-    // Match legacy bootstrap() finally — dispose runs disposers + emits
-    // server.instance.disposed even on early-return / error paths.
+    // Ensure store.dispose runs disposers and emits server.instance.disposed
+    // on every exit path: success, early return, typed failure, defect, interrupt.
     return yield* runImport(args.file, ctx.project.id).pipe(Effect.ensuring(store.dispose(ctx)))
   }),
 })
@@ -117,11 +118,20 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, projectI
     const req = yield* Effect.orDie(share.request())
     const headers = shouldAttachShareAuthHeaders(file, req.baseUrl) ? req.headers : {}
 
+    const tryFetch = (url: string) =>
+      Effect.tryPromise({
+        try: () => fetch(url, { headers }),
+        catch: (e) =>
+          new CliError({
+            message: `Failed to fetch share data: ${e instanceof Error ? e.message : String(e)}`,
+          }),
+      })
+
     const dataPath = req.api.data(slug)
-    let response = yield* Effect.promise(() => fetch(`${baseUrl}${dataPath}`, { headers }))
+    let response = yield* tryFetch(`${baseUrl}${dataPath}`)
 
     if (!response.ok && dataPath !== `/api/share/${slug}/data`) {
-      response = yield* Effect.promise(() => fetch(`${baseUrl}/api/share/${slug}/data`, { headers }))
+      response = yield* tryFetch(`${baseUrl}/api/share/${slug}/data`)
     }
 
     if (!response.ok) {
@@ -130,7 +140,10 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, projectI
       return
     }
 
-    const shareData = (yield* Effect.promise(() => response.json())) as ShareData[]
+    const shareData = yield* Effect.tryPromise({
+      try: () => response.json() as Promise<ShareData[]>,
+      catch: () => new CliError({ message: "Share data was not valid JSON" }),
+    })
     const transformed = transformShareData(shareData)
 
     if (!transformed) {
