@@ -30,16 +30,15 @@ export const Instance = {
 
   /**
    * Check if a path is within the project boundary.
-   * Returns true if path is inside Instance.directory OR Instance.worktree.
+   * Returns true if path is inside ctx.directory OR ctx.worktree.
    * Paths within the worktree but outside the working directory should not trigger external_directory permission.
    */
-  containsPath(filepath: string, ctx?: InstanceContext) {
-    const instance = ctx ?? Instance
-    if (AppFileSystem.contains(instance.directory, filepath)) return true
+  containsPath(filepath: string, ctx: InstanceContext) {
+    if (AppFileSystem.contains(ctx.directory, filepath)) return true
     // Non-git projects set worktree to "/" which would match ANY absolute path.
     // Skip worktree check in this case to preserve external_directory permissions.
-    if (instance.worktree === "/") return false
-    return AppFileSystem.contains(instance.worktree, filepath)
+    if (ctx.worktree === "/") return false
+    return AppFileSystem.contains(ctx.worktree, filepath)
   },
   /**
    * Captures the current instance ALS context and returns a wrapper that
