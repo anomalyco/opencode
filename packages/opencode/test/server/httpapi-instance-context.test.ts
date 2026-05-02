@@ -1,6 +1,5 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { GlobalBus } from "@/bus/global"
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from "effect/unstable/http"
@@ -20,6 +19,7 @@ import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpa
 import { workspaceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
+import { waitGlobalBusEvent } from "./global-bus"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
@@ -97,24 +97,10 @@ const serveProbe = (probePath: HttpRouter.PathInput = "/probe") =>
     Layer.build,
   )
 
-const waitDisposedEvent = Effect.promise(
-  () =>
-    new Promise<{ directory?: string; workspace?: string }>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        GlobalBus.off("event", onEvent)
-        reject(new Error("timed out waiting for instance disposal"))
-      }, 10_000)
-
-      function onEvent(event: { directory?: string; workspace?: string; payload: { type?: string } }) {
-        if (event.payload.type !== "server.instance.disposed") return
-        clearTimeout(timer)
-        GlobalBus.off("event", onEvent)
-        resolve({ directory: event.directory, workspace: event.workspace })
-      }
-
-      GlobalBus.on("event", onEvent)
-    }),
-)
+const waitDisposedEvent = waitGlobalBusEvent({
+  message: "timed out waiting for instance disposal",
+  predicate: (event) => event.payload.type === "server.instance.disposed",
+}).pipe(Effect.map((event) => ({ directory: event.directory, workspace: event.workspace })))
 
 const serveDisposeProbe = () =>
   HttpRouter.serve(

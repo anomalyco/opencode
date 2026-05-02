@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
@@ -11,6 +10,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { waitGlobalBusEventPromise } from "./global-bus"
 
 void Log.init({ print: false })
 
@@ -31,20 +31,9 @@ function createSession(input?: Session.CreateInput) {
 }
 
 async function waitReady(directory: string) {
-  return await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      GlobalBus.off("event", onEvent)
-      reject(new Error("timed out waiting for worktree.ready"))
-    }, 10_000)
-
-    function onEvent(event: { directory?: string; payload: { type?: string } }) {
-      if (event.payload.type !== Worktree.Event.Ready.type || event.directory !== directory) return
-      clearTimeout(timer)
-      GlobalBus.off("event", onEvent)
-      resolve()
-    }
-
-    GlobalBus.on("event", onEvent)
+  await waitGlobalBusEventPromise({
+    message: "timed out waiting for worktree.ready",
+    predicate: (event) => event.payload.type === Worktree.Event.Ready.type && event.directory === directory,
   })
 }
 

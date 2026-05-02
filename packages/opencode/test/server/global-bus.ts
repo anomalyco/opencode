@@ -1,16 +1,16 @@
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Effect } from "effect"
 
+const isTimeout = (error: unknown) =>
+  typeof error === "object" && error !== null && "_tag" in error && error._tag === "TimeoutException"
+
 export function waitGlobalBusEvent(input: {
   timeout?: number
   message?: string
   predicate: (event: GlobalEvent) => boolean
 }) {
   return Effect.callback<GlobalEvent, unknown>((resume) => {
-    const cleanup = () => {
-      clearTimeout(timeout)
-      GlobalBus.off("event", handler)
-    }
+    const cleanup = () => GlobalBus.off("event", handler)
 
     const handler = (event: GlobalEvent) => {
       try {
@@ -23,14 +23,12 @@ export function waitGlobalBusEvent(input: {
       }
     }
 
-    const timeout = setTimeout(() => {
-      cleanup()
-      resume(Effect.fail(new Error(input.message ?? "timed out waiting for global bus event")))
-    }, input.timeout ?? 10_000)
-
     GlobalBus.on("event", handler)
     return Effect.sync(cleanup)
-  })
+  }).pipe(
+    Effect.timeout(input.timeout ?? 10_000),
+    Effect.mapError((error) => (isTimeout(error) ? new Error(input.message ?? "timed out waiting for global bus event") : error)),
+  )
 }
 
 export const waitGlobalBusEventPromise = (input: Parameters<typeof waitGlobalBusEvent>[0]) =>
