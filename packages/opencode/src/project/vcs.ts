@@ -1,15 +1,15 @@
-import { Effect, Layer, Context, Stream, Scope } from "effect"
+import { Effect, Layer, Context, Schema, Stream, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { InstanceState } from "@/effect/instance-state"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
-import { Log } from "@/util"
-import { Instance } from "./instance"
-import z from "zod"
+import * as Log from "@opencode-ai/core/util/log"
+import { zod } from "@/util/effect-zod"
+import { NonNegativeInt, withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "vcs" })
 
@@ -102,40 +102,36 @@ const compare = Effect.fnUntraced(function* (
   )
 })
 
-export const Mode = z.enum(["git", "branch"])
-export type Mode = z.infer<typeof Mode>
+export const Mode = Schema.Literals(["git", "branch"]).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Mode = Schema.Schema.Type<typeof Mode>
 
 export const Event = {
   BranchUpdated: BusEvent.define(
     "vcs.branch.updated",
-    z.object({
-      branch: z.string().optional(),
+    Schema.Struct({
+      branch: Schema.optional(Schema.String),
     }),
   ),
 }
 
-export const Info = z
-  .object({
-    branch: z.string().optional(),
-    default_branch: z.string().optional(),
-  })
-  .meta({
-    ref: "VcsInfo",
-  })
-export type Info = z.infer<typeof Info>
+export const Info = Schema.Struct({
+  branch: Schema.optional(Schema.String),
+  default_branch: Schema.optional(Schema.String),
+})
+  .annotate({ identifier: "VcsInfo" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type Info = Schema.Schema.Type<typeof Info>
 
-export const FileDiff = z
-  .object({
-    file: z.string(),
-    patch: z.string(),
-    additions: z.number(),
-    deletions: z.number(),
-    status: z.enum(["added", "deleted", "modified"]).optional(),
-  })
-  .meta({
-    ref: "VcsFileDiff",
-  })
-export type FileDiff = z.infer<typeof FileDiff>
+export const FileDiff = Schema.Struct({
+  file: Schema.String,
+  patch: Schema.String,
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
+  status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
+})
+  .annotate({ identifier: "VcsFileDiff" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type FileDiff = Schema.Schema.Type<typeof FileDiff>
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>
@@ -205,21 +201,17 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Serv
       }),
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode) {
         const value = yield* InstanceState.get(state)
-        if (Instance.project.vcs !== "git") return []
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return []
         if (mode === "git") {
-          return yield* track(
-            fs,
-            git,
-            Instance.directory,
-            (yield* git.hasHead(Instance.directory)) ? "HEAD" : undefined,
-          )
+          return yield* track(fs, git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined)
         }
 
         if (!value.root) return []
         if (value.current && value.current === value.root.name) return []
-        const ref = yield* git.mergeBase(Instance.directory, value.root.ref)
+        const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
         if (!ref) return []
-        return yield* compare(fs, git, Instance.directory, ref)
+        return yield* compare(fs, git, ctx.directory, ref)
       }),
     })
   }),
@@ -230,3 +222,5 @@ export const defaultLayer = layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Bus.layer),
 )
+
+export * as Vcs from "./vcs"

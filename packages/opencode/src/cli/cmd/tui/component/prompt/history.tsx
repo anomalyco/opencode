@@ -1,6 +1,6 @@
 import path from "path"
-import { Global } from "@/global"
-import { Filesystem } from "@/util"
+import { Global } from "@opencode-ai/core/global"
+import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"

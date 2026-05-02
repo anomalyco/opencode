@@ -2,12 +2,26 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { MCP } from "@/mcp"
-import { Config } from "@/config"
 import { ConfigMCP } from "@/config/mcp"
-import { AppRuntime } from "@/effect/app-runtime"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
 import { Effect } from "effect"
+import { jsonRequest, runRequest } from "./trace"
+
+const UnsupportedOAuthError = z
+  .object({
+    error: z.string(),
+  })
+  .meta({ ref: "McpUnsupportedOAuthError" })
+
+const unsupportedOAuthErrorResponse = {
+  description: "MCP server does not support OAuth",
+  content: {
+    "application/json": {
+      schema: resolver(UnsupportedOAuthError),
+    },
+  },
+}
 
 export const McpRoutes = lazy(() =>
   new Hono()
@@ -22,15 +36,17 @@ export const McpRoutes = lazy(() =>
             description: "MCP server status",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), MCP.Status)),
+                schema: resolver(z.record(z.string(), MCP.Status.zod)),
               },
             },
           },
         },
       }),
-      async (c) => {
-        return c.json(await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.status())))
-      },
+      async (c) =>
+        jsonRequest("McpRoutes.status", c, function* () {
+          const mcp = yield* MCP.Service
+          return yield* mcp.status()
+        }),
     )
     .post(
       "/",
@@ -43,7 +59,7 @@ export const McpRoutes = lazy(() =>
             description: "MCP server added successfully",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), MCP.Status)),
+                schema: resolver(z.record(z.string(), MCP.Status.zod)),
               },
             },
           },
@@ -54,14 +70,16 @@ export const McpRoutes = lazy(() =>
         "json",
         z.object({
           name: z.string(),
-          config: ConfigMCP.Info,
+          config: ConfigMCP.Info.zod,
         }),
       ),
-      async (c) => {
-        const { name, config } = c.req.valid("json")
-        const result = await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.add(name, config)))
-        return c.json(result.status)
-      },
+      async (c) =>
+        jsonRequest("McpRoutes.add", c, function* () {
+          const { name, config } = c.req.valid("json")
+          const mcp = yield* MCP.Service
+          const result = yield* mcp.add(name, config)
+          return result.status
+        }),
     )
     .post(
       "/:name/auth",
@@ -82,12 +100,15 @@ export const McpRoutes = lazy(() =>
               },
             },
           },
-          ...errors(400, 404),
+          400: unsupportedOAuthErrorResponse,
+          ...errors(404),
         },
       }),
       async (c) => {
         const name = c.req.param("name")
-        const result = await AppRuntime.runPromise(
+        const result = await runRequest(
+          "McpRoutes.auth.start",
+          c,
           Effect.gen(function* () {
             const mcp = yield* MCP.Service
             const supports = yield* mcp.supportsOAuth(name)
@@ -116,7 +137,7 @@ export const McpRoutes = lazy(() =>
             description: "OAuth authentication completed",
             content: {
               "application/json": {
-                schema: resolver(MCP.Status),
+                schema: resolver(MCP.Status.zod),
               },
             },
           },
@@ -129,12 +150,13 @@ export const McpRoutes = lazy(() =>
           code: z.string().describe("Authorization code from OAuth callback"),
         }),
       ),
-      async (c) => {
-        const name = c.req.param("name")
-        const { code } = c.req.valid("json")
-        const status = await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.finishAuth(name, code)))
-        return c.json(status)
-      },
+      async (c) =>
+        jsonRequest("McpRoutes.auth.callback", c, function* () {
+          const name = c.req.param("name")
+          const { code } = c.req.valid("json")
+          const mcp = yield* MCP.Service
+          return yield* mcp.finishAuth(name, code)
+        }),
     )
     .post(
       "/:name/auth/authenticate",
@@ -147,16 +169,19 @@ export const McpRoutes = lazy(() =>
             description: "OAuth authentication completed",
             content: {
               "application/json": {
-                schema: resolver(MCP.Status),
+                schema: resolver(MCP.Status.zod),
               },
             },
           },
-          ...errors(400, 404),
+          400: unsupportedOAuthErrorResponse,
+          ...errors(404),
         },
       }),
       async (c) => {
         const name = c.req.param("name")
-        const result = await AppRuntime.runPromise(
+        const result = await runRequest(
+          "McpRoutes.auth.authenticate",
+          c,
           Effect.gen(function* () {
             const mcp = yield* MCP.Service
             const supports = yield* mcp.supportsOAuth(name)
@@ -191,11 +216,13 @@ export const McpRoutes = lazy(() =>
           ...errors(404),
         },
       }),
-      async (c) => {
-        const name = c.req.param("name")
-        await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.removeAuth(name)))
-        return c.json({ success: true as const })
-      },
+      async (c) =>
+        jsonRequest("McpRoutes.auth.remove", c, function* () {
+          const name = c.req.param("name")
+          const mcp = yield* MCP.Service
+          yield* mcp.removeAuth(name)
+          return { success: true as const }
+        }),
     )
     .post(
       "/:name/connect",
@@ -214,11 +241,13 @@ export const McpRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ name: z.string() })),
-      async (c) => {
-        const { name } = c.req.valid("param")
-        await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.connect(name)))
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("McpRoutes.connect", c, function* () {
+          const { name } = c.req.valid("param")
+          const mcp = yield* MCP.Service
+          yield* mcp.connect(name)
+          return true
+        }),
     )
     .post(
       "/:name/disconnect",
@@ -237,10 +266,12 @@ export const McpRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ name: z.string() })),
-      async (c) => {
-        const { name } = c.req.valid("param")
-        await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.disconnect(name)))
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("McpRoutes.disconnect", c, function* () {
+          const { name } = c.req.valid("param")
+          const mcp = yield* MCP.Service
+          yield* mcp.disconnect(name)
+          return true
+        }),
     ),
 )

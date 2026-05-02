@@ -2,17 +2,17 @@ import { afterEach, describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { LSP } from "../../src/lsp"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
-import { Truncate } from "../../src/tool"
-import { Tool } from "../../src/tool"
-import { Filesystem } from "../../src/util"
+import { Truncate } from "@/tool/truncate"
+import { Tool } from "@/tool/tool"
+import { Filesystem } from "@/util/filesystem"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -394,6 +394,19 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  it.live("detects attachment media from file contents", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01])
+      yield* put(path.join(dir, "image.bin"), jpeg)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "image.bin") })
+      expect(result.output).toBe("Image read successfully")
+      expect(result.attachments?.[0].mime).toBe("image/jpeg")
+      expect(result.attachments?.[0].url.startsWith("data:image/jpeg;base64,")).toBe(true)
+    }),
+  )
+
   it.live("large image files are properly attached without error", () =>
     Effect.gen(function* () {
       const result = yield* exec(FIXTURES_DIR, { filePath: path.join(FIXTURES_DIR, "large-image.png") })
@@ -425,6 +438,24 @@ root_type Monster;`
       expect(result.attachments).toBeUndefined()
       expect(result.output).toContain("namespace MyGame")
       expect(result.output).toContain("table Monster")
+    }),
+  )
+
+  it.live("falls through unsupported image mime types to text", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const cases = [
+        ["image.bmp", "BM text content"],
+        ["photo.tiff", "II text content"],
+        ["photo.avif", "avif text content"],
+      ] as const
+
+      for (const item of cases) {
+        yield* put(path.join(dir, item[0]), item[1])
+        const result = yield* exec(dir, { filePath: path.join(dir, item[0]) })
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain(item[1])
+      }
     }),
   )
 })

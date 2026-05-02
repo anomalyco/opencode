@@ -1,16 +1,18 @@
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "@/project/instance"
-import { InstanceBootstrap } from "@/project/bootstrap"
-import { Rpc } from "@/util"
+import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
-import { Config } from "@/config"
+import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
-import { Flag } from "@/flag/flag"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
+import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+
+ensureProcessMetadata("worker")
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -74,7 +76,6 @@ export const rpc = {
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({
       directory: input.directory,
-      init: () => AppRuntime.runPromise(InstanceBootstrap),
       fn: async () => {
         await upgrade().catch(() => {})
       },

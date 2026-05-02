@@ -4,12 +4,12 @@ import * as fs from "fs/promises"
 import { Effect, ManagedRuntime, Layer } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
-import { LSP } from "../../src/lsp"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { LSP } from "@/lsp/lsp"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
-import { Truncate } from "../../src/tool"
+import { Truncate } from "@/tool/truncate"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 
@@ -191,6 +191,35 @@ describe("tool.apply_patch freeform", () => {
         await execute({ patchText }, ctx)
 
         expect(await fs.readFile(target, "utf-8")).toBe("line1\nchanged2\nline3\nchanged4\n")
+      },
+    })
+  })
+
+  test("does not invent a first-line diff for BOM files", async () => {
+    await using fixture = await tmpdir()
+    const { ctx, calls } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const bom = String.fromCharCode(0xfeff)
+        const target = path.join(fixture.path, "example.cs")
+        await fs.writeFile(target, `${bom}using System;\n\nclass Test {}\n`, "utf-8")
+
+        const patchText =
+          "*** Begin Patch\n*** Update File: example.cs\n@@\n class Test {}\n+class Next {}\n*** End Patch"
+
+        await execute({ patchText }, ctx)
+
+        expect(calls.length).toBe(1)
+        const shown = calls[0].metadata.files[0]?.patch ?? ""
+        expect(shown).not.toContain(bom)
+        expect(shown).not.toContain("-using System;")
+        expect(shown).not.toContain("+using System;")
+
+        const content = await fs.readFile(target, "utf-8")
+        expect(content.charCodeAt(0)).toBe(0xfeff)
+        expect(content.slice(1)).toBe("using System;\n\nclass Test {}\nclass Next {}\n")
       },
     })
   })

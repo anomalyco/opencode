@@ -3,32 +3,42 @@ import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { SessionID, MessageID, PartID } from "@/session/schema"
 import z from "zod"
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRunState } from "@/session/run-state"
 import { SessionCompaction } from "@/session/compaction"
 import { SessionRevert } from "@/session/revert"
-import { SessionShare } from "@/share"
+import { SessionShare } from "@/share/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { Effect } from "effect"
-import { AppRuntime } from "@/effect/app-runtime"
 import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Command } from "@/command"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
+import { zodObject } from "@/util/effect-zod"
 import { Bus } from "@/bus"
-import { NamedError } from "@opencode-ai/shared/util/error"
-import { jsonRequest } from "./trace"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { jsonRequest, runRequest } from "./trace"
 
 const log = Log.create({ service: "server" })
+
+const QueryBoolean = z.union([
+  z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean()),
+  z.enum(["true", "false"]),
+])
+
+function queryBoolean(value: z.infer<typeof QueryBoolean> | undefined) {
+  if (value === undefined) return
+  return value === true || value === "true"
+}
 
 export const SessionRoutes = lazy(() =>
   new Hono()
@@ -43,7 +53,7 @@ export const SessionRoutes = lazy(() =>
             description: "List of sessions",
             content: {
               "application/json": {
-                schema: resolver(Session.Info.array()),
+                schema: resolver(Session.Info.zod.array()),
               },
             },
           },
@@ -52,8 +62,12 @@ export const SessionRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
-          roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
+          directory: z.string().optional().meta({ description: "Filter sessions by directory" }),
+          // TODO: in 2.0 remove `scope` and `directory` and default
+          // to list all sessions for a project
+          scope: z.enum(["project"]).optional().meta({ description: "List all sessions for the current project" }),
+          path: z.string().optional().meta({ description: "Filter sessions by project-relative path" }),
+          roots: QueryBoolean.optional().meta({ description: "Only return root sessions (no parentID)" }),
           start: z.coerce
             .number()
             .optional()
@@ -64,17 +78,22 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const query = c.req.valid("query")
-        const sessions: Session.Info[] = []
-        for await (const session of Session.list({
-          directory: query.directory,
-          roots: query.roots,
-          start: query.start,
-          search: query.search,
-          limit: query.limit,
-        })) {
-          sessions.push(session)
-        }
-        return c.json(sessions)
+        return c.json(
+          await runRequest(
+            "SessionRoutes.list",
+            c,
+            Session.Service.use((svc) =>
+              svc.list({
+                directory: query.scope === "project" ? undefined : query.directory,
+                path: query.path,
+                roots: queryBoolean(query.roots),
+                start: query.start,
+                search: query.search,
+                limit: query.limit,
+              }),
+            ),
+          ),
+        )
       },
     )
     .get(
@@ -88,7 +107,7 @@ export const SessionRoutes = lazy(() =>
             description: "Get session status",
             content: {
               "application/json": {
-                schema: resolver(z.record(z.string(), SessionStatus.Info)),
+                schema: resolver(z.record(z.string(), SessionStatus.Info.zod)),
               },
             },
           },
@@ -113,7 +132,7 @@ export const SessionRoutes = lazy(() =>
             description: "Get session",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(Session.Info.zod),
               },
             },
           },
@@ -123,7 +142,7 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.GetInput,
+          sessionID: Session.GetInput.zod,
         }),
       ),
       async (c) => {
@@ -146,7 +165,7 @@ export const SessionRoutes = lazy(() =>
             description: "List of children",
             content: {
               "application/json": {
-                schema: resolver(Session.Info.array()),
+                schema: resolver(Session.Info.zod.array()),
               },
             },
           },
@@ -156,7 +175,7 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.ChildrenInput,
+          sessionID: Session.ChildrenInput.zod,
         }),
       ),
       async (c) => {
@@ -178,7 +197,7 @@ export const SessionRoutes = lazy(() =>
             description: "Todo list",
             content: {
               "application/json": {
-                schema: resolver(Todo.Info.array()),
+                schema: resolver(Todo.Info.zod.array()),
               },
             },
           },
@@ -211,18 +230,19 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully created session",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(Session.Info.zod),
               },
             },
           },
         },
       }),
-      validator("json", Session.CreateInput),
-      async (c) => {
-        const body = c.req.valid("json") ?? {}
-        const session = await AppRuntime.runPromise(SessionShare.Service.use((svc) => svc.create(body)))
-        return c.json(session)
-      },
+      validator("json", Session.CreateInput.zod),
+      async (c) =>
+        jsonRequest("SessionRoutes.create", c, function* () {
+          const body = c.req.valid("json") ?? {}
+          const svc = yield* SessionShare.Service
+          return yield* svc.create(body)
+        }),
     )
     .delete(
       "/:sessionID",
@@ -245,14 +265,16 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.RemoveInput,
+          sessionID: Session.RemoveInput.zod,
         }),
       ),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        await AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(sessionID)))
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.delete", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const svc = yield* Session.Service
+          yield* svc.remove(sessionID)
+          return true
+        }),
     )
     .patch(
       "/:sessionID",
@@ -265,7 +287,7 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully updated session",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(Session.Info.zod),
               },
             },
           },
@@ -290,32 +312,28 @@ export const SessionRoutes = lazy(() =>
             .optional(),
         }),
       ),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const updates = c.req.valid("json")
-        const session = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const session = yield* Session.Service
-            const current = yield* session.get(sessionID)
+      async (c) =>
+        jsonRequest("SessionRoutes.update", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const updates = c.req.valid("json")
+          const session = yield* Session.Service
+          const current = yield* session.get(sessionID)
 
-            if (updates.title !== undefined) {
-              yield* session.setTitle({ sessionID, title: updates.title })
-            }
-            if (updates.permission !== undefined) {
-              yield* session.setPermission({
-                sessionID,
-                permission: Permission.merge(current.permission ?? [], updates.permission),
-              })
-            }
-            if (updates.time?.archived !== undefined) {
-              yield* session.setArchived({ sessionID, time: updates.time.archived })
-            }
+          if (updates.title !== undefined) {
+            yield* session.setTitle({ sessionID, title: updates.title })
+          }
+          if (updates.permission !== undefined) {
+            yield* session.setPermission({
+              sessionID,
+              permission: Permission.merge(current.permission ?? [], updates.permission),
+            })
+          }
+          if (updates.time?.archived !== undefined) {
+            yield* session.setArchived({ sessionID, time: updates.time.archived })
+          }
 
-            return yield* session.get(sessionID)
-          }),
-        )
-        return c.json(session)
-      },
+          return yield* session.get(sessionID)
+        }),
     )
     // TODO(v2): remove this dedicated route and rely on the normal `/init` command flow.
     .post(
@@ -351,22 +369,20 @@ export const SessionRoutes = lazy(() =>
           messageID: MessageID.zod,
         }),
       ),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const body = c.req.valid("json")
-        await AppRuntime.runPromise(
-          SessionPrompt.Service.use((svc) =>
-            svc.command({
-              sessionID,
-              messageID: body.messageID,
-              model: body.providerID + "/" + body.modelID,
-              command: Command.Default.INIT,
-              arguments: "",
-            }),
-          ),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.init", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          const svc = yield* SessionPrompt.Service
+          yield* svc.command({
+            sessionID,
+            messageID: body.messageID,
+            model: body.providerID + "/" + body.modelID,
+            command: Command.Default.INIT,
+            arguments: "",
+          })
+          return true
+        }),
     )
     .post(
       "/:sessionID/fork",
@@ -379,7 +395,7 @@ export const SessionRoutes = lazy(() =>
             description: "200",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(Session.Info.zod),
               },
             },
           },
@@ -388,16 +404,17 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: Session.ForkInput.shape.sessionID,
+          sessionID: SessionID.zod,
         }),
       ),
-      validator("json", Session.ForkInput.omit({ sessionID: true })),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const body = c.req.valid("json")
-        const result = await AppRuntime.runPromise(Session.Service.use((svc) => svc.fork({ ...body, sessionID })))
-        return c.json(result)
-      },
+      validator("json", zodObject(Session.ForkInput).omit({ sessionID: true })),
+      async (c) =>
+        jsonRequest("SessionRoutes.fork", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json") as { messageID?: MessageID }
+          const svc = yield* Session.Service
+          return yield* svc.fork({ ...body, sessionID })
+        }),
     )
     .post(
       "/:sessionID/abort",
@@ -423,10 +440,12 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      async (c) => {
-        await AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.cancel(c.req.valid("param").sessionID)))
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.abort", c, function* () {
+          const svc = yield* SessionPrompt.Service
+          yield* svc.cancel(c.req.valid("param").sessionID)
+          return true
+        }),
     )
     .post(
       "/:sessionID/share",
@@ -439,7 +458,7 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully shared session",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(Session.Info.zod),
               },
             },
           },
@@ -452,18 +471,14 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const session = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const share = yield* SessionShare.Service
-            const session = yield* Session.Service
-            yield* share.share(sessionID)
-            return yield* session.get(sessionID)
-          }),
-        )
-        return c.json(session)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.share", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const share = yield* SessionShare.Service
+          const session = yield* Session.Service
+          yield* share.share(sessionID)
+          return yield* session.get(sessionID)
+        }),
     )
     .get(
       "/:sessionID/diff",
@@ -476,7 +491,7 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully retrieved diff",
             content: {
               "application/json": {
-                schema: resolver(Snapshot.FileDiff.array()),
+                schema: resolver(Snapshot.FileDiff.zod.array()),
               },
             },
           },
@@ -485,28 +500,20 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: SessionSummary.DiffInput.shape.sessionID,
+          sessionID: SessionID.zod,
         }),
       ),
-      validator(
-        "query",
-        z.object({
-          messageID: SessionSummary.DiffInput.shape.messageID,
+      validator("query", zodObject(SessionSummary.DiffInput).omit({ sessionID: true })),
+      async (c) =>
+        jsonRequest("SessionRoutes.diff", c, function* () {
+          const query = c.req.valid("query") as Omit<SessionSummary.DiffInput, "sessionID">
+          const params = c.req.valid("param")
+          const summary = yield* SessionSummary.Service
+          return yield* summary.diff({
+            sessionID: params.sessionID,
+            messageID: query.messageID,
+          })
         }),
-      ),
-      async (c) => {
-        const query = c.req.valid("query")
-        const params = c.req.valid("param")
-        const result = await AppRuntime.runPromise(
-          SessionSummary.Service.use((summary) =>
-            summary.diff({
-              sessionID: params.sessionID,
-              messageID: query.messageID,
-            }),
-          ),
-        )
-        return c.json(result)
-      },
     )
     .delete(
       "/:sessionID/share",
@@ -519,7 +526,7 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully unshared session",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(Session.Info.zod),
               },
             },
           },
@@ -532,18 +539,14 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const session = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const share = yield* SessionShare.Service
-            const session = yield* Session.Service
-            yield* share.unshare(sessionID)
-            return yield* session.get(sessionID)
-          }),
-        )
-        return c.json(session)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.unshare", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const share = yield* SessionShare.Service
+          const session = yield* Session.Service
+          yield* share.unshare(sessionID)
+          return yield* session.get(sessionID)
+        }),
     )
     .post(
       "/:sessionID/summarize",
@@ -577,43 +580,40 @@ export const SessionRoutes = lazy(() =>
           auto: z.boolean().optional().default(false),
         }),
       ),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const body = c.req.valid("json")
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const session = yield* Session.Service
-            const revert = yield* SessionRevert.Service
-            const compact = yield* SessionCompaction.Service
-            const prompt = yield* SessionPrompt.Service
-            const agent = yield* Agent.Service
+      async (c) =>
+        jsonRequest("SessionRoutes.summarize", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const compact = yield* SessionCompaction.Service
+          const prompt = yield* SessionPrompt.Service
+          const agent = yield* Agent.Service
 
-            yield* revert.cleanup(yield* session.get(sessionID))
-            const msgs = yield* session.messages({ sessionID })
-            const defaultAgent = yield* agent.defaultAgent()
-            let currentAgent = defaultAgent
-            for (let i = msgs.length - 1; i >= 0; i--) {
-              const info = msgs[i].info
-              if (info.role === "user") {
-                currentAgent = info.agent || defaultAgent
-                break
-              }
+          yield* revert.cleanup(yield* session.get(sessionID))
+          const msgs = yield* session.messages({ sessionID })
+          const defaultAgent = yield* agent.defaultAgent()
+          let currentAgent = defaultAgent
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const info = msgs[i].info
+            if (info.role === "user") {
+              currentAgent = info.agent || defaultAgent
+              break
             }
+          }
 
-            yield* compact.create({
-              sessionID,
-              agent: currentAgent,
-              model: {
-                providerID: body.providerID,
-                modelID: body.modelID,
-              },
-              auto: body.auto,
-            })
-            yield* prompt.loop({ sessionID })
-          }),
-        )
-        return c.json(true)
-      },
+          yield* compact.create({
+            sessionID,
+            agent: currentAgent,
+            model: {
+              providerID: body.providerID,
+              modelID: body.modelID,
+            },
+            auto: body.auto,
+          })
+          yield* prompt.loop({ sessionID })
+          return true
+        }),
     )
     .get(
       "/:sessionID/message",
@@ -626,7 +626,7 @@ export const SessionRoutes = lazy(() =>
             description: "List of messages",
             content: {
               "application/json": {
-                schema: resolver(MessageV2.WithParts.array()),
+                schema: resolver(MessageV2.WithParts.zod.array()),
               },
             },
           },
@@ -675,7 +675,9 @@ export const SessionRoutes = lazy(() =>
         const query = c.req.valid("query")
         const sessionID = c.req.valid("param").sessionID
         if (query.limit === undefined || query.limit === 0) {
-          const messages = await AppRuntime.runPromise(
+          const messages = await runRequest(
+            "SessionRoutes.messages",
+            c,
             Effect.gen(function* () {
               const session = yield* Session.Service
               yield* session.get(sessionID)
@@ -714,8 +716,8 @@ export const SessionRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    info: MessageV2.Info,
-                    parts: MessageV2.Part.array(),
+                    info: MessageV2.Info.zod,
+                    parts: MessageV2.Part.zod.array(),
                   }),
                 ),
               },
@@ -766,21 +768,18 @@ export const SessionRoutes = lazy(() =>
           messageID: MessageID.zod,
         }),
       ),
-      async (c) => {
-        const params = c.req.valid("param")
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const state = yield* SessionRunState.Service
-            const session = yield* Session.Service
-            yield* state.assertNotBusy(params.sessionID)
-            yield* session.removeMessage({
-              sessionID: params.sessionID,
-              messageID: params.messageID,
-            })
-          }),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.deleteMessage", c, function* () {
+          const params = c.req.valid("param")
+          const state = yield* SessionRunState.Service
+          const session = yield* Session.Service
+          yield* state.assertNotBusy(params.sessionID)
+          yield* session.removeMessage({
+            sessionID: params.sessionID,
+            messageID: params.messageID,
+          })
+          return true
+        }),
     )
     .delete(
       "/:sessionID/message/:messageID/part/:partID",
@@ -807,19 +806,17 @@ export const SessionRoutes = lazy(() =>
           partID: PartID.zod,
         }),
       ),
-      async (c) => {
-        const params = c.req.valid("param")
-        await AppRuntime.runPromise(
-          Session.Service.use((svc) =>
-            svc.removePart({
-              sessionID: params.sessionID,
-              messageID: params.messageID,
-              partID: params.partID,
-            }),
-          ),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.deletePart", c, function* () {
+          const params = c.req.valid("param")
+          const svc = yield* Session.Service
+          yield* svc.removePart({
+            sessionID: params.sessionID,
+            messageID: params.messageID,
+            partID: params.partID,
+          })
+          return true
+        }),
     )
     .patch(
       "/:sessionID/message/:messageID/part/:partID",
@@ -831,7 +828,7 @@ export const SessionRoutes = lazy(() =>
             description: "Successfully updated part",
             content: {
               "application/json": {
-                schema: resolver(MessageV2.Part),
+                schema: resolver(MessageV2.Part.zod),
               },
             },
           },
@@ -846,7 +843,7 @@ export const SessionRoutes = lazy(() =>
           partID: PartID.zod,
         }),
       ),
-      validator("json", MessageV2.Part),
+      validator("json", MessageV2.Part.zod),
       async (c) => {
         const params = c.req.valid("param")
         const body = c.req.valid("json")
@@ -855,8 +852,10 @@ export const SessionRoutes = lazy(() =>
             `Part mismatch: body.id='${body.id}' vs partID='${params.partID}', body.messageID='${body.messageID}' vs messageID='${params.messageID}', body.sessionID='${body.sessionID}' vs sessionID='${params.sessionID}'`,
           )
         }
-        const part = await AppRuntime.runPromise(Session.Service.use((svc) => svc.updatePart(body)))
-        return c.json(part)
+        return jsonRequest("SessionRoutes.updatePart", c, function* () {
+          const svc = yield* Session.Service
+          return yield* svc.updatePart(body)
+        })
       },
     )
     .post(
@@ -872,8 +871,8 @@ export const SessionRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    info: MessageV2.Assistant,
-                    parts: MessageV2.Part.array(),
+                    info: MessageV2.Assistant.zod,
+                    parts: MessageV2.Part.zod.array(),
                   }),
                 ),
               },
@@ -888,15 +887,19 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+      validator("json", zodObject(SessionPrompt.PromptInput).omit({ sessionID: true })),
       async (c) => {
         c.status(200)
         c.header("Content-Type", "application/json")
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await AppRuntime.runPromise(
-            SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID })),
+          const msg = await runRequest(
+            "SessionRoutes.prompt",
+            c,
+            SessionPrompt.Service.use((svc) =>
+              svc.prompt({ ...body, sessionID } as unknown as SessionPrompt.PromptInput),
+            ),
           )
           void stream.write(JSON.stringify(msg))
         })
@@ -922,19 +925,23 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
+      validator("json", zodObject(SessionPrompt.PromptInput).omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
-        void AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.prompt({ ...body, sessionID }))).catch(
-          (err) => {
-            log.error("prompt_async failed", { sessionID, error: err })
-            void Bus.publish(Session.Event.Error, {
-              sessionID,
-              error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
-            })
-          },
-        )
+        void runRequest(
+          "SessionRoutes.prompt_async",
+          c,
+          SessionPrompt.Service.use((svc) =>
+            svc.prompt({ ...body, sessionID } as unknown as SessionPrompt.PromptInput),
+          ),
+        ).catch((err) => {
+          log.error("prompt_async failed", { sessionID, error: err })
+          void Bus.publish(Session.Event.Error, {
+            sessionID,
+            error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+          })
+        })
 
         return c.body(null, 204)
       },
@@ -952,8 +959,8 @@ export const SessionRoutes = lazy(() =>
               "application/json": {
                 schema: resolver(
                   z.object({
-                    info: MessageV2.Assistant,
-                    parts: MessageV2.Part.array(),
+                    info: MessageV2.Assistant.zod,
+                    parts: MessageV2.Part.zod.array(),
                   }),
                 ),
               },
@@ -968,13 +975,14 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", SessionPrompt.CommandInput.omit({ sessionID: true })),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const body = c.req.valid("json")
-        const msg = await AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.command({ ...body, sessionID })))
-        return c.json(msg)
-      },
+      validator("json", zodObject(SessionPrompt.CommandInput).omit({ sessionID: true })),
+      async (c) =>
+        jsonRequest("SessionRoutes.command", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json") as Omit<SessionPrompt.CommandInput, "sessionID">
+          const svc = yield* SessionPrompt.Service
+          return yield* svc.command({ ...body, sessionID })
+        }),
     )
     .post(
       "/:sessionID/shell",
@@ -987,7 +995,7 @@ export const SessionRoutes = lazy(() =>
             description: "Created message",
             content: {
               "application/json": {
-                schema: resolver(MessageV2.WithParts),
+                schema: resolver(MessageV2.WithParts.zod),
               },
             },
           },
@@ -1000,13 +1008,14 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const body = c.req.valid("json")
-        const msg = await AppRuntime.runPromise(SessionPrompt.Service.use((svc) => svc.shell({ ...body, sessionID })))
-        return c.json(msg)
-      },
+      validator("json", zodObject(SessionPrompt.ShellInput).omit({ sessionID: true })),
+      async (c) =>
+        jsonRequest("SessionRoutes.shell", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json") as Omit<SessionPrompt.ShellInput, "sessionID">
+          const svc = yield* SessionPrompt.Service
+          return yield* svc.shell({ ...body, sessionID })
+        }),
     )
     .post(
       "/:sessionID/revert",
@@ -1019,7 +1028,7 @@ export const SessionRoutes = lazy(() =>
             description: "Updated session",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(Session.Info.zod),
               },
             },
           },
@@ -1032,19 +1041,15 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      validator("json", SessionRevert.RevertInput.omit({ sessionID: true })),
+      validator("json", zodObject(SessionRevert.RevertInput).omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        log.info("revert", c.req.valid("json"))
-        const session = await AppRuntime.runPromise(
-          SessionRevert.Service.use((svc) =>
-            svc.revert({
-              sessionID,
-              ...c.req.valid("json"),
-            }),
-          ),
-        )
-        return c.json(session)
+        const body = c.req.valid("json") as Omit<SessionRevert.RevertInput, "sessionID">
+        log.info("revert", body)
+        return jsonRequest("SessionRoutes.revert", c, function* () {
+          const svc = yield* SessionRevert.Service
+          return yield* svc.revert({ sessionID, ...body })
+        })
       },
     )
     .post(
@@ -1058,7 +1063,7 @@ export const SessionRoutes = lazy(() =>
             description: "Updated session",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(Session.Info.zod),
               },
             },
           },
@@ -1071,11 +1076,12 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const session = await AppRuntime.runPromise(SessionRevert.Service.use((svc) => svc.unrevert({ sessionID })))
-        return c.json(session)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.unrevert", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const svc = yield* SessionRevert.Service
+          return yield* svc.unrevert({ sessionID })
+        }),
     )
     .post(
       "/:sessionID/permissions/:permissionID",
@@ -1104,17 +1110,15 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       validator("json", z.object({ response: Permission.Reply.zod })),
-      async (c) => {
-        const params = c.req.valid("param")
-        await AppRuntime.runPromise(
-          Permission.Service.use((svc) =>
-            svc.reply({
-              requestID: params.permissionID,
-              reply: c.req.valid("json").response,
-            }),
-          ),
-        )
-        return c.json(true)
-      },
+      async (c) =>
+        jsonRequest("SessionRoutes.permissionRespond", c, function* () {
+          const params = c.req.valid("param")
+          const svc = yield* Permission.Service
+          yield* svc.reply({
+            requestID: params.permissionID,
+            reply: c.req.valid("json").response,
+          })
+          return true
+        }),
     ),
 )
