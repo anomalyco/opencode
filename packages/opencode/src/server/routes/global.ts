@@ -8,7 +8,7 @@ import { SyncEvent } from "@/sync"
 import { GlobalBus } from "@/bus/global"
 import { AppRuntime } from "@/effect/app-runtime"
 import { AsyncQueue } from "@/util/queue"
-import { InstanceStore } from "../../project/instance-store"
+import { InstanceRuntime } from "../../project/instance-runtime"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
@@ -200,7 +200,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        await InstanceStore.disposeAllInstances()
+        await InstanceRuntime.disposeAllInstances()
         GlobalBus.emit("event", {
           directory: "global",
           payload: {

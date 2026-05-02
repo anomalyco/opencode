@@ -18,8 +18,7 @@ import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
 import { Installation } from "@/installation"
-import { InstanceBootstrap } from "@/project/bootstrap"
-import { InstanceStore } from "@/project/instance-store"
+import { InstanceRuntime } from "@/project/instance-runtime"
 import { Plugin } from "@/plugin"
 import { Project } from "@/project/project"
 import { ProviderAuth } from "@/provider/auth"
@@ -153,8 +152,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       Format.defaultLayer,
       LSP.defaultLayer,
       Installation.defaultLayer,
-      InstanceBootstrap.defaultLayer,
-      InstanceStore.defaultLayer,
+      InstanceRuntime.layer,
       MCP.defaultLayer,
       ModelsDev.defaultLayer,
       Permission.defaultLayer,

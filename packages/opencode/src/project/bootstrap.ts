@@ -10,21 +10,19 @@ import { Command } from "../command"
 import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share/share-next"
-import { Context, Effect, Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { Config } from "@/config/config"
+import { Service } from "./bootstrap-service"
 
-export interface Interface {
-  readonly run: Effect.Effect<void>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/InstanceBootstrap") {}
+export { Service } from "./bootstrap-service"
+export type { Interface } from "./bootstrap-service"
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     // Yield each bootstrap dep at layer init so `run` itself has R = never.
-    // This breaks the circular declaration loop through Config → Instance → InstanceStore
-    // (instance-store.ts only yields this Service tag, never the impl-side services).
+    // InstanceStore imports only the lightweight tag from bootstrap-service.ts,
+    // so it can depend on bootstrap without importing this implementation graph.
     const bus = yield* Bus.Service
     const config = yield* Config.Service
     const file = yield* File.Service

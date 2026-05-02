@@ -5,7 +5,7 @@ import path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Instance } from "../../src/project/instance"
-import { InstanceStore } from "../../src/project/instance-store"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Worktree } from "../../src/worktree"
 import { disposeAllInstances, provideInstance, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -138,9 +138,10 @@ describe("Worktree", () => {
             expect(props.branch).toBe(info.branch)
 
             yield* Effect.promise(() =>
-              InstanceStore.runtime.runPromise((s) =>
-                s.load({ directory: info.directory }).pipe(Effect.flatMap(s.dispose)),
-              ),
+              Instance.provide({
+                directory: info.directory,
+                fn: () => InstanceRuntime.disposeInstance(Instance.current),
+              }),
             )
             yield* Effect.promise(() => Bun.sleep(100))
             yield* svc.remove({ directory: info.directory })
@@ -162,9 +163,10 @@ describe("Worktree", () => {
 
             yield* Effect.promise(() => ready)
             yield* Effect.promise(() =>
-              InstanceStore.runtime.runPromise((s) =>
-                s.load({ directory: info.directory }).pipe(Effect.flatMap(s.dispose)),
-              ),
+              Instance.provide({
+                directory: info.directory,
+                fn: () => InstanceRuntime.disposeInstance(Instance.current),
+              }),
             )
             yield* Effect.promise(() => Bun.sleep(100))
             yield* svc.remove({ directory: info.directory })

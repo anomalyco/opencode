@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime } from "effect"
+import { Layer, ManagedRuntime } from "effect"
 import { attach } from "./run-service"
 import * as Observability from "@opencode-ai/core/effect/observability"
 
@@ -40,8 +40,7 @@ import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { Format } from "@/format"
-import { InstanceBootstrap } from "@/project/bootstrap"
-import { InstanceStore } from "@/project/instance-store"
+import { InstanceRuntime } from "@/project/instance-runtime"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { Workspace } from "@/control-plane/workspace"
@@ -94,8 +93,7 @@ export const AppLayer = Layer.mergeAll(
   Truncate.defaultLayer,
   ToolRegistry.defaultLayer,
   Format.defaultLayer,
-  InstanceBootstrap.defaultLayer,
-  InstanceStore.defaultLayer,
+  InstanceRuntime.layer,
   Project.defaultLayer,
   Vcs.defaultLayer,
   Workspace.defaultLayer,
@@ -131,16 +129,4 @@ export const AppRuntime: Runtime = {
     return rt.runCallback(wrap(effect))
   },
   dispose: () => rt.dispose(),
-}
-
-let bootstrapRun: Promise<Effect.Effect<void>>
-export function getBootstrapRunEffect(): Promise<Effect.Effect<void>> {
-  if (!bootstrapRun) {
-    bootstrapRun = AppRuntime.runPromise(
-      Effect.gen(function* () {
-        return (yield* InstanceBootstrap.Service).run
-      }),
-    )
-  }
-  return bootstrapRun
 }

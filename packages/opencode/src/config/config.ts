@@ -12,7 +12,6 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { type InstanceContext } from "../project/instance"
-import { InstanceStore } from "../project/instance-store"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { existsSync } from "fs"
 import { GlobalBus } from "@/bus/global"
@@ -46,6 +45,10 @@ import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "config" })
+
+async function loadInstanceRuntime() {
+  return (await import("../project/instance-runtime")).InstanceRuntime
+}
 
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
@@ -742,13 +745,14 @@ export const layer = Layer.effect(
         // mask "config update without an active instance" bugs. The throw
         // comes from `Instance.current` inside `InstanceState.context`.
         const ctx = yield* InstanceState.context
-        yield* Effect.promise(() => InstanceStore.disposeInstance(ctx))
+        yield* Effect.promise(async () => (await loadInstanceRuntime()).disposeInstance(ctx))
       }
     })
 
     const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
       yield* invalidateGlobal
-      const task = InstanceStore.disposeAllInstances()
+      const task = loadInstanceRuntime()
+        .then((runtime) => runtime.disposeAllInstances())
         .catch(() => undefined)
         .finally(() =>
           GlobalBus.emit("event", {

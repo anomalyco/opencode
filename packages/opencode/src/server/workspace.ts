@@ -5,7 +5,7 @@ import { WorkspaceID } from "@/control-plane/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Workspace } from "@/control-plane/workspace"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { getBootstrapRunEffect, AppRuntime } from "@/effect/app-runtime"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
@@ -94,13 +94,11 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     const target = await adapter.target(workspace)
 
     if (target.type === "local") {
-      const init = await getBootstrapRunEffect()
       return WorkspaceContext.provide({
         workspaceID: WorkspaceID.make(workspaceID),
         fn: () =>
           Instance.provide({
             directory: target.directory,
-            init,
             async fn() {
               return next()
             },

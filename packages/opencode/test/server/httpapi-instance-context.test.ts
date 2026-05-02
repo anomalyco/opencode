@@ -11,9 +11,8 @@ import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
-import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Instance } from "../../src/project/instance"
-import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { disposeMiddleware, markInstanceForDisposal } from "../../src/server/routes/instance/httpapi/lifecycle"
 import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
@@ -42,8 +41,7 @@ const it = testEffect(
     testStateLayer,
     NodeHttpServer.layerTest,
     NodeServices.layer,
-    InstanceBootstrap.defaultLayer,
-    InstanceStore.defaultLayer,
+    InstanceRuntime.layer,
     Project.defaultLayer,
     Workspace.defaultLayer,
   ),
