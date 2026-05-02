@@ -1,4 +1,3 @@
-import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "@/lsp/lsp"
 import { File } from "../file"
@@ -7,6 +6,7 @@ import * as Project from "./project"
 import * as Vcs from "./vcs"
 import { Bus } from "../bus"
 import { Command } from "../command"
+import { Plugin } from "../plugin"
 import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share/share-next"
@@ -16,6 +16,21 @@ import { Config } from "@/config/config"
 export interface Interface {
   readonly run: Effect.Effect<void>
 }
+
+const configWithPluginPriority = Layer.effect(
+  Config.Service,
+  Effect.gen(function* () {
+    const config = yield* Config.Service
+    const plugin = yield* Plugin.Service
+
+    return {
+      ...config,
+      get: () => Effect.andThen(plugin.init(), config.get),
+      getGlobal: () => Effect.andThen(plugin.init(), config.getGlobal),
+      getConsoleState: () => Effect.andThen(plugin.init(), config.getConsoleState),
+    }
+  }),
+).pipe(Layer.provide(Layer.merge(Plugin.defaultLayer, Config.defaultLayer)))
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstanceBootstrap") {}
 
@@ -31,7 +46,6 @@ export const layer = Layer.effect(
     const fileWatcher = yield* FileWatcher.Service
     const format = yield* Format.Service
     const lsp = yield* LSP.Service
-    const plugin = yield* Plugin.Service
     const shareNext = yield* ShareNext.Service
     const snapshot = yield* Snapshot.Service
     const vcs = yield* Vcs.Service
@@ -41,8 +55,6 @@ export const layer = Layer.effect(
       yield* Effect.logInfo("bootstrapping", { directory: ctx.directory })
       // everything depends on config so eager load it for nice traces
       yield* config.get()
-      // Plugin can mutate config so it has to be initialized before anything else.
-      yield* plugin.init()
       yield* Effect.all(
         [lsp, shareNext, format, file, fileWatcher, vcs, snapshot].map((s) => Effect.forkDetach(s.init())),
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
@@ -62,7 +74,7 @@ export const layer = Layer.effect(
 export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide([
     Bus.layer,
-    Config.defaultLayer,
+    configWithPluginPriority,
     File.defaultLayer,
     FileWatcher.defaultLayer,
     Format.defaultLayer,

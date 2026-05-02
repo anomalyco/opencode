@@ -5,6 +5,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
+import { bootstrap } from "../bootstrap"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -36,7 +37,7 @@ export const WebCommand = cmd({
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
-    const opts = await resolveNetworkOptions(args)
+    const opts = await bootstrap(process.cwd(), () => resolveNetworkOptions(args))
     const server = await Server.listen(opts)
     UI.empty()
     UI.println(UI.logo("  "))
