@@ -171,115 +171,107 @@ describe("tool.write", () => {
   })
 
   describe("file permissions", () => {
-    it.live("sets file permissions when writing sensitive data", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "sensitive.json")
-          yield* run({ filePath: filepath, content: JSON.stringify({ secret: "data" }) })
+    it.instance("sets file permissions when writing sensitive data", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "sensitive.json")
+        yield* run({ filePath: filepath, content: JSON.stringify({ secret: "data" }) })
 
-          if (process.platform !== "win32") {
-            const stats = yield* Effect.promise(() => fs.stat(filepath))
-            expect(stats.mode & 0o777).toBe(0o644)
-          }
-        }),
-      ),
+        if (process.platform !== "win32") {
+          const stats = yield* Effect.promise(() => fs.stat(filepath))
+          expect(stats.mode & 0o777).toBe(0o644)
+        }
+      }),
     )
   })
 
   describe("content types", () => {
-    it.live("writes JSON content", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "data.json")
-          const data = { key: "value", nested: { array: [1, 2, 3] } }
-          yield* run({ filePath: filepath, content: JSON.stringify(data, null, 2) })
+    it.instance("writes JSON content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "data.json")
+        const data = { key: "value", nested: { array: [1, 2, 3] } }
+        yield* run({ filePath: filepath, content: JSON.stringify(data, null, 2) })
 
-          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
-          expect(JSON.parse(content)).toEqual(data)
-        }),
-      ),
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(JSON.parse(content)).toEqual(data)
+      }),
     )
 
-    it.live("writes binary-safe content", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "binary.bin")
-          const content = "Hello\x00World\x01\x02\x03"
-          yield* run({ filePath: filepath, content })
+    it.instance("writes binary-safe content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "binary.bin")
+        const content = "Hello\x00World\x01\x02\x03"
+        yield* run({ filePath: filepath, content })
 
-          const buf = yield* Effect.promise(() => fs.readFile(filepath))
-          expect(buf.toString()).toBe(content)
-        }),
-      ),
+        const buf = yield* Effect.promise(() => fs.readFile(filepath))
+        expect(buf.toString()).toBe(content)
+      }),
     )
 
-    it.live("writes empty content", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "empty.txt")
-          yield* run({ filePath: filepath, content: "" })
+    it.instance("writes empty content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "empty.txt")
+        yield* run({ filePath: filepath, content: "" })
 
-          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
-          expect(content).toBe("")
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("")
 
-          const stats = yield* Effect.promise(() => fs.stat(filepath))
-          expect(stats.size).toBe(0)
-        }),
-      ),
+        const stats = yield* Effect.promise(() => fs.stat(filepath))
+        expect(stats.size).toBe(0)
+      }),
     )
 
-    it.live("writes multi-line content", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "multiline.txt")
-          const lines = ["Line 1", "Line 2", "Line 3", ""].join("\n")
-          yield* run({ filePath: filepath, content: lines })
+    it.instance("writes multi-line content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "multiline.txt")
+        const lines = ["Line 1", "Line 2", "Line 3", ""].join("\n")
+        yield* run({ filePath: filepath, content: lines })
 
-          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
-          expect(content).toBe(lines)
-        }),
-      ),
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe(lines)
+      }),
     )
 
-    it.live("handles different line endings", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "crlf.txt")
-          const content = "Line 1\r\nLine 2\r\nLine 3"
-          yield* run({ filePath: filepath, content })
+    it.instance("handles different line endings", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "crlf.txt")
+        const content = "Line 1\r\nLine 2\r\nLine 3"
+        yield* run({ filePath: filepath, content })
 
-          const buf = yield* Effect.promise(() => fs.readFile(filepath))
-          expect(buf.toString()).toBe(content)
-        }),
-      ),
+        const buf = yield* Effect.promise(() => fs.readFile(filepath))
+        expect(buf.toString()).toBe(content)
+      }),
     )
   })
 
   describe("error handling", () => {
-    it.live("throws error when OS denies write access", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const readonlyPath = path.join(dir, "readonly.txt")
-          yield* Effect.promise(() => fs.writeFile(readonlyPath, "test", "utf-8"))
-          yield* Effect.promise(() => fs.chmod(readonlyPath, 0o444))
-          const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(Effect.exit)
-          expect(exit._tag).toBe("Failure")
-        }),
-      ),
+    it.instance("throws error when OS denies write access", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const readonlyPath = path.join(test.directory, "readonly.txt")
+        yield* Effect.promise(() => fs.writeFile(readonlyPath, "test", "utf-8"))
+        yield* Effect.promise(() => fs.chmod(readonlyPath, 0o444))
+        const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(Effect.exit)
+        expect(exit._tag).toBe("Failure")
+      }),
     )
   })
 
   describe("title generation", () => {
-    it.live("returns relative path as title", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "src", "components", "Button.tsx")
-          yield* Effect.promise(() => fs.mkdir(path.dirname(filepath), { recursive: true }))
+    it.instance("returns relative path as title", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "src", "components", "Button.tsx")
+        yield* Effect.promise(() => fs.mkdir(path.dirname(filepath), { recursive: true }))
 
-          const result = yield* run({ filePath: filepath, content: "export const Button = () => {}" })
-          expect(result.title).toEndWith(path.join("src", "components", "Button.tsx"))
-        }),
-      ),
+        const result = yield* run({ filePath: filepath, content: "export const Button = () => {}" })
+        expect(result.title).toEndWith(path.join("src", "components", "Button.tsx"))
+      }),
     )
   })
 })
