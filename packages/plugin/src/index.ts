@@ -278,6 +278,39 @@ export interface Hooks {
       metadata: any
     },
   ) => Promise<void>
+  /**
+   * Called before the LLM is invoked. Allows plugins to inspect and
+   * transform the messages array (e.g., strip images, add vision
+   * descriptions, modify system prompts).
+   *
+   * - `messages`: The full messages array including all parts
+   * - `output.messages`: Return a new array or mutate to transform messages.
+   *   Remove `FilePart` objects with `image: true` to strip images.
+   *   Replace with `TextPart` containing the vision description.
+   * - Runs BEFORE `experimental.chat.messages.transform`.
+   */
+  "pre_chat.messages.transform"?: (
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      messages: {
+        info: Message
+        parts: Part[]
+      }[]
+    },
+    output: {
+      messages: {
+        info: Message
+        parts: Part[]
+      }[]
+    },
+  ) => Promise<void>
+  /**
+   * @deprecated Use `pre_chat.messages.transform` instead.
+   * This hook exists for backward compatibility but has empty input
+   * and does not receive messages.
+   */
   "experimental.chat.messages.transform"?: (
     input: {},
     output: {
