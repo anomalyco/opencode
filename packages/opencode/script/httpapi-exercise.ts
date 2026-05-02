@@ -417,6 +417,10 @@ const scenarios: Scenario[] = [
       object(body)
       check(body.username === "httpapi-local", "local config update should return patched config")
     }, "status"),
+  http
+    .patch("/config", "config.update.invalid")
+    .at((ctx) => ({ path: "/config", headers: ctx.headers(), body: { username: 1 } }))
+    .status(400),
   http.get("/config/providers", "config.providers").json(),
   http.get("/project", "project.list").json(200, array, "status"),
   http.get("/project/current", "project.current").json(200, (body, ctx) => {
@@ -458,24 +462,32 @@ const scenarios: Scenario[] = [
     .status(400),
   http.get("/permission", "permission.list").json(200, array),
   http
+    .post("/permission/{requestID}/reply", "permission.reply.invalid")
+    .at((ctx) => ({ path: route("/permission/{requestID}/reply", { requestID: "per_httpapi" }), headers: ctx.headers(), body: { reply: "bad" } }))
+    .status(400),
+  http
     .post("/permission/{requestID}/reply", "permission.reply")
     .at((ctx) => ({ path: route("/permission/{requestID}/reply", { requestID: "per_httpapi" }), headers: ctx.headers(), body: { reply: "once" } }))
     .json(200, (body) => {
       check(body === true, "permission reply should return true even when request is no longer pending")
-    }, "status"),
+    }),
   http.get("/question", "question.list").json(200, array),
+  http
+    .post("/question/{requestID}/reply", "question.reply.invalid")
+    .at((ctx) => ({ path: route("/question/{requestID}/reply", { requestID: "que_httpapi_reply" }), headers: ctx.headers(), body: { answers: "Yes" } }))
+    .status(400),
   http
     .post("/question/{requestID}/reply", "question.reply")
     .at((ctx) => ({ path: route("/question/{requestID}/reply", { requestID: "que_httpapi_reply" }), headers: ctx.headers(), body: { answers: [["Yes"]] } }))
     .json(200, (body) => {
       check(body === true, "question reply should return true even when request is no longer pending")
-    }, "status"),
+    }),
   http
     .post("/question/{requestID}/reject", "question.reject")
     .at((ctx) => ({ path: route("/question/{requestID}/reject", { requestID: "que_httpapi_reject" }), headers: ctx.headers() }))
     .json(200, (body) => {
       check(body === true, "question reject should return true even when request is no longer pending")
-    }, "status"),
+    }),
   http
     .get("/file", "file.list")
     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
@@ -488,6 +500,13 @@ const scenarios: Scenario[] = [
     .json(200, (body) => {
       object(body)
       check(body.content === "hello", `content should match seeded file: ${JSON.stringify(body)}`)
+    }),
+  http
+    .get("/file/content", "file.read.missing")
+    .at((ctx) => ({ path: `/file/content?${new URLSearchParams({ path: "missing.txt" })}`, headers: ctx.headers() }))
+    .json(200, (body) => {
+      object(body)
+      check(body.type === "text" && body.content === "", "missing file content should return an empty text result")
     }),
   http.get("/file/status", "file.status").json(200, array),
   http
@@ -529,6 +548,10 @@ const scenarios: Scenario[] = [
       check(body["httpapi-disabled"].status === "disabled", "disabled MCP server should be added without spawning")
     }, "status"),
   http
+    .post("/mcp", "mcp.add.invalid")
+    .at((ctx) => ({ path: "/mcp", headers: ctx.headers(), body: { name: "httpapi-invalid", config: { type: "invalid" } } }))
+    .status(400),
+  http
     .post("/mcp/{name}/auth", "mcp.auth.start")
     .at((ctx) => ({ path: route("/mcp/{name}/auth", { name: "httpapi-missing" }), headers: ctx.headers() }))
     .json(400, (body) => {
@@ -542,7 +565,7 @@ const scenarios: Scenario[] = [
     .json(200, (body) => {
       object(body)
       check(body.success === true, "MCP auth removal should return success")
-    }, "status"),
+    }),
   http
     .post("/mcp/{name}/auth/authenticate", "mcp.auth.authenticate")
     .at((ctx) => ({ path: route("/mcp/{name}/auth/authenticate", { name: "httpapi-missing" }), headers: ctx.headers() }))
@@ -560,14 +583,14 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({ path: route("/mcp/{name}/connect", { name: "httpapi-missing" }), headers: ctx.headers() }))
     .json(200, (body) => {
       check(body === true, "missing MCP connect should remain a no-op success")
-    }, "status"),
+    }),
   http
     .post("/mcp/{name}/disconnect", "mcp.disconnect")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/disconnect", { name: "httpapi-missing" }), headers: ctx.headers() }))
     .json(200, (body) => {
       check(body === true, "missing MCP disconnect should remain a no-op success")
-    }, "status"),
+    }),
   http.get("/pty/shells", "pty.shells").json(200, array),
   http.get("/pty", "pty.list").json(200, array),
   http
@@ -580,6 +603,10 @@ const scenarios: Scenario[] = [
       check(body.command === "/bin/sh", "PTY create should use controlled shell command")
       check(body.cwd === ctx.directory, "PTY create should default cwd to scenario directory")
     }, "status"),
+  http
+    .post("/pty", "pty.create.invalid")
+    .at((ctx) => ({ path: "/pty", headers: ctx.headers(), body: { command: 1 } }))
+    .status(400),
   http
     .get("/pty/{ptyID}", "pty.get")
     .at((ctx) => ({ path: route("/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
@@ -599,7 +626,7 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({ path: route("/pty/{ptyID}", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
     .json(200, (body) => {
       check(body === true, "PTY remove should return true")
-    }, "status"),
+    }),
   http
     .get("/pty/{ptyID}/connect", "pty.connect")
     .at((ctx) => ({ path: route("/pty/{ptyID}/connect", { ptyID: "pty_httpapi_missing" }), headers: ctx.headers() }))
@@ -644,13 +671,17 @@ const scenarios: Scenario[] = [
       }),
     "status"),
   http
+    .post("/experimental/worktree", "worktree.create.invalid")
+    .at((ctx) => ({ path: "/experimental/worktree", headers: ctx.headers(), body: { name: 1 } }))
+    .status(400),
+  http
     .delete("/experimental/worktree", "worktree.remove")
     .mutating()
     .seeded((ctx) => ctx.worktree({ name: "api-remove" }))
     .at((ctx) => ({ path: "/experimental/worktree", headers: ctx.headers(), body: { directory: ctx.state.directory } }))
     .json(200, (body) => {
       check(body === true, "worktree remove should return true")
-    }, "status"),
+    }),
   http
     .post("/experimental/worktree/reset", "worktree.reset")
     .mutating()
@@ -661,7 +692,7 @@ const scenarios: Scenario[] = [
         check(body === true, "worktree reset should return true")
         yield* ctx.worktreeRemove(ctx.state.directory)
       }),
-    "status"),
+    ),
   http.get("/experimental/session", "experimental.session.list").json(200, array),
   http.get("/experimental/resource", "experimental.resource.list").json(),
   http.post("/sync/history", "sync.history.list").at((ctx) => ({ path: "/sync/history", headers: ctx.headers(), body: {} })).json(200, array),
@@ -671,10 +702,10 @@ const scenarios: Scenario[] = [
     .status(400),
   http.post("/sync/start", "sync.start").mutating().preserveDatabase().json(200, (body) => {
     check(body === true, "sync start should return true when no workspace sessions exist")
-  }, "status"),
+  }),
   http.post("/instance/dispose", "instance.dispose").mutating().json(200, (body) => {
     check(body === true, "instance dispose should return true")
-  }, "status"),
+  }),
   http
     .post("/log", "app.log")
     .global()
@@ -693,7 +724,7 @@ const scenarios: Scenario[] = [
         object(auth)
         check(isRecord(auth.test) && auth.test.key === "test-key", "auth set should write isolated auth file")
       }),
-    "status"),
+    ),
   http
     .delete("/auth/{providerID}", "auth.remove")
     .global()
@@ -710,7 +741,7 @@ const scenarios: Scenario[] = [
         object(auth)
         check(auth.test === undefined, "auth remove should delete provider from isolated auth file")
       }),
-    "status"),
+    ),
   http
     .get("/session", "session.list")
     .seeded((ctx) => ctx.session({ title: "List me" }))
@@ -742,6 +773,10 @@ const scenarios: Scenario[] = [
       check(body.title === "Get me", "should preserve seeded title")
     }),
   http
+    .get("/session/{sessionID}", "session.get.missing")
+    .at((ctx) => ({ path: route("/session/{sessionID}", { sessionID: "ses_httpapi_missing" }), headers: ctx.headers() }))
+    .status(404),
+  http
     .patch("/session/{sessionID}", "session.update")
     .mutating()
     .seeded((ctx) => ctx.session({ title: "Before rename" }))
@@ -750,6 +785,11 @@ const scenarios: Scenario[] = [
       object(body)
       check(body.title === "After rename", "updated session should use new title")
     }, "status"),
+  http
+    .patch("/session/{sessionID}", "session.update.invalid")
+    .mutating()
+    .at((ctx) => ({ path: route("/session/{sessionID}", { sessionID: "ses_httpapi_missing" }), headers: ctx.headers(), body: { title: 1 } }))
+    .status(400),
   http
     .delete("/session/{sessionID}", "session.delete")
     .mutating()
@@ -760,7 +800,7 @@ const scenarios: Scenario[] = [
         check(body === true, "delete should return true")
         check((yield* ctx.sessionGet(ctx.state.id)) === undefined, "deleted session should not remain in storage")
       }),
-    "status"),
+    ),
   http
     .get("/session/{sessionID}/children", "session.children")
     .seeded((ctx) =>
@@ -870,7 +910,7 @@ const scenarios: Scenario[] = [
         const messages = yield* ctx.messages(ctx.state.session.id)
         check(messages[0]?.parts.length === 0, "deleted part should not remain on message")
       }),
-    "status"),
+    ),
   http
     .delete("/session/{sessionID}/message/{messageID}", "session.deleteMessage")
     .mutating()
@@ -893,7 +933,7 @@ const scenarios: Scenario[] = [
         check(body === true, "delete message should return true")
         check((yield* ctx.messages(ctx.state.session.id)).length === 0, "deleted message should not remain")
       }),
-    "status"),
+    ),
   http
     .post("/session/{sessionID}/fork", "session.fork")
     .mutating()
@@ -910,7 +950,13 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({ path: route("/session/{sessionID}/abort", { sessionID: ctx.state.id }), headers: ctx.headers() }))
     .json(200, (body) => {
       check(body === true, "abort should return true")
-    }, "status"),
+    }),
+  http
+    .post("/session/{sessionID}/abort", "session.abort.missing")
+    .at((ctx) => ({ path: route("/session/{sessionID}/abort", { sessionID: "ses_httpapi_missing" }), headers: ctx.headers() }))
+    .json(200, (body) => {
+      check(body === true, "missing session abort should remain a no-op success")
+    }),
   http
     .post("/session/{sessionID}/init", "session.init")
     .preserveDatabase()
@@ -934,7 +980,7 @@ const scenarios: Scenario[] = [
         check(body === true, "init should return true")
         yield* ctx.llmWait(1)
       }),
-    "status"),
+    ),
   http
     .post("/session/{sessionID}/message", "session.prompt")
     .preserveDatabase()
@@ -1126,7 +1172,7 @@ const scenarios: Scenario[] = [
     }))
     .json(200, (body) => {
       check(body === true, "deprecated permission response should return true")
-    }, "status"),
+    }),
   http
     .post("/session/{sessionID}/share", "session.share")
     .mutating()
@@ -1149,6 +1195,10 @@ const scenarios: Scenario[] = [
     .post("/tui/append-prompt", "tui.appendPrompt")
     .at((ctx) => ({ path: "/tui/append-prompt", headers: ctx.headers(), body: { text: "hello" } }))
     .json(200, boolean, "status"),
+  http
+    .post("/tui/select-session", "tui.selectSession.invalid")
+    .at((ctx) => ({ path: "/tui/select-session", headers: ctx.headers(), body: { sessionID: "invalid" } }))
+    .status(400),
   http.post("/tui/open-help", "tui.openHelp").json(200, boolean, "status"),
   http.post("/tui/open-sessions", "tui.openSessions").json(200, boolean, "status"),
   http.post("/tui/open-themes", "tui.openThemes").json(200, boolean, "status"),
