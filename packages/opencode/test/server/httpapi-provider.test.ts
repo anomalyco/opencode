@@ -3,10 +3,11 @@ import { Effect, FileSystem, Layer, Path } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
@@ -89,7 +90,9 @@ function withProviderProject<A, E, R>(self: (dir: string) => Effect.Effect<A, E,
     )
     yield* writeProviderAuthPlugin(dir)
     yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Instance.provide({ directory: dir, fn: () => Instance.dispose() })).pipe(Effect.ignore),
+      Effect.promise(() =>
+        Instance.provide({ directory: dir, fn: () => InstanceStore.disposeInstance(Instance.current) }),
+      ).pipe(Effect.ignore),
     )
 
     return yield* self(dir).pipe(provideInstance(dir))
@@ -98,7 +101,7 @@ function withProviderProject<A, E, R>(self: (dir: string) => Effect.Effect<A, E,
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 

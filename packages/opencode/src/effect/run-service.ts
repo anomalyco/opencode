@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime } from "effect"
+import { Effect, Fiber, Layer, ManagedRuntime } from "effect"
 import * as Context from "effect/Context"
 import { Instance } from "@/project/instance"
 import { LocalContext } from "@/util/local-context"
@@ -24,15 +24,20 @@ export function attachWith<A, E, R>(effect: Effect.Effect<A, E, R>, refs: Refs):
 }
 
 export function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-  try {
-    return attachWith(effect, {
-      instance: Instance.current,
-      workspace: WorkspaceContext.workspaceID,
-    })
-  } catch (err) {
-    if (!(err instanceof LocalContext.NotFound)) throw err
-  }
-  return effect
+  const workspace = WorkspaceContext.workspaceID
+  const instance = (() => {
+    try {
+      return Instance.current
+    } catch (err) {
+      if (!(err instanceof LocalContext.NotFound)) throw err
+    }
+  })()
+  if (instance && workspace !== undefined) return attachWith(effect, { instance, workspace })
+  const fiber = Fiber.getCurrent()
+  return attachWith(effect, {
+    instance: instance ?? (fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined),
+    workspace: workspace ?? (fiber ? Context.getReferenceUnsafe(fiber.context, WorkspaceRef) : undefined),
+  })
 }
 
 export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {

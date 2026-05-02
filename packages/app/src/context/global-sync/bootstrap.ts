@@ -260,9 +260,6 @@ export async function bootstrapDirectory(input: {
   const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
   if (seededProject) input.setStore("project", seededProject)
   if (seededPath) input.setStore("path", seededPath)
-  if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
-    input.setStore("provider", input.global.provider)
-  }
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
     input.setStore("config", reconcile(input.global.config, { merge: false }))
   }

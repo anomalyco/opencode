@@ -17,12 +17,12 @@ export const WorkspaceInfo = Schema.Struct({
   .pipe(withStatics((s) => ({ zod: zod(s) })))
 export type WorkspaceInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceInfo>>
 
-export const WorkspaceAdaptorEntry = Schema.Struct({
+export const WorkspaceAdapterEntry = Schema.Struct({
   type: Schema.String,
   name: Schema.String,
   description: Schema.String,
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
-export type WorkspaceAdaptorEntry = Schema.Schema.Type<typeof WorkspaceAdaptorEntry>
+export type WorkspaceAdapterEntry = Schema.Schema.Type<typeof WorkspaceAdapterEntry>
 
 export type Target =
   | {
@@ -35,7 +35,7 @@ export type Target =
       headers?: HeadersInit
     }
 
-export type WorkspaceAdaptor = {
+export type WorkspaceAdapter = {
   name: string
   description: string
   configure(info: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
