@@ -9,6 +9,19 @@ import { TestInstance, withTmpdirInstance } from "../fixture/fixture"
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
 type InstanceOptions = { git?: boolean; config?: Partial<Config.Info> }
 
+function isInstanceOptions(options: InstanceOptions | number | TestOptions | undefined): options is InstanceOptions {
+  return !!options && typeof options === "object" && ("git" in options || "config" in options)
+}
+
+function instanceArgs(
+  options?: InstanceOptions | number | TestOptions,
+  testOptions?: number | TestOptions,
+): { instanceOptions: InstanceOptions | undefined; testOptions: number | TestOptions | undefined } {
+  if (typeof options === "number") return { instanceOptions: undefined, testOptions: options }
+  if (isInstanceOptions(options)) return { instanceOptions: options, testOptions }
+  return { instanceOptions: undefined, testOptions: options }
+}
+
 const body = <A, E, R>(value: Body<A, E, R>) => Effect.suspend(() => (typeof value === "function" ? value() : value))
 
 const run = <A, E, R, E2>(value: Body<A, E, R | Scope.Scope>, layer: Layer.Layer<R, E2>) =>
@@ -44,23 +57,32 @@ const make = <R, E>(testLayer: Layer.Layer<R, E>, liveLayer: Layer.Layer<R, E>) 
   const instance = <A, E2>(
     name: string,
     value: Body<A, E2, R | TestInstance | Scope.Scope>,
-    instanceOptions?: InstanceOptions,
+    options?: InstanceOptions | number | TestOptions,
     opts?: number | TestOptions,
-  ) => test(name, () => run(body(value).pipe(withTmpdirInstance(instanceOptions)), liveLayer), opts)
+  ) => {
+    const args = instanceArgs(options, opts)
+    return test(name, () => run(body(value).pipe(withTmpdirInstance(args.instanceOptions)), liveLayer), args.testOptions)
+  }
 
   instance.only = <A, E2>(
     name: string,
     value: Body<A, E2, R | TestInstance | Scope.Scope>,
-    instanceOptions?: InstanceOptions,
+    options?: InstanceOptions | number | TestOptions,
     opts?: number | TestOptions,
-  ) => test.only(name, () => run(body(value).pipe(withTmpdirInstance(instanceOptions)), liveLayer), opts)
+  ) => {
+    const args = instanceArgs(options, opts)
+    return test.only(name, () => run(body(value).pipe(withTmpdirInstance(args.instanceOptions)), liveLayer), args.testOptions)
+  }
 
   instance.skip = <A, E2>(
     name: string,
     value: Body<A, E2, R | TestInstance | Scope.Scope>,
-    instanceOptions?: InstanceOptions,
+    options?: InstanceOptions | number | TestOptions,
     opts?: number | TestOptions,
-  ) => test.skip(name, () => run(body(value).pipe(withTmpdirInstance(instanceOptions)), liveLayer), opts)
+  ) => {
+    const args = instanceArgs(options, opts)
+    return test.skip(name, () => run(body(value).pipe(withTmpdirInstance(args.instanceOptions)), liveLayer), args.testOptions)
+  }
 
   return { effect, live, instance }
 }

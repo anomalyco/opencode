@@ -31,6 +31,7 @@ import type { Worktree } from "../src/worktree"
 import type { Project } from "../src/project/project"
 import path from "path"
 
+const preserveExerciseGlobalRoot = !!process.env.OPENCODE_HTTPAPI_EXERCISE_GLOBAL
 const exerciseGlobalRoot = process.env.OPENCODE_HTTPAPI_EXERCISE_GLOBAL ?? path.join(process.env.TMPDIR ?? "/tmp", `opencode-httpapi-global-${process.pid}`)
 process.env.XDG_DATA_HOME = path.join(exerciseGlobalRoot, "data")
 process.env.XDG_CONFIG_HOME = path.join(exerciseGlobalRoot, "config")
@@ -40,6 +41,7 @@ process.env.OPENCODE_DISABLE_SHARE = "true"
 const exerciseConfigDirectory = path.join(exerciseGlobalRoot, "config", "opencode")
 const exerciseDataDirectory = path.join(exerciseGlobalRoot, "data", "opencode")
 
+const preserveExerciseDatabase = !!process.env.OPENCODE_HTTPAPI_EXERCISE_DB
 const exerciseDatabasePath = process.env.OPENCODE_HTTPAPI_EXERCISE_DB ?? path.join(process.env.TMPDIR ?? "/tmp", `opencode-httpapi-exercise-${process.pid}.db`)
 process.env.OPENCODE_DB = exerciseDatabasePath
 Flag.OPENCODE_DB = exerciseDatabasePath
@@ -60,6 +62,7 @@ const color = {
 type Method = (typeof Methods)[number]
 type OpenApiMethod = (typeof OpenApiMethods)[number]
 type Mode = "effect" | "parity" | "coverage"
+type Backend = "effect" | "legacy"
 type Comparison = "none" | "status" | "json"
 type CaptureMode = "full" | "stream"
 type ProjectOptions = { git?: boolean; config?: Partial<Config.Info>; llm?: boolean }
@@ -84,6 +87,10 @@ type CallResult = {
   contentType: string
   body: unknown
   text: string
+}
+
+type BackendApp = {
+  request(input: string | URL | Request, init?: RequestInit): Response | Promise<Response>
 }
 
 /** Effect-native helpers available while setting up and asserting a scenario. */
@@ -1191,6 +1198,7 @@ const scenarios: Scenario[] = [
 ]
 
 const main = Effect.gen(function* () {
+  yield* Effect.addFinalizer(() => cleanupExercisePaths)
   const options = parseOptions(Bun.argv.slice(2))
   const modules = yield* Effect.promise(() => runtime())
   const effectRoutes = routeKeys(OpenApi.fromApi(modules.PublicApi))
@@ -1416,15 +1424,23 @@ function controlledPtyInput(title: string | undefined) {
   }
 }
 
-function call(backend: "effect" | "legacy", scenario: ActiveScenario, ctx: SeededContext<unknown>) {
+function call(backend: Backend, scenario: ActiveScenario, ctx: SeededContext<unknown>) {
   return Effect.promise(async () => capture(await app(await runtime(), backend).request(toRequest(scenario, ctx)), scenario.capture))
 }
 
-function app(modules: Runtime, backend: "effect" | "legacy") {
+const appCache: Partial<Record<Backend, BackendApp>> = {}
+
+function app(modules: Runtime, backend: Backend) {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = backend === "effect"
   Flag.OPENCODE_SERVER_PASSWORD = undefined
   Flag.OPENCODE_SERVER_USERNAME = undefined
-  if (backend === "legacy") return modules.Server.Legacy().app
+  if (appCache[backend]) return appCache[backend]
+  if (backend === "legacy") {
+    const legacy = modules.Server.Legacy().app
+    return (appCache.legacy = {
+      request: (input, init) => legacy.request(input, init),
+    })
+  }
 
   const handler = HttpRouter.toWebHandler(
     modules.ExperimentalHttpApiServer.routes.pipe(
@@ -1432,12 +1448,11 @@ function app(modules: Runtime, backend: "effect" | "legacy") {
     ),
     { disableLogger: true },
   ).handler
-  return {
-    fetch: (request: Request) => handler(request, modules.ExperimentalHttpApiServer.context),
+  return (appCache.effect = {
     request(input: string | URL | Request, init?: RequestInit) {
-      return this.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
+      return handler(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init), modules.ExperimentalHttpApiServer.context)
     },
-  }
+  })
 }
 
 function toRequest(scenario: ActiveScenario, ctx: SeededContext<unknown>) {
@@ -1462,16 +1477,28 @@ async function capture(response: Response, mode: CaptureMode): Promise<CallResul
 async function captureStream(response: Response) {
   if (!response.body) return ""
   const reader = response.body.getReader()
-  const read = reader.read().then((result) => ({ result }))
+  const read = reader.read().then(
+    (result) => ({ result }),
+    (error: unknown) => ({ error }),
+  )
   const winner = await Promise.race([read, Bun.sleep(1_000).then(() => ({ timeout: true }))])
   if ("timeout" in winner) {
     await reader.cancel("timed out waiting for stream chunk").catch(() => undefined)
     throw new Error("timed out waiting for stream chunk")
   }
+  if ("error" in winner) throw winner.error
   await reader.cancel().catch(() => undefined)
   if (winner.result.done) return ""
   return new TextDecoder().decode(winner.result.value)
 }
+
+const cleanupExercisePaths = Effect.promise(async () => {
+  const fs = await import("fs/promises")
+  if (!preserveExerciseDatabase) {
+    await Promise.all([exerciseDatabasePath, `${exerciseDatabasePath}-wal`, `${exerciseDatabasePath}-shm`].map((file) => fs.rm(file, { force: true }).catch(() => undefined)))
+  }
+  if (!preserveExerciseGlobalRoot) await fs.rm(exerciseGlobalRoot, { recursive: true, force: true }).catch(() => undefined)
+})
 
 function compare(scenario: ActiveScenario, effect: CallResult, legacy: CallResult) {
   return Effect.sync(() => {
