@@ -1,4 +1,4 @@
-import { describe, expect, beforeEach, afterAll } from "bun:test"
+import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -9,12 +9,21 @@ import { it } from "../lib/effect"
 import { rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
 
-// test/preload.ts sets OPENCODE_MODELS_PATH to a static fixture and leaves
-// MODELS_FETCH enabled — both flags are captured at flag-module load time,
-// which is too early for env mutation to take effect. Mutate the resolved Flag
-// values directly; they're read inside Layer.effect when each test builds.
-Flag.OPENCODE_DISABLE_MODELS_FETCH = true
-Flag.OPENCODE_MODELS_PATH = undefined
+// test/preload.ts pins OPENCODE_MODELS_PATH to a fixture so other tests can
+// resolve providers without network. These tests need to drive the on-disk
+// cache themselves and silence the eager refresh fork. Save/restore around
+// the suite — never leak the mutation to subsequent test files in the same
+// bun process.
+const ORIGINAL_MODELS_PATH = Flag.OPENCODE_MODELS_PATH
+const ORIGINAL_DISABLE_FETCH = Flag.OPENCODE_DISABLE_MODELS_FETCH
+beforeAll(() => {
+  Flag.OPENCODE_MODELS_PATH = undefined
+  Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+})
+afterAll(() => {
+  Flag.OPENCODE_MODELS_PATH = ORIGINAL_MODELS_PATH
+  Flag.OPENCODE_DISABLE_MODELS_FETCH = ORIGINAL_DISABLE_FETCH
+})
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
 
