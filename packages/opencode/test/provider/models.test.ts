@@ -1,6 +1,6 @@
 import { describe, expect, beforeEach, afterAll } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
@@ -64,15 +64,13 @@ interface MockState {
   calls: Array<{ url: string }>
 }
 
-const makeMockClient = (state: Ref.Ref<MockState>): HttpClient.HttpClient =>
-  HttpClient.makeWith(
-    Effect.fnUntraced(function* (requestEffect) {
-      const request = yield* requestEffect
+const makeMockClient = (state: Ref.Ref<MockState>) =>
+  HttpClient.make((request) =>
+    Effect.gen(function* () {
       yield* Ref.update(state, (s) => ({ ...s, calls: [...s.calls, { url: request.url }] }))
       const s = yield* Ref.get(state)
       return HttpClientResponse.fromWeb(request, new Response(s.body, { status: s.status }))
     }),
-    Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>,
   )
 
 const buildLayer = (state: Ref.Ref<MockState>) =>
@@ -244,10 +242,8 @@ describe("ModelsDev Service", () => {
           return yield* svc.get()
         }),
       )
-      // refresh logged + ignored; the cache map is whatever loadFromDisk yields next.
-      // With the failing fetch the disk file is unchanged → still the original fixture.
       expect(result).toEqual(fixture)
-      // withTransientReadRetry retries 5xx, so calls > 1 is expected.
+      // withTransientReadRetry retries 5xx, so calls may be > 1.
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBeGreaterThanOrEqual(1)
     }),
