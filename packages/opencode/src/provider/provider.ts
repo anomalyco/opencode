@@ -1488,44 +1488,6 @@ const layer: Layer.Layer<
             mode: "replace",
             run: () => discoverOpenAICompatibleModels(providers[providerID]),
           }
-
-            const configProvider = cfg.provider?.[providerID]
-
-            for (const [modelID, model] of Object.entries(provider.models)) {
-              model.api.id = model.api.id ?? model.id ?? modelID
-              if (
-                modelID === "gpt-5-chat-latest" ||
-                (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
-              )
-                delete provider.models[modelID]
-              if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
-              if (model.status === "deprecated") delete provider.models[modelID]
-              if (
-                (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-                (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
-              )
-                delete provider.models[modelID]
-
-              if (!model.variants || Object.keys(model.variants).length === 0) {
-                model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
-              }
-
-              const configVariants = configProvider?.models?.[modelID]?.variants
-              if (configVariants && model.variants) {
-                const merged = mergeDeep(model.variants, configVariants)
-                model.variants = mapValues(
-                  pickBy(merged, (v) => !v.disabled),
-                  (v) => omit(v, ["disabled"]),
-                )
-              }
-            }
-
-            if (Object.keys(provider.models).length === 0) {
-              delete providers[providerID]
-              continue
-            }
-
-            log.info("found", { providerID })
         }
 
         finalizeProviders(providers, cfg, isProviderAllowed)

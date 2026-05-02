@@ -1,7 +1,7 @@
 import { Layer, ManagedRuntime } from "effect"
 
 import { Plugin } from "@/plugin"
-import { Provider } from "@/provider"
+import { Provider } from "@/provider/provider"
 import { LSP } from "@/lsp/lsp"
 import { FileWatcher } from "@/file/watcher"
 import { Format } from "@/format"
