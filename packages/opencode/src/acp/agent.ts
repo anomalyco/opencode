@@ -145,8 +145,9 @@ export class Agent implements ACPAgent {
   private eventAbort = new AbortController()
   private eventStarted = false
   private bashSnapshots = new Map<string, string>()
-  private toolStarts = new Set<string>()
-  private permissionQueues = new Map<string, Promise<void>>()
+    private toolStarts = new Set<string>()
+    private textSnapshots = new Map<string, string>()
+    private permissionQueues = new Map<string, Promise<void>>()
   private permissionOptions: PermissionOption[] = [
     { optionId: "once", kind: "allow_once", name: "Allow once" },
     { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -456,15 +457,21 @@ export class Agent implements ACPAgent {
           }
         }
 
-        // ACP clients already know the prompt they just submitted, so replaying
-        // live user parts duplicates the message. We still replay user history in
-        // loadSession() and forkSession() via processMessage().
-        if (part.type !== "text" && part.type !== "file") return
+          if (part.type === "text" && part.ignored !== true) {
+            const delta = this.textDelta(part.id, part.text)
+            if (delta) await this.sendTextChunk(sessionId, "agent_message_chunk", delta)
+            return
+          }
 
-        return
-      }
+          if (part.type === "reasoning") {
+            const delta = this.textDelta(part.id, part.text)
+            if (delta) await this.sendTextChunk(sessionId, "agent_thought_chunk", delta)
+            return
+          }
+          return
+        }
 
-      case "message.part.delta": {
+        case "message.part.delta": {
         const props = event.properties
         const session = this.sessionManager.tryGet(props.sessionID)
         if (!session) return
@@ -491,43 +498,17 @@ export class Agent implements ACPAgent {
         if (!part) return
 
         if (part.type === "text" && props.field === "text" && part.ignored !== true) {
-          await this.connection
-            .sessionUpdate({
-              sessionId,
-              update: {
-                sessionUpdate: "agent_message_chunk",
-                messageId: props.messageID,
-                content: {
-                  type: "text",
-                  text: props.delta,
-                },
-              },
-            })
-            .catch((error) => {
-              log.error("failed to send text delta to ACP", { error })
-            })
+            this.textSnapshots.set(part.id, (this.textSnapshots.get(part.id) ?? "") + props.delta)
+            await this.sendTextChunk(sessionId, "agent_message_chunk", props.delta)
+            return
+          }
+
+          if (part.type === "reasoning" && props.field === "text") {
+            this.textSnapshots.set(part.id, (this.textSnapshots.get(part.id) ?? "") + props.delta)
+            await this.sendTextChunk(sessionId, "agent_thought_chunk", props.delta)
+          }
           return
         }
-
-        if (part.type === "reasoning" && props.field === "text") {
-          await this.connection
-            .sessionUpdate({
-              sessionId,
-              update: {
-                sessionUpdate: "agent_thought_chunk",
-                messageId: props.messageID,
-                content: {
-                  type: "text",
-                  text: props.delta,
-                },
-              },
-            })
-            .catch((error) => {
-              log.error("failed to send reasoning delta to ACP", { error })
-            })
-        }
-        return
-      }
     }
   }
 
@@ -1111,6 +1092,30 @@ export class Agent implements ACPAgent {
     const output = part.state.metadata["output"]
     if (typeof output !== "string") return
     return output
+  }
+
+  private textDelta(id: string, next: string) {
+    const prev = this.textSnapshots.get(id) ?? ""
+    this.textSnapshots.set(id, next)
+    if (!next) return ""
+    if (next.startsWith(prev)) return next.slice(prev.length)
+    return next
+  }
+
+  private async sendTextChunk(
+    sessionId: string,
+    update: "agent_message_chunk" | "agent_thought_chunk",
+    text: string,
+  ) {
+    await this.connection
+      .sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: update,
+          content: { type: "text", text },
+        },
+      })
+      .catch((error) => log.error(`failed to send ${update} to ACP`, { error }))
   }
 
   private async toolStart(sessionId: string, part: ToolPart) {

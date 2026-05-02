@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { ACP } from "../../src/acp/agent"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import type { Event, EventMessagePartUpdated, ToolStatePending, ToolStateRunning } from "@opencode-ai/sdk/v2"
-import { Instance } from "../../src/project/instance"
+import { Instance } from "@/project/instance.ts"
 import { tmpdir } from "../fixture/fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
@@ -138,7 +138,6 @@ function createFakeAgent() {
       if (update?.sessionUpdate === "agent_message_chunk") {
         const content = update.content
         if (content?.type !== "text") return
-        if (typeof content.text !== "string") return
         chunks.set(params.sessionId, (chunks.get(params.sessionId) ?? "") + content.text)
       }
     },
@@ -382,6 +381,276 @@ describe("acp.agent event subscription", () => {
         for (const part of tokenB) expect(a).not.toContain(part)
         for (const part of tokenA) expect(b).not.toContain(part)
 
+        stop()
+      },
+    })
+  })
+
+  test("emits text chunks from message.part.updated when delta events are absent", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, chunks, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "part_1",
+                sessionID: sessionId,
+                messageID: "msg_1",
+                type: "text",
+                text: "hello",
+              },
+            },
+          },
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "part_1",
+                sessionID: sessionId,
+                messageID: "msg_1",
+                type: "text",
+                text: "hello world",
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(chunks.get(sessionId)).toBe("hello world")
+        stop()
+      },
+    })
+  })
+
+  test("emits reasoning chunks from message.part.updated when delta events are absent", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const thoughtChunks = new Map<string, string>()
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+
+        const originalSessionUpdate = sessionUpdates.push.bind(sessionUpdates)
+        const connection = (agent as any).connection
+        connection.sessionUpdate = async (params: SessionUpdateParams) => {
+          if (params.update?.sessionUpdate === "agent_thought_chunk") {
+            const content = params.update.content
+            if (content?.type === "text") {
+              thoughtChunks.set(params.sessionId, (thoughtChunks.get(params.sessionId) ?? "") + content.text)
+            }
+          }
+          return originalSessionUpdate(params)
+        }
+
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "reasoning_1",
+                sessionID: sessionId,
+                messageID: "msg_1",
+                type: "reasoning",
+                text: "thinking...",
+                time: { start: Date.now() },
+              },
+            },
+          },
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "reasoning_1",
+                sessionID: sessionId,
+                messageID: "msg_1",
+                type: "reasoning",
+                text: "thinking... deeply",
+                time: { start: Date.now() },
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(thoughtChunks.get(sessionId)).toBe("thinking... deeply")
+        stop()
+      },
+    })
+  })
+
+  test("does not duplicate chunks when message.part.delta is followed by message.part.updated", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, chunks, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.delta",
+            properties: {
+              sessionID: sessionId,
+              messageID: "msg_1",
+              partID: "msg_1_part",
+              field: "text",
+              delta: "hello",
+            },
+          },
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "msg_1_part",
+                sessionID: sessionId,
+                messageID: "msg_1",
+                type: "text",
+                text: "hello",
+              },
+            },
+          },
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "msg_1_part",
+                sessionID: sessionId,
+                messageID: "msg_1",
+                type: "text",
+                text: "hello world",
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(chunks.get(sessionId)).toBe("hello world")
+        stop()
+      },
+    })
+  })
+
+  test("does not duplicate reasoning chunks when delta is followed by updated", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const thoughtChunks = new Map<string, string>()
+        const { agent, controller, stop, sdk } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+
+        sdk.session.message = async (params?: any) => ({
+          data: {
+            info: { role: "assistant" },
+            parts: [
+              {
+                id: params?.messageID ? `${params.messageID}_part` : "part_1",
+                type: "reasoning",
+                text: "",
+                time: { start: Date.now() },
+              },
+            ],
+          },
+        })
+
+        const connection = (agent as any).connection
+        connection.sessionUpdate = async (params: SessionUpdateParams) => {
+          if (params.update?.sessionUpdate === "agent_thought_chunk") {
+            const content = params.update.content
+            if (content?.type === "text") {
+              thoughtChunks.set(params.sessionId, (thoughtChunks.get(params.sessionId) ?? "") + content.text)
+            }
+          }
+        }
+
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.delta",
+            properties: {
+              sessionID: sessionId,
+              messageID: "msg_1",
+              partID: "msg_1_part",
+              field: "text",
+              delta: "thinking",
+            },
+          },
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "msg_1_part",
+                sessionID: sessionId,
+                messageID: "msg_1",
+                type: "reasoning",
+                text: "thinking",
+                time: { start: Date.now() },
+              },
+            },
+          },
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                id: "msg_1_part",
+                sessionID: sessionId,
+                messageID: "msg_1",
+                type: "reasoning",
+                text: "thinking deeply",
+                time: { start: Date.now() },
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(thoughtChunks.get(sessionId)).toBe("thinking deeply")
         stop()
       },
     })
