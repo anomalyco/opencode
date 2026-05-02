@@ -3,12 +3,12 @@ import { Effect, Schema } from "effect"
 import { AppRuntime, type AppServices } from "@/effect/app-runtime"
 import { InstanceStore } from "@/project/instance-store"
 import { cmd } from "./cmd/cmd"
-import { UI } from "./ui"
 
 /**
- * User-visible command failure. Use `fail("...")` from a handler to surface a
- * non-zero exit with a printed message. Anything else escapes as a defect and
- * the runtime prints the cause.
+ * User-visible command failure. Throw via `fail("...")` from an effectCmd handler
+ * to surface a printed message + non-zero exit. Recognised by the global error
+ * formatter in `src/cli/error.ts` (FormatError), so the existing top-level
+ * catch + cleanup in `src/index.ts` runs normally.
  */
 export class CliError extends Schema.TaggedErrorClass<CliError>()("CliError", {
   message: Schema.String,
@@ -18,14 +18,16 @@ export class CliError extends Schema.TaggedErrorClass<CliError>()("CliError", {
 export const fail = (message: string, exitCode = 1) => Effect.fail(new CliError({ message, exitCode }))
 
 /**
- * Effect-native CLI command builder. Wraps yargs `cmd()` with:
- * - `InstanceStore.provide` so `InstanceRef` is available inside the handler
- * - `AppRuntime.runPromise` so any AppServices can be yielded directly
- * - `CliError` interception so domain failures translate to a clean exit
+ * Effect-native CLI command builder. Wraps yargs `cmd()` so the handler body is
+ * an `Effect` with `InstanceRef` provided and any `AppServices` yieldable.
  *
- * The handler is typically an `Effect.fn("Cli.<name>")(function*(args){...})` value,
- * which gives each CLI run a named tracing span automatically. Eventually `cmd()` can
- * swap to effect/cli's `Command.make(...)` without touching the handler bodies.
+ * Errors propagate to the existing top-level handler in `src/index.ts`; use
+ * `fail("...")` for user-visible domain failures (clean exit, formatted message).
+ *
+ * Handlers are typically `Effect.fn("Cli.<name>")(function*(args) { ... })`,
+ * which adds a named tracing span per CLI invocation. Once all commands use
+ * `effectCmd`, swapping the underlying `cmd()` factory for effect/cli's
+ * `Command.make(...)` won't touch any handler bodies.
  */
 export const effectCmd = <Args, A>(opts: {
   command: string | readonly string[]
@@ -35,20 +37,16 @@ export const effectCmd = <Args, A>(opts: {
   directory?: (args: Args) => string
   handler: (args: Args) => Effect.Effect<A, CliError, AppServices | InstanceStore.Service>
 }) =>
-  cmd<unknown, Args>({
+  cmd<{}, Args>({
     command: opts.command,
     describe: opts.describe,
     builder: opts.builder as never,
-    async handler(args) {
-      const directory = opts.directory?.(args as Args) ?? process.cwd()
-      const program = InstanceStore.Service.use((s) => s.provide({ directory }, opts.handler(args as Args))).pipe(
-        Effect.catchTag("CliError", (e) =>
-          Effect.sync(() => {
-            UI.error(e.message)
-            process.exit(e.exitCode ?? 1)
-          }),
-        ),
+    async handler(rawArgs) {
+      // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
+      const args = rawArgs as unknown as Args
+      const directory = opts.directory?.(args) ?? process.cwd()
+      await AppRuntime.runPromise(
+        InstanceStore.Service.use((s) => s.provide({ directory }, opts.handler(args))),
       )
-      await AppRuntime.runPromise(program)
     },
   })
