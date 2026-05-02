@@ -135,6 +135,7 @@ export function Prompt(props: PromptProps) {
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const [autoaccept, setAutoaccept] = kv.signal<"none" | "edit">("permission_auto_accept", "edit")
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -1341,7 +1342,6 @@ export function Prompt(props: PromptProps) {
               </box>
               <Show when={hasRightContent() || autoaccept() === "edit"}>
                 <box flexDirection="row" gap={1} alignItems="center">
-                  {props.right}
                   <Show when={autoaccept() === "edit"}>
                     <text>
                       <span style={{ fg: theme.warning }}>autoedit</span>

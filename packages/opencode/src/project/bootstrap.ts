@@ -46,6 +46,7 @@ export const layer = Layer.effect(
     const fileWatcher = yield* FileWatcher.Service
     const format = yield* Format.Service
     const lsp = yield* LSP.Service
+    const plugin = yield* Plugin.Service
     const shareNext = yield* ShareNext.Service
     const snapshot = yield* Snapshot.Service
     const vcs = yield* Vcs.Service
@@ -57,6 +58,11 @@ export const layer = Layer.effect(
       yield* config.get()
       yield* Effect.all(
         [lsp, shareNext, format, file, fileWatcher, vcs, snapshot].map((s) => Effect.forkDetach(s.init())),
+      yield* Effect.all(
+        [
+          config.get(),
+          ...[plugin, lsp, shareNext, format, file, fileWatcher, vcs, snapshot].map((s) => s.init()),
+        ].map((e) => Effect.forkDetach(e)),
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
 
       const projectID = ctx.project.id
@@ -75,6 +81,7 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide([
     Bus.layer,
     configWithPluginPriority,
+    Config.defaultLayer,
     File.defaultLayer,
     FileWatcher.defaultLayer,
     Format.defaultLayer,
