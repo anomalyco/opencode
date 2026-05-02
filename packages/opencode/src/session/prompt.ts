@@ -1727,9 +1727,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
 
       const hasFollowupText = input.arguments.trim().length > 0
+      const followupSuffix = /^\s/.test(input.arguments) ? input.arguments : ` ${input.arguments}`
       const followupText = !hasFollowupText
         ? undefined
-        : (input.invocation ?? `/${input.command}${input.arguments ? ` ${input.arguments}` : ""}`)
+        : `/${input.command}${followupSuffix}`
       const followupParts = [
         ...(followupText ? ([{ type: "text", text: followupText }] as const) : []),
         ...(input.parts ?? []),
@@ -1950,7 +1951,6 @@ export const CommandInput = Schema.Struct({
   sessionID: SessionID,
   agent: Schema.optional(Schema.String),
   model: Schema.optional(Schema.String),
-  invocation: Schema.optional(Schema.String),
   arguments: Schema.String,
   command: Schema.String,
   variant: Schema.optional(Schema.String),

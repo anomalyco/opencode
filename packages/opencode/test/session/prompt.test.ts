@@ -1367,7 +1367,6 @@ it.live(
             sessionID: chat.id,
             command: "test-skill",
             arguments: "",
-            invocation: "/test-skill",
           })
 
           expect(result.info.role).toBe("assistant")
@@ -1405,15 +1404,15 @@ it.live(
             title: "Pinned",
             permission: [{ permission: "*", pattern: "*", action: "allow" }],
           })
-          const invocation = "/test-skill   inspect cache\nkeep slash token"
+          const argumentsText = "   inspect cache\nkeep slash token"
+          const invocation = `/test-skill${argumentsText}`
 
           yield* llm.text("done")
 
           const result = yield* prompt.command({
             sessionID: chat.id,
             command: "test-skill",
-            arguments: "inspect cache\nkeep slash token",
-            invocation,
+            arguments: argumentsText,
           })
 
           expect(result.info.role).toBe("assistant")
@@ -1462,7 +1461,6 @@ it.live(
             sessionID: chat.id,
             command: "test-skill",
             arguments: "",
-            invocation: "/test-skill",
             parts: [
               {
                 type: "file",
@@ -1511,7 +1509,6 @@ it.live(
               sessionID: chat.id,
               command: "test-skill",
               arguments: "inspect cache",
-              invocation: "/test-skill inspect cache",
             })
             .pipe(Effect.exit)
 

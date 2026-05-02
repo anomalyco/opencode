@@ -71,8 +71,8 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     return true
   }
 
-  const [head, ...tail] = text.split(" ")
-  const cmd = head?.startsWith("/") ? head.slice(1) : undefined
+  const commandMatch = text.match(/^\/([^\s]+)([\s\S]*)$/)
+  const cmd = commandMatch?.[1]
   if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
     setBusy()
     try {
@@ -84,8 +84,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       await input.client.session.command({
         sessionID: input.draft.sessionID,
         command: cmd,
-        invocation: text,
-        arguments: tail.join(" "),
+        arguments: commandMatch?.[2] ?? "",
         agent: input.draft.agent,
         model: `${input.draft.model.providerID}/${input.draft.model.modelID}`,
         variant: input.draft.variant,
