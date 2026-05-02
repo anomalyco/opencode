@@ -1,44 +1,13 @@
 import { Effect } from "effect"
-import { InstanceRef } from "@/effect/instance-ref"
-import * as Project from "./project"
 import { context, type InstanceContext } from "./instance-context"
 import { InstanceStore } from "./instance-store"
 
 export type { InstanceContext } from "./instance-context"
 export type { LoadInput } from "./instance-store"
 
-type LegacyLoadInput = {
-  directory: string
-  init?: Effect.Effect<void>
-  project?: Project.Info
-  worktree?: string
-}
-
-// Bind ALS around init so legacy code reachable through it (Instance.directory reads, etc.)
-// stays bound. The Effect-typed init also gets InstanceRef provided by the store.
-const liftLegacyInput = (input: LegacyLoadInput): InstanceStore.LoadInput => {
-  const { init, ...rest } = input
-  if (!init) return rest
-  return {
-    ...rest,
-    init: Effect.gen(function* () {
-      const ctx = yield* InstanceRef
-      if (!ctx) return yield* init
-      yield* Effect.callback<void>((resume) => {
-        context.provide(ctx, () => {
-          Effect.runPromise(init).then(
-            () => resume(Effect.void),
-            (err) => resume(Effect.die(err)),
-          )
-        })
-      })
-    }),
-  }
-}
-
 export const Instance = {
-  load(input: LegacyLoadInput): Promise<InstanceContext> {
-    return InstanceStore.runtime.runPromise((store) => store.load(liftLegacyInput(input)))
+  load(input: InstanceStore.LoadInput): Promise<InstanceContext> {
+    return InstanceStore.runtime.runPromise((store) => store.load(input))
   },
   async provide<R>(input: { directory: string; init?: Effect.Effect<void>; fn: () => R }): Promise<R> {
     return context.provide(
@@ -76,8 +45,8 @@ export const Instance = {
   restore<R>(ctx: InstanceContext, fn: () => R): R {
     return context.provide(ctx, fn)
   },
-  async reload(input: LegacyLoadInput) {
-    return InstanceStore.runtime.runPromise((store) => store.reload(liftLegacyInput(input)))
+  async reload(input: InstanceStore.LoadInput) {
+    return InstanceStore.runtime.runPromise((store) => store.reload(input))
   },
   async dispose() {
     return InstanceStore.runtime.runPromise((store) => store.dispose(Instance.current))
