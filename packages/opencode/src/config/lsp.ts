@@ -14,6 +14,7 @@ export const Entry = Schema.Union([
   Schema.Struct({
     command: Schema.mutable(Schema.Array(Schema.String)),
     extensions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+    languageId: Schema.optional(Schema.String),
     disabled: Schema.optional(Schema.Boolean),
     env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
     initialization: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),

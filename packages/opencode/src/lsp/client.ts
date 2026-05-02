@@ -138,7 +138,13 @@ function shouldSeedDiagnosticsOnFirstPush(serverID: string) {
   return serverID === "typescript"
 }
 
-export async function create(input: { serverID: string; server: LSPServer.Handle; root: string; directory: string }) {
+export async function create(input: {
+  serverID: string
+  server: LSPServer.Handle
+  root: string
+  directory: string
+  languageId?: string
+}) {
   const logger = log.clone().tag("serverID", input.serverID)
   logger.info("starting client")
 
@@ -588,7 +594,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
         )
         const text = await Filesystem.readText(request.path)
         const extension = path.extname(request.path)
-        const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+        const languageId = input.languageId ?? LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
         const document = files[request.path]
         if (document !== undefined) {

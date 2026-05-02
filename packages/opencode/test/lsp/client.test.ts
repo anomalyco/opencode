@@ -144,6 +144,57 @@ describe("LSPClient interop", () => {
     await client.shutdown()
   })
 
+  test("didOpen uses LANGUAGE_EXTENSIONS when no languageId override", async () => {
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "test.ts")
+    await Bun.write(file, "const x = 1\n")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+        })
+
+        await client.notify.open({ path: file })
+        const didOpen = await client.connection.sendRequest<any>("test/get-last-did-open", {})
+        expect(didOpen.textDocument.languageId).toBe("typescript")
+
+        await client.shutdown()
+      },
+    })
+  })
+
+  test("didOpen uses languageId override from config", async () => {
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "test.qml")
+    await Bun.write(file, "import QtQuick\n")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+          languageId: "qml",
+        })
+
+        await client.notify.open({ path: file })
+        const didOpen = await client.connection.sendRequest<any>("test/get-last-did-open", {})
+        expect(didOpen.textDocument.languageId).toBe("qml")
+
+        await client.shutdown()
+      },
+    })
+  })
+
   test("sends ranged didChange for incremental sync servers", async () => {
     const handle = spawnFakeServer() as any
     await using tmp = await tmpdir()

@@ -184,6 +184,7 @@ export const layer = Layer.effect(
                 id: name,
                 root: existing?.root ?? (async (_file, ctx) => ctx.directory),
                 extensions: item.extensions ?? existing?.extensions ?? [],
+                languageId: item.languageId ?? existing?.languageId,
                 spawn: async (root) => ({
                   process: lspspawn(item.command[0], item.command.slice(1), {
                     cwd: root,
@@ -248,6 +249,7 @@ export const layer = Layer.effect(
             server: handle,
             root,
             directory: ctx.directory,
+            languageId: server.languageId,
           }).catch(async (err) => {
             s.broken.add(key)
             await Process.stop(handle.process)

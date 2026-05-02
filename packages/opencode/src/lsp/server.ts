@@ -58,6 +58,7 @@ const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): Roo
 export interface Info {
   id: string
   extensions: string[]
+  languageId?: string
   global?: boolean
   root: RootFunction
   spawn(root: string, ctx: InstanceContext): Promise<Handle | undefined>

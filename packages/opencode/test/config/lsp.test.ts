@@ -51,6 +51,14 @@ describe("ConfigLSP.Info refinement", () => {
       expect(decodeEffect(input)).toEqual(input)
       expect(ConfigLSP.Info.zod.parse(input)).toEqual(input)
     })
+
+    test("custom server with languageId passes", () => {
+      const input = {
+        cfml: { command: ["node", "/path/to/bridge.js"], extensions: [".cfm", ".cfc"], languageId: "coldfusion" },
+      }
+      expect(decodeEffect(input)).toEqual(input)
+      expect(ConfigLSP.Info.zod.parse(input)).toEqual(input)
+    })
   })
 
   describe("rejected inputs", () => {

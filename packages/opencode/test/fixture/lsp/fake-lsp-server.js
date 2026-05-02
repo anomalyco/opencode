@@ -3,6 +3,7 @@
 let nextId = 1
 let readBuffer = Buffer.alloc(0)
 let lastChange = null
+let lastDidOpen = null
 let initializeParams = null
 let diagnosticRequestCount = 0
 let registeredCapability = false
@@ -139,6 +140,7 @@ function handle(raw) {
   }
 
   if (data.method === "textDocument/didOpen") {
+    lastDidOpen = data.params
     maybeRegister("didOpen")
     return
   }
@@ -203,6 +205,11 @@ function handle(raw) {
 
   if (data.method === "test/get-last-change") {
     sendResponse(data.id, lastChange)
+    return
+  }
+
+  if (data.method === "test/get-last-did-open") {
+    sendResponse(data.id, lastDidOpen)
     return
   }
 
