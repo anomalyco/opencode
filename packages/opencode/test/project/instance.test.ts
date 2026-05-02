@@ -1,6 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Effect, Fiber, Layer } from "effect"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { Instance } from "../../src/project/instance"
 import { InstanceStore } from "../../src/project/instance-store"
@@ -26,7 +27,7 @@ describe("InstanceStore", () => {
     }),
   )
 
-  it.live("runs load init inside the loaded legacy instance context", () =>
+  it.live("runs load init with InstanceRef provided", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const store = yield* InstanceStore.Service
@@ -34,9 +35,9 @@ describe("InstanceStore", () => {
 
       yield* store.load({
         directory: dir,
-        init: async () => {
-          initializedDirectory = Instance.directory
-        },
+        init: Effect.gen(function* () {
+          initializedDirectory = (yield* InstanceRef)?.directory
+        }),
       })
 
       expect(initializedDirectory).toBe(dir)
@@ -52,15 +53,15 @@ describe("InstanceStore", () => {
 
       const first = yield* store.load({
         directory: dir,
-        init: async () => {
+        init: Effect.sync(() => {
           initialized++
-        },
+        }),
       })
       const second = yield* store.load({
         directory: dir,
-        init: async () => {
+        init: Effect.sync(() => {
           initialized++
-        },
+        }),
       })
 
       expect(second).toBe(first)
@@ -79,11 +80,11 @@ describe("InstanceStore", () => {
       const first = yield* store
         .load({
           directory: dir,
-          init: async () => {
+          init: Effect.promise(async () => {
             initialized++
             started.resolve()
             await release.promise
-          },
+          }),
         })
         .pipe(Effect.forkScoped)
 
@@ -92,9 +93,9 @@ describe("InstanceStore", () => {
       const second = yield* store
         .load({
           directory: dir,
-          init: async () => {
+          init: Effect.sync(() => {
             initialized++
-          },
+          }),
         })
         .pipe(Effect.forkScoped)
 
@@ -116,10 +117,10 @@ describe("InstanceStore", () => {
       const failed = yield* store
         .load({
           directory: dir,
-          init: async () => {
+          init: Effect.sync(() => {
             attempts++
             throw new Error("init failed")
-          },
+          }),
         })
         .pipe(
           Effect.as(false),
@@ -130,9 +131,9 @@ describe("InstanceStore", () => {
 
       const ctx = yield* store.load({
         directory: dir,
-        init: async () => {
+        init: Effect.sync(() => {
           attempts++
-        },
+        }),
       })
 
       expect(ctx.directory).toBe(dir)
@@ -170,10 +171,10 @@ describe("InstanceStore", () => {
       const reload = yield* store
         .reload({
           directory: dir,
-          init: async () => {
+          init: Effect.promise(async () => {
             reloading.resolve()
             await releaseReload.promise
-          },
+          }),
         })
         .pipe(Effect.forkScoped)
 
