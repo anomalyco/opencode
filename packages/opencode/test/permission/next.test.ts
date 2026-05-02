@@ -7,7 +7,13 @@ import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
-import { disposeAllInstances, provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import {
+  disposeAllInstances,
+  provideInstance,
+  provideTmpdirInstance,
+  reloadTestInstance,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
 
@@ -1024,7 +1030,7 @@ it.live("pending permission rejects on instance reload", () =>
     }).pipe(run, Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
-    yield* Effect.promise(() => InstanceRuntime.reloadInstance({ directory: dir }))
+    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)
@@ -1118,7 +1124,7 @@ it.live("ask - abort should clear pending request", () =>
 
     const pending = yield* waitForPending(1).pipe(run)
     expect(pending).toHaveLength(1)
-    yield* Effect.promise(() => InstanceRuntime.reloadInstance({ directory: dir }))
+    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)

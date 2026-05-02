@@ -1,11 +1,46 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Effect } from "effect"
-import { tmpdir } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
+import { pathToFileURL } from "url"
+import { Effect, Layer } from "effect"
+import { provideTestInstance, tmpdir } from "../fixture/fixture"
 import { ProviderAuth } from "@/provider/auth"
 import { ProviderID } from "../../src/provider/schema"
+import { Plugin } from "@/plugin"
+import { Config } from "@/config/config"
+import { Auth } from "@/auth"
+import { Bus } from "@/bus"
+
+function layer(directory: string, plugins: string[]) {
+  return ProviderAuth.layer.pipe(
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(
+      Plugin.layer.pipe(
+        Layer.provide(Bus.layer),
+        Layer.provide(
+          Layer.mock(Config.Service)({
+            get: () =>
+              Effect.succeed({
+                plugin: plugins,
+                plugin_origins: plugins.map((plugin) => ({
+                  spec: plugin,
+                  source: path.join(directory, "opencode.json"),
+                  scope: "local" as const,
+                })),
+              }),
+            getGlobal: () => Effect.succeed({}),
+            getConsoleState: () => Effect.die("not implemented"),
+            update: () => Effect.void,
+            updateGlobal: () => Effect.die("not implemented"),
+            invalidate: () => Effect.void,
+            directories: () => Effect.succeed([directory]),
+            waitForDependencies: () => Effect.void,
+          }),
+        ),
+      ),
+    ),
+  )
+}
 
 describe("plugin.auth-override", () => {
   test("user plugin overrides built-in github-copilot auth", async () => {
@@ -37,23 +72,25 @@ describe("plugin.auth-override", () => {
 
     await using plain = await tmpdir()
 
-    const methods = await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        return Effect.runPromise(
-          ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(ProviderAuth.defaultLayer)),
-        )
-      },
-    })
-
-    const plainMethods = await Instance.provide({
-      directory: plain.path,
-      fn: async () => {
-        return Effect.runPromise(
-          ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(ProviderAuth.defaultLayer)),
-        )
-      },
-    })
+    const plugin = pathToFileURL(path.join(tmp.path, ".opencode", "plugin", "custom-copilot-auth.ts")).href
+    const [methods, plainMethods] = await Promise.all([
+      provideTestInstance({
+        directory: tmp.path,
+        fn: async () => {
+          return Effect.runPromise(
+            ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(layer(tmp.path, [plugin]))),
+          )
+        },
+      }),
+      provideTestInstance({
+        directory: plain.path,
+        fn: async () => {
+          return Effect.runPromise(
+            ProviderAuth.Service.use((svc) => svc.methods()).pipe(Effect.provide(layer(plain.path, []))),
+          )
+        },
+      }),
+    ])
 
     const copilot = methods[ProviderID.make("github-copilot")]
     expect(copilot).toBeDefined()

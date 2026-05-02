@@ -1,9 +1,9 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 import { Filesystem } from "@/util/filesystem"
 
 const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
@@ -12,7 +12,8 @@ process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
 const { readPackageThemes } = await import("../../src/plugin/shared")
-const { Instance } = await import("../../src/project/instance")
+const { Config } = await import("../../src/config/config")
+const { Bus } = await import("../../src/bus")
 const { Npm } = await import("@opencode-ai/core/npm")
 
 afterAll(() => {
@@ -28,14 +29,37 @@ afterEach(async () => {
 })
 
 async function load(dir: string) {
-  return Instance.provide({
-    directory: dir,
-    fn: async () =>
-      Effect.gen(function* () {
-        const plugin = yield* Plugin.Service
-        yield* plugin.list()
-      }).pipe(Effect.provide(Plugin.defaultLayer), Effect.runPromise),
-  })
+  const source = path.join(dir, "opencode.json")
+  const config = (await Bun.file(source).json()) as { plugin?: Array<string | [string, Record<string, unknown>]> }
+  const plugins = config.plugin ?? []
+  return Effect.gen(function* () {
+    const plugin = yield* Plugin.Service
+    yield* plugin.list()
+  }).pipe(
+    Effect.provide(
+      Plugin.layer.pipe(
+        Layer.provide(Bus.layer),
+        Layer.provide(
+          Layer.mock(Config.Service)({
+            get: () =>
+              Effect.succeed({
+                plugin: plugins,
+                plugin_origins: plugins.map((plugin) => ({ spec: plugin, source, scope: "local" as const })),
+              }),
+            getGlobal: () => Effect.succeed({}),
+            getConsoleState: () => Effect.die("not implemented"),
+            update: () => Effect.void,
+            updateGlobal: () => Effect.die("not implemented"),
+            invalidate: () => Effect.void,
+            directories: () => Effect.succeed([dir]),
+            waitForDependencies: () => Effect.void,
+          }),
+        ),
+      ),
+    ),
+    provideInstance(dir),
+    Effect.runPromise,
+  )
 }
 
 describe("plugin.loader.shared", () => {
