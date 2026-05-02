@@ -331,6 +331,33 @@ test("revert non-existent file", async () => {
   })
 })
 
+test("revert ignores worktree root targets", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await run(tmp.path, (snapshot) => snapshot.track())
+      expect(before).toBeTruthy()
+
+      const marker = `${tmp.path}/b.txt`
+      const initial = await fs.stat(marker)
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+
+      await run(tmp.path, (snapshot) =>
+        snapshot.revert([
+          {
+            hash: before!,
+            files: [tmp.path],
+          },
+        ]),
+      )
+
+      const next = await fs.stat(marker)
+      expect(next.mtimeMs).toBe(initial.mtimeMs)
+    },
+  })
+})
+
 test("unicode filenames", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({

@@ -379,21 +379,34 @@ export const layer: Layer.Layer<
             Effect.gen(function* () {
               const ops: { hash: string; file: string; rel: string }[] = []
               const seen = new Set<string>()
+              const worktree = path.resolve(state.worktree)
+
+              const normalize = (file: string) => {
+                const resolved = path.resolve(file)
+                const rel = path.relative(worktree, resolved).replaceAll("\\", "/")
+                const outside = rel === ".." || rel.startsWith("../")
+                const root = !rel || rel === "."
+                const absoluteRel = path.isAbsolute(rel) || /^[A-Za-z]:[\\/]/.test(rel)
+                if (outside || root || absoluteRel) return
+                return { file: resolved, rel }
+              }
+
               for (const item of patches) {
                 for (const file of item.files) {
-                  if (seen.has(file)) continue
-                  seen.add(file)
-                  ops.push({
-                    hash: item.hash,
-                    file,
-                    rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
-                  })
+                  const normalized = normalize(file)
+                  if (!normalized) {
+                    log.warn("skipping unsafe revert target", { file, hash: item.hash })
+                    continue
+                  }
+                  if (seen.has(normalized.rel)) continue
+                  seen.add(normalized.rel)
+                  ops.push({ hash: item.hash, file: normalized.file, rel: normalized.rel })
                 }
               }
 
               const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
                 log.info("reverting", { file: op.file, hash: op.hash })
-                const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
+                const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.rel])], {
                   cwd: state.worktree,
                 })
                 if (result.code === 0) return
@@ -459,7 +472,7 @@ export const layer: Layer.Layer<
                 if (list.length) {
                   log.info("reverting", { hash: first.hash, files: list.length })
                   const result = yield* git(
-                    [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
+                    [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.rel)])],
                     {
                       cwd: state.worktree,
                     },
