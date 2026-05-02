@@ -620,7 +620,7 @@ describe("session.message-v2.toModelMessage", () => {
               status: "completed",
               input: { cmd: "ls" },
               output: "abcdefghij",
-              title: "Bash",
+              title: "Shell",
               metadata: {},
               time: { start: 0, end: 1 },
             },
@@ -740,9 +740,9 @@ describe("session.message-v2.toModelMessage", () => {
       "12179",
       "4575",
       "",
-      "<bash_metadata>",
+      "<shell_metadata>",
       "User aborted the command",
-      "</bash_metadata>",
+      "</shell_metadata>",
     ].join("\n")
 
     const input: MessageV2.WithParts[] = [
