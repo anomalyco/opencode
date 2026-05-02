@@ -119,7 +119,23 @@ type RequestBody = {
 function parameterKey(param: unknown): string | undefined {
   if (!param || typeof param !== "object" || !("in" in param) || !("name" in param)) return undefined
   if (typeof param.in !== "string" || typeof param.name !== "string") return undefined
-  return `${param.in}:${param.name}:${"required" in param && param.required === true}`
+  return `${param.in}:${param.name}:${"required" in param && param.required === true}:${stableSchema(
+    "schema" in param ? param.schema : undefined,
+  )}`
+}
+
+function stableSchema(input: unknown): string {
+  return JSON.stringify(sortSchema(input))
+}
+
+function sortSchema(input: unknown): unknown {
+  if (Array.isArray(input)) return input.map(sortSchema)
+  if (!input || typeof input !== "object") return input
+  return Object.fromEntries(
+    Object.entries(input)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => [key, sortSchema(value)]),
+  )
 }
 
 function parameterSchema(input: {
