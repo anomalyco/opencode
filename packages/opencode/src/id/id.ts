@@ -2,6 +2,7 @@ import z from "zod"
 import { randomBytes } from "crypto"
 
 const prefixes = {
+  job: "job",
   event: "evt",
   session: "ses",
   message: "msg",

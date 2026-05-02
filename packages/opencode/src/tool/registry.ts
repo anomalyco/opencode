@@ -7,6 +7,7 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { TaskStatusTool } from "./task_status"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
@@ -50,6 +51,8 @@ import { Agent } from "../agent/agent"
 import { Git } from "@/git"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
+import { SessionStatus } from "@/session/status"
+import { BackgroundJob } from "@/background/job"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -82,12 +85,14 @@ export const layer: Layer.Layer<
   | Agent.Service
   | Skill.Service
   | Session.Service
+  | SessionStatus.Service
   | Provider.Service
   | Git.Service
   | LSP.Service
   | Instruction.Service
   | AppFileSystem.Service
   | Bus.Service
+  | BackgroundJob.Service
   | HttpClient.HttpClient
   | ChildProcessSpawner
   | Ripgrep.Service
@@ -121,6 +126,7 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const taskstatus = yield* TaskStatusTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -201,6 +207,7 @@ export const layer: Layer.Layer<
           edit: Tool.init(edit),
           write: Tool.init(writetool),
           task: Tool.init(task),
+          taskstatus: Tool.init(taskstatus),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
@@ -226,6 +233,7 @@ export const layer: Layer.Layer<
             tool.edit,
             tool.write,
             tool.task,
+            tool.taskstatus,
             tool.fetch,
             tool.todo,
             tool.search,
@@ -345,12 +353,14 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Skill.defaultLayer),
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Session.defaultLayer),
+    Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Git.defaultLayer),
     Layer.provide(LSP.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),
+    Layer.provide(BackgroundJob.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(Format.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),

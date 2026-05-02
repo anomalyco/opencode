@@ -118,6 +118,7 @@ export const layer = Layer.effect(
         cancel: (sessionID: SessionID) => run.fork(cancel(sessionID)),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
         prompt: (input: PromptInput) => prompt(input),
+        loop: (input: LoopInput) => loop(input),
       } satisfies TaskPromptOps
     })
 

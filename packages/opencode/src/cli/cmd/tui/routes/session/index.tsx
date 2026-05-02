@@ -1966,12 +1966,15 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const { navigate } = useRoute()
   const sync = useSync()
 
-  onMount(() => {
-    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      void sync.session.sync(props.metadata.sessionId)
+  createEffect(() => {
+    const sessionID = props.metadata.sessionId
+    if (!sessionID) return
+    if (sync.data.message[sessionID]?.length) return
+    void sync.session.sync(sessionID)
   })
 
-  const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
+  const childSessionID = createMemo(() => props.metadata.sessionId)
+  const messages = createMemo(() => sync.data.message[childSessionID() ?? ""] ?? [])
 
   const tools = createMemo(() => {
     return messages().flatMap((msg) =>
@@ -1985,7 +1988,16 @@ function Task(props: ToolProps<typeof TaskTool>) {
     tools().findLast((x) => (x.state.status === "running" || x.state.status === "completed") && x.state.title),
   )
 
-  const isRunning = createMemo(() => props.part.state.status === "running")
+  const isBackground = createMemo(() => props.metadata.background === true)
+  const isBackgroundRunning = createMemo(() => {
+    const sessionID = childSessionID()
+    if (!isBackground() || !sessionID) return false
+    const status = sync.data.session_status[sessionID]?.type
+    if (status === "busy" || status === "retry") return true
+    if (status === "idle") return false
+    return !messages().some((x) => x.role === "assistant" && x.time.completed)
+  })
+  const isRunning = createMemo(() => props.part.state.status === "running" || isBackgroundRunning())
 
   const duration = createMemo(() => {
     const first = messages().find((x) => x.role === "user")?.time.created
@@ -1996,7 +2008,8 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   const content = createMemo(() => {
     if (!props.input.description) return ""
-    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${props.input.description}`]
+    const description = isBackground() ? `${props.input.description} (background)` : props.input.description
+    let content = [`${Locale.titlecase(props.input.subagent_type ?? "General")} Task — ${description}`]
 
     if (isRunning() && tools().length > 0) {
       // content[0] += ` · ${tools().length} toolcalls`
@@ -2007,7 +2020,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
       } else content.push(`↳ ${tools().length} toolcalls`)
     }
 
-    if (props.part.state.status === "completed") {
+    if (!isRunning() && props.part.state.status === "completed") {
       content.push(`└ ${tools().length} toolcalls · ${Locale.duration(duration())}`)
     }
 
@@ -2022,8 +2035,9 @@ function Task(props: ToolProps<typeof TaskTool>) {
       pending="Delegating..."
       part={props.part}
       onClick={() => {
-        if (props.metadata.sessionId) {
-          navigate({ type: "session", sessionID: props.metadata.sessionId })
+        const sessionID = childSessionID()
+        if (sessionID) {
+          navigate({ type: "session", sessionID })
         }
       }}
     >

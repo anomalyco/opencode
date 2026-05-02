@@ -25,6 +25,7 @@ import { Parameters as Todo } from "../../src/tool/todo"
 import { Parameters as WebFetch } from "../../src/tool/webfetch"
 import { Parameters as WebSearch } from "../../src/tool/websearch"
 import { Parameters as Write } from "../../src/tool/write"
+import { SessionID } from "../../src/session/schema"
 
 const parse = <S extends Schema.Decoder<unknown>>(schema: S, input: unknown): S["Type"] =>
   Schema.decodeUnknownSync(schema)(input)
@@ -202,6 +203,19 @@ describe("tool parameters", () => {
     test("accepts description + prompt + subagent_type", () => {
       const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general" })
       expect(parsed.subagent_type).toBe("general")
+    })
+    test("accepts optional task_id + command + background", () => {
+      const parsed = parse(Task, {
+        description: "d",
+        prompt: "p",
+        subagent_type: "general",
+        task_id: SessionID.make("ses_test"),
+        command: "/cmd",
+        background: true,
+      })
+      expect(parsed.task_id).toBe(SessionID.make("ses_test"))
+      expect(parsed.command).toBe("/cmd")
+      expect(parsed.background).toBe(true)
     })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)

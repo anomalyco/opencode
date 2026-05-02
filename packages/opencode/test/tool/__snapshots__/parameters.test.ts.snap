@@ -320,6 +320,10 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "background": {
+      "description": "When true, launch the subagent in the background and return immediately",
+      "type": "boolean",
+    },
     "command": {
       "description": "The command that triggered this task",
       "type": "string",
@@ -338,6 +342,7 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
     },
     "task_id": {
       "description": "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+      "pattern": "^ses.*",
       "type": "string",
     },
   },

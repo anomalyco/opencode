@@ -51,6 +51,7 @@ import { SessionShare } from "@/share/session"
 import { SyncEvent } from "@/sync"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { BackgroundJob } from "@/background/job"
 
 // Adjusts the default Config layer to ensure that plugins are always initialised before
 // any other layers read the current config
@@ -93,6 +94,7 @@ export const AppLayer = Layer.mergeAll(
   Todo.defaultLayer,
   Session.defaultLayer,
   SessionStatus.defaultLayer,
+  BackgroundJob.defaultLayer,
   SessionRunState.defaultLayer,
   SessionProcessor.defaultLayer,
   SessionCompaction.defaultLayer,
