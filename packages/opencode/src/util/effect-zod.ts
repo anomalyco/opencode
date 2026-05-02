@@ -90,7 +90,7 @@ function bodyWithChecks(ast: SchemaAST.AST): z.ZodTypeAny {
   // Schema.withDecodingDefault also attaches encoding, but we want `.default(v)`
   // on the inner Zod rather than a transform wrapper — so optional ASTs whose
   // encoding resolves a default from Option.none() route through body()/opt().
-  const hasEncoding = ast.encoding?.length && ast._tag !== "Declaration"
+  const hasEncoding = ast.encoding?.length && (ast._tag !== "Declaration" || ast.typeParameters.length === 0)
   const hasTransform = hasEncoding && !(SchemaAST.isOptional(ast) && extractDefault(ast) !== undefined)
   const base = hasTransform ? encoded(ast) : body(ast)
   return ast.checks?.length ? applyChecks(base, ast.checks, ast) : base

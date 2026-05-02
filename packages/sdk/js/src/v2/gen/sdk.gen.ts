@@ -187,6 +187,10 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  V2SessionListErrors,
+  V2SessionListResponses,
+  V2SessionMessagesErrors,
+  V2SessionMessagesResponses,
   VcsDiffResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
@@ -1691,6 +1695,12 @@ export class Session2 extends HeyApiClient {
       workspace?: string
       parentID?: string
       title?: string
+      agent?: string
+      model?: {
+        id: string
+        providerID: string
+        variant?: string
+      }
       permission?: PermissionRuleset
       workspaceID?: string
     },
@@ -1705,6 +1715,8 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "parentID" },
             { in: "body", key: "title" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
             { in: "body", key: "permission" },
             { in: "body", key: "workspaceID" },
           ],
@@ -3179,6 +3191,97 @@ export class Sync extends HeyApiClient {
   }
 }
 
+export class Session3 extends HeyApiClient {
+  /**
+   * List v2 sessions
+   *
+   * Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      limit?: number
+      cursor?: string
+      order?: "asc" | "desc"
+      path?: string
+      roots?: "true" | "false"
+      start?: number
+      search?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "order" },
+            { in: "query", key: "path" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "start" },
+            { in: "query", key: "search" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionListResponses, V2SessionListErrors, ThrowOnError>({
+      url: "/api/session",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get v2 session messages
+   *
+   * Retrieve projected v2 messages for a session directly from the message database.
+   */
+  public messages<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      limit?: number
+      cursor?: string
+      order?: "asc" | "desc"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "order" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionMessagesResponses, V2SessionMessagesErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/message",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class V2 extends HeyApiClient {
+  private _session?: Session3
+  get session(): Session3 {
+    return (this._session ??= new Session3({ client: this.client }))
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -4438,6 +4541,11 @@ export class OpencodeClient extends HeyApiClient {
   private _sync?: Sync
   get sync(): Sync {
     return (this._sync ??= new Sync({ client: this.client }))
+  }
+
+  private _v2?: V2
+  get v2(): V2 {
+    return (this._v2 ??= new V2({ client: this.client }))
   }
 
   private _find?: Find
