@@ -4,8 +4,8 @@ import path from "path"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
-import { Permission } from "../../src/permission"
 import { Global } from "@opencode-ai/core/global"
+import { Permission } from "../../src/permission"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): Permission.Action | undefined {
@@ -32,6 +32,7 @@ test("returns default native agents when no config", async () => {
       expect(names).toContain("plan")
       expect(names).toContain("general")
       expect(names).toContain("explore")
+      expect(names).toContain("scout")
       expect(names).toContain("compaction")
       expect(names).toContain("title")
       expect(names).toContain("summary")
@@ -50,6 +51,8 @@ test("build agent has correct default properties", async () => {
       expect(build?.native).toBe(true)
       expect(evalPerm(build, "edit")).toBe("ask")
       expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "repo_clone")).toBe("deny")
+      expect(evalPerm(build, "repo_overview")).toBe("deny")
     },
   })
 })
@@ -97,6 +100,81 @@ test("explore agent asks for external directories and allows whitelisted externa
       expect(
         Permission.evaluate("external_directory", path.join(Global.Path.tmp, "agent-work"), explore!.permission).action,
       ).toBe("allow")
+    },
+  })
+})
+
+test("scout agent allows repo cloning and repo cache reads", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const scout = await load(tmp.path, (svc) => svc.get("scout"))
+      expect(scout).toBeDefined()
+      expect(scout?.mode).toBe("subagent")
+      expect(evalPerm(scout, "repo_clone")).toBe("allow")
+      expect(evalPerm(scout, "repo_overview")).toBe("allow")
+      expect(evalPerm(scout, "edit")).toBe("deny")
+      expect(
+        Permission.evaluate(
+          "external_directory",
+          path.join(Global.Path.repos, "github.com", "owner", "repo", "README.md"),
+          scout!.permission,
+        ).action,
+      ).toBe("allow")
+    },
+  })
+})
+
+test("reference config creates scout-backed subagents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      reference: {
+        effect: "github.com/effect/effect-smol",
+        effectFull: {
+          repository: "Effect-TS/effect",
+          branch: "main",
+        },
+        localdocs: "../docs",
+        localdocsFull: {
+          path: "../local-docs",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const effect = await load(tmp.path, (svc) => svc.get("effect"))
+      const effectFull = await load(tmp.path, (svc) => svc.get("effectFull"))
+      const local = await load(tmp.path, (svc) => svc.get("localdocs"))
+      const localFull = await load(tmp.path, (svc) => svc.get("localdocsFull"))
+
+      expect(effect).toBeDefined()
+      expect(effect?.mode).toBe("subagent")
+      expect(effect?.prompt).toContain("Repository: github.com/effect/effect-smol")
+      expect(evalPerm(effect, "repo_clone")).toBe("allow")
+
+      expect(effectFull).toBeDefined()
+      expect(effectFull?.mode).toBe("subagent")
+      expect(effectFull?.prompt).toContain("Repository: Effect-TS/effect")
+      expect(effectFull?.prompt).toContain("Branch/ref: main")
+      expect(evalPerm(effectFull, "repo_clone")).toBe("allow")
+
+      expect(local).toBeDefined()
+      expect(local?.mode).toBe("subagent")
+      expect(local?.prompt).toContain(`Local directory: ${path.resolve(tmp.path, "../docs")}`)
+      expect(
+        Permission.evaluate(
+          "external_directory",
+          path.join(path.resolve(tmp.path, "../docs"), "README.md"),
+          local!.permission,
+        ).action,
+      ).toBe("allow")
+
+      expect(localFull).toBeDefined()
+      expect(localFull?.mode).toBe("subagent")
+      expect(localFull?.prompt).toContain(`Local directory: ${path.resolve(tmp.path, "../local-docs")}`)
     },
   })
 })

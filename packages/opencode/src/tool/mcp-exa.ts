@@ -35,6 +35,11 @@ export const SearchArgs = Schema.Struct({
   contextMaxCharacters: Schema.optional(Schema.Number),
 })
 
+export const CodeArgs = Schema.Struct({
+  query: Schema.String,
+  tokensNum: Schema.Number,
+})
+
 const McpRequest = <F extends Schema.Struct.Fields>(args: Schema.Struct<F>) =>
   Schema.Struct({
     jsonrpc: Schema.Literal("2.0"),
