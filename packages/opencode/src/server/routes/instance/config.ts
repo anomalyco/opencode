@@ -2,6 +2,8 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Config } from "@/config/config"
+import { Instance } from "@/project/instance"
+import { InstanceStore } from "@/project/instance-store"
 import { Provider } from "@/provider/provider"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
@@ -55,7 +57,9 @@ export const ConfigRoutes = lazy(() =>
         jsonRequest("ConfigRoutes.update", c, function* () {
           const config = c.req.valid("json")
           const cfg = yield* Config.Service
+          const store = yield* InstanceStore.Service
           yield* cfg.update(config)
+          yield* store.dispose(Instance.current)
           return config
         }),
     )

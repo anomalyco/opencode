@@ -12,6 +12,8 @@ import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { Effect } from "effect"
+import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 
 ensureProcessMetadata("worker")
 
@@ -83,7 +85,13 @@ export const rpc = {
     })
   },
   async reload() {
-    await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.invalidate(true)))
+    await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const cfg = yield* Config.Service
+        yield* cfg.invalidate()
+        yield* disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true })
+      }),
+    )
   },
   async shutdown() {
     Log.Default.info("worker shutting down")

@@ -7,9 +7,9 @@ import { provideTestInstance, tmpdir } from "../fixture/fixture"
 import { ProviderAuth } from "@/provider/auth"
 import { ProviderID } from "../../src/provider/schema"
 import { Plugin } from "@/plugin"
-import { Config } from "@/config/config"
 import { Auth } from "@/auth"
 import { Bus } from "@/bus"
+import { TestConfig } from "../fixture/config"
 
 function layer(directory: string, plugins: string[]) {
   return ProviderAuth.layer.pipe(
@@ -18,7 +18,7 @@ function layer(directory: string, plugins: string[]) {
       Plugin.layer.pipe(
         Layer.provide(Bus.layer),
         Layer.provide(
-          Layer.mock(Config.Service)({
+          TestConfig.layer({
             get: () =>
               Effect.succeed({
                 plugin: plugins,
@@ -28,13 +28,7 @@ function layer(directory: string, plugins: string[]) {
                   scope: "local" as const,
                 })),
               }),
-            getGlobal: () => Effect.succeed({}),
-            getConsoleState: () => Effect.die("not implemented"),
-            update: () => Effect.void,
-            updateGlobal: () => Effect.die("not implemented"),
-            invalidate: () => Effect.void,
             directories: () => Effect.succeed([directory]),
-            waitForDependencies: () => Effect.void,
           }),
         ),
       ),

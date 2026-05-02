@@ -12,9 +12,9 @@ process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
 const { readPackageThemes } = await import("../../src/plugin/shared")
-const { Config } = await import("../../src/config/config")
 const { Bus } = await import("../../src/bus")
 const { Npm } = await import("@opencode-ai/core/npm")
+const { TestConfig } = await import("../fixture/config")
 
 afterAll(() => {
   if (disableDefault === undefined) {
@@ -40,19 +40,13 @@ async function load(dir: string) {
       Plugin.layer.pipe(
         Layer.provide(Bus.layer),
         Layer.provide(
-          Layer.mock(Config.Service)({
+          TestConfig.layer({
             get: () =>
               Effect.succeed({
                 plugin: plugins,
                 plugin_origins: plugins.map((plugin) => ({ spec: plugin, source, scope: "local" as const })),
               }),
-            getGlobal: () => Effect.succeed({}),
-            getConsoleState: () => Effect.die("not implemented"),
-            update: () => Effect.void,
-            updateGlobal: () => Effect.die("not implemented"),
-            invalidate: () => Effect.void,
             directories: () => Effect.succeed([dir]),
-            waitForDependencies: () => Effect.void,
           }),
         ),
       ),

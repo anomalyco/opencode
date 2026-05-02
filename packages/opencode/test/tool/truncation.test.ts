@@ -9,6 +9,7 @@ import { Filesystem } from "@/util/filesystem"
 import path from "path"
 import { testEffect } from "../lib/effect"
 import { writeFileStringScoped } from "../lib/filesystem"
+import { TestConfig } from "../fixture/config"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 const ROOT = path.resolve(import.meta.dir, "..", "..")
@@ -19,7 +20,7 @@ const configuredLayer = (cfg: Config.Info) =>
   Layer.mergeAll(
     Truncate.defaultLayer,
     NodeFileSystem.layer,
-    Layer.mock(Config.Service)({ get: () => Effect.succeed(cfg) }),
+    TestConfig.layer({ get: () => Effect.succeed(cfg) }),
   )
 const configuredIt = (cfg: Config.Info) => testEffect(configuredLayer(cfg))
 
