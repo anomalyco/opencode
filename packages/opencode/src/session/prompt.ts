@@ -464,9 +464,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
                 { args },
               )
-              yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-              const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
-                execute(args, opts),
+              const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
+                yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
+                return yield* Effect.promise(() => execute(args, opts))
+              }).pipe(
+                Effect.withSpan("Tool.execute", {
+                  attributes: {
+                    "tool.name": key,
+                    "tool.call_id": opts.toolCallId,
+                    "session.id": ctx.sessionID,
+                    "message.id": input.processor.message.id,
+                  },
+                }),
               )
               yield* plugin.trigger(
                 "tool.execute.after",
