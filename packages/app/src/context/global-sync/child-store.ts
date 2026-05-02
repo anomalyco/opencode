@@ -1,7 +1,7 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import type { OpencodeClient, VcsInfo } from "@opencode-ai/sdk/v2/client"
+import type { OpencodeClient, ProviderListResponse, VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -27,6 +27,9 @@ export function createChildStoreManager(input: {
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
   getSdk: (directory: string) => OpencodeClient
+  global: {
+    provider: ProviderListResponse
+  }
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const vcsCache = new Map<string, VcsCache>()
@@ -189,7 +192,13 @@ export function createChildStoreManager(input: {
             get provider_ready() {
               return !providerQuery.isLoading
             },
-            provider: { all: [], connected: [], default: {} },
+            get provider() {
+              const EMPTY = { all: [], connected: [], default: {} }
+              if (providerQuery.isLoading) return EMPTY
+              if (providerQuery.data?.all.length === 0 && input.global.provider.all.length > 0)
+                return input.global.provider
+              return providerQuery.data ?? EMPTY
+            },
             config: {},
             get path() {
               if (pathQuery.isLoading || !pathQuery.data)

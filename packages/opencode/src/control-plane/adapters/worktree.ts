@@ -1,7 +1,5 @@
 import { Schema } from "effect"
-import { AppRuntime } from "@/effect/app-runtime"
-import { Worktree } from "@/worktree"
-import { type WorkspaceAdaptor, WorkspaceInfo } from "../types"
+import { type WorkspaceAdapter, WorkspaceInfo } from "../types"
 
 const WorktreeConfig = Schema.Struct({
   name: WorkspaceInfo.fields.name,
@@ -10,19 +8,26 @@ const WorktreeConfig = Schema.Struct({
 })
 const decodeWorktreeConfig = Schema.decodeUnknownSync(WorktreeConfig)
 
-export const WorktreeAdaptor: WorkspaceAdaptor = {
+async function loadWorktree() {
+  const [{ AppRuntime }, { Worktree }] = await Promise.all([import("@/effect/app-runtime"), import("@/worktree")])
+  return { AppRuntime, Worktree }
+}
+
+export const WorktreeAdapter: WorkspaceAdapter = {
   name: "Worktree",
   description: "Create a git worktree",
   async configure(info) {
-    const worktree = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
+    const { AppRuntime, Worktree } = await loadWorktree()
+    const next = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
     return {
       ...info,
-      name: worktree.name,
-      branch: worktree.branch,
-      directory: worktree.directory,
+      name: next.name,
+      branch: next.branch,
+      directory: next.directory,
     }
   },
   async create(info) {
+    const { AppRuntime, Worktree } = await loadWorktree()
     const config = decodeWorktreeConfig(info)
     await AppRuntime.runPromise(
       Worktree.Service.use((svc) =>
@@ -35,6 +40,7 @@ export const WorktreeAdaptor: WorkspaceAdaptor = {
     )
   },
   async remove(info) {
+    const { AppRuntime, Worktree } = await loadWorktree()
     const config = decodeWorktreeConfig(info)
     await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove({ directory: config.directory })))
   },

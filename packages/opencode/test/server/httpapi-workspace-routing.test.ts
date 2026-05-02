@@ -3,6 +3,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer, Queue } from "effect"
 import {
+  FetchHttpClient,
   HttpClient,
   HttpClientRequest,
   HttpRouter,
@@ -14,12 +15,13 @@ import * as Socket from "effect/unstable/socket/Socket"
 import Http from "node:http"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { registerAdaptor } from "../../src/control-plane/adaptors"
+import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
-import type { WorkspaceAdaptor } from "../../src/control-plane/types"
+import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 import { Project } from "../../src/project/project"
+import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
   WorkspaceRouteContext,
   workspaceRouterMiddleware,
@@ -49,6 +51,7 @@ const it = testEffect(
     NodeHttpServer.layerTest,
     NodeServices.layer,
     Project.defaultLayer,
+    Workspace.defaultLayer,
     Socket.layerWebSocketConstructorGlobal,
   ),
 )
@@ -64,7 +67,7 @@ type TestHandler<E, R> = (
 ) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
 
 const workspaceRoutingTestLayer = workspaceRouterMiddleware.layer.pipe(
-  Layer.provide(Socket.layerWebSocketConstructorGlobal),
+  Layer.provide([Socket.layerWebSocketConstructorGlobal, FetchHttpClient.layer]),
 )
 
 const serverUrl = HttpServer.HttpServer.use((server) => Effect.succeed(HttpServer.formatAddress(server.address)))
@@ -79,7 +82,7 @@ const listenAdditionalServer = <E, R>(handler: TestHandler<E, R>) =>
     return HttpServer.formatAddress(server.address)
   })
 
-const localAdaptor = (directory: string): WorkspaceAdaptor => ({
+const localAdapter = (directory: string): WorkspaceAdapter => ({
   name: "Local Test",
   description: "Create a local test workspace",
   configure: (info) => ({ ...info, name: "local-test", directory }),
@@ -90,7 +93,7 @@ const localAdaptor = (directory: string): WorkspaceAdaptor => ({
   target: () => ({ type: "local" as const, directory }),
 })
 
-const remoteAdaptor = (directory: string, url: string, headers?: HeadersInit): WorkspaceAdaptor => ({
+const remoteAdapter = (directory: string, url: string, headers?: HeadersInit): WorkspaceAdapter => ({
   name: "Remote Test",
   description: "Create a remote test workspace",
   configure: (info) => ({ ...info, name: "remote-test", directory }),
@@ -113,18 +116,19 @@ const syncResponse = (request: HttpServerRequest.HttpServerRequest) => {
   return undefined
 }
 
-const createWorkspace = (input: { projectID: Project.Info["id"]; type: string; adaptor: WorkspaceAdaptor }) =>
+const createWorkspace = (input: { projectID: Project.Info["id"]; type: string; adapter: WorkspaceAdapter }) =>
   Effect.acquireRelease(
-    Effect.promise(async () => {
-      registerAdaptor(input.projectID, input.type, input.adaptor)
-      return Workspace.create({
+    Effect.gen(function* () {
+      registerAdapter(input.projectID, input.type, input.adapter)
+      const workspace = yield* Workspace.Service
+      return yield* workspace.create({
         type: input.type,
         branch: null,
         extra: null,
         projectID: input.projectID,
       })
     }),
-    (workspace) => Effect.promise(() => Workspace.remove(workspace.id)).pipe(Effect.ignore),
+    (info) => Workspace.Service.use((workspace) => workspace.remove(info.id)).pipe(Effect.ignore),
   )
 
 const createRemoteWorkspace = (input: {
@@ -140,14 +144,14 @@ const createRemoteWorkspace = (input: {
   createWorkspace({
     projectID: input.projectID,
     type: input.type,
-    adaptor: remoteAdaptor(path.join(input.dir, `.${input.type}`), input.url, input.headers),
+    adapter: remoteAdapter(path.join(input.dir, `.${input.type}`), input.url, input.headers),
   })
 
 const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: string; directory: string }) =>
   createWorkspace({
     projectID: input.projectID,
     type: input.type,
-    adaptor: localAdaptor(input.directory),
+    adapter: localAdapter(input.directory),
   })
 
 const insertRemoteWorkspaceWithoutSync = (input: {
@@ -158,7 +162,7 @@ const insertRemoteWorkspaceWithoutSync = (input: {
 }) =>
   Effect.sync(() => {
     const id = WorkspaceID.ascending()
-    registerAdaptor(input.projectID, input.type, remoteAdaptor(path.join(input.dir, `.${input.type}`), input.url))
+    registerAdapter(input.projectID, input.type, remoteAdapter(path.join(input.dir, `.${input.type}`), input.url))
     Database.use((db) => db.insert(WorkspaceTable).values({ id, type: input.type, project_id: input.projectID }).run())
     return id
   })
@@ -233,7 +237,7 @@ describe("HttpApi workspace routing middleware", () => {
           { status: 201, headers: { "x-remote": "yes" } },
         )
       })
-      // The adaptor target tells the middleware where to proxy selected remote
+      // The adapter target tells the middleware where to proxy selected remote
       // workspace requests. Appending /probe to this base should produce
       // `${remoteUrl}/base/probe` on the fake remote server above.
       const workspace = yield* createRemoteWorkspace({
@@ -381,6 +385,36 @@ describe("HttpApi workspace routing middleware", () => {
       ).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
 
       const response = yield* HttpClient.get(`/session?workspace=${workspace.id}`)
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
+    }),
+  )
+
+  it.live("keeps workspace control routes local even when workspace is selected", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-local")
+      const workspace = yield* createLocalWorkspace({
+        projectID: project.project.id,
+        type: "workspace-control-plane-target",
+        directory: workspaceDir,
+      })
+
+      // Workspace CRUD/status routes manage the control plane itself. Selecting
+      // a workspace should preserve the selected id for handlers, but must not
+      // swap the route context to the workspace target directory.
+      yield* HttpRouter.add(
+        "GET",
+        WorkspacePaths.list,
+        Effect.gen(function* () {
+          const route = yield* WorkspaceRouteContext
+          return yield* HttpServerResponse.json({ directory: route.directory, workspaceID: route.workspaceID })
+        }),
+      ).pipe(Layer.provide(workspaceRoutingTestLayer), HttpRouter.serve, Layer.build)
+
+      const response = yield* HttpClient.get(`${WorkspacePaths.list}?workspace=${workspace.id}`)
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
