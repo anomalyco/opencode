@@ -15,7 +15,7 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
-import { childSessionOnPath, hasProjectPermissions } from "./helpers"
+import { childSessions, hasProjectPermissions } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -172,9 +172,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
   const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))
   const tooltip = createMemo(() => props.showTooltip ?? (props.mobile || !props.sidebarExpanded()))
-  const currentChild = createMemo(() => {
-    if (!props.showChild) return
-    return childSessionOnPath(sessionStore.session, props.session.id, params.id)
+  const children = createMemo(() => {
+    if (!props.showChild) return []
+    return childSessions(sessionStore.session, props.session.id, Date.now())
   })
 
   const warm = (span: number, priority: "high" | "low") => {
@@ -268,13 +268,13 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </Show>
         </div>
       </div>
-      <Show when={currentChild()} keyed>
+      <For each={children()}>
         {(child) => (
           <div class="w-full">
             <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
           </div>
         )}
-      </Show>
+      </For>
     </>
   )
 }
