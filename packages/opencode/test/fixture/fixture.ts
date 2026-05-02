@@ -11,7 +11,6 @@ import type { Config } from "@/config/config"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Instance } from "../../src/project/instance"
-import { InstanceStore } from "../../src/project/instance-store"
 import { TestLLMServer } from "../lib/llm-server"
 
 // Re-export for test ergonomics. The implementation lives next to the runtime
