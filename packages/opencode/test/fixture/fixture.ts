@@ -9,6 +9,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
 import { InstanceRef } from "../../src/effect/instance-ref"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Instance } from "../../src/project/instance"
 import { InstanceStore } from "../../src/project/instance-store"
 import { TestLLMServer } from "../lib/llm-server"
@@ -151,7 +152,7 @@ export function provideTmpdirInstance<A, E, R>(
         ? Effect.promise(() =>
             Instance.provide({
               directory: path,
-              fn: () => Instance.dispose(),
+              fn: () => InstanceStore.disposeInstance(Instance.current),
             }),
           ).pipe(Effect.ignore)
         : Effect.void,

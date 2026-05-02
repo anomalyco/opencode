@@ -1,6 +1,7 @@
 import { afterEach, test, expect } from "bun:test"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
+import { InstanceStore } from "../../src/project/instance-store"
 import { QuestionID } from "../../src/question/schema"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
@@ -421,7 +422,7 @@ test("pending question rejects on instance dispose", async () => {
     fn: async () => {
       const items = await list()
       expect(items).toHaveLength(1)
-      await Instance.dispose()
+      await InstanceStore.disposeInstance(Instance.current)
     },
   })
 
@@ -456,7 +457,7 @@ test("pending question rejects on instance reload", async () => {
     fn: async () => {
       const items = await list()
       expect(items).toHaveLength(1)
-      await Instance.reload({ directory: tmp.path })
+      await InstanceStore.reloadInstance({ directory: tmp.path })
     },
   })
 

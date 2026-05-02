@@ -23,6 +23,7 @@ import { InstanceStore } from "@/project/instance-store"
 import { Plugin } from "@/plugin"
 import { Project } from "@/project/project"
 import { ProviderAuth } from "@/provider/auth"
+import { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
 import { Question } from "@/question"
@@ -155,6 +156,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       InstanceBootstrap.defaultLayer,
       InstanceStore.defaultLayer,
       MCP.defaultLayer,
+      ModelsDev.defaultLayer,
       Permission.defaultLayer,
       Plugin.defaultLayer,
       Project.defaultLayer,
