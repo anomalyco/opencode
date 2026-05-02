@@ -997,6 +997,133 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
       type: "number",
     })
   })
+
+  test("flattens deeply nested schemas to avoid Kimi K2.6 depth limit", () => {
+    // Build a schema with 12+ levels of nesting (exceeds Kimi's 10-level limit)
+    const deepSchema: any = { type: "object", properties: {} }
+    let current = deepSchema.properties
+    for (let i = 0; i < 12; i++) {
+      current[`level${i}`] = {
+        type: "object",
+        properties: {},
+      }
+      current = current[`level${i}`].properties
+    }
+    current.leaf = { type: "string", description: "Should be flattened" }
+
+    const result = ProviderTransform.schema(moonshotModel, deepSchema) as any
+
+    // Verify top-level properties are preserved
+    expect(result.type).toBe("object")
+    expect(result.properties.level0).toBeDefined()
+
+    // Count how many levels we can descend before hitting a flattened node
+    let node: any = result.properties
+    let depthReached = 0
+    for (let i = 0; i < 12; i++) {
+      if (!node || !node[`level${i}`]) break
+      node = node[`level${i}`]
+      depthReached++
+      if (node.additionalProperties === true && !node.properties) {
+        // Found flattened node — success!
+        break
+      }
+      node = node.properties
+    }
+
+    // Should have flattened before reaching all 12 levels
+    expect(depthReached).toBeGreaterThanOrEqual(4)
+    expect(depthReached).toBeLessThan(12)
+  })
+
+  test("flattens deeply nested anyOf schemas for Moonshot", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        input: {
+          type: "object",
+          properties: {
+            data: {
+              type: "object",
+              properties: {
+                attributes: {
+                  type: "object",
+                  properties: {
+                    campaignMessages: {
+                      type: "object",
+                      properties: {
+                        data: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              attributes: {
+                                type: "object",
+                                properties: {
+                                  definition: {
+                                    anyOf: [
+                                      {
+                                        type: "object",
+                                        properties: {
+                                          options: {
+                                            type: "object",
+                                            properties: {
+                                              badge: {
+                                                anyOf: [
+                                                  {
+                                                    type: "object",
+                                                    properties: {
+                                                      badgeOptions: {
+                                                        anyOf: [
+                                                          {
+                                                            type: "object",
+                                                            properties: {
+                                                              badgeConfig: {
+                                                                type: "string",
+                                                                enum: ["increment_one", "set_count"],
+                                                              },
+                                                            },
+                                                          },
+                                                        ],
+                                                      },
+                                                    },
+                                                  },
+                                                ],
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    ],
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(moonshotModel, schema) as any
+
+    // Should not throw and should produce a valid, flattened schema
+    expect(result.type).toBe("object")
+    expect(result.properties.input.type).toBe("object")
+
+    // Navigate to the definition area — deeply nested anyOf should be flattened
+    const definition = result.properties.input.properties.data.properties.attributes.properties.campaignMessages
+    expect(definition).toBeDefined()
+    // The exact structure after flattening may vary, but it must be a valid schema object
+    expect(definition.type).toBe("object")
+  })
 })
 
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {

@@ -1101,12 +1101,44 @@ export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JS
   */
 
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
-    const sanitizeMoonshot = (obj: unknown): unknown => {
+    const MAX_DEPTH = 9 // Kimi K2.6 rejects schemas with nesting > 10; leave headroom
+
+    const isComplex = (node: Record<string, any>): boolean => {
+      if (node.type && !["object", "array"].includes(node.type)) return false
+      return !!(
+        node.properties ||
+        node.anyOf ||
+        node.oneOf ||
+        node.allOf ||
+        node.items ||
+        node.$defs ||
+        node.definitions
+      )
+    }
+
+    const flatten = (node: Record<string, any>): Record<string, any> => {
+      if (node.type === "array") {
+        return { type: "array", items: { type: "object", additionalProperties: true } }
+      }
+      return { type: "object", additionalProperties: true }
+    }
+
+    const sanitizeMoonshot = (obj: unknown, depth = 0): unknown => {
       if (obj === null || typeof obj !== "object") return obj
-      if (Array.isArray(obj)) return obj.map(sanitizeMoonshot)
+      if (Array.isArray(obj)) {
+        return obj.map((item) => sanitizeMoonshot(item, depth + 1))
+      }
+
       // Moonshot expands $ref before validation and rejects sibling keywords like description on the same node.
       if ("$ref" in obj && typeof obj.$ref === "string") return { $ref: obj.$ref }
-      const result = Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value)]))
+
+      if (depth >= MAX_DEPTH && isComplex(obj as Record<string, any>)) {
+        return flatten(obj as Record<string, any>)
+      }
+
+      const result = Object.fromEntries(
+        Object.entries(obj).map(([key, value]) => [key, sanitizeMoonshot(value, depth + 1)]),
+      )
       // MFJS does not support tuple-style `items` arrays; it requires one schema object for all array items.
       if (Array.isArray(result.items)) result.items = result.items[0] ?? {}
       return result
