@@ -3,8 +3,11 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import * as TestClock from "effect/testing/TestClock"
 import * as TestConsole from "effect/testing/TestConsole"
+import type { Config } from "@/config/config"
+import { TestInstance, withTmpdirInstance } from "../fixture/fixture"
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
+type InstanceOptions = { git?: boolean; config?: Partial<Config.Info> }
 
 const body = <A, E, R>(value: Body<A, E, R>) => Effect.suspend(() => (typeof value === "function" ? value() : value))
 
@@ -38,7 +41,28 @@ const make = <R, E>(testLayer: Layer.Layer<R, E>, liveLayer: Layer.Layer<R, E>) 
   live.skip = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
     test.skip(name, () => run(value, liveLayer), opts)
 
-  return { effect, live }
+  const instance = <A, E2>(
+    name: string,
+    value: Body<A, E2, R | TestInstance | Scope.Scope>,
+    instanceOptions?: InstanceOptions,
+    opts?: number | TestOptions,
+  ) => test(name, () => run(body(value).pipe(withTmpdirInstance(instanceOptions)), liveLayer), opts)
+
+  instance.only = <A, E2>(
+    name: string,
+    value: Body<A, E2, R | TestInstance | Scope.Scope>,
+    instanceOptions?: InstanceOptions,
+    opts?: number | TestOptions,
+  ) => test.only(name, () => run(body(value).pipe(withTmpdirInstance(instanceOptions)), liveLayer), opts)
+
+  instance.skip = <A, E2>(
+    name: string,
+    value: Body<A, E2, R | TestInstance | Scope.Scope>,
+    instanceOptions?: InstanceOptions,
+    opts?: number | TestOptions,
+  ) => test.skip(name, () => run(body(value).pipe(withTmpdirInstance(instanceOptions)), liveLayer), opts)
+
+  return { effect, live, instance }
 }
 
 // Test environment with TestClock and TestConsole
