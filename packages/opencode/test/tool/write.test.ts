@@ -95,26 +95,42 @@ describe("tool.write", () => {
   })
 
   describe("existing file overwrite", () => {
-    it.live("overwrites existing file content", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "existing.txt")
-          yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf-8"))
-          const result = yield* run({ filePath: filepath, content: "new content" })
+    it.instance("overwrites existing file content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "existing.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf-8"))
+        const result = yield* run({ filePath: filepath, content: "new content" })
 
-          expect(result.output).toContain("Wrote file successfully")
-          expect(result.metadata.exists).toBe(true)
+        expect(result.output).toContain("Wrote file successfully")
+        expect(result.metadata.exists).toBe(true)
 
-          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
-          expect(content).toBe("new content")
-        }),
-      ),
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("new content")
+      }),
     )
 
-    it.live("preserves BOM when overwriting existing files", () =>
-      provideTmpdirInstance((dir) =>
+    it.instance("preserves BOM when overwriting existing files", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "existing.cs")
+        const bom = String.fromCharCode(0xfeff)
+        yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
+
+        yield* run({ filePath: filepath, content: "using Up;\n" })
+
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content.charCodeAt(0)).toBe(0xfeff)
+        expect(content.slice(1)).toBe("using Up;\n")
+      }),
+    )
+
+    it.instance(
+      "restores BOM after formatter strips it",
+      () =>
         Effect.gen(function* () {
-          const filepath = path.join(dir, "existing.cs")
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "formatted.cs")
           const bom = String.fromCharCode(0xfeff)
           yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
 
@@ -124,52 +140,33 @@ describe("tool.write", () => {
           expect(content.charCodeAt(0)).toBe(0xfeff)
           expect(content.slice(1)).toBe("using Up;\n")
         }),
-      ),
-    )
-
-    it.live("restores BOM after formatter strips it", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const filepath = path.join(dir, "formatted.cs")
-            const bom = String.fromCharCode(0xfeff)
-            yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
-
-            yield* run({ filePath: filepath, content: "using Up;\n" })
-
-            const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
-            expect(content.charCodeAt(0)).toBe(0xfeff)
-            expect(content.slice(1)).toBe("using Up;\n")
-          }),
-        {
-          config: {
-            formatter: {
-              stripbom: {
-                extensions: [".cs"],
-                command: [
-                  "node",
-                  "-e",
-                  "const fs = require('fs'); const file = process.argv[1]; let text = fs.readFileSync(file, 'utf8'); if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); fs.writeFileSync(file, text, 'utf8')",
-                  "$FILE",
-                ],
-              },
+      {
+        config: {
+          formatter: {
+            stripbom: {
+              extensions: [".cs"],
+              command: [
+                "node",
+                "-e",
+                "const fs = require('fs'); const file = process.argv[1]; let text = fs.readFileSync(file, 'utf8'); if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); fs.writeFileSync(file, text, 'utf8')",
+                "$FILE",
+              ],
             },
           },
         },
-      ),
+      },
     )
 
-    it.live("returns diff in metadata for existing files", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "file.txt")
-          yield* Effect.promise(() => fs.writeFile(filepath, "old", "utf-8"))
-          const result = yield* run({ filePath: filepath, content: "new" })
+    it.instance("returns diff in metadata for existing files", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "file.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "old", "utf-8"))
+        const result = yield* run({ filePath: filepath, content: "new" })
 
-          expect(result.metadata).toHaveProperty("filepath", filepath)
-          expect(result.metadata).toHaveProperty("exists", true)
-        }),
-      ),
+        expect(result.metadata).toHaveProperty("filepath", filepath)
+        expect(result.metadata).toHaveProperty("exists", true)
+      }),
     )
   })
 
