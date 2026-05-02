@@ -217,6 +217,24 @@ describe("workspace HttpApi", () => {
     }),
   )
 
+  it.live("creates a real git worktree workspace via the builtin adapter", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+
+      const created = yield* request(WorkspacePaths.list, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "worktree", branch: null }),
+      })
+
+      const body = yield* Effect.promise(() => created.text())
+      expect({ status: created.status, body }).toMatchObject({ status: 200 })
+      const workspace = JSON.parse(body) as Workspace.Info
+      expect(workspace).toMatchObject({ type: "worktree" })
+    }),
+  )
+
   it.live("documents legacy Hono accepting the TUI payload shape", () =>
     Effect.gen(function* () {
       Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
