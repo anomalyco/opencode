@@ -5,6 +5,7 @@ import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
+import { containsPath } from "../../src/project/instance-context"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 
 const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
@@ -121,15 +122,15 @@ describe("File.list path traversal protection", () => {
   })
 })
 
-describe("Instance.containsPath", () => {
+describe("containsPath", () => {
   test("returns true for path inside directory", async () => {
     await using tmp = await tmpdir({ git: true })
 
     await Instance.provide({
       directory: tmp.path,
       fn: () => {
-        expect(Instance.containsPath(path.join(tmp.path, "foo.txt"))).toBe(true)
-        expect(Instance.containsPath(path.join(tmp.path, "src", "file.ts"))).toBe(true)
+        expect(containsPath(path.join(tmp.path, "foo.txt"), Instance.current)).toBe(true)
+        expect(containsPath(path.join(tmp.path, "src", "file.ts"), Instance.current)).toBe(true)
       },
     })
   })
@@ -143,11 +144,11 @@ describe("Instance.containsPath", () => {
       directory: subdir,
       fn: () => {
         // .opencode at worktree root, but we're running from packages/lib
-        expect(Instance.containsPath(path.join(tmp.path, ".opencode", "state"))).toBe(true)
+        expect(containsPath(path.join(tmp.path, ".opencode", "state"), Instance.current)).toBe(true)
         // sibling package should also be accessible
-        expect(Instance.containsPath(path.join(tmp.path, "packages", "other", "file.ts"))).toBe(true)
+        expect(containsPath(path.join(tmp.path, "packages", "other", "file.ts"), Instance.current)).toBe(true)
         // worktree root itself
-        expect(Instance.containsPath(tmp.path)).toBe(true)
+        expect(containsPath(tmp.path, Instance.current)).toBe(true)
       },
     })
   })
@@ -158,8 +159,8 @@ describe("Instance.containsPath", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: () => {
-        expect(Instance.containsPath("/etc/passwd")).toBe(false)
-        expect(Instance.containsPath("/tmp/other-project")).toBe(false)
+        expect(containsPath("/etc/passwd", Instance.current)).toBe(false)
+        expect(containsPath("/tmp/other-project", Instance.current)).toBe(false)
       },
     })
   })
@@ -170,7 +171,7 @@ describe("Instance.containsPath", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: () => {
-        expect(Instance.containsPath(path.join(tmp.path, "..", "escape.txt"))).toBe(false)
+        expect(containsPath(path.join(tmp.path, "..", "escape.txt"), Instance.current)).toBe(false)
       },
     })
   })
@@ -182,8 +183,8 @@ describe("Instance.containsPath", () => {
       directory: tmp.path,
       fn: () => {
         expect(Instance.directory).toBe(Instance.worktree)
-        expect(Instance.containsPath(path.join(tmp.path, "file.txt"))).toBe(true)
-        expect(Instance.containsPath("/etc/passwd")).toBe(false)
+        expect(containsPath(path.join(tmp.path, "file.txt"), Instance.current)).toBe(true)
+        expect(containsPath("/etc/passwd", Instance.current)).toBe(false)
       },
     })
   })
@@ -195,9 +196,9 @@ describe("Instance.containsPath", () => {
       directory: tmp.path,
       fn: () => {
         // worktree is "/" for non-git projects, but containsPath should NOT allow all paths
-        expect(Instance.containsPath(path.join(tmp.path, "file.txt"))).toBe(true)
-        expect(Instance.containsPath("/etc/passwd")).toBe(false)
-        expect(Instance.containsPath("/tmp/other")).toBe(false)
+        expect(containsPath(path.join(tmp.path, "file.txt"), Instance.current)).toBe(true)
+        expect(containsPath("/etc/passwd", Instance.current)).toBe(false)
+        expect(containsPath("/tmp/other", Instance.current)).toBe(false)
       },
     })
   })

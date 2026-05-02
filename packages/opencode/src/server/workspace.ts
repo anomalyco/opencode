@@ -5,7 +5,6 @@ import { WorkspaceID } from "@/control-plane/schema"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Workspace } from "@/control-plane/workspace"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { InstanceBootstrap } from "@/project/bootstrap"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
@@ -100,7 +99,6 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
         fn: () =>
           Instance.provide({
             directory: target.directory,
-            init: () => AppRuntime.runPromise(InstanceBootstrap),
             async fn() {
               return next()
             },
