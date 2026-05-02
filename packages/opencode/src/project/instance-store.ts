@@ -2,10 +2,10 @@ import { GlobalBus } from "@/bus/global"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
+import { InstanceBootstrap } from "./bootstrap-service"
 import * as Project from "./project"
 
 export interface LoadInput<R = never> {
@@ -36,10 +36,11 @@ interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
 
-export const layer: Layer.Layer<Service, never, Project.Service> = Layer.effect(
+export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const project = yield* Project.Service
+    const bootstrap = yield* InstanceBootstrap.Service
     const scope = yield* Scope.Scope
     const cache = new Map<string, Entry>()
 
@@ -59,6 +60,7 @@ export const layer: Layer.Layer<Service, never, Project.Service> = Layer.effect(
                   project: result.project,
                 })),
               )
+        yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
         if (input.init) yield* input.init.pipe(Effect.provideService(InstanceRef, ctx))
         return ctx
       }).pipe(Effect.withSpan("InstanceStore.boot"))
@@ -194,14 +196,5 @@ export const layer: Layer.Layer<Service, never, Project.Service> = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Project.defaultLayer))
-
-export const runtime = makeRuntime(Service, defaultLayer)
-
-// Promise-returning helpers for callers without an Effect runtime in scope.
-// They route through `runtime` (not a yielded Service from a fresh runtime)
-// so they share the cache that `Instance.provide` populates.
-export const disposeInstance = (ctx: InstanceContext) => runtime.runPromise((store) => store.dispose(ctx))
-export const disposeAllInstances = () => runtime.runPromise((store) => store.disposeAll())
-export const reloadInstance = (input: LoadInput) => runtime.runPromise((store) => store.reload(input))
 
 export * as InstanceStore from "./instance-store"

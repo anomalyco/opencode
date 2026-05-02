@@ -2,9 +2,9 @@ import { afterEach, expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
-import { InstanceStore } from "../../src/project/instance-store"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { QuestionID } from "../../src/question/schema"
-import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -376,7 +376,7 @@ it.live("pending question rejects on instance dispose", () =>
 
     expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
     yield* Effect.promise(() =>
-      Instance.provide({ directory: dir, fn: () => InstanceStore.disposeInstance(Instance.current) }),
+      Instance.provide({ directory: dir, fn: () => InstanceRuntime.disposeInstance(Instance.current) }),
     )
 
     const exit = yield* Fiber.await(fiber)
@@ -400,7 +400,7 @@ it.live("pending question rejects on instance reload", () =>
     }).pipe(provideInstance(dir), Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
-    yield* Effect.promise(() => InstanceStore.reloadInstance({ directory: dir }))
+    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)

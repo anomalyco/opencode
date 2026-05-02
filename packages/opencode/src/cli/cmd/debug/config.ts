@@ -1,17 +1,21 @@
 import { EOL } from "os"
+import { Effect } from "effect"
 import { Config } from "@/config/config"
-import { AppRuntime } from "@/effect/app-runtime"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
+import { effectCmd } from "../../effect-cmd"
+import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceStore } from "@/project/instance-store"
 
-export const ConfigCommand = cmd({
+export const ConfigCommand = effectCmd({
   command: "config",
   describe: "show resolved configuration",
   builder: (yargs) => yargs,
-  async handler() {
-    await bootstrap(process.cwd(), async () => {
-      const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
+  handler: Effect.fn("Cli.debug.config")(function* () {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const store = yield* InstanceStore.Service
+    return yield* Effect.gen(function* () {
+      const config = yield* Config.Service.use((cfg) => cfg.get())
       process.stdout.write(JSON.stringify(config, null, 2) + EOL)
-    })
-  },
+    }).pipe(Effect.ensuring(store.dispose(ctx)))
+  }),
 })

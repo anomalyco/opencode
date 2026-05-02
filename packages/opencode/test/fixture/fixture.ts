@@ -1,21 +1,45 @@
 import { $ } from "bun"
+import * as Observability from "@opencode-ai/core/effect/observability"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { Effect, Context } from "effect"
+import { Effect, Context, Layer, ManagedRuntime } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import type * as Scope from "effect/Scope"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
 import { InstanceRef } from "../../src/effect/instance-ref"
+import { InstanceBootstrap } from "../../src/project/bootstrap-service"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Instance } from "../../src/project/instance"
 import { TestLLMServer } from "../lib/llm-server"
 
-// Re-export for test ergonomics. The implementation lives next to the runtime
-// it consumes; see `InstanceStore.disposeAllInstances` for the rationale.
-export { disposeAllInstances } from "../../src/project/instance-store"
+const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+const testInstanceRuntime = ManagedRuntime.make(
+  InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap), Layer.provideMerge(Observability.layer)),
+)
+
+const runTestInstanceStore = <A>(fn: (store: InstanceStore.Interface) => Effect.Effect<A>) =>
+  testInstanceRuntime.runPromise(InstanceStore.Service.use(fn))
+
+export async function provideTestInstance<R>(input: { directory: string; init?: Effect.Effect<void>; fn: () => R }) {
+  const ctx = await runTestInstanceStore((store) => store.load({ directory: input.directory, init: input.init }))
+  try {
+    return await Instance.restore(ctx, () => input.fn())
+  } finally {
+    await runTestInstanceStore((store) => store.dispose(ctx))
+  }
+}
+
+export async function reloadTestInstance(input: { directory: string }) {
+  return runTestInstanceStore((store) => store.reload(input))
+}
+
+export async function disposeAllInstances() {
+  await Promise.all([InstanceRuntime.disposeAllInstances(), runTestInstanceStore((store) => store.disposeAll())])
+}
 
 // Strip null bytes from paths (defensive fix for CI environment issues)
 function sanitizePath(p: string): string {
@@ -130,12 +154,12 @@ export const provideInstance =
   (directory: string) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.contextWith((services: Context.Context<R>) =>
-      Effect.promise<A>(async () =>
-        Instance.provide({
-          directory,
-          fn: () => Effect.runPromiseWith(services)(self.pipe(Effect.provideService(InstanceRef, Instance.current))),
-        }),
-      ),
+      Effect.promise<A>(async () => {
+        const ctx = await runTestInstanceStore((store) => store.load({ directory }))
+        return Instance.restore(ctx, () =>
+          Effect.runPromiseWith(services)(self.pipe(Effect.provideService(InstanceRef, ctx))),
+        )
+      }),
     )
 
 export function provideTmpdirInstance<A, E, R>(
@@ -149,10 +173,9 @@ export function provideTmpdirInstance<A, E, R>(
     yield* Effect.addFinalizer(() =>
       provided
         ? Effect.promise(() =>
-            Instance.provide({
-              directory: path,
-              fn: () => InstanceStore.disposeInstance(Instance.current),
-            }),
+            runTestInstanceStore((store) =>
+              store.load({ directory: path }).pipe(Effect.flatMap((ctx) => store.dispose(ctx))),
+            ),
           ).pipe(Effect.ignore)
         : Effect.void,
     )
@@ -172,7 +195,10 @@ export const withTmpdirInstance =
       return yield* InstanceStore.Service.use((store) =>
         store.provide({ directory }, self.pipe(Effect.provideService(TestInstance, { directory }))),
       )
-    }).pipe(Effect.provide(InstanceStore.defaultLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+    }).pipe(
+      Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))),
+      Effect.provide(CrossSpawnSpawner.defaultLayer),
+    )
 
 export function provideTmpdirServer<A, E, R>(
   self: (input: { dir: string; llm: TestLLMServer["Service"] }) => Effect.Effect<A, E, R>,

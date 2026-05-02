@@ -7,14 +7,14 @@ import { Session } from "@/session/session"
 import type { MessageV2 } from "../../../session/message-v2"
 import { MessageID, PartID } from "../../../session/schema"
 import { ToolRegistry } from "@/tool/registry"
-import { Instance } from "../../../project/instance"
 import { Permission } from "../../../permission"
 import { iife } from "../../../util/iife"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
-import { AppRuntime } from "@/effect/app-runtime"
+import { effectCmd, fail } from "../../effect-cmd"
+import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceStore } from "@/project/instance-store"
+import type { InstanceContext } from "@/project/instance"
 
-export const AgentCommand = cmd({
+export const AgentCommand = effectCmd({
   command: "agent <name>",
   describe: "show agent configuration details",
   builder: (yargs) =>
@@ -32,60 +32,61 @@ export const AgentCommand = cmd({
         type: "string",
         description: "Tool params as JSON or a JS object literal",
       }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      const agentName = args.name as string
-      const agent = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(agentName)))
-      if (!agent) {
-        process.stderr.write(
-          `Agent ${agentName} not found, run '${basename(process.execPath)} agent list' to get an agent list` + EOL,
-        )
-        process.exit(1)
-      }
-      const availableTools = await getAvailableTools(agent)
-      const resolvedTools = await resolveTools(agent, availableTools)
-      const toolID = args.tool as string | undefined
-      if (toolID) {
-        const tool = availableTools.find((item) => item.id === toolID)
-        if (!tool) {
-          process.stderr.write(`Tool ${toolID} not found for agent ${agentName}` + EOL)
-          process.exit(1)
-        }
-        if (resolvedTools[toolID] === false) {
-          process.stderr.write(`Tool ${toolID} is disabled for agent ${agentName}` + EOL)
-          process.exit(1)
-        }
-        const params = parseToolParams(args.params as string | undefined)
-        const ctx = await createToolContext(agent)
-        const result = await tool.execute(params, ctx)
-        process.stdout.write(JSON.stringify({ tool: toolID, input: params, result }, null, 2) + EOL)
-        return
-      }
-
-      const output = {
-        ...agent,
-        tools: resolvedTools,
-      }
-      process.stdout.write(JSON.stringify(output, null, 2) + EOL)
-    })
-  },
+  handler: Effect.fn("Cli.debug.agent")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const store = yield* InstanceStore.Service
+    return yield* run(args, ctx).pipe(Effect.ensuring(store.dispose(ctx)))
+  }),
 })
 
-async function getAvailableTools(agent: Agent.Info) {
-  return AppRuntime.runPromise(
-    Effect.gen(function* () {
-      const provider = yield* Provider.Service
-      const registry = yield* ToolRegistry.Service
-      const model = agent.model ?? (yield* provider.defaultModel())
-      return yield* registry.tools({
-        ...model,
-        agent,
-      })
-    }),
-  )
-}
+const run = Effect.fn("Cli.debug.agent.body")(function* (
+  args: { name: string; tool?: string; params?: string },
+  ctx: InstanceContext,
+) {
+  const agentName = args.name
+  const agent = yield* Agent.Service.use((svc) => svc.get(agentName))
+  if (!agent) {
+    process.stderr.write(
+      `Agent ${agentName} not found, run '${basename(process.execPath)} agent list' to get an agent list` + EOL,
+    )
+    return yield* fail("", 1)
+  }
+  const availableTools = yield* getAvailableTools(agent)
+  const resolvedTools = resolveTools(agent, availableTools)
+  const toolID = args.tool
+  if (toolID) {
+    const tool = availableTools.find((item) => item.id === toolID)
+    if (!tool) {
+      process.stderr.write(`Tool ${toolID} not found for agent ${agentName}` + EOL)
+      return yield* fail("", 1)
+    }
+    if (resolvedTools[toolID] === false) {
+      process.stderr.write(`Tool ${toolID} is disabled for agent ${agentName}` + EOL)
+      return yield* fail("", 1)
+    }
+    const params = parseToolParams(args.params)
+    const toolCtx = yield* createToolContext(agent, ctx)
+    const result = yield* tool.execute(params, toolCtx)
+    process.stdout.write(JSON.stringify({ tool: toolID, input: params, result }, null, 2) + EOL)
+    return
+  }
 
-async function resolveTools(agent: Agent.Info, availableTools: Awaited<ReturnType<typeof getAvailableTools>>) {
+  const output = {
+    ...agent,
+    tools: resolvedTools,
+  }
+  process.stdout.write(JSON.stringify(output, null, 2) + EOL)
+})
+
+const getAvailableTools = Effect.fn("Cli.debug.agent.getAvailableTools")(function* (agent: Agent.Info) {
+  const provider = yield* Provider.Service
+  const registry = yield* ToolRegistry.Service
+  const model = agent.model ?? (yield* provider.defaultModel())
+  return yield* registry.tools({ ...model, agent })
+})
+
+function resolveTools(agent: Agent.Info, availableTools: { id: string }[]) {
   const disabled = Permission.disabled(
     availableTools.map((tool) => tool.id),
     agent.permission,
@@ -123,50 +124,38 @@ function parseToolParams(input?: string) {
   return parsed as Record<string, unknown>
 }
 
-async function createToolContext(agent: Agent.Info) {
-  const { session, messageID } = await AppRuntime.runPromise(
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const result = yield* session.create({ title: `Debug tool run (${agent.name})` })
-      const messageID = MessageID.ascending()
-      const model = agent.model
-        ? agent.model
-        : yield* Effect.gen(function* () {
-            const provider = yield* Provider.Service
-            return yield* provider.defaultModel()
-          })
-      const now = Date.now()
-      const message: MessageV2.Assistant = {
-        id: messageID,
-        sessionID: result.id,
-        role: "assistant",
-        time: {
-          created: now,
-        },
-        parentID: messageID,
-        modelID: model.modelID,
-        providerID: model.providerID,
-        mode: "debug",
-        agent: agent.name,
-        path: {
-          cwd: Instance.directory,
-          root: Instance.worktree,
-        },
-        cost: 0,
-        tokens: {
-          input: 0,
-          output: 0,
-          reasoning: 0,
-          cache: {
-            read: 0,
-            write: 0,
-          },
-        },
-      }
-      yield* session.updateMessage(message)
-      return { session: result, messageID }
-    }),
-  )
+const createToolContext = Effect.fn("Cli.debug.agent.createToolContext")(function* (
+  agent: Agent.Info,
+  ctx: InstanceContext,
+) {
+  const sessionSvc = yield* Session.Service
+  const session = yield* sessionSvc.create({ title: `Debug tool run (${agent.name})` })
+  const messageID = MessageID.ascending()
+  const model = agent.model
+    ? agent.model
+    : yield* Effect.gen(function* () {
+        const provider = yield* Provider.Service
+        return yield* provider.defaultModel()
+      })
+  const now = Date.now()
+  const message: MessageV2.Assistant = {
+    id: messageID,
+    sessionID: session.id,
+    role: "assistant",
+    time: { created: now },
+    parentID: messageID,
+    modelID: model.modelID,
+    providerID: model.providerID,
+    mode: "debug",
+    agent: agent.name,
+    path: {
+      cwd: ctx.directory,
+      root: ctx.worktree,
+    },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  }
+  yield* sessionSvc.updateMessage(message)
 
   const ruleset = Permission.merge(agent.permission, session.permission ?? [])
 
@@ -189,4 +178,4 @@ async function createToolContext(agent: Agent.Info) {
       })
     },
   }
-}
+})

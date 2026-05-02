@@ -26,6 +26,7 @@ import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { TestConfig } from "../fixture/config"
 
 void Log.init({ print: false })
 
@@ -208,7 +209,7 @@ function layer(result: "continue" | "compact") {
 
 function cfg(compaction?: Config.Info["compaction"]) {
   const base = Config.Info.zod.parse({})
-  return Layer.mock(Config.Service)({
+  return TestConfig.layer({
     get: () => Effect.succeed({ ...base, compaction }),
   })
 }

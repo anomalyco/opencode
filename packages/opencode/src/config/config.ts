@@ -12,11 +12,8 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { type InstanceContext } from "../project/instance"
-import { InstanceStore } from "../project/instance-store"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { existsSync } from "fs"
-import { GlobalBus } from "@/bus/global"
-import { Event } from "../server/event"
 import { Account } from "@/account/account"
 import { isRecord } from "@/util/record"
 import type { ConsoleState } from "./console-state"
@@ -289,9 +286,9 @@ export interface Interface {
   readonly get: () => Effect.Effect<Info>
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
-  readonly update: (config: Info, options?: { dispose?: boolean }) => Effect.Effect<void>
-  readonly updateGlobal: (config: Info) => Effect.Effect<Info>
-  readonly invalidate: (wait?: boolean) => Effect.Effect<void>
+  readonly update: (config: Info) => Effect.Effect<void>
+  readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
 }
@@ -730,37 +727,17 @@ export const layer = Layer.effect(
       )
     })
 
-    const update = Effect.fn("Config.update")(function* (config: Info, options?: { dispose?: boolean }) {
+    const update = Effect.fn("Config.update")(function* (config: Info) {
       const dir = yield* InstanceState.directory
       const file = path.join(dir, "config.json")
       const existing = yield* loadFile(file)
       yield* fs
         .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
         .pipe(Effect.orDie)
-      if (options?.dispose !== false) {
-        // Fail loudly if no instance is bound — silently skipping would
-        // mask "config update without an active instance" bugs. The throw
-        // comes from `Instance.current` inside `InstanceState.context`.
-        const ctx = yield* InstanceState.context
-        yield* Effect.promise(() => InstanceStore.disposeInstance(ctx))
-      }
     })
 
-    const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
+    const invalidate = Effect.fn("Config.invalidate")(function* () {
       yield* invalidateGlobal
-      const task = InstanceStore.disposeAllInstances()
-        .catch(() => undefined)
-        .finally(() =>
-          GlobalBus.emit("event", {
-            directory: "global",
-            payload: {
-              type: Event.Disposed.type,
-              properties: {},
-            },
-          }),
-        )
-      if (wait) yield* Effect.promise(() => task)
-      else void task
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
@@ -784,9 +761,8 @@ export const layer = Layer.effect(
         if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }
 
-      // Only tear down running instances if the config actually changed.
       if (changed) yield* invalidate()
-      return next
+      return { info: next, changed }
     })
 
     return Service.of({

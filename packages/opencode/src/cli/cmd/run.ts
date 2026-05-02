@@ -22,7 +22,8 @@ import { WriteTool } from "../../tool/write"
 import { WebSearchTool } from "../../tool/websearch"
 import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
-import { BashTool } from "../../tool/bash"
+import { ShellTool } from "../../tool/shell"
+import { ShellID } from "../../tool/shell/id"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "@/util/locale"
 import { AppRuntime } from "@/effect/app-runtime"
@@ -175,7 +176,7 @@ function skill(info: ToolProps<typeof SkillTool>) {
   })
 }
 
-function bash(info: ToolProps<typeof BashTool>) {
+function shell(info: ToolProps<typeof ShellTool>) {
   const output = info.part.state.status === "completed" ? info.part.state.output?.trim() : undefined
   block(
     {
@@ -400,7 +401,7 @@ export const RunCommand = cmd({
     async function execute(sdk: OpencodeClient) {
       function tool(part: ToolPart) {
         try {
-          if (part.tool === "bash") return bash(props<typeof BashTool>(part))
+          if (part.tool === ShellID.ToolID) return shell(props<typeof ShellTool>(part))
           if (part.tool === "glob") return glob(props<typeof GlobTool>(part))
           if (part.tool === "grep") return grep(props<typeof GrepTool>(part))
           if (part.tool === "read") return read(props<typeof ReadTool>(part))

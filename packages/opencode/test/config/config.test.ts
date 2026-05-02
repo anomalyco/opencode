@@ -12,8 +12,9 @@ import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
-import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
+import { provideTestInstance, provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
+import { InstanceRuntime } from "@/project/instance-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
@@ -41,6 +42,12 @@ const emptyAuth = Layer.mock(Auth.Service)({
 
 const testFlock = EffectFlock.defaultLayer
 
+const noopNpm = Layer.mock(Npm.Service)({
+  install: () => Effect.void,
+  add: () => Effect.die("not implemented"),
+  which: () => Effect.succeed(Option.none()),
+})
+
 const layer = Config.layer.pipe(
   Layer.provide(testFlock),
   Layer.provide(AppFileSystem.defaultLayer),
@@ -48,7 +55,7 @@ const layer = Config.layer.pipe(
   Layer.provide(emptyAuth),
   Layer.provide(emptyAccount),
   Layer.provideMerge(infra),
-  Layer.provide(Npm.defaultLayer),
+  Layer.provide(noopNpm),
 )
 
 const it = testEffect(layer)
@@ -57,9 +64,17 @@ const load = () => Effect.runPromise(Config.Service.use((svc) => svc.get()).pipe
 const save = (config: Config.Info) =>
   Effect.runPromise(Config.Service.use((svc) => svc.update(config)).pipe(Effect.scoped, Effect.provide(layer)))
 const saveGlobal = (config: Config.Info) =>
-  Effect.runPromise(Config.Service.use((svc) => svc.updateGlobal(config)).pipe(Effect.scoped, Effect.provide(layer)))
-const clear = (wait = false) =>
-  Effect.runPromise(Config.Service.use((svc) => svc.invalidate(wait)).pipe(Effect.scoped, Effect.provide(layer)))
+  Effect.runPromise(
+    Config.Service.use((svc) => svc.updateGlobal(config)).pipe(
+      Effect.map((result) => result.info),
+      Effect.scoped,
+      Effect.provide(layer),
+    ),
+  )
+const clear = async (wait = false) => {
+  await Effect.runPromise(Config.Service.use((svc) => svc.invalidate()).pipe(Effect.scoped, Effect.provide(layer)))
+  if (wait) await InstanceRuntime.disposeAllInstances()
+}
 const listDirs = () =>
   Effect.runPromise(Config.Service.use((svc) => svc.directories()).pipe(Effect.scoped, Effect.provide(layer)))
 const ready = () =>
@@ -108,7 +123,7 @@ async function check(map: (dir: string) => string) {
       },
     })
   } finally {
-    await disposeAllInstances()
+    await InstanceRuntime.disposeAllInstances()
     ;(Global.Path as { config: string }).config = prev
     await clear()
   }
@@ -483,6 +498,7 @@ test("resolves env templates in account config with account token", async () => 
     Layer.provide(emptyAuth),
     Layer.provide(fakeAccount),
     Layer.provideMerge(infra),
+    Layer.provide(noopNpm),
   )
 
   try {
@@ -493,7 +509,7 @@ test("resolves env templates in account config with account token", async () => 
           expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
         }),
       ),
-    ).pipe(Effect.scoped, Effect.provide(layer), Effect.provide(Npm.defaultLayer), Effect.runPromise)
+    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
   } finally {
     if (originalControlToken !== undefined) {
       process.env["OPENCODE_CONSOLE_TOKEN"] = originalControlToken
@@ -550,7 +566,7 @@ test("validates config schema and throws on invalid fields", async () => {
       })
     },
   })
-  await Instance.provide({
+  await provideTestInstance({
     directory: tmp.path,
     fn: async () => {
       // Strict schema should throw an error for invalid fields
@@ -565,7 +581,7 @@ test("throws error for invalid JSON", async () => {
       await Filesystem.write(path.join(dir, "opencode.json"), "{ invalid json }")
     },
   })
-  await Instance.provide({
+  await provideTestInstance({
     directory: tmp.path,
     fn: async () => {
       await expect(load()).rejects.toThrow()
@@ -986,11 +1002,6 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   const prev = process.env.OPENCODE_CONFIG_DIR
   process.env.OPENCODE_CONFIG_DIR = tmp.extra
 
-  const noopNpm = Layer.mock(Npm.Service)({
-    install: () => Effect.void,
-    add: () => Effect.die("not implemented"),
-    which: () => Effect.succeed(Option.none()),
-  })
   const testLayer = Config.layer.pipe(
     Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
@@ -1061,7 +1072,7 @@ test("resolves scoped npm plugins in config", async () => {
     },
   })
 
-  await Instance.provide({
+  await provideTestInstance({
     directory: tmp.path,
     fn: async () => {
       const config = await load()
@@ -1099,7 +1110,7 @@ test("merges plugin arrays from global and local configs", async () => {
     },
   })
 
-  await Instance.provide({
+  await provideTestInstance({
     directory: path.join(tmp.path, "project"),
     fn: async () => {
       const config = await load()
@@ -1258,7 +1269,7 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     },
   })
 
-  await Instance.provide({
+  await provideTestInstance({
     directory: path.join(tmp.path, "project"),
     fn: async () => {
       const config = await load()
@@ -1307,7 +1318,7 @@ test("keeps plugin origins aligned with merged plugin list", async () => {
     },
   })
 
-  await Instance.provide({
+  await provideTestInstance({
     directory: path.join(tmp.path, "project"),
     fn: async () => {
       const cfg = await load()
@@ -1883,7 +1894,7 @@ test("project config overrides remote well-known config", async () => {
     Layer.provide(fakeAuth),
     Layer.provide(emptyAccount),
     Layer.provideMerge(infra),
-    Layer.provide(Npm.defaultLayer),
+    Layer.provide(noopNpm),
   )
 
   try {
@@ -1941,7 +1952,7 @@ test("wellknown URL with trailing slash is normalized", async () => {
     Layer.provide(fakeAuth),
     Layer.provide(emptyAccount),
     Layer.provideMerge(infra),
-    Layer.provide(Npm.defaultLayer),
+    Layer.provide(noopNpm),
   )
 
   try {
@@ -2096,7 +2107,7 @@ describe("deduplicatePluginOrigins", () => {
       },
     })
 
-    await Instance.provide({
+    await provideTestInstance({
       directory: path.join(tmp.path, "project"),
       fn: async () => {
         const config = await load()

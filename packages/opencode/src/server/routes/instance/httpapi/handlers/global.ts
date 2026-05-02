@@ -1,7 +1,8 @@
 import { Config } from "@/config/config"
 import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
+import { EffectBridge } from "@/effect/bridge"
 import { Installation } from "@/installation"
-import { InstanceStore } from "@/project/instance-store"
+import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
 import { Effect, Queue, Schema } from "effect"
@@ -68,7 +69,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
   Effect.gen(function* () {
     const config = yield* Config.Service
     const installation = yield* Installation.Service
-    const store = yield* InstanceStore.Service
+    const bridge = yield* EffectBridge.make()
 
     const health = Effect.fn("GlobalHttpApi.health")(function* () {
       return { healthy: true as const, version: InstallationVersion }
@@ -83,15 +84,13 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     })
 
     const configUpdate = Effect.fn("GlobalHttpApi.configUpdate")(function* (ctx) {
-      return yield* config.updateGlobal(ctx.payload)
+      const result = yield* config.updateGlobal(ctx.payload)
+      if (result.changed) bridge.fork(disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true }))
+      return result.info
     })
 
     const dispose = Effect.fn("GlobalHttpApi.dispose")(function* () {
-      yield* store.disposeAll()
-      GlobalBus.emit("event", {
-        directory: "global",
-        payload: { type: "global.disposed", properties: {} },
-      })
+      yield* disposeAllInstancesAndEmitGlobalDisposed()
       return true
     })
 
