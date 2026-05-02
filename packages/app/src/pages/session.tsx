@@ -1843,10 +1843,10 @@ export default function Page() {
                       diffStyle: "unified",
                       classes: {
                         root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
+                        header: "px-0",
+                        container: "px-0",
                       },
-                      loadingClass: "px-4 py-4 text-text-weak",
+                      loadingClass: "px-0 py-4 text-text-weak",
                       emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
                     })}
                     actions={actions}
