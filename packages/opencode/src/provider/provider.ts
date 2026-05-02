@@ -25,6 +25,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined, withStatics } from "@/util/schema"
+import { repairSSE } from "./sse-repair"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
@@ -1412,7 +1413,12 @@ const layer: Layer.Layer<
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
-    async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
+    async function resolveSDK(
+      model: Model,
+      s: State,
+      envs: Record<string, string | undefined>,
+      sdkOpts: { repairSSE: boolean },
+    ) {
       try {
         using _ = log.time("getSDK", {
           providerID: model.providerID,
@@ -1509,8 +1515,9 @@ const layer: Layer.Layer<
             timeout: false,
           })
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          const maybeRepaired = sdkOpts.repairSSE ? repairSSE(res) : res
+          if (!chunkAbortCtl) return maybeRepaired
+          return wrapSSE(maybeRepaired, chunkTimeout, chunkAbortCtl)
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
@@ -1583,9 +1590,12 @@ const layer: Layer.Layer<
       const key = `${model.providerID}/${model.id}`
       if (s.models.has(key)) return s.models.get(key)!
 
+      const cfg = yield* config.get()
+      const sdkOpts = { repairSSE: cfg.experimental?.enable_sse_json_repair === true }
+
       return yield* Effect.promise(async () => {
         const provider = s.providers[model.providerID]
-        const sdk = await resolveSDK(model, s, envs)
+        const sdk = await resolveSDK(model, s, envs, sdkOpts)
 
         try {
           const language = s.modelLoaders[model.providerID]

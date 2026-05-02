@@ -247,6 +247,10 @@ export const Info = Schema.Struct({
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
+      enable_sse_json_repair: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Enable SSE chunk JSON repair. When enabled, malformed JSON in SSE data lines is repaired via jsonrepair to keep the stream alive. Disabled by default to minimize behavior changes; turn on if upstream providers return malformed SSE payloads.",
+      }),
       batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
       openTelemetry: Schema.optional(Schema.Boolean).annotate({
         description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
