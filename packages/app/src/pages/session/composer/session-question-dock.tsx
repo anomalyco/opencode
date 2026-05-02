@@ -160,7 +160,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     focusFrame = requestAnimationFrame(() => {
       focusFrame = undefined
       const el = next === options().length ? customRef : optsRef[next]
-      el?.focus()
+      el?.focus({ preventScroll: true })
     })
   }
 
