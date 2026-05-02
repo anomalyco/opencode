@@ -1,13 +1,13 @@
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
-import { Context, Duration, Effect, Layer, ManagedRuntime, Option, Schedule, Schema } from "effect"
-import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Installation } from "../installation"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { makeRuntime } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
 const Cost = Schema.Struct({
@@ -111,12 +111,10 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
     const ttl = Duration.minutes(5)
     const lockKey = `models-dev:${filepath}`
 
-    let cached: Record<string, Provider> | undefined
-
     const fresh = Effect.fnUntraced(function* () {
       const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
-      if (!stat?.mtime) return false
-      const mtime = Option.isOption(stat.mtime) ? Number(Option.getOrElse(stat.mtime, () => new Date(0)).getTime()) : 0
+      if (!stat) return false
+      const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
       return Date.now() - mtime < Duration.toMillis(ttl)
     })
 
@@ -129,67 +127,69 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
       )
     })
 
-    const loadFromDisk = Effect.fnUntraced(function* () {
-      return yield* fs
-        .readJson(Flag.OPENCODE_MODELS_PATH ?? filepath)
-        .pipe(Effect.catch(() => Effect.succeed(undefined))) as Effect.Effect<
-        Record<string, Provider> | undefined
-      >
+    const loadFromDisk = fs
+      .readJson(Flag.OPENCODE_MODELS_PATH ?? filepath)
+      .pipe(
+        Effect.catch(() => Effect.succeed(undefined)),
+        Effect.map((v) => v as Record<string, Provider> | undefined),
+      )
+
+    // Bundled snapshot fallback — present in built releases, missing in dev.
+    const loadSnapshot = Effect.tryPromise({
+      // @ts-ignore — generated at build time, may not exist in dev
+      try: () => import("./models-snapshot.js").then((m) => m.snapshot as Record<string, Provider> | undefined),
+      catch: () => undefined,
+    }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+
+    // Cross-process file lock — Flock is the right primitive (in-process
+    // semaphores can't coordinate concurrent opencode CLIs writing the same cache).
+    const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
+      const text = yield* fetchApi()
+      yield* fs.writeWithDirs(filepath, text)
+      return text
     })
 
-    const loadSnapshot = Effect.promise(async () => {
-      try {
-        // @ts-ignore — generated at build time, may not exist in dev
-        const m = await import("./models-snapshot.js")
-        return m.snapshot as Record<string, Provider> | undefined
-      } catch {
-        return undefined
-      }
-    })
-
-    const populate = Effect.fn("ModelsDev.populate")(function* () {
-      const fromDisk = yield* loadFromDisk()
+    const populate = Effect.gen(function* () {
+      const fromDisk = yield* loadFromDisk
       if (fromDisk) return fromDisk
       const snapshot = yield* loadSnapshot
       if (snapshot) return snapshot
       if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-
-      // Cross-process file lock — Flock is the right primitive (in-process
-      // semaphores can't coordinate concurrent opencode CLIs writing the same cache).
-      return yield* Effect.promise(() =>
-        Flock.withLock(lockKey, async () => {
-          const text = await Effect.runPromise(fetchApi())
-          await Effect.runPromise(fs.writeWithDirs(filepath, text))
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* Flock.effect(lockKey)
+          const text = yield* fetchAndWrite()
           return JSON.parse(text) as Record<string, Provider>
         }),
       )
-    })
+    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
-    const get = Effect.fn("ModelsDev.get")(function* () {
-      if (cached) return cached
-      cached = yield* populate()
-      return cached
-    })
+    // Single-flight cache: concurrent first-call dedupes via the cached effect.
+    // refresh() invalidates so the next get() re-populates from disk.
+    const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
+
+    const get = (): Effect.Effect<Record<string, Provider>> => cachedGet
 
     const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-      if (!force && (yield* fresh())) {
-        cached = undefined
-        return
-      }
-      yield* Effect.promise(() =>
-        Flock.withLock(lockKey, async () => {
-          const text = await Effect.runPromise(fetchApi())
-          await Effect.runPromise(fs.writeWithDirs(filepath, text))
+      if (!force && (yield* fresh())) return yield* invalidate
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* Flock.effect(lockKey)
+          if (!force && (yield* fresh())) return
+          yield* fetchAndWrite()
         }),
       ).pipe(
         Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
         Effect.ignore,
       )
-      cached = undefined
+      yield* invalidate
     })
 
     if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
-      yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.fixed("60 minutes")), Effect.ignore))
+      // Eager initial refresh + 1 hour cadence (matches pre-Service behavior).
+      yield* Effect.forkScoped(
+        refresh().pipe(Effect.andThen(refresh().pipe(Effect.repeat(Schedule.fixed("60 minutes")))), Effect.ignore),
+      )
     }
 
     return Service.of({ get, refresh })
@@ -202,10 +202,10 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
 )
 
 // Promise-style compat for callers in Promise-context (Hono routes, legacy CLI handlers).
-// Uses the shared memoMap so this runtime's Service instance is shared with AppRuntime
-// — Effect callers that yield ModelsDev.Service see the same cache.
-const promiseRuntime = ManagedRuntime.make(defaultLayer, { memoMap })
-export const get = () => promiseRuntime.runPromise(Service.use((s) => s.get()))
-export const refresh = (force = false) => promiseRuntime.runPromise(Service.use((s) => s.refresh(force)))
+// makeRuntime uses the shared memoMap so this runtime's Service instance is the same one
+// AppRuntime sees — Effect callers and Promise callers operate on the same cache.
+const runtime = makeRuntime(Service, defaultLayer)
+export const get = () => runtime.runPromise((s) => s.get())
+export const refresh = (force = false) => runtime.runPromise((s) => s.refresh(force))
 
 export * as ModelsDev from "./models"
