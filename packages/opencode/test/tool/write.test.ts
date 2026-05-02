@@ -13,7 +13,7 @@ import { Tool } from "@/tool/tool"
 import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const ctx = {
@@ -58,42 +58,39 @@ const run = Effect.fn("WriteToolTest.run")(function* (
 
 describe("tool.write", () => {
   describe("new file creation", () => {
-    it.live("writes content to new file", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "newfile.txt")
-          const result = yield* run({ filePath: filepath, content: "Hello, World!" })
+    it.instance("writes content to new file", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "newfile.txt")
+        const result = yield* run({ filePath: filepath, content: "Hello, World!" })
 
-          expect(result.output).toContain("Wrote file successfully")
-          expect(result.metadata.exists).toBe(false)
+        expect(result.output).toContain("Wrote file successfully")
+        expect(result.metadata.exists).toBe(false)
 
-          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
-          expect(content).toBe("Hello, World!")
-        }),
-      ),
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("Hello, World!")
+      }),
     )
 
-    it.live("creates parent directories if needed", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          const filepath = path.join(dir, "nested", "deep", "file.txt")
-          yield* run({ filePath: filepath, content: "nested content" })
+    it.instance("creates parent directories if needed", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "nested", "deep", "file.txt")
+        yield* run({ filePath: filepath, content: "nested content" })
 
-          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
-          expect(content).toBe("nested content")
-        }),
-      ),
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("nested content")
+      }),
     )
 
-    it.live("handles relative paths by resolving to instance directory", () =>
-      provideTmpdirInstance((dir) =>
-        Effect.gen(function* () {
-          yield* run({ filePath: "relative.txt", content: "relative content" })
+    it.instance("handles relative paths by resolving to instance directory", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* run({ filePath: "relative.txt", content: "relative content" })
 
-          const content = yield* Effect.promise(() => fs.readFile(path.join(dir, "relative.txt"), "utf-8"))
-          expect(content).toBe("relative content")
-        }),
-      ),
+        const content = yield* Effect.promise(() => fs.readFile(path.join(test.directory, "relative.txt"), "utf-8"))
+        expect(content).toBe("relative content")
+      }),
     )
   })
 
