@@ -1,13 +1,12 @@
-import { afterEach, test, expect } from "bun:test"
-import { Effect, Fiber, Layer } from "effect"
+import { afterEach, expect } from "bun:test"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
 import { InstanceStore } from "../../src/project/instance-store"
 import { QuestionID } from "../../src/question/schema"
-import { disposeAllInstances, provideInstance, tmpdir, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
-import { AppRuntime } from "../../src/effect/app-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 
 const it = testEffect(Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer))
@@ -35,16 +34,6 @@ const rejectEffect = Effect.fn("QuestionTest.reject")(function* (id: QuestionID)
   const question = yield* Question.Service
   yield* question.reject(id)
 })
-
-const ask = (input: { sessionID: SessionID; questions: ReadonlyArray<Question.Info>; tool?: Question.Tool }) =>
-  AppRuntime.runPromise(Question.Service.use((svc) => svc.ask(input)))
-
-const list = () => AppRuntime.runPromise(Question.Service.use((svc) => svc.list()))
-
-const reply = (input: { requestID: QuestionID; answers: ReadonlyArray<Question.Answer> }) =>
-  AppRuntime.runPromise(Question.Service.use((svc) => svc.reply(input)))
-
-const reject = (id: QuestionID) => AppRuntime.runPromise(Question.Service.use((svc) => svc.reject(id)))
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -371,72 +360,50 @@ it.live("questions stay isolated by directory", () =>
   }),
 )
 
-test("pending question rejects on instance dispose", async () => {
-  await using tmp = await tmpdir({ git: true })
+it.live("pending question rejects on instance dispose", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const fiber = yield* askEffect({
+      sessionID: SessionID.make("ses_dispose"),
+      questions: [
+        {
+          question: "Dispose me?",
+          header: "Dispose",
+          options: [{ label: "Yes", description: "Yes" }],
+        },
+      ],
+    }).pipe(provideInstance(dir), Effect.forkScoped)
 
-  const pending = Instance.provide({
-    directory: tmp.path,
-    fn: () => {
-      return ask({
-        sessionID: SessionID.make("ses_dispose"),
-        questions: [
-          {
-            question: "Dispose me?",
-            header: "Dispose",
-            options: [{ label: "Yes", description: "Yes" }],
-          },
-        ],
-      })
-    },
-  })
-  const result = pending.then(
-    () => "resolved" as const,
-    (err) => err,
-  )
+    expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
+    yield* Effect.promise(() =>
+      Instance.provide({ directory: dir, fn: () => InstanceStore.disposeInstance(Instance.current) }),
+    )
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const items = await list()
-      expect(items).toHaveLength(1)
-      await InstanceStore.disposeInstance(Instance.current)
-    },
-  })
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Question.RejectedError)
+  }),
+)
 
-  expect(await result).toBeInstanceOf(Question.RejectedError)
-})
+it.live("pending question rejects on instance reload", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const fiber = yield* askEffect({
+      sessionID: SessionID.make("ses_reload"),
+      questions: [
+        {
+          question: "Reload me?",
+          header: "Reload",
+          options: [{ label: "Yes", description: "Yes" }],
+        },
+      ],
+    }).pipe(provideInstance(dir), Effect.forkScoped)
 
-test("pending question rejects on instance reload", async () => {
-  await using tmp = await tmpdir({ git: true })
+    expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
+    yield* Effect.promise(() => InstanceStore.reloadInstance({ directory: dir }))
 
-  const pending = Instance.provide({
-    directory: tmp.path,
-    fn: () => {
-      return ask({
-        sessionID: SessionID.make("ses_reload"),
-        questions: [
-          {
-            question: "Reload me?",
-            header: "Reload",
-            options: [{ label: "Yes", description: "Yes" }],
-          },
-        ],
-      })
-    },
-  })
-  const result = pending.then(
-    () => "resolved" as const,
-    (err) => err,
-  )
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const items = await list()
-      expect(items).toHaveLength(1)
-      await InstanceStore.reloadInstance({ directory: tmp.path })
-    },
-  })
-
-  expect(await result).toBeInstanceOf(Question.RejectedError)
-})
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Question.RejectedError)
+  }),
+)
