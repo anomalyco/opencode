@@ -6,6 +6,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
+import { InstanceStore } from "../../src/project/instance-store"
 import { disposeAllInstances, provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
@@ -998,7 +999,7 @@ it.live("pending permission rejects on instance dispose", () =>
     }).pipe(run, Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
-    yield* Effect.promise(() => Instance.provide({ directory: dir, fn: () => void Instance.dispose() }))
+    yield* Effect.promise(() => Instance.provide({ directory: dir, fn: () => void InstanceStore.disposeInstance(Instance.current) }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)
@@ -1021,7 +1022,7 @@ it.live("pending permission rejects on instance reload", () =>
     }).pipe(run, Effect.forkScoped)
 
     expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
-    yield* Effect.promise(() => Instance.reload({ directory: dir }))
+    yield* Effect.promise(() => InstanceStore.reloadInstance({ directory: dir }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)
@@ -1115,7 +1116,7 @@ it.live("ask - abort should clear pending request", () =>
 
     const pending = yield* waitForPending(1).pipe(run)
     expect(pending).toHaveLength(1)
-    yield* Effect.promise(() => Instance.reload({ directory: dir }))
+    yield* Effect.promise(() => InstanceStore.reloadInstance({ directory: dir }))
 
     const exit = yield* Fiber.await(fiber)
     expect(Exit.isFailure(exit)).toBe(true)
