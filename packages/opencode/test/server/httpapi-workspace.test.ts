@@ -27,9 +27,9 @@ const it = testEffect(
   Layer.mergeAll(NodeServices.layer, Project.defaultLayer, Session.defaultLayer, Workspace.defaultLayer),
 )
 
-function request(path: string, directory: string, init: RequestInit = {}) {
+function request(path: string, directory: string, init: RequestInit = {}, httpApi = true) {
   return Effect.promise(() => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpApi
     const headers = new Headers(init.headers)
     headers.set("x-opencode-directory", directory)
     return Promise.resolve(Server.Default().app.request(path, { ...init, headers }))
@@ -192,6 +192,55 @@ describe("workspace HttpApi", () => {
       const listed = yield* request(WorkspacePaths.list, dir)
       expect(listed.status).toBe(200)
       expect(yield* Effect.promise(() => listed.json())).toEqual([])
+    }),
+  )
+
+  it.live("creates workspace with the TUI payload shape", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      registerAdapter(project.project.id, "local-test", localAdapter(path.join(dir, ".workspace")))
+
+      const created = yield* request(WorkspacePaths.list, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "local-test", branch: null }),
+      })
+
+      expect(created.status).toBe(200)
+      expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
+        type: "local-test",
+        name: "local-test",
+        extra: null,
+      })
+    }),
+  )
+
+  it.live("documents legacy Hono accepting the TUI payload shape", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      registerAdapter(project.project.id, "local-test", localAdapter(path.join(dir, ".workspace")))
+
+      const created = yield* request(
+        WorkspacePaths.list,
+        dir,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "local-test", branch: null }),
+        },
+        false,
+      )
+
+      expect(created.status).toBe(200)
+      expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
+        type: "local-test",
+        name: "local-test",
+        extra: null,
+      })
     }),
   )
 
