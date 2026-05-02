@@ -1448,7 +1448,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
             }
 
-            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+            // Allow plugins to transform messages before LLM invocation
+            // (e.g., replace image attachments with text descriptions via Vision)
+            yield* plugin.trigger(
+              "pre_chat.messages.transform",
+              {
+                sessionID,
+                agent: agent.name,
+                model,
+                messages: msgs,
+              },
+              { messages: structuredClone(msgs) },
+            )
+            yield* plugin.trigger(
+              "experimental.chat.messages.transform",
+              { sessionID, agent: agent.name, model, messages: msgs },
+              { messages: msgs },
+            )
 
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
