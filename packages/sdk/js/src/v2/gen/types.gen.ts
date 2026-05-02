@@ -98,6 +98,13 @@ export type EventInstallationUpdateAvailable = {
   }
 }
 
+export type EventProviderUpdated = {
+  type: "provider.updated"
+  properties: {
+    providerIDs: Array<string>
+  }
+}
+
 export type EventMessagePartDelta = {
   type: "message.part.delta"
   properties: {
@@ -1119,6 +1126,7 @@ export type GlobalEvent = {
     | EventLspUpdated
     | EventInstallationUpdated
     | EventInstallationUpdateAvailable
+    | EventProviderUpdated
     | EventMessagePartDelta
     | EventPermissionAsked
     | EventPermissionReplied
@@ -2058,6 +2066,7 @@ export type Event =
   | EventLspUpdated
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventProviderUpdated
   | EventMessagePartDelta
   | EventPermissionAsked
   | EventPermissionReplied

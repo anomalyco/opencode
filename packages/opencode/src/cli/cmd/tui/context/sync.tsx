@@ -343,6 +343,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
+        case "provider.updated": {
+          const workspace = project.workspace.current()
+          void Promise.all([sdk.client.config.providers({ workspace }), sdk.client.provider.list({ workspace })]).then(
+            ([providers, providerList]) => {
+              batch(() => {
+                setStore("provider", reconcile(providers.data?.providers ?? []))
+                setStore("provider_default", reconcile(providers.data?.default ?? {}))
+                setStore(
+                  "provider_next",
+                  reconcile(providerList.data ?? { all: [], default: {}, connected: [] }),
+                )
+              })
+            },
+          )
+          break
+        }
+
         case "vcs.branch.updated": {
           setStore("vcs", { branch: event.properties.branch })
           break

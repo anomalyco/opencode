@@ -3,6 +3,7 @@ import { Format } from "../format"
 import { LSP } from "../lsp"
 import { File } from "../file"
 import { Snapshot } from "../snapshot"
+import { Provider } from "../provider"
 import * as Project from "./project"
 import * as Vcs from "./vcs"
 import { Bus } from "../bus"
@@ -31,6 +32,14 @@ export const InstanceBootstrap = Effect.gen(function* () {
       Snapshot.Service,
     ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
   ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+  yield* Provider.Service.use((svc) => svc.refresh()).pipe(
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        Log.Default.warn("provider refresh failed", { cause })
+      }),
+    ),
+    Effect.forkDetach,
+  )
 
   yield* Bus.Service.use((svc) =>
     svc.subscribeCallback(Command.Event.Executed, async (payload) => {

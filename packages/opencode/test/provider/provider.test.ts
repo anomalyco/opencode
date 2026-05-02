@@ -9,6 +9,7 @@ import { Plugin } from "../../src/plugin/index"
 import { ModelsDev } from "../../src/provider"
 import { Provider } from "../../src/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
+import { GlobalBus } from "../../src/bus/global"
 import { Filesystem } from "../../src/util"
 import { Env } from "../../src/env"
 import { Effect } from "effect"
@@ -29,6 +30,10 @@ async function run<A, E>(fn: (provider: Provider.Interface) => Effect.Effect<A, 
 
 async function list() {
   return run((provider) => provider.list())
+}
+
+async function refresh() {
+  return run((provider) => provider.refresh())
 }
 
 async function getProvider(providerID: ProviderID) {
@@ -1115,6 +1120,81 @@ test("provider with custom npm package", async () => {
       expect(providers[ProviderID.make("local-llm")]).toBeDefined()
       expect(providers[ProviderID.make("local-llm")].models["llama-3"].api.npm).toBe("@ai-sdk/openai-compatible")
       expect(providers[ProviderID.make("local-llm")].options.baseURL).toBe("http://localhost:11434/v1")
+    },
+  })
+})
+
+test("openai-compatible custom provider refreshes models from /models", async () => {
+  using server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname !== "/v1/models") {
+        return new Response("not found", { status: 404 })
+      }
+      expect(req.headers.get("Authorization")).toBe("Bearer test-key")
+      return new Response(
+        JSON.stringify({
+          data: [
+            { id: "qwen2.5-coder-7b-instruct" },
+            { id: "gemma-3-12b" },
+          ],
+        }),
+        {
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      )
+    },
+  })
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            lmstudio: {
+              name: "LM Studio",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                placeholder: {
+                  name: "Placeholder",
+                  tool_call: true,
+                  temperature: true,
+                  limit: { context: 8192, output: 2048 },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+                baseURL: `http://127.0.0.1:${server.port}/v1`,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await list()
+      expect(before[ProviderID.make("lmstudio")]).toBeDefined()
+      expect(before[ProviderID.make("lmstudio")].models["placeholder"]).toBeDefined()
+      expect(before[ProviderID.make("lmstudio")].models["qwen2.5-coder-7b-instruct"]).toBeUndefined()
+
+      await refresh()
+
+      const after = await list()
+      expect(after[ProviderID.make("lmstudio")].models["placeholder"]).toBeUndefined()
+      expect(after[ProviderID.make("lmstudio")].models["qwen2.5-coder-7b-instruct"]).toBeDefined()
+      expect(after[ProviderID.make("lmstudio")].models["gemma-3-12b"]).toBeDefined()
+      expect(after[ProviderID.make("lmstudio")].models["qwen2.5-coder-7b-instruct"].api.npm).toBe(
+        "@ai-sdk/openai-compatible",
+      )
     },
   })
 })
@@ -2541,6 +2621,86 @@ test("plugin config enabled and disabled providers are honored", async () => {
       expect(providers[ProviderID.openai]).toBeUndefined()
     },
   })
+})
+
+test("provider refresh replaces plugin-scanned models after startup", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const configDir = path.join(dir, ".opencode")
+      const root = path.join(configDir, "plugin")
+      await mkdir(root, { recursive: true })
+      await markPluginDependenciesReady(configDir)
+      await markPluginDependenciesReady(Global.Path.config)
+      await Bun.write(
+        path.join(root, "refresh-provider.ts"),
+        [
+          "export default {",
+          '  id: "demo.refresh-provider",',
+          "  server: async () => ({",
+          "    async config(cfg) {",
+          "      cfg.provider ??= {}",
+          "      cfg.provider.demo = {",
+          '        name: "Demo Provider",',
+          '        npm: "@ai-sdk/openai-compatible",',
+          '        api: "https://example.com/v1",',
+          "        models: {",
+          "          base: {",
+          '            name: "Base Model",',
+          "            tool_call: true,",
+          "            temperature: true,",
+          "            limit: { context: 128000, output: 4096 },",
+          "          },",
+          "        },",
+          "      }",
+          "    },",
+          "    provider: {",
+          '      id: "demo",',
+          "      async models(provider) {",
+          "        return {",
+          "          scanned: {",
+          "            ...provider.models.base,",
+          '            name: "Scanned Model",',
+          "            api: { ...provider.models.base.api, id: 'scanned' },",
+          "          },",
+          "        }",
+          "      },",
+          "    },",
+          "  }),",
+          "}",
+          "",
+        ].join("\n"),
+      )
+    },
+  })
+
+  const seen: string[] = []
+  const handler = (event: { payload: { type: string; properties: { providerIDs?: string[] } } }) => {
+    if (event.payload.type !== "provider.updated") return
+    seen.push(...(event.payload.properties.providerIDs ?? []))
+  }
+  GlobalBus.on("event", handler)
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const before = await list()
+        expect(before[ProviderID.make("demo")]).toBeDefined()
+        expect(before[ProviderID.make("demo")].models[ModelID.make("base")]).toBeDefined()
+        expect(before[ProviderID.make("demo")].models[ModelID.make("scanned")]).toBeUndefined()
+
+        await refresh()
+
+        const after = await list()
+        expect(after[ProviderID.make("demo")].models[ModelID.make("base")]).toBeUndefined()
+        expect(after[ProviderID.make("demo")].models[ModelID.make("scanned")]).toBeDefined()
+      },
+    })
+  } finally {
+    GlobalBus.off("event", handler)
+  }
+
+  expect(seen).toContain("demo")
 })
 
 test("opencode loader keeps paid models when config apiKey is present", async () => {
