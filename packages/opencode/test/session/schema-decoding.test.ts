@@ -59,6 +59,7 @@ describe("Session.Info", () => {
       projectID,
       workspaceID,
       directory: "/tmp/proj",
+      path: "packages/opencode",
       parentID: sessionIDChild,
       summary: {
         additions: 10,

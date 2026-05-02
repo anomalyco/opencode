@@ -156,28 +156,38 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   }
 
   if (method.type === "api") {
-    if (method.authorize) {
-      const key = await prompts.password({
-        message: "Enter your API key",
-        validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-      })
-      if (prompts.isCancel(key)) throw new UI.CancelledError()
+    const key = await prompts.password({
+      message: "Enter your API key",
+      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+    })
+    if (prompts.isCancel(key)) throw new UI.CancelledError()
 
-      const result = await method.authorize(inputs)
-      if (result.type === "failed") {
-        prompts.log.error("Failed to authorize")
-      }
-      if (result.type === "success") {
-        const saveProvider = result.provider ?? provider
-        await put(saveProvider, {
-          type: "api",
-          key: result.key ?? key,
-        })
-        prompts.log.success("Login successful")
-      }
+    const metadata = Object.keys(inputs).length ? { metadata: inputs } : {}
+    if (!method.authorize) {
+      await put(provider, {
+        type: "api",
+        key,
+        ...metadata,
+      })
       prompts.outro("Done")
       return true
     }
+
+    const result = await method.authorize(inputs)
+    if (result.type === "failed") {
+      prompts.log.error("Failed to authorize")
+    }
+    if (result.type === "success") {
+      const saveProvider = result.provider ?? provider
+      await put(saveProvider, {
+        type: "api",
+        key: result.key ?? key,
+        ...metadata,
+      })
+      prompts.log.success("Login successful")
+    }
+    prompts.outro("Done")
+    return true
   }
 
   return false

@@ -208,6 +208,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
         parent_id: data.parentID ?? null,
         slug: data.slug ?? "",
         directory: data.directory ?? "",
+        path: data.path ?? null,
         title: data.title ?? "",
         version: data.version ?? "",
         share_url: data.share?.url ?? null,

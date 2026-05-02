@@ -33,13 +33,6 @@ export type EventProjectUpdated = {
   properties: Project
 }
 
-export type EventServerInstanceDisposed = {
-  type: "server.instance.disposed"
-  properties: {
-    directory: string
-  }
-}
-
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -54,18 +47,10 @@ export type EventGlobalDisposed = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
+export type EventServerInstanceDisposed = {
+  type: "server.instance.disposed"
   properties: {
-    file: string
-  }
-}
-
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
+    directory: string
   }
 }
 
@@ -227,6 +212,53 @@ export type EventInstallationUpdateAvailable = {
   type: "installation.update-available"
   properties: {
     version: string
+  }
+}
+
+export type EventWorkspaceReady = {
+  type: "workspace.ready"
+  properties: {
+    name: string
+  }
+}
+
+export type EventWorkspaceFailed = {
+  type: "workspace.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type EventWorkspaceRestore = {
+  type: "workspace.restore"
+  properties: {
+    workspaceID: string
+    sessionID: string
+    total: number
+    step: number
+  }
+}
+
+export type EventWorkspaceStatus = {
+  type: "workspace.status"
+  properties: {
+    workspaceID: string
+    status: "connected" | "connecting" | "disconnected" | "error"
+  }
+}
+
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
   }
 }
 
@@ -503,38 +535,6 @@ export type EventPtyDeleted = {
   type: "pty.deleted"
   properties: {
     id: string
-  }
-}
-
-export type EventWorkspaceReady = {
-  type: "workspace.ready"
-  properties: {
-    name: string
-  }
-}
-
-export type EventWorkspaceFailed = {
-  type: "workspace.failed"
-  properties: {
-    message: string
-  }
-}
-
-export type EventWorkspaceRestore = {
-  type: "workspace.restore"
-  properties: {
-    workspaceID: string
-    sessionID: string
-    total: number
-    step: number
-  }
-}
-
-export type EventWorkspaceStatus = {
-  type: "workspace.status"
-  properties: {
-    workspaceID: string
-    status: "connected" | "connecting" | "disconnected" | "error"
   }
 }
 
@@ -936,6 +936,7 @@ export type Session = {
   projectID: string
   workspaceID?: string
   directory: string
+  path?: string
   parentID?: string
   summary?: {
     additions: number
@@ -1063,6 +1064,7 @@ export type SyncEventSessionUpdated = {
       projectID?: string | null
       workspaceID?: string | null
       directory?: string | null
+      path?: string | null
       parentID?: string | null
       summary?: {
         additions: number
@@ -1110,11 +1112,9 @@ export type GlobalEvent = {
   workspace?: string
   payload:
     | EventProjectUpdated
-    | EventServerInstanceDisposed
     | EventServerConnected
     | EventGlobalDisposed
-    | EventFileEdited
-    | EventFileWatcherUpdated
+    | EventServerInstanceDisposed
     | EventLspClientDiagnostics
     | EventLspUpdated
     | EventMessagePartDelta
@@ -1124,6 +1124,12 @@ export type GlobalEvent = {
     | EventSessionError
     | EventInstallationUpdated
     | EventInstallationUpdateAvailable
+    | EventWorkspaceReady
+    | EventWorkspaceFailed
+    | EventWorkspaceRestore
+    | EventWorkspaceStatus
+    | EventFileEdited
+    | EventFileWatcherUpdated
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
@@ -1145,10 +1151,6 @@ export type GlobalEvent = {
     | EventPtyUpdated
     | EventPtyExited
     | EventPtyDeleted
-    | EventWorkspaceReady
-    | EventWorkspaceFailed
-    | EventWorkspaceRestore
-    | EventWorkspaceStatus
     | EventMessageUpdated
     | EventMessageRemoved
     | EventMessagePartUpdated
@@ -1219,7 +1221,6 @@ export type PermissionConfig =
       question?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
-      codesearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
       doom_loop?: PermissionActionConfig
       skill?: PermissionRuleConfig
@@ -1882,6 +1883,7 @@ export type GlobalSession = {
   projectID: string
   workspaceID?: string
   directory: string
+  path?: string
   parentID?: string
   summary?: {
     additions: number
@@ -2053,11 +2055,9 @@ export type File = {
 
 export type Event =
   | EventProjectUpdated
-  | EventServerInstanceDisposed
   | EventServerConnected
   | EventGlobalDisposed
-  | EventFileEdited
-  | EventFileWatcherUpdated
+  | EventServerInstanceDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
@@ -2067,6 +2067,12 @@ export type Event =
   | EventSessionError
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventWorkspaceReady
+  | EventWorkspaceFailed
+  | EventWorkspaceRestore
+  | EventWorkspaceStatus
+  | EventFileEdited
+  | EventFileWatcherUpdated
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -2088,10 +2094,6 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventWorkspaceReady
-  | EventWorkspaceFailed
-  | EventWorkspaceRestore
-  | EventWorkspaceStatus
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -2128,6 +2130,10 @@ export type McpStatus =
   | McpStatusFailed
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
+
+export type McpUnsupportedOAuthError = {
+  error: string
+}
 
 export type Path = {
   home: string
@@ -2424,19 +2430,19 @@ export type AppLogResponses = {
 
 export type AppLogResponse = AppLogResponses[keyof AppLogResponses]
 
-export type ExperimentalWorkspaceAdaptorListData = {
+export type ExperimentalWorkspaceAdapterListData = {
   body?: never
   path?: never
   query?: {
     directory?: string
     workspace?: string
   }
-  url: "/experimental/workspace/adaptor"
+  url: "/experimental/workspace/adapter"
 }
 
-export type ExperimentalWorkspaceAdaptorListResponses = {
+export type ExperimentalWorkspaceAdapterListResponses = {
   /**
-   * Workspace adaptors
+   * Workspace adapters
    */
   200: Array<{
     type: string
@@ -2445,8 +2451,8 @@ export type ExperimentalWorkspaceAdaptorListResponses = {
   }>
 }
 
-export type ExperimentalWorkspaceAdaptorListResponse =
-  ExperimentalWorkspaceAdaptorListResponses[keyof ExperimentalWorkspaceAdaptorListResponses]
+export type ExperimentalWorkspaceAdapterListResponse =
+  ExperimentalWorkspaceAdapterListResponses[keyof ExperimentalWorkspaceAdapterListResponses]
 
 export type ExperimentalWorkspaceListData = {
   body?: never
@@ -3217,7 +3223,7 @@ export type ExperimentalSessionListData = {
     /**
      * Only return root sessions (no parentID)
      */
-    roots?: boolean
+    roots?: boolean | "true" | "false"
     /**
      * Filter sessions updated on or after this timestamp (milliseconds since epoch)
      */
@@ -3237,7 +3243,7 @@ export type ExperimentalSessionListData = {
     /**
      * Include archived sessions (default false)
      */
-    archived?: boolean
+    archived?: boolean | "true" | "false"
   }
   url: "/experimental/session"
 }
@@ -3278,14 +3284,22 @@ export type SessionListData = {
   path?: never
   query?: {
     /**
-     * Filter sessions by project directory
+     * Filter sessions by directory
      */
     directory?: string
     workspace?: string
     /**
+     * List all sessions for the current project
+     */
+    scope?: "project"
+    /**
+     * Filter sessions by project-relative path
+     */
+    path?: string
+    /**
      * Only return root sessions (no parentID)
      */
-    roots?: boolean
+    roots?: boolean | "true" | "false"
     /**
      * Filter sessions updated on or after this timestamp (milliseconds since epoch)
      */
@@ -4907,9 +4921,9 @@ export type McpAuthStartData = {
 
 export type McpAuthStartErrors = {
   /**
-   * Bad request
+   * MCP server does not support OAuth
    */
-  400: BadRequestError
+  400: McpUnsupportedOAuthError
   /**
    * Not found
    */
@@ -4985,9 +4999,9 @@ export type McpAuthAuthenticateData = {
 
 export type McpAuthAuthenticateErrors = {
   /**
-   * Bad request
+   * MCP server does not support OAuth
    */
-  400: BadRequestError
+  400: McpUnsupportedOAuthError
   /**
    * Not found
    */

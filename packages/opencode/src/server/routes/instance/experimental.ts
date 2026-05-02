@@ -37,6 +37,16 @@ const ConsoleSwitchBody = z.object({
   orgID: z.string(),
 })
 
+const QueryBoolean = z.union([
+  z.preprocess((value) => (value === "true" ? true : value === "false" ? false : value), z.boolean()),
+  z.enum(["true", "false"]),
+])
+
+function queryBoolean(value: z.infer<typeof QueryBoolean> | undefined) {
+  if (value === undefined) return
+  return value === true || value === "true"
+}
+
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
     .get(
@@ -346,7 +356,7 @@ export const ExperimentalRoutes = lazy(() =>
         "query",
         z.object({
           directory: z.string().optional().meta({ description: "Filter sessions by project directory" }),
-          roots: z.coerce.boolean().optional().meta({ description: "Only return root sessions (no parentID)" }),
+          roots: QueryBoolean.optional().meta({ description: "Only return root sessions (no parentID)" }),
           start: z.coerce
             .number()
             .optional()
@@ -357,7 +367,7 @@ export const ExperimentalRoutes = lazy(() =>
             .meta({ description: "Return sessions updated before this timestamp (milliseconds since epoch)" }),
           search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
           limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
-          archived: z.coerce.boolean().optional().meta({ description: "Include archived sessions (default false)" }),
+          archived: QueryBoolean.optional().meta({ description: "Include archived sessions (default false)" }),
         }),
       ),
       async (c) => {
@@ -366,12 +376,12 @@ export const ExperimentalRoutes = lazy(() =>
         const sessions: Session.GlobalInfo[] = []
         for await (const session of Session.listGlobal({
           directory: query.directory,
-          roots: query.roots,
+          roots: queryBoolean(query.roots),
           start: query.start,
           cursor: query.cursor,
           search: query.search,
           limit: limit + 1,
-          archived: query.archived,
+          archived: queryBoolean(query.archived),
         })) {
           sessions.push(session)
         }
