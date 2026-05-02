@@ -2,12 +2,12 @@ import z from "zod"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../project/instance"
-import { InstanceBootstrap } from "../project/bootstrap"
-import { Project } from "../project"
-import { Database, eq } from "../storage"
+import { Project } from "@/project/project"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
@@ -19,7 +19,7 @@ import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { zod as effectZod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
 
@@ -254,7 +254,6 @@ export const layer: Layer.Layer<
       const booted = yield* Effect.promise(() =>
         Instance.provide({
           directory: info.directory,
-          init: () => BootstrapRuntime.runPromise(InstanceBootstrap),
           fn: () => undefined,
         })
           .then(() => true)

@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import { SessionID } from "./schema"
 import { ModelID, ProviderID } from "../provider/schema"
 import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
+import { NonNegativeInt, withStatics } from "@/util/schema"
 import { namedSchemaError } from "@/util/named-schema-error"
 
 export const OutputLengthError = namedSchemaError("MessageOutputLengthError", {})
@@ -33,7 +33,7 @@ const UnknownErrorEffect = Schema.Struct({
 
 export const ToolCall = Schema.Struct({
   state: Schema.Literal("call"),
-  step: Schema.optional(Schema.Number),
+  step: Schema.optional(NonNegativeInt),
   toolCallId: Schema.String,
   toolName: Schema.String,
   args: Schema.Unknown,
@@ -44,7 +44,7 @@ export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 
 export const ToolPartialCall = Schema.Struct({
   state: Schema.Literal("partial-call"),
-  step: Schema.optional(Schema.Number),
+  step: Schema.optional(NonNegativeInt),
   toolCallId: Schema.String,
   toolName: Schema.String,
   args: Schema.Unknown,
@@ -55,7 +55,7 @@ export type ToolPartialCall = Schema.Schema.Type<typeof ToolPartialCall>
 
 export const ToolResult = Schema.Struct({
   state: Schema.Literal("result"),
-  step: Schema.optional(Schema.Number),
+  step: Schema.optional(NonNegativeInt),
   toolCallId: Schema.String,
   toolName: Schema.String,
   args: Schema.Unknown,
@@ -141,8 +141,8 @@ export const Info = Schema.Struct({
   parts: Schema.Array(MessagePart),
   metadata: Schema.Struct({
     time: Schema.Struct({
-      created: Schema.Number,
-      completed: Schema.optional(Schema.Number),
+      created: NonNegativeInt,
+      completed: Schema.optional(NonNegativeInt),
     }),
     error: Schema.optional(Schema.Union([AuthErrorEffect, UnknownErrorEffect, OutputLengthErrorEffect])),
     sessionID: SessionID,
@@ -153,8 +153,8 @@ export const Info = Schema.Struct({
           title: Schema.String,
           snapshot: Schema.optional(Schema.String),
           time: Schema.Struct({
-            start: Schema.Number,
-            end: Schema.Number,
+            start: NonNegativeInt,
+            end: NonNegativeInt,
           }),
         }),
         [Schema.Record(Schema.String, Schema.Unknown)],
@@ -169,15 +169,15 @@ export const Info = Schema.Struct({
           cwd: Schema.String,
           root: Schema.String,
         }),
-        cost: Schema.Number,
+        cost: Schema.Finite,
         summary: Schema.optional(Schema.Boolean),
         tokens: Schema.Struct({
-          input: Schema.Number,
-          output: Schema.Number,
-          reasoning: Schema.Number,
+          input: NonNegativeInt,
+          output: NonNegativeInt,
+          reasoning: NonNegativeInt,
           cache: Schema.Struct({
-            read: Schema.Number,
-            write: Schema.Number,
+            read: NonNegativeInt,
+            write: NonNegativeInt,
           }),
         }),
       }),

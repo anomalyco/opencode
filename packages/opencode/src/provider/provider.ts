@@ -1,9 +1,9 @@
 import os from "os"
 import fuzzysort from "fuzzysort"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import { Log } from "../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
@@ -20,13 +20,13 @@ import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
+import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
 import { BusEvent } from "@/bus/bus-event"
-import { EffectBridge } from "@/effect"
-import { InstanceState } from "@/effect"
 import { GlobalBus } from "@/bus/global"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
-import { withStatics } from "@/util/schema"
+import { optionalOmitUndefined, withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
@@ -132,7 +132,7 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/vercel": () => import("@ai-sdk/vercel").then((m) => m.createVercel),
   "@ai-sdk/alibaba": () => import("@ai-sdk/alibaba").then((m) => m.createAlibaba),
   "gitlab-ai-provider": () => import("gitlab-ai-provider").then((m) => m.createGitLab),
-  "@ai-sdk/github-copilot": () => import("./sdk/copilot").then((m) => m.createOpenaiCompatible),
+  "@ai-sdk/github-copilot": () => import("./sdk/copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
 }
 
@@ -219,11 +219,25 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     azure: Effect.fnUntraced(function* (provider: Info) {
       const env = yield* dep.env()
+      const auth = yield* dep.auth(provider.id)
       const resource = iife(() => {
-        const name = provider.options?.resourceName
-        if (typeof name === "string" && name.trim() !== "") return name
-        return env["AZURE_RESOURCE_NAME"]
+        return [
+          provider.options?.resourceName,
+          auth?.type === "api" ? auth.metadata?.resourceName : undefined,
+          env["AZURE_RESOURCE_NAME"],
+        ].find((name) => typeof name === "string" && name.trim() !== "")
       })
+
+      if (!resource && !provider.options?.baseURL) {
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(
+              "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
+            )
+          },
+        }
+      }
 
       return {
         autoload: false,
@@ -235,11 +249,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             return sdk.responses(modelID)
           }
         },
-        options: {},
-        vars(_options) {
-          return {
-            ...(resource && { AZURE_RESOURCE_NAME: resource }),
+        options: {
+          resourceName: resource,
+        },
+        vars(_options): Record<string, string> {
+          if (resource) {
+            return {
+              AZURE_RESOURCE_NAME: resource,
+            }
           }
+          return {}
         },
       }
     }),
@@ -868,27 +887,27 @@ const ProviderCapabilities = Schema.Struct({
 })
 
 const ProviderCacheCost = Schema.Struct({
-  read: Schema.Number,
-  write: Schema.Number,
+  read: Schema.Finite,
+  write: Schema.Finite,
 })
 
 const ProviderCost = Schema.Struct({
-  input: Schema.Number,
-  output: Schema.Number,
+  input: Schema.Finite,
+  output: Schema.Finite,
   cache: ProviderCacheCost,
-  experimentalOver200K: Schema.optional(
+  experimentalOver200K: optionalOmitUndefined(
     Schema.Struct({
-      input: Schema.Number,
-      output: Schema.Number,
+      input: Schema.Finite,
+      output: Schema.Finite,
       cache: ProviderCacheCost,
     }),
   ),
 })
 
 const ProviderLimit = Schema.Struct({
-  context: Schema.Number,
-  input: Schema.optional(Schema.Number),
-  output: Schema.Number,
+  context: Schema.Finite,
+  input: optionalOmitUndefined(Schema.Finite),
+  output: Schema.Finite,
 })
 
 export const Model = Schema.Struct({
@@ -896,7 +915,7 @@ export const Model = Schema.Struct({
   providerID: ProviderID,
   api: ProviderApiInfo,
   name: Schema.String,
-  family: Schema.optional(Schema.String),
+  family: optionalOmitUndefined(Schema.String),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
@@ -904,7 +923,7 @@ export const Model = Schema.Struct({
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
-  variants: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
+  variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
 })
   .annotate({ identifier: "Model" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -915,7 +934,7 @@ export const Info = Schema.Struct({
   name: Schema.String,
   source: Schema.Literals(["env", "config", "custom", "api"]),
   env: Schema.Array(Schema.String),
-  key: Schema.optional(Schema.String),
+  key: optionalOmitUndefined(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
   models: Schema.Record(Schema.String, Model),
 })
@@ -1173,7 +1192,7 @@ async function discoverOpenAICompatibleModels(provider: Info): Promise<Record<st
 const layer: Layer.Layer<
   Service,
   never,
-  Config.Service | Auth.Service | Plugin.Service | AppFileSystem.Service | Env.Service
+  Config.Service | Auth.Service | Plugin.Service | AppFileSystem.Service | Env.Service | ModelsDev.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -1182,13 +1201,14 @@ const layer: Layer.Layer<
     const auth = yield* Auth.Service
     const env = yield* Env.Service
     const plugin = yield* Plugin.Service
+    const modelsDevSvc = yield* ModelsDev.Service
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
         using _ = log.time("state")
         const bridge = yield* EffectBridge.make()
         const cfg = yield* config.get()
-        const modelsDev = yield* Effect.promise(() => ModelsDev.get())
+        const modelsDev = yield* modelsDevSvc.get()
         const database = mapValues(modelsDev, fromModelsDevProvider)
 
         const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
@@ -1237,6 +1257,33 @@ const layer: Layer.Layer<
           return true
         }
 
+        for (const hook of plugins) {
+          const p = hook.provider
+          const models = p?.models
+          if (!p || !models) continue
+
+          const providerID = ProviderID.make(p.id)
+          if (disabled.has(providerID)) continue
+
+          const provider = database[providerID]
+          if (!provider) continue
+          const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+
+          provider.models = yield* Effect.promise(async () => {
+            const next = await models(provider, { auth: pluginAuth })
+            return Object.fromEntries(
+              Object.entries(next).map(([id, model]) => [
+                id,
+                {
+                  ...model,
+                  id: ModelID.make(id),
+                  providerID,
+                },
+              ]),
+            )
+          })
+        }
+
         // extend database from config
         for (const [providerID, provider] of configProviders) {
           const existing = database[providerID]
@@ -1251,6 +1298,13 @@ const layer: Layer.Layer<
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
             const existingModel = parsed.models[model.id ?? modelID]
+            const apiID = model.id ?? existingModel?.api.id ?? modelID
+            const apiNpm =
+              model.provider?.npm ??
+              provider.npm ??
+              existingModel?.api.npm ??
+              modelsDev[providerID]?.npm ??
+              "@ai-sdk/openai-compatible"
             const name = iife(() => {
               if (model.name) return model.name
               if (model.id && model.id !== modelID) return modelID
@@ -1259,13 +1313,8 @@ const layer: Layer.Layer<
             const parsedModel: Model = {
               id: ModelID.make(modelID),
               api: {
-                id: model.id ?? existingModel?.api.id ?? modelID,
-                npm:
-                  model.provider?.npm ??
-                  provider.npm ??
-                  existingModel?.api.npm ??
-                  modelsDev[providerID]?.npm ??
-                  "@ai-sdk/openai-compatible",
+                id: apiID,
+                npm: apiNpm,
                 url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? "",
               },
               status: model.status ?? existingModel?.status ?? "active",
@@ -1293,7 +1342,12 @@ const layer: Layer.Layer<
                     model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
                   pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
                 },
-                interleaved: model.interleaved ?? existingModel?.capabilities.interleaved ?? false,
+                interleaved:
+                  model.interleaved ??
+                  existingModel?.capabilities.interleaved ??
+                  (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
+                    ? { field: "reasoning_content" }
+                    : false),
               },
               cost: {
                 input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
@@ -1404,6 +1458,7 @@ const layer: Layer.Layer<
           mergeProvider(providerID, partial)
         }
 
+<<<<<<< HEAD
         for (const hook of plugins) {
           const p = hook.provider
           const models = p?.models
@@ -1426,6 +1481,25 @@ const layer: Layer.Layer<
         }
 
         for (const [id] of configProviders) {
+=======
+        const gitlab = ProviderID.make("gitlab")
+        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+          yield* Effect.promise(async () => {
+            try {
+              const discovered = await discoveryLoaders[gitlab]()
+              for (const [modelID, model] of Object.entries(discovered)) {
+                if (!providers[gitlab].models[modelID]) {
+                  providers[gitlab].models[modelID] = model
+                }
+              }
+            } catch (e) {
+              log.warn("state discovery error", { id: "gitlab", error: e })
+            }
+          })
+        }
+
+        for (const [id, provider] of Object.entries(providers)) {
+>>>>>>> dfe1325fca27612bab879102eb8974270cc13407
           const providerID = ProviderID.make(id)
           const provider = providers[providerID]
           if (!provider || scans[providerID]) continue
@@ -1434,6 +1508,47 @@ const layer: Layer.Layer<
             mode: "replace",
             run: () => discoverOpenAICompatibleModels(providers[providerID]),
           }
+<<<<<<< HEAD
+=======
+
+          const configProvider = cfg.provider?.[providerID]
+
+          for (const [modelID, model] of Object.entries(provider.models)) {
+            model.api.id = model.api.id ?? model.id ?? modelID
+            if (
+              modelID === "gpt-5-chat-latest" ||
+              (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
+            )
+              delete provider.models[modelID]
+            if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
+            if (model.status === "deprecated") delete provider.models[modelID]
+            if (
+              (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
+              (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+            )
+              delete provider.models[modelID]
+
+            if (!model.variants || Object.keys(model.variants).length === 0) {
+              model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            }
+
+            const configVariants = configProvider?.models?.[modelID]?.variants
+            if (configVariants && model.variants) {
+              const merged = mergeDeep(model.variants, configVariants)
+              model.variants = mapValues(
+                pickBy(merged, (v) => !v.disabled),
+                (v) => omit(v, ["disabled"]),
+              )
+            }
+          }
+
+          if (Object.keys(provider.models).length === 0) {
+            delete providers[providerID]
+            continue
+          }
+
+          log.info("found", { providerID })
+>>>>>>> dfe1325fca27612bab879102eb8974270cc13407
         }
 
         finalizeProviders(providers, cfg, isProviderAllowed)
@@ -1602,10 +1717,13 @@ const layer: Layer.Layer<
           if (combined) opts.signal = combined
 
           // Strip openai itemId metadata following what codex does
-          if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+          if (
+            (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
+            opts.body &&
+            opts.method === "POST"
+          ) {
             const body = JSON.parse(opts.body as string)
-            const isAzure = model.providerID.includes("azure")
-            const keepIds = isAzure && body.store === true
+            const keepIds = body.store === true
             if (!keepIds && Array.isArray(body.input)) {
               for (const item of body.input) {
                 if ("id" in item) {
@@ -1836,6 +1954,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
+    Layer.provide(ModelsDev.defaultLayer),
   ),
 )
 
@@ -1867,6 +1986,7 @@ export const InitError = namedSchemaError("ProviderInitError", {
   providerID: ProviderID,
 })
 
+<<<<<<< HEAD
 function finalizeProvider(
   providerID: ProviderID,
   provider: Info,
@@ -1930,3 +2050,6 @@ function finalizeProviders(
     log.info("found", { providerID })
   }
 }
+=======
+export * as Provider from "./provider"
+>>>>>>> dfe1325fca27612bab879102eb8974270cc13407

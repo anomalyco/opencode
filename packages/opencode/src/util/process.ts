@@ -172,3 +172,5 @@ export async function text(cmd: string[], opts: RunOptions = {}): Promise<TextRe
 export async function lines(cmd: string[], opts: RunOptions = {}): Promise<string[]> {
   return (await text(cmd, opts)).text.split(/\r?\n/).filter(Boolean)
 }
+
+export * as Process from "./process"

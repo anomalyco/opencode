@@ -5,11 +5,11 @@ import path from "path"
 import fs from "fs/promises"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
-import { Filesystem } from "../../src/util"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { Filesystem } from "@/util/filesystem"
+import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const init = () => run(File.Service.use((svc) => svc.init()))
@@ -936,7 +936,7 @@ describe("file/index Filesystem patterns", () => {
         },
       })
 
-      await Instance.disposeAll()
+      await disposeAllInstances()
 
       await fs.writeFile(path.join(tmp.path, "after.ts"), "after", "utf-8")
       await fs.rm(path.join(tmp.path, "before.ts"))

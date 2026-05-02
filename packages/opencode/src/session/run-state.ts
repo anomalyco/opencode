@@ -1,6 +1,6 @@
-import { InstanceState } from "@/effect"
-import { Runner } from "@/effect"
-import { Effect, Layer, Scope, Context } from "effect"
+import { InstanceState } from "@/effect/instance-state"
+import { Runner } from "@/effect/runner"
+import { Effect, Latch, Layer, Scope, Context } from "effect"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID } from "./schema"
@@ -18,6 +18,7 @@ export interface Interface {
     sessionID: SessionID,
     onInterrupt: Effect.Effect<MessageV2.WithParts>,
     work: Effect.Effect<MessageV2.WithParts>,
+    ready?: Latch.Latch,
   ) => Effect.Effect<MessageV2.WithParts>
 }
 
@@ -95,8 +96,9 @@ export const layer = Layer.effect(
       sessionID: SessionID,
       onInterrupt: Effect.Effect<MessageV2.WithParts>,
       work: Effect.Effect<MessageV2.WithParts>,
+      ready?: Latch.Latch,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).startShell(work)
+      return yield* (yield* runner(sessionID, onInterrupt)).startShell(work, ready)
     })
 
     return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
