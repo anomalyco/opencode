@@ -1050,7 +1050,7 @@ export function MessageTimeline(props: {
                       }}
                     >
                       <Show when={commentCount() > 0}>
-                        <div class="w-full px-4 md:px-5 pb-2">
+                        <div class="w-full px-0 md:px-0 pb-2">
                           <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
                             <div class="flex w-max min-w-full justify-end gap-2">
                               <Index each={comments()}>
@@ -1102,7 +1102,7 @@ export function MessageTimeline(props: {
                         classes={{
                           root: "min-w-0 w-full relative",
                           content: "flex flex-col justify-between !overflow-visible",
-                          container: "w-full px-4 md:px-5",
+                          container: "w-full px-0 md:px-0",
                         }}
                       />
                     </div>

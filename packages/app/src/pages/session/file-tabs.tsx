@@ -446,9 +446,9 @@ export function FileTabContent(props: { tab: string }) {
         <Switch>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+            <div class="px-0 py-4 text-text-weak">{language.t("common.loading")}...</div>
           </Match>
-          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+          <Match when={state()?.error}>{(err) => <div class="px-0 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
     </Tabs.Content>

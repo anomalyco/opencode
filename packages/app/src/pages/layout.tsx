@@ -2080,7 +2080,7 @@ export default function Layout(props: ParentProps) {
           when={project()}
           fallback={
             <Show when={empty()}>
-              <div class="flex-1 min-h-0 -mt-4 flex items-center justify-center px-6 pb-64 text-center">
+              <div class="flex-1 min-h-0 -mt-4 flex items-center justify-center px-0 pb-64 text-center">
                 <div class="mt-8 flex max-w-60 flex-col items-center gap-6 text-center">
                   <div class="flex flex-col gap-3">
                     <div class="text-14-medium text-text-strong">{language.t("sidebar.empty.title")}</div>
