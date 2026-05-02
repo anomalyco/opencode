@@ -30,9 +30,11 @@ if (-not (Test-Path $override)) {
 }
 
 # 0. Ensure sidecar built, mtime >= packages/opencode/src/**/*.ts latest
-# Upstream predev.ts uses baseline path; in our env (clash proxy) bun-baseline download fails,
-# but non-baseline still builds OK. We bypass this by preferring non-baseline binary in sidecars/.
-# Mac side: build-deskfox.sh line 52-95 (no baseline issue there, direct predev.ts).
+# 绕过上游 packages/desktop/scripts/predev.ts:它会按 SIDECAR_BINARIES 表跑 build --single --baseline,
+# Bun.compile 内部需要从 GitHub 拉 bun-windows-x64-baseline 运行时(~190MB),clash/国内网络常超时失败。
+# DeskFox 用户群默认现代 CPU(都有 AVX2),baseline 二进制不需要兜底,直接 build --single 即可,
+# 输出 dist/opencode-windows-x64/bin/opencode.exe,复用本机已有的 bun runtime,零下载。
+# Mac 侧 build-deskfox.sh 自己控,不受影响。
 if (-not $env:RUST_TARGET) {
     # ARM64 Windows: add detect branch when needed
     $env:RUST_TARGET = "x86_64-pc-windows-msvc"
@@ -57,28 +59,26 @@ if (-not (Test-Path $sidecarPath)) {
 }
 
 if ($needBuild) {
-    Write-Output "[deskfox] running predev.ts (RUST_TARGET=$($env:RUST_TARGET))..."
-    Push-Location (Join-Path $repoRoot "packages/desktop")
+    Write-Output "[deskfox] building sidecar: bun run build --single (no --baseline, RUST_TARGET=$($env:RUST_TARGET))..."
+    Push-Location (Join-Path $repoRoot "packages/opencode")
     try {
-        # Allow predev failure (baseline download often fails); fallback to dist/ non-baseline below
-        bun ./scripts/predev.ts
+        bun run build --single
+        if ($LASTEXITCODE -ne 0) {
+            throw "[deskfox] sidecar build failed: bun run build --single exited $LASTEXITCODE. Hint: 检查 bun 输出 / clash 状态 / @opentui/core 安装"
+        }
     } finally {
         Pop-Location
     }
 
-    # Prefer non-baseline (clash-friendly), fallback baseline
-    $nonBaselineBin = Join-Path $repoRoot "packages/opencode/dist/opencode-windows-x64/bin/opencode.exe"
-    $baselineBin = Join-Path $repoRoot "packages/opencode/dist/opencode-windows-x64-baseline/bin/opencode.exe"
-    $srcBin = $null
-    if ((Test-Path $nonBaselineBin) -and (Get-Item $nonBaselineBin).LastWriteTime -gt (Get-Date).AddMinutes(-10)) {
-        $srcBin = $nonBaselineBin
-        Write-Output "[deskfox] using non-baseline sidecar (clash/network friendly)"
-    } elseif ((Test-Path $baselineBin) -and (Get-Item $baselineBin).LastWriteTime -gt (Get-Date).AddMinutes(-10)) {
-        $srcBin = $baselineBin
-        Write-Output "[deskfox] using baseline sidecar"
-    } else {
-        throw "[deskfox] sidecar build failed: no fresh binary in packages/opencode/dist/{opencode-windows-x64,opencode-windows-x64-baseline}/bin/. Hint: check bun build output, RUST_TARGET env, and clash/network"
+    $srcBin = Join-Path $repoRoot "packages/opencode/dist/opencode-windows-x64/bin/opencode.exe"
+    if (-not (Test-Path $srcBin)) {
+        throw "[deskfox] sidecar build reported success but no binary at $srcBin"
     }
+    if ((Get-Item $srcBin).LastWriteTime -lt (Get-Date).AddMinutes(-10)) {
+        throw "[deskfox] sidecar binary at $srcBin is stale (>10 min old), build 可能跳过/静默失败"
+    }
+    Write-Output "[deskfox] using sidecar: $srcBin"
+
     # CI 干净 checkout 时 sidecars/ 目录可能不存在(本地有是因为之前 build 过留下),Copy-Item 不会自动建父目录
     $sidecarDir = Split-Path -Parent $sidecarPath
     if (-not (Test-Path $sidecarDir)) {
