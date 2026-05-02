@@ -254,11 +254,29 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
 
         if (config.extension === "zip") {
           const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
+          // Avoid Expand-Archive: when opencode is spawned via Bun on
+          // Windows, Microsoft.PowerShell.Archive fails to autoload and
+          // emits a noisy CouldNotAutoloadMatchingModule error to stderr.
+          // Use System.IO.Compression directly. See #24291, #23457.
+          const escapedArchive = archive.replaceAll("'", "''")
+          const escapedDir = dir.replaceAll("'", "''")
           const result = yield* run(shell, [
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
+            [
+              `Add-Type -AssemblyName System.IO.Compression.FileSystem;`,
+              `$zip = [System.IO.Compression.ZipFile]::OpenRead('${escapedArchive}');`,
+              `try {`,
+              `  foreach ($e in $zip.Entries) {`,
+              `    $target = Join-Path '${escapedDir}' $e.FullName;`,
+              `    if ($e.FullName.EndsWith('/')) { New-Item -ItemType Directory -Force -Path $target | Out-Null; continue }`,
+              `    $parent = Split-Path -Parent $target;`,
+              `    if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }`,
+              `    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $target, $true)`,
+              `  }`,
+              `} finally { $zip.Dispose() }`,
+            ].join(" "),
           ])
           if (result.code !== 0) {
             return yield* Effect.fail(error(result.stderr || result.stdout, result.code))
