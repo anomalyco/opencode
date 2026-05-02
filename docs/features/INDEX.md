@@ -29,3 +29,4 @@
 | [分支策略-v2](./分支策略-v2/) | done | dev 单一稳定主干 + 上游同步分离 + 三档环境正交分支 — feat → dev 一次性 merge 切换(`fae01d2a8`,187 文件 / +19721 行),废除 4.3 节"禁止直 push 到 dev",origin 双 push 临时改单推 gitee |
 | [win-tri-env-appid](./win-tri-env-appid/) | done | Windows 三档 AppId 同机共存 — `DeskFox.iss` 加 `#if AppEnv` 切档(beta `{86413DCA-...}` + dev `{4C5D29F2-...}` 新生成,prod GUID 锁死不变);`pack-installer.ps1` 加 `-Env` 参数;Mac/Win 三档共存能力对齐 |
 | [数据目录-deskfox-隔离](./数据目录-deskfox-隔离/) | spec | DeskFox 与上游 opencode 共用全部数据目录(auth/sessions/config/cache/install_id),两档实施:Phase 1 install_id 独立(fork-only,3 行)/ Phase 2 全量隔离(改上游 R3);从隐私协议 v0.5 待办挪入 |
+| [post-sync-build-fix](./post-sync-build-fix/) | done | sync/upstream-2026-05-02 merge 后两个 latent build bug 浮出 — Windows symlink 落空(`.d.ts` 转真文件 + triple-slash reference,R4 override)+ Bun baseline runtime ~190MB 下载绕过(build-deskfox.ps1 直接 build --single 跳 predev.ts) |
