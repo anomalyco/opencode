@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import { Effect, Schema } from "effect"
 import { AppRuntime, type AppServices } from "@/effect/app-runtime"
 import { InstanceStore } from "@/project/instance-store"
+import { InstanceRef } from "@/effect/instance-ref"
 import { cmd } from "./cmd/cmd"
 
 /**
@@ -20,6 +21,11 @@ export const fail = (message: string, exitCode = 1) => Effect.fail(new CliError(
 /**
  * Effect-native CLI command builder. Wraps yargs `cmd()` so the handler body is
  * an `Effect` with `InstanceRef` provided and any `AppServices` yieldable.
+ *
+ * The handler is wrapped in `Effect.ensuring(store.dispose(ctx))` so the loaded
+ * InstanceContext is disposed (runDisposers + IPC `server.instance.disposed`)
+ * on every Exit — success, typed failure, defect, or interruption. Matches the
+ * legacy `bootstrap()` finally-disposal semantics without per-handler boilerplate.
  *
  * Errors propagate to the existing top-level handler in `src/index.ts`; use
  * `fail("...")` for user-visible domain failures (clean exit, formatted message).
@@ -47,6 +53,17 @@ export const effectCmd = <Args, A>(opts: {
       // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
       const args = rawArgs as unknown as Args
       const directory = opts.directory?.(args) ?? process.cwd()
-      await AppRuntime.runPromise(InstanceStore.Service.use((s) => s.provide({ directory }, opts.handler(args))))
+      await AppRuntime.runPromise(
+        InstanceStore.Service.use((store) =>
+          store.provide(
+            { directory },
+            Effect.gen(function* () {
+              const ctx = yield* InstanceRef
+              const body = opts.handler(args)
+              return ctx ? yield* body.pipe(Effect.ensuring(store.dispose(ctx))) : yield* body
+            }),
+          ),
+        ),
+      )
     },
   })
