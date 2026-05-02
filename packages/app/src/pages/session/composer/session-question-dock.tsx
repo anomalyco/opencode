@@ -74,6 +74,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     customOn: cached?.customOn ?? ([] as boolean[]),
     editing: false,
     focus: 0,
+    minimized: false,
   })
 
   let root: HTMLDivElement | undefined
@@ -426,9 +427,16 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       kind="question"
       ref={(el) => (root = el)}
       onKeyDown={nav}
+      minimized={store.minimized}
       header={
         <>
-          <div data-slot="question-header-title">{summary()}</div>
+          <div
+            data-slot="question-header-title"
+            role="button"
+            onClick={() => setStore("minimized", !store.minimized)}
+          >
+            {summary()}
+          </div>
           <div data-slot="question-progress">
             <For each={questions()}>
               {(_, i) => (
