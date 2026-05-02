@@ -9,15 +9,13 @@ export type { LoadInput } from "./instance-store"
 
 type LegacyLoadInput = {
   directory: string
-  init?: () => Promise<unknown>
+  init?: Effect.Effect<void>
   project?: Project.Info
   worktree?: string
 }
 
-// Promise-style legacy inits often read Instance.directory etc. from the ALS context.
-// The new Effect-typed init path doesn't bind ALS — it provides InstanceRef. To keep
-// legacy inits working without forcing every test to convert, bind ALS around the
-// Promise call here using the instance ctx that the store provides via InstanceRef.
+// Bind ALS around init so legacy code reachable through it (Instance.directory reads, etc.)
+// stays bound. The Effect-typed init also gets InstanceRef provided by the store.
 const liftLegacyInput = (input: LegacyLoadInput): InstanceStore.LoadInput => {
   const { init, ...rest } = input
   if (!init) return rest
@@ -25,7 +23,15 @@ const liftLegacyInput = (input: LegacyLoadInput): InstanceStore.LoadInput => {
     ...rest,
     init: Effect.gen(function* () {
       const ctx = yield* InstanceRef
-      yield* Effect.promise(() => (ctx ? context.provide(ctx, init) : init()))
+      if (!ctx) return yield* init
+      yield* Effect.callback<void>((resume) => {
+        context.provide(ctx, () => {
+          Effect.runPromise(init).then(
+            () => resume(Effect.void),
+            (err) => resume(Effect.die(err)),
+          )
+        })
+      })
     }),
   }
 }
@@ -34,9 +40,10 @@ export const Instance = {
   load(input: LegacyLoadInput): Promise<InstanceContext> {
     return InstanceStore.runtime.runPromise((store) => store.load(liftLegacyInput(input)))
   },
-  async provide<R>(input: { directory: string; init?: () => Promise<unknown>; fn: () => R }): Promise<R> {
-    return context.provide(await Instance.load({ directory: input.directory, init: input.init }), async () =>
-      input.fn(),
+  async provide<R>(input: { directory: string; init?: Effect.Effect<void>; fn: () => R }): Promise<R> {
+    return context.provide(
+      await Instance.load({ directory: input.directory, init: input.init }),
+      async () => input.fn(),
     )
   },
   get current() {
