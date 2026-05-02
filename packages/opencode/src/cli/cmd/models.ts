@@ -1,19 +1,16 @@
-import type { Argv } from "yargs"
-import { Instance } from "../../project/instance"
+import { EOL } from "os"
+import { Effect } from "effect"
 import { Provider } from "@/provider/provider"
 import { ProviderID } from "../../provider/schema"
 import { ModelsDev } from "@/provider/models"
-import { cmd } from "./cmd"
+import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
-import { EOL } from "os"
-import { AppRuntime } from "@/effect/app-runtime"
-import { Effect } from "effect"
 
-export const ModelsCommand = cmd({
+export const ModelsCommand = effectCmd({
   command: "models [provider]",
   describe: "list all available models",
-  builder: (yargs: Argv) => {
-    return yargs
+  builder: (yargs) =>
+    yargs
       .positional("provider", {
         describe: "provider ID to filter models by",
         type: "string",
@@ -26,63 +23,45 @@ export const ModelsCommand = cmd({
       .option("refresh", {
         describe: "refresh the models cache from models.dev",
         type: "boolean",
-      })
-  },
-  handler: async (args) => {
+      }),
+  handler: Effect.fn("Cli.models")(function* (args) {
     if (args.refresh) {
-      await ModelsDev.refresh(true)
+      // followup: lift ModelsDev into an Effect Service so this drops the Effect.promise wrap.
+      yield* Effect.promise(() => ModelsDev.refresh(true))
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
     }
 
-    await Instance.provide({
-      directory: process.cwd(),
-      async fn() {
-        await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const svc = yield* Provider.Service
-            const providers = yield* svc.list()
+    const provider = yield* Provider.Service
+    const providers = yield* provider.list()
 
-            const print = (providerID: ProviderID, verbose?: boolean) => {
-              const provider = providers[providerID]
-              const sorted = Object.entries(provider.models).sort(([a], [b]) => a.localeCompare(b))
-              for (const [modelID, model] of sorted) {
-                process.stdout.write(`${providerID}/${modelID}`)
-                process.stdout.write(EOL)
-                if (verbose) {
-                  process.stdout.write(JSON.stringify(model, null, 2))
-                  process.stdout.write(EOL)
-                }
-              }
-            }
+    const print = (providerID: ProviderID, verbose?: boolean) => {
+      const p = providers[providerID]
+      const sorted = Object.entries(p.models).sort(([a], [b]) => a.localeCompare(b))
+      for (const [modelID, model] of sorted) {
+        process.stdout.write(`${providerID}/${modelID}`)
+        process.stdout.write(EOL)
+        if (verbose) {
+          process.stdout.write(JSON.stringify(model, null, 2))
+          process.stdout.write(EOL)
+        }
+      }
+    }
 
-            if (args.provider) {
-              const providerID = ProviderID.make(args.provider)
-              const provider = providers[providerID]
-              if (!provider) {
-                yield* Effect.sync(() => UI.error(`Provider not found: ${args.provider}`))
-                return
-              }
+    if (args.provider) {
+      const providerID = ProviderID.make(args.provider)
+      if (!providers[providerID]) return yield* fail(`Provider not found: ${args.provider}`)
+      print(providerID, args.verbose)
+      return
+    }
 
-              yield* Effect.sync(() => print(providerID, args.verbose))
-              return
-            }
-
-            const ids = Object.keys(providers).sort((a, b) => {
-              const aIsOpencode = a.startsWith("opencode")
-              const bIsOpencode = b.startsWith("opencode")
-              if (aIsOpencode && !bIsOpencode) return -1
-              if (!aIsOpencode && bIsOpencode) return 1
-              return a.localeCompare(b)
-            })
-
-            yield* Effect.sync(() => {
-              for (const providerID of ids) {
-                print(ProviderID.make(providerID), args.verbose)
-              }
-            })
-          }),
-        )
-      },
+    const ids = Object.keys(providers).sort((a, b) => {
+      const aIsOpencode = a.startsWith("opencode")
+      const bIsOpencode = b.startsWith("opencode")
+      if (aIsOpencode && !bIsOpencode) return -1
+      if (!aIsOpencode && bIsOpencode) return 1
+      return a.localeCompare(b)
     })
-  },
+
+    for (const providerID of ids) print(ProviderID.make(providerID), args.verbose)
+  }),
 })
