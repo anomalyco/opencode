@@ -14,6 +14,7 @@ import {
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
+  workspaceDeleteKeyAction,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
 
@@ -215,6 +216,14 @@ describe("layout workspace helpers", () => {
   test("formats fallback project display name", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")
+  })
+
+  test("maps workspace delete dialog Enter keys", () => {
+    expect(workspaceDeleteKeyAction(new KeyboardEvent("keydown", { key: "Escape" }), "ready")).toBe("ignore")
+    expect(workspaceDeleteKeyAction(new KeyboardEvent("keydown", { key: "Enter" }), "loading")).toBe("block")
+    expect(workspaceDeleteKeyAction(new KeyboardEvent("keydown", { key: "Enter", repeat: true }), "ready")).toBe("block")
+    expect(workspaceDeleteKeyAction(new KeyboardEvent("keydown", { key: "Enter" }), "ready")).toBe("confirm")
+    expect(workspaceDeleteKeyAction(new KeyboardEvent("keydown", { key: "Enter" }), "error")).toBe("confirm")
   })
 
   test("extracts api error message and fallback", () => {

@@ -55,6 +55,15 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 
+export function workspaceDeleteKeyAction(
+  event: Pick<KeyboardEvent, "key" | "repeat">,
+  status: "loading" | "ready" | "error",
+) {
+  if (event.key !== "Enter") return "ignore"
+  if (event.repeat || status === "loading") return "block"
+  return "confirm"
+}
+
 export const errorMessage = (err: unknown, fallback: string) => {
   if (err && typeof err === "object" && "data" in err) {
     const data = (err as { data?: { message?: string } }).data

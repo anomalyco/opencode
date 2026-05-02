@@ -71,6 +71,7 @@ import {
   errorMessage,
   latestRootSession,
   sortedRootSessions,
+  workspaceDeleteKeyAction,
 } from "./layout/helpers"
 import {
   collectNewSessionDeepLinks,
@@ -1622,7 +1623,30 @@ export default function Layout(props: ParentProps) {
       dirty: false,
     })
 
+    const handleDelete = () => {
+      const leaveDeletedWorkspace = !!params.dir && pathKey(currentDir()) === pathKey(props.directory)
+      if (leaveDeletedWorkspace) {
+        navigateWithSidebarReset(`/${base64Encode(props.root)}/session`)
+      }
+      dialog.close()
+      void deleteWorkspace(props.root, props.directory, leaveDeletedWorkspace)
+    }
+
     onMount(() => {
+      makeEventListener(
+        window,
+        "keydown",
+        (event) => {
+          const action = workspaceDeleteKeyAction(event, data.status)
+          if (action === "ignore") return
+          event.preventDefault()
+          event.stopPropagation()
+          if (action === "block") return
+          handleDelete()
+        },
+        { capture: true },
+      )
+
       globalSDK.client.file
         .status({ directory: props.directory })
         .then((x) => {
@@ -1634,15 +1658,6 @@ export default function Layout(props: ParentProps) {
           setData({ status: "error", dirty: false })
         })
     })
-
-    const handleDelete = () => {
-      const leaveDeletedWorkspace = !!params.dir && pathKey(currentDir()) === pathKey(props.directory)
-      if (leaveDeletedWorkspace) {
-        navigateWithSidebarReset(`/${base64Encode(props.root)}/session`)
-      }
-      dialog.close()
-      void deleteWorkspace(props.root, props.directory, leaveDeletedWorkspace)
-    }
 
     const description = () => {
       if (data.status === "loading") return language.t("workspace.status.checking")
