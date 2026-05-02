@@ -6,7 +6,7 @@ import * as Tool from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
 import * as Log from "@opencode-ai/core/util/log"
-import { Instance, type InstanceContext } from "../project/instance"
+import { containsPath, type InstanceContext } from "../project/instance-context"
 import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
@@ -386,7 +386,7 @@ export const BashTool = Tool.define(
           for (const arg of pathArgs(command, ps)) {
             const resolved = yield* argPath(arg, cwd, ps, shell)
             log.info("resolved path", { arg, resolved })
-            if (!resolved || Instance.containsPath(resolved, instance)) continue
+            if (!resolved || containsPath(resolved, instance)) continue
             const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
             scan.dirs.add(dir)
           }
@@ -612,7 +612,7 @@ export const BashTool = Tool.define(
                     Effect.sync(() => tree.delete()),
                   )
                   const scan = yield* collect(tree.rootNode, cwd, ps, shell, executeInstance)
-                  if (!Instance.containsPath(cwd, executeInstance)) scan.dirs.add(cwd)
+                  if (!containsPath(cwd, executeInstance)) scan.dirs.add(cwd)
                   yield* ask(ctx, scan)
                 }),
               )

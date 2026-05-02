@@ -1,7 +1,7 @@
 import { Config } from "@/config/config"
 import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
 import { Installation } from "@/installation"
-import { Instance } from "@/project/instance"
+import { InstanceStore } from "@/project/instance-store"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import * as Log from "@opencode-ai/core/util/log"
 import { Effect, Queue, Schema } from "effect"
@@ -68,6 +68,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
   Effect.gen(function* () {
     const config = yield* Config.Service
     const installation = yield* Installation.Service
+    const store = yield* InstanceStore.Service
 
     const health = Effect.fn("GlobalHttpApi.health")(function* () {
       return { healthy: true as const, version: InstallationVersion }
@@ -86,7 +87,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     })
 
     const dispose = Effect.fn("GlobalHttpApi.dispose")(function* () {
-      yield* Effect.promise(() => Instance.disposeAll())
+      yield* store.disposeAll()
       GlobalBus.emit("event", {
         directory: "global",
         payload: { type: "global.disposed", properties: {} },
