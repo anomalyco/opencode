@@ -1,4 +1,3 @@
-import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "@/lsp/lsp"
 import { File } from "../file"
@@ -7,6 +6,7 @@ import * as Project from "./project"
 import * as Vcs from "./vcs"
 import { Bus } from "../bus"
 import { Command } from "../command"
+import { Plugin } from "../plugin"
 import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { ShareNext } from "@/share/share-next"
@@ -39,12 +39,11 @@ export const layer = Layer.effect(
     const run = Effect.gen(function* () {
       const ctx = yield* InstanceState.context
       yield* Effect.logInfo("bootstrapping", { directory: ctx.directory })
-      // everything depends on config so eager load it for nice traces
-      yield* config.get()
-      // Plugin can mutate config so it has to be initialized before anything else.
-      yield* plugin.init()
       yield* Effect.all(
-        [lsp, shareNext, format, file, fileWatcher, vcs, snapshot].map((s) => Effect.forkDetach(s.init())),
+        [
+          config.get(),
+          ...[plugin, lsp, shareNext, format, file, fileWatcher, vcs, snapshot].map((s) => s.init()),
+        ].map((e) => Effect.forkDetach(e)),
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
 
       const projectID = ctx.project.id
