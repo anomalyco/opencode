@@ -1968,6 +1968,48 @@ describe("resolvePluginSpec", () => {
     expect(await ConfigPlugin.resolvePluginSpec("@scope/pkg", file)).toBe("@scope/pkg")
   })
 
+  test("resolves $HOME-prefixed plugin directory specs", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const plugin = path.join(dir, "plugin")
+        await fs.mkdir(plugin, { recursive: true })
+        await Filesystem.write(path.join(plugin, "index.ts"), "export default {}")
+      },
+    })
+
+    const previous = process.env.HOME
+    process.env.HOME = tmp.path
+    try {
+      const file = path.join(tmp.path, "opencode.json")
+      const hit = await ConfigPlugin.resolvePluginSpec("$HOME/plugin", file)
+      expect(ConfigPlugin.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
+    } finally {
+      if (previous === undefined) delete process.env.HOME
+      else process.env.HOME = previous
+    }
+  })
+
+  test("resolves %USERPROFILE%-prefixed plugin directory specs", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const plugin = path.join(dir, "plugin")
+        await fs.mkdir(plugin, { recursive: true })
+        await Filesystem.write(path.join(plugin, "index.ts"), "export default {}")
+      },
+    })
+
+    const previous = process.env.USERPROFILE
+    process.env.USERPROFILE = tmp.path
+    try {
+      const file = path.join(tmp.path, "opencode.json")
+      const hit = await ConfigPlugin.resolvePluginSpec("%USERPROFILE%/plugin", file)
+      expect(ConfigPlugin.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
+    } finally {
+      if (previous === undefined) delete process.env.USERPROFILE
+      else process.env.USERPROFILE = previous
+    }
+  })
+
   test("resolves windows-style relative plugin directory specs", async () => {
     if (process.platform !== "win32") return
 

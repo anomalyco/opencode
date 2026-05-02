@@ -4,6 +4,7 @@ import { pathToFileURL } from "url"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 import { zod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
+import os from "os"
 import path from "path"
 
 export const Options = Schema.Record(Schema.String, Schema.Unknown).pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -49,11 +50,52 @@ export function pluginOptions(plugin: Spec): Options | undefined {
   return Array.isArray(plugin) ? plugin[1] : undefined
 }
 
+function expandPathVariablePrefix(spec: string) {
+  if (spec === "~") return os.homedir()
+  if (spec.startsWith("~/") || spec.startsWith("~\\")) return path.join(os.homedir(), spec.slice(2))
+
+  const posix = spec.match(/^\$([A-Za-z_][A-Za-z0-9_]*)(?=$|[\\/])/)
+  if (posix) {
+    const value = process.env[posix[1]]
+    if (value) return value + spec.slice(posix[0].length)
+  }
+
+  const braced = spec.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}(?=$|[\\/])/)
+  if (braced) {
+    const value = process.env[braced[1]]
+    if (value) return value + spec.slice(braced[0].length)
+  }
+
+  const windows = spec.match(/^%([^%]+)%(?=$|[\\/])/)
+  if (windows) {
+    const value = process.env[windows[1]]
+    if (value) return value + spec.slice(windows[0].length)
+  }
+
+  return spec
+}
+
+function hasPathVariablePrefix(spec: string) {
+  if (spec === "~" || spec.startsWith("~/") || spec.startsWith("~\\")) return true
+
+  const posix = spec.match(/^\$([A-Za-z_][A-Za-z0-9_]*)(?=$|[\\/])/)
+  if (posix) return !!process.env[posix[1]]
+
+  const braced = spec.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}(?=$|[\\/])/)
+  if (braced) return !!process.env[braced[1]]
+
+  const windows = spec.match(/^%([^%]+)%(?=$|[\\/])/)
+  if (windows) return !!process.env[windows[1]]
+
+  return false
+}
+
 // Path-like specs are resolved relative to the config file that declared them so merges later on do not
 // accidentally reinterpret `./plugin.ts` relative to some other directory.
 export async function resolvePluginSpec(plugin: Spec, configFilepath: string): Promise<Spec> {
-  const spec = pluginSpecifier(plugin)
-  if (!isPathPluginSpec(spec)) return plugin
+  const raw = pluginSpecifier(plugin)
+  const spec = expandPathVariablePrefix(raw)
+  if (!isPathPluginSpec(raw) && !hasPathVariablePrefix(raw) && !isPathPluginSpec(spec)) return plugin
 
   const base = path.dirname(configFilepath)
   const file = (() => {
