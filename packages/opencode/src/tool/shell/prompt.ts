@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import DESCRIPTION from "./shell.txt"
+import { Global } from "@opencode-ai/core/global"
 
 const PS = new Set(["powershell", "pwsh"])
 const CMD = new Set(["cmd"])
@@ -281,6 +282,7 @@ export function render(name: string, platform: NodeJS.Platform, limits: Limits) 
       intro: selected.intro,
       os: platform,
       shell: name,
+      tmp: Global.Path.tmp,
       workdirSection: selected.workdirSection,
       commandSection: selected.commandSection,
       gitCommands: selected.gitCommands,

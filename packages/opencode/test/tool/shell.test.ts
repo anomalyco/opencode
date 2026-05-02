@@ -5,6 +5,7 @@ import path from "path"
 import { Config } from "@/config/config"
 import { Shell } from "../../src/shell/shell"
 import { ShellTool } from "../../src/tool/shell"
+import { ShellPrompt } from "../../src/tool/shell/prompt"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
@@ -15,6 +16,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Plugin } from "../../src/plugin"
+import { Global } from "@opencode-ai/core/global"
 
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(
@@ -139,6 +141,12 @@ const mustTruncate = (result: {
 }
 
 describe("tool.shell", () => {
+  test("shell prompt template resolves tmp placeholder", () => {
+    const prompt = ShellPrompt.render("bash", process.platform, { maxLines: 1, maxBytes: 1 })
+    expect(prompt.description).toContain(Global.Path.tmp)
+    expect(prompt.description).not.toContain("${tmp}")
+  })
+
   each("basic", async () => {
     await Instance.provide({
       directory: projectRoot,
