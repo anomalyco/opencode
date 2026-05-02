@@ -1,8 +1,5 @@
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
-import { Effect } from "effect"
-
-const isTimeout = (error: unknown) =>
-  typeof error === "object" && error !== null && "_tag" in error && error._tag === "TimeoutException"
+import { Cause, Effect } from "effect"
 
 export function waitGlobalBusEvent(input: {
   timeout?: number
@@ -27,7 +24,9 @@ export function waitGlobalBusEvent(input: {
     return Effect.sync(cleanup)
   }).pipe(
     Effect.timeout(input.timeout ?? 10_000),
-    Effect.mapError((error) => (isTimeout(error) ? new Error(input.message ?? "timed out waiting for global bus event") : error)),
+    Effect.mapError((error) =>
+      Cause.isTimeoutError(error) ? new Error(input.message ?? "timed out waiting for global bus event") : error,
+    ),
   )
 }
 
