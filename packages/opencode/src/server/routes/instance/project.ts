@@ -8,7 +8,7 @@ import z from "zod"
 import { ProjectID } from "@/project/schema"
 import { errors } from "../../error"
 import { lazy } from "@/util/lazy"
-import { AppRuntime } from "@/effect/app-runtime"
+import { getBootstrapRunEffect } from "@/effect/app-runtime"
 import { jsonRequest, runRequest } from "./trace"
 
 export const ProjectRoutes = lazy(() =>
@@ -82,7 +82,7 @@ export const ProjectRoutes = lazy(() =>
           Project.Service.use((svc) => svc.initGit({ directory: dir, project: prev })),
         )
         if (next.id === prev.id && next.vcs === prev.vcs && next.worktree === prev.worktree) return c.json(next)
-        await InstanceStore.reloadInstance({ directory: dir, worktree: dir, project: next })
+        await InstanceStore.reloadInstance({ directory: dir, worktree: dir, project: next, init: await getBootstrapRunEffect() })
         return c.json(next)
       },
     )

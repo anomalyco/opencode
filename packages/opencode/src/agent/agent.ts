@@ -80,6 +80,7 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
+        yield* plugin.init()
         const skillDirs = yield* skill.dirs()
         const whitelistedDirs = [
           Truncate.GLOB,
