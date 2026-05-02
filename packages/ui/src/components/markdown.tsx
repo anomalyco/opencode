@@ -337,6 +337,7 @@ export function Markdown(
   return (
     <div
       data-component="markdown"
+      dir="auto"
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
