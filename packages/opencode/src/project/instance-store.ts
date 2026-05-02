@@ -1,5 +1,6 @@
 import { GlobalBus } from "@/bus/global"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
+import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance } from "@/effect/instance-registry"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -19,6 +20,7 @@ export interface Interface {
   readonly reload: (input: LoadInput) => Effect.Effect<InstanceContext>
   readonly dispose: (ctx: InstanceContext) => Effect.Effect<void>
   readonly disposeAll: () => Effect.Effect<void>
+  readonly provide: <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstanceStore") {}
@@ -168,6 +170,9 @@ export const layer: Layer.Layer<Service, never, Project.Service> = Layer.effect(
       return yield* cachedDisposeAll
     })
 
+    const provide = <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      load(input).pipe(Effect.flatMap((ctx) => effect.pipe(Effect.provideService(InstanceRef, ctx))))
+
     yield* Effect.addFinalizer(() => disposeAll().pipe(Effect.ignore))
 
     return Service.of({
@@ -175,6 +180,7 @@ export const layer: Layer.Layer<Service, never, Project.Service> = Layer.effect(
       reload,
       dispose,
       disposeAll,
+      provide,
     })
   }),
 )
