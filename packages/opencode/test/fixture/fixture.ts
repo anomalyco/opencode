@@ -9,7 +9,15 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { Instance } from "../../src/project/instance"
+import { InstanceStore } from "../../src/project/instance-store"
 import { TestLLMServer } from "../lib/llm-server"
+
+// Test helper for tearing down all loaded instances. Used in afterEach hooks.
+// Replaces direct Instance.disposeAll() calls so the legacy promise method can be removed.
+// IMPORTANT: must use InstanceStore.runtime, not AppRuntime or a test-layer Service —
+// Instance.provide loads instances into InstanceStore.runtime's Service cache, and that
+// Service is built per-runtime (not shared via memoMap across Effect.runPromise boundaries).
+export const disposeAllInstances = () => InstanceStore.runtime.runPromise((s) => s.disposeAll())
 
 // Strip null bytes from paths (defensive fix for CI environment issues)
 function sanitizePath(p: string): string {

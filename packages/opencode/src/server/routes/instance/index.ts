@@ -6,6 +6,7 @@ import z from "zod"
 import { Format } from "@/format"
 import { TuiRoutes } from "./tui"
 import { Instance } from "@/project/instance"
+import { InstanceStore } from "@/project/instance-store"
 import { Vcs } from "@/project/vcs"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
@@ -62,7 +63,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
         },
       }),
       async (c) => {
-        await Instance.dispose()
+        await InstanceStore.runtime.runPromise((s) => s.dispose(Instance.current))
         return c.json(true)
       },
     )

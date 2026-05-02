@@ -2,6 +2,7 @@ import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "@/project/instance"
+import { InstanceStore } from "@/project/instance-store"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
@@ -87,7 +88,7 @@ export const rpc = {
   async shutdown() {
     Log.Default.info("worker shutting down")
 
-    await Instance.disposeAll()
+    await InstanceStore.runtime.runPromise((s) => s.disposeAll())
     if (server) await server.stop(true)
   },
 }

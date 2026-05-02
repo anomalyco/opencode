@@ -11,7 +11,9 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
-import { Instance, type InstanceContext } from "../project/instance"
+import { type InstanceContext } from "../project/instance"
+import { InstanceStore } from "../project/instance-store"
+import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { existsSync } from "fs"
 import { GlobalBus } from "@/bus/global"
@@ -736,12 +738,16 @@ export const layer = Layer.effect(
       yield* fs
         .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
         .pipe(Effect.orDie)
-      if (options?.dispose !== false) yield* Effect.promise(() => Instance.dispose())
+      if (options?.dispose !== false) {
+        const ctx = yield* InstanceRef
+        if (ctx) yield* Effect.promise(() => InstanceStore.runtime.runPromise((s) => s.dispose(ctx)))
+      }
     })
 
     const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
       yield* invalidateGlobal
-      const task = Instance.disposeAll()
+      const task = InstanceStore.runtime
+        .runPromise((s) => s.disposeAll())
         .catch(() => undefined)
         .finally(() =>
           GlobalBus.emit("event", {

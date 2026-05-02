@@ -4,7 +4,7 @@ import { $ } from "bun"
 import { Context, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { Instance } from "../../src/project/instance"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(CrossSpawnSpawner.defaultLayer)
@@ -19,7 +19,7 @@ const tmpdirGitScoped = Effect.gen(function* () {
 })
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 it.live("InstanceState caches values per directory", () =>
@@ -94,7 +94,7 @@ it.live("InstanceState invalidates on disposeAll", () =>
 
     yield* access(state, one)
     yield* access(state, two)
-    yield* Effect.promise(() => Instance.disposeAll())
+    yield* Effect.promise(disposeAllInstances)
 
     expect(seen.sort()).toEqual([one, two].sort())
   }),

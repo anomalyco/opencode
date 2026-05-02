@@ -8,7 +8,7 @@ import { Server } from "../../src/server/server"
 import { Filesystem } from "@/util/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -69,7 +69,7 @@ describe("project.initGit endpoint", () => {
         ),
       ).toBeTruthy()
     } finally {
-      await Instance.disposeAll()
+      await disposeAllInstances()
       reloadSpy.mockRestore()
       GlobalBus.off("event", fn)
     }
@@ -114,7 +114,7 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.path,
       })
     } finally {
-      await Instance.disposeAll()
+      await disposeAllInstances()
       reloadSpy.mockRestore()
       GlobalBus.off("event", fn)
     }

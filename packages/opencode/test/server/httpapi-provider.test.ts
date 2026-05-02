@@ -6,7 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
@@ -98,7 +98,7 @@ function withProviderProject<A, E, R>(self: (dir: string) => Effect.Effect<A, E,
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 

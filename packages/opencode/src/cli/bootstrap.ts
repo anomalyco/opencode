@@ -1,5 +1,5 @@
-import { AppRuntime } from "@/effect/app-runtime"
 import { Instance } from "../project/instance"
+import { InstanceStore } from "../project/instance-store"
 
 export async function bootstrap<T>(directory: string, cb: () => Promise<T>) {
   return Instance.provide({
@@ -9,7 +9,7 @@ export async function bootstrap<T>(directory: string, cb: () => Promise<T>) {
         const result = await cb()
         return result
       } finally {
-        await Instance.dispose()
+        await InstanceStore.runtime.runPromise((s) => s.dispose(Instance.current))
       }
     },
   })

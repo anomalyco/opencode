@@ -4,7 +4,7 @@ import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const TestEvent = {
@@ -151,7 +151,7 @@ describe("Bus (Effect-native)", () => {
       }).pipe(provideInstance(dir))
 
       // Dispose from OUTSIDE the instance scope
-      yield* Effect.promise(() => Instance.disposeAll())
+      yield* Effect.promise(disposeAllInstances)
       yield* Deferred.await(disposed).pipe(Effect.timeout("2 seconds"))
 
       expect(types).toContain("test.effect.ping")

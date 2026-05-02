@@ -6,7 +6,7 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Instance } from "../../src/project/instance"
 import { Worktree } from "../../src/worktree"
-import { provideInstance, provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(Worktree.defaultLayer, CrossSpawnSpawner.defaultLayer))
@@ -37,7 +37,7 @@ async function waitReady() {
 }
 
 describe("Worktree", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(() => disposeAllInstances())
 
   describe("makeWorktreeInfo", () => {
     it.live("returns info with name, branch, and directory", () =>

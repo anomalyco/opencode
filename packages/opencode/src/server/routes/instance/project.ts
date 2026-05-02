@@ -81,11 +81,7 @@ export const ProjectRoutes = lazy(() =>
           Project.Service.use((svc) => svc.initGit({ directory: dir, project: prev })),
         )
         if (next.id === prev.id && next.vcs === prev.vcs && next.worktree === prev.worktree) return c.json(next)
-        await Instance.reload({
-          directory: dir,
-          worktree: dir,
-          project: next,
-        })
+        await Instance.reload({ directory: dir, worktree: dir, project: next })
         return c.json(next)
       },
     )

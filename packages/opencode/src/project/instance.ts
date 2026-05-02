@@ -6,13 +6,11 @@ export type { InstanceContext } from "./instance-context"
 export type { LoadInput } from "./instance-store"
 
 export const Instance = {
-  load(input: InstanceStore.LoadInput): Promise<InstanceContext> {
-    return InstanceStore.runtime.runPromise((store) => store.load(input))
-  },
   async provide<R>(input: { directory: string; init?: Effect.Effect<void>; fn: () => R }): Promise<R> {
-    return context.provide(await Instance.load({ directory: input.directory, init: input.init }), async () =>
-      input.fn(),
+    const ctx = await InstanceStore.runtime.runPromise((store) =>
+      store.load({ directory: input.directory, init: input.init }),
     )
+    return context.provide(ctx, async () => input.fn())
   },
   get current() {
     return context.use()
@@ -49,8 +47,5 @@ export const Instance = {
   },
   async dispose() {
     return InstanceStore.runtime.runPromise((store) => store.dispose(Instance.current))
-  },
-  async disposeAll() {
-    return InstanceStore.runtime.runPromise((store) => store.disposeAll())
   },
 }

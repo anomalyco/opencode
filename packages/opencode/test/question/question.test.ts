@@ -2,7 +2,7 @@ import { afterEach, test, expect } from "bun:test"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
 import { QuestionID } from "../../src/question/schema"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 
@@ -17,7 +17,7 @@ const reply = (input: { requestID: QuestionID; answers: ReadonlyArray<Question.A
 const reject = (id: QuestionID) => AppRuntime.runPromise(Question.Service.use((svc) => svc.reject(id)))
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 /** Reject all pending questions so dangling Deferred fibers don't hang the test. */

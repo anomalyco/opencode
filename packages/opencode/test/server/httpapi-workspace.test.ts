@@ -12,7 +12,7 @@ import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Project } from "../../src/project/project"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
@@ -128,7 +128,7 @@ afterEach(async () => {
   mock.restore()
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 

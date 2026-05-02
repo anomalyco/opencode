@@ -19,7 +19,7 @@ import { disposeMiddleware, markInstanceForDisposal } from "../../src/server/rou
 import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
 import { workspaceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { resetDatabase } from "../fixture/db"
-import { tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
@@ -30,7 +30,7 @@ const testStateLayer = Layer.effectDiscard(
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
         Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
-        await Instance.disposeAll()
+        await disposeAllInstances()
         await resetDatabase()
       }),
     )
