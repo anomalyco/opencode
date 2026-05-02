@@ -214,7 +214,7 @@ export const RunCommand = cmd({
         default: [],
       })
       .option("command", {
-        describe: "the command to run, use message for args",
+        describe: "the command to run (without leading slash), use message for args",
         type: "string",
       })
       .option("continue", {
@@ -632,7 +632,7 @@ export const RunCommand = cmd({
           sessionID,
           agent,
           model: args.model,
-          command: args.command,
+          command: args.command.replace(/^\//, ""),
           arguments: message,
           variant: args.variant,
         })
