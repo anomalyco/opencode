@@ -108,6 +108,13 @@ export const Client = Object.assign(
     db.run("PRAGMA foreign_keys = ON")
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
+    // One-time migration: enable incremental auto-vacuum (takes effect after next VACUUM)
+    const autoVacuumMode = db.$client.query("PRAGMA auto_vacuum").get() as { auto_vacuum: number } | undefined
+    if (autoVacuumMode?.auto_vacuum === 0) {
+      db.$client.run("PRAGMA auto_vacuum = INCREMENTAL")
+      db.$client.run("VACUUM")
+    }
+
     // Apply schema migrations
     const entries =
       typeof OPENCODE_MIGRATIONS !== "undefined"
@@ -194,6 +201,22 @@ export function transaction<T>(
       return result as NotPromise<T>
     }
     throw err
+  }
+}
+
+export function checkpoint() {
+  try {
+    Client().$client.run("PRAGMA wal_checkpoint(TRUNCATE)")
+  } catch (err) {
+    log.error("checkpoint failed", { err })
+  }
+}
+
+export function vacuum() {
+  try {
+    Client().$client.run("PRAGMA incremental_vacuum")
+  } catch (err) {
+    log.error("vacuum failed", { err })
   }
 }
 
