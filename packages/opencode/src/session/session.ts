@@ -316,7 +316,8 @@ export const Event = {
       sessionID: Schema.optional(SessionID),
       // Reuses MessageV2.Assistant.fields.error (already Schema.optional) so
       // the derived zod keeps the same discriminated-union shape on the bus.
-      error: MessageV2.Assistant.fields.error,
+      // Schema.suspend defers access to break circular init in compiled binaries.
+      error: Schema.suspend(() => MessageV2.Assistant.fields.error),
     }),
   ),
 }
