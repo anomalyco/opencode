@@ -1,20 +1,25 @@
 import { afterEach, expect, test } from "bun:test"
+import { Hono } from "hono"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { bootstrap as cliBootstrap } from "../../src/cli/bootstrap"
 import { Instance } from "../../src/project/instance"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
+import { InstanceMiddleware } from "../../src/server/routes/instance/middleware"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
-// Instance.provide must run bootstrap before fn. The plugin config hook writes
-// a marker file, and fn deliberately avoids touching Plugin or config so the
-// marker only exists if bootstrap ran at the instance boundary.
+// These regressions cover the legacy instance-loading paths fixed by PRs
+// #25389 and #25449. The plugin config hook writes a marker file, and the test
+// bodies deliberately avoid touching Plugin or config directly. The marker only
+// exists if InstanceBootstrap ran at the instance boundary.
 
 afterEach(async () => {
   await disposeAllInstances()
 })
 
-test("Instance.provide runs InstanceBootstrap before fn (boundary invariant)", async () => {
-  await using tmp = await tmpdir({
+async function bootstrapFixture() {
+  return tmpdir({
     init: async (dir) => {
       const marker = path.join(dir, "config-hook-fired")
       const pluginFile = path.join(dir, "plugin.ts")
@@ -40,14 +45,41 @@ test("Instance.provide runs InstanceBootstrap before fn (boundary invariant)", a
       return marker
     },
   })
+}
 
-  // The body of `fn` deliberately does not yield Plugin, read config, or
-  // touch any service that would force Plugin.state to materialize on
-  // demand. The only way the marker gets written is if bootstrap ran.
+test("Instance.provide runs InstanceBootstrap before fn (boundary invariant)", async () => {
+  await using tmp = await bootstrapFixture()
+
   await Instance.provide({
     directory: tmp.path,
     fn: async () => "ok",
   })
+
+  expect(existsSync(tmp.extra)).toBe(true)
+})
+
+test("CLI bootstrap runs InstanceBootstrap before callback", async () => {
+  await using tmp = await bootstrapFixture()
+
+  await cliBootstrap(tmp.path, async () => "ok")
+
+  expect(existsSync(tmp.extra)).toBe(true)
+})
+
+test("legacy Hono instance middleware runs InstanceBootstrap before next handler", async () => {
+  await using tmp = await bootstrapFixture()
+  const app = new Hono().use(InstanceMiddleware()).get("/probe", (c) => c.text("ok"))
+
+  const response = await app.request("/probe", { headers: { "x-opencode-directory": tmp.path } })
+
+  expect(response.status).toBe(200)
+  expect(existsSync(tmp.extra)).toBe(true)
+})
+
+test("InstanceRuntime.reloadInstance runs InstanceBootstrap", async () => {
+  await using tmp = await bootstrapFixture()
+
+  await InstanceRuntime.reloadInstance({ directory: tmp.path })
 
   expect(existsSync(tmp.extra)).toBe(true)
 })
