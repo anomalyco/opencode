@@ -31,6 +31,7 @@ export const fail = (message: string, exitCode = 1) => Effect.fail(new CliError(
  */
 export const effectCmd = <Args, A>(opts: {
   command: string | readonly string[]
+  aliases?: string | readonly string[]
   describe: string | false
   builder?: (yargs: Argv) => Argv<Args>
   /** Defaults to process.cwd(). Override for commands that take a directory positional. */
@@ -39,6 +40,7 @@ export const effectCmd = <Args, A>(opts: {
 }) =>
   cmd<{}, Args>({
     command: opts.command,
+    aliases: opts.aliases,
     describe: opts.describe,
     builder: opts.builder as never,
     async handler(rawArgs) {
