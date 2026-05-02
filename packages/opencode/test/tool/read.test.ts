@@ -13,13 +13,13 @@ import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const ctx = {
@@ -438,6 +438,24 @@ root_type Monster;`
       expect(result.attachments).toBeUndefined()
       expect(result.output).toContain("namespace MyGame")
       expect(result.output).toContain("table Monster")
+    }),
+  )
+
+  it.live("falls through unsupported image mime types to text", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const cases = [
+        ["image.bmp", "BM text content"],
+        ["photo.tiff", "II text content"],
+        ["photo.avif", "avif text content"],
+      ] as const
+
+      for (const item of cases) {
+        yield* put(path.join(dir, item[0]), item[1])
+        const result = yield* exec(dir, { filePath: path.join(dir, item[0]) })
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain(item[1])
+      }
     }),
   )
 })

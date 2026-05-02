@@ -21,7 +21,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { SyncEvent } from "@/sync"
 import { EventSequenceTable, EventTable } from "@/sync/event.sql"
 import { resetDatabase } from "../fixture/db"
-import { provideTmpdirInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
@@ -93,7 +93,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   mock.restore()
-  await Instance.disposeAll()
+  await disposeAllInstances()
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspacesFlag
   restoreEnv()
   await resetDatabase()

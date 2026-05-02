@@ -1,8 +1,9 @@
 import type { Argv } from "yargs"
+import { Effect } from "effect"
 import { cmd } from "./cmd"
+import { effectCmd, fail } from "../effect-cmd"
 import { Session } from "@/session/session"
 import { SessionID } from "../../session/schema"
-import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { Locale } from "@/util/locale"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -11,7 +12,8 @@ import { Process } from "@/util/process"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
-import { AppRuntime } from "@/effect/app-runtime"
+import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceStore } from "@/project/instance-store"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -47,36 +49,35 @@ export const SessionCommand = cmd({
   async handler() {},
 })
 
-export const SessionDeleteCommand = cmd({
+export const SessionDeleteCommand = effectCmd({
   command: "delete <sessionID>",
   describe: "delete a session",
-  builder: (yargs: Argv) => {
-    return yargs.positional("sessionID", {
+  builder: (yargs) =>
+    yargs.positional("sessionID", {
       describe: "session ID to delete",
       type: "string",
       demandOption: true,
-    })
-  },
-  handler: async (args) => {
-    await bootstrap(process.cwd(), async () => {
+    }),
+  handler: Effect.fn("Cli.session.delete")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const store = yield* InstanceStore.Service
+    return yield* Effect.gen(function* () {
+      const svc = yield* Session.Service
       const sessionID = SessionID.make(args.sessionID)
-      try {
-        await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(sessionID)))
-      } catch {
-        UI.error(`Session not found: ${args.sessionID}`)
-        process.exit(1)
-      }
-      await AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(sessionID)))
+      // Match legacy try/catch — Session.get surfaces NotFoundError as a defect.
+      yield* svc.get(sessionID).pipe(Effect.catchCause(() => fail(`Session not found: ${args.sessionID}`)))
+      yield* svc.remove(sessionID)
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
-    })
-  },
+    }).pipe(Effect.ensuring(store.dispose(ctx)))
+  }),
 })
 
-export const SessionListCommand = cmd({
+export const SessionListCommand = effectCmd({
   command: "list",
   describe: "list sessions",
-  builder: (yargs: Argv) => {
-    return yargs
+  builder: (yargs) =>
+    yargs
       .option("max-count", {
         alias: "n",
         describe: "limit to N most recent sessions",
@@ -87,47 +88,42 @@ export const SessionListCommand = cmd({
         type: "string",
         choices: ["table", "json"],
         default: "table",
-      })
-  },
-  handler: async (args) => {
-    await bootstrap(process.cwd(), async () => {
-      const sessions = await AppRuntime.runPromise(
-        Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount })),
-      )
+      }),
+  handler: Effect.fn("Cli.session.list")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const store = yield* InstanceStore.Service
+    return yield* Effect.gen(function* () {
+      const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount }))
 
-      if (sessions.length === 0) {
-        return
-      }
+      if (sessions.length === 0) return
 
-      let output: string
-      if (args.format === "json") {
-        output = formatSessionJSON(sessions)
-      } else {
-        output = formatSessionTable(sessions)
-      }
+      const output = args.format === "json" ? formatSessionJSON(sessions) : formatSessionTable(sessions)
 
       const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
 
       if (shouldPaginate) {
-        const proc = Process.spawn(pagerCmd(), {
-          stdin: "pipe",
-          stdout: "inherit",
-          stderr: "inherit",
+        yield* Effect.promise(async () => {
+          const proc = Process.spawn(pagerCmd(), {
+            stdin: "pipe",
+            stdout: "inherit",
+            stderr: "inherit",
+          })
+
+          if (!proc.stdin) {
+            console.log(output)
+            return
+          }
+
+          proc.stdin.write(output)
+          proc.stdin.end()
+          await proc.exited
         })
-
-        if (!proc.stdin) {
-          console.log(output)
-          return
-        }
-
-        proc.stdin.write(output)
-        proc.stdin.end()
-        await proc.exited
       } else {
         console.log(output)
       }
-    })
-  },
+    }).pipe(Effect.ensuring(store.dispose(ctx)))
+  }),
 })
 
 function formatSessionTable(sessions: Session.Info[]): string {

@@ -13,7 +13,7 @@ import { Tool } from "@/tool/tool"
 import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const ctx = {
@@ -28,7 +28,7 @@ const ctx = {
 }
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const it = testEffect(

@@ -5,7 +5,7 @@ import type { SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -24,7 +24,7 @@ const svc = {
 }
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 describe("tui.selectSession endpoint", () => {
