@@ -88,7 +88,7 @@ export function formatPart(part: Part, options: TranscriptOptions): string {
 
   if (part.type === "reasoning") {
     if (options.thinking) {
-      return `_Thinking:_\n\n${part.text}\n\n`
+      return `<thinking>\n${part.text}\n</thinking>\n\n`
     }
     return ""
   }
