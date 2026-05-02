@@ -15,6 +15,7 @@ import { createSessionTabs } from "@/pages/session/helpers"
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
   placement?: TooltipProps["placement"]
+  onClick?: () => void
 }
 
 function openSessionContext(args: {
@@ -111,7 +112,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               type="button"
               variant="ghost"
               class="size-6"
-              onClick={openContext}
+              onClick={props.onClick ?? openContext}
               aria-label={language.t("context.usage.view")}
             >
               {circle()}

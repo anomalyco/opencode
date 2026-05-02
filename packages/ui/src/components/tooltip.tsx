@@ -116,7 +116,7 @@ export function Tooltip(props: TooltipProps) {
             if (state.block && open) return
             if (justClickedTrigger) {
               justClickedTrigger = false
-              return
+              if (!open) return
             }
             setState("open", open)
           }}
@@ -126,7 +126,10 @@ export function Tooltip(props: TooltipProps) {
             as={"div"}
             data-component="tooltip-trigger"
             class={local.class}
-            onPointerDownCapture={arm}
+            onPointerDownCapture={(event: PointerEvent) => {
+              if (event.pointerType === "touch") return
+              arm()
+            }}
             onKeyDownCapture={(event: KeyboardEvent) => {
               if (event.key !== "Enter" && event.key !== " ") return
               arm()

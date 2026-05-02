@@ -229,6 +229,7 @@ export function MessageTimeline(props: {
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
   anchor: (id: string) => string
+  onContextClick?: () => void
 }) {
   let touchGesture: number | undefined
 
@@ -815,7 +816,7 @@ export function MessageTimeline(props: {
                   <Show when={sessionID()} keyed>
                     {(id) => (
                       <div class="shrink-0 flex items-center gap-3">
-                        <SessionContextUsage placement="bottom" />
+                        <SessionContextUsage placement="bottom" onClick={props.onContextClick} />
                         <Show when={!parentID()}>
                           <DropdownMenu
                             gutter={4}

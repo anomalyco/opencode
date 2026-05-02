@@ -30,7 +30,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { useSearchParams } from "@solidjs/router"
-import { NewSessionView, SessionHeader } from "@/components/session"
+import { NewSessionView, SessionHeader, SessionContextTab } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
@@ -513,7 +513,7 @@ export default function Page() {
 
   const [store, setStore] = createStore({
     messageId: undefined as string | undefined,
-    mobileTab: "session" as "session" | "changes",
+    mobileTab: "session" as "session" | "changes" | "context",
     changes: "git" as ChangeMode,
     newSessionWorktree: "main",
     deferRender: false,
@@ -1802,21 +1802,29 @@ export default function Page() {
             <Tabs.List>
               <Tabs.Trigger
                 value="session"
-                class="!w-1/2 !max-w-none"
-                classes={{ button: "w-full" }}
+                class="!w-1/3 !max-w-none"
+                classes={{ button: "w-full !px-3" }}
                 onClick={() => setStore("mobileTab", "session")}
               >
                 {language.t("session.tab.session")}
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="changes"
-                class="!w-1/2 !max-w-none !border-r-0"
-                classes={{ button: "w-full" }}
+                class="!w-1/3 !max-w-none"
+                classes={{ button: "w-full !px-3" }}
                 onClick={() => setStore("mobileTab", "changes")}
               >
                 {hasReview()
                   ? language.t("session.review.filesChanged", { count: reviewCount() })
                   : language.t("session.review.change.other")}
+              </Tabs.Trigger>
+              <Tabs.Trigger
+                value="context"
+                class="!w-1/3 !max-w-none !border-r-0"
+                classes={{ button: "w-full !px-3" }}
+                onClick={() => setStore("mobileTab", "context")}
+              >
+                {language.t("session.tab.context")}
               </Tabs.Trigger>
             </Tabs.List>
           </Tabs>
@@ -1837,46 +1845,54 @@ export default function Page() {
             <Switch>
               <Match when={params.id}>
                 <Show when={messagesReady()}>
-                  <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                    actions={actions}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    onUserScroll={markUserScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+                  <Show
+                    when={!isDesktop() && store.mobileTab === "context"}
+                    fallback={
+                      <MessageTimeline
+                        mobileChanges={mobileChanges()}
+                        mobileFallback={reviewContent({
+                          diffStyle: "unified",
+                          classes: {
+                            root: "pb-8",
+                            header: "px-4",
+                            container: "px-4",
+                          },
+                          loadingClass: "px-4 py-4 text-text-weak",
+                          emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+                        })}
+                        actions={actions}
+                        scroll={ui.scroll}
+                        onResumeScroll={resumeScroll}
+                        setScrollRef={setScrollRef}
+                        onScheduleScrollState={scheduleScrollState}
+                        onAutoScrollHandleScroll={autoScroll.handleScroll}
+                        onMarkScrollGesture={markScrollGesture}
+                        hasScrollGesture={hasScrollGesture}
+                        onUserScroll={markUserScroll}
+                        onTurnBackfillScroll={historyWindow.onScrollerScroll}
+                        onAutoScrollInteraction={autoScroll.handleInteraction}
+                        centered={centered()}
+                        setContentRef={(el) => {
+                          content = el
+                          autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    turnStart={historyWindow.turnStart()}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      void historyWindow.loadAndReveal()
-                    }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
-                    anchor={anchor}
-                  />
+                          const root = scroller
+                          if (root) scheduleScrollState(root)
+                        }}
+                        turnStart={historyWindow.turnStart()}
+                        historyMore={historyMore()}
+                        historyLoading={historyLoading()}
+                        onLoadEarlier={() => {
+                          void historyWindow.loadAndReveal()
+                        }}
+                        renderedUserMessages={historyWindow.renderedUserMessages()}
+                        anchor={anchor}
+                        onContextClick={!isDesktop() ? () => setStore("mobileTab", "context") : undefined}
+                      />
+                    }
+                  >
+                    <SessionContextTab />
+                  </Show>
                 </Show>
               </Match>
               <Match when={true}>
