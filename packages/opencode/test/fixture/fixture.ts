@@ -25,8 +25,9 @@ const runTestInstanceStore = <A>(fn: (store: InstanceStore.Interface) => Effect.
   testInstanceRuntime.runPromise(InstanceStore.Service.use(fn))
 
 export async function provideTestInstance<R>(input: { directory: string; init?: Effect.Effect<void>; fn: () => R }) {
-  const ctx = await runTestInstanceStore((store) => store.load({ directory: input.directory, init: input.init }))
+  const ctx = await runTestInstanceStore((store) => store.load({ directory: input.directory }))
   try {
+    if (input.init) await testInstanceRuntime.runPromise(input.init.pipe(Effect.provideService(InstanceRef, ctx)))
     return await Instance.restore(ctx, () => input.fn())
   } finally {
     await runTestInstanceStore((store) => store.dispose(ctx))

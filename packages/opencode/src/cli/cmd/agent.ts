@@ -10,6 +10,7 @@ import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import matter from "gray-matter"
 import { Instance } from "../../project/instance"
+import { WithInstance } from "../../project/with-instance"
 import { EOL } from "os"
 import type { Argv } from "yargs"
 
@@ -61,7 +62,7 @@ const AgentCreateCommand = cmd({
         describe: "model to use in the format of provider/model",
       }),
   async handler(args) {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         const cliPath = args.path
@@ -236,7 +237,7 @@ const AgentListCommand = cmd({
   command: "list",
   describe: "list all available agents",
   async handler() {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         const agents = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))

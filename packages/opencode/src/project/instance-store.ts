@@ -8,26 +8,18 @@ import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
 import * as Project from "./project"
 
-export interface LoadInput<R = never> {
+export interface LoadInput {
   directory: string
-  /**
-   * Additional setup to run after the default InstanceBootstrap.
-   * Mainly used by tests for env-var setup or file writes that need the instance ALS context.
-   */
-  init?: Effect.Effect<void, never, R>
   worktree?: string
   project?: Project.Info
 }
 
 export interface Interface {
-  readonly load: <R = never>(input: LoadInput<R>) => Effect.Effect<InstanceContext, never, R>
-  readonly reload: <R = never>(input: LoadInput<R>) => Effect.Effect<InstanceContext, never, R>
+  readonly load: (input: LoadInput) => Effect.Effect<InstanceContext>
+  readonly reload: (input: LoadInput) => Effect.Effect<InstanceContext>
   readonly dispose: (ctx: InstanceContext) => Effect.Effect<void>
   readonly disposeAll: () => Effect.Effect<void>
-  readonly provide: <A, E, R, R2 = never>(
-    input: LoadInput<R2>,
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E, R | R2>
+  readonly provide: <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstanceStore") {}
@@ -44,7 +36,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
     const scope = yield* Scope.Scope
     const cache = new Map<string, Entry>()
 
-    const boot = <R>(input: LoadInput<R> & { directory: string }) =>
+    const boot = (input: LoadInput & { directory: string }) =>
       Effect.gen(function* () {
         const ctx: InstanceContext =
           input.project && input.worktree
@@ -61,7 +53,6 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
                 })),
               )
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
-        if (input.init) yield* input.init.pipe(Effect.provideService(InstanceRef, ctx))
         return ctx
       }).pipe(Effect.withSpan("InstanceStore.boot"))
 
@@ -72,7 +63,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
         return true
       })
 
-    const completeLoad = <R>(directory: string, input: LoadInput<R>, entry: Entry) =>
+    const completeLoad = (directory: string, input: LoadInput, entry: Entry) =>
       Effect.gen(function* () {
         const exit = yield* Effect.exit(boot({ ...input, directory }))
         if (Exit.isFailure(exit)) yield* removeEntry(directory, entry)
@@ -108,7 +99,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       return true
     })
 
-    const load = <R>(input: LoadInput<R>): Effect.Effect<InstanceContext, never, R> => {
+    const load = (input: LoadInput): Effect.Effect<InstanceContext> => {
       const directory = AppFileSystem.resolve(input.directory)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
@@ -126,7 +117,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       ).pipe(Effect.withSpan("InstanceStore.load"))
     }
 
-    const reload = <R>(input: LoadInput<R>): Effect.Effect<InstanceContext, never, R> => {
+    const reload = (input: LoadInput): Effect.Effect<InstanceContext> => {
       const directory = AppFileSystem.resolve(input.directory)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
@@ -180,7 +171,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       return yield* cachedDisposeAll
     })
 
-    const provide = <A, E, R, R2>(input: LoadInput<R2>, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | R2> =>
+    const provide = <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
       load(input).pipe(Effect.flatMap((ctx) => effect.pipe(Effect.provideService(InstanceRef, ctx))))
 
     yield* Effect.addFinalizer(() => disposeAll().pipe(Effect.ignore))

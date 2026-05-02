@@ -13,7 +13,7 @@ import os from "os"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import { Plugin } from "../../plugin"
-import { Instance } from "../../project/instance"
+import { WithInstance } from "../../project/with-instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "@/util/process"
 import { text } from "node:stream/consumers"
@@ -303,7 +303,7 @@ export const ProvidersLoginCommand = cmd({
         type: "string",
       }),
   async handler(args) {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()

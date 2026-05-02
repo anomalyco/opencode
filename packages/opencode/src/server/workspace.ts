@@ -6,7 +6,7 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Workspace } from "@/control-plane/workspace"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Instance } from "@/project/instance"
+import { WithInstance } from "@/project/with-instance"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { Effect } from "effect"
@@ -97,7 +97,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       return WorkspaceContext.provide({
         workspaceID: WorkspaceID.make(workspaceID),
         fn: () =>
-          Instance.provide({
+          WithInstance.provide({
             directory: target.directory,
             async fn() {
               return next()

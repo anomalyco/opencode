@@ -10,6 +10,7 @@ import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
 import { ConfigMCP } from "../../config/mcp"
 import { Instance } from "../../project/instance"
+import { WithInstance } from "../../project/with-instance"
 import { Installation } from "../../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
@@ -114,7 +115,7 @@ export const McpListCommand = cmd({
   aliases: ["ls"],
   describe: "list MCP servers and their status",
   async handler() {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
@@ -186,7 +187,7 @@ export const McpAuthCommand = cmd({
       })
       .command(McpAuthListCommand),
   async handler(args) {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
@@ -318,7 +319,7 @@ export const McpAuthListCommand = cmd({
   aliases: ["ls"],
   describe: "list OAuth-capable MCP servers and their auth status",
   async handler() {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
@@ -357,7 +358,7 @@ export const McpLogoutCommand = cmd({
       type: "string",
     }),
   async handler(args) {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
@@ -448,7 +449,7 @@ export const McpAddCommand = cmd({
   command: "add",
   describe: "add an MCP server",
   async handler() {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
@@ -618,7 +619,7 @@ export const McpDebugCommand = cmd({
       demandOption: true,
     }),
   async handler(args) {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()

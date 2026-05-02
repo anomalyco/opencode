@@ -20,6 +20,7 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "@/provider/models"
 import { Instance } from "@/project/instance"
+import { WithInstance } from "@/project/with-instance"
 import { bootstrap } from "../bootstrap"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
@@ -203,7 +204,7 @@ export const GithubInstallCommand = cmd({
   command: "install",
   describe: "install the GitHub agent",
   async handler() {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: process.cwd(),
       async fn() {
         {

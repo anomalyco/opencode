@@ -18,7 +18,7 @@ import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
 import { Installation } from "@/installation"
-import { InstanceRuntime } from "@/project/instance-runtime"
+import { InstanceLayer } from "@/project/instance-layer"
 import { Plugin } from "@/plugin"
 import { Project } from "@/project/project"
 import { ProviderAuth } from "@/provider/auth"
@@ -152,7 +152,6 @@ export function createRoutes(corsOptions?: CorsOptions) {
       Format.defaultLayer,
       LSP.defaultLayer,
       Installation.defaultLayer,
-      InstanceRuntime.layer,
       MCP.defaultLayer,
       ModelsDev.defaultLayer,
       Permission.defaultLayer,
@@ -185,6 +184,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       FetchHttpClient.layer,
       HttpServer.layerServices,
     ]),
+    Layer.provideMerge(InstanceLayer.layer),
     Layer.provideMerge(Observability.layer),
   )
 }
