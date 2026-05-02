@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
@@ -85,7 +85,7 @@ function nextBranchUpdate(directory: string, timeout = 10_000) {
 
 describeVcs("Vcs", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("branch() returns current branch name", async () => {
@@ -158,7 +158,7 @@ describeVcs("Vcs", () => {
 
 describe("Vcs diff", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("defaultBranch() falls back to main", async () => {

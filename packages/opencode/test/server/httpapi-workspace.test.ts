@@ -12,7 +12,7 @@ import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Project } from "../../src/project/project"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
@@ -128,7 +128,7 @@ afterEach(async () => {
   mock.restore()
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
@@ -214,6 +214,24 @@ describe("workspace HttpApi", () => {
         name: "local-test",
         extra: null,
       })
+    }),
+  )
+
+  it.live("creates a real git worktree workspace via the builtin adapter", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+
+      const created = yield* request(WorkspacePaths.list, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "worktree", branch: null }),
+      })
+
+      const body = yield* Effect.promise(() => created.text())
+      expect({ status: created.status, body }).toMatchObject({ status: 200 })
+      const workspace = JSON.parse(body) as Workspace.Info
+      expect(workspace).toMatchObject({ type: "worktree" })
     }),
   )
 

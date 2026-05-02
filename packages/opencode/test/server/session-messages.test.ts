@@ -6,7 +6,7 @@ import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -31,7 +31,7 @@ const svc = {
 }
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 async function withoutWatcher<T>(fn: () => Promise<T>) {

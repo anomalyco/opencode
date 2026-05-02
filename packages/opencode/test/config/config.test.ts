@@ -12,7 +12,7 @@ import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
-import { provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
@@ -108,7 +108,7 @@ async function check(map: (dir: string) => string) {
       },
     })
   } finally {
-    await Instance.disposeAll()
+    await disposeAllInstances()
     ;(Global.Path as { config: string }).config = prev
     await clear()
   }

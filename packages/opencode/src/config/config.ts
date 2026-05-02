@@ -11,7 +11,8 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
-import { Instance, type InstanceContext } from "../project/instance"
+import { type InstanceContext } from "../project/instance"
+import { InstanceStore } from "../project/instance-store"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { existsSync } from "fs"
 import { GlobalBus } from "@/bus/global"
@@ -736,12 +737,18 @@ export const layer = Layer.effect(
       yield* fs
         .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
         .pipe(Effect.orDie)
-      if (options?.dispose !== false) yield* Effect.promise(() => Instance.dispose())
+      if (options?.dispose !== false) {
+        // Fail loudly if no instance is bound — silently skipping would
+        // mask "config update without an active instance" bugs. The throw
+        // comes from `Instance.current` inside `InstanceState.context`.
+        const ctx = yield* InstanceState.context
+        yield* Effect.promise(() => InstanceStore.disposeInstance(ctx))
+      }
     })
 
     const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
       yield* invalidateGlobal
-      const task = Instance.disposeAll()
+      const task = InstanceStore.disposeAllInstances()
         .catch(() => undefined)
         .finally(() =>
           GlobalBus.emit("event", {
