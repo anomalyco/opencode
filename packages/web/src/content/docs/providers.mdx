@@ -1642,6 +1642,50 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Manifest
+
+[Manifest](https://manifest.build) is an open-source LLM router that cuts inference costs through smart routing across 16+ providers. You get full control over which model handles each request. Route by complexity tier, task-specificity (coding, web browsing, etc.) and custom tiers.
+
+1. Head over to [manifest.build](https://manifest.build), create an account, and copy your API key (starts with `mnfst_`).
+
+2. Run the `/connect` command and search for Manifest.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter the API key for the provider.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command and select `auto`.
+
+   ```txt
+   /models
+   ```
+
+:::note[Self-hosted]
+Manifest is open-source and can be self-hosted with Docker for fully private inference. Override the base URL in your config to point to your local instance:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "manifest": {
+      "api": "http://localhost:2099/v1"
+    }
+  }
+}
+```
+:::
+
+---
+
 ### LLM Gateway
 
 1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.
