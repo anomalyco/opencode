@@ -25,7 +25,6 @@ import { ExperimentalRoutes } from "./experimental"
 import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
-import { InstanceMiddleware } from "./middleware"
 import { jsonRequest } from "./trace"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {

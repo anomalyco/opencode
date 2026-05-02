@@ -3,11 +3,11 @@ import { type InstanceContext } from "./instance-context"
 import { InstanceStore, type LoadInput } from "./instance-store"
 import { Effect, Layer } from "effect"
 
-// Bridge for Promise/ALS callers that cannot yet yield InstanceStore.Service.
-// This keeps InstanceStore itself low-level while still giving legacy Hono and
-// CLI paths the production bootstrap implementation. Delete this module once
-// those callers are migrated to Effect boundaries that provide InstanceStore
-// directly, like the HttpApi middleware does.
+// Production InstanceStore wiring plus a bridge for Promise/ALS callers that
+// cannot yet yield InstanceStore.Service. This keeps InstanceStore itself
+// low-level while still giving legacy Hono and CLI paths the production
+// bootstrap implementation. Delete the Promise helpers once those callers are
+// migrated to Effect boundaries that provide InstanceStore directly.
 // Keep the bootstrap implementation import lazy: Instance is imported broadly,
 // and importing the app bootstrap graph at module load can trigger ESM cycles.
 export const layer = Layer.unwrap(
