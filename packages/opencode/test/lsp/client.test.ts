@@ -445,6 +445,72 @@ describe("LSPClient interop", () => {
     })
   })
 
+  test("pyright ignores virtualenv workspace pull diagnostics", async () => {
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "main.py")
+    const source = path.join(tmp.path, "app.py")
+    const virtualenv = path.join(tmp.path, ".venv", "lib", "python3.12", "site-packages", "pkg.py")
+    await Bun.write(file, "print('main')\n")
+    await Bun.write(source, "print('app')\n")
+    await Bun.write(virtualenv, "print('pkg')\n")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const client = await LSPClient.create({
+          serverID: "pyright",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+        })
+
+        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+          registerOn: "didOpen",
+          registrations: [{ identifier: "workspace", workspaceDiagnostics: true }],
+          workspaceDiagnosticsByIdentifier: {
+            workspace: [
+              {
+                uri: pathToFileURL(source).href,
+                items: [
+                  {
+                    range: {
+                      start: { line: 0, character: 0 },
+                      end: { line: 0, character: 5 },
+                    },
+                    message: "source diagnostic",
+                    severity: 1,
+                  },
+                ],
+              },
+              {
+                uri: pathToFileURL(virtualenv).href,
+                items: [
+                  {
+                    range: {
+                      start: { line: 0, character: 0 },
+                      end: { line: 0, character: 5 },
+                    },
+                    message: "virtualenv diagnostic",
+                    severity: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        })
+
+        const version = await client.notify.open({ path: file })
+        await client.waitForDiagnostics({ path: file, version, mode: "full" })
+
+        expect(client.diagnostics.get(source)?.[0]?.message).toBe("source diagnostic")
+        expect(client.diagnostics.has(virtualenv)).toBe(false)
+
+        await client.shutdown()
+      },
+    })
+  })
+
   test("full mode treats an empty workspace pull response as handled", async () => {
     const handle = spawnFakeServer() as any
     await using tmp = await tmpdir()

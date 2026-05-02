@@ -162,13 +162,27 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
   const published = new Map<string, { at: number; version?: number }>()
   const diagnosticRegistrations = new Map<string, CapabilityRegistration>()
   const registrationListeners = new Set<() => void>()
+  const shouldIgnoreDiagnostics = (filePath: string) => {
+    if (input.serverID !== "pyright") return false
+    const relative = path.relative(input.root, filePath)
+    if (relative.startsWith("..") || path.isAbsolute(relative)) return false
+    return relative.split(/[\\/]+/).some((part) => part === ".venv" || part === "venv")
+  }
   const mergedDiagnostics = (filePath: string) =>
     dedupeDiagnostics([...(pushDiagnostics.get(filePath) ?? []), ...(pullDiagnostics.get(filePath) ?? [])])
   const updatePushDiagnostics = (filePath: string, next: Diagnostic[]) => {
+    if (shouldIgnoreDiagnostics(filePath)) {
+      pushDiagnostics.delete(filePath)
+      return
+    }
     pushDiagnostics.set(filePath, next)
     Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
   }
   const updatePullDiagnostics = (filePath: string, next: Diagnostic[]) => {
+    if (shouldIgnoreDiagnostics(filePath)) {
+      pullDiagnostics.delete(filePath)
+      return
+    }
     pullDiagnostics.set(filePath, next)
   }
   const emitRegistrationChange = () => {
