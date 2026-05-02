@@ -88,7 +88,7 @@ export const rpc = {
   async shutdown() {
     Log.Default.info("worker shutting down")
 
-    await InstanceStore.runtime.runPromise((s) => s.disposeAll())
+    await InstanceStore.disposeAllInstances()
     if (server) await server.stop(true)
   },
 }

@@ -63,7 +63,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
         },
       }),
       async (c) => {
-        await InstanceStore.runtime.runPromise((s) => s.dispose(Instance.current))
+        await InstanceStore.disposeInstance(Instance.current)
         return c.json(true)
       },
     )

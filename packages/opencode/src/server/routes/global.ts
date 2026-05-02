@@ -200,7 +200,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        await InstanceStore.runtime.runPromise((s) => s.disposeAll())
+        await InstanceStore.disposeAllInstances()
         GlobalBus.emit("event", {
           directory: "global",
           payload: {

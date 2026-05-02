@@ -42,10 +42,17 @@ export const Instance = {
   restore<R>(ctx: InstanceContext, fn: () => R): R {
     return context.provide(ctx, fn)
   },
+  // followup: `reload` survives because `test/server/project-init-git.test.ts`
+  // spies on this exact method. Once that test asserts on `InstanceStore.reloadInstance`
+  // (or moves to an Effect runtime), this wrapper can drop.
   async reload(input: InstanceStore.LoadInput) {
-    return InstanceStore.runtime.runPromise((store) => store.reload(input))
+    return InstanceStore.reloadInstance(input)
   },
+  // followup: `dispose` survives for legacy fixtures that read `Instance.current`
+  // out of ALS (e.g. `test/fixture/fixture.ts` `provideTmpdirInstance`,
+  // `test/question/question.test.ts` cancellation tests). Convert those to call
+  // `InstanceStore.disposeInstance(ctx)` directly once `Instance.provide` is gone.
   async dispose() {
-    return InstanceStore.runtime.runPromise((store) => store.dispose(Instance.current))
+    return InstanceStore.disposeInstance(Instance.current)
   },
 }

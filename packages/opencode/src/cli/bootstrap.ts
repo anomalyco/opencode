@@ -9,7 +9,7 @@ export async function bootstrap<T>(directory: string, cb: () => Promise<T>) {
         const result = await cb()
         return result
       } finally {
-        await InstanceStore.runtime.runPromise((s) => s.dispose(Instance.current))
+        await InstanceStore.disposeInstance(Instance.current)
       }
     },
   })
