@@ -58,6 +58,10 @@ import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 
+function isQuestionTool(tool: string) {
+  return tool === "question" || tool === "plan_question"
+}
+
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
   let valueRef: HTMLSpanElement | undefined
@@ -399,6 +403,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: i18n.t("ui.tool.todos"),
       }
     case "question":
+    case "plan_question":
       return {
         icon: "bubble-5",
         title: i18n.t("ui.tool.questions"),
@@ -567,7 +572,7 @@ function index<T extends { id: string }>(items: readonly T[]) {
 function renderable(part: PartType, showReasoningSummaries = true) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
-    if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
+    if (isQuestionTool(part.tool)) return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
@@ -1299,7 +1304,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   if (part().tool === "todowrite") return null
 
   const hideQuestion = createMemo(
-    () => part().tool === "question" && (part().state.status === "pending" || part().state.status === "running"),
+    () => isQuestionTool(part().tool) && (part().state.status === "pending" || part().state.status === "running"),
   )
 
   const emptyInput: Record<string, any> = {}
@@ -1333,7 +1338,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           <Match when={part().state.status === "error" && (part().state as any).error}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
-              if (part().tool === "question" && cleaned.includes("dismissed this question")) {
+              if (isQuestionTool(part().tool) && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
                     <span class="text-13-regular text-text-weak cursor-default">
@@ -2224,50 +2229,50 @@ ToolRegistry.register({
   },
 })
 
-ToolRegistry.register({
-  name: "question",
-  render(props) {
-    const i18n = useI18n()
-    const questions = createMemo(() => (props.input.questions ?? []) as QuestionInfo[])
-    const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
-    const completed = createMemo(() => answers().length > 0)
+function QuestionTool(props: ToolProps) {
+  const i18n = useI18n()
+  const questions = createMemo(() => (props.input.questions ?? []) as QuestionInfo[])
+  const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
+  const completed = createMemo(() => answers().length > 0)
 
-    const subtitle = createMemo(() => {
-      const count = questions().length
-      if (count === 0) return ""
-      if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
-      return `${count} ${i18n.t(count > 1 ? "ui.common.question.other" : "ui.common.question.one")}`
-    })
+  const subtitle = createMemo(() => {
+    const count = questions().length
+    if (count === 0) return ""
+    if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
+    return `${count} ${i18n.t(count > 1 ? "ui.common.question.other" : "ui.common.question.one")}`
+  })
 
-    return (
-      <BasicTool
-        {...props}
-        defaultOpen={completed()}
-        icon="bubble-5"
-        trigger={{
-          title: i18n.t("ui.tool.questions"),
-          subtitle: subtitle(),
-        }}
-      >
-        <Show when={completed()}>
-          <div data-component="question-answers">
-            <For each={questions()}>
-              {(q, i) => {
-                const answer = () => answers()[i()] ?? []
-                return (
-                  <div data-slot="question-answer-item">
-                    <div data-slot="question-text">{q.question}</div>
-                    <div data-slot="answer-text">{answer().join(", ") || i18n.t("ui.question.answer.none")}</div>
-                  </div>
-                )
-              }}
-            </For>
-          </div>
-        </Show>
-      </BasicTool>
-    )
-  },
-})
+  return (
+    <BasicTool
+      {...props}
+      defaultOpen={completed()}
+      icon="bubble-5"
+      trigger={{
+        title: i18n.t("ui.tool.questions"),
+        subtitle: subtitle(),
+      }}
+    >
+      <Show when={completed()}>
+        <div data-component="question-answers">
+          <For each={questions()}>
+            {(q, i) => {
+              const answer = () => answers()[i()] ?? []
+              return (
+                <div data-slot="question-answer-item">
+                  <div data-slot="question-text">{q.question}</div>
+                  <div data-slot="answer-text">{answer().join(", ") || i18n.t("ui.question.answer.none")}</div>
+                </div>
+              )
+            }}
+          </For>
+        </div>
+      </Show>
+    </BasicTool>
+  )
+}
+
+ToolRegistry.register({ name: "question", render: QuestionTool })
+ToolRegistry.register({ name: "plan_question", render: QuestionTool })
 
 ToolRegistry.register({
   name: "skill",

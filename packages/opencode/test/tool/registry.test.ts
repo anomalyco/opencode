@@ -5,12 +5,14 @@ import { Effect, Layer } from "effect"
 import { Instance } from "../../src/project/instance"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
+import { Agent } from "@/agent/agent"
+import { ModelID, ProviderID } from "@/provider/schema"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const node = CrossSpawnSpawner.defaultLayer
 
-const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
+const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, Agent.defaultLayer, node))
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -146,6 +148,23 @@ describe("tool.registry", () => {
         const registry = yield* ToolRegistry.Service
         const ids = yield* registry.ids()
         expect(ids).toContain("cowsay")
+      }),
+    ),
+  )
+
+  it.live("uses the plan-specific question tool only for plan agent", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        const agents = yield* Agent.Service
+        const model = { providerID: ProviderID.opencode, modelID: ModelID.make("test") }
+        const buildTools = yield* registry.tools({ ...model, agent: yield* agents.get("build") })
+        const planTools = yield* registry.tools({ ...model, agent: yield* agents.get("plan") })
+
+        expect(buildTools.map((tool) => tool.id)).toContain("question")
+        expect(buildTools.map((tool) => tool.id)).not.toContain("plan_question")
+        expect(planTools.map((tool) => tool.id)).not.toContain("question")
+        expect(planTools.map((tool) => tool.id)).toContain("plan_question")
       }),
     ),
   )

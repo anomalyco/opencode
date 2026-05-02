@@ -561,6 +561,11 @@ export const GithubRunCommand = cmd({
                   action: "deny",
                   pattern: "*",
                 },
+                {
+                  permission: "plan_question",
+                  action: "deny",
+                  pattern: "*",
+                },
               ],
             }),
           ),

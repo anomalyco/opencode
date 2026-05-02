@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer } from "effect"
-import { QuestionTool } from "../../src/tool/question"
+import { PlanQuestionTool, QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Agent } from "../../src/agent/agent"
@@ -82,6 +82,34 @@ describe("tool.question", () => {
 
         const result = yield* Fiber.join(fiber)
         expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
+      }),
+    ),
+  )
+
+  it.live("should execute plan-specific questions with plan guidance", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const question = yield* Question.Service
+        const toolInfo = yield* PlanQuestionTool
+        const tool = yield* toolInfo.init()
+        const questions = [
+          {
+            question: "Which implementation direction should the plan use?",
+            header: "Direction",
+            options: [
+              { label: "Minimal", description: "Make the smallest safe change" },
+              { label: "Refactor", description: "Refactor the full flow" },
+            ],
+          },
+        ]
+
+        const fiber = yield* tool.execute({ questions }, ctx).pipe(Effect.forkScoped)
+        const item = yield* pending(question)
+        yield* question.reply({ requestID: item.id, answers: [["Minimal"]] })
+
+        const result = yield* Fiber.join(fiber)
+        expect(result.output).toContain("plan-mode questions")
+        expect(result.output).toContain("submit the plan")
       }),
     ),
   )

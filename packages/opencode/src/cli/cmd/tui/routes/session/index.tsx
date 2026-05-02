@@ -47,7 +47,7 @@ import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { WebSearchTool } from "@/tool/websearch"
 import type { TaskTool } from "@/tool/task"
-import type { QuestionTool } from "@/tool/question"
+import type { PlanQuestionTool, QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
@@ -1685,7 +1685,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "todowrite"}>
           <TodoWrite {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "question"}>
+        <Match when={props.part.tool === "question" || props.part.tool === "plan_question"}>
           <Question {...toolprops} />
         </Match>
         <Match when={props.part.tool === "skill"}>
@@ -2273,7 +2273,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
   )
 }
 
-function Question(props: ToolProps<typeof QuestionTool>) {
+function Question(props: ToolProps<typeof QuestionTool | typeof PlanQuestionTool>) {
   const { theme } = useTheme()
   const count = createMemo(() => props.input.questions?.length ?? 0)
 

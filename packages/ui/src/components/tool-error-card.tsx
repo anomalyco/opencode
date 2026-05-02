@@ -36,6 +36,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       bash: "ui.tool.shell",
       apply_patch: "ui.tool.patch",
       question: "ui.tool.questions",
+      plan_question: "ui.tool.questions",
     }
     const key = map[split.tool]
     if (!key) return split.tool

@@ -1,6 +1,6 @@
 import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
-import { QuestionTool } from "./question"
+import { PlanQuestionTool, QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
@@ -101,6 +101,7 @@ export const layer: Layer.Layer<
     const task = yield* TaskTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
+    const planQuestion = yield* PlanQuestionTool
     const todo = yield* TodoWriteTool
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
@@ -199,6 +200,7 @@ export const layer: Layer.Layer<
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
+          planQuestion: Tool.init(planQuestion),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
         })
@@ -207,7 +209,7 @@ export const layer: Layer.Layer<
           custom,
           builtin: [
             tool.invalid,
-            ...(questionEnabled ? [tool.question] : []),
+            ...(questionEnabled ? [tool.question, tool.planQuestion] : []),
             tool.bash,
             tool.read,
             tool.glob,
@@ -274,6 +276,9 @@ export const layer: Layer.Layer<
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
+        if (tool.id === QuestionTool.id) return input.agent.name !== "plan"
+        if (tool.id === PlanQuestionTool.id) return input.agent.name === "plan"
+
         if (tool.id === WebSearchTool.id) {
           return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
         }

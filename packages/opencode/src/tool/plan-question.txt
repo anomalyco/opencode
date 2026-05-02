@@ -1,0 +1,16 @@
+Use this tool in plan mode when you need to ask the user questions before finalizing the plan. This is the plan-mode ASK tool.
+
+Use this instead of writing questions in normal assistant text. If you need user input, call this tool and end the turn.
+
+This allows you to:
+1. Clarify requirements before writing the final plan
+2. Ask the user to choose between implementation tradeoffs
+3. Gather missing preferences or constraints
+
+Usage notes:
+- Do not ask "Is this plan okay?" with this tool; use plan_exit for final plan approval
+- When answers resolve the remaining uncertainty, continue planning, update the plan, then call the plan submission tool (`plan_exit` when available)
+- If answers reveal more ambiguity, use this tool again with the next focused question set
+- When `custom` is enabled (default), a "Type your own answer" option is added automatically; don't include "Other" or catch-all options
+- Answers are returned as arrays of labels; set `multiple: true` to allow selecting more than one
+- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label

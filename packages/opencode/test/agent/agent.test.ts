@@ -49,6 +49,8 @@ test("build agent has correct default properties", async () => {
       expect(build?.native).toBe(true)
       expect(evalPerm(build, "edit")).toBe("allow")
       expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "question")).toBe("allow")
+      expect(evalPerm(build, "plan_question")).toBe("deny")
     },
   })
 })
@@ -64,6 +66,9 @@ test("plan agent denies edits except .opencode/plans/*", async () => {
       expect(evalPerm(plan, "edit")).toBe("deny")
       // But specific path is allowed
       expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
+      expect(evalPerm(plan, "question")).toBe("deny")
+      expect(evalPerm(plan, "plan_question")).toBe("allow")
+      expect(evalPerm(plan, "plan_exit")).toBe("allow")
     },
   })
 })

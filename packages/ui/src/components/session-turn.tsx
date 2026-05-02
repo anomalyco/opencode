@@ -92,10 +92,14 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 
 const hidden = new Set(["todowrite"])
 
+function isQuestionTool(tool: string) {
+  return tool === "question" || tool === "plan_question"
+}
+
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
     if (hidden.has(part.tool)) return
-    if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
+    if (isQuestionTool(part.tool) && (part.state.status === "pending" || part.state.status === "running")) return
     return "visible" as const
   }
   if (part.type === "text") return part.text?.trim() ? ("visible" as const) : undefined

@@ -300,7 +300,7 @@ Goal: Gain a comprehensive understanding of the user's request by reading throug
  - Quality over quantity - 3 agents maximum, but you should try to use the minimum number of agents necessary (usually just 1)
  - If using multiple agents: Provide each agent with a specific search focus or area to explore. Example: One agent searches for existing implementations, another explores related components, a third investigates testing patterns
 
-3. After exploring the code, use the question tool to clarify ambiguities in the user request up front.
+3. After exploring the code, use the plan_question tool to clarify ambiguities in the user request up front. Do not ask plan-mode questions in normal assistant text.
 
 ### Phase 2: Design
 Goal: Design an implementation approach.
@@ -333,7 +333,7 @@ In the agent prompt:
 Goal: Review the plan(s) from Phase 2 and ensure alignment with the user's intentions.
 1. Read the critical files identified by agents to deepen your understanding
 2. Ensure that the plans align with the user's original request
-3. Use question tool to clarify any remaining questions with the user
+3. Use plan_question tool to clarify any remaining questions with the user. Do not ask plan-mode questions in normal assistant text.
 
 ### Phase 4: Final Plan
 Goal: Write your final plan to the plan file (the only file you can edit).
@@ -344,11 +344,11 @@ Goal: Write your final plan to the plan file (the only file you can edit).
 
 ### Phase 5: Call plan_exit tool
 At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
-This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
+This is critical - your turn should only end with either calling plan_question or calling plan_exit. Do not stop unless it's for these 2 reasons.
 
-**Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
+**Important:** Use plan_question to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use plan_question to ask "Is this plan okay?" - that's what plan_exit does. Never end a plan-mode response by listing questions in prose; call plan_question instead.
 
-NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
+NOTE: At any point in time through this workflow you should feel free to call plan_question for questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
 </system-reminder>`,
         synthetic: true,
       })
