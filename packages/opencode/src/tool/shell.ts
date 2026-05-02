@@ -1,12 +1,11 @@
-import { Schema } from "effect"
-import { PositiveInt } from "@/util/schema"
+import { Effect, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
 import path from "path"
-import DESCRIPTION from "./bash.txt"
 import * as Log from "@opencode-ai/core/util/log"
 import { containsPath, type InstanceContext } from "../project/instance-context"
+import { InstanceState } from "@/effect/instance-state"
 import { lazy } from "@/util/lazy"
 import { Language, type Node } from "web-tree-sitter"
 
@@ -14,20 +13,21 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
 import { Shell } from "@/shell/shell"
+import { ShellID } from "./shell/id"
 
-import { BashArity } from "@/permission/arity"
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
-import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import { InstanceState } from "@/effect/instance-state"
+import { ShellPrompt, type Parameters } from "./shell/prompt"
+import { BashArity } from "@/permission/arity"
+
+export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
-const CWD = new Set(["cd", "push-location", "set-location"])
+const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
   "rm",
@@ -50,20 +50,9 @@ const FILES = new Set([
   "new-item",
   "rename-item",
 ])
+const CMD_FILES = new Set(["copy", "del", "dir", "erase", "md", "mkdir", "move", "rd", "ren", "rename", "rmdir", "type"])
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
-
-export const Parameters = Schema.Struct({
-  command: Schema.String.annotate({ description: "The command to execute" }),
-  timeout: Schema.optional(PositiveInt).annotate({ description: "Optional timeout in milliseconds" }),
-  workdir: Schema.optional(Schema.String).annotate({
-    description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
-  }),
-  description: Schema.String.annotate({
-    description:
-      "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-  }),
-})
 
 type Part = {
   type: string
@@ -81,7 +70,7 @@ type Chunk = {
   size: number
 }
 
-export const log = Log.create({ service: "bash-tool" })
+export const log = Log.create({ service: "shell-tool" })
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -187,11 +176,16 @@ function prefix(text: string) {
   return text.slice(0, match.index)
 }
 
-function pathArgs(list: Part[], ps: boolean) {
+function pathArgs(list: Part[], ps: boolean, cmd = false) {
   if (!ps) {
     return list
       .slice(1)
-      .filter((item) => !item.text.startsWith("-") && !(list[0]?.text === "chmod" && item.text.startsWith("+")))
+      .filter(
+        (item) =>
+          !item.text.startsWith("-") &&
+          !(cmd && item.text.startsWith("/")) &&
+          !(list[0]?.text === "chmod" && item.text.startsWith("+")),
+      )
       .map((item) => item.text)
   }
 
@@ -251,13 +245,13 @@ function tail(text: string, maxLines: number, maxBytes: number) {
   }
 }
 
-const parse = Effect.fn("BashTool.parse")(function* (command: string, ps: boolean) {
+const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boolean) {
   const tree = yield* Effect.promise(() => parser().then((p) => (ps ? p.ps : p.bash).parse(command)))
   if (!tree) throw new Error("Failed to parse command")
   return tree
 })
 
-const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) {
+const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan) {
   if (scan.dirs.size > 0) {
     const globs = Array.from(scan.dirs).map((dir) => {
       if (process.platform === "win32") return AppFileSystem.normalizePathPattern(path.join(dir, "*"))
@@ -273,7 +267,7 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
 
   if (scan.patterns.size === 0) return
   yield* ctx.ask({
-    permission: "bash",
+    permission: ShellID.ToolID,
     patterns: Array.from(scan.patterns),
     always: Array.from(scan.always),
     metadata: {},
@@ -325,9 +319,8 @@ const parser = lazy(async () => {
   return { bash, ps }
 })
 
-// TODO: we may wanna rename this tool so it works better on other shells
-export const BashTool = Tool.define(
-  "bash",
+export const ShellTool = Tool.define(
+  ShellID.ToolID,
   Effect.gen(function* () {
     const config = yield* Config.Service
     const spawner = yield* ChildProcessSpawner
@@ -335,7 +328,7 @@ export const BashTool = Tool.define(
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
 
-    const cygpath = Effect.fn("BashTool.cygpath")(function* (shell: string, text: string) {
+    const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
       const lines = yield* spawner
         .lines(ChildProcess.make(shell, ["-lc", 'cygpath -w -- "$1"', "_", text]))
         .pipe(Effect.catch(() => Effect.succeed([] as string[])))
@@ -344,7 +337,7 @@ export const BashTool = Tool.define(
       return AppFileSystem.normalizePath(file)
     })
 
-    const resolvePath = Effect.fn("BashTool.resolvePath")(function* (text: string, root: string, shell: string) {
+    const resolvePath = Effect.fn("ShellTool.resolvePath")(function* (text: string, root: string, shell: string) {
       if (process.platform === "win32") {
         if (Shell.posix(shell) && text.startsWith("/") && AppFileSystem.windowsPath(text) === text) {
           const file = yield* cygpath(shell, text)
@@ -355,7 +348,7 @@ export const BashTool = Tool.define(
       return path.resolve(root, text)
     })
 
-    const argPath = Effect.fn("BashTool.argPath")(function* (arg: string, cwd: string, ps: boolean, shell: string) {
+    const argPath = Effect.fn("ShellTool.argPath")(function* (arg: string, cwd: string, ps: boolean, shell: string) {
       const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
       const file = text && prefix(text)
       if (!file || dynamic(file, ps)) return
@@ -364,7 +357,7 @@ export const BashTool = Tool.define(
       return yield* resolvePath(next, cwd, shell)
     })
 
-    const collect = Effect.fn("BashTool.collect")(function* (
+    const collect = Effect.fn("ShellTool.collect")(function* (
       root: Node,
       cwd: string,
       ps: boolean,
@@ -376,14 +369,15 @@ export const BashTool = Tool.define(
         patterns: new Set<string>(),
         always: new Set<string>(),
       }
+      const shellKind = ShellID.toKind(Shell.name(shell))
 
       for (const node of commands(root)) {
         const command = parts(node)
         const tokens = command.map((item) => item.text)
-        const cmd = ps ? tokens[0]?.toLowerCase() : tokens[0]
+        const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
 
-        if (cmd && FILES.has(cmd)) {
-          for (const arg of pathArgs(command, ps)) {
+        if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
+          for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
             const resolved = yield* argPath(arg, cwd, ps, shell)
             log.info("resolved path", { arg, resolved })
             if (!resolved || containsPath(resolved, instance)) continue
@@ -401,7 +395,7 @@ export const BashTool = Tool.define(
       return scan
     })
 
-    const shellEnv = Effect.fn("BashTool.shellEnv")(function* (ctx: Tool.Context, cwd: string) {
+    const shellEnv = Effect.fn("ShellTool.shellEnv")(function* (ctx: Tool.Context, cwd: string) {
       const extra = yield* plugin.trigger(
         "shell.env",
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -413,7 +407,7 @@ export const BashTool = Tool.define(
       }
     })
 
-    const run = Effect.fn("BashTool.run")(function* (
+    const run = Effect.fn("ShellTool.run")(function* (
       input: {
         shell: string
         command: string
@@ -527,7 +521,7 @@ export const BashTool = Tool.define(
       const meta: string[] = []
       if (expired) {
         meta.push(
-          `bash tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
+          `shell tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
         )
       }
       if (aborted) meta.push("User aborted the command")
@@ -546,7 +540,7 @@ export const BashTool = Tool.define(
       }
 
       if (meta.length > 0) {
-        output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"
+        output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
       if (sink) {
         const stream = sink
@@ -577,25 +571,14 @@ export const BashTool = Tool.define(
         const cfg = yield* config.get()
         const shell = Shell.acceptable(cfg.shell)
         const name = Shell.name(shell)
-        const chain =
-          name === "powershell"
-            ? "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell 5.1 does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
-            : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
-        log.info("bash tool using shell", { shell })
-
         const limits = yield* trunc.limits()
-        const instance = yield* InstanceState.context
+        const prompt = ShellPrompt.render(name, process.platform, limits)
+        log.info("shell tool using shell", { shell })
 
         return {
-          description: DESCRIPTION.replaceAll("${directory}", instance.directory)
-            .replaceAll("${tmp}", Global.Path.tmp)
-            .replaceAll("${os}", process.platform)
-            .replaceAll("${shell}", name)
-            .replaceAll("${chaining}", chain)
-            .replaceAll("${maxLines}", String(limits.maxLines))
-            .replaceAll("${maxBytes}", String(limits.maxBytes)),
-          parameters: Parameters,
-          execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+          description: prompt.description,
+          parameters: prompt.parameters,
+          execute: (params: Parameters, ctx: Tool.Context) =>
             Effect.gen(function* () {
               const executeInstance = yield* InstanceState.context
               const cwd = params.workdir
