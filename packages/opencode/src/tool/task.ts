@@ -59,6 +59,8 @@ export const TaskTool = Tool.define(
 
       const canTask = next.permission.some((rule) => rule.permission === id)
       const canTodo = next.permission.some((rule) => rule.permission === "todowrite")
+      const canPlanExit = next.permission.some((rule) => rule.permission === "plan_exit")
+      const canPlanEnter = next.permission.some((rule) => rule.permission === "plan_enter")
 
       const taskID = params.task_id
       const session = taskID
@@ -88,6 +90,24 @@ export const TaskTool = Tool.define(
               : [
                   {
                     permission: id,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
+            ...(canPlanExit
+              ? []
+              : [
+                  {
+                    permission: "plan_exit" as const,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
+            ...(canPlanEnter
+              ? []
+              : [
+                  {
+                    permission: "plan_enter" as const,
                     pattern: "*" as const,
                     action: "deny" as const,
                   },
@@ -143,6 +163,8 @@ export const TaskTool = Tool.define(
               tools: {
                 ...(canTodo ? {} : { todowrite: false }),
                 ...(canTask ? {} : { task: false }),
+                ...(canPlanExit ? {} : { plan_exit: false }),
+                ...(canPlanEnter ? {} : { plan_enter: false }),
                 ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
               },
               parts,
