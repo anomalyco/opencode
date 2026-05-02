@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { Instance } from "../../src/project/instance"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { mkdir } from "fs/promises"
 import path from "path"
@@ -30,7 +30,7 @@ const svc = {
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 describe("session.list", () => {

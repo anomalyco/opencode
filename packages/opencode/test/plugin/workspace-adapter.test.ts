@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import path from "path"
 import { pathToFileURL } from "url"
-import { provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
@@ -20,7 +20,7 @@ const experimental = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 afterAll(() => {

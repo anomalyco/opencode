@@ -7,7 +7,7 @@ import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
 import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -27,7 +27,7 @@ afterEach(async () => {
   mock.restore()
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 

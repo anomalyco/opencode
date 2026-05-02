@@ -2,7 +2,7 @@ import { test, expect } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../../src/project/instance"
 import { Plugin } from "../../src/plugin/index"
@@ -2557,7 +2557,7 @@ test("plugin config providers persist after instance dispose", async () => {
   expect(first[ProviderID.make("demo")]).toBeDefined()
   expect(first[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
 
-  await Instance.disposeAll()
+  await disposeAllInstances()
 
   const second = await Instance.provide({
     directory: tmp.path,

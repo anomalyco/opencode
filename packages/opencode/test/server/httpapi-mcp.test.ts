@@ -5,10 +5,11 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
 import { Instance } from "../../src/project/instance"
+import { InstanceStore } from "../../src/project/instance-store"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
@@ -57,7 +58,9 @@ function withMcpProject<A, E, R>(self: (dir: string) => Effect.Effect<A, E, R>) 
       }),
     )
     yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Instance.provide({ directory: dir, fn: () => Instance.dispose() })).pipe(Effect.ignore),
+      Effect.promise(() =>
+        Instance.provide({ directory: dir, fn: () => InstanceStore.disposeInstance(Instance.current) }),
+      ).pipe(Effect.ignore),
     )
 
     return yield* self(dir).pipe(provideInstance(dir))
@@ -76,7 +79,7 @@ const readResponse = Effect.fnUntraced(function* (input: { app: TestApp; path: s
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 

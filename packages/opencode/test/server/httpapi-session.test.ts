@@ -20,7 +20,7 @@ import { SessionTable } from "@/session/session.sql"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
 
 void Log.init({ print: false })
@@ -138,7 +138,7 @@ function withTmp<A, E, R>(
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
