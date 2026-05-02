@@ -126,7 +126,10 @@ export function Tooltip(props: TooltipProps) {
             as={"div"}
             data-component="tooltip-trigger"
             class={local.class}
-            onPointerDownCapture={arm}
+            onPointerDownCapture={(event: PointerEvent) => {
+              if (event.pointerType === "touch") return
+              arm()
+            }}
             onKeyDownCapture={(event: KeyboardEvent) => {
               if (event.key !== "Enter" && event.key !== " ") return
               arm()
