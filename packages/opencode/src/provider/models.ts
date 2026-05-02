@@ -7,7 +7,6 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { makeRuntime } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
 const Cost = Schema.Struct({
@@ -195,12 +194,5 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(AppFileSystem.defaultLayer),
 )
-
-// Promise-style compat for callers in Promise-context (Hono routes, legacy CLI handlers).
-// makeRuntime uses the shared memoMap so this runtime's Service instance is the same one
-// AppRuntime sees — Effect callers and Promise callers operate on the same cache.
-const runtime = makeRuntime(Service, defaultLayer)
-export const get = () => runtime.runPromise((s) => s.get())
-export const refresh = (force = false) => runtime.runPromise((s) => s.refresh(force))
 
 export * as ModelsDev from "./models"
