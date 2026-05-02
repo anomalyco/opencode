@@ -1,5 +1,4 @@
 import { WorkspaceRef } from "@/effect/instance-ref"
-import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { Effect, Layer } from "effect"
@@ -25,11 +24,12 @@ function decode(input: string): string {
 function provideInstanceContext<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E>,
   store: InstanceStore.Interface,
+  bootstrap: InstanceBootstrap.Interface,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext
     return yield* store.provide(
-      { directory: decode(route.directory), init: () => AppRuntime.runPromise(InstanceBootstrap) },
+      { directory: decode(route.directory), init: bootstrap.run },
       effect.pipe(Effect.provideService(WorkspaceRef, route.workspaceID)),
     )
   })
@@ -39,13 +39,15 @@ export const instanceContextLayer = Layer.effect(
   InstanceContextMiddleware,
   Effect.gen(function* () {
     const store = yield* InstanceStore.Service
-    return InstanceContextMiddleware.of((effect) => provideInstanceContext(effect, store))
+    const bootstrap = yield* InstanceBootstrap.Service
+    return InstanceContextMiddleware.of((effect) => provideInstanceContext(effect, store, bootstrap))
   }),
 )
 
 export const instanceRouterMiddleware = HttpRouter.middleware()(
   Effect.gen(function* () {
     const store = yield* InstanceStore.Service
-    return (effect) => provideInstanceContext(effect, store)
+    const bootstrap = yield* InstanceBootstrap.Service
+    return (effect) => provideInstanceContext(effect, store, bootstrap)
   }),
 )
