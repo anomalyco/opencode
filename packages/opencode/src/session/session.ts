@@ -11,6 +11,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@/storage/db"
 import { NotFoundError } from "@/storage/storage"
 import { eq } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { and } from "drizzle-orm"
 import { gte } from "drizzle-orm"
 import { isNull } from "drizzle-orm"
@@ -142,8 +143,9 @@ const Share = Schema.Struct({
   url: Schema.String,
 })
 
-// Legacy HTTP accepted negative values here. Keep archive timestamps permissive
-// while excluding non-finite values that cannot round-trip through JSON.
+// Legacy HTTP accepted any number here, and persisted data may contain
+// negative values (but not Infinity/-Infinity/NaN). Keep archive timestamps
+// permissive while other clocks stay non-negative.
 export const ArchivedTimestamp = Schema.Finite
 
 const Time = Schema.Struct({
@@ -897,6 +899,94 @@ export function* listGlobal(input?: {
     const project = projects.get(row.project_id) ?? null
     yield { ...fromRow(row), project }
   }
+}
+
+export function* listDirectories() {
+  const rows = Database.use((db) =>
+    db
+      .select({
+        directory: sql<string>`REPLACE(${SessionTable.directory}, '\\', '/')`,
+        count: sql<number>`COUNT(*)`.mapWith(Number),
+      })
+      .from(SessionTable)
+      .where(and(isNull(SessionTable.time_archived), isNull(SessionTable.parent_id)))
+      .groupBy(sql`REPLACE(${SessionTable.directory}, '\\', '/')`)
+      .orderBy(sql`COUNT(*) DESC`)
+      .all()
+  )
+  for (const row of rows) yield row
+}
+
+export function* listProjectCounts() {
+  const rows = Database.use((db) =>
+    db
+      .select({
+        project_id: SessionTable.project_id,
+        count: sql<number>`COUNT(*)`.mapWith(Number),
+        worktree: ProjectTable.worktree,
+        name: ProjectTable.name,
+      })
+      .from(SessionTable)
+      .leftJoin(ProjectTable, eq(SessionTable.project_id, ProjectTable.id))
+      .where(and(isNull(SessionTable.time_archived), isNull(SessionTable.parent_id)))
+      .groupBy(SessionTable.project_id)
+      .orderBy(sql`COUNT(*) DESC`)
+      .all(),
+  )
+  for (const row of rows) yield row
+}
+
+export function* listByProjectIds(input: {
+  projectIds: string[]
+  cursor?: number
+  limit?: number
+}) {
+  const conditions: SQL[] = [
+    input.projectIds.length === 1
+      ? eq(SessionTable.project_id, input.projectIds[0]!)
+      : inArray(SessionTable.project_id, input.projectIds),
+    isNull(SessionTable.time_archived),
+    isNull(SessionTable.parent_id),
+  ]
+  if (input.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
+
+  const limit = input.limit ?? 50
+  const rows = Database.use((db) =>
+    db
+      .select()
+      .from(SessionTable)
+      .where(and(...conditions))
+      .orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
+      .limit(limit + 1)
+      .all(),
+  )
+  for (const row of rows) yield fromRow(row)
+}
+
+export function* listByNormalizedDirectory(input: {
+  directory: string
+  roots?: boolean
+  cursor?: number
+  limit?: number
+}) {
+  const conditions: SQL[] = [
+    sql`REPLACE(${SessionTable.directory}, '\\', '/') = ${input.directory}`,
+    isNull(SessionTable.time_archived),
+  ]
+  if (input.roots) conditions.push(isNull(SessionTable.parent_id))
+  if (input.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
+
+  const limit = input.limit ?? 50
+  const rows = Database.use((db) =>
+    db
+      .select()
+      .from(SessionTable)
+      .where(and(...conditions))
+      .orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
+      .limit(limit + 1)
+      .all()
+  )
+  for (const row of rows) yield fromRow(row)
 }
 
 export * as Session from "./session"

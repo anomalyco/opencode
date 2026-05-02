@@ -73,8 +73,34 @@ export const ExperimentalPaths = {
   worktree: "/experimental/worktree",
   worktreeReset: "/experimental/worktree/reset",
   session: "/experimental/session",
+  sessionDirectories: "/experimental/session/directories",
+  sessionProjectCounts: "/experimental/session/project-counts",
+  sessionBrowse: "/experimental/session/browse",
+  sessionBrowseProject: "/experimental/session/browse-project",
   resource: "/experimental/resource",
 } as const
+
+export const SessionDirectoryListQuery = Schema.Struct({
+  directory: Schema.optional(Schema.String),
+  roots: Schema.optional(QueryBoolean),
+  cursor: Schema.optional(Schema.NumberFromString),
+  limit: Schema.optional(Schema.NumberFromString),
+})
+
+export const SessionProjectCountsQuery = Schema.Struct({})
+
+export const SessionBrowseQuery = Schema.Struct({
+  directory: Schema.String,
+  roots: Schema.optional(QueryBoolean),
+  cursor: Schema.optional(Schema.NumberFromString),
+  limit: Schema.optional(Schema.NumberFromString),
+})
+
+export const SessionBrowseProjectQuery = Schema.Struct({
+  project_id: Schema.String,
+  cursor: Schema.optional(Schema.NumberFromString),
+  limit: Schema.optional(Schema.NumberFromString),
+})
 
 export const ExperimentalApi = HttpApi.make("experimental")
   .add(
@@ -183,6 +209,64 @@ export const ExperimentalApi = HttpApi.make("experimental")
             summary: "List sessions",
             description:
               "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+          }),
+        ),
+        HttpApiEndpoint.get("sessionDirectories", ExperimentalPaths.sessionDirectories, {
+          success: described(
+            Schema.Array(
+              Schema.Struct({
+                directory: Schema.String,
+                count: NonNegativeInt,
+              }),
+            ),
+            "Directories with session counts",
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.directories",
+            summary: "List session directories",
+            description:
+              "Get a list of all directories that contain sessions, with their session counts.",
+          }),
+        ),
+        HttpApiEndpoint.get("sessionProjectCounts", ExperimentalPaths.sessionProjectCounts, {
+          success: described(
+            Schema.Array(
+              Schema.Struct({
+                project_id: Schema.String,
+                count: NonNegativeInt,
+                worktree: Schema.NullOr(Schema.String),
+                name: Schema.NullOr(Schema.String),
+              }),
+            ),
+            "Project session counts",
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.projectCounts",
+            summary: "Session counts per project",
+            description: "Get the number of sessions grouped by project_id.",
+          }),
+        ),
+        HttpApiEndpoint.get("sessionBrowse", ExperimentalPaths.sessionBrowse, {
+          query: SessionBrowseQuery,
+          success: described(Schema.Array(Session.Info), "Sessions in directory"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.browse",
+            summary: "Browse sessions by directory",
+            description:
+              "Get a list of sessions in a specific directory, sorted by most recently updated.",
+          }),
+        ),
+        HttpApiEndpoint.get("sessionBrowseProject", ExperimentalPaths.sessionBrowseProject, {
+          query: SessionBrowseProjectQuery,
+          success: described(Schema.Array(Session.Info), "Sessions in project"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.browseProject",
+            summary: "Browse sessions by project",
+            description: "Get a list of sessions for a specific project, sorted by most recently updated.",
           }),
         ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {

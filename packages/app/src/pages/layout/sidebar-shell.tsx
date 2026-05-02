@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, type Accessor, type JSX } from "solid-js"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -31,6 +31,8 @@ export const SidebarContent = (props: {
   helpLabel: Accessor<string>
   onOpenHelp: () => void
   renderPanel: () => JSX.Element
+  browserOpen?: Accessor<boolean>
+  onToggleBrowser?: () => void
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
@@ -83,6 +85,16 @@ export const SidebarContent = (props: {
                   size="large"
                   onClick={props.onOpenProject}
                   aria-label={typeof props.openProjectLabel === "string" ? props.openProjectLabel : undefined}
+                />
+              </Tooltip>
+              <Tooltip placement={placement()} value="Session History">
+                <IconButton
+                  icon="clock-history"
+                  variant="ghost"
+                  size="large"
+                  onClick={props.onToggleBrowser}
+                  classList={{ "bg-surface-base-active": !!props.browserOpen?.() }}
+                  aria-label="Session History"
                 />
               </Tooltip>
             </div>

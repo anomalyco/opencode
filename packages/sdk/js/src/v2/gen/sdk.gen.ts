@@ -28,7 +28,11 @@ import type {
   ExperimentalConsoleListOrgsResponses,
   ExperimentalConsoleSwitchOrgResponses,
   ExperimentalResourceListResponses,
+  ExperimentalSessionBrowseProjectResponses,
+  ExperimentalSessionBrowseResponses,
+  ExperimentalSessionDirectoriesResponses,
   ExperimentalSessionListResponses,
+  ExperimentalSessionProjectCountsResponses,
   ExperimentalWorkspaceAdapterListResponses,
   ExperimentalWorkspaceCreateErrors,
   ExperimentalWorkspaceCreateResponses,
@@ -876,6 +880,138 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<ExperimentalSessionListResponses, unknown, ThrowOnError>({
       url: "/experimental/session",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List session directories
+   *
+   * Get a list of all directories that contain sessions, with their session counts.
+   */
+  public directories<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalSessionDirectoriesResponses, unknown, ThrowOnError>({
+      url: "/experimental/session/directories",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Session counts per project
+   *
+   * Get the number of sessions grouped by project_id.
+   */
+  public projectCounts<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalSessionProjectCountsResponses, unknown, ThrowOnError>({
+      url: "/experimental/session/project-counts",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Browse sessions by directory
+   *
+   * Get a list of sessions in a specific directory, sorted by most recently updated.
+   */
+  public browse<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory: string
+      workspace?: string
+      roots?: boolean | "true" | "false"
+      cursor?: number
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "roots" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalSessionBrowseResponses, unknown, ThrowOnError>({
+      url: "/experimental/session/browse",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Browse sessions by project
+   *
+   * Get a list of sessions for a specific project, sorted by most recently updated.
+   */
+  public browseProject<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      project_id: string
+      cursor?: number
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "project_id" },
+            { in: "query", key: "cursor" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentalSessionBrowseProjectResponses, unknown, ThrowOnError>({
+      url: "/experimental/session/browse-project",
       ...options,
       ...params,
     })

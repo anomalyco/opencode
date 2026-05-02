@@ -3257,6 +3257,100 @@ export type ExperimentalSessionListResponses = {
 
 export type ExperimentalSessionListResponse = ExperimentalSessionListResponses[keyof ExperimentalSessionListResponses]
 
+export type ExperimentalSessionDirectoriesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/session/directories"
+}
+
+export type ExperimentalSessionDirectoriesResponses = {
+  /**
+   * Directories with session counts
+   */
+  200: Array<{
+    directory: string
+    count: number
+  }>
+}
+
+export type ExperimentalSessionDirectoriesResponse =
+  ExperimentalSessionDirectoriesResponses[keyof ExperimentalSessionDirectoriesResponses]
+
+export type ExperimentalSessionProjectCountsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/session/project-counts"
+}
+
+export type ExperimentalSessionProjectCountsResponses = {
+  /**
+   * Project session counts
+   */
+  200: Array<{
+    project_id: string
+    count: number
+    worktree: string | null
+    name: string | null
+  }>
+}
+
+export type ExperimentalSessionProjectCountsResponse =
+  ExperimentalSessionProjectCountsResponses[keyof ExperimentalSessionProjectCountsResponses]
+
+export type ExperimentalSessionBrowseData = {
+  body?: never
+  path?: never
+  query: {
+    directory: string
+    workspace?: string
+    roots?: boolean | "true" | "false"
+    cursor?: number
+    limit?: number
+  }
+  url: "/experimental/session/browse"
+}
+
+export type ExperimentalSessionBrowseResponses = {
+  /**
+   * Sessions in directory
+   */
+  200: Array<Session>
+}
+
+export type ExperimentalSessionBrowseResponse =
+  ExperimentalSessionBrowseResponses[keyof ExperimentalSessionBrowseResponses]
+
+export type ExperimentalSessionBrowseProjectData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    project_id: string
+    cursor?: number
+    limit?: number
+  }
+  url: "/experimental/session/browse-project"
+}
+
+export type ExperimentalSessionBrowseProjectResponses = {
+  /**
+   * Sessions in project
+   */
+  200: Array<Session>
+}
+
+export type ExperimentalSessionBrowseProjectResponse =
+  ExperimentalSessionBrowseProjectResponses[keyof ExperimentalSessionBrowseProjectResponses]
+
 export type ExperimentalResourceListData = {
   body?: never
   path?: never

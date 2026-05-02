@@ -2,7 +2,7 @@ import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import z from "zod"
 import { createSdkForServer } from "@/utils/server"
 import { useLanguage } from "./language"
@@ -228,15 +228,31 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       flush()
     })
 
-    const sdk = createSdkForServer({
-      server: server.current.http,
-      fetch: platform.fetch,
-      throwOnError: true,
+    const [client, setClient] = createSignal(
+      createSdkForServer({
+        server: server.current!.http,
+        fetch: platform.fetch,
+        throwOnError: true,
+      }),
+    )
+
+    createEffect(() => {
+      const current = server.current
+      if (!current) return
+      setClient(
+        createSdkForServer({
+          server: current.http,
+          fetch: platform.fetch,
+          throwOnError: true,
+        }),
+      )
     })
 
     return {
       url: currentServer.http.url,
-      client: sdk,
+      get client() {
+        return client()
+      },
       event: {
         on: emitter.on.bind(emitter),
         listen: emitter.listen.bind(emitter),

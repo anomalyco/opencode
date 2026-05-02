@@ -3,6 +3,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createSignal,
   For,
   on,
   onCleanup,
@@ -87,6 +88,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { SessionBrowserPanel, type ViewMode } from "@/components/session-browser/panel"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -100,6 +102,7 @@ export default function Layout(props: ParentProps) {
       workspaceBranchName: {} as Record<string, Record<string, string>>,
       workspaceExpanded: {} as Record<string, boolean>,
       gettingStartedDismissed: false,
+      browserOpen: false,
     }),
   )
 
@@ -197,6 +200,130 @@ export default function Layout(props: ParentProps) {
       globalSync.child(directory)
       setState("hoverProject", directory)
     },
+  })
+
+  // Browser state (non-persisted, in-memory)
+  const [browserExpandedDirs, setBrowserExpandedDirs] = createStore({} as Record<string, boolean>)
+  const [browserDirectories, setBrowserDirectories] = createSignal<Array<{ directory: string; count: number }>>([])
+  const [browserProjectCounts, setBrowserProjectCounts] = createSignal<Array<{ project_id: string; count: number; worktree: string | null; name: string | null }>>([])
+  const [browserLoading, setBrowserLoading] = createSignal(false)
+  const [browserSessions, setBrowserSessions] = createStore({} as Record<string, Session[]>)
+  const [browserMeta, setBrowserMeta] = createStore(
+    {} as Record<string, { loading: boolean; cursor?: number; complete: boolean }>,
+  )
+  const [browserSessionsVisible, setBrowserSessionsVisible] = createStore({} as Record<string, boolean>)
+  const [browserSearch, setBrowserSearch] = createSignal("")
+  const [browserViewMode, setBrowserViewMode] = createSignal<ViewMode>("directories")
+
+  // Map worktree path → project IDs (for fetching sessions by project)
+  const worktreeProjectIds = createMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const pc of browserProjectCounts()) {
+      if (!pc.worktree) continue
+      const key = pc.worktree.replace(/\\/g, "/").toLowerCase()
+      const ids = map.get(key) ?? []
+      ids.push(pc.project_id)
+      map.set(key, ids)
+    }
+    return map
+  })
+
+  async function fetchDirectories() {
+    setBrowserLoading(true)
+    const result = await globalSDK.client.experimental.session.directories().catch((e) => {
+      console.error("[session-browser] fetchDirectories failed:", e)
+      return undefined
+    })
+    if (result?.data) setBrowserDirectories(result.data as Array<{ directory: string; count: number }>)
+    setBrowserLoading(false)
+  }
+
+  async function fetchProjectCounts() {
+    const result = await globalSDK.client.experimental.session.projectCounts().catch((e) => {
+      console.error("[session-browser] fetchProjectCounts failed:", e)
+      return undefined
+    })
+    if (result?.data) setBrowserProjectCounts(result.data as Array<{ project_id: string; count: number; worktree: string | null; name: string | null }>)
+  }
+
+  async function fetchSessions(rawDirectory: string, cursor?: number, byProject?: boolean) {
+    const directory = rawDirectory.replace(/\\/g, "/")
+    setBrowserMeta(directory, { loading: true, cursor, complete: false })
+
+    const projectIds = byProject
+      ? worktreeProjectIds().get(directory.toLowerCase())
+      : undefined
+    const result = projectIds
+      ? await fetchSessionsByProject(directory, projectIds, cursor)
+      : await fetchSessionsByDirectory(directory, cursor)
+
+    if (!result) {
+      setBrowserMeta(directory, "loading", false)
+      return
+    }
+    if (cursor) {
+      setBrowserSessions(directory, (prev) => [...(prev ?? []), ...result.sessions])
+    } else {
+      setBrowserSessions(directory, result.sessions)
+    }
+    setBrowserMeta(directory, { loading: false, cursor: result.nextCursor, complete: !result.nextCursor })
+  }
+
+  async function fetchSessionsByDirectory(directory: string, cursor?: number) {
+    const result = await globalSDK.client.experimental.session
+      .browse({ directory, roots: true, limit: 20, cursor })
+      .catch((e) => {
+        console.error("[session-browser] fetchSessions failed:", e)
+        return undefined
+      })
+    if (!result) return undefined
+    const sessions = (result.data ?? []) as Session[]
+    const nextCursorHeader = result.response.headers.get("x-next-cursor")
+    return { sessions, nextCursor: nextCursorHeader ? Number(nextCursorHeader) : undefined }
+  }
+
+  async function fetchSessionsByProject(_storeKey: string, projectIds: string[], cursor?: number) {
+    const result = await globalSDK.client.experimental.session.browseProject({ project_id: projectIds.join(","), limit: 20, cursor }).catch((e) => {
+      console.error("[session-browser] fetchProjectSessions failed:", e)
+      return undefined
+    })
+    if (!result) return undefined
+    const sessions = (result.data ?? []) as Session[]
+    const nextCursorHeader = result.response.headers.get("x-next-cursor")
+    return { sessions, nextCursor: nextCursorHeader ? Number(nextCursorHeader) : undefined }
+  }
+
+  function toggleBrowserDir(rawDirectory: string) {
+    const directory = rawDirectory.replace(/\\/g, "/")
+    setBrowserExpandedDirs(directory, !browserExpandedDirs[directory])
+  }
+
+  function toggleBrowserSessions(rawDirectory: string) {
+    const directory = rawDirectory.replace(/\\/g, "/")
+    const visible = browserSessionsVisible[directory]
+    setBrowserSessionsVisible(directory, !visible)
+    if (!visible && !browserSessions[directory]?.length) {
+      fetchSessions(directory, undefined, browserViewMode() === "projects")
+    }
+  }
+
+  function loadMoreSessions(directory: string) {
+    const meta = browserMeta[directory]
+    if (!meta || meta.loading || meta.complete) return
+    fetchSessions(directory, meta.cursor, browserViewMode() === "projects")
+  }
+
+  function selectBrowserSession(directory: string, sessionId: string) {
+    layout.projects.open(directory)
+    server.projects.touch(directory)
+    navigateWithSidebarReset(`/${base64Encode(directory)}/session/${sessionId}`)
+  }
+
+  createEffect(() => {
+    if (store.browserOpen) {
+      fetchDirectories()
+      fetchProjectCounts()
+    }
   })
 
   onCleanup(() => {
@@ -1999,6 +2126,7 @@ export default function Layout(props: ParentProps) {
       setState("hoverProject", hoverOpen ? worktree : undefined)
     },
     navigateToProject,
+    closeBrowser: () => setStore("browserOpen", false),
     openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog,
@@ -2346,8 +2474,42 @@ export default function Layout(props: ParentProps) {
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
       renderPanel={() =>
-        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
+        store.browserOpen ? (
+          <div
+            class="flex-1 flex flex-col min-h-0 min-w-0 border-l border-t border-border-weaker-base bg-background-base rounded-tl-[12px] overflow-hidden"
+            style={{ width: mobile ? undefined : `${panel()}px` }}
+          >
+            <SessionBrowserPanel
+              directories={browserDirectories()}
+              projectCounts={browserProjectCounts()}
+              sessionsByDir={browserSessions}
+              metaByDir={browserMeta}
+              currentSessionId={params.id}
+              expandedDirs={browserExpandedDirs}
+              sessionsVisible={browserSessionsVisible}
+              onToggleDir={toggleBrowserDir}
+              onToggleSessions={toggleBrowserSessions}
+              onSelectSession={selectBrowserSession}
+              onLoadMore={loadMoreSessions}
+              loading={browserLoading()}
+              searchQuery={browserSearch()}
+              onSearchChange={setBrowserSearch}
+              viewMode={browserViewMode()}
+              onViewModeChange={setBrowserViewMode}
+            />
+          </div>
+        ) : mobile ? (
+          <SidebarPanel project={currentProject} mobile />
+        ) : (
+          <SidebarPanel project={currentProject} merged />
+        )
       }
+      browserOpen={() => store.browserOpen}
+      onToggleBrowser={() => {
+        const opening = !store.browserOpen
+        setStore("browserOpen", opening)
+        if (opening && !layout.sidebar.opened()) layout.sidebar.open()
+      }}
     />
   )
 

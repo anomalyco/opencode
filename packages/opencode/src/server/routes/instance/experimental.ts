@@ -394,6 +394,136 @@ export const ExperimentalRoutes = lazy(() =>
       },
     )
     .get(
+      "/session/directories",
+      describeRoute({
+        summary: "List session directories",
+        description: "Get a list of all directories that contain sessions, with their session counts.",
+        operationId: "experimental.session.directories",
+        responses: {
+          200: {
+            description: "Directories with session counts",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(z.object({ directory: z.string(), count: z.number() }))),
+              },
+            },
+          },
+        },
+      }),
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.session.directories", c, function* () {
+          return Array.from(Session.listDirectories())
+        }),
+    )
+    .get(
+      "/session/project-counts",
+      describeRoute({
+        summary: "Session counts per project",
+        description: "Get the number of sessions grouped by project_id.",
+        operationId: "experimental.session.projectCounts",
+        responses: {
+          200: {
+            description: "Project session counts",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(z.object({ project_id: z.string(), count: z.number(), worktree: z.string().nullable(), name: z.string().nullable() }))),
+              },
+            },
+          },
+        },
+      }),
+      async (c) =>
+        jsonRequest("ExperimentalRoutes.session.projectCounts", c, function* () {
+          return Array.from(Session.listProjectCounts())
+        }),
+    )
+    .get(
+      "/session/browse",
+      describeRoute({
+        summary: "Browse sessions by directory",
+        description: "Get a list of sessions in a specific directory, sorted by most recently updated.",
+        operationId: "experimental.session.browse",
+        responses: {
+          200: {
+            description: "Sessions in directory",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info.zod.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          directory: z.string(),
+          roots: QueryBoolean.optional(),
+          cursor: z.coerce.number().optional(),
+          limit: z.coerce.number().optional(),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        const limit = query.limit ?? 50
+        const sessions = Array.from(
+          Session.listByNormalizedDirectory({
+            directory: query.directory,
+            roots: queryBoolean(query.roots),
+            cursor: query.cursor,
+            limit: limit + 1,
+          }),
+        )
+        const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
+        if (sessions.length > limit && list.length > 0) {
+          c.header("x-next-cursor", String(list[list.length - 1].time.updated))
+        }
+        return c.json(list)
+      },
+    )
+    .get(
+      "/session/browse-project",
+      describeRoute({
+        summary: "Browse sessions by project",
+        description: "Get a list of sessions for a specific project, sorted by most recently updated.",
+        operationId: "experimental.session.browseProject",
+        responses: {
+          200: {
+            description: "Sessions in project",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info.zod.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          project_id: z.string(),
+          cursor: z.coerce.number().optional(),
+          limit: z.coerce.number().optional(),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        const limit = query.limit ?? 50
+        const sessions = Array.from(
+          Session.listByProjectIds({
+            projectIds: query.project_id.split(","),
+            cursor: query.cursor,
+            limit: limit + 1,
+          }),
+        )
+        const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
+        if (sessions.length > limit && list.length > 0) {
+          c.header("x-next-cursor", String(list[list.length - 1].time.updated))
+        }
+        return c.json(list)
+      },
+    )
+    .get(
       "/resource",
       describeRoute({
         summary: "Get MCP resources",

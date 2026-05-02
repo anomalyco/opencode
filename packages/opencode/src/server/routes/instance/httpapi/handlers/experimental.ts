@@ -12,7 +12,15 @@ import { Effect, Option } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ConsoleSwitchPayload, SessionListQuery, ToolListQuery } from "../groups/experimental"
+import {
+  ConsoleSwitchPayload,
+  SessionBrowseProjectQuery,
+  SessionBrowseQuery,
+  SessionDirectoryListQuery,
+  SessionListQuery,
+  SessionProjectCountsQuery,
+  ToolListQuery,
+} from "../groups/experimental"
 
 export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "experimental", (handlers) =>
   Effect.gen(function* () {
@@ -135,6 +143,55 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       })
     })
 
+    const sessionDirectories = Effect.fn("ExperimentalHttpApi.sessionDirectories")(function* () {
+      return Array.from(Session.listDirectories())
+    })
+
+    const sessionProjectCounts = Effect.fn("ExperimentalHttpApi.sessionProjectCounts")(function* () {
+      return Array.from(Session.listProjectCounts())
+    })
+
+    const sessionBrowse = Effect.fn("ExperimentalHttpApi.sessionBrowse")(function* (ctx: {
+      query: typeof SessionBrowseQuery.Type
+    }) {
+      const limit = ctx.query.limit ?? 50
+      const sessions = Array.from(
+        Session.listByNormalizedDirectory({
+          directory: ctx.query.directory,
+          roots: ctx.query.roots,
+          cursor: ctx.query.cursor,
+          limit: limit + 1,
+        }),
+      )
+      const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
+      return HttpServerResponse.jsonUnsafe(list, {
+        headers:
+          sessions.length > limit && list.length > 0
+            ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
+            : undefined,
+      })
+    })
+
+    const sessionBrowseProject = Effect.fn("ExperimentalHttpApi.sessionBrowseProject")(function* (ctx: {
+      query: typeof SessionBrowseProjectQuery.Type
+    }) {
+      const limit = ctx.query.limit ?? 50
+      const sessions = Array.from(
+        Session.listByProjectIds({
+          projectIds: ctx.query.project_id.split(","),
+          cursor: ctx.query.cursor,
+          limit: limit + 1,
+        }),
+      )
+      const list = sessions.length > limit ? sessions.slice(0, limit) : sessions
+      return HttpServerResponse.jsonUnsafe(list, {
+        headers:
+          sessions.length > limit && list.length > 0
+            ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
+            : undefined,
+      })
+    })
+
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {
       return yield* mcp.resources()
     })
@@ -150,6 +207,10 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       .handle("worktreeRemove", worktreeRemove)
       .handle("worktreeReset", worktreeReset)
       .handle("session", session)
+      .handle("sessionDirectories", sessionDirectories)
+      .handle("sessionProjectCounts", sessionProjectCounts)
+      .handle("sessionBrowse", sessionBrowse)
+      .handle("sessionBrowseProject", sessionBrowseProject)
       .handle("resource", resource)
   }),
 )

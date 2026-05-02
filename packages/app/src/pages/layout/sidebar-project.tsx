@@ -24,6 +24,7 @@ export type ProjectSidebarContext = {
   onProjectFocus: (worktree: string) => void
   onHoverOpenChanged: (worktree: string, hovered: boolean) => void
   navigateToProject: (directory: string) => void
+  closeBrowser: () => void
   openSidebar: () => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
@@ -63,6 +64,7 @@ const ProjectTile = (props: {
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
+  closeBrowser: () => void
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
@@ -135,6 +137,7 @@ const ProjectTile = (props: {
         }}
         onClick={() => {
           props.setOpen(false)
+          props.closeBrowser()
           if (props.selected()) {
             layout.sidebar.toggle()
             return
@@ -255,6 +258,7 @@ const ProjectPreviewPanel = (props: {
         variant="ghost"
         class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
         onClick={() => {
+          props.ctx.closeBrowser()
           props.ctx.openSidebar()
           props.ctx.onHoverOpenChanged(props.project.worktree, false)
           if (props.selected()) return
@@ -320,6 +324,7 @@ export const SortableProject = (props: {
       onProjectMouseLeave={props.ctx.onProjectMouseLeave}
       onProjectFocus={props.ctx.onProjectFocus}
       navigateToProject={props.ctx.navigateToProject}
+      closeBrowser={props.ctx.closeBrowser}
       showEditProjectDialog={props.ctx.showEditProjectDialog}
       toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
       workspacesEnabled={props.ctx.workspacesEnabled}
