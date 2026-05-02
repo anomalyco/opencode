@@ -147,6 +147,8 @@ export class Agent implements ACPAgent {
   private bashSnapshots = new Map<string, string>()
   private toolStarts = new Set<string>()
   private permissionQueues = new Map<string, Promise<void>>()
+  private messageCompletionResolvers = new Map<string, () => void>()
+  private completedAssistantMessageIds = new Set<string>()
   private permissionOptions: PermissionOption[] = [
     { optionId: "once", kind: "allow_once", name: "Allow once" },
     { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -267,6 +269,19 @@ export class Agent implements ACPAgent {
             }
           })
         this.permissionQueues.set(permission.sessionID, next)
+        return
+      }
+
+      case "message.updated": {
+        const info = event.properties.info
+        if (info.role === "assistant" && info.time.completed !== undefined) {
+          this.completedAssistantMessageIds.add(info.id)
+          const resolver = this.messageCompletionResolvers.get(info.id)
+          if (resolver) {
+            this.messageCompletionResolvers.delete(info.id)
+            resolver()
+          }
+        }
         return
       }
 
@@ -529,6 +544,34 @@ export class Agent implements ACPAgent {
         return
       }
     }
+  }
+
+  // Block until `message.updated` for `messageId` (with `time.completed`
+  // set) has been observed by the event subscription. Because
+  // `runEventSubscription` processes events sequentially via `for await`
+  // and awaits each `handleEvent` (which awaits the inner
+  // `connection.sessionUpdate(...)`), waiting for the completed event
+  // guarantees every prior `message.part.delta` chunk for this turn has
+  // already been forwarded to ACP. Without this, `prompt()` returns
+  // `stopReason: "end_turn"` while trailing chunk events are still queued
+  // in the SDK event stream, putting `agent_message_chunk` frames on the
+  // wire AFTER the RPC reply (a protocol violation visible to ACP clients
+  // as text appearing post-end_turn).
+  private waitForMessageCompletion(messageId: string, timeoutMs: number): Promise<void> {
+    if (this.completedAssistantMessageIds.has(messageId)) {
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) => {
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        this.messageCompletionResolvers.delete(messageId)
+        resolve()
+      }
+      this.messageCompletionResolvers.set(messageId, finish)
+      setTimeout(finish, timeoutMs)
+    })
   }
 
   async initialize(params: InitializeRequest): Promise<InitializeResponse> {
@@ -1481,6 +1524,12 @@ export class Agent implements ACPAgent {
       })
       const msg = response.data?.info
 
+      // Drain trailing message.part.delta events before returning end_turn —
+      // see `waitForMessageCompletion` for why.
+      if (msg?.id) {
+        await this.waitForMessageCompletion(msg.id, 5000)
+      }
+
       await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
 
       return {
@@ -1503,6 +1552,10 @@ export class Agent implements ACPAgent {
         directory,
       })
       const msg = response.data?.info
+
+      if (msg?.id) {
+        await this.waitForMessageCompletion(msg.id, 5000)
+      }
 
       await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
 
