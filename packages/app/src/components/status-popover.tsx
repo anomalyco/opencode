@@ -7,7 +7,6 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
-import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
@@ -166,8 +165,6 @@ export function StatusPopover() {
   const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
-  const server = useServer()
-  const sync = useSync()
   const [shown, setShown] = createSignal(false)
   const [tab, setTab] = createSignal<"servers" | "mcp" | "lsp" | "plugins" | "skills">("servers")
   let dialogRun = 0
@@ -398,18 +395,12 @@ export function StatusPopover() {
                       const key = ServerConnection.key(s)
                       const isBlocked = () => health[key]?.healthy === false
                       return (
-                        <button
-                          type="button"
+                        <div
                           class="status-list-item flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
                           classList={{
                             "cursor-not-allowed": isBlocked(),
                           }}
                           aria-disabled={isBlocked()}
-                          onClick={() => {
-                            if (isBlocked()) return
-                            navigate("/")
-                            queueMicrotask(() => server.setActive(key))
-                          }}
                         >
                           <ServerHealthIndicator health={health[key]} />
                           <ServerRow
@@ -432,7 +423,7 @@ export function StatusPopover() {
                               <Icon name="check" size="small" class="text-icon-weak shrink-0" />
                             </Show>
                           </ServerRow>
-                        </button>
+                        </div>
                       )
                     }}
                   </For>

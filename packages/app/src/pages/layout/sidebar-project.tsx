@@ -156,7 +156,8 @@ export const SortableProject = (props: {
   project: LocalProject
   mobile?: boolean
   ctx: ProjectSidebarContext
-}): JSX.Element => {
+}): JSX.Element | null => {
+  if (!props.project?.worktree) return null
   const sortable = createSortable(props.project.worktree)
   const selected = createMemo(() =>
     projectSelected(props.ctx.currentDir(), props.project.worktree, props.project.sandboxes),

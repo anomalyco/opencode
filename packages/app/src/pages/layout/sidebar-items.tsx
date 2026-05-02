@@ -19,12 +19,10 @@ import { sessionPermissionRequest } from "../session/composer/session-request-tr
 import { working } from "../session/session-working"
 import { hasProjectPermissions, workspaceKey } from "./helpers"
 
-export const ProjectIcon = (props: {
-  project: LocalProject
-  class?: string
-  notify?: boolean
-  working?: boolean
-}): JSX.Element => {
+const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+
+export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element | null => {
+  if (!props.project?.worktree) return null
   const globalSync = useGlobalSync()
   const notification = useNotification()
   const permission = usePermission()
