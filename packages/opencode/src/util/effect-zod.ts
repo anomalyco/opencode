@@ -256,6 +256,8 @@ function body(ast: SchemaAST.AST): z.ZodTypeAny {
       return array(ast)
     case "Declaration":
       return decl(ast)
+    case "Suspend":
+      return z.lazy(() => walk(ast.thunk()))
     default:
       return fail(ast)
   }
