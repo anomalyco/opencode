@@ -1,11 +1,11 @@
-import type { Argv } from "yargs"
-import { cmd } from "./cmd"
+import { Effect } from "effect"
+import { effectCmd } from "../effect-cmd"
 import { Session } from "@/session/session"
-import { bootstrap } from "../bootstrap"
 import { Database } from "@/storage/db"
 import { SessionTable } from "../../session/session.sql"
 import { Project } from "@/project/project"
-import { Instance } from "../../project/instance"
+import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceStore } from "@/project/instance-store"
 import { AppRuntime } from "@/effect/app-runtime"
 
 interface SessionStats {
@@ -47,11 +47,11 @@ interface SessionStats {
   medianTokensPerSession: number
 }
 
-export const StatsCommand = cmd({
+export const StatsCommand = effectCmd({
   command: "stats",
   describe: "show token usage and cost statistics",
-  builder: (yargs: Argv) => {
-    return yargs
+  builder: (yargs) =>
+    yargs
       .option("days", {
         describe: "show stats for the last N days (default: all time)",
         type: "number",
@@ -66,34 +66,39 @@ export const StatsCommand = cmd({
       .option("project", {
         describe: "filter by project (default: all projects, empty string: current project)",
         type: "string",
-      })
-  },
-  handler: async (args) => {
-    await bootstrap(process.cwd(), async () => {
-      const stats = await aggregateSessionStats(args.days, args.project)
-
-      let modelLimit: number | undefined
-      if (args.models === true) {
-        modelLimit = Infinity
-      } else if (typeof args.models === "number") {
-        modelLimit = args.models
-      }
-
-      displayStats(stats, args.tools, modelLimit)
-    })
-  },
+      }),
+  handler: Effect.fn("Cli.stats")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const store = yield* InstanceStore.Service
+    return yield* run(args, ctx.project).pipe(Effect.ensuring(store.dispose(ctx)))
+  }),
 })
 
-async function getCurrentProject(): Promise<Project.Info> {
-  return Instance.project
-}
+const run = (args: { days?: number; tools?: number; models?: unknown; project?: string }, currentProject: Project.Info) =>
+  Effect.promise(async () => {
+    const stats = await aggregateSessionStats(args.days, args.project, currentProject)
+
+    let modelLimit: number | undefined
+    if (args.models === true) {
+      modelLimit = Infinity
+    } else if (typeof args.models === "number") {
+      modelLimit = args.models
+    }
+
+    displayStats(stats, args.tools, modelLimit)
+  })
 
 async function getAllSessions(): Promise<Session.Info[]> {
   const rows = Database.use((db) => db.select().from(SessionTable).all())
   return rows.map((row) => Session.fromRow(row))
 }
 
-export async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
+export async function aggregateSessionStats(
+  days?: number,
+  projectFilter?: string,
+  currentProject?: Project.Info,
+): Promise<SessionStats> {
   const sessions = await getAllSessions()
   const MS_IN_DAY = 24 * 60 * 60 * 1000
 
@@ -117,7 +122,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
 
   if (projectFilter !== undefined) {
     if (projectFilter === "") {
-      const currentProject = await getCurrentProject()
+      if (!currentProject) throw new Error("currentProject required when projectFilter is empty string")
       filteredSessions = filteredSessions.filter((session) => session.projectID === currentProject.id)
     } else {
       filteredSessions = filteredSessions.filter((session) => session.projectID === projectFilter)
