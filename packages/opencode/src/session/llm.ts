@@ -334,6 +334,9 @@ const live: Layer.Layer<
         : undefined
 
       return streamText({
+        timeout: cfg.experimental?.mcp_timeout
+          ? { stepMs: cfg.experimental.mcp_timeout }
+          : undefined,
         onError(error) {
           l.error("stream error", {
             error,
