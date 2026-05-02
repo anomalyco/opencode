@@ -2,6 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import * as fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -84,6 +85,23 @@ function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
         else process.env.SHELL = prev
         Shell.preferred.reset()
       }),
+  )
+}
+
+async function createSkill(dir: string, name = "test-skill") {
+  const skillDir = path.join(dir, ".opencode", "skill", name)
+  await fs.mkdir(skillDir, { recursive: true })
+  await fs.writeFile(
+    path.join(skillDir, "SKILL.md"),
+    `---
+name: ${name}
+description: Skill for prompt command tests.
+---
+
+# ${name}
+
+Use this skill in prompt command tests.
+`,
   )
 }
 
@@ -1326,6 +1344,196 @@ unix(
           }),
         },
       ),
+    ),
+  30_000,
+)
+
+it.live(
+  "skill commands execute the real skill tool without a followup prompt",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => createSkill(dir))
+
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "Pinned",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+
+          const result = yield* prompt.command({
+            sessionID: chat.id,
+            command: "test-skill",
+            arguments: "",
+            invocation: "/test-skill",
+          })
+
+          expect(result.info.role).toBe("assistant")
+          const tool = completedTool(result.parts)
+          expect(tool?.tool).toBe("skill")
+          expect(tool?.state.title).toBe("Loaded skill: test-skill")
+          expect(yield* llm.calls).toBe(0)
+
+          const messages = yield* sessions.messages({ sessionID: chat.id })
+          expect(messages).toHaveLength(2)
+          expect(
+            messages.some(
+              (message) =>
+                message.info.role === "user" &&
+                message.parts.some((part) => part.type === "text" && !part.synthetic && part.text === "/test-skill"),
+            ),
+          ).toBe(false)
+        }),
+      { git: true, config: providerCfg },
+    ),
+  30_000,
+)
+
+it.live(
+  "skill commands preserve the raw slash invocation in the followup prompt",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => createSkill(dir))
+
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "Pinned",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+          const invocation = "/test-skill   inspect cache\nkeep slash token"
+
+          yield* llm.text("done")
+
+          const result = yield* prompt.command({
+            sessionID: chat.id,
+            command: "test-skill",
+            arguments: "inspect cache\nkeep slash token",
+            invocation,
+          })
+
+          expect(result.info.role).toBe("assistant")
+          expect(yield* llm.calls).toBe(1)
+
+          const messages = yield* sessions.messages({ sessionID: chat.id })
+          expect(messages).toHaveLength(4)
+          expect(
+            messages.some(
+              (message) =>
+                message.info.role === "user" &&
+                message.parts.some((part) => part.type === "text" && !part.synthetic && part.text === invocation),
+            ),
+          ).toBe(true)
+
+          const skillMessage = messages.find(
+            (message) =>
+              message.info.role === "assistant" &&
+              message.parts.some((part) => part.type === "tool" && part.tool === "skill"),
+          )
+          expect(skillMessage).toBeDefined()
+        }),
+      { git: true, config: providerCfg },
+    ),
+  30_000,
+)
+
+it.live(
+  "skill commands keep attachments on the followup user message",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => createSkill(dir))
+
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "Pinned",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          })
+
+          yield* llm.text("done")
+
+          const result = yield* prompt.command({
+            sessionID: chat.id,
+            command: "test-skill",
+            arguments: "",
+            invocation: "/test-skill",
+            parts: [
+              {
+                type: "file",
+                mime: "image/png",
+                filename: "dot.png",
+                url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0XcAAAAASUVORK5CYII=",
+              },
+            ],
+          })
+
+          expect(result.info.role).toBe("assistant")
+          expect(yield* llm.calls).toBe(1)
+
+          const messages = yield* sessions.messages({ sessionID: chat.id })
+          const followup = messages.find(
+            (message) =>
+              message.info.role === "user" &&
+              message.parts.some((part) => part.type === "file" && part.filename === "dot.png"),
+          )
+
+          expect(followup).toBeDefined()
+          expect(followup?.parts.some((part) => part.type === "text" && !part.synthetic)).toBe(false)
+        }),
+      { git: true, config: providerCfg },
+    ),
+  30_000,
+)
+
+it.live(
+  "skill activation failure prevents the followup prompt from being sent",
+  () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => createSkill(dir))
+
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const chat = yield* sessions.create({
+            title: "Pinned",
+            permission: [{ permission: "skill", pattern: "test-skill", action: "deny" }],
+          })
+
+          const exit = yield* prompt
+            .command({
+              sessionID: chat.id,
+              command: "test-skill",
+              arguments: "inspect cache",
+              invocation: "/test-skill inspect cache",
+            })
+            .pipe(Effect.exit)
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          expect(yield* llm.calls).toBe(0)
+
+          const messages = yield* sessions.messages({ sessionID: chat.id })
+          expect(
+            messages.some(
+              (message) =>
+                message.info.role === "user" &&
+                message.parts.some(
+                  (part) => part.type === "text" && !part.synthetic && part.text === "/test-skill inspect cache",
+                ),
+            ),
+          ).toBe(false)
+
+          const assistant = messages.find((message) => message.info.role === "assistant")
+          const tool = assistant ? errorTool(assistant.parts) : undefined
+          expect(tool?.tool).toBe("skill")
+        }),
+      { git: true, config: providerCfg },
     ),
   30_000,
 )

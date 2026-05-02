@@ -842,6 +842,7 @@ export function Prompt(props: PromptProps) {
       void sdk.client.session.command({
         sessionID,
         command: command.slice(1),
+        invocation: inputText,
         arguments: args,
         agent: agent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,

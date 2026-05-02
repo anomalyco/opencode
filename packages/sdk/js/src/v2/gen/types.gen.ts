@@ -4086,6 +4086,7 @@ export type SessionCommandData = {
     messageID?: string
     agent?: string
     model?: string
+    invocation?: string
     arguments: string
     command: string
     variant?: string

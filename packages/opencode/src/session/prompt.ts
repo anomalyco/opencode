@@ -1516,6 +1516,183 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     )
 
+    const activateCommandSkill = Effect.fn("SessionPrompt.activateCommandSkill")(function* (input: {
+      sessionID: SessionID
+      agent: Agent.Info
+      model: Schema.Schema.Type<typeof ModelRef>
+      variant?: string
+      skill: string
+      session: Session.Info
+    }) {
+      const ctx = yield* InstanceState.context
+      const priorMessages = yield* sessions.messages({ sessionID: input.sessionID })
+      const skillTool = (yield* registry.all()).find((item) => item.id === "skill")
+      if (!skillTool) throw new Error('Tool "skill" is not registered')
+
+      const userMessage: MessageV2.User = {
+        id: MessageID.ascending(),
+        sessionID: input.sessionID,
+        time: { created: Date.now() },
+        role: "user",
+        agent: input.agent.name,
+        model: {
+          providerID: input.model.providerID,
+          modelID: input.model.modelID,
+          variant: input.variant,
+        },
+      }
+      yield* sessions.updateMessage(userMessage)
+      yield* sessions.updatePart({
+        type: "text",
+        id: PartID.ascending(),
+        messageID: userMessage.id,
+        sessionID: input.sessionID,
+        text: "The following tool was executed by the user",
+        synthetic: true,
+      })
+
+      let assistantMessage: MessageV2.Assistant = {
+        id: MessageID.ascending(),
+        sessionID: input.sessionID,
+        parentID: userMessage.id,
+        mode: input.agent.name,
+        agent: input.agent.name,
+        variant: input.variant,
+        cost: 0,
+        path: { cwd: ctx.directory, root: ctx.worktree },
+        time: { created: Date.now() },
+        role: "assistant",
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: input.model.modelID,
+        providerID: input.model.providerID,
+      }
+      yield* sessions.updateMessage(assistantMessage)
+
+      let part: MessageV2.ToolPart = {
+        type: "tool",
+        id: PartID.ascending(),
+        messageID: assistantMessage.id,
+        sessionID: input.sessionID,
+        tool: skillTool.id,
+        callID: ulid(),
+        state: {
+          status: "running",
+          time: { start: Date.now() },
+          input: { name: input.skill },
+        },
+      }
+      yield* sessions.updatePart(part)
+      yield* sessions.touch(input.sessionID)
+
+      const args = { name: input.skill }
+      const ruleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
+      const abort = new AbortController()
+      const start = Date.now()
+
+      part = yield* sessions.updatePart({
+        ...part,
+        state: {
+          status: "running",
+          input: args,
+          time: { start },
+        },
+      } satisfies MessageV2.ToolPart)
+
+      yield* plugin.trigger(
+        "tool.execute.before",
+        { tool: skillTool.id, sessionID: input.sessionID, callID: part.callID },
+        { args },
+      )
+
+      const exit = yield* skillTool
+        .execute(args, {
+          agent: input.agent.name,
+          messageID: assistantMessage.id,
+          sessionID: input.sessionID,
+          abort: abort.signal,
+          callID: part.callID,
+          messages: priorMessages,
+          metadata: (val) =>
+            Effect.gen(function* () {
+              part = yield* sessions.updatePart({
+                ...part,
+                state: {
+                  status: "running",
+                  input: part.state.input,
+                  time: { start },
+                  title: val.title,
+                  metadata: val.metadata,
+                },
+              } satisfies MessageV2.ToolPart)
+            }),
+          ask: (req) =>
+            permission
+              .ask({
+                ...req,
+                sessionID: input.sessionID,
+                tool: { messageID: assistantMessage.id, callID: part.callID },
+                ruleset,
+              })
+              .pipe(Effect.orDie),
+        })
+        .pipe(Effect.exit)
+
+      assistantMessage = {
+        ...assistantMessage,
+        time: { ...assistantMessage.time, completed: Date.now() },
+      }
+      yield* sessions.updateMessage(assistantMessage)
+
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        part = yield* sessions.updatePart({
+          ...part,
+          state: {
+            status: "error",
+            input: part.state.input,
+            error: error instanceof Error ? error.message : String(error),
+            time: { start, end: Date.now() },
+          },
+        } satisfies MessageV2.ToolPart)
+        throw error
+      }
+
+      const attachments = exit.value.attachments?.map((attachment) => ({
+        ...attachment,
+        id: PartID.ascending(),
+        sessionID: input.sessionID,
+        messageID: assistantMessage.id,
+      }))
+      const output = {
+        ...exit.value,
+        attachments,
+      }
+
+      yield* plugin.trigger(
+        "tool.execute.after",
+        { tool: skillTool.id, sessionID: input.sessionID, callID: part.callID, args },
+        output,
+      )
+
+      part = yield* sessions.updatePart({
+        ...part,
+        state: {
+          status: "completed",
+          input: part.state.input,
+          title: output.title,
+          metadata: output.metadata,
+          output: output.output,
+          attachments: output.attachments,
+          time: { start, end: Date.now() },
+        },
+      } satisfies MessageV2.ToolPart)
+
+      return {
+        info: assistantMessage,
+        parts: [part],
+      }
+    })
+
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
       yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
       const cmd = yield* commands.get(input.command)
@@ -1527,6 +1704,76 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw error
       }
       const agentName = cmd.agent ?? input.agent ?? (yield* agents.defaultAgent())
+
+      const taskModel = yield* Effect.gen(function* () {
+        if (cmd.model) return Provider.parseModel(cmd.model)
+        if (cmd.agent) {
+          const cmdAgent = yield* agents.get(cmd.agent)
+          if (cmdAgent?.model) return cmdAgent.model
+        }
+        if (input.model) return Provider.parseModel(input.model)
+        return yield* lastModel(input.sessionID)
+      })
+
+      yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
+
+      const agent = yield* agents.get(agentName)
+      if (!agent) {
+        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+        const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+        const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
+        yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+        throw error
+      }
+
+      const hasFollowupText = input.arguments.trim().length > 0
+      const followupText = !hasFollowupText
+        ? undefined
+        : (input.invocation ?? `/${input.command}${input.arguments ? ` ${input.arguments}` : ""}`)
+      const followupParts = [
+        ...(followupText ? ([{ type: "text", text: followupText }] as const) : []),
+        ...(input.parts ?? []),
+      ]
+
+      if (cmd.source === "skill") {
+        const session = yield* sessions.get(input.sessionID)
+        yield* revert.cleanup(session)
+
+        yield* plugin.trigger(
+          "command.execute.before",
+          { command: input.command, sessionID: input.sessionID, arguments: input.arguments },
+          { parts: followupParts },
+        )
+
+        const skillResult = yield* activateCommandSkill({
+          sessionID: input.sessionID,
+          agent,
+          model: taskModel,
+          variant: input.variant,
+          skill: input.command,
+          session,
+        })
+
+        const result =
+          followupParts.length === 0
+            ? skillResult
+            : yield* prompt({
+                sessionID: input.sessionID,
+                messageID: input.messageID,
+                model: taskModel,
+                agent: agentName,
+                parts: [...followupParts],
+                variant: input.variant,
+              })
+
+        yield* bus.publish(Command.Event.Executed, {
+          name: input.command,
+          sessionID: input.sessionID,
+          arguments: input.arguments,
+          messageID: result.info.id,
+        })
+        return result
+      }
 
       const raw = input.arguments.match(argsRegex) ?? []
       const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -1566,27 +1813,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         template = template.replace(bashRegex, () => results[index++])
       }
       template = template.trim()
-
-      const taskModel = yield* Effect.gen(function* () {
-        if (cmd.model) return Provider.parseModel(cmd.model)
-        if (cmd.agent) {
-          const cmdAgent = yield* agents.get(cmd.agent)
-          if (cmdAgent?.model) return cmdAgent.model
-        }
-        if (input.model) return Provider.parseModel(input.model)
-        return yield* lastModel(input.sessionID)
-      })
-
-      yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
-
-      const agent = yield* agents.get(agentName)
-      if (!agent) {
-        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
-        const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-        const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
-        yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
-        throw error
-      }
 
       const templateParts = yield* resolvePromptParts(template)
       const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
@@ -1724,6 +1950,7 @@ export const CommandInput = Schema.Struct({
   sessionID: SessionID,
   agent: Schema.optional(Schema.String),
   model: Schema.optional(Schema.String),
+  invocation: Schema.optional(Schema.String),
   arguments: Schema.String,
   command: Schema.String,
   variant: Schema.optional(Schema.String),

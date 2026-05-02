@@ -84,6 +84,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       await input.client.session.command({
         sessionID: input.draft.sessionID,
         command: cmd,
+        invocation: text,
         arguments: tail.join(" "),
         agent: input.draft.agent,
         model: `${input.draft.model.providerID}/${input.draft.model.modelID}`,
