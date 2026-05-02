@@ -17,6 +17,7 @@ import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
+import { computePromptTraits } from "./traits"
 import { assign } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
@@ -557,17 +558,11 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    const capture =
-      store.mode === "normal"
-        ? auto()?.visible
-          ? (["escape", "navigate", "submit", "tab"] as const)
-          : (["tab"] as const)
-        : undefined
-    input.traits = {
-      capture,
-      suspend: !!props.disabled || store.mode === "shell",
-      status: store.mode === "shell" ? "SHELL" : undefined,
-    }
+    input.traits = computePromptTraits({
+      mode: store.mode,
+      disabled: !!props.disabled,
+      autocompleteVisible: !!auto()?.visible,
+    })
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {

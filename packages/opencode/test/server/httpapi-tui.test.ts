@@ -11,7 +11,7 @@ import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { OpenApi } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -45,7 +45,7 @@ async function expectTrue(path: string, headers: Record<string, string>, body?: 
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 

@@ -2,13 +2,13 @@ import { afterEach, describe, test, expect } from "bun:test"
 import { Permission } from "../src/permission"
 import { Config } from "@/config/config"
 import { Instance } from "../src/project/instance"
-import { tmpdir } from "./fixture/fixture"
+import { disposeAllInstances, tmpdir } from "./fixture/fixture"
 import { AppRuntime } from "../src/effect/app-runtime"
 
 const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 describe("Permission.evaluate for permission.task", () => {
