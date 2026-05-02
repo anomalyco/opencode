@@ -23,6 +23,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 import { zod as effectZod } from "@/util/effect-zod"
 import { withStatics } from "@/util/schema"
+import { WorktreeInclude } from "./include"
 
 const log = Log.create({ service: "worktree" })
 
@@ -251,6 +252,39 @@ export const layer: Layer.Layer<
         })
         return
       }
+
+      // Copy gitignored files declared in `.worktreeinclude` (e.g. `.env`).
+      // Failures here only produce warnings — they must not block worktree boot.
+      yield* WorktreeInclude.apply({
+        source: ctx.worktree,
+        destination: info.directory,
+        fs,
+        pathSvc,
+      }).pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            if (result.copied.length || result.failed.length) {
+              log.debug("worktreeinclude applied", {
+                directory: info.directory,
+                copied: result.copied.length,
+                failed: result.failed.length,
+              })
+            }
+            if (result.failed.length) {
+              log.warn("worktreeinclude partial failure", {
+                directory: info.directory,
+                count: result.failed.length,
+                sample: result.failed.slice(0, 3),
+              })
+            }
+          }),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.sync(() =>
+            log.warn("worktreeinclude failed", { directory: info.directory, cause: errorMessage(cause) }),
+          ),
+        ),
+      )
 
       const booted = yield* Effect.promise(() =>
         Instance.provide({
@@ -568,6 +602,39 @@ export const layer: Layer.Layer<
       if (status.text.trim()) {
         throw new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
       }
+
+      // Re-copy gitignored files declared in `.worktreeinclude` after `git clean`
+      // wiped them. Failures only produce warnings.
+      yield* WorktreeInclude.apply({
+        source: ctx.worktree,
+        destination: worktreePath,
+        fs,
+        pathSvc,
+      }).pipe(
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            if (result.copied.length || result.failed.length) {
+              log.debug("worktreeinclude applied", {
+                directory: worktreePath,
+                copied: result.copied.length,
+                failed: result.failed.length,
+              })
+            }
+            if (result.failed.length) {
+              log.warn("worktreeinclude partial failure", {
+                directory: worktreePath,
+                count: result.failed.length,
+                sample: result.failed.slice(0, 3),
+              })
+            }
+          }),
+        ),
+        Effect.catchCause((cause) =>
+          Effect.sync(() =>
+            log.warn("worktreeinclude failed", { directory: worktreePath, cause: errorMessage(cause) }),
+          ),
+        ),
+      )
 
       yield* runStartScripts(worktreePath, { projectID: ctx.project.id }).pipe(
         Effect.catchCause((cause) => Effect.sync(() => log.error("worktree start task failed", { cause }))),
