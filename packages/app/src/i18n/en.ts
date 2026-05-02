@@ -230,7 +230,7 @@ export const dict = {
   "common.default": "Default",
   "common.attachment": "attachment",
 
-  "prompt.placeholder.shell": "Enter shell command...",
+  "prompt.placeholder.shell": "Enter shell command... {{example}}",
   "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
   "prompt.placeholder.simple": "Ask anything...",
   "prompt.placeholder.summarizeComments": "Summarize comments…",
@@ -465,6 +465,8 @@ export const dict = {
   "error.page.description": "An error occurred while loading the application.",
   "error.page.details.label": "Error Details",
   "error.page.action.restart": "Restart",
+  "error.page.action.report": "Report Error",
+  "error.page.action.reported": "Error Reported",
   "error.page.action.checking": "Checking...",
   "error.page.action.checkUpdates": "Check for updates",
   "error.page.action.updateTo": "Update to {{version}}",
@@ -728,6 +730,11 @@ export const dict = {
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",
+  "settings.general.row.shell.title": "Terminal Shell",
+  "settings.general.row.shell.description":
+    "Choose the shell used for your terminal. Compatible shells are also used for agent tool calls.",
+  "settings.general.row.shell.autoDefault": "Auto (Default)",
+  "settings.general.row.shell.terminalOnly": "terminal only",
   "settings.general.row.appearance.title": "Appearance",
   "settings.general.row.appearance.description": "Customise how OpenCode looks on your device",
   "settings.general.row.colorScheme.title": "Color scheme",
@@ -735,7 +742,9 @@ export const dict = {
   "settings.general.row.theme.title": "Theme",
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Code Font",
-  "settings.general.row.font.description": "Customise the font used in code blocks and terminals",
+  "settings.general.row.font.description": "Customise the font used in code blocks",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI Font",
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
   "settings.general.row.followup.title": "Follow-up behavior",
@@ -760,6 +769,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
+  "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
+  "settings.general.row.showSessionProgressBar.description":
+    "Display the animated progress bar at the top of the session when the agent is working",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
@@ -910,8 +922,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Fetch content from a URL",
   "settings.permissions.tool.websearch.title": "Web Search",
   "settings.permissions.tool.websearch.description": "Search the web",
-  "settings.permissions.tool.codesearch.title": "Code Search",
-  "settings.permissions.tool.codesearch.description": "Search code on the web",
   "settings.permissions.tool.external_directory.title": "External Directory",
   "settings.permissions.tool.external_directory.description": "Access files outside the project directory",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",

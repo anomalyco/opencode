@@ -117,6 +117,104 @@ test("preserves temperature support from existing provider models", async () => 
   expect(models["brand-new"].capabilities.temperature).toBe(true)
 })
 
+test("clears existing variants so refreshed models calculate provider-specific variants", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "claude-opus-4.7",
+              name: "Claude Opus 4.7",
+              version: "claude-opus-4.7-2026-04-16",
+              supported_endpoints: ["/v1/messages"],
+              capabilities: {
+                family: "claude-opus",
+                limits: {
+                  max_context_window_tokens: 144000,
+                  max_output_tokens: 64000,
+                  max_prompt_tokens: 128000,
+                },
+                supports: {
+                  adaptive_thinking: true,
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = await CopilotModels.get(
+    "https://api.githubcopilot.com",
+    {},
+    {
+      "claude-opus-4.7": {
+        id: "claude-opus-4.7",
+        providerID: "github-copilot",
+        api: {
+          id: "claude-opus-4.7",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+        name: "Claude Opus 4.7",
+        family: "claude-opus",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: {
+            text: true,
+            audio: false,
+            image: true,
+            video: false,
+            pdf: false,
+          },
+          output: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          interleaved: false,
+        },
+        cost: {
+          input: 0,
+          output: 0,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+        limit: {
+          context: 144000,
+          input: 128000,
+          output: 64000,
+        },
+        options: {},
+        headers: {},
+        release_date: "2026-04-16",
+        variants: {
+          low: {
+            reasoningEffort: "low",
+          },
+        },
+        status: "active",
+      },
+    },
+  )
+
+  expect(models["claude-opus-4.7"].api.npm).toBe("@ai-sdk/anthropic")
+  expect(models["claude-opus-4.7"].variants).toBeUndefined()
+})
+
 test("remaps fallback oauth model urls to the enterprise host", async () => {
   globalThis.fetch = mock(() => Promise.reject(new Error("timeout"))) as unknown as typeof fetch
 

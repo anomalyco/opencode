@@ -1,8 +1,16 @@
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
+
+// normalizeQuestionsInput: Qwen が `questions` を malformed JSON string として送る issue (#67/#69)
+// で、生 input を可能な限り「question 配列形式」へ正規化する。
+//
+// 元 catch-up sprint では `z.preprocess` で schema レベルに組み込んでいたが、v1.14.x で
+// schema が Effect Schema に移行したため、preprocess を schema に組み込むのは別途 refactor が
+// 必要 (Schema.transform)。当面は **processor.ts の state 記録時のみ** にこの関数を使い、
+// execute() に届く時点では upstream の strict decode を許容する (LLM 側に正しい形式を強制)。
+// schema preprocess の再導入は #90 のフォロー作業として継続。
 
 function trim(input: unknown) {
   return typeof input === "string" ? input.trim() : ""
@@ -81,30 +89,23 @@ export function normalizeQuestionsInput(input: unknown) {
   return input
 }
 
-const parameters = z.object({
-  questions: z.preprocess(normalizeQuestionsInput, z.array(Question.Prompt.zod)).describe("Questions to ask"),
+export const Parameters = Schema.Struct({
+  questions: Schema.mutable(Schema.Array(Question.Prompt)).annotate({ description: "Questions to ask" }),
 })
 
 type Metadata = {
   answers: ReadonlyArray<Question.Answer>
 }
 
-export const QuestionTool = Tool.define<typeof parameters, Metadata, Question.Service>(
+export const QuestionTool = Tool.define<typeof Parameters, Metadata, Question.Service>(
   "question",
   Effect.gen(function* () {
     const question = yield* Question.Service
 
     return {
       description: DESCRIPTION,
-      parameters,
-      formatValidationError(error: z.ZodError) {
-        return [
-          `The question tool was called with invalid arguments: ${error}.`,
-          "Pass `questions` as an array of question objects, not a JSON-encoded string.",
-          'Example: {"questions":[{"header":"Stack","question":"Which language?","options":[]}]}',
-        ].join("\n")
-      },
-      execute: (params: z.infer<typeof parameters>, ctx: Tool.Context<Metadata>) =>
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
           const answers = yield* question.ask({
             sessionID: ctx.sessionID,
