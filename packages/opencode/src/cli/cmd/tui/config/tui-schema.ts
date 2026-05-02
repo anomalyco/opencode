@@ -33,6 +33,23 @@ export const TuiInfo = z
     keybinds: KeybindOverride.optional(),
     plugin: ConfigPlugin.Spec.zod.array().optional(),
     plugin_enabled: z.record(z.string(), z.boolean()).optional(),
+    placeholders: z
+      .object({
+        input: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Replaces the prompt input placeholder on the home screen. Items are used literally (no 'Ask anything...' prefix) and rotated.",
+          ),
+        shell: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Replaces the shell-mode prompt placeholder on the home screen. Items are used literally (no 'Run a command...' prefix) and rotated.",
+          ),
+      })
+      .optional()
+      .describe("Customize the rotating placeholder text shown inside the prompt input on the home screen."),
   })
   .extend(TuiOptions.shape)
   .strict()

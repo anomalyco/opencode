@@ -8,6 +8,7 @@ import { useArgs } from "../context/args"
 import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
+import { useTuiConfig } from "@tui/context/tui-config"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 
 let once = false
@@ -24,6 +25,15 @@ export function Home() {
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
+  const config = useTuiConfig()
+  const userInput = config.placeholders?.input
+  const userShell = config.placeholders?.shell
+  const placeholders = {
+    normal: userInput ?? placeholder.normal,
+    shell: userShell ?? placeholder.shell,
+    rawNormal: !!userInput,
+    rawShell: !!userShell,
+  }
   let sent = false
 
   const bind = (r: PromptRef | undefined) => {
@@ -74,7 +84,7 @@ export function Home() {
               ref={bind}
               workspaceID={project.workspace.current()}
               right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
-              placeholders={placeholder}
+              placeholders={placeholders}
             />
           </TuiPluginRuntime.Slot>
         </box>

@@ -57,6 +57,8 @@ export type PromptProps = {
   placeholders?: {
     normal?: string[]
     shell?: string[]
+    rawNormal?: boolean
+    rawShell?: boolean
   }
 }
 
@@ -1016,10 +1018,11 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") {
       if (!shell().length) return undefined
       const example = shell()[store.placeholder % shell().length]
-      return `Run a command... "${example}"`
+      return props.placeholders?.rawShell ? example : `Run a command... "${example}"`
     }
     if (!list().length) return undefined
-    return `Ask anything... "${list()[store.placeholder % list().length]}"`
+    const example = list()[store.placeholder % list().length]
+    return props.placeholders?.rawNormal ? example : `Ask anything... "${example}"`
   })
 
   const spinnerDef = createMemo(() => {
