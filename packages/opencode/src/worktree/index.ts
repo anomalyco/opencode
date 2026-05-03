@@ -233,6 +233,17 @@ export const layer: Layer.Layer<
       yield* project.addSandbox(ctx.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
     })
 
+    // Copy gitignored files declared in `.worktreeinclude` from the source repo
+    // into a freshly populated worktree directory. `apply` logs its own success
+    // and partial-failure summaries; we only need to swallow unexpected causes
+    // so the caller's boot/reset flow keeps going.
+    const applyInclude = (source: string, destination: string) =>
+      WorktreeInclude.apply({ source, destination, fs, pathSvc }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => log.warn("worktreeinclude failed", { destination, cause: errorMessage(cause) })),
+        ),
+      )
+
     const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
       const ctx = yield* InstanceState.context
       const workspaceID = yield* InstanceState.workspaceID
@@ -252,38 +263,7 @@ export const layer: Layer.Layer<
         return
       }
 
-      // Copy gitignored files declared in `.worktreeinclude` (e.g. `.env`).
-      // Failures here only produce warnings — they must not block worktree boot.
-      yield* WorktreeInclude.apply({
-        source: ctx.worktree,
-        destination: info.directory,
-        fs,
-        pathSvc,
-      }).pipe(
-        Effect.tap((result) =>
-          Effect.sync(() => {
-            if (result.copied.length || result.failed.length) {
-              log.debug("worktreeinclude applied", {
-                directory: info.directory,
-                copied: result.copied.length,
-                failed: result.failed.length,
-              })
-            }
-            if (result.failed.length) {
-              log.warn("worktreeinclude partial failure", {
-                directory: info.directory,
-                count: result.failed.length,
-                sample: result.failed.slice(0, 3),
-              })
-            }
-          }),
-        ),
-        Effect.catchCause((cause) =>
-          Effect.sync(() =>
-            log.warn("worktreeinclude failed", { directory: info.directory, cause: errorMessage(cause) }),
-          ),
-        ),
-      )
+      yield* applyInclude(ctx.worktree, info.directory)
 
       const booted = yield* Effect.promise(() =>
         Instance.provide({
@@ -601,38 +581,7 @@ export const layer: Layer.Layer<
         throw new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
       }
 
-      // Re-copy gitignored files declared in `.worktreeinclude` after `git clean`
-      // wiped them. Failures only produce warnings.
-      yield* WorktreeInclude.apply({
-        source: ctx.worktree,
-        destination: worktreePath,
-        fs,
-        pathSvc,
-      }).pipe(
-        Effect.tap((result) =>
-          Effect.sync(() => {
-            if (result.copied.length || result.failed.length) {
-              log.debug("worktreeinclude applied", {
-                directory: worktreePath,
-                copied: result.copied.length,
-                failed: result.failed.length,
-              })
-            }
-            if (result.failed.length) {
-              log.warn("worktreeinclude partial failure", {
-                directory: worktreePath,
-                count: result.failed.length,
-                sample: result.failed.slice(0, 3),
-              })
-            }
-          }),
-        ),
-        Effect.catchCause((cause) =>
-          Effect.sync(() =>
-            log.warn("worktreeinclude failed", { directory: worktreePath, cause: errorMessage(cause) }),
-          ),
-        ),
-      )
+      yield* applyInclude(ctx.worktree, worktreePath)
 
       yield* runStartScripts(worktreePath, { projectID: ctx.project.id }).pipe(
         Effect.catchCause((cause) => Effect.sync(() => log.error("worktree start task failed", { cause }))),

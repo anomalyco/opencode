@@ -28,8 +28,7 @@ const copyFileEntry = Effect.fnUntraced(function* (
   dst: string,
   type: AppFileSystem.DirEntry["type"],
 ) {
-  const parent = pathSvc.dirname(dst)
-  yield* fs.makeDirectory(parent, { recursive: true })
+  yield* fs.makeDirectory(pathSvc.dirname(dst), { recursive: true })
 
   if (type === "symlink") {
     const target = yield* fs.readLink(src)
@@ -86,8 +85,8 @@ const copyOne = Effect.fnUntraced(function* (
   const dst = pathSvc.join(destination, rel)
 
   if (type === "directory") {
-    const parent = pathSvc.dirname(dst)
-    yield* fs.makeDirectory(parent, { recursive: true })
+    // `copyDirectoryRecursive` runs `makeDirectory(dst, { recursive: true })`
+    // which also creates the parent — no need to do it twice.
     yield* copyDirectoryRecursive(fs, pathSvc, src, dst)
     return
   }
@@ -136,49 +135,32 @@ function visitForMatches(
   })
 }
 
-const walk = Effect.fnUntraced(function* (
-  fs: AppFileSystem.Interface,
-  pathSvc: Path.Path,
-  source: string,
-  matcher: ReturnType<typeof ignore>,
-) {
-  const matches: Match[] = []
-  yield* visitForMatches(fs, pathSvc, source, matcher, "", matches)
-  return matches
-})
-
 export const apply = Effect.fn("Worktree.includeIgnored")(function* (input: {
   source: string
   destination: string
   fs: AppFileSystem.Interface
   pathSvc: Path.Path
 }) {
-  const { fs, pathSvc } = input
+  const { fs, pathSvc, source, destination } = input
 
-  const includeFile = pathSvc.join(input.source, FILENAME)
+  const includeFile = pathSvc.join(source, FILENAME)
   const text = yield* fs.readFileString(includeFile).pipe(Effect.catch(() => Effect.succeed("")))
   const trimmed = text.trim()
   const empty: ApplyResult = { copied: [], failed: [] }
   if (!trimmed) {
     log.debug("worktreeinclude: no patterns", {
-      source: input.source,
-      destination: input.destination,
+      source,
+      destination,
       includeFile,
       hasFile: text.length > 0,
     })
     return empty
   }
 
-  log.debug("worktreeinclude: scanning", {
-    source: input.source,
-    destination: input.destination,
-    patternBytes: trimmed.length,
-  })
-
-  const matcher = ignore().add(text)
-  const matched = yield* walk(fs, pathSvc, input.source, matcher)
-  if (!matched.length) {
-    log.debug("worktreeinclude: no matches", { source: input.source })
+  const matches: Match[] = []
+  yield* visitForMatches(fs, pathSvc, source, ignore().add(text), "", matches)
+  if (!matches.length) {
+    log.debug("worktreeinclude: no matches", { source, destination })
     return empty
   }
 
@@ -186,9 +168,9 @@ export const apply = Effect.fn("Worktree.includeIgnored")(function* (input: {
   const failed: { path: string; error: string }[] = []
 
   yield* Effect.forEach(
-    matched,
+    matches,
     (item) =>
-      copyOne(fs, pathSvc, input.source, input.destination, item.rel, item.type).pipe(
+      copyOne(fs, pathSvc, source, destination, item.rel, item.type).pipe(
         Effect.tap(() => Effect.sync(() => copied.push(item.rel))),
         Effect.catchCause((cause) =>
           Effect.sync(() => {
@@ -199,6 +181,21 @@ export const apply = Effect.fn("Worktree.includeIgnored")(function* (input: {
       ),
     { concurrency: COPY_CONCURRENCY, discard: true },
   )
+
+  log.debug("worktreeinclude applied", {
+    source,
+    destination,
+    copied: copied.length,
+    failed: failed.length,
+  })
+  if (failed.length) {
+    log.warn("worktreeinclude partial failure", {
+      source,
+      destination,
+      count: failed.length,
+      sample: failed.slice(0, 3),
+    })
+  }
 
   return { copied, failed } satisfies ApplyResult
 })
