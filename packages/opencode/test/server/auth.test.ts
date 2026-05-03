@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { Flag } from "../src/flag/flag"
-import { ServerAuth } from "../src/flag/server-auth"
+import { Option, Redacted } from "effect"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { ServerAuth } from "../../src/server/auth"
 
 const original = {
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
@@ -46,5 +47,13 @@ describe("ServerAuth", () => {
     expect(ServerAuth.headers({ password: "cli-secret", username: "bob" })).toEqual({
       Authorization: `Basic ${Buffer.from("bob:cli-secret").toString("base64")}`,
     })
+  })
+
+  test("validates decoded credentials against effect config", () => {
+    const config = { password: Option.some("secret"), username: "alice" }
+
+    expect(ServerAuth.required(config)).toBe(true)
+    expect(ServerAuth.authorized({ username: "alice", password: Redacted.make("secret") }, config)).toBe(true)
+    expect(ServerAuth.authorized({ username: "opencode", password: Redacted.make("secret") }, config)).toBe(false)
   })
 })

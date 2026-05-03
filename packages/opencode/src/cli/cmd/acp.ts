@@ -4,9 +4,9 @@ import { effectCmd } from "../effect-cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
 import { Server } from "@/server/server"
+import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { ServerAuth } from "@opencode-ai/core/flag/server-auth"
 
 const log = Log.create({ service: "acp-command" })
 
