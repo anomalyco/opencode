@@ -230,24 +230,21 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         style={{ "padding-left": `${8 + (props.level ?? 0) * 16}px` }}
       >
         <div class="flex min-w-0 items-center gap-1">
-          <div
-            class="shrink-0 size-4 flex items-center justify-center transition-opacity"
-            classList={{
-              "opacity-0 pointer-events-none": !hasChildren(),
-              "group-hover/session:opacity-100 group-hover/session:pointer-events-auto": !expanded(),
-            }}
-          >
-            <Show when={hasChildren()}>
+          <Show when={hasChildren()}>
+            <div class="shrink-0 size-6 flex items-center justify-center">
               <IconButton
                 icon={expanded() ? "chevron-down" : "chevron-right"}
                 variant="ghost"
                 size="small"
-                class="size-4 rounded-xs"
+                class="size-6 rounded-xs transition-opacity"
+                classList={{
+                  "opacity-0 group-hover/session:opacity-100": !expanded(),
+                }}
                 aria-label={expanded() ? language.t("session.todo.collapse") : language.t("session.todo.expand")}
                 onClick={() => setExpanded((v) => !v)}
               />
-            </Show>
-          </div>
+            </div>
+          </Show>
           <div class="min-w-0 flex-1">
             <Show
               when={!tooltip()}
