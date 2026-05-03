@@ -138,11 +138,19 @@ export const MediaPart = TypeStruct("media", "LLM.Content.Media", {
 })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
-export const ToolResultValue = Schema.Struct({
-  type: Schema.Literals(["json", "text", "error"]),
-  value: Schema.Unknown,
-}).annotate({ identifier: "LLM.ToolResult" })
-export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>
+const toolResultValueTagged = Schema.Union([
+  TypeStruct("json", "LLM.ToolResult.Json", { value: Schema.Unknown }),
+  TypeStruct("text", "LLM.ToolResult.Text", { value: Schema.Unknown }),
+  TypeStruct("error", "LLM.ToolResult.Error", { value: Schema.Unknown }),
+]).pipe(Schema.toTaggedUnion("type"))
+export const ToolResultValue = Object.assign(toolResultValueTagged, {
+  is: {
+    json: toolResultValueTagged.guards.json,
+    text: toolResultValueTagged.guards.text,
+    error: toolResultValueTagged.guards.error,
+  },
+})
+export type ToolResultValue = Schema.Schema.Type<typeof toolResultValueTagged>
 
 export const ToolCallPart = TypeStruct("tool-call", "LLM.Content.ToolCall", {
   id: Schema.String,
@@ -319,6 +327,7 @@ export const ToolResult = TypeStruct("tool-result", "LLM.Event.ToolResult", {
   name: Schema.String,
   result: ToolResultValue,
   providerExecuted: Schema.optional(Schema.Boolean),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 })
 export type ToolResult = Schema.Schema.Type<typeof ToolResult>
 
@@ -490,10 +499,15 @@ const llmErrorTagged = Schema.Union([
 export const LLMError = Object.assign(llmErrorTagged, {
   is: {
     invalidRequest: llmErrorTagged.guards["LLM.InvalidRequestError"],
+    invalidRequestError: llmErrorTagged.guards["LLM.InvalidRequestError"],
     noAdapter: llmErrorTagged.guards["LLM.NoAdapterError"],
+    noAdapterError: llmErrorTagged.guards["LLM.NoAdapterError"],
     providerChunk: llmErrorTagged.guards["LLM.ProviderChunkError"],
+    providerChunkError: llmErrorTagged.guards["LLM.ProviderChunkError"],
     providerRequest: llmErrorTagged.guards["LLM.ProviderRequestError"],
+    providerRequestError: llmErrorTagged.guards["LLM.ProviderRequestError"],
     transport: llmErrorTagged.guards["LLM.TransportError"],
+    transportError: llmErrorTagged.guards["LLM.TransportError"],
   },
 })
 export type LLMError = Schema.Schema.Type<typeof llmErrorTagged>

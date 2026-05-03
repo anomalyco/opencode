@@ -62,6 +62,7 @@ describe("Conversation", () => {
         name: "web_search",
         result: { type: "json", value: { results: [] } },
         providerExecuted: true,
+        metadata: { provider: "openai" },
       }),
     ).toEqual([
       {
@@ -72,6 +73,7 @@ describe("Conversation", () => {
           name: "web_search",
           result: { type: "json", value: { results: [] } },
           providerExecuted: true,
+          metadata: { provider: "openai" },
         },
       },
       {
@@ -82,6 +84,7 @@ describe("Conversation", () => {
           name: "web_search",
           result: { type: "json", value: { results: [] } },
           providerExecuted: true,
+          metadata: { provider: "openai" },
         },
       },
     ])

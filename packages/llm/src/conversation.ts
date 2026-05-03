@@ -97,6 +97,7 @@ export const mutate = (state: State, event: LLMEvent): ReadonlyArray<Delta> => {
       name: event.name,
       result: event.result,
       providerExecuted: true,
+      metadata: event.metadata,
     })
     state.assistantContent.push(part)
     state.activeContent = undefined

@@ -398,23 +398,26 @@ const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = 
 const isServerToolResultType = (type: string): type is AnthropicServerToolResultType =>
   type in SERVER_TOOL_RESULT_NAMES
 
-const serverToolResultEvent = (block: NonNullable<AnthropicChunk["content_block"]>): LLMEvent | undefined => {
+const serverToolResultEvent = (block: NonNullable<AnthropicChunk["content_block"]>) => Effect.gen(function* () {
   if (!block.type || !isServerToolResultType(block.type)) return undefined
+  if (!block.tool_use_id) {
+    return yield* ProviderShared.chunkError(ADAPTER, `Anthropic Messages server tool result ${block.type} is missing tool_use_id`)
+  }
   const errorPayload =
     typeof block.content === "object" && block.content !== null && "type" in block.content
       ? String((block.content as Record<string, unknown>).type)
       : ""
   const isError = errorPayload.endsWith("_tool_result_error")
   return {
-    type: "tool-result",
-    id: block.tool_use_id ?? "",
+    type: "tool-result" as const,
+    id: block.tool_use_id,
     name: SERVER_TOOL_RESULT_NAMES[block.type],
     result: isError
-      ? { type: "error", value: block.content }
-      : { type: "json", value: block.content },
+      ? { type: "error" as const, value: block.content }
+      : { type: "json" as const, value: block.content },
     providerExecuted: true,
   }
-}
+})
 
 const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
   Effect.gen(function* () {
@@ -451,7 +454,7 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
     }
 
     if (chunk.type === "content_block_start" && chunk.content_block) {
-      const event = serverToolResultEvent(chunk.content_block)
+      const event = yield* serverToolResultEvent(chunk.content_block)
       if (event) return [state, [event]] as const
     }
 
@@ -537,7 +540,7 @@ export const model = (input: AnthropicMessagesModelInput) =>
     protocol: "anthropic-messages",
     capabilities: input.capabilities ?? capabilities({
       output: { reasoning: true },
-      tools: { calls: true, streamingInput: true },
+      tools: { calls: true, streamingInput: true, providerExecuted: true },
       cache: { prompt: true, contentBlocks: true },
       reasoning: { efforts: ["low", "medium", "high", "xhigh", "max"], summaries: false, encryptedContent: true },
     }),

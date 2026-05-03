@@ -12,6 +12,7 @@ import {
   ModelRef,
   ProviderID,
   ResponseFormat,
+  ToolResultValue,
 } from "../src/schema"
 
 const capabilities = new ModelCapabilities({
@@ -72,6 +73,7 @@ describe("llm schema", () => {
     expect(ContentPart.is.toolCall({ type: "tool-call", id: "call_1", name: "lookup", input: {} })).toBe(true)
     expect(ContentPart.is.toolResult({ type: "tool-call", id: "call_1", name: "lookup", input: {} })).toBe(false)
     expect(ResponseFormat.is.json({ type: "json", schema: { type: "object" } })).toBe(true)
+    expect(ToolResultValue.is.error({ type: "error", value: "Nope" })).toBe(true)
     expect(LLMEvent.is.providerError({ type: "provider-error", message: "Nope" })).toBe(true)
   })
 
@@ -79,6 +81,7 @@ describe("llm schema", () => {
     const error = new InvalidRequestError({ message: "Bad request" })
 
     expect(LLMError.is.invalidRequest(error)).toBe(true)
+    expect(LLMError.is.invalidRequestError(error)).toBe(true)
     expect(LLMError.guards["LLM.InvalidRequestError"](error)).toBe(true)
     expect(LLMError.match(error, {
       "LLM.InvalidRequestError": (value) => value.message,

@@ -36,6 +36,7 @@ describe("Anthropic Messages adapter", () => {
         max_tokens: 20,
         temperature: 0,
       })
+      expect(prepared.model.capabilities.tools.providerExecuted).toBe(true)
     }),
   )
 
@@ -277,6 +278,37 @@ describe("Anthropic Messages adapter", () => {
         result: { type: "error" },
         providerExecuted: true,
       })
+    }),
+  )
+
+  it.effect("rejects server tool results without tool_use_id", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+        .generate(
+          LLM.updateRequest(request, {
+            tools: [{ name: "web_search", description: "Web search", inputSchema: { type: "object" } }],
+          }),
+        )
+        .pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                {
+                  type: "content_block_start",
+                  index: 0,
+                  content_block: {
+                    type: "web_search_tool_result",
+                    content: [{ type: "web_search_result", url: "https://example.com", title: "Example" }],
+                  },
+                },
+              ),
+            ),
+          ),
+          Effect.flip,
+        )
+
+      expect(error.message).toContain("missing tool_use_id")
     }),
   )
 

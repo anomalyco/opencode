@@ -456,7 +456,7 @@ export const model = (input: OpenAIResponsesModelInput) =>
     ...input,
     provider: "openai",
     protocol: "openai-responses",
-    capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true } }),
+    capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true, providerExecuted: true } }),
   })
 
 export * as OpenAIResponses from "./openai-responses"

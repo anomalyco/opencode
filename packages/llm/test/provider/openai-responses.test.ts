@@ -39,6 +39,7 @@ describe("OpenAI Responses adapter", () => {
         max_output_tokens: 20,
         temperature: 0,
       })
+      expect(prepared.model.capabilities.tools.providerExecuted).toBe(true)
     }),
   )
 

@@ -11,6 +11,7 @@ import {
   ProviderID,
   ToolChoice,
   ToolDefinition,
+  ToolResultValue,
   type ContentPart,
   type ModelID as ModelIDType,
   type ProviderID as ProviderIDType,
@@ -18,7 +19,6 @@ import {
   type SystemPart,
   type ToolCallPart,
   type ToolResultPart,
-  type ToolResultValue,
 } from "./schema"
 
 export type CapabilitiesInput = {
@@ -119,11 +119,8 @@ export const toolDefinition = (input: ToolDefinition | ConstructorParameters<typ
 
 export const toolCall = (input: Omit<ToolCallPart, "type">): ToolCallPart => ({ type: "tool-call", ...input })
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
 const isToolResultValue = (value: unknown): value is ToolResultValue =>
-  isRecord(value) && (value.type === "text" || value.type === "json" || value.type === "error") && "value" in value
+  ToolResultValue.is.json(value) || ToolResultValue.is.text(value) || ToolResultValue.is.error(value)
 
 const toolResultValue = (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
   if (isToolResultValue(value)) return value
