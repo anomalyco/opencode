@@ -1455,8 +1455,8 @@ export function Prompt(props: PromptProps) {
                       {(item) => (
                         <text fg={theme.textMuted} wrapMode="none">
                           {[
-                            tuiConfig.session_bar.context ? item().context : undefined,
-                            tuiConfig.session_bar.cost ? item().cost : undefined,
+                            (tuiConfig.session_bar?.context ?? true) ? item().context : undefined,
+                            (tuiConfig.session_bar?.cost ?? true) ? item().cost : undefined,
                           ].filter(Boolean).join(" · ")}
                         </text>
                       )}

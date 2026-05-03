@@ -39,11 +39,11 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().text}>
         <b>Context</b>
       </text>
-      <Show when={tuiConfig.sidebar.context}>
+      <Show when={tuiConfig.sidebar?.context ?? true}>
         <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
         <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
       </Show>
-      <Show when={tuiConfig.sidebar.cost}>
+      <Show when={tuiConfig.sidebar?.cost ?? true}>
         <text fg={theme().textMuted}>{money.format(cost())} spent</text>
       </Show>
     </box>
