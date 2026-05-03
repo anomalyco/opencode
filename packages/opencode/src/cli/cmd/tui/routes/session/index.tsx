@@ -1149,6 +1149,7 @@ export function Session() {
                         index={index()}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
+                          if (tuiConfig.message_click_actions === false) return
                           dialog.replace(() => (
                             <DialogMessage
                               messageID={message.id}
