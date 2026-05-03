@@ -22,6 +22,7 @@ import {
 } from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "./validate-session"
 import { Provider } from "@/provider/provider"
+import { WithInstance } from "@/project/with-instance"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -143,7 +144,14 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
-      const pick = await Provider.resolveSelection(args.model, args.variant)
+      // resolveSelection reads project config via Provider.Service.list, which
+      // requires the Instance ALS context. The TUI handler runs outside the
+      // effectCmd wrapper that establishes that context for `run`, so we must
+      // load it here explicitly. Worker spawn below establishes its own.
+      const pick = await WithInstance.provide({
+        directory: cwd,
+        fn: () => Provider.resolveSelection(args.model, args.variant),
+      })
       const model = pick.model
       const variant = pick.variant
       const env = sanitizedProcessEnv({
