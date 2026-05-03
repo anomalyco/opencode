@@ -5,7 +5,11 @@ import { lazy } from "@/util/lazy"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { WorkspaceID } from "@/control-plane/schema"
+import { Context, Effect, Exit, Layer, Scope } from "effect"
+import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
+import { BunHttpServer } from "@effect/platform-bun"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { MDNS } from "./mdns"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
 import { FenceMiddleware } from "./fence"
@@ -18,6 +22,7 @@ import { WorkspaceRouterMiddleware } from "./workspace"
 import { InstanceMiddleware } from "./routes/instance/middleware"
 import { WorkspaceRoutes } from "./routes/control/workspace"
 import { ExperimentalHttpApiServer } from "./routes/instance/httpapi/server"
+import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { PublicApi } from "./routes/instance/httpapi/public"
 import * as ServerBackend from "./backend"
 import type { CorsOptions } from "./cors"
@@ -182,38 +187,122 @@ export async function openapiHono() {
 export let url: URL
 
 export async function listen(opts: ListenOptions): Promise<Listener> {
-  const built = create(opts)
-  const server = await built.runtime.listen(opts)
+  const selected = select()
+  const inner: Listener =
+    selected.backend === "effect-httpapi" ? await listenHttpApi(opts, selected) : await listenLegacy(opts)
 
-  const next = new URL("http://localhost")
-  next.hostname = opts.hostname
-  next.port = String(server.port)
+  const next = new URL(inner.url)
   url = next
 
   const mdns =
     opts.mdns &&
-    server.port &&
+    inner.port &&
     opts.hostname !== "127.0.0.1" &&
     opts.hostname !== "localhost" &&
     opts.hostname !== "::1"
   if (mdns) {
-    MDNS.publish(server.port, opts.mdnsDomain)
+    MDNS.publish(inner.port, opts.mdnsDomain)
   } else if (opts.mdns) {
     log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
   }
 
   let closing: Promise<void> | undefined
   return {
-    hostname: opts.hostname,
-    port: server.port,
+    hostname: inner.hostname,
+    port: inner.port,
     url: next,
     stop(close?: boolean) {
       closing ??= (async () => {
         if (mdns) MDNS.unpublish()
-        await server.stop(close)
+        await inner.stop(close)
       })()
       return closing
     },
+  }
+}
+
+async function listenLegacy(opts: ListenOptions): Promise<Listener> {
+  const built = create(opts)
+  const server = await built.runtime.listen(opts)
+  const innerUrl = new URL("http://localhost")
+  innerUrl.hostname = opts.hostname
+  innerUrl.port = String(server.port)
+  return {
+    hostname: opts.hostname,
+    port: server.port,
+    url: innerUrl,
+    stop: (close?: boolean) => server.stop(close),
+  }
+}
+
+/**
+ * Run the effect-httpapi backend on a native Effect `BunHttpServer`. This
+ * lets HttpApi routes that call `request.upgrade` (PTY connect, the
+ * workspace-routing proxy WS bridge) work end-to-end — the legacy Hono
+ * adapter path can't surface `request.upgrade` because its fetch handler has
+ * no reference to the bun `server` instance for `server.upgrade(...)`.
+ */
+async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selection): Promise<Listener> {
+  log.info("server backend selected", {
+    ...ServerBackend.attributes(selection),
+    "opencode.server.runtime": "bun-http-server",
+  })
+
+  const buildLayer = (port: number) =>
+    HttpRouter.serve(ExperimentalHttpApiServer.createRoutes(opts), {
+      middleware: disposeMiddleware,
+      disableLogger: true,
+      disableListenLog: true,
+    }).pipe(Layer.provideMerge(BunHttpServer.layer({ port, hostname: opts.hostname })))
+
+  // Server-level CORS options are dynamic; don't reuse the default memoized
+  // route layer (which bakes in default CORS). Mirrors `webHandler` in
+  // `routes/instance/httpapi/server.ts`.
+  const layerMemoMap = opts.cors?.length ? Layer.makeMemoMapUnsafe() : memoMap
+
+  const start = async (port: number) => {
+    const scope = Scope.makeUnsafe()
+    try {
+      // Effect's `HttpMiddleware` interface returns `Effect<…, any, any>` by
+      // design, which leaks `R = any` through `HttpRouter.serve`. The actual
+      // requirements at this point are fully satisfied by `createRoutes` and
+      // `BunHttpServer.layer`; cast away the `any` to satisfy `runPromise`.
+      const layer = buildLayer(port) as Layer.Layer<HttpServer.HttpServer, unknown, never>
+      const ctx = await Effect.runPromise(Layer.buildWithMemoMap(layer, layerMemoMap, scope))
+      return { scope, ctx }
+    } catch (err) {
+      await Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => undefined)
+      throw err
+    }
+  }
+
+  // Match the legacy adapter port-resolution behavior: explicit `0` prefers
+  // 4096 first, then any free port.
+  let resolved: Awaited<ReturnType<typeof start>> | undefined
+  if (opts.port === 0) {
+    resolved = await start(4096).catch(() => undefined)
+    if (!resolved) resolved = await start(0)
+  } else {
+    resolved = await start(opts.port)
+  }
+  if (!resolved) throw new Error(`Failed to start server on port ${opts.port}`)
+
+  const server = Context.get(resolved.ctx, HttpServer.HttpServer)
+  if (server.address._tag !== "TcpAddress") {
+    await Effect.runPromise(Scope.close(resolved.scope, Exit.void))
+    throw new Error(`Unexpected HttpServer address tag: ${server.address._tag}`)
+  }
+  const port = server.address.port
+
+  const innerUrl = new URL("http://localhost")
+  innerUrl.hostname = opts.hostname
+  innerUrl.port = String(port)
+
+  return {
+    hostname: opts.hostname,
+    port,
+    url: innerUrl,
+    stop: () => Effect.runPromise(Scope.close(resolved!.scope, Exit.void)),
   }
 }
 
