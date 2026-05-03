@@ -18,6 +18,34 @@ export class CliError extends Schema.TaggedErrorClass<CliError>()("CliError", {
 
 export const fail = (message: string, exitCode = 1) => Effect.fail(new CliError({ message, exitCode }))
 
+interface EffectCmdOpts<Args, A> {
+  command: string | readonly string[]
+  aliases?: string | readonly string[]
+  describe: string | false
+  builder?: (yargs: Argv) => Argv<Args>
+  /**
+   * Whether the command needs a project InstanceContext. Defaults to true.
+   *
+   * `true` (default): wraps the handler in `InstanceStore.Service.provide({directory})`
+   * so `InstanceRef` resolves to a loaded `InstanceContext`. Auto-disposes via
+   * `Effect.ensuring(store.dispose(ctx))` on every Exit (matches the legacy
+   * `bootstrap()` finally-disposal). Runs InstanceBootstrap (config + plugin
+   * init + LSP/File/etc forks) eagerly.
+   *
+   * `false`: skip the instance entirely. Saves the InstanceBootstrap work and
+   * suppresses the `server.instance.disposed` IPC event. The handler runs
+   * directly under AppRuntime — it can yield any `AppServices` but must not
+   * yield `InstanceRef` (it'd be undefined, causing a defect).
+   *
+   * Use `false` for commands that don't read project state (e.g. `models`,
+   * `serve`, `web`, `account`, `db`, `upgrade`).
+   */
+  instance?: boolean
+  /** Defaults to process.cwd(). Override for commands that take a directory positional. */
+  directory?: (args: Args) => string
+  handler: (args: Args) => Effect.Effect<A, CliError, AppServices | InstanceStore.Service>
+}
+
 /**
  * Effect-native CLI command builder. Wraps yargs `cmd()` so the handler body is
  * an `Effect` with `InstanceRef` provided and any `AppServices` yieldable.
@@ -35,15 +63,7 @@ export const fail = (message: string, exitCode = 1) => Effect.fail(new CliError(
  * `effectCmd`, swapping the underlying `cmd()` factory for effect/cli's
  * `Command.make(...)` won't touch any handler bodies.
  */
-export const effectCmd = <Args, A>(opts: {
-  command: string | readonly string[]
-  aliases?: string | readonly string[]
-  describe: string | false
-  builder?: (yargs: Argv) => Argv<Args>
-  /** Defaults to process.cwd(). Override for commands that take a directory positional. */
-  directory?: (args: Args) => string
-  handler: (args: Args) => Effect.Effect<A, CliError, AppServices | InstanceStore.Service>
-}) =>
+export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
   cmd<{}, Args>({
     command: opts.command,
     aliases: opts.aliases,
@@ -52,6 +72,10 @@ export const effectCmd = <Args, A>(opts: {
     async handler(rawArgs) {
       // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
       const args = rawArgs as unknown as Args
+      if (opts.instance === false) {
+        await AppRuntime.runPromise(opts.handler(args))
+        return
+      }
       const directory = opts.directory?.(args) ?? process.cwd()
       await AppRuntime.runPromise(
         InstanceStore.Service.use((store) =>
