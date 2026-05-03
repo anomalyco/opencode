@@ -103,6 +103,39 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
 const zenLiteProduct = new stripe.Product("ZenLite", {
   name: "OpenCode Go",
 })
+const zenLiteCouponFirstMonth50 = new stripe.Coupon("ZenLiteCouponFirstMonth50", {
+  name: "First month 50% off",
+  percentOff: 50,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "once",
+})
+const zenLiteCouponFirstMonth100 = new stripe.Coupon("ZenLiteCouponFirstMonth100", {
+  name: "First month 100% off",
+  percentOff: 100,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "once",
+})
+const zenLiteCouponThreeMonths100 = new stripe.Coupon("ZenLiteCoupon3Months100", {
+  name: "3 months 100% off",
+  percentOff: 100,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "repeating",
+  durationInMonths: 3,
+})
+const zenLiteCouponSixMonths100 = new stripe.Coupon("ZenLiteCoupon6Months100", {
+  name: "6 months 100% off",
+  percentOff: 100,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "repeating",
+  durationInMonths: 6,
+})
+const zenLiteCouponTwelveMonths100 = new stripe.Coupon("ZenLiteCoupon12Months100", {
+  name: "12 months 100% off",
+  percentOff: 100,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "repeating",
+  durationInMonths: 12,
+})
 const zenLitePrice = new stripe.Price("ZenLitePrice", {
   product: zenLiteProduct.id,
   currency: "usd",
@@ -116,6 +149,12 @@ const ZEN_LITE_PRICE = new sst.Linkable("ZEN_LITE_PRICE", {
   properties: {
     product: zenLiteProduct.id,
     price: zenLitePrice.id,
+    priceInr: 92900,
+    firstMonth50Coupon: zenLiteCouponFirstMonth50.id,
+    firstMonth100Coupon: zenLiteCouponFirstMonth100.id,
+    threeMonths100Coupon: zenLiteCouponThreeMonths100.id,
+    sixMonths100Coupon: zenLiteCouponSixMonths100.id,
+    twelveMonths100Coupon: zenLiteCouponTwelveMonths100.id,
   },
 })
 
@@ -194,6 +233,10 @@ const bucketNew = new sst.cloudflare.Bucket("ZenDataNew")
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
 
+const SALESFORCE_CLIENT_ID = new sst.Secret("SALESFORCE_CLIENT_ID")
+const SALESFORCE_CLIENT_SECRET = new sst.Secret("SALESFORCE_CLIENT_SECRET")
+const SALESFORCE_INSTANCE_URL = new sst.Secret("SALESFORCE_INSTANCE_URL")
+
 const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
   handler: "packages/console/function/src/log-processor.ts",
   link: [new sst.Secret("HONEYCOMB_API_KEY")],
@@ -212,6 +255,9 @@ new sst.cloudflare.x.SolidStart("Console", {
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
+    SALESFORCE_CLIENT_ID,
+    SALESFORCE_CLIENT_SECRET,
+    SALESFORCE_INSTANCE_URL,
     ZEN_BLACK_PRICE,
     ZEN_LITE_PRICE,
     new sst.Secret("ZEN_LIMITS"),

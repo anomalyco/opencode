@@ -1,7 +1,6 @@
-import { Binary } from "@opencode-ai/util/binary"
+import { Binary } from "@opencode-ai/core/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
-  FileDiff,
   Message,
   Part,
   PermissionRequest,
@@ -9,15 +8,20 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
+import { dropSessionCaches } from "./session-cache"
+import { diffs as list, message as clean } from "@/utils/diffs"
+
+const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
-  setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
+  setGlobalProject: (next: Project[] | ((draft: Project[]) => Project[])) => void
   refresh: () => void
 }) {
   if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
@@ -29,48 +33,59 @@ export function applyGlobalEvent(input: {
   const properties = input.event.properties as Project
   const result = Binary.search(input.project, properties.id, (s) => s.id)
   if (result.found) {
-    input.setGlobalProject((draft) => {
-      draft[result.index] = { ...draft[result.index], ...properties }
-    })
+    input.setGlobalProject(
+      produce((draft) => {
+        draft[result.index] = { ...draft[result.index], ...properties }
+      }),
+    )
     return
   }
-  input.setGlobalProject((draft) => {
-    draft.splice(result.index, 0, properties)
-  })
+  input.setGlobalProject(
+    produce((draft) => {
+      draft.splice(result.index, 0, properties)
+    }),
+  )
 }
 
 function cleanupSessionCaches(
-  store: Store<State>,
   setStore: SetStoreFunction<State>,
   sessionID: string,
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void,
 ) {
   if (!sessionID) return
-  const hasAny =
-    store.message[sessionID] !== undefined ||
-    store.session_diff[sessionID] !== undefined ||
-    store.todo[sessionID] !== undefined ||
-    store.permission[sessionID] !== undefined ||
-    store.question[sessionID] !== undefined ||
-    store.session_status[sessionID] !== undefined
   setSessionTodo?.(sessionID, undefined)
-  if (!hasAny) return
   setStore(
     produce((draft) => {
-      const messages = draft.message[sessionID]
-      if (messages) {
-        for (const message of messages) {
-          const id = message?.id
-          if (!id) continue
-          delete draft.part[id]
-        }
-      }
-      delete draft.message[sessionID]
-      delete draft.session_diff[sessionID]
-      delete draft.todo[sessionID]
-      delete draft.permission[sessionID]
-      delete draft.question[sessionID]
-      delete draft.session_status[sessionID]
+      dropSessionCaches(draft, [sessionID])
+    }),
+  )
+}
+
+export function cleanupDroppedSessionCaches(
+  store: Store<State>,
+  setStore: SetStoreFunction<State>,
+  next: Session[],
+  setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void,
+) {
+  const keep = new Set(next.map((item) => item.id))
+  const stale = [
+    ...Object.keys(store.message),
+    ...Object.keys(store.session_diff),
+    ...Object.keys(store.todo),
+    ...Object.keys(store.permission),
+    ...Object.keys(store.question),
+    ...Object.keys(store.session_status),
+    ...Object.values(store.part)
+      .map((parts) => parts?.find((part) => !!part?.sessionID)?.sessionID)
+      .filter((sessionID): sessionID is string => !!sessionID),
+  ].filter((sessionID, index, list) => !keep.has(sessionID) && list.indexOf(sessionID) === index)
+  if (stale.length === 0) return
+  for (const sessionID of stale) {
+    setSessionTodo?.(sessionID, undefined)
+  }
+  setStore(
+    produce((draft) => {
+      dropSessionCaches(draft, stale)
     }),
   )
 }
@@ -102,6 +117,7 @@ export function applyDirectoryEvent(input: {
       next.splice(result.index, 0, info)
       const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
+      cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
       if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
       break
     }
@@ -117,7 +133,7 @@ export function applyDirectoryEvent(input: {
             }),
           )
         }
-        cleanupSessionCaches(input.store, input.setStore, info.id, input.setSessionTodo)
+        cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
         if (info.parentID) break
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
@@ -130,6 +146,7 @@ export function applyDirectoryEvent(input: {
       next.splice(result.index, 0, info)
       const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
+      cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
       break
     }
     case "session.deleted": {
@@ -143,14 +160,14 @@ export function applyDirectoryEvent(input: {
           }),
         )
       }
-      cleanupSessionCaches(input.store, input.setStore, info.id, input.setSessionTodo)
+      cleanupSessionCaches(input.setStore, info.id, input.setSessionTodo)
       if (info.parentID) break
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break
     }
     case "session.diff": {
-      const props = event.properties as { sessionID: string; diff: FileDiff[] }
-      input.setStore("session_diff", props.sessionID, reconcile(props.diff, { key: "file" }))
+      const props = event.properties as { sessionID: string; diff: SnapshotFileDiff[] }
+      input.setStore("session_diff", props.sessionID, reconcile(list(props.diff), { key: "file" }))
       break
     }
     case "todo.updated": {
@@ -165,7 +182,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "message.updated": {
-      const info = (event.properties as { info: Message }).info
+      const info = clean((event.properties as { info: Message }).info)
       const messages = input.store.message[info.sessionID]
       if (!messages) {
         input.setStore("message", info.sessionID, [info])
@@ -201,6 +218,7 @@ export function applyDirectoryEvent(input: {
     }
     case "message.part.updated": {
       const part = (event.properties as { part: Part }).part
+      if (SKIP_PARTS.has(part.type)) break
       const parts = input.store.part[part.messageID]
       if (!parts) {
         input.setStore("part", part.messageID, [part])
@@ -258,9 +276,9 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "vcs.branch.updated": {
-      const props = event.properties as { branch: string }
+      const props = event.properties as { branch?: string }
       if (input.store.vcs?.branch === props.branch) break
-      const next = { branch: props.branch }
+      const next = { ...input.store.vcs, branch: props.branch }
       input.setStore("vcs", next)
       if (input.vcsCache) input.vcsCache.setStore("value", next)
       break

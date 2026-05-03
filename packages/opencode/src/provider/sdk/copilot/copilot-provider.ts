@@ -1,4 +1,4 @@
-import type { LanguageModelV2 } from "@ai-sdk/provider"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { type FetchFunction, withoutTrailingSlash, withUserAgentSuffix } from "@ai-sdk/provider-utils"
 import { OpenAICompatibleChatLanguageModel } from "./chat/openai-compatible-chat-language-model"
 import { OpenAIResponsesLanguageModel } from "./responses/openai-responses-language-model"
@@ -36,10 +36,10 @@ export interface OpenaiCompatibleProviderSettings {
 }
 
 export interface OpenaiCompatibleProvider {
-  (modelId: OpenaiCompatibleModelId): LanguageModelV2
-  chat(modelId: OpenaiCompatibleModelId): LanguageModelV2
-  responses(modelId: OpenaiCompatibleModelId): LanguageModelV2
-  languageModel(modelId: OpenaiCompatibleModelId): LanguageModelV2
+  (modelId: OpenaiCompatibleModelId): LanguageModelV3
+  chat(modelId: OpenaiCompatibleModelId): LanguageModelV3
+  responses(modelId: OpenaiCompatibleModelId): LanguageModelV3
+  languageModel(modelId: OpenaiCompatibleModelId): LanguageModelV3
 
   // embeddingModel(modelId: any): EmbeddingModelV2
 

@@ -11,24 +11,10 @@
 - Keep things in one function unless composable or reusable
 - Avoid `try`/`catch` where possible
 - Avoid using the `any` type
-- Prefer single word variable names where possible
 - Use Bun APIs when possible, like `Bun.file()`
 - Rely on type inference when possible; avoid explicit type annotations or interfaces unless necessary for exports or clarity
 - Prefer functional array methods (flatMap, filter, map) over for loops; use type guards on filter to maintain type inference downstream
-
-### Naming
-
-Prefer single word names for variables and functions. Only use multiple words if necessary.
-
-```ts
-// Good
-const foo = 1
-function journal(dir: string) {}
-
-// Bad
-const fooBar = 1
-function prepareJournal(dir: string) {}
-```
+- In `src/config`, follow the existing self-export pattern at the top of the file (for example `export * as ConfigAgent from "./agent"`) when adding a new config module.
 
 Reduce total variable count by inlining when a value is only used once.
 
@@ -111,3 +97,7 @@ const table = sqliteTable("session", {
 - Avoid mocks as much as possible
 - Test actual implementation, do not duplicate logic into tests
 - Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+
+## Type Checking
+
+- Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.

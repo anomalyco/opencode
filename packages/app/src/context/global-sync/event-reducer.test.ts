@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
-import { applyDirectoryEvent, applyGlobalEvent } from "./event-reducer"
+import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
 
 const rootSession = (input: { id: string; parentID?: string; archived?: number }) =>
   ({
@@ -248,6 +248,62 @@ describe("applyDirectoryEvent", () => {
     }
   })
 
+  test("cleans caches for trimmed sessions on session.created", () => {
+    const dropped = rootSession({ id: "ses_b" })
+    const kept = rootSession({ id: "ses_a" })
+    const message = userMessage("msg_1", dropped.id)
+    const todos: string[] = []
+    const [store, setStore] = createStore(
+      baseState({
+        limit: 1,
+        session: [dropped],
+        message: { [dropped.id]: [message] },
+        part: { [message.id]: [textPart("prt_1", dropped.id, message.id)] },
+        session_diff: { [dropped.id]: [] },
+        todo: { [dropped.id]: [] },
+        permission: { [dropped.id]: [] },
+        question: { [dropped.id]: [] },
+        session_status: { [dropped.id]: { type: "busy" } },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: { type: "session.created", properties: { info: kept } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+      setSessionTodo(sessionID, value) {
+        if (value !== undefined) return
+        todos.push(sessionID)
+      },
+    })
+
+    expect(store.session.map((x) => x.id)).toEqual([kept.id])
+    expect(store.message[dropped.id]).toBeUndefined()
+    expect(store.part[message.id]).toBeUndefined()
+    expect(store.session_diff[dropped.id]).toBeUndefined()
+    expect(store.todo[dropped.id]).toBeUndefined()
+    expect(store.permission[dropped.id]).toBeUndefined()
+    expect(store.question[dropped.id]).toBeUndefined()
+    expect(store.session_status[dropped.id]).toBeUndefined()
+    expect(todos).toEqual([dropped.id])
+  })
+
+  test("cleanupDroppedSessionCaches clears part-only orphan state", () => {
+    const [store, setStore] = createStore(
+      baseState({
+        session: [rootSession({ id: "ses_keep" })],
+        part: { msg_1: [textPart("prt_1", "ses_drop", "msg_1")] },
+      }),
+    )
+
+    cleanupDroppedSessionCaches(store, setStore, store.session)
+
+    expect(store.part.msg_1).toBeUndefined()
+  })
+
   test("upserts and removes messages while clearing orphaned parts", () => {
     const sessionID = "ses_1"
     const [store, setStore] = createStore(
@@ -438,8 +494,10 @@ describe("applyDirectoryEvent", () => {
   })
 
   test("updates vcs branch in store and cache", () => {
-    const [store, setStore] = createStore(baseState())
-    const [cacheStore, setCacheStore] = createStore({ value: undefined as State["vcs"] })
+    const [store, setStore] = createStore(baseState({ vcs: { branch: "main", default_branch: "main" } }))
+    const [cacheStore, setCacheStore] = createStore({
+      value: { branch: "main", default_branch: "main" } as State["vcs"],
+    })
 
     applyDirectoryEvent({
       event: { type: "vcs.branch.updated", properties: { branch: "feature/test" } },
@@ -455,8 +513,8 @@ describe("applyDirectoryEvent", () => {
       },
     })
 
-    expect(store.vcs).toEqual({ branch: "feature/test" })
-    expect(cacheStore.value).toEqual({ branch: "feature/test" })
+    expect(store.vcs).toEqual({ branch: "feature/test", default_branch: "main" })
+    expect(cacheStore.value).toEqual({ branch: "feature/test", default_branch: "main" })
   })
 
   test("routes disposal and lsp events to side-effect handlers", () => {

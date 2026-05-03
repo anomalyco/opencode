@@ -1,348 +1,277 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { LSP } from "@/lsp/lsp"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Bus } from "../../src/bus"
+import { Format } from "../../src/format"
+import { Truncate } from "@/tool/truncate"
+import { Tool } from "@/tool/tool"
+import { Agent } from "../../src/agent/agent"
+import { SessionID, MessageID } from "../../src/session/schema"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { disposeAllInstances, provideTmpdirInstance, TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 const ctx = {
-  sessionID: "test-write-session",
-  messageID: "",
+  sessionID: SessionID.make("ses_test-write-session"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
+
+afterEach(async () => {
+  await disposeAllInstances()
+})
+
+const it = testEffect(
+  Layer.mergeAll(
+    LSP.defaultLayer,
+    AppFileSystem.defaultLayer,
+    Bus.layer,
+    Format.defaultLayer,
+    CrossSpawnSpawner.defaultLayer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
+)
+
+const init = Effect.fn("WriteToolTest.init")(function* () {
+  const info = yield* WriteTool
+  return yield* info.init()
+})
+
+const run = Effect.fn("WriteToolTest.run")(function* (
+  args: Tool.InferParameters<typeof WriteTool>,
+  next: Tool.Context = ctx,
+) {
+  const tool = yield* init()
+  return yield* tool.execute(args, next)
+})
 
 describe("tool.write", () => {
   describe("new file creation", () => {
-    test("writes content to new file", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "newfile.txt")
+    it.instance("writes content to new file", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "newfile.txt")
+        const result = yield* run({ filePath: filepath, content: "Hello, World!" })
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          const result = await write.execute(
-            {
-              filePath: filepath,
-              content: "Hello, World!",
-            },
-            ctx,
-          )
+        expect(result.output).toContain("Wrote file successfully")
+        expect(result.metadata.exists).toBe(false)
 
-          expect(result.output).toContain("Wrote file successfully")
-          expect(result.metadata.exists).toBe(false)
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("Hello, World!")
+      }),
+    )
 
-          const content = await fs.readFile(filepath, "utf-8")
-          expect(content).toBe("Hello, World!")
-        },
-      })
-    })
+    it.instance("creates parent directories if needed", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "nested", "deep", "file.txt")
+        yield* run({ filePath: filepath, content: "nested content" })
 
-    test("creates parent directories if needed", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "nested", "deep", "file.txt")
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("nested content")
+      }),
+    )
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: filepath,
-              content: "nested content",
-            },
-            ctx,
-          )
+    it.instance("handles relative paths by resolving to instance directory", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* run({ filePath: "relative.txt", content: "relative content" })
 
-          const content = await fs.readFile(filepath, "utf-8")
-          expect(content).toBe("nested content")
-        },
-      })
-    })
-
-    test("handles relative paths by resolving to instance directory", async () => {
-      await using tmp = await tmpdir()
-
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: "relative.txt",
-              content: "relative content",
-            },
-            ctx,
-          )
-
-          const content = await fs.readFile(path.join(tmp.path, "relative.txt"), "utf-8")
-          expect(content).toBe("relative content")
-        },
-      })
-    })
+        const content = yield* Effect.promise(() => fs.readFile(path.join(test.directory, "relative.txt"), "utf-8"))
+        expect(content).toBe("relative content")
+      }),
+    )
   })
 
   describe("existing file overwrite", () => {
-    test("overwrites existing file content", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "existing.txt")
-      await fs.writeFile(filepath, "old content", "utf-8")
+    it.instance("overwrites existing file content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "existing.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "old content", "utf-8"))
+        const result = yield* run({ filePath: filepath, content: "new content" })
 
-      // First read the file to satisfy FileTime requirement
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, filepath)
+        expect(result.output).toContain("Wrote file successfully")
+        expect(result.metadata.exists).toBe(true)
 
-          const write = await WriteTool.init()
-          const result = await write.execute(
-            {
-              filePath: filepath,
-              content: "new content",
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("new content")
+      }),
+    )
+
+    it.instance("preserves BOM when overwriting existing files", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "existing.cs")
+        const bom = String.fromCharCode(0xfeff)
+        yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
+
+        yield* run({ filePath: filepath, content: "using Up;\n" })
+
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content.charCodeAt(0)).toBe(0xfeff)
+        expect(content.slice(1)).toBe("using Up;\n")
+      }),
+    )
+
+    it.instance(
+      "restores BOM after formatter strips it",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const filepath = path.join(test.directory, "formatted.cs")
+          const bom = String.fromCharCode(0xfeff)
+          yield* Effect.promise(() => fs.writeFile(filepath, `${bom}using System;\n`, "utf-8"))
+
+          yield* run({ filePath: filepath, content: "using Up;\n" })
+
+          const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+          expect(content.charCodeAt(0)).toBe(0xfeff)
+          expect(content.slice(1)).toBe("using Up;\n")
+        }),
+      {
+        config: {
+          formatter: {
+            stripbom: {
+              extensions: [".cs"],
+              command: [
+                "node",
+                "-e",
+                "const fs = require('fs'); const file = process.argv[1]; let text = fs.readFileSync(file, 'utf8'); if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); fs.writeFileSync(file, text, 'utf8')",
+                "$FILE",
+              ],
             },
-            ctx,
-          )
-
-          expect(result.output).toContain("Wrote file successfully")
-          expect(result.metadata.exists).toBe(true)
-
-          const content = await fs.readFile(filepath, "utf-8")
-          expect(content).toBe("new content")
+          },
         },
-      })
-    })
+      },
+    )
 
-    test("returns diff in metadata for existing files", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "file.txt")
-      await fs.writeFile(filepath, "old", "utf-8")
+    it.instance("returns diff in metadata for existing files", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "file.txt")
+        yield* Effect.promise(() => fs.writeFile(filepath, "old", "utf-8"))
+        const result = yield* run({ filePath: filepath, content: "new" })
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, filepath)
-
-          const write = await WriteTool.init()
-          const result = await write.execute(
-            {
-              filePath: filepath,
-              content: "new",
-            },
-            ctx,
-          )
-
-          // Diff should be in metadata
-          expect(result.metadata).toHaveProperty("filepath", filepath)
-          expect(result.metadata).toHaveProperty("exists", true)
-        },
-      })
-    })
+        expect(result.metadata).toHaveProperty("filepath", filepath)
+        expect(result.metadata).toHaveProperty("exists", true)
+      }),
+    )
   })
 
   describe("file permissions", () => {
-    test("sets file permissions when writing sensitive data", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "sensitive.json")
+    it.instance("sets file permissions when writing sensitive data", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "sensitive.json")
+        yield* run({ filePath: filepath, content: JSON.stringify({ secret: "data" }) })
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: filepath,
-              content: JSON.stringify({ secret: "data" }),
-            },
-            ctx,
-          )
-
-          // On Unix systems, check permissions
-          if (process.platform !== "win32") {
-            const stats = await fs.stat(filepath)
-            expect(stats.mode & 0o777).toBe(0o644)
-          }
-        },
-      })
-    })
+        if (process.platform !== "win32") {
+          const stats = yield* Effect.promise(() => fs.stat(filepath))
+          expect(stats.mode & 0o777).toBe(0o644)
+        }
+      }),
+    )
   })
 
   describe("content types", () => {
-    test("writes JSON content", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "data.json")
-      const data = { key: "value", nested: { array: [1, 2, 3] } }
+    it.instance("writes JSON content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "data.json")
+        const data = { key: "value", nested: { array: [1, 2, 3] } }
+        yield* run({ filePath: filepath, content: JSON.stringify(data, null, 2) })
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: filepath,
-              content: JSON.stringify(data, null, 2),
-            },
-            ctx,
-          )
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(JSON.parse(content)).toEqual(data)
+      }),
+    )
 
-          const content = await fs.readFile(filepath, "utf-8")
-          expect(JSON.parse(content)).toEqual(data)
-        },
-      })
-    })
+    it.instance("writes binary-safe content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "binary.bin")
+        const content = "Hello\x00World\x01\x02\x03"
+        yield* run({ filePath: filepath, content })
 
-    test("writes binary-safe content", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "binary.bin")
-      const content = "Hello\x00World\x01\x02\x03"
+        const buf = yield* Effect.promise(() => fs.readFile(filepath))
+        expect(buf.toString()).toBe(content)
+      }),
+    )
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: filepath,
-              content,
-            },
-            ctx,
-          )
+    it.instance("writes empty content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "empty.txt")
+        yield* run({ filePath: filepath, content: "" })
 
-          const buf = await fs.readFile(filepath)
-          expect(buf.toString()).toBe(content)
-        },
-      })
-    })
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe("")
 
-    test("writes empty content", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "empty.txt")
+        const stats = yield* Effect.promise(() => fs.stat(filepath))
+        expect(stats.size).toBe(0)
+      }),
+    )
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: filepath,
-              content: "",
-            },
-            ctx,
-          )
+    it.instance("writes multi-line content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "multiline.txt")
+        const lines = ["Line 1", "Line 2", "Line 3", ""].join("\n")
+        yield* run({ filePath: filepath, content: lines })
 
-          const content = await fs.readFile(filepath, "utf-8")
-          expect(content).toBe("")
+        const content = yield* Effect.promise(() => fs.readFile(filepath, "utf-8"))
+        expect(content).toBe(lines)
+      }),
+    )
 
-          const stats = await fs.stat(filepath)
-          expect(stats.size).toBe(0)
-        },
-      })
-    })
+    it.instance("handles different line endings", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "crlf.txt")
+        const content = "Line 1\r\nLine 2\r\nLine 3"
+        yield* run({ filePath: filepath, content })
 
-    test("writes multi-line content", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "multiline.txt")
-      const lines = ["Line 1", "Line 2", "Line 3", ""].join("\n")
-
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: filepath,
-              content: lines,
-            },
-            ctx,
-          )
-
-          const content = await fs.readFile(filepath, "utf-8")
-          expect(content).toBe(lines)
-        },
-      })
-    })
-
-    test("handles different line endings", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "crlf.txt")
-      const content = "Line 1\r\nLine 2\r\nLine 3"
-
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: filepath,
-              content,
-            },
-            ctx,
-          )
-
-          const buf = await fs.readFile(filepath)
-          expect(buf.toString()).toBe(content)
-        },
-      })
-    })
+        const buf = yield* Effect.promise(() => fs.readFile(filepath))
+        expect(buf.toString()).toBe(content)
+      }),
+    )
   })
 
   describe("error handling", () => {
-    test("throws error when OS denies write access", async () => {
-      await using tmp = await tmpdir()
-      const readonlyPath = path.join(tmp.path, "readonly.txt")
-
-      // Create a read-only file
-      await fs.writeFile(readonlyPath, "test", "utf-8")
-      await fs.chmod(readonlyPath, 0o444)
-
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, readonlyPath)
-
-          const write = await WriteTool.init()
-          await expect(
-            write.execute(
-              {
-                filePath: readonlyPath,
-                content: "new content",
-              },
-              ctx,
-            ),
-          ).rejects.toThrow()
-        },
-      })
-    })
+    it.instance("throws error when OS denies write access", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const readonlyPath = path.join(test.directory, "readonly.txt")
+        yield* Effect.promise(() => fs.writeFile(readonlyPath, "test", "utf-8"))
+        yield* Effect.promise(() => fs.chmod(readonlyPath, 0o444))
+        const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(Effect.exit)
+        expect(exit._tag).toBe("Failure")
+      }),
+    )
   })
 
   describe("title generation", () => {
-    test("returns relative path as title", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "src", "components", "Button.tsx")
-      await fs.mkdir(path.dirname(filepath), { recursive: true })
+    it.instance("returns relative path as title", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "src", "components", "Button.tsx")
+        yield* Effect.promise(() => fs.mkdir(path.dirname(filepath), { recursive: true }))
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          const result = await write.execute(
-            {
-              filePath: filepath,
-              content: "export const Button = () => {}",
-            },
-            ctx,
-          )
-
-          expect(result.title).toEndWith(path.join("src", "components", "Button.tsx"))
-        },
-      })
-    })
+        const result = yield* run({ filePath: filepath, content: "export const Button = () => {}" })
+        expect(result.title).toEndWith(path.join("src", "components", "Button.tsx"))
+      }),
+    )
   })
 })

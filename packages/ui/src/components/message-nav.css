@@ -95,7 +95,7 @@
   color: var(--text-base);
 }
 
-[data-slot="message-nav-tooltip"] {
+.message-nav-tooltip {
   z-index: 1000;
 }
 

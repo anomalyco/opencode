@@ -1,5 +1,6 @@
 import { Component, For, Show, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -9,6 +10,7 @@ import fuzzysort from "fuzzysort"
 import { formatKeybind, parseKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
+import { SettingsList } from "./settings-list"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 const PALETTE_ID = "command.palette"
@@ -238,7 +240,7 @@ function useKeyCapture(input: {
         showToast({
           title: input.language.t("settings.shortcuts.conflict.title"),
           description: input.language.t("settings.shortcuts.conflict.description", {
-            keybind: formatKeybind(next),
+            keybind: formatKeybind(next, input.language.t),
             titles: [...conflicts.values()].join(", "),
           }),
         })
@@ -249,8 +251,7 @@ function useKeyCapture(input: {
       input.stop()
     }
 
-    document.addEventListener("keydown", handle, true)
-    onCleanup(() => document.removeEventListener("keydown", handle, true))
+    makeEventListener(document, "keydown", handle, { capture: true })
   })
 }
 
@@ -406,7 +407,7 @@ export const SettingsKeybinds: Component = () => {
             <Show when={(filtered().get(group) ?? []).length > 0}>
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t(groupKey[group])}</h3>
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <For each={filtered().get(group) ?? []}>
                     {(id) => (
                       <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
@@ -432,7 +433,7 @@ export const SettingsKeybinds: Component = () => {
                       </div>
                     )}
                   </For>
-                </div>
+                </SettingsList>
               </div>
             </Show>
           )}

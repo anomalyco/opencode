@@ -1,5 +1,6 @@
-import { Global } from "../../../global"
-import { bootstrap } from "../../bootstrap"
+import { Global } from "@opencode-ai/core/global"
+import { Duration, Effect } from "effect"
+import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 import { ConfigCommand } from "./config"
 import { FileCommand } from "./file"
@@ -9,6 +10,7 @@ import { ScrapCommand } from "./scrap"
 import { SkillCommand } from "./skill"
 import { SnapshotCommand } from "./snapshot"
 import { AgentCommand } from "./agent"
+import { StartupCommand } from "./startup"
 
 export const DebugCommand = cmd({
   command: "debug",
@@ -22,19 +24,20 @@ export const DebugCommand = cmd({
       .command(ScrapCommand)
       .command(SkillCommand)
       .command(SnapshotCommand)
+      .command(StartupCommand)
       .command(AgentCommand)
       .command(PathsCommand)
-      .command({
-        command: "wait",
-        describe: "wait indefinitely (for debugging)",
-        async handler() {
-          await bootstrap(process.cwd(), async () => {
-            await new Promise((resolve) => setTimeout(resolve, 1_000 * 60 * 60 * 24))
-          })
-        },
-      })
+      .command(WaitCommand)
       .demandCommand(),
   async handler() {},
+})
+
+const WaitCommand = effectCmd({
+  command: "wait",
+  describe: "wait indefinitely (for debugging)",
+  handler: Effect.fn("Cli.debug.wait")(function* () {
+    yield* Effect.sleep(Duration.days(1))
+  }),
 })
 
 const PathsCommand = cmd({
