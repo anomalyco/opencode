@@ -25,7 +25,7 @@ describe("file fsmonitor", () => {
     expect(before.exitCode).not.toBe(0)
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         await File.status()
       },
@@ -50,7 +50,7 @@ describe("file fsmonitor", () => {
     expect(before.exitCode).not.toBe(0)
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         await File.read("tracked.txt")
       },

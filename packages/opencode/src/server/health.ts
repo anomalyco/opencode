@@ -73,18 +73,14 @@ function normalizeBaseUrl(input: string) {
   return input.replace(/\/+$/, "")
 }
 
-function localDev() {
-  return !!process.env.DEV_BACKEND_HOST?.trim()
-}
-
-/** `http(s)://.../health` from VITE_UNIVER_SDK_WS; relay serves this in `packages/relay/server.ts`. */
+/** `http(s)://.../readyz` from VITE_UNIVER_SDK_WS; relay serves this in `packages/relay/server.ts`. */
 function relayHttpHealthFromViteUniverSdkWs(): string | undefined {
   const ws = process.env.VITE_UNIVER_SDK_WS?.trim()
   if (!ws) return undefined
   try {
     const url = new URL(ws)
     url.protocol = url.protocol === "wss:" ? "https:" : "http:"
-    url.pathname = "/health"
+    url.pathname = "/readyz"
     url.search = ""
     url.hash = ""
     return url.toString()
@@ -100,12 +96,12 @@ function executorUrl() {
   return undefined
 }
 
-function univerHealthTargets() {
+function univerLicenseProbeUrl() {
   const raw = process.env.VERITLY_HEALTH_UNIVER_URL?.trim() || process.env.VITE_UNIVER_BACKEND_URL?.trim()
-  if (!raw) return []
-
+  if (!raw) return undefined
   const base = normalizeBaseUrl(raw)
-  return [`${base}/healthz`, `${base}/universer-api/license/key`, `${base}/health`]
+  /** Univer Server has no `/readyz`; license API is the stable probe. */
+  return `${base}/universer-api/license/key`
 }
 
 async function checkDatabase() {
@@ -208,13 +204,6 @@ async function checkExecutor() {
       }
     }
 
-    if (localDev()) {
-      return {
-        ok: true,
-        detail: "executor reachable",
-      }
-    }
-
     // Now test Python3 and Univer SDK via executor
     const id = `health-${Date.now()}`
     try {
@@ -261,8 +250,8 @@ async function checkExecutor() {
 }
 
 async function checkOptionalUniver() {
-  const targets = univerHealthTargets()
-  if (!targets.length) {
+  const target = univerLicenseProbeUrl()
+  if (!target) {
     return {
       name: "univer",
       ok: true,
@@ -271,23 +260,15 @@ async function checkOptionalUniver() {
     } satisfies HealthCheckResult
   }
 
-  for (const target of targets) {
-    const result = await checkHttpTarget("univer", target)
-    if (result.ok) return result
-    log.warn("univer health target failed", {
+  const result = await checkHttpTarget("univer", target)
+  if (!result.ok) {
+    log.warn("univer license probe failed", {
       target,
       status: result.status,
       detail: result.detail,
     })
   }
-
-  return {
-    name: "univer",
-    ok: false,
-    target: targets[0],
-    detail: "all univer health targets failed",
-    latencyMs: 0,
-  }
+  return result
 }
 
 // Simple health check for orchestrators (Kubernetes) - just database
@@ -319,5 +300,5 @@ export async function apiHealthReport(): Promise<ApiHealthReport> {
 }
 
 export function isPublicHealthPath(path: string) {
-  return path === "/health" || path === "/healthz" || path === "/livez" || path === "/global/health"
+  return path === "/livez" || path === "/readyz" || path === "/global/readyz"
 }

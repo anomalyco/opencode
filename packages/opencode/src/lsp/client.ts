@@ -146,7 +146,7 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
-          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
+          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.workspace, input.path)
           const text = await Filesystem.readText(input.path)
           const extension = path.extname(input.path)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
@@ -208,7 +208,7 @@ export namespace LSPClient {
       },
       async waitForDiagnostics(input: { path: string }) {
         const normalizedPath = Filesystem.normalizePath(
-          path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path),
+          path.isAbsolute(input.path) ? input.path : path.resolve(Instance.workspace, input.path),
         )
         log.info("waiting for diagnostics", { path: normalizedPath })
         let unsub: () => void

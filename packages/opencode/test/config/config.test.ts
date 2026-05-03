@@ -40,11 +40,11 @@ async function check(map: (dir: string) => string) {
       snapshot: false,
     })
     await Instance.provide({
-      directory: map(tmp.path),
+      workspace: map(tmp.path),
       fn: async () => {
         const cfg = await Config.get()
         expect(cfg.snapshot).toBe(true)
-        expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
+        expect(Instance.workspace).toBe(Filesystem.resolve(tmp.path))
         expect(Instance.project.id).not.toBe(ProjectID.global)
       },
     })
@@ -58,7 +58,7 @@ async function check(map: (dir: string) => string) {
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.username).toBeDefined()
@@ -77,7 +77,7 @@ test("loads JSON config file", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.model).toBe("test/model")
@@ -115,7 +115,7 @@ test("ignores legacy tui keys in opencode config", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.model).toBe("test/model")
@@ -140,7 +140,7 @@ test("loads JSONC config file", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.model).toBe("test/model")
@@ -168,7 +168,7 @@ test("merges multiple config files with correct precedence", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.model).toBe("override")
@@ -191,7 +191,7 @@ test("handles environment variable substitution", async () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         expect(config.username).toBe("test-user")
@@ -223,7 +223,7 @@ test("preserves env variables when adding $schema to config", async () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         expect(config.username).toBe("secret_value")
@@ -272,7 +272,7 @@ test("resolves env templates in account config with account token", async () => 
   try {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
@@ -301,7 +301,7 @@ test("handles file inclusion substitution", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.username).toBe("test-user")
@@ -320,7 +320,7 @@ test("handles file inclusion with replacement tokens", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.username).toBe("const out = await Bun.$`echo hi`")
@@ -338,7 +338,7 @@ test("validates config schema and throws on invalid fields", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       // Strict schema should throw an error for invalid fields
       await expect(Config.get()).rejects.toThrow()
@@ -353,7 +353,7 @@ test("throws error for invalid JSON", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       await expect(Config.get()).rejects.toThrow()
     },
@@ -376,7 +376,7 @@ test("handles agent configuration", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test_agent"]).toEqual(
@@ -407,7 +407,7 @@ test("treats agent variant as model-scoped setting (not provider option)", async
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       const agent = config.agent?.["test_agent"]
@@ -437,7 +437,7 @@ test("handles command configuration", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.command?.["test_command"]).toEqual({
@@ -462,7 +462,7 @@ test("migrates autoshare to share field", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.share).toBe("auto")
@@ -489,7 +489,7 @@ test("migrates mode field to agent field", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test_mode"]).toEqual({
@@ -521,7 +521,7 @@ Test agent prompt`,
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]).toEqual(
@@ -565,7 +565,7 @@ Nested agent prompt`,
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
 
@@ -614,7 +614,7 @@ Nested command template`,
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
 
@@ -659,7 +659,7 @@ Nested command template`,
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
 
@@ -679,7 +679,7 @@ Nested command template`,
 test("updates config and writes to file", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const newConfig = { model: "updated/model" }
       await Config.update(newConfig as any)
@@ -693,7 +693,7 @@ test("updates config and writes to file", async () => {
 test("gets config directories", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const dirs = await Config.directories()
       expect(dirs.length).toBeGreaterThanOrEqual(1)
@@ -723,7 +723,7 @@ test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", as
 
   try {
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         await Config.get()
       },
@@ -751,7 +751,7 @@ test.skip("installs dependencies in writable OPENCODE_CONFIG_DIR (needs testcont
 
   try {
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         await Config.get()
         await Config.waitForDependencies()
@@ -801,7 +801,7 @@ test("resolves scoped npm plugins in config", async () => {
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       const pluginEntries = config.plugin ?? []
@@ -850,7 +850,7 @@ test("merges plugin arrays from global and local configs", async () => {
       }),
     )
     await Instance.provide({
-      directory: path.join(tmp.path, "project"),
+      workspace: path.join(tmp.path, "project"),
       fn: async () => {
         const config = await Config.get()
         const plugins = config.plugin ?? []
@@ -886,7 +886,7 @@ Helper subagent prompt`,
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["helper"]).toMatchObject({
@@ -929,7 +929,7 @@ test("merges instructions arrays from global and local configs", async () => {
       }),
     )
     await Instance.provide({
-      directory: path.join(tmp.path, "project"),
+      workspace: path.join(tmp.path, "project"),
       fn: async () => {
         const config = await Config.get()
         const instructions = config.instructions ?? []
@@ -975,7 +975,7 @@ test("deduplicates duplicate instructions from global and local configs", async 
       }),
     )
     await Instance.provide({
-      directory: path.join(tmp.path, "project"),
+      workspace: path.join(tmp.path, "project"),
       fn: async () => {
         const config = await Config.get()
         const instructions = config.instructions ?? []
@@ -1025,7 +1025,7 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
       }),
     )
     await Instance.provide({
-      directory: path.join(tmp.path, "project"),
+      workspace: path.join(tmp.path, "project"),
       fn: async () => {
         const config = await Config.get()
         const plugins = config.plugin ?? []
@@ -1068,7 +1068,7 @@ test("migrates legacy tools config to permissions - allow", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
@@ -1099,7 +1099,7 @@ test("migrates legacy tools config to permissions - deny", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
@@ -1129,7 +1129,7 @@ test("migrates legacy write tool to edit permission", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
@@ -1161,7 +1161,7 @@ test("managed settings override user settings", async () => {
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.model).toBe("managed/model")
@@ -1189,7 +1189,7 @@ test("managed settings override project settings", async () => {
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.autoupdate).toBe(false)
@@ -1209,7 +1209,7 @@ test("missing managed settings file is not an error", async () => {
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.model).toBe("user/model")
@@ -1236,7 +1236,7 @@ test("migrates legacy edit tool to edit permission", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
@@ -1265,7 +1265,7 @@ test("migrates legacy patch tool to edit permission", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
@@ -1294,7 +1294,7 @@ test("migrates legacy multiedit tool to edit permission", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
@@ -1326,7 +1326,7 @@ test("migrates mixed legacy tools config", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
@@ -1361,7 +1361,7 @@ test("merges legacy tools with existing permission config", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
@@ -1397,7 +1397,7 @@ test("permission config preserves key order", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(Object.keys(config.permission!)).toEqual([
@@ -1458,7 +1458,7 @@ test("project config can override MCP server enabled status", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       // jira should be enabled (overridden by project config)
@@ -1514,7 +1514,7 @@ test("MCP config deep merges preserving base config properties", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.mcp?.myserver).toEqual({
@@ -1565,7 +1565,7 @@ test("local .opencode config can override MCP from project config", async () => 
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const config = await Config.get()
       expect(config.mcp?.docs?.enabled).toBe(true)
@@ -1633,7 +1633,7 @@ test("project config overrides remote well-known config", async () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         // Verify fetch was called for wellknown config
@@ -1700,7 +1700,7 @@ test("wellknown URL with trailing slash is normalized", async () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         await Config.get()
         // Trailing slash should be stripped — no double slash in the fetch URL
@@ -1788,7 +1788,7 @@ describe("deduplicatePlugins", () => {
     })
 
     await Instance.provide({
-      directory: path.join(tmp.path, "project"),
+      workspace: path.join(tmp.path, "project"),
       fn: async () => {
         const config = await Config.get()
         const plugins = config.plugin ?? []
@@ -1821,7 +1821,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         },
       })
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const config = await Config.get()
           // Project config should NOT be loaded - model should be default, not "project/model"
@@ -1852,7 +1852,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         },
       })
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const directories = await Config.directories()
           // Project .opencode should NOT be in directories list
@@ -1876,7 +1876,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
     try {
       await using tmp = await tmpdir()
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           // Should still get default config (from global or defaults)
           const config = await Config.get()
@@ -1918,7 +1918,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       })
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           // The relative instruction should be skipped without error
           // We're mainly verifying this doesn't throw and the config loads
@@ -1978,7 +1978,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
 
       await Instance.provide({
-        directory: projectTmp.path,
+        workspace: projectTmp.path,
         fn: async () => {
           const config = await Config.get()
           // Should load from OPENCODE_CONFIG_DIR, not project
@@ -2013,7 +2013,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     try {
       await using tmp = await tmpdir()
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const config = await Config.get()
           expect(config.username).toBe("test_api_key_12345")
@@ -2047,7 +2047,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
         },
       })
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const config = await Config.get()
           expect(config.username).toBe("secret_key_from_file")

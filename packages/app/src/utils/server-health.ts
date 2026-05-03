@@ -1,6 +1,5 @@
 import { usePlatform } from "@/context/platform";
 import type { ServerConnection } from "@/context/server";
-import { createSdkForServer } from "./server";
 
 export type ServerHealth = { healthy: boolean; version?: string; unauthorized?: boolean };
 
@@ -56,16 +55,6 @@ function retryable(error: unknown, signal?: AbortSignal) {
 	return /network|fetch|econnreset|econnrefused|enotfound|timedout/i.test(error.message);
 }
 
-function isUnauthorized(error: unknown): boolean {
-	if (error && typeof error === "object") {
-		const e = error as Record<string, unknown>;
-		if (e.status === 401 || e.status === "401") return true;
-		const msg = String(e.message || e.error || "");
-		if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) return true;
-	}
-	return false;
-}
-
 export function healthOk(input: unknown) {
 	if (!input || typeof input !== "object") return false;
 	const value = input as Record<string, unknown>;
@@ -97,19 +86,20 @@ export async function checkServerHealth(
 			.then(() => attempt(count + 1))
 			.catch(() => fail());
 	};
+	const base = server.url.replace(/\/+$/, "");
+	/** Root `/readyz` is the fast server readiness check; deep dependency checks live under `/global/readyz`. */
 	const attempt = (count: number): Promise<ServerHealth> =>
-		createSdkForServer({
-			server,
-			fetch,
+		fetch(`${base}/readyz`, {
+			method: "GET",
+			credentials: "include",
+			headers: { accept: "application/json" },
 			signal,
 		})
-			.global.health()
-			.then((x) => {
-				if (x.error) {
-					const unauth = isUnauthorized(x.error);
-					return next(count, x.error, unauth);
-				}
-				return { healthy: healthOk(x.data), version: healthVersion(x.data) };
+			.then(async (res) => {
+				const raw = (await res.json().catch(() => undefined)) as unknown;
+				if (res.status === 401) return next(count, { status: 401 }, true);
+				if (!res.ok) return next(count, new Error(`http ${res.status}`), false);
+				return { healthy: healthOk(raw), version: healthVersion(raw) };
 			})
 			.catch((error) => next(count, error));
 	return attempt(0).finally(() => timeout?.clear?.());

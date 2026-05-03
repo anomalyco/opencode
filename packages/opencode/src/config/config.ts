@@ -120,7 +120,7 @@ export namespace Config {
 
     // Project config overrides global and remote config.
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      for (const file of await ConfigPaths.projectFiles("opencode", Instance.directory, Instance.directory)) {
+      for (const file of await ConfigPaths.projectFiles("opencode", Instance.workspace, Instance.workspace)) {
         result = mergeConfigConcatArrays(result, await loadFile(file))
       }
     }
@@ -129,7 +129,7 @@ export namespace Config {
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
 
-    const directories = await ConfigPaths.directories(Instance.directory, Instance.directory)
+    const directories = await ConfigPaths.directories(Instance.workspace, Instance.workspace)
 
     // .opencode directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
@@ -168,7 +168,7 @@ export namespace Config {
       result = mergeConfigConcatArrays(
         result,
         await load(process.env.OPENCODE_CONFIG_CONTENT, {
-          dir: Instance.directory,
+          dir: Instance.workspace,
           source: "OPENCODE_CONFIG_CONTENT",
         }),
       )
@@ -1261,7 +1261,10 @@ export namespace Config {
 
     const normalized = (() => {
       if (!data || typeof data !== "object" || Array.isArray(data)) return data
-      return { ...(data as Record<string, unknown>) }
+      const next = { ...(data as Record<string, unknown>) }
+      delete next.theme
+      delete next.tui
+      return next
     })()
 
     const parsed = Info.safeParse(normalized)
@@ -1317,7 +1320,7 @@ export namespace Config {
   }
 
   export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
+    const filepath = path.join(Instance.workspace, "config.json")
     const existing = await loadFile(filepath)
     await Filesystem.writeJson(filepath, mergeDeep(existing, config))
     await Instance.dispose()

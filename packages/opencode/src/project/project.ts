@@ -6,6 +6,7 @@ import { Log } from "../util/log";
 import { fn } from "@opencode-ai/util/fn";
 import { BusEvent } from "@/bus/bus-event";
 import { GlobalBus } from "@/bus/global";
+import { Filesystem } from "@/util/filesystem";
 import { ProjectID } from "./schema";
 
 export namespace Project {
@@ -32,6 +33,7 @@ export namespace Project {
 				updated: z.number(),
 				initialized: z.number().optional(),
 			}),
+			vcs: z.literal("git").optional(),
 		})
 		.meta({
 			ref: "Project",
@@ -86,6 +88,27 @@ export namespace Project {
 
 	export async function createSimple(input: { name: string; tenantUserId: string }) {
 		const id = ProjectID.makeUnsafe(crypto.randomUUID());
+		const now = Date.now();
+		const insert = {
+			id,
+			tenant_user_id: input.tenantUserId,
+			name: input.name,
+			icon_url: null,
+			icon_color: null,
+			time_created: now,
+			time_updated: now,
+			time_initialized: null,
+			commands: null,
+		};
+		await Database.use(async (db) => db.insert(ProjectTable).values(insert));
+		const project = await get(id);
+		if (!project) throw new Error("Failed to create project");
+		return { project, directory: `/projects/${project.id}` };
+	}
+
+	/** Host-backed project: primary key is the resolved workspace path (see `Instance.workspace`). */
+	export async function createForDirectory(input: { workspace: string; name: string; tenantUserId: string }) {
+		const id = ProjectID.makeUnsafe(Filesystem.resolve(input.workspace));
 		const now = Date.now();
 		const insert = {
 			id,

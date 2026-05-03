@@ -4,14 +4,15 @@
 
 set -e
 
-if [ ! -s packages/executor/output/vmlinux ] || [ ! -s packages/executor/output/rootfs.ext4 ]; then
-  echo "[E2E Setup] Missing Firecracker VM artifacts."
+if [ ! -s packages/executor/output/vmlinux ] || [ ! -s packages/executor/output/initrd.img ] || [ ! -s packages/executor/output/rootfs.ext4 ]; then
+  echo "[E2E Setup] Missing QEMU guest VM artifacts (vmlinux, initrd.img, rootfs.ext4)."
   echo ""
-  echo "Build them first on a Linux/KVM-capable host:"
+  echo "Build them first on a Linux machine (debootstrap needs Linux):"
   echo "  (cd packages/executor && bun run build-vm)"
   echo ""
   echo "Expected files:"
   echo "  packages/executor/output/vmlinux"
+  echo "  packages/executor/output/initrd.img"
   echo "  packages/executor/output/rootfs.ext4"
   exit 1
 fi

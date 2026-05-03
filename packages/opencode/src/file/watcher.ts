@@ -76,12 +76,12 @@ export namespace FileWatcher {
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
       if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-        const pending = w.subscribe(Instance.directory, subscribe, {
+        const pending = w.subscribe(Instance.workspace, subscribe, {
           ignore: [...FileIgnore.PATTERNS, ...cfgIgnores, ...Protected.paths()],
           backend,
         })
         const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
-          log.error("failed to subscribe to Instance.directory", { error: err })
+          log.error("failed to subscribe to Instance.workspace", { error: err })
           pending.then((s) => s.unsubscribe()).catch(() => {})
           return undefined
         })
@@ -90,9 +90,9 @@ export namespace FileWatcher {
 
       if (Instance.project.vcs === "git") {
         const result = await git(["rev-parse", "--git-dir"], {
-          cwd: Instance.directory,
+          cwd: Instance.workspace,
         })
-        const vcsDir = result.exitCode === 0 ? path.resolve(Instance.directory, result.text().trim()) : undefined
+        const vcsDir = result.exitCode === 0 ? path.resolve(Instance.workspace, result.text().trim()) : undefined
         if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
           const gitDirContents = await readdir(vcsDir).catch(() => [])
           const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")

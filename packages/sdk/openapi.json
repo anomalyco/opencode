@@ -6,11 +6,11 @@
     "version": "1.0.0"
   },
   "paths": {
-    "/global/health": {
+    "/global/readyz": {
       "get": {
-        "operationId": "global.health",
-        "summary": "Get health",
-        "description": "Get health information about the OpenCode server.",
+        "operationId": "global.readyz",
+        "summary": "Get readiness",
+        "description": "Get readiness information about the OpenCode server.",
         "responses": {
           "200": {
             "description": "Health information",
@@ -36,7 +36,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.health({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.readyz({\n  ...\n})"
           }
         ]
       }

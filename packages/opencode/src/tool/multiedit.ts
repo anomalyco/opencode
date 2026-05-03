@@ -36,7 +36,7 @@ export const MultiEditTool = Tool.define("multiedit", {
       results.push(result)
     }
     return {
-      title: path.relative(Instance.directory, params.filePath),
+      title: path.relative(Instance.workspace, params.filePath),
       metadata: {
         results: results.map((r) => r.metadata),
       },

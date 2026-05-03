@@ -15,7 +15,7 @@ const hasApiKey = !!process.env.ANTHROPIC_API_KEY
 // Helper to run test within Instance context
 async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
   return Instance.provide({
-    directory: projectRoot,
+    workspace: projectRoot,
     fn,
   })
 }

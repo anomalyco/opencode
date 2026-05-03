@@ -26,7 +26,7 @@ export type ProviderContext = {
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
-  directory: string
+  workspace: string
   worktree: string
   serverUrl: URL
   $: BunShell

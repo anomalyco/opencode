@@ -124,7 +124,7 @@ test("BrowserOpenFailed event is published when open() throws", async () => {
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       openShouldFail = true
 
@@ -175,7 +175,7 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       openShouldFail = false
 
@@ -224,7 +224,7 @@ test("open() is called with the authorization URL", async () => {
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       openShouldFail = false
       openCalledWith = undefined

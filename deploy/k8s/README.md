@@ -79,6 +79,21 @@ kubectl create -f deploy/k8s/opencode-migrate-job.yaml
 
 ## Manual Steps
 
+### Executor in-cluster vs laptop port-forward
+
+**Production:** OpenCode / API uses the executor **Service DNS inside the cluster** (same namespace / ClusterIP). No tunnel — see `packages/executor/README.md` “Mode 1”.
+
+**Local laptop (Mac):** Firecracker does not run on the Mac; use **Mode 2**: deploy `executor-dev`, then from your machine:
+
+```bash
+./script/executor-dev-port-forward.sh
+# or: bun run --cwd packages/opencode executor-dev:k8s-tunnel
+
+export VERITLY_EXECUTOR_URL=http://127.0.0.1:7777
+```
+
+Image build/push is unchanged — port-forward is only to reach an already-running cluster executor from localhost.
+
 ### 1. Configure kubectl
 ```bash
 doctl kubernetes cluster kubeconfig save 602c73dd-37fe-4c00-a23e-1aa027878fa2
@@ -108,6 +123,8 @@ docker push registry.digitalocean.com/veritly/relay:latest
 docker push registry.digitalocean.com/veritly/opencode:latest
 docker push registry.digitalocean.com/veritly/executor-api:latest
 ```
+
+To **drop old image manifests** and keep only `latest` per repository, use `doctl` + JSON (not the default text table) — see `deploy/k8s/clean-registry-nonlatest.sh`. Set `DO_REGISTRY_NAME` if the registry is not `veritly-registry`. Afterward, run `doctl registry garbage-collection start` if DigitalOcean still shows high storage from untagged layer data.
 
 ### 4. Update Registry in Kustomization
 ```bash
@@ -149,10 +166,10 @@ kubectl get svc -n veritly
 kubectl get ingress -n veritly
 
 # Test relay health
-curl https://relay.veritly.co.uk/health
+curl https://relay.veritly.co.uk/readyz
 
 # Test app
-curl https://app.veritly.co.uk/global/health
+curl https://app.veritly.co.uk/global/readyz
 ```
 
 ## Configuration

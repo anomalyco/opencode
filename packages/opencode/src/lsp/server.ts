@@ -42,7 +42,7 @@ export namespace LSPServer {
         const excludedFiles = Filesystem.up({
           targets: excludePatterns,
           start: path.dirname(file),
-          stop: Instance.directory,
+          stop: Instance.workspace,
         })
         const excluded = await excludedFiles.next()
         await excludedFiles.return()
@@ -51,11 +51,11 @@ export namespace LSPServer {
       const files = Filesystem.up({
         targets: includePatterns,
         start: path.dirname(file),
-        stop: Instance.directory,
+        stop: Instance.workspace,
       })
       const first = await files.next()
       await files.return()
-      if (!first.value) return Instance.directory
+      if (!first.value) return Instance.workspace
       return path.dirname(first.value)
     }
   }
@@ -74,7 +74,7 @@ export namespace LSPServer {
       const files = Filesystem.up({
         targets: ["deno.json", "deno.jsonc"],
         start: path.dirname(file),
-        stop: Instance.directory,
+        stop: Instance.workspace,
       })
       const first = await files.next()
       await files.return()
@@ -104,7 +104,7 @@ export namespace LSPServer {
     ),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
-      const tsserver = Module.resolve("typescript/lib/tsserver.js", Instance.directory)
+      const tsserver = Module.resolve("typescript/lib/tsserver.js", Instance.workspace)
       log.info("typescript server", { tsserver })
       if (!tsserver) return
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
@@ -179,7 +179,7 @@ export namespace LSPServer {
     root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(root) {
-      const eslint = Module.resolve("eslint", Instance.directory)
+      const eslint = Module.resolve("eslint", Instance.workspace)
       if (!eslint) return
       log.info("spawning eslint server")
       const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
@@ -257,7 +257,7 @@ export namespace LSPServer {
         const candidates = Filesystem.up({
           targets: [target],
           start: root,
-          stop: Instance.directory,
+          stop: Instance.workspace,
         })
         const first = await candidates.next()
         await candidates.return()
@@ -879,7 +879,7 @@ export namespace LSPServer {
         currentDir = parentDir
 
         // Stop if we've gone above the app root
-        if (!currentDir.startsWith(Instance.directory)) break
+        if (!currentDir.startsWith(Instance.workspace)) break
       }
 
       return crateRoot
@@ -1090,7 +1090,7 @@ export namespace LSPServer {
     extensions: [".astro"],
     root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     async spawn(root) {
-      const tsserver = Module.resolve("typescript/lib/tsserver.js", Instance.directory)
+      const tsserver = Module.resolve("typescript/lib/tsserver.js", Instance.workspace)
       if (!tsserver) {
         log.info("typescript not found, required for Astro language server")
         return
@@ -1647,7 +1647,7 @@ export namespace LSPServer {
   export const BashLS: Info = {
     id: "bash",
     extensions: [".sh", ".bash", ".zsh", ".ksh"],
-    root: async () => Instance.directory,
+    root: async () => Instance.workspace,
     async spawn(root) {
       let binary = which("bash-language-server")
       const args: string[] = []
@@ -1859,7 +1859,7 @@ export namespace LSPServer {
   export const DockerfileLS: Info = {
     id: "dockerfile",
     extensions: [".dockerfile", "Dockerfile"],
-    root: async () => Instance.directory,
+    root: async () => Instance.workspace,
     async spawn(root) {
       let binary = which("docker-langserver")
       const args: string[] = []
@@ -1940,10 +1940,10 @@ export namespace LSPServer {
     root: async (file) => {
       // First, look for flake.nix - the most reliable Nix project root indicator
       const flakeRoot = await NearestRoot(["flake.nix"])(file)
-      if (flakeRoot && flakeRoot !== Instance.directory) return flakeRoot
+      if (flakeRoot && flakeRoot !== Instance.workspace) return flakeRoot
 
       // If no flake.nix, use the instance directory as fallback
-      return Instance.directory
+      return Instance.workspace
     },
     async spawn(root) {
       const nixd = which("nixd")

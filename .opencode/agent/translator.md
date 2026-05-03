@@ -416,7 +416,7 @@ opencode.server.close()
 /find/symbol?query=<q>
 /formatter
 /global/event
-/global/health
+/global/readyz
 /help
 /init
 /instance/dispose

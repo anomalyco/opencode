@@ -1,50 +1,59 @@
-# Firecracker executor API. Commands run inside per-session microVMs.
+# Executor API: per-session Firecracker microVMs (Linux + KVM required).
 FROM ubuntu:22.04
 
 WORKDIR /app
 
-# Install dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     iproute2 \
+    iptables \
+    socat \
     unzip \
     openssh-client \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Bun
+ARG FIRECRACKER_VERSION=v1.8.0
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) fc_arch="x86_64" ;; \
+      arm64) fc_arch="aarch64" ;; \
+      *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    tmp="$(mktemp -d)"; \
+    cd "$tmp"; \
+    curl -fsSLO "https://github.com/firecracker-microvm/firecracker/releases/download/${FIRECRACKER_VERSION}/firecracker-${FIRECRACKER_VERSION}-${fc_arch}.tgz"; \
+    tar -xzf "firecracker-${FIRECRACKER_VERSION}-${fc_arch}.tgz"; \
+    install -m 0755 "release-${FIRECRACKER_VERSION}-${fc_arch}/firecracker-${FIRECRACKER_VERSION}-${fc_arch}" /usr/bin/firecracker; \
+    install -m 0755 "release-${FIRECRACKER_VERSION}-${fc_arch}/jailer-${FIRECRACKER_VERSION}-${fc_arch}" /usr/bin/jailer; \
+    rm -rf "$tmp"
+
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-# Download Firecracker
-RUN ARCH="$(uname -m)" && \
-    LATEST_VERSION="v1.8.0" && \
-    curl -L -o firecracker.tgz "https://github.com/firecracker-microvm/firecracker/releases/download/${LATEST_VERSION}/firecracker-${LATEST_VERSION}-${ARCH}.tgz" && \
-    tar -xzf firecracker.tgz && \
-    mv release-${LATEST_VERSION}-$(uname -m)/firecracker-${LATEST_VERSION}-${ARCH} /usr/local/bin/firecracker && \
-    chmod +x /usr/local/bin/firecracker && \
-    rm -rf firecracker.tgz release-*
-
-# Copy prebuilt VM artifacts from packages/executor/scripts/build-vm.sh.
-# The rootfs is where Python, pip, and veritly_univer_sdk are installed.
 RUN mkdir -p /opt/veritly
 COPY packages/executor/output/vmlinux /opt/veritly/vmlinux
+COPY packages/executor/output/initrd.img /opt/veritly/initrd.img
 COPY packages/executor/output/rootfs.ext4 /opt/veritly/rootfs.ext4
-RUN chmod +x /opt/veritly/vmlinux && test "$(stat -c%s /opt/veritly/rootfs.ext4)" -gt 1048576
+RUN chmod +x /opt/veritly/vmlinux \
+  && test "$(stat -c%s /opt/veritly/rootfs.ext4)" -gt 1048576 \
+  && test "$(stat -c%s /opt/veritly/initrd.img)" -gt 1048576
 
-# Copy executor code
 COPY packages/executor/package.json ./
 RUN bun install --production --no-save
 
 COPY packages/executor/src ./src
 
-# Create workspace
 RUN mkdir -p /workspace /tmp/veritly-vms
 
 ENV PORT=7777
 ENV VM_DATA_DIR=/tmp/veritly-vms
 ENV KERNEL_PATH=/opt/veritly/vmlinux
+ENV INITRD_PATH=/opt/veritly/initrd.img
 ENV ROOTFS_PATH=/opt/veritly/rootfs.ext4
-ENV FIRECRACKER_BINARY=/usr/local/bin/firecracker
+ENV FIRECRACKER_PATH=/usr/bin/firecracker
+ENV JAILER_PATH=/usr/bin/jailer
 ENV VM_INACTIVITY_TIMEOUT_MS=300000
 
 EXPOSE 7777

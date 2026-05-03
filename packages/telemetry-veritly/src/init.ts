@@ -1,7 +1,7 @@
-import { context, diag, DiagConsoleLogger, propagation, trace } from "@opentelemetry/api"
+import { context, diag, DiagConsoleLogger, DiagLogLevel, propagation, trace } from "@opentelemetry/api"
 import { logs } from "@opentelemetry/api-logs"
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks"
-import { W3CTraceContextPropagator, getEnv } from "@opentelemetry/core"
+import { W3CTraceContextPropagator } from "@opentelemetry/core"
 import { createOtlpLogExporter, createOtlpTraceExporter, useFetchOtlpExporters } from "./otlp-exporters.js"
 import { Resource } from "@opentelemetry/resources"
 import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs"
@@ -12,7 +12,22 @@ import {
   wrapSpanExporterWithOtlpDiag,
 } from "./otlp-export-diag.js"
 import { otlpLogsExporterOptions, otlpTraceExporterOptions, sanitizeOtlpUrlForDiag } from "./otlp.js"
-import { railwayOtelResourceAttributes } from "./railway.js"
+import { veritlyOtelResourceAttributes } from "./deployment.js"
+
+function diagLevelFromEnv(): number {
+  const raw = process.env.OTEL_LOG_LEVEL?.trim().toUpperCase()
+  if (!raw) return DiagLogLevel.WARN
+  const table: Record<string, number> = {
+    ALL: DiagLogLevel.ALL,
+    VERBOSE: DiagLogLevel.VERBOSE,
+    DEBUG: DiagLogLevel.DEBUG,
+    INFO: DiagLogLevel.INFO,
+    WARN: DiagLogLevel.WARN,
+    ERROR: DiagLogLevel.ERROR,
+    NONE: DiagLogLevel.NONE,
+  }
+  return table[raw] ?? DiagLogLevel.WARN
+}
 
 export type InitVeritlyTracerOptions = {
   serviceName: string
@@ -30,8 +45,7 @@ export function initVeritlyTracer(options: InitVeritlyTracerOptions): { shutdown
     return { shutdown: existing }
   }
 
-  const { OTEL_LOG_LEVEL } = getEnv()
-  diag.setLogger(new DiagConsoleLogger(), OTEL_LOG_LEVEL)
+  diag.setLogger(new DiagConsoleLogger(), diagLevelFromEnv())
 
   const otlp = otlpTraceExporterOptions()
   const otlpLogs = otlpLogsExporterOptions()
@@ -68,15 +82,12 @@ export function initVeritlyTracer(options: InitVeritlyTracerOptions): { shutdown
   propagation.setGlobalPropagator(new W3CTraceContextPropagator())
 
   const env =
-    process.env.DEPLOYMENT_ENVIRONMENT?.trim() ||
-    process.env.RAILWAY_ENVIRONMENT?.trim() ||
-    process.env.NODE_ENV ||
-    "development"
+    process.env.DEPLOYMENT_ENVIRONMENT?.trim() || process.env.NODE_ENV || "development"
 
   const resource = new Resource({
     "service.name": options.serviceName,
     "deployment.environment": env,
-    ...railwayOtelResourceAttributes(),
+    ...veritlyOtelResourceAttributes(),
   })
 
   let traceShutdown: () => Promise<void> = async () => {}

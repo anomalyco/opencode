@@ -315,7 +315,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             id: incoming.sessionID,
           },
           query: {
-            directory: input.directory,
+            directory: input.workspace,
           },
           throwOnError: true,
         })

@@ -1,0 +1,32 @@
+# Optional: route OpenCode → executor through the in-cluster **nginx** Ingress controller so
+# requests hash by `$request_uri` (session id lives under `/v1/sessions/<id>/…`).
+#
+# No cloud/external LB: traffic stays inside the cluster (Ingress controller Service ClusterIP).
+#
+# Wire-up on opencode-api:
+#   VERITLY_EXECUTOR_URL=http://ingress-nginx-controller.ingress-nginx.svc.cluster.local
+#   VERITLY_EXECUTOR_HTTP_HOST=executor-sticky.internal
+# (Adjust controller namespace/name to match your cluster: kubectl get svc -A | grep ingress.)
+#
+# Limits: `/readyz` and `/v1/admin/sessions` hash to fixed backends (not a union across replicas).
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: executor-sticky
+  namespace: veritly
+  annotations:
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: executor-sticky.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: executor
+                port:
+                  number: 7777

@@ -7,7 +7,9 @@ Log.init({ print: false })
 // Long timeout for container startup (Postgres + Server + Migrations)
 const TEST_TIMEOUT = 300000 // 5 minutes
 
-describe("Full Stack Integration (Postgres + Server + Client SDK)", () => {
+describe.skipIf(process.env.OPENCODE_FULL_STACK_TEST !== "1")(
+  "Full Stack Integration (Postgres + Server + Client SDK)",
+  () => {
   // Cleanup after all tests
   afterAll(async () => {
     await cleanupFullStack()

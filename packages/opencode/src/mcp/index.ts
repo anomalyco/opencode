@@ -437,7 +437,7 @@ export namespace MCP {
 
     if (mcp.type === "local") {
       const [cmd, ...args] = mcp.command
-      const cwd = Instance.directory
+      const cwd = Instance.workspace
       const transport = new StdioClientTransport({
         stderr: "pipe",
         command: cmd,

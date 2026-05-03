@@ -1911,7 +1911,7 @@ export type GlobalHealthData = {
   body?: never
   path?: never
   query?: never
-  url: "/global/health"
+  url: "/global/readyz"
 }
 
 export type GlobalHealthResponses = {

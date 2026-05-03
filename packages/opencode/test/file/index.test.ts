@@ -14,7 +14,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "Hello World", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("test.txt")
           expect(result.type).toBe("text")
@@ -27,7 +27,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir()
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           // Non-existent file should return empty content
           const result = await File.read("nonexistent.txt")
@@ -43,7 +43,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "  content with spaces  \n\n", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("test.txt")
           expect(result.content).toBe("content with spaces")
@@ -57,7 +57,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("empty.txt")
           expect(result.type).toBe("text")
@@ -72,7 +72,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("multiline.txt")
           expect(result.content).toBe("line1\nline2\nline3")
@@ -89,7 +89,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, binaryContent)
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("image.png")
           expect(result.type).toBe("text") // Images return as text with base64 encoding
@@ -106,7 +106,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, Buffer.from([0x7f, 0x45, 0x4c, 0x46]), "binary")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("binary.so")
           expect(result.type).toBe("binary")
@@ -123,7 +123,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, '{"key": "value"}', "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           expect(Filesystem.mimeType(filepath)).toContain("application/json")
 
@@ -147,7 +147,7 @@ describe("file/index Filesystem patterns", () => {
         await fs.writeFile(filepath, Buffer.from([0x00, 0x00, 0x00, 0x00]), "binary")
 
         await Instance.provide({
-          directory: tmp.path,
+          workspace: tmp.path,
           fn: async () => {
             expect(Filesystem.mimeType(filepath)).toContain(mime)
           },
@@ -161,7 +161,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir({ git: true })
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const gitignorePath = path.join(tmp.path, ".gitignore")
           await fs.writeFile(gitignorePath, "node_modules\ndist\n", "utf-8")
@@ -179,7 +179,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir({ git: true })
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const ignorePath = path.join(tmp.path, ".ignore")
           await fs.writeFile(ignorePath, "*.log\n.env\n", "utf-8")
@@ -194,7 +194,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir({ git: true })
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const gitignorePath = path.join(tmp.path, ".gitignore")
           expect(await Filesystem.exists(gitignorePath)).toBe(false)
@@ -211,7 +211,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir({ git: true })
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const untrackedPath = path.join(tmp.path, "untracked.txt")
           await fs.writeFile(untrackedPath, "new content\nwith multiple lines", "utf-8")
@@ -232,7 +232,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const nonExistentPath = path.join(tmp.path, "does-not-exist.txt")
           // Filesystem.readText() on non-existent file throws
@@ -249,7 +249,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir()
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const nonExistentPath = path.join(tmp.path, "does-not-exist.bin")
           const buffer = await Filesystem.readArrayBuffer(nonExistentPath).catch(() => new ArrayBuffer(0))
@@ -264,7 +264,7 @@ describe("file/index Filesystem patterns", () => {
       // Don't create the file
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           // File.read() handles missing images gracefully
           const result = await File.read("broken.png")
@@ -282,7 +282,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "export const value = 1", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("test.ts")
           expect(result.type).toBe("text")
@@ -297,7 +297,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "export const value = 1", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("test.mts")
           expect(result.type).toBe("text")
@@ -312,7 +312,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "#!/usr/bin/env bash\necho hello", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("test.sh")
           expect(result.type).toBe("text")
@@ -327,7 +327,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "FROM alpine:3.20", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("Dockerfile")
           expect(result.type).toBe("text")
@@ -342,7 +342,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, "simple text", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("test.txt")
           expect(result.encoding).toBeUndefined()
@@ -357,7 +357,7 @@ describe("file/index Filesystem patterns", () => {
       await fs.writeFile(filepath, Buffer.from([0xff, 0xd8, 0xff, 0xe0]), "binary")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await File.read("test.jpg")
           expect(result.encoding).toBe("base64")
@@ -372,7 +372,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir()
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           await expect(File.read("../outside.txt")).rejects.toThrow("Access denied")
         },
@@ -383,7 +383,7 @@ describe("file/index Filesystem patterns", () => {
       await using tmp = await tmpdir()
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           await expect(File.read("../outside.txt")).rejects.toThrow("Access denied")
         },
@@ -398,7 +398,7 @@ describe("file/index Filesystem patterns", () => {
     await fs.writeFile(filepath, content)
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const result = await File.read("sheet.xlsx")
         expect(result.type).toBe("binary")
@@ -416,7 +416,7 @@ describe("file/index Filesystem patterns", () => {
     await fs.writeFile(filepath, content)
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const result = await File.read(filepath)
         expect(result.type).toBe("binary")

@@ -27,7 +27,7 @@ describe("tool.assertExternalDirectory", () => {
     }
 
     await Instance.provide({
-      directory: "/tmp",
+      workspace: "/tmp",
       fn: async () => {
         await assertExternalDirectory(ctx)
       },
@@ -36,7 +36,7 @@ describe("tool.assertExternalDirectory", () => {
     expect(requests.length).toBe(0)
   })
 
-  test("no-ops for paths inside Instance.directory", async () => {
+  test("no-ops for paths inside Instance.workspace", async () => {
     const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
@@ -46,7 +46,7 @@ describe("tool.assertExternalDirectory", () => {
     }
 
     await Instance.provide({
-      directory: "/tmp/project",
+      workspace: "/tmp/project",
       fn: async () => {
         await assertExternalDirectory(ctx, path.join("/tmp/project", "file.txt"))
       },
@@ -64,12 +64,12 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
-    const directory = "/tmp/project"
+    const root = "/tmp/project"
     const target = "/tmp/outside/file.txt"
     const expected = path.join(path.dirname(target), "*").replaceAll("\\", "/")
 
     await Instance.provide({
-      directory,
+      workspace: root,
       fn: async () => {
         await assertExternalDirectory(ctx, target)
       },
@@ -90,12 +90,12 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
-    const directory = "/tmp/project"
+    const root = "/tmp/project"
     const target = "/tmp/outside"
     const expected = path.join(target, "*").replaceAll("\\", "/")
 
     await Instance.provide({
-      directory,
+      workspace: root,
       fn: async () => {
         await assertExternalDirectory(ctx, target, { kind: "directory" })
       },
@@ -117,7 +117,7 @@ describe("tool.assertExternalDirectory", () => {
     }
 
     await Instance.provide({
-      directory: "/tmp/project",
+      workspace: "/tmp/project",
       fn: async () => {
         await assertExternalDirectory(ctx, "/tmp/outside/file.txt", { bypass: true })
       },

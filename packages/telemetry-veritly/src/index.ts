@@ -10,4 +10,9 @@ export {
 export { isOtlpExportDebugEnabled } from "./otlp-export-diag.js"
 export { veritlyHonoOtelMiddleware } from "./hono.js"
 export { injectTraceHeaders } from "./propagate.js"
-export { railwayDeploymentFlat, railwayOtelResourceAttributes } from "./railway.js"
+export {
+  deploymentInfoFlat,
+  railwayDeploymentFlat,
+  veritlyOtelResourceAttributes,
+  railwayOtelResourceAttributes,
+} from "./deployment.js"

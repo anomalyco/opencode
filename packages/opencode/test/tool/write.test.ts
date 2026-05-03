@@ -72,9 +72,8 @@ describe("tool.write", () => {
     test("handles relative paths by resolving to instance directory", async () => {
       await using tmp = await tmpdir()
 
-      const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
       await Instance.provide({
-        project,
+        workspace: tmp.path,
         fn: async () => {
           const write = await WriteTool.init()
           await write.execute(
@@ -85,7 +84,7 @@ describe("tool.write", () => {
             ctx,
           )
 
-          const content = await fs.readFile(path.join(tmp.path, "relative.txt"), "utf-8")
+          const content = await fs.readFile(path.join(Instance.workspace, "relative.txt"), "utf-8")
           expect(content).toBe("relative content")
         },
       })

@@ -67,7 +67,7 @@ export const prettier: Info = {
     ".gql",
   ],
   async enabled() {
-    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.directory)
+    const items = await Filesystem.findUp("package.json", Instance.workspace, Instance.workspace)
     for (const item of items) {
       const json = await Filesystem.readJson<{
         dependencies?: Record<string, string>
@@ -89,7 +89,7 @@ export const oxfmt: Info = {
   extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
   async enabled() {
     if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
-    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.directory)
+    const items = await Filesystem.findUp("package.json", Instance.workspace, Instance.workspace)
     for (const item of items) {
       const json = await Filesystem.readJson<{
         dependencies?: Record<string, string>
@@ -139,7 +139,7 @@ export const biome: Info = {
   async enabled() {
     const configs = ["biome.json", "biome.jsonc"]
     for (const config of configs) {
-      const found = await Filesystem.findUp(config, Instance.directory, Instance.directory)
+      const found = await Filesystem.findUp(config, Instance.workspace, Instance.workspace)
       if (found.length > 0) {
         return true
       }
@@ -162,7 +162,7 @@ export const clang: Info = {
   command: ["clang-format", "-i", "$FILE"],
   extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
   async enabled() {
-    const items = await Filesystem.findUp(".clang-format", Instance.directory, Instance.directory)
+    const items = await Filesystem.findUp(".clang-format", Instance.workspace, Instance.workspace)
     return items.length > 0
   },
 }
@@ -184,7 +184,7 @@ export const ruff: Info = {
     if (!which("ruff")) return false
     const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
     for (const config of configs) {
-      const found = await Filesystem.findUp(config, Instance.directory, Instance.directory)
+      const found = await Filesystem.findUp(config, Instance.workspace, Instance.workspace)
       if (found.length > 0) {
         if (config === "pyproject.toml") {
           const content = await Filesystem.readText(found[0])
@@ -196,7 +196,7 @@ export const ruff: Info = {
     }
     const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
     for (const dep of deps) {
-      const found = await Filesystem.findUp(dep, Instance.directory, Instance.directory)
+      const found = await Filesystem.findUp(dep, Instance.workspace, Instance.workspace)
       if (found.length > 0) {
         const content = await Filesystem.readText(found[0])
         if (content.includes("ruff")) return true
@@ -291,7 +291,7 @@ export const ocamlformat: Info = {
   extensions: [".ml", ".mli"],
   async enabled() {
     if (!which("ocamlformat")) return false
-    const items = await Filesystem.findUp(".ocamlformat", Instance.directory, Instance.directory)
+    const items = await Filesystem.findUp(".ocamlformat", Instance.workspace, Instance.workspace)
     return items.length > 0
   },
 }
@@ -355,7 +355,7 @@ export const pint: Info = {
   command: ["./vendor/bin/pint", "$FILE"],
   extensions: [".php"],
   async enabled() {
-    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.directory)
+    const items = await Filesystem.findUp("composer.json", Instance.workspace, Instance.workspace)
     for (const item of items) {
       const json = await Filesystem.readJson<{
         require?: Record<string, string>

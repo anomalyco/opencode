@@ -57,7 +57,7 @@ export namespace Skill {
     const dirs = new Set<string>()
 
     log.info("skill discovery starting", {
-      instanceDirectory: Instance.directory,
+      instanceWorkspace: Instance.workspace,
       opencodeSkillGlob: OPENCODE_SKILL_PATTERN,
     })
 
@@ -131,8 +131,8 @@ export namespace Skill {
 
       for await (const root of Filesystem.up({
         targets: EXTERNAL_DIRS,
-        start: Instance.directory,
-        stop: Instance.directory,
+        start: Instance.workspace,
+        stop: Instance.workspace,
       })) {
         await scanExternal(root, "project")
       }
@@ -162,7 +162,7 @@ export namespace Skill {
     })
     for (const skillPath of config.skills?.paths ?? []) {
       const expanded = skillPath.startsWith("~/") ? path.join(os.homedir(), skillPath.slice(2)) : skillPath
-      const resolved = path.isAbsolute(expanded) ? expanded : path.join(Instance.directory, expanded)
+      const resolved = path.isAbsolute(expanded) ? expanded : path.join(Instance.workspace, expanded)
       if (!(await Filesystem.isDir(resolved))) {
         log.warn("skill path not found", { requested: skillPath, resolved })
         continue

@@ -209,7 +209,7 @@ export namespace SessionPrompt {
         seen.add(name)
         const filepath = name.startsWith("~/")
           ? path.join(os.homedir(), name.slice(2))
-          : path.resolve(Instance.directory, name)
+          : path.resolve(Instance.workspace, name)
 
         const stats = await fs.stat(filepath).catch(() => undefined)
         if (!stats) {
@@ -372,8 +372,8 @@ export namespace SessionPrompt {
           agent: task.agent,
           variant: lastUser.variant,
           path: {
-            cwd: Instance.directory,
-            root: Instance.directory,
+            cwd: Instance.workspace,
+            root: Instance.workspace,
           },
           cost: 0,
           tokens: {
@@ -409,8 +409,8 @@ export namespace SessionPrompt {
           agent: lastUser.agent,
           variant: lastUser.variant,
           path: {
-            cwd: Instance.directory,
-            root: Instance.directory,
+            cwd: Instance.workspace,
+            root: Instance.workspace,
           },
           cost: 0,
           tokens: {
@@ -1369,8 +1369,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: input.agent,
       cost: 0,
       path: {
-        cwd: Instance.directory,
-        root: Instance.directory,
+        cwd: Instance.workspace,
+        root: Instance.workspace,
       },
       time: {
         created: Date.now(),
@@ -1459,7 +1459,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const matchingInvocation = invocations[shellName] ?? invocations[""]
     const args = matchingInvocation?.args
 
-    const cwd = Instance.directory
+    const cwd = Instance.workspace
     const shellEnv = await Plugin.trigger(
       "shell.env",
       { cwd, sessionID: input.sessionID, callID: part.callID },

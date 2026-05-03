@@ -142,8 +142,8 @@ export namespace SessionCompaction {
       variant: userMessage.variant,
       summary: true,
       path: {
-        cwd: Instance.directory,
-        root: Instance.directory,
+        cwd: Instance.workspace,
+        root: Instance.workspace,
       },
       cost: 0,
       tokens: {

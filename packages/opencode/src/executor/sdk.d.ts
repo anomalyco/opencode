@@ -7,26 +7,30 @@
 export interface ExecutorConfig {
     baseUrl: string;
     timeout?: number;
+    /** When `baseUrl` targets an in-cluster Ingress VIP, set this to the Ingress rule host (see deploy/k8s `03c-*`). Env: `VERITLY_EXECUTOR_HTTP_HOST`. */
+    httpHost?: string;
 }
 export interface ExecResult {
     output: string;
     exitCode: number;
     sessionId: string;
-    mode: "firecracker" | "dangerous-local";
+    mode: "firecracker";
     vmId: string;
 }
 export interface SessionStatus {
     sessionId: string;
     createdAt: number;
     lastActivity: number;
-    mode: "firecracker" | "dangerous-local";
+    mode: "firecracker";
     vmId: string;
-    guestIP?: string;
+    sshPort?: number;
 }
 export interface ExecutorHealth {
     ok: boolean;
     service: string;
-    mode: "firecracker" | "dangerous-local";
+    mode: "firecracker";
+    guest: "x86_64";
+    firecrackerVersion?: string;
     activeSessions: number;
     ready: boolean;
 }
@@ -38,7 +42,9 @@ export declare class ExecutorError extends Error {
 export declare class ExecutorSDK {
     private baseUrl;
     private defaultTimeout;
+    private httpHost?;
     constructor(config: ExecutorConfig);
+    private hdr;
     /**
      * Check executor health
      */

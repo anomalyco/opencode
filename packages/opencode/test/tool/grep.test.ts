@@ -21,7 +21,7 @@ const projectRoot = path.join(__dirname, "../..")
 describe("tool.grep", () => {
   test("basic search", async () => {
     await Instance.provide({
-      directory: projectRoot,
+      workspace: projectRoot,
       fn: async () => {
         const grep = await GrepTool.init()
         const result = await grep.execute(
@@ -45,7 +45,7 @@ describe("tool.grep", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const grep = await GrepTool.init()
         const result = await grep.execute(
@@ -70,7 +70,7 @@ describe("tool.grep", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const grep = await GrepTool.init()
         const result = await grep.execute(

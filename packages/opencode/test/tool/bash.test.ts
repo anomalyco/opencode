@@ -47,7 +47,7 @@ beforeEach(() => {
   process.env.VERITLY_EXECUTOR_URL = "http://executor.test"
   globalThis.fetch = (async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-    if (url.endsWith("/health")) {
+    if (url.endsWith("/readyz")) {
       return new Response("ok", { status: 200 })
     }
     if (!url.includes("/exec")) {
@@ -70,7 +70,7 @@ afterEach(() => {
 describe("tool.bash", () => {
   test("basic", async () => {
     await Instance.provide({
-      directory: projectRoot,
+      workspace: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
         const result = await bash.execute(
@@ -91,7 +91,7 @@ describe("tool.bash permissions", () => {
   test("asks for bash permission with correct pattern", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -118,7 +118,7 @@ describe("tool.bash permissions", () => {
   test("asks for bash permission with multiple commands", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -146,7 +146,7 @@ describe("tool.bash permissions", () => {
   test("asks for external_directory permission when cd to parent", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -172,7 +172,7 @@ describe("tool.bash permissions", () => {
   test("asks for external_directory permission when workdir is outside project", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -205,7 +205,7 @@ describe("tool.bash permissions", () => {
     })
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -235,7 +235,7 @@ describe("tool.bash permissions", () => {
   test("does not ask for external_directory permission when rm inside project", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -265,7 +265,7 @@ describe("tool.bash permissions", () => {
   test("includes always patterns for auto-approval", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -292,7 +292,7 @@ describe("tool.bash permissions", () => {
   test("does not ask for bash permission when command is cd only", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -318,7 +318,7 @@ describe("tool.bash permissions", () => {
   test("matches redirects in permission pattern", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -339,7 +339,7 @@ describe("tool.bash permissions", () => {
   test("always pattern has space before wildcard to not include different commands", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -362,7 +362,7 @@ describe("tool.bash permissions", () => {
 describe("tool.bash truncation", () => {
   test("truncates output exceeding line limit", async () => {
     await Instance.provide({
-      directory: projectRoot,
+      workspace: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
         const lineCount = Truncate.MAX_LINES + 500
@@ -382,7 +382,7 @@ describe("tool.bash truncation", () => {
 
   test("truncates output exceeding byte limit", async () => {
     await Instance.provide({
-      directory: projectRoot,
+      workspace: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
         const byteCount = Truncate.MAX_BYTES + 10000
@@ -402,7 +402,7 @@ describe("tool.bash truncation", () => {
 
   test("does not truncate small output", async () => {
     await Instance.provide({
-      directory: projectRoot,
+      workspace: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
         const result = await bash.execute(
@@ -421,7 +421,7 @@ describe("tool.bash truncation", () => {
 
   test("full output is saved to file when truncated", async () => {
     await Instance.provide({
-      directory: projectRoot,
+      workspace: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
         const lineCount = Truncate.MAX_LINES + 100

@@ -10,7 +10,7 @@ import { tmpdir } from "../fixture/fixture"
 Log.init({ print: false })
 
 async function create(dir: string, name: string) {
-  return (await Project.createForDirectory({ directory: dir, name, tenantUserId: "user_test" })).project
+  return (await Project.createForDirectory({ workspace: dir, name, tenantUserId: "user_test" })).project
 }
 
 // TODO: This test times out - possibly related to Server.Default() initialization
@@ -19,7 +19,7 @@ describe.skip("tui.selectSession endpoint (needs investigation)", () => {
   test("should return 200 when called with valid session", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "session-select"),
       fn: async () => {
         // #given
@@ -46,7 +46,7 @@ describe.skip("tui.selectSession endpoint (needs investigation)", () => {
   test("should return 404 when session does not exist", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "session-select-missing"),
       fn: async () => {
         // #given
@@ -69,7 +69,7 @@ describe.skip("tui.selectSession endpoint (needs investigation)", () => {
   test("should return 400 when session ID format is invalid", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "session-select-invalid"),
       fn: async () => {
         // #given

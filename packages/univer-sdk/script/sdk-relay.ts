@@ -150,7 +150,7 @@ Bun.serve({
       })
       const active = trace.setSpan(context.active(), span)
       return context.with(active, () => {
-        if (url.pathname === "/health") {
+        if (url.pathname === "/readyz") {
           span.end()
           return new Response(JSON.stringify({ ok: true, browserConnected: Boolean(browser), agentCount: agents.size }), {
             headers: { "content-type": "application/json; charset=utf-8" },

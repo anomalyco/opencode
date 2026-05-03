@@ -273,13 +273,13 @@ export class Config extends HeyApiClient {
 
 export class Global extends HeyApiClient {
   /**
-   * Get health
+   * Get readiness
    *
-   * Get health information about the OpenCode server.
+   * Get readiness information about the OpenCode server.
    */
-  public health<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+  public readyz<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<GlobalHealthResponses, unknown, ThrowOnError>({
-      url: "/global/health",
+      url: "/global/readyz",
       ...options,
     })
   }

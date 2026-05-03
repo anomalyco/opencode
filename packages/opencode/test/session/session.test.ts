@@ -12,14 +12,14 @@ import { tmpdir } from "../fixture/fixture"
 Log.init({ print: false })
 
 async function create(dir: string, name: string) {
-  return (await Project.createForDirectory({ directory: dir, name, tenantUserId: "user_test" })).project
+  return (await Project.createForDirectory({ workspace: dir, name, tenantUserId: "user_test" })).project
 }
 
 describe("session.started event", () => {
   test("should emit session.started event when session is created", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "session-events-a"),
       fn: async () => {
         let eventReceived = false
@@ -50,7 +50,7 @@ describe("session.started event", () => {
   test("session.started event should be emitted before session.updated", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "session-events-b"),
       fn: async () => {
         const events: string[] = []
@@ -86,7 +86,7 @@ describe("step-finish token propagation via Bus event", () => {
     async () => {
       await using tmp = await tmpdir({ git: true })
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         project: await create(tmp.path, "session-events-c"),
         fn: async () => {
           const session = await Session.create({})

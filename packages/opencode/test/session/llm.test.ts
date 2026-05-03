@@ -263,7 +263,7 @@ describe("session.llm.stream", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const resolved = await Provider.getModel(providerID, model.id)
         const sessionID = SessionID.make("session-test-1")
@@ -393,7 +393,7 @@ describe("session.llm.stream", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const resolved = await Provider.getModel("openai", model.id)
         const sessionID = SessionID.make("session-test-2")
@@ -515,7 +515,7 @@ describe("session.llm.stream", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const resolved = await Provider.getModel(providerID, model.id)
         const sessionID = SessionID.make("session-test-3")
@@ -616,7 +616,7 @@ describe("session.llm.stream", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const resolved = await Provider.getModel(providerID, model.id)
         const sessionID = SessionID.make("session-test-4")

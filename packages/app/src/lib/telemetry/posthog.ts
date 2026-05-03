@@ -1,5 +1,4 @@
 import { trace } from "@opentelemetry/api"
-import type { ServerConnection } from "@/context/server"
 import posthog from "posthog-js"
 
 let inited = false
@@ -16,39 +15,6 @@ function browserSurfaceProps(): Record<string, string> {
   return {
     browser_host: window.location.host,
     browser_origin: window.location.origin,
-  }
-}
-
-function authHeadersForServer(http: ServerConnection.HttpBase): Headers {
-  const h = new Headers()
-  if (http.password) {
-    h.set("Authorization", `Basic ${btoa(`${http.username ?? "opencode"}:${http.password}`)}`)
-  }
-  return h
-}
-
-/**
- * After the OpenCode server is reachable, merges Railway system IDs into PostHog super-properties
- * (`posthog.register`) so every capture is tagged with instance (replica, service, public domain, …).
- * Local dev returns `{}` from the API — you still get `browser_host` on each event.
- */
-export async function registerPosthogDeploymentFromOpenCodeServer(http: ServerConnection.HttpBase): Promise<void> {
-  if (!inited || typeof window === "undefined") return
-  const base = http.url.replace(/\/$/, "")
-  try {
-    const res = await fetch(`${base}/global/veritly-deployment`, {
-      headers: authHeadersForServer(http),
-      credentials: "include",
-    })
-    if (!res.ok) return
-    const data = (await res.json()) as Record<string, unknown>
-    const registerProps: Record<string, string> = {}
-    for (const [k, v] of Object.entries(data)) {
-      if (typeof v === "string" && v.length > 0) registerProps[k] = v
-    }
-    if (Object.keys(registerProps).length > 0) posthog.register(registerProps)
-  } catch {
-    /* offline or local */
   }
 }
 

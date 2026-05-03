@@ -108,7 +108,7 @@ export namespace LSP {
         servers[name] = {
           ...existing,
           id: name,
-          root: existing?.root ?? (async () => Instance.directory),
+          root: existing?.root ?? (async () => Instance.workspace),
           extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
@@ -167,7 +167,7 @@ export namespace LSP {
         result.push({
           id: client.serverID,
           name: x.servers[client.serverID].id,
-          root: path.relative(Instance.directory, client.root),
+          root: path.relative(Instance.workspace, client.root),
           status: "connected",
         })
       }

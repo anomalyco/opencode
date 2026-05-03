@@ -5,10 +5,10 @@ export type ToolContext = {
   messageID: string
   agent: string
   /**
-   * Current project directory for this session.
+   * Workspace root for this session.
    * Prefer this over process.cwd() when resolving relative paths.
    */
-  directory: string
+  workspace: string
   /**
    * Project worktree root for this session.
    * Useful for generating stable relative paths (e.g. path.relative(worktree, absPath)).

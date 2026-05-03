@@ -43,7 +43,7 @@ import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { VeritlyFile } from "@/components/veritly-file"
 import { ErrorPage } from "./pages/error"
-import { identifyVeritly, registerPosthogDeploymentFromOpenCodeServer } from "@/lib/telemetry/posthog"
+import { identifyVeritly } from "@/lib/telemetry/posthog"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const Home = lazy(() => import("@/pages/home"))
@@ -66,6 +66,11 @@ const SessionRoute = () => (
 )
 
 const SessionIndexRoute = () => <Navigate href="session" />
+
+/** Full-page GET is handled by Vite middleware; SPA navigation loads the same URLs in an iframe. */
+function HealthIframe(props: { src: string; title: string }) {
+  return <iframe class="w-full min-h-dvh border-0 block bg-background-base" src={props.src} title={props.title} />
+}
 
 const AuthCallbackRoute = () => (
   <Suspense fallback={<Loading />}>
@@ -171,9 +176,6 @@ function PosthogServerIdentify() {
     const id = server.key
     if (!id) return
     identifyVeritly(id, { server_name: server.name })
-    const conn = server.current
-    const http = conn && "http" in conn ? conn.http : undefined
-    if (http) void registerPosthogDeploymentFromOpenCodeServer(http)
   })
   return null
 }
@@ -297,6 +299,8 @@ export function AppInterface(props: {
             >
               <Route path="/" component={HomeRoute} />
               <Route path="/auth/callback" component={AuthCallbackRoute} />
+              <Route path="/livez" component={() => <HealthIframe src="/livez" title="livez" />} />
+              <Route path="/readyz" component={() => <HealthIframe src="/readyz" title="readyz" />} />
               <Route path="/:dir" component={DirectoryLayout}>
                 <Route path="/" component={SessionIndexRoute} />
                 <Route path="/session/:id?" component={SessionRoute} />

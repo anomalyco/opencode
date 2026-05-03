@@ -66,7 +66,7 @@ export namespace Command {
         description: "create/update AGENTS.md",
         source: "command",
         get template() {
-          return PROMPT_INITIALIZE.replace("${path}", Instance.directory)
+          return PROMPT_INITIALIZE.replace("${path}", Instance.workspace)
         },
         hints: hints(PROMPT_INITIALIZE),
       },
@@ -75,7 +75,7 @@ export namespace Command {
         description: "review changes [commit|branch|pr], defaults to uncommitted",
         source: "command",
         get template() {
-          return PROMPT_REVIEW.replace("${path}", Instance.directory)
+          return PROMPT_REVIEW.replace("${path}", Instance.workspace)
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),

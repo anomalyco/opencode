@@ -50,7 +50,7 @@ describe("GET /file and File.list (no host project directory)", () => {
       },
     })
     await Instance.provide({
-      directory: t.path,
+      workspace: t.path,
       fn: async () => {
         expect(await File.list("")).toEqual([])
         expect(await File.list("x")).toEqual([])

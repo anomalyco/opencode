@@ -9,6 +9,9 @@ COPY packages/app/server.ts /app/server.ts
 
 ENV PORT=80
 ENV FRONTEND_DIST_DIR=/app/dist
+ENV FRONTEND_PUBLIC_OPENCODE_SERVER_URL=https://api.veritly.co.uk
+ENV FRONTEND_PUBLIC_UNIVER_BACKEND_URL=https://univer.veritly.co.uk
+ENV FRONTEND_PUBLIC_UNIVER_SDK_WS=wss://relay.veritly.co.uk/ws
 
 EXPOSE 80
 

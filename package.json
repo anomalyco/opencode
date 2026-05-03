@@ -7,6 +7,9 @@
 	"packageManager": "bun@1.3.10",
 	"scripts": {
 		"dev:all": "bun --env-file=.env.development local-dev.ts --service all",
+		"local:db": "docker compose -f docker-compose.local.yml up -d",
+		"local:k8s:apply": "kubectl apply -k deploy/k8s/local-dev",
+		"local:k8s:up": "bash script/local-k8s-firecracker.sh build && bash script/local-k8s-firecracker.sh load && bash script/local-k8s-firecracker.sh apply",
 		"workos:dev-session": "bun run --cwd packages/opencode workos:dev-session",
 		"staging:test-session": "bun run --cwd packages/opencode staging:test-session",
 		"smoke:browser": "bun run --cwd packages/app smoke:browser",
@@ -14,6 +17,7 @@
 		"dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
 		"dev:app": "bun run local-dev.ts --service frontend --conditions=browser",
 		"typecheck": "bun turbo typecheck",
+		"typecheck:repo": "bash script/typecheck.sh",
 		"prepare": "husky",
 		"random": "echo 'Random script'",
 		"hello": "echo 'Hello World!'",

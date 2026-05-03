@@ -12,13 +12,18 @@ const log = Log.create({ service: "executor-sdk" })
 export interface ExecutorConfig {
   baseUrl: string
   timeout?: number
+  /**
+   * Override HTTP `Host` (e.g. when `baseUrl` points at an in-cluster Ingress VIP and rules match this host).
+   * Also read from env `VERITLY_EXECUTOR_HTTP_HOST`.
+   */
+  httpHost?: string
 }
 
 export interface ExecResult {
   output: string
   exitCode: number
   sessionId: string
-  mode: "firecracker" | "dangerous-local"
+  mode: "firecracker"
   vmId: string
 }
 
@@ -26,15 +31,17 @@ export interface SessionStatus {
   sessionId: string
   createdAt: number
   lastActivity: number
-  mode: "firecracker" | "dangerous-local"
+  mode: "firecracker"
   vmId: string
-  guestIP?: string
+  sshPort?: number
 }
 
 export interface ExecutorHealth {
   ok: boolean
   service: string
-  mode: "firecracker" | "dangerous-local"
+  mode: "firecracker"
+  guest: "x86_64"
+  firecrackerVersion?: string
   activeSessions: number
   ready: boolean
 }
@@ -55,17 +62,25 @@ export class ExecutorError extends Error {
 export class ExecutorSDK {
   private baseUrl: string
   private defaultTimeout: number
+  private httpHost?: string
 
   constructor(config: ExecutorConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, "")
     this.defaultTimeout = config.timeout ?? 120000
+    this.httpHost = config.httpHost?.trim() || process.env.VERITLY_EXECUTOR_HTTP_HOST?.trim() || undefined
+  }
+
+  private hdr(extra?: Record<string, string>): Record<string, string> {
+    const out = { ...extra }
+    if (this.httpHost) out.Host = this.httpHost
+    return out
   }
 
   /**
    * Check executor health
    */
   async health(): Promise<ExecutorHealth> {
-    const response = await fetch(`${this.baseUrl}/health`)
+    const response = await fetch(`${this.baseUrl}/readyz`, { headers: this.hdr() })
     if (!response.ok) {
       throw new ExecutorError("Health check failed", "HEALTH_CHECK_FAILED", response.status)
     }
@@ -87,7 +102,7 @@ export class ExecutorSDK {
 
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.hdr({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         command,
         timeout: timeout ?? this.defaultTimeout,
@@ -112,8 +127,8 @@ export class ExecutorSDK {
   async getSession(sessionId: string): Promise<SessionStatus> {
     const url = `${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/status`
     
-    const response = await fetch(url)
-    
+    const response = await fetch(url, { headers: this.hdr() })
+
     if (response.status === 404) {
       throw new ExecutorError("Session not found", "SESSION_NOT_FOUND", 404)
     }
@@ -131,7 +146,7 @@ export class ExecutorSDK {
   async closeSession(sessionId: string): Promise<void> {
     const url = `${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/close`
     
-    const response = await fetch(url, { method: "POST" })
+    const response = await fetch(url, { method: "POST", headers: this.hdr() })
     
     if (!response.ok && response.status !== 404) {
       throw new ExecutorError("Failed to close session", "CLOSE_ERROR", response.status)
@@ -144,8 +159,8 @@ export class ExecutorSDK {
   async listSessions(): Promise<Array<{ id: string; createdAt: number; lastActivity: number }>> {
     const url = `${this.baseUrl}/v1/admin/sessions`
     
-    const response = await fetch(url)
-    
+    const response = await fetch(url, { headers: this.hdr() })
+
     if (!response.ok) {
       throw new ExecutorError("Failed to list sessions", "LIST_ERROR", response.status)
     }

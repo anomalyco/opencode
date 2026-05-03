@@ -461,7 +461,7 @@ test("disabled - specific allow overrides wildcard deny", () => {
 test("ask - resolves immediately when action is allow", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const result = await PermissionNext.ask({
         sessionID: SessionID.make("session_test"),
@@ -479,7 +479,7 @@ test("ask - resolves immediately when action is allow", async () => {
 test("ask - throws RejectedError when action is deny", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       await expect(
         PermissionNext.ask({
@@ -498,7 +498,7 @@ test("ask - throws RejectedError when action is deny", async () => {
 test("ask - returns pending promise when action is ask", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const promise = PermissionNext.ask({
         sessionID: SessionID.make("session_test"),
@@ -520,7 +520,7 @@ test("ask - returns pending promise when action is ask", async () => {
 test("reply - once resolves the pending ask", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const askPromise = PermissionNext.ask({
         id: PermissionID.make("per_test1"),
@@ -545,7 +545,7 @@ test("reply - once resolves the pending ask", async () => {
 test("reply - reject throws RejectedError", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const askPromise = PermissionNext.ask({
         id: PermissionID.make("per_test2"),
@@ -570,7 +570,7 @@ test("reply - reject throws RejectedError", async () => {
 test("reply - always persists approval and resolves", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const askPromise = PermissionNext.ask({
         id: PermissionID.make("per_test3"),
@@ -592,7 +592,7 @@ test("reply - always persists approval and resolves", async () => {
   })
   // Re-provide to reload state with stored permissions
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       // Stored approval should allow without asking
       const result = await PermissionNext.ask({
@@ -611,7 +611,7 @@ test("reply - always persists approval and resolves", async () => {
 test("reply - reject cancels all pending for same session", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const askPromise1 = PermissionNext.ask({
         id: PermissionID.make("per_test4a"),
@@ -653,7 +653,7 @@ test("reply - reject cancels all pending for same session", async () => {
 test("ask - checks all patterns and stops on first deny", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       await expect(
         PermissionNext.ask({
@@ -675,7 +675,7 @@ test("ask - checks all patterns and stops on first deny", async () => {
 test("ask - allows all patterns when all match allow rules", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const result = await PermissionNext.ask({
         sessionID: SessionID.make("session_test"),

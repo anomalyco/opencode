@@ -43,7 +43,7 @@ Instructions here.
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(1)
@@ -78,7 +78,7 @@ description: Skill for dirs test.
 
   try {
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const dirs = await Skill.dirs()
         const skillDir = path.join(tmp.path, ".opencode", "skill", "dir-skill")
@@ -121,7 +121,7 @@ description: Second test skill.
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(2)
@@ -147,7 +147,7 @@ Just some content without YAML frontmatter.
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
       expect(skills).toEqual([])
@@ -174,7 +174,7 @@ description: A skill in the .claude/skills directory.
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(1)
@@ -194,7 +194,7 @@ test("discovers global skills from ~/.claude/skills/ directory", async () => {
   try {
     await createGlobalSkill(tmp.path)
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const skills = await Skill.all()
         expect(skills.length).toBe(1)
@@ -212,7 +212,7 @@ test("returns empty array when no skills exist", async () => {
   await using tmp = await tmpdir({ git: true })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
       expect(skills).toEqual([])
@@ -239,7 +239,7 @@ description: A skill in the .agents/skills directory.
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(1)
@@ -273,7 +273,7 @@ This skill is loaded from the global home directory.
     )
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const skills = await Skill.all()
         expect(skills.length).toBe(1)
@@ -317,7 +317,7 @@ description: A skill in the .agents/skills directory.
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(2)
@@ -379,7 +379,7 @@ description: A skill in the .opencode/skills directory.
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const dirs = await Skill.dirs()
       expect(dirs.length).toBe(4)

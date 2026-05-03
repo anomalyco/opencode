@@ -44,7 +44,7 @@ services:
     devices:
       - /dev/kvm:/dev/kvm
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7777/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:7777/readyz"]
       interval: 2s
       timeout: 5s
       retries: 10

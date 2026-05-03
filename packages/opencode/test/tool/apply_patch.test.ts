@@ -80,7 +80,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx, calls } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const modifyPath = path.join(fixture.path, "modify.txt")
         const deletePath = path.join(fixture.path, "delete.txt")
@@ -132,7 +132,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx, calls } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const original = path.join(fixture.path, "old", "name.txt")
         await fs.mkdir(path.dirname(original), { recursive: true })
@@ -162,7 +162,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "multi.txt")
         await fs.writeFile(target, "line1\nline2\nline3\nline4\n", "utf-8")
@@ -182,7 +182,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "insert_only.txt")
         await fs.writeFile(target, "alpha\nomega\n", "utf-8")
@@ -201,7 +201,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "no_newline.txt")
         await fs.writeFile(target, "no newline at end", "utf-8")
@@ -223,7 +223,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const original = path.join(fixture.path, "old", "name.txt")
         await fs.mkdir(path.dirname(original), { recursive: true })
@@ -246,7 +246,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const original = path.join(fixture.path, "old", "name.txt")
         const destination = path.join(fixture.path, "renamed", "dir", "name.txt")
@@ -271,7 +271,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "duplicate.txt")
         await fs.writeFile(target, "old content\n", "utf-8")
@@ -289,7 +289,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const patchText = "*** Begin Patch\n*** Update File: missing.txt\n@@\n-nope\n+better\n*** End Patch"
 
@@ -305,7 +305,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const patchText = "*** Begin Patch\n*** Delete File: missing.txt\n*** End Patch"
 
@@ -319,7 +319,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const dirPath = path.join(fixture.path, "dir")
         await fs.mkdir(dirPath)
@@ -336,7 +336,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const patchText = "*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch"
 
@@ -350,7 +350,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "modify.txt")
         await fs.writeFile(target, "line1\nline2\n", "utf-8")
@@ -368,7 +368,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const patchText =
           "*** Begin Patch\n*** Add File: created.txt\n+hello\n*** Update File: missing.txt\n@@\n-old\n+new\n*** End Patch"
@@ -386,7 +386,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "tail.txt")
         await fs.writeFile(target, "alpha\nlast\n", "utf-8")
@@ -404,7 +404,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "two_chunks.txt")
         await fs.writeFile(target, "a\nb\nc\nd\n", "utf-8")
@@ -422,7 +422,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "multi_ctx.txt")
         await fs.writeFile(target, "fn a\nx=10\ny=2\nfn b\nx=10\ny=20\n", "utf-8")
@@ -440,7 +440,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "eof_anchor.txt")
         // File has duplicate "marker" lines - one in middle, one at end
@@ -462,7 +462,7 @@ describe("tool.apply_patch freeform", () => {
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const patchText = `cat <<'EOF'
 *** Begin Patch
@@ -483,7 +483,7 @@ EOF`
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const patchText = `<<EOF
 *** Begin Patch
@@ -504,7 +504,7 @@ EOF`
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "trailing_ws.txt")
         // File has trailing spaces on some lines
@@ -524,7 +524,7 @@ EOF`
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "leading_ws.txt")
         // File has leading spaces
@@ -544,7 +544,7 @@ EOF`
     const { ctx } = makeCtx()
 
     await Instance.provide({
-      directory: fixture.path,
+      workspace: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "unicode.txt")
         // File has fancy Unicode quotes (U+201C, U+201D) and em-dash (U+2014)

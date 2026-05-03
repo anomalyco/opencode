@@ -22,7 +22,7 @@ test("agent color parsed from project config", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const cfg = await Config.get()
       expect(cfg.agent?.["build"]?.color).toBe("#FFA500")
@@ -47,7 +47,7 @@ test("Agent.get includes color from config", async () => {
     },
   })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const plan = await AgentSvc.get("plan")
       expect(plan?.color).toBe("#A855F7")

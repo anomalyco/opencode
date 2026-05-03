@@ -52,13 +52,13 @@ spec:
           mountPath: /data
         livenessProbe:
           httpGet:
-            path: /healthz
+            path: /livez
             port: 3000
           initialDelaySeconds: 30
           periodSeconds: 15
         readinessProbe:
           httpGet:
-            path: /healthz
+            path: /readyz
             port: 3000
           initialDelaySeconds: 10
           periodSeconds: 5

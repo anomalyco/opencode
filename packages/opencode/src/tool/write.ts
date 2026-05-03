@@ -23,7 +23,7 @@ export const WriteTool = Tool.define("write", {
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.workspace, params.filePath)
     await assertExternalDirectory(ctx, filepath)
 
     const exists = await Filesystem.exists(filepath)
@@ -33,7 +33,7 @@ export const WriteTool = Tool.define("write", {
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
     await ctx.ask({
       permission: "edit",
-      patterns: [path.relative(Instance.directory, filepath)],
+      patterns: [path.relative(Instance.workspace, filepath)],
       always: ["*"],
       metadata: {
         filepath,
@@ -72,7 +72,7 @@ export const WriteTool = Tool.define("write", {
     }
 
     return {
-      title: path.relative(Instance.directory, filepath),
+      title: path.relative(Instance.workspace, filepath),
       metadata: {
         diagnostics,
         filepath,

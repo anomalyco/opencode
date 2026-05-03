@@ -40,13 +40,11 @@ description: Skill for tool tests.
     const home = process.env.OPENCODE_TEST_HOME
     process.env.OPENCODE_TEST_HOME = tmp.path
 
-    const project = { id: "test-project", time: { created: 0, updated: 0 } }
     try {
       await Instance.provide({
-        project,
+        workspace: tmp.path,
         fn: async () => {
           const tool = await SkillTool.init()
-          const skillPath = path.join(tmp.path, ".opencode", "skill", "tool-skill", "SKILL.md")
           expect(tool.description).toContain(`**tool-skill**: Skill for tool tests.`)
         },
       })
@@ -79,10 +77,9 @@ Use this skill.
     const home = process.env.OPENCODE_TEST_HOME
     process.env.OPENCODE_TEST_HOME = tmp.path
 
-    const project = { id: "test-project", time: { created: 0, updated: 0 } }
     try {
       await Instance.provide({
-        project,
+        workspace: tmp.path,
         fn: async () => {
           const tool = await SkillTool.init()
           const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []

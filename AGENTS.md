@@ -126,3 +126,9 @@ const table = sqliteTable("session", {
 ## Type Checking
 
 - Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+
+## Backwards-compatibility
+
+- We do not support any fallback behavior and backwards compatibility. Treat everything as a Greenfield change.
+Prioritise doing this properly than not breaking old stuff, go ahead and break old stuff if it makes this cleaner. 
+- Stop adding env variables everywhere, do it more sparingly and when necessary, not even change needs a flag. 

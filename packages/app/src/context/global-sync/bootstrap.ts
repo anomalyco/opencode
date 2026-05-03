@@ -57,9 +57,9 @@ export async function bootstrapGlobal(input: {
 		}
 	}
 
-	const health = await input.globalSDK.global
-		.health()
-		.then((x) => x.data)
+	const hz = `${input.baseUrl.replace(/\/+$/, "")}/readyz`;
+	const health = await fetch(hz, { credentials: "include", headers: { accept: "application/json" } })
+		.then(async (r) => (r.ok ? r.json().catch(() => undefined) : undefined))
 		.catch(() => undefined);
 	if (!healthOk(health)) {
 		showToast({

@@ -343,14 +343,14 @@ export namespace File {
     let cache: Entry = { files: [], dirs: [] }
     let fetching = false
 
-    const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
+    const isGlobalHome = Instance.workspace === Global.Path.home && Instance.project.id === "global"
     
     // Virtual projects (e.g., /projects/<id>) don't have a local filesystem
-    const isVirtualProject = Instance.directory.startsWith("/projects/") && !isGlobalHome
+    const isVirtualProject = Instance.workspace.startsWith("/projects/") && !isGlobalHome
 
     const fn = async (result: Entry) => {
       // Disable scanning if in root of file system
-      if (Instance.directory === path.parse(Instance.directory).root) return
+      if (Instance.workspace === path.parse(Instance.workspace).root) return
       
       // Virtual projects have no local files - files come from executor
       if (isVirtualProject) {
@@ -371,7 +371,7 @@ export namespace File {
         const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
 
         const top = await fs.promises
-          .readdir(Instance.directory, { withFileTypes: true })
+          .readdir(Instance.workspace, { withFileTypes: true })
           .catch(() => [] as fs.Dirent[])
 
         for (const entry of top) {
@@ -379,7 +379,7 @@ export namespace File {
           if (shouldIgnore(entry.name)) continue
           dirs.add(entry.name + "/")
 
-          const base = path.join(Instance.directory, entry.name)
+          const base = path.join(Instance.workspace, entry.name)
           const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
           for (const child of children) {
             if (!child.isDirectory()) continue
@@ -395,7 +395,7 @@ export namespace File {
       }
 
       const set = new Set<string>()
-      for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+      for await (const file of Ripgrep.files({ cwd: Instance.workspace })) {
         result.files.push(file)
         let current = file
         while (true) {
@@ -436,7 +436,7 @@ export namespace File {
 
     const diffOutput = (
       await git(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", "HEAD"], {
-        cwd: Instance.directory,
+        cwd: Instance.workspace,
       })
     ).text()
 
@@ -459,7 +459,7 @@ export namespace File {
       await git(
         ["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "ls-files", "--others", "--exclude-standard"],
         {
-          cwd: Instance.directory,
+          cwd: Instance.workspace,
         },
       )
     ).text()
@@ -468,7 +468,7 @@ export namespace File {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Filesystem.readText(path.join(Instance.directory, filepath))
+          const content = await Filesystem.readText(path.join(Instance.workspace, filepath))
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
@@ -487,7 +487,7 @@ export namespace File {
       await git(
         ["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--name-only", "--diff-filter=D", "HEAD"],
         {
-          cwd: Instance.directory,
+          cwd: Instance.workspace,
         },
       )
     ).text()
@@ -505,10 +505,10 @@ export namespace File {
     }
 
     return changedFiles.map((x) => {
-      const full = path.isAbsolute(x.path) ? x.path : path.join(Instance.directory, x.path)
+      const full = path.isAbsolute(x.path) ? x.path : path.join(Instance.workspace, x.path)
       return {
         ...x,
-        path: path.relative(Instance.directory, full),
+        path: path.relative(Instance.workspace, full),
       }
     })
   }
@@ -516,7 +516,7 @@ export namespace File {
   export async function read(file: string): Promise<Content> {
     using _ = log.time("read", { file })
     const project = Instance.project
-    const full = path.isAbsolute(file) ? file : path.join(Instance.directory, file)
+    const full = path.isAbsolute(file) ? file : path.join(Instance.workspace, file)
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
@@ -571,14 +571,14 @@ export namespace File {
     const content = (await Filesystem.readText(full).catch(() => "")).trim()
 
     if (project.vcs === "git") {
-      let diff = (await git(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: Instance.directory })).text()
+      let diff = (await git(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: Instance.workspace })).text()
       if (!diff.trim()) {
         diff = (
-          await git(["-c", "core.fsmonitor=false", "diff", "--staged", "--", file], { cwd: Instance.directory })
+          await git(["-c", "core.fsmonitor=false", "diff", "--staged", "--", file], { cwd: Instance.workspace })
         ).text()
       }
       if (diff.trim()) {
-        const original = (await git(["show", `HEAD:${file}`], { cwd: Instance.directory })).text()
+        const original = (await git(["show", `HEAD:${file}`], { cwd: Instance.workspace })).text()
         const patch = structuredPatch(file, file, original, content, "old", "new", {
           context: Infinity,
           ignoreWhitespace: true,
@@ -636,7 +636,7 @@ export namespace File {
   }
 
   export async function write(filepath: string, content: Uint8Array): Promise<Node> {
-    const full = path.join(Instance.directory, filepath)
+    const full = path.join(Instance.workspace, filepath)
 
     if (!Instance.containsPath(full)) {
       throw new Error(`Access denied: path escapes project directory`)
@@ -656,7 +656,7 @@ export namespace File {
   }
 
   export async function mkdir(dirpath: string): Promise<Node> {
-    const full = path.join(Instance.directory, dirpath)
+    const full = path.join(Instance.workspace, dirpath)
 
     if (!Instance.containsPath(full)) {
       throw new Error(`Access denied: path escapes project directory`)
@@ -675,7 +675,7 @@ export namespace File {
   }
 
   export async function remove(filepath: string, recursive = false): Promise<void> {
-    const full = path.join(Instance.directory, filepath)
+    const full = path.join(Instance.workspace, filepath)
 
     if (!Instance.containsPath(full)) {
       throw new Error(`Access denied: path escapes project directory`)

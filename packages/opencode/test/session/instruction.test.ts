@@ -14,7 +14,7 @@ describe("InstructionPrompt.resolve", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const system = await InstructionPrompt.systemPaths()
         expect(system.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
@@ -33,7 +33,7 @@ describe("InstructionPrompt.resolve", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const system = await InstructionPrompt.systemPaths()
         expect(system.has(path.join(tmp.path, "subdir", "AGENTS.md"))).toBe(false)
@@ -57,7 +57,7 @@ describe("InstructionPrompt.resolve", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const filepath = path.join(tmp.path, "subdir", "AGENTS.md")
         const system = await InstructionPrompt.systemPaths()
@@ -104,7 +104,7 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
 
     try {
       await Instance.provide({
-        directory: projectTmp.path,
+        workspace: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
           expect(paths.has(path.join(profileTmp.path, "AGENTS.md"))).toBe(true)
@@ -131,7 +131,7 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
 
     try {
       await Instance.provide({
-        directory: projectTmp.path,
+        workspace: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
           expect(paths.has(path.join(profileTmp.path, "AGENTS.md"))).toBe(false)
@@ -157,7 +157,7 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
 
     try {
       await Instance.provide({
-        directory: projectTmp.path,
+        workspace: projectTmp.path,
         fn: async () => {
           const paths = await InstructionPrompt.systemPaths()
           expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(true)

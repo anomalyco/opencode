@@ -152,7 +152,7 @@ describe("permission.task with real config files", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
@@ -177,7 +177,7 @@ describe("permission.task with real config files", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
@@ -202,7 +202,7 @@ describe("permission.task with real config files", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
@@ -229,7 +229,7 @@ describe("permission.task with real config files", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
@@ -267,7 +267,7 @@ describe("permission.task with real config files", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
@@ -298,7 +298,7 @@ describe("permission.task with real config files", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})

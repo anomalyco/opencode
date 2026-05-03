@@ -10,6 +10,8 @@ resources:
   - 02-opencode-api.yaml
   - 02b-opencode-frontend.yaml
   - 03-executor.yaml
+  - 03c-executor-sticky-ingress.yaml
+  - 03b-executor-dev.yaml
   - 04-ingress.yaml
 
 images:
@@ -25,3 +27,6 @@ images:
   - name: opencode-veritly-executor
     newName: registry.digitalocean.com/veritly-registry/executor
     newTag: latest
+  - name: opencode-veritly-executor-dev
+    newName: registry.digitalocean.com/veritly-registry/executor
+    newTag: dev

@@ -25,7 +25,7 @@ describe("LSPClient interop", () => {
     const handle = spawnFakeServer() as any
 
     const client = await Instance.provide({
-      directory: process.cwd(),
+      workspace: process.cwd(),
       fn: () =>
         LSPClient.create({
           serverID: "fake",
@@ -49,7 +49,7 @@ describe("LSPClient interop", () => {
     const handle = spawnFakeServer() as any
 
     const client = await Instance.provide({
-      directory: process.cwd(),
+      workspace: process.cwd(),
       fn: () =>
         LSPClient.create({
           serverID: "fake",
@@ -73,7 +73,7 @@ describe("LSPClient interop", () => {
     const handle = spawnFakeServer() as any
 
     const client = await Instance.provide({
-      directory: process.cwd(),
+      workspace: process.cwd(),
       fn: () =>
         LSPClient.create({
           serverID: "fake",

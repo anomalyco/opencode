@@ -114,7 +114,7 @@ export namespace Format {
           const proc = Process.spawn(
             item.command.map((x) => x.replace("$FILE", file)),
             {
-              cwd: Instance.directory,
+              cwd: Instance.workspace,
               env: { ...process.env, ...item.environment },
               stdout: "ignore",
               stderr: "ignore",

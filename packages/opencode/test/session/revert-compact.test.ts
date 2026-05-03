@@ -14,14 +14,14 @@ const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
 async function create(dir: string, name: string) {
-  return (await Project.createForDirectory({ directory: dir, name, tenantUserId: "user_test" })).project
+  return (await Project.createForDirectory({ workspace: dir, name, tenantUserId: "user_test" })).project
 }
 
 describe("revert + compact workflow", () => {
   test("should properly handle compact command after revert", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "revert-compact-a"),
       fn: async () => {
         // Create a session
@@ -198,7 +198,7 @@ describe("revert + compact workflow", () => {
   test("should properly clean up revert state before creating compaction message", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "revert-compact-b"),
       fn: async () => {
         // Create a session

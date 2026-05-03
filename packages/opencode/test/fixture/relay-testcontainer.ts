@@ -129,7 +129,7 @@ export async function startRelayContainer(): Promise<RelayTestContext> {
     }])
     .withWorkingDir("/relay")
     .withCommand(["bun", "run", "server.ts"])
-    .withWaitStrategy(Wait.forHttp("/health", 8080))
+    .withWaitStrategy(Wait.forHttp("/readyz", 8080))
     .withStartupTimeout(30000)
     .start()
 
@@ -139,7 +139,7 @@ export async function startRelayContainer(): Promise<RelayTestContext> {
   const port = container.getMappedPort(8080)
   const relayUrl = `ws://${host}:${port}/relay/ws`
   const agentUrl = `${relayUrl}?role=agent`
-  const healthUrl = `http://${host}:${port}/relay/health`
+  const healthUrl = `http://${host}:${port}/relay/readyz`
 
   log.info("Relay ready", { host, port, relayUrl })
 

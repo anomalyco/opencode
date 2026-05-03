@@ -120,7 +120,7 @@ export const BashTool = Tool.define("bash", async () => {
   }
 
   return {
-    description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
+    description: DESCRIPTION.replaceAll("${workspace}", Instance.workspace)
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
       .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
     parameters: z.object({
@@ -129,7 +129,7 @@ export const BashTool = Tool.define("bash", async () => {
       workdir: z
         .string()
         .describe(
-          `The working directory to run the command in. Defaults to ${Instance.directory}. Use this instead of 'cd' commands.`,
+          `The working directory to run the command in. Defaults to ${Instance.workspace}. Use this instead of 'cd' commands.`,
         )
         .optional(),
       description: z
@@ -147,7 +147,7 @@ export const BashTool = Tool.define("bash", async () => {
         span.setAttribute("veritly.tool.command_sha256_prefix", hash)
 
         try {
-          const cwd = params.workdir || Instance.directory
+          const cwd = params.workdir || Instance.workspace
           if (params.timeout !== undefined && params.timeout < 0) {
             throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
           }
@@ -234,7 +234,7 @@ export const BashTool = Tool.define("bash", async () => {
 
           // Prepare command with workdir if specified
           let finalCommand = params.command
-          if (params.workdir && params.workdir !== Instance.directory) {
+          if (params.workdir && params.workdir !== Instance.workspace) {
             finalCommand = `cd ${params.workdir} && ${params.command}`
           }
 

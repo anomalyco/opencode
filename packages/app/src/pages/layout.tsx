@@ -68,7 +68,7 @@ function Sidebar() {
   }
   const createProject = () =>
     dialog.show(() => (
-      <DialogCreateProject
+        <DialogCreateProject
         onCreate={(project) => {
           rememberProject(project)
           openProject(project.id)
@@ -89,9 +89,9 @@ function Sidebar() {
     }
 
     navigate(`/${dir}/session`)
-  }
+    }
 
-  return (
+    return (
     <aside class="shrink-0 bg-background-base flex h-full min-h-0 overflow-hidden">
       <div
         data-component="sidebar-rail"
@@ -108,7 +108,7 @@ function Sidebar() {
                   data-action="project-switch"
                   data-project={project.id}
                   class="flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default"
-                  classList={{
+        classList={{
                     "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover":
                       project.id === current(),
                     "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
@@ -127,18 +127,18 @@ function Sidebar() {
             </For>
             <IconButton
               icon="plus"
-              variant="ghost"
+                      variant="ghost"
               size="large"
               onClick={createProject}
               aria-label="New project"
             />
-          </div>
-        </div>
+                </div>
+              </div>
         <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
           <IconButton
             icon="settings-gear"
             variant="ghost"
-            size="large"
+                          size="large"
             onClick={() => dialog.show(() => <DialogSettings />)}
             aria-label="Settings"
           />
@@ -148,9 +148,9 @@ function Sidebar() {
             size="large"
             onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
             aria-label="Help"
-          />
-        </div>
-      </div>
+                        />
+                      </div>
+                    </div>
 
       <Show when={layout.sidebar.opened() && current()}>
         <div class="w-72 border-r border-border-weak-base flex h-full min-h-0 min-w-0 flex-col bg-background-base">
@@ -159,8 +159,8 @@ function Sidebar() {
               <div class="text-12-medium text-text-weak">Project</div>
               <div class="text-14-medium text-text-strong truncate">
                 {projects().find((project) => project.id === current())?.name || current()}
-              </div>
-            </div>
+                        </div>
+                    </div>
             <button
               type="button"
               class="shrink-0 size-7 rounded-md flex items-center justify-center hover:bg-surface-base-hover text-icon-base"
@@ -169,7 +169,7 @@ function Sidebar() {
             >
               <Icon name="plus-small" size="small" />
             </button>
-          </div>
+              </div>
 
           <div class="px-2 pb-3 flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-1">
             <div class="px-2 pt-3 pb-2 text-12-medium text-text-weak">Sessions</div>
@@ -179,7 +179,7 @@ function Sidebar() {
                   type="button"
                   data-session-id={session.id}
                   class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover"
-                  classList={{
+          classList={{
                     "bg-surface-base-active text-text-strong": session.id === params.id,
                     "text-text-base": session.id !== params.id,
                   }}
@@ -188,16 +188,16 @@ function Sidebar() {
                   <div class="flex items-center gap-1 w-full py-1">
                     <div class="shrink-0 size-6 flex items-center justify-center">
                       <Icon name="dash" size="small" class="text-icon-weak" />
-                    </div>
+                </div>
                     <span class="text-14-regular grow-1 min-w-0 overflow-hidden text-ellipsis truncate text-left">
                       {session.title || session.id}
                     </span>
-                  </div>
+                </div>
                 </button>
               )}
             </For>
-          </div>
-        </div>
+              </div>
+              </div>
       </Show>
     </aside>
   )

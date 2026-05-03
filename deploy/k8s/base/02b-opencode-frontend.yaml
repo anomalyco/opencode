@@ -33,11 +33,11 @@ spec:
             - name: NODE_ENV
               value: "production"
             - name: FRONTEND_BACKEND_HEALTH_URL
-              value: "http://opencode-api:3000/healthz"
+              value: "http://opencode-api:3000/readyz"
             - name: FRONTEND_RELAY_HEALTH_URL
-              value: "http://relay:8080/healthz"
+              value: "http://relay:8080/readyz"
             - name: FRONTEND_RELAY_WS_HEALTH_URL
-              value: "ws://relay:8080/health/ws"
+              value: "ws://relay:8080/readyz/ws"
             - name: FRONTEND_PUBLIC_OPENCODE_SERVER_URL
               valueFrom:
                 configMapKeyRef:
@@ -64,7 +64,7 @@ spec:
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 80
             initialDelaySeconds: 5
             periodSeconds: 10

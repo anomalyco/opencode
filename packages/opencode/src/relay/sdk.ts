@@ -243,7 +243,7 @@ export class RelaySDK {
    * Get relay health status
    */
   async health(): Promise<{ ok: boolean; browserConnected: boolean; agentCount: number }> {
-    const url = this.config.relayUrl.replace("ws://", "http://").replace("wss://", "https://").split("?")[0].replace("/relay/ws", "/relay/health")
+    const url = this.config.relayUrl.replace("ws://", "http://").replace("wss://", "https://").split("?")[0].replace("/relay/ws", "/relay/readyz")
     
     const response = await fetch(url)
     if (!response.ok) {

@@ -13,7 +13,7 @@ async function list(input?: Parameters<typeof Session.list>[0]) {
 }
 
 async function create(dir: string, name: string) {
-  return (await Project.createForDirectory({ directory: dir, name, tenantUserId: "user_test" })).project
+  return (await Project.createForDirectory({ workspace: dir, name, tenantUserId: "user_test" })).project
 }
 
 describe("Session.list", () => {
@@ -23,7 +23,6 @@ describe("Session.list", () => {
     await using first = await tmpdir({ git: true })
     const firstProject = await create(first.path, "session-list-main")
     await Instance.provide({
-      directory: first.path,
       project: firstProject,
       fn: async () => {
         const first = await Session.create({ title: "first-project-session" })
@@ -32,7 +31,6 @@ describe("Session.list", () => {
         await using secondDir = await tmpdir({ git: true })
         const secondProject = await create(secondDir.path, "session-list-other")
         const second = await Instance.provide({
-          directory: secondDir.path,
           project: secondProject,
           fn: async () => Session.create({ title: "second-project-session" }),
         })
@@ -51,7 +49,7 @@ describe("Session.list", () => {
     await using tmp = await tmpdir({ git: true })
     const project = await create(tmp.path, "session-roots")
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => {
         const root = await Session.create({ title: "root-session" })
@@ -70,7 +68,7 @@ describe("Session.list", () => {
     await using tmp = await tmpdir({ git: true })
     const project = await create(tmp.path, "session-start")
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => {
         await Session.create({ title: "new-session" })
@@ -86,7 +84,7 @@ describe("Session.list", () => {
     await using tmp = await tmpdir({ git: true })
     const project = await create(tmp.path, "session-search")
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => {
         await Session.create({ title: "unique-search-term-abc" })
@@ -105,7 +103,7 @@ describe("Session.list", () => {
     await using tmp = await tmpdir({ git: true })
     const project = await create(tmp.path, "session-limit")
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => {
         await Session.create({ title: "session-1" })

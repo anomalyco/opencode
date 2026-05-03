@@ -34,7 +34,7 @@ async function bootstrap() {
 test("tracks deleted files correctly", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -49,7 +49,7 @@ test("tracks deleted files correctly", async () => {
 test("revert should remove new files", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -71,7 +71,7 @@ test("revert should remove new files", async () => {
 test("revert in subdirectory", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -96,7 +96,7 @@ test("revert in subdirectory", async () => {
 test("multiple file operations", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -126,7 +126,7 @@ test("multiple file operations", async () => {
 test("empty directory handling", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -141,7 +141,7 @@ test("empty directory handling", async () => {
 test("binary file handling", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -165,7 +165,7 @@ test("binary file handling", async () => {
 test("symlink handling", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -180,7 +180,7 @@ test("symlink handling", async () => {
 test("large file handling", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -195,7 +195,7 @@ test("large file handling", async () => {
 test("nested directory revert", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -218,7 +218,7 @@ test("nested directory revert", async () => {
 test("special characters in filenames", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -238,7 +238,7 @@ test("special characters in filenames", async () => {
 test("revert with empty patches", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       // Should not crash with empty patches
       expect(Snapshot.revert([])).resolves.toBeUndefined()
@@ -252,7 +252,7 @@ test("revert with empty patches", async () => {
 test("patch with invalid hash", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -271,7 +271,7 @@ test("patch with invalid hash", async () => {
 test("revert non-existent file", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -293,7 +293,7 @@ test("revert non-existent file", async () => {
 test("unicode filenames", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -333,7 +333,7 @@ test("unicode filenames", async () => {
 test.skip("unicode filenames modification and restore", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const chineseFile = fwd(tmp.path, "文件.txt")
       const cyrillicFile = fwd(tmp.path, "файл.txt")
@@ -362,7 +362,7 @@ test.skip("unicode filenames modification and restore", async () => {
 test("unicode filenames in subdirectories", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -388,7 +388,7 @@ test("unicode filenames in subdirectories", async () => {
 test("very long filenames", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -415,7 +415,7 @@ test("very long filenames", async () => {
 test("hidden files", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -435,7 +435,7 @@ test("hidden files", async () => {
 test("nested symlinks", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -455,7 +455,7 @@ test("nested symlinks", async () => {
 test("file permissions and ownership changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -476,7 +476,7 @@ test("file permissions and ownership changes", async () => {
 test("circular symlinks", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -493,7 +493,7 @@ test("circular symlinks", async () => {
 test("gitignore changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -517,7 +517,7 @@ test("gitignore changes", async () => {
 test("git info exclude changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -543,7 +543,7 @@ test("git info exclude changes", async () => {
 test("git info exclude keeps global excludes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const global = `${tmp.path}/global.ignore`
       const config = `${tmp.path}/global.gitconfig`
@@ -579,7 +579,7 @@ test("git info exclude keeps global excludes", async () => {
 test("concurrent file operations during patch", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -611,7 +611,7 @@ test("snapshot state isolation between projects", async () => {
   await using tmp2 = await bootstrap()
 
   await Instance.provide({
-    directory: tmp1.path,
+    workspace: tmp1.path,
     fn: async () => {
       const before1 = await Snapshot.track()
       await Filesystem.write(`${tmp1.path}/project1.txt`, "project1 content")
@@ -621,7 +621,7 @@ test("snapshot state isolation between projects", async () => {
   })
 
   await Instance.provide({
-    directory: tmp2.path,
+    workspace: tmp2.path,
     fn: async () => {
       const before2 = await Snapshot.track()
       await Filesystem.write(`${tmp2.path}/project2.txt`, "project2 content")
@@ -639,7 +639,7 @@ test("snapshot state isolation between projects", async () => {
 test("track with no changes returns same hash", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const hash1 = await Snapshot.track()
       expect(hash1).toBeTruthy()
@@ -658,7 +658,7 @@ test("track with no changes returns same hash", async () => {
 test("diff function with various changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -679,7 +679,7 @@ test("diff function with various changes", async () => {
 test("restore function", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -713,7 +713,7 @@ test("restore function", async () => {
 test("revert should not delete files that existed but were deleted in snapshot", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const snapshot1 = await Snapshot.track()
       expect(snapshot1).toBeTruthy()
@@ -743,7 +743,7 @@ test("revert should not delete files that existed but were deleted in snapshot",
 test("revert preserves file that existed in snapshot when deleted then recreated", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       await Filesystem.write(`${tmp.path}/existing.txt`, "original content")
 
@@ -780,7 +780,7 @@ test("revert preserves file that existed in snapshot when deleted then recreated
 test("diffFull sets status based on git change type", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       await Filesystem.write(`${tmp.path}/grow.txt`, "one\n")
       await Filesystem.write(`${tmp.path}/trim.txt`, "line1\nline2\n")
@@ -826,7 +826,7 @@ test("diffFull sets status based on git change type", async () => {
 test("diffFull with new file additions", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -852,7 +852,7 @@ test("diffFull with new file additions", async () => {
 test("diffFull with file modifications", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -878,7 +878,7 @@ test("diffFull with file modifications", async () => {
 test("diffFull with file deletions", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -904,7 +904,7 @@ test("diffFull with file deletions", async () => {
 test("diffFull with multiple line additions", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -930,7 +930,7 @@ test("diffFull with multiple line additions", async () => {
 test("diffFull with addition and deletion", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -964,7 +964,7 @@ test("diffFull with addition and deletion", async () => {
 test("diffFull with multiple additions and deletions", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -1006,7 +1006,7 @@ test("diffFull with multiple additions and deletions", async () => {
 test("diffFull with no changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -1023,7 +1023,7 @@ test("diffFull with no changes", async () => {
 test("diffFull with binary file changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
@@ -1046,7 +1046,7 @@ test("diffFull with binary file changes", async () => {
 test("diffFull with whitespace changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       await Filesystem.write(`${tmp.path}/whitespace.txt`, "line1\nline2")
       const before = await Snapshot.track()

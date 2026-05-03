@@ -5,9 +5,11 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "build-vm": "bash scripts/build-vm.sh",
+    "fetch-guest-kernel": "bash scripts/fetch-guest-kernel.sh",
+    "verify-artifacts": "bash scripts/verify-guest-artifacts.sh",
     "test": "bun run src/test.ts",
     "test:e2e": "bun run src/e2e-test.ts",
-    "test:integration": "bun run src/integration-test.ts",
+    "test:integration": "bun run --cwd ../opencode test:executor-sdk",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

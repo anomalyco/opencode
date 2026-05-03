@@ -6,7 +6,7 @@ import { tmpdir } from "./fixture/fixture"
 describe("Scheduler.register", () => {
   const hour = 60 * 60 * 1000
 
-  test("defaults to instance scope per directory", async () => {
+  test("defaults to instance scope per workspace", async () => {
     await using one = await tmpdir({ git: true })
     await using two = await tmpdir({ git: true })
     const runs = { count: 0 }
@@ -20,7 +20,7 @@ describe("Scheduler.register", () => {
     }
 
     await Instance.provide({
-      directory: one.path,
+      workspace: one.path,
       fn: async () => {
         Scheduler.register(task)
         await Instance.dispose()
@@ -29,7 +29,7 @@ describe("Scheduler.register", () => {
     expect(runs.count).toBe(1)
 
     await Instance.provide({
-      directory: two.path,
+      workspace: two.path,
       fn: async () => {
         Scheduler.register(task)
         await Instance.dispose()
@@ -53,7 +53,7 @@ describe("Scheduler.register", () => {
     }
 
     await Instance.provide({
-      directory: one.path,
+      workspace: one.path,
       fn: async () => {
         Scheduler.register(task)
         await Instance.dispose()
@@ -62,7 +62,7 @@ describe("Scheduler.register", () => {
     expect(runs.count).toBe(1)
 
     await Instance.provide({
-      directory: two.path,
+      workspace: two.path,
       fn: async () => {
         Scheduler.register(task)
         await Instance.dispose()

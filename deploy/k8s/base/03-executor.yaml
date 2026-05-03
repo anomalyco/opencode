@@ -6,7 +6,8 @@ metadata:
   labels:
     app: executor
 spec:
-  replicas: 1
+  # Raise node RAM before increasing — each replica holds FC VMs (896Mi request / 2.5Gi cap each).
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -20,6 +21,18 @@ spec:
       labels:
         app: executor
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - executor
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: executor
           image: opencode-veritly-executor:latest
@@ -35,16 +48,14 @@ spec:
           env:
             - name: PORT
               value: "7777"
-            - name: EXECUTOR_RUNTIME
-              value: "firecracker"
             - name: VM_INACTIVITY_TIMEOUT_MS
               value: "300000"
             - name: KERNEL_PATH
               value: "/opt/veritly/vmlinux"
             - name: ROOTFS_PATH
               value: "/opt/veritly/rootfs.ext4"
-            - name: FIRECRACKER_BINARY
-              value: "/usr/local/bin/firecracker"
+            - name: QEMU_BINARY
+              value: "/usr/bin/qemu-system-x86_64"
             - name: UNIVER_SDK_WS
               value: "ws://relay:8080/ws"
             - name: VM_DATA_DIR
@@ -57,17 +68,18 @@ spec:
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 7777
             initialDelaySeconds: 2
             periodSeconds: 5
+          # Same rationale as `03b-executor-dev.yaml`: FC RSS ~1.4Gi; cap raised above observed usage.
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "896Mi"
+              cpu: "250m"
             limits:
-              memory: "1Gi"
-              cpu: "500m"
+              memory: "2560Mi"
+              cpu: "1500m"
       volumes:
         - name: dev-kvm
           hostPath:
@@ -79,7 +91,14 @@ kind: Service
 metadata:
   name: executor
   namespace: veritly
+  annotations:
+    # Sticky by SOURCE IP. Traffic from a single opencode-api pod → one client IP → one executor pod (no spread).
+    # For per-session spread across replicas, use `03c-executor-sticky-ingress.yaml` + VERITLY_EXECUTOR_HTTP_HOST on the API.
 spec:
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 14400
   selector:
     app: executor
   ports:

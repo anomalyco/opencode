@@ -29,7 +29,7 @@ describe("tool.read external_directory permission", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "test.txt") }, ctx)
@@ -45,7 +45,7 @@ describe("tool.read external_directory permission", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "subdir", "test.txt") }, ctx)
@@ -62,7 +62,7 @@ describe("tool.read external_directory permission", () => {
     })
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -88,7 +88,7 @@ describe("tool.read external_directory permission", () => {
     })
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -109,7 +109,7 @@ describe("tool.read external_directory permission", () => {
   test("asks for external_directory permission when reading relative path outside project", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -135,7 +135,7 @@ describe("tool.read external_directory permission", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
@@ -170,7 +170,7 @@ describe("tool.read env file permissions", () => {
         init: (dir) => Bun.write(path.join(dir, filename), "content"),
       })
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const agent = await Agent.get(agentName)
           let askedForEnv = false
@@ -208,7 +208,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "large.json") }, ctx)
@@ -227,7 +227,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "many-lines.txt"), limit: 10 }, ctx)
@@ -248,7 +248,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "small.txt") }, ctx)
@@ -266,7 +266,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "offset.txt"), offset: 10, limit: 5 }, ctx)
@@ -290,7 +290,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         await expect(
@@ -307,7 +307,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "empty.txt") }, ctx)
@@ -324,7 +324,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         await expect(read.execute({ filePath: path.join(tmp.path, "empty.txt"), offset: 2 }, ctx)).rejects.toThrow(
@@ -343,7 +343,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "dir"), offset: 6, limit: 5 }, ctx)
@@ -361,7 +361,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "long-line.txt") }, ctx)
@@ -383,7 +383,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "image.png") }, ctx)
@@ -399,7 +399,7 @@ describe("tool.read truncation", () => {
 
   test("large image files are properly attached without error", async () => {
     await Instance.provide({
-      directory: FIXTURES_DIR,
+      workspace: FIXTURES_DIR,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(FIXTURES_DIR, "large-image.png") }, ctx)
@@ -421,7 +421,7 @@ describe("tool.read truncation", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "sheet.xlsx") }, ctx)
@@ -452,7 +452,7 @@ root_type Monster;`
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "schema.fbs") }, ctx)
@@ -474,7 +474,7 @@ describe("tool.read loaded instructions", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "subdir", "nested", "test.txt") }, ctx)
@@ -497,7 +497,7 @@ describe("tool.read binary detection", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         await expect(read.execute({ filePath: path.join(tmp.path, "null-byte.txt") }, ctx)).rejects.toThrow(
@@ -514,7 +514,7 @@ describe("tool.read binary detection", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
         await expect(read.execute({ filePath: path.join(tmp.path, "module.wasm") }, ctx)).rejects.toThrow(

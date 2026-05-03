@@ -29,7 +29,7 @@ describe("Project.createForDirectory", () => {
     await using tmp = await tmpdir({ git: true })
 
     const { project } = await Project.createForDirectory({
-      directory: tmp.path,
+      workspace: tmp.path,
       name: "Directory Project",
       tenantUserId: "user_test",
     })

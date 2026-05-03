@@ -10,7 +10,6 @@ import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"
 import { errors } from "../error"
-import { railwayDeploymentFlat } from "@veritly/telemetry-veritly"
 import { apiHealthReport } from "../health"
 
 const log = Log.create({ service: "server" })
@@ -20,12 +19,12 @@ export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({
 export const GlobalRoutes = lazy(() =>
   new Hono()
     .get(
-      "/health",
+      "/readyz",
       describeRoute({
-        summary: "Get health",
+        summary: "Get readiness",
         description:
           "Get comprehensive health information about the OpenCode server including database, executor, relay, and univer status.",
-        operationId: "global.health",
+        operationId: "global.readyz",
         responses: {
           200: {
             description: "Health information",
@@ -82,9 +81,6 @@ export const GlobalRoutes = lazy(() =>
         return c.json(report, report.ok ? 200 : 503)
       },
     )
-    .get("/veritly-deployment", async (c) => {
-      return c.json(railwayDeploymentFlat())
-    })
     .get(
       "/event",
       describeRoute({

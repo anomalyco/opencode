@@ -49,7 +49,7 @@ describe("File.read path traversal protection", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         await expect(File.read("../../../etc/passwd")).rejects.toThrow("Access denied: path escapes project directory")
       },
@@ -60,7 +60,7 @@ describe("File.read path traversal protection", () => {
     await using tmp = await tmpdir()
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         await expect(File.read("src/nested/../../../../../../../etc/passwd")).rejects.toThrow(
           "Access denied: path escapes project directory",
@@ -77,7 +77,7 @@ describe("File.read path traversal protection", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const result = await File.read("valid.txt")
         expect(result.content).toBe("valid content")
@@ -91,7 +91,7 @@ describe("File.list", () => {
     await using tmp = await tmpdir()
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         expect(await File.list("../../../etc")).toEqual([])
         expect(await File.list("")).toEqual([])
@@ -106,7 +106,7 @@ describe("Instance.containsPath", () => {
     await using tmp = await tmpdir({ git: true })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: () => {
         expect(Instance.containsPath(path.join(tmp.path, "foo.txt"))).toBe(true)
         expect(Instance.containsPath(path.join(tmp.path, "src", "file.ts"))).toBe(true)
@@ -120,7 +120,7 @@ describe("Instance.containsPath", () => {
     await fs.mkdir(subdir, { recursive: true })
 
     await Instance.provide({
-      directory: subdir,
+      workspace: subdir,
       fn: () => {
         expect(Instance.containsPath(path.join(subdir, "state"))).toBe(true)
         expect(Instance.containsPath(path.join(tmp.path, ".opencode", "state"))).toBe(false)
@@ -134,7 +134,7 @@ describe("Instance.containsPath", () => {
     await using tmp = await tmpdir({ git: true })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: () => {
         expect(Instance.containsPath("/etc/passwd")).toBe(false)
         expect(Instance.containsPath("/tmp/other-project")).toBe(false)
@@ -146,7 +146,7 @@ describe("Instance.containsPath", () => {
     await using tmp = await tmpdir({ git: true })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: () => {
         expect(Instance.containsPath(path.join(tmp.path, "..", "escape.txt"))).toBe(false)
       },
@@ -157,9 +157,9 @@ describe("Instance.containsPath", () => {
     await using tmp = await tmpdir({ git: true })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: () => {
-        expect(Instance.directory).toBe(tmp.path)
+        expect(Instance.workspace).toBe(tmp.path)
         expect(Instance.containsPath(path.join(tmp.path, "file.txt"))).toBe(true)
         expect(Instance.containsPath("/etc/passwd")).toBe(false)
       },
@@ -170,7 +170,7 @@ describe("Instance.containsPath", () => {
     await using tmp = await tmpdir() // no git: true
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: () => {
         // worktree is "/" for non-git projects, but containsPath should NOT allow all paths
         expect(Instance.containsPath(path.join(tmp.path, "file.txt"))).toBe(true)

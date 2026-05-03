@@ -50,7 +50,7 @@ export const EditTool = Tool.define("edit", {
       throw new Error("No changes to apply: oldString and newString are identical.")
     }
 
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.workspace, params.filePath)
     await assertExternalDirectory(ctx, filePath)
 
     let diff = ""
@@ -63,7 +63,7 @@ export const EditTool = Tool.define("edit", {
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
           permission: "edit",
-          patterns: [path.relative(Instance.directory, filePath)],
+          patterns: [path.relative(Instance.workspace, filePath)],
           always: ["*"],
           metadata: {
             filepath: filePath,
@@ -99,7 +99,7 @@ export const EditTool = Tool.define("edit", {
       )
       await ctx.ask({
         permission: "edit",
-        patterns: [path.relative(Instance.directory, filePath)],
+        patterns: [path.relative(Instance.workspace, filePath)],
         always: ["*"],
         metadata: {
           filepath: filePath,
@@ -161,7 +161,7 @@ export const EditTool = Tool.define("edit", {
         diff,
         filediff,
       },
-      title: `${path.relative(Instance.directory, filePath)}`,
+      title: `${path.relative(Instance.workspace, filePath)}`,
       output,
     }
   },

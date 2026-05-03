@@ -92,10 +92,7 @@ Bun.serve({
     const url = new URL(req.url)
     const origin = req.headers.get("origin")
 
-    if (
-      req.method === "OPTIONS" &&
-      (url.pathname === "/relay/health" || url.pathname === "/health" || url.pathname === "/healthz")
-    ) {
+    if (req.method === "OPTIONS" && (url.pathname === "/relay/readyz" || url.pathname === "/readyz")) {
       return new Response(null, {
         status: 204,
         headers: corsHeaders(origin),
@@ -111,7 +108,7 @@ Bun.serve({
       })
     }
 
-    if (url.pathname === "/relay/health" || url.pathname === "/health" || url.pathname === "/healthz") {
+    if (url.pathname === "/relay/readyz" || url.pathname === "/readyz") {
       const payload = relayHealthPayload()
       return new Response(JSON.stringify(payload), {
         status: payload.ok ? 200 : 503,
@@ -122,7 +119,7 @@ Bun.serve({
       })
     }
 
-    if (url.pathname === "/relay/health/ws" || url.pathname === "/health/ws") {
+    if (url.pathname === "/relay/readyz/ws" || url.pathname === "/readyz/ws") {
       const upgraded = server.upgrade(req, { data: { role: "healthcheck" } })
       return upgraded ? undefined : new Response("upgrade failed", { status: 500 })
     }

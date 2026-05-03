@@ -40,8 +40,8 @@ async function checkServices(): Promise<string[]> {
           // Ollama uses /api/tags for health check
           res = await fetch(`${config.url}/api/tags`)
         } else {
-          // Executor uses /health
-          res = await fetch(`${config.url}/health`)
+          // Executor uses /readyz
+          res = await fetch(`${config.url}/readyz`)
         }
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`)
@@ -60,7 +60,7 @@ async function waitForServer(url: string, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${url}/global/health`)
+      const res = await fetch(`${url}/global/readyz`)
       if (res.ok) return
     } catch {}
     await new Promise(r => setTimeout(r, 100))

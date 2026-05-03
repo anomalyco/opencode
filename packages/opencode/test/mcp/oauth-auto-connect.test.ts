@@ -120,7 +120,7 @@ test("first connect to OAuth server shows needs_auth instead of failed", async (
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const result = await MCP.add("test-oauth", {
         type: "remote",
@@ -146,7 +146,7 @@ test("state() generates a new state when none is saved", async () => {
   await using tmp = await tmpdir()
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const provider = new McpOAuthProvider(
         "test-state-gen",
@@ -178,7 +178,7 @@ test("state() returns existing state when one is saved", async () => {
   await using tmp = await tmpdir()
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const provider = new McpOAuthProvider(
         "test-state-existing",

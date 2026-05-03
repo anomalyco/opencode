@@ -35,7 +35,7 @@ import { GlobalRoutes } from "./routes/global"
 import { lazy } from "@/util/lazy"
 import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry-veritly"
 import path from "path"
-import { apiHealthReport, apiHealthReportSimple, isPublicHealthPath } from "./health"
+import { apiHealthReportSimple, isPublicHealthPath } from "./health"
 import { AuthRoutes, getCookieOptions, type SessionUser } from "./routes/auth"
 import { isOpencodeWorkosEnabled } from "./workos-env"
 import { resolveInstanceProject } from "./resolve-instance-project"
@@ -126,11 +126,7 @@ export namespace Server {
           },
         }))
         .get("/livez", (c) => c.text("ok"))
-        .get("/health", async (c) => {
-          const report = await apiHealthReport()
-          return c.json(report, report.ok ? 200 : 503)
-        })
-        .get("/healthz", async (c) => {
+        .get("/readyz", async (c) => {
           const report = await apiHealthReportSimple()
           return c.json(report, report.ok ? 200 : 503)
         })

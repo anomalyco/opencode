@@ -12,7 +12,7 @@ describe("Session.create with virtual project handle", () => {
     // Setup: Create a project in the database
     await using tmp = await tmpdir({ git: true })
     const projectResult = await Project.createForDirectory({
-      directory: tmp.path,
+      workspace: tmp.path,
       name: "virtual-project-test",
       tenantUserId: "user_test",
     })
@@ -23,7 +23,7 @@ describe("Session.create with virtual project handle", () => {
     const virtualHandle = `/projects/${project.id}`
 
     await Instance.provide({
-      directory: virtualHandle,
+      workspace: virtualHandle,
       project,
       fn: async () => {
         // Create a session - this should work without any directory field
@@ -54,14 +54,14 @@ describe("Session.create with virtual project handle", () => {
     // This verifies the general case: sessions no longer have a directory field
     await using tmp = await tmpdir({ git: true })
     const projectResult = await Project.createForDirectory({
-      directory: tmp.path,
+      workspace: tmp.path,
       name: "stateless-test",
       tenantUserId: "user_test",
     })
     const project = projectResult.project
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => {
         const session = await Session.create({
@@ -82,14 +82,14 @@ describe("Session.create with virtual project handle", () => {
   test("fork session works without directory", async () => {
     await using tmp = await tmpdir({ git: true })
     const projectResult = await Project.createForDirectory({
-      directory: tmp.path,
+      workspace: tmp.path,
       name: "fork-test",
       tenantUserId: "user_test",
     })
     const project = projectResult.project
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => {
         // Create parent session
@@ -114,14 +114,14 @@ describe("Session.create with virtual project handle", () => {
   test("session can have messages without directory", async () => {
     await using tmp = await tmpdir({ git: true })
     const projectResult = await Project.createForDirectory({
-      directory: tmp.path,
+      workspace: tmp.path,
       name: "messages-test",
       tenantUserId: "user_test",
     })
     const project = projectResult.project
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => {
         const session = await Session.create({

@@ -182,7 +182,9 @@ const svc = {
     })
   },
   executor: async () => {
-    const port = new URL(env("VERITLY_EXECUTOR_URL")).port || "80"
+    process.env["VERITLY_EXECUTOR_URL"] =
+    process.env["VERITLY_EXECUTOR_URL"]?.trim() || "http://127.0.0.1:7777"
+    const port = new URL(env("VERITLY_EXECUTOR_URL")).port || "7777"
     const python = resolve(root, "packages/univer-sdk/python")
     ensureUniverSdkInstalled(python)
     const user = execSync("python3 -c 'import site; print(site.getusersitepackages())'", {

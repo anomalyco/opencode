@@ -70,7 +70,7 @@ test("headers are passed to transports when oauth is enabled (default)", async (
   })
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       // Trigger MCP initialization - it will fail to connect but we can check the transport options
       await MCP.add("test-server", {
@@ -102,7 +102,7 @@ test("headers are passed to transports when oauth is explicitly disabled", async
   await using tmp = await tmpdir()
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       transportCalls.length = 0
 
@@ -133,7 +133,7 @@ test("no requestInit when headers are not provided", async () => {
   await using tmp = await tmpdir()
 
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       transportCalls.length = 0
 

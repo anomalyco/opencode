@@ -16,7 +16,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const before = FileTime.get(sessionID, filepath)
           expect(before).toBeUndefined()
@@ -36,7 +36,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read("session1", filepath)
           FileTime.read("session2", filepath)
@@ -56,7 +56,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(sessionID, filepath)
           const first = FileTime.get(sessionID, filepath)!
@@ -79,7 +79,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(sessionID, filepath)
 
@@ -95,7 +95,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow("You must read file")
         },
@@ -108,7 +108,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(sessionID, filepath)
 
@@ -129,7 +129,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(sessionID, filepath)
           await new Promise((resolve) => setTimeout(resolve, 100))
@@ -154,7 +154,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const { Flag } = await import("../../src/flag/flag")
           const original = Flag.OPENCODE_DISABLE_FILETIME_CHECK
@@ -177,7 +177,7 @@ describe("file/time", () => {
       const filepath = path.join(tmp.path, "file.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           let executed = false
           await FileTime.withLock(filepath, async () => {
@@ -194,7 +194,7 @@ describe("file/time", () => {
       const filepath = path.join(tmp.path, "file.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const result = await FileTime.withLock(filepath, async () => {
             return "success"
@@ -209,7 +209,7 @@ describe("file/time", () => {
       const filepath = path.join(tmp.path, "file.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const order: number[] = []
 
@@ -241,7 +241,7 @@ describe("file/time", () => {
       const filepath2 = path.join(tmp.path, "file2.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           let started1 = false
           let started2 = false
@@ -269,7 +269,7 @@ describe("file/time", () => {
       const filepath = path.join(tmp.path, "file.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           await expect(
             FileTime.withLock(filepath, async () => {
@@ -292,7 +292,7 @@ describe("file/time", () => {
       const filepath = path.join(tmp.path, "file.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           // Nested locks on same file cause deadlock - this is expected
           // The outer lock waits for inner to complete, but inner waits for outer to release
@@ -320,7 +320,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(sessionID, filepath)
 
@@ -340,7 +340,7 @@ describe("file/time", () => {
       await fs.writeFile(filepath, "original", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(sessionID, filepath)
 

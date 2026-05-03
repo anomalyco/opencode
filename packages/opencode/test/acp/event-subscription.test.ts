@@ -261,7 +261,7 @@ describe("acp.agent event subscription", () => {
   test("routes message.part.delta by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const { agent, controller, updates, stop } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"
@@ -296,7 +296,7 @@ describe("acp.agent event subscription", () => {
   test("keeps concurrent sessions isolated when message.part.delta events are interleaved", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const { agent, controller, chunks, stop } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"
@@ -348,7 +348,7 @@ describe("acp.agent event subscription", () => {
   test("does not create additional event subscriptions on repeated loadSession()", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const { agent, calls, stop } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"
@@ -370,7 +370,7 @@ describe("acp.agent event subscription", () => {
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const permissionReplies: string[] = []
         const { agent, controller, stop, sdk } = createFakeAgent()
@@ -409,7 +409,7 @@ describe("acp.agent event subscription", () => {
   test("permission prompt on session A does not block message updates for session B", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const permissionReplies: string[] = []
         let resolvePermissionA: (() => void) | undefined
@@ -496,7 +496,7 @@ describe("acp.agent event subscription", () => {
   test("streams running bash output snapshots and de-dupes identical snapshots", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"
@@ -530,7 +530,7 @@ describe("acp.agent event subscription", () => {
   test("emits synthetic pending before first running update for any tool", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"
@@ -575,7 +575,7 @@ describe("acp.agent event subscription", () => {
   test("does not emit duplicate synthetic pending after replayed running tool", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop, sdk } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"
@@ -634,7 +634,7 @@ describe("acp.agent event subscription", () => {
   test("clears bash snapshot marker on pending state", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"

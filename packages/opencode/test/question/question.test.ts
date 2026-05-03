@@ -8,7 +8,7 @@ import { SessionID } from "../../src/session/schema"
 test("ask - returns pending promise", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const promise = Question.ask({
         sessionID: SessionID.make("ses_test"),
@@ -31,7 +31,7 @@ test("ask - returns pending promise", async () => {
 test("ask - adds to pending list", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const questions = [
         {
@@ -61,7 +61,7 @@ test("ask - adds to pending list", async () => {
 test("reply - resolves the pending ask with answers", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const questions = [
         {
@@ -96,7 +96,7 @@ test("reply - resolves the pending ask with answers", async () => {
 test("reply - removes from pending list", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       Question.ask({
         sessionID: SessionID.make("ses_test"),
@@ -129,7 +129,7 @@ test("reply - removes from pending list", async () => {
 test("reply - does nothing for unknown requestID", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       await Question.reply({
         requestID: QuestionID.make("que_unknown"),
@@ -145,7 +145,7 @@ test("reply - does nothing for unknown requestID", async () => {
 test("reject - throws RejectedError", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const askPromise = Question.ask({
         sessionID: SessionID.make("ses_test"),
@@ -172,7 +172,7 @@ test("reject - throws RejectedError", async () => {
 test("reject - removes from pending list", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const askPromise = Question.ask({
         sessionID: SessionID.make("ses_test"),
@@ -203,7 +203,7 @@ test("reject - removes from pending list", async () => {
 test("reject - does nothing for unknown requestID", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       await Question.reject(QuestionID.make("que_unknown"))
       // Should not throw
@@ -216,7 +216,7 @@ test("reject - does nothing for unknown requestID", async () => {
 test("ask - handles multiple questions", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const questions = [
         {
@@ -260,7 +260,7 @@ test("ask - handles multiple questions", async () => {
 test("list - returns all pending requests", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       Question.ask({
         sessionID: SessionID.make("ses_test1"),
@@ -293,7 +293,7 @@ test("list - returns all pending requests", async () => {
 test("list - returns empty when no pending", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
-    directory: tmp.path,
+    workspace: tmp.path,
     fn: async () => {
       const pending = await Question.list()
       expect(pending.length).toBe(0)

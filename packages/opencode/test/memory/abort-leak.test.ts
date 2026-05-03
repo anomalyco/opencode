@@ -28,7 +28,7 @@ const getHeapMB = () => {
 describe("memory: abort controller leak", () => {
   test("webfetch does not leak memory over many invocations", async () => {
     await Instance.provide({
-      directory: projectRoot,
+      workspace: projectRoot,
       fn: async () => {
         const tool = await WebFetchTool.init()
 

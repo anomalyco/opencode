@@ -36,7 +36,7 @@ log(`root=${opencodeRoot}`)
 log(`opencode_projects_root=${process.env.OPENCODE_PROJECTS_ROOT}`)
 
 const relayPort = process.env.UNIVER_SDK_PORT?.trim() ? Number(process.env.UNIVER_SDK_PORT.trim()) : 18766
-const relayHealthUrl = `http://127.0.0.1:${relayPort}/health`
+const relayHealthUrl = `http://127.0.0.1:${relayPort}/readyz`
 
 async function relayHealthy(): Promise<boolean> {
   try {

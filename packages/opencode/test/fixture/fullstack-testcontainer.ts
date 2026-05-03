@@ -116,7 +116,7 @@ export async function startFullStack(): Promise<FullStackContext> {
          console.log("Server listening on :4096");
        '`,
     ])
-    .withWaitStrategy(Wait.forHttp("/health", 4096))
+    .withWaitStrategy(Wait.forHttp("/readyz", 4096))
     .withStartupTimeout(60000)
     .start()
 

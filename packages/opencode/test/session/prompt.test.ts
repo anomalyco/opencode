@@ -12,7 +12,7 @@ import { tmpdir } from "../fixture/fixture"
 Log.init({ print: false })
 
 async function create(dir: string, name: string) {
-  return (await Project.createForDirectory({ directory: dir, name, tenantUserId: "user_test" })).project
+  return (await Project.createForDirectory({ workspace: dir, name, tenantUserId: "user_test" })).project
 }
 
 describe("session.prompt missing file", () => {
@@ -29,7 +29,7 @@ describe("session.prompt missing file", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "prompt-missing-file"),
       fn: async () => {
         const session = await Session.create({})
@@ -75,7 +75,7 @@ describe("session.prompt missing file", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "prompt-order"),
       fn: async () => {
         const session = await Session.create({})
@@ -124,7 +124,7 @@ describe("session.prompt special characters", () => {
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project: await create(tmp.path, "prompt-special"),
       fn: async () => {
         const session = await Session.create({})
@@ -174,7 +174,7 @@ describe("session.prompt agent variant", () => {
       })
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         project: await create(tmp.path, "prompt-variant"),
         fn: async () => {
           const session = await Session.create({})

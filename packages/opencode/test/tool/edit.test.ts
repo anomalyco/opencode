@@ -25,7 +25,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "newfile.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const edit = await EditTool.init()
           const result = await edit.execute(
@@ -50,7 +50,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "nested", "dir", "file.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const edit = await EditTool.init()
           await edit.execute(
@@ -73,7 +73,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "new.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const { Bus } = await import("../../src/bus")
           const { File } = await import("../../src/file")
@@ -109,7 +109,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "old content here", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 
@@ -136,7 +136,7 @@ describe("tool.edit", () => {
       const filepath = path.join(tmp.path, "nonexistent.txt")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 
@@ -161,7 +161,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const edit = await EditTool.init()
           await expect(
@@ -184,7 +184,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "actual content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 
@@ -209,7 +209,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const edit = await EditTool.init()
           await expect(
@@ -232,7 +232,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "original content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           // Read first
           FileTime.read(ctx.sessionID, filepath)
@@ -265,7 +265,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "foo bar foo baz foo", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 
@@ -292,7 +292,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "original", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 
@@ -330,7 +330,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 
@@ -356,7 +356,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "line1\r\nold\r\nline3", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 
@@ -382,7 +382,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "content", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const edit = await EditTool.init()
           await expect(
@@ -405,7 +405,7 @@ describe("tool.edit", () => {
       await fs.mkdir(dirpath)
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, dirpath)
 
@@ -430,7 +430,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "line1\nline2\nline3", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 
@@ -499,7 +499,7 @@ describe("tool.edit", () => {
       })
 
       return await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           const edit = await EditTool.init()
           const filePath = path.join(tmp.path, "test.txt")
@@ -642,7 +642,7 @@ describe("tool.edit", () => {
       await fs.writeFile(filepath, "0", "utf-8")
 
       await Instance.provide({
-        directory: tmp.path,
+        workspace: tmp.path,
         fn: async () => {
           FileTime.read(ctx.sessionID, filepath)
 

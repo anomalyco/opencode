@@ -16,23 +16,21 @@ describe("Session.listGlobal", () => {
     await using first = await tmpdir({ git: true })
     await using second = await tmpdir({ git: true })
     const firstProject = (await Project.createForDirectory({
-      directory: first.path,
+      workspace: first.path,
       name: "global-first",
       tenantUserId: "user_test",
     })).project
     const secondProject = (await Project.createForDirectory({
-      directory: second.path,
+      workspace: second.path,
       name: "global-second",
       tenantUserId: "user_test",
     })).project
 
     const firstSession = await Instance.provide({
-      directory: first.path,
       project: firstProject,
       fn: async () => Session.create({ title: "first-session" }),
     })
     const secondSession = await Instance.provide({
-      directory: second.path,
       project: secondProject,
       fn: async () => Session.create({ title: "second-session" }),
     })
@@ -56,19 +54,19 @@ describe("Session.listGlobal", () => {
   test("excludes archived sessions by default", async () => {
     await using tmp = await tmpdir({ git: true })
     const project = (await Project.createForDirectory({
-      directory: tmp.path,
+      workspace: tmp.path,
       name: "global-archived",
       tenantUserId: "user_test",
     })).project
 
     const archived = await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => Session.create({ title: "archived-session" }),
     })
 
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => Session.setArchived({ sessionID: archived.id, time: Date.now() }),
     })
@@ -87,19 +85,19 @@ describe("Session.listGlobal", () => {
   test("supports cursor pagination", async () => {
     await using tmp = await tmpdir({ git: true })
     const project = (await Project.createForDirectory({
-      directory: tmp.path,
+      workspace: tmp.path,
       name: "global-cursor",
       tenantUserId: "user_test",
     })).project
 
     const first = await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => Session.create({ title: "page-one" }),
     })
     await new Promise((resolve) => setTimeout(resolve, 5))
     const second = await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       project,
       fn: async () => Session.create({ title: "page-two" }),
     })

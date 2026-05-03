@@ -44,7 +44,7 @@ describe("session.compaction.isOverflow", () => {
   test("returns true when token count exceeds usable context", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
@@ -56,7 +56,7 @@ describe("session.compaction.isOverflow", () => {
   test("returns false when token count within usable context", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const model = createModel({ context: 200_000, output: 32_000 })
         const tokens = { input: 100_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } }
@@ -68,7 +68,7 @@ describe("session.compaction.isOverflow", () => {
   test("includes cache.read in token count", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 60_000, output: 10_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
@@ -80,7 +80,7 @@ describe("session.compaction.isOverflow", () => {
   test("respects input limit for input caps", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
         const tokens = { input: 271_000, output: 1_000, reasoning: 0, cache: { read: 2_000, write: 0 } }
@@ -92,7 +92,7 @@ describe("session.compaction.isOverflow", () => {
   test("returns false when input/output are within input caps", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
         const tokens = { input: 200_000, output: 20_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
@@ -104,7 +104,7 @@ describe("session.compaction.isOverflow", () => {
   test("returns false when output within limit with input caps", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const model = createModel({ context: 200_000, input: 120_000, output: 10_000 })
         const tokens = { input: 50_000, output: 9_999, reasoning: 0, cache: { read: 0, write: 0 } }
@@ -128,7 +128,7 @@ describe("session.compaction.isOverflow", () => {
   test("BUG: no headroom when limit.input is set — compaction should trigger near boundary but does not", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         // Simulate Claude with prompt caching: input limit = 200K, output limit = 32K
         const model = createModel({ context: 200_000, input: 200_000, output: 32_000 })
@@ -154,7 +154,7 @@ describe("session.compaction.isOverflow", () => {
   test("BUG: without limit.input, same token count correctly triggers compaction", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         // Same model but without limit.input — uses context - output instead
         const model = createModel({ context: 200_000, output: 32_000 })
@@ -174,7 +174,7 @@ describe("session.compaction.isOverflow", () => {
   test("BUG: asymmetry — limit.input model allows 30K more usage before compaction than equivalent model without it", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         // Two models with identical context/output limits, differing only in limit.input
         const withInputLimit = createModel({ context: 200_000, input: 200_000, output: 32_000 })
@@ -196,7 +196,7 @@ describe("session.compaction.isOverflow", () => {
   test("returns false when model context limit is 0", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const model = createModel({ context: 0, output: 32_000 })
         const tokens = { input: 100_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } }
@@ -217,7 +217,7 @@ describe("session.compaction.isOverflow", () => {
       },
     })
     await Instance.provide({
-      directory: tmp.path,
+      workspace: tmp.path,
       fn: async () => {
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }

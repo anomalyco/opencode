@@ -205,7 +205,7 @@ export class OpenCodeClient {
   // ============ Health ============
 
   async health(): Promise<{ ok: boolean }> {
-    return this.request<{ ok: boolean }>("GET", "/health")
+    return this.request<{ ok: boolean }>("GET", "/readyz")
   }
 
   async isAvailable(): Promise<boolean> {

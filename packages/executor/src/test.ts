@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Test script for the Firecracker executor integration
+ * Test script for the QEMU executor integration
  *
  * Usage: bun test-executor.ts [session-id]
  */
@@ -10,7 +10,7 @@ const EXECUTOR_URL = process.env.VERITLY_EXECUTOR_URL ?? "http://localhost:7777"
 async function healthCheck() {
   console.log("Checking executor health...")
   try {
-    const response = await fetch(`${EXECUTOR_URL}/health`)
+    const response = await fetch(`${EXECUTOR_URL}/readyz`)
     const data = await response.json()
     console.log("✓ Executor is healthy:", data)
     return true
@@ -93,7 +93,7 @@ async function main() {
   const sessionId = process.argv[2] ?? `test-session-${Date.now()}`
 
   console.log("=".repeat(60))
-  console.log("Veritly Firecracker Executor Test")
+  console.log("Veritly QEMU Executor Test")
   console.log("=".repeat(60))
   console.log(`Executor URL: ${EXECUTOR_URL}`)
   console.log(`Session ID: ${sessionId}`)

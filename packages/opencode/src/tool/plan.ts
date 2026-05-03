@@ -21,7 +21,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.directory, Session.plan(session))
+    const plan = path.relative(Instance.workspace, Session.plan(session))
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: [
@@ -77,7 +77,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.directory, Session.plan(session))
+    const plan = path.relative(Instance.workspace, Session.plan(session))
 
     const answers = await Question.ask({
       sessionID: ctx.sessionID,

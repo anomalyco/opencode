@@ -15,11 +15,11 @@ import { Truncate } from "../tool/truncation"
 import { Filesystem } from "@/util/filesystem"
 
 export async function InstanceBootstrap() {
-  Log.Default.info("bootstrapping", { directory: Instance.directory })
+  Log.Default.info("bootstrapping", { workspace: Instance.workspace })
   await Plugin.init()
   ShareNext.init()
   Format.init()
-  if (await Filesystem.exists(Instance.directory)) {
+  if (await Filesystem.exists(Instance.workspace)) {
     await LSP.init()
     FileWatcher.init()
     File.init()

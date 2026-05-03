@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import path from "node:path"
@@ -8,9 +9,8 @@ import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
-import { localProject } from "./local-project"
 
-type Info = Project.Info & { vcs?: "git" }
+type Info = Project.Info
 
 interface Ctx {
   project: Info
@@ -21,6 +21,23 @@ const cache = new Map<string, Promise<Ctx>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
+}
+
+/** Tests / scripts: bootstrap Instance from a filesystem path (not used by HTTP resolve). */
+function projectFromWorkspacePath(resolvedPath: string): Info {
+  const now = Date.now()
+  const match = /^\/projects\/(.+)$/.exec(resolvedPath)
+  const base: Info = {
+    id: ProjectID.make(match ? match[1] : resolvedPath),
+    time: {
+      created: now,
+      updated: now,
+    },
+  }
+  if (existsSync(path.join(resolvedPath, ".git"))) {
+    return { ...base, vcs: "git" }
+  }
+  return base
 }
 
 function emit(projectID: string) {
@@ -54,15 +71,18 @@ function track(projectID: string, next: Promise<Ctx>) {
   return task
 }
 
+/** Bootstrap from a filesystem path: use `workspace` (preferred) or `directory` (same meaning). */
 type ProvideGetInput =
   | { project: Info; init?: () => Promise<any> }
+  | { workspace: string; init?: () => Promise<any> }
   | { directory: string; init?: () => Promise<any> }
 
 function asBootInput(input: ProvideGetInput): { project: Info; init?: () => Promise<any> } {
   if ("project" in input) {
     return { project: input.project, init: input.init }
   }
-  return { project: localProject(Filesystem.resolve(input.directory)), init: input.init }
+  const raw = "workspace" in input ? input.workspace : input.directory
+  return { project: projectFromWorkspacePath(Filesystem.resolve(raw)), init: input.init }
 }
 
 export const Instance = {
@@ -82,16 +102,16 @@ export const Instance = {
     const next = track(project.id, boot({ project, init }))
     return next
   },
-  
+
   get project() {
     return context.use().project
   },
-  
+
   get projectID() {
     return context.use().project.id
   },
 
-  get directory() {
+  get workspace() {
     const p = this.project
     if (p.id === ProjectID.global) return Global.Path.home
     const id = p.id as string
@@ -101,22 +121,19 @@ export const Instance = {
     return `/projects/${id}`
   },
 
-  /**
-   * True when the resolved path is the project root or inside it (no `..` escape to a sibling of root).
-   */
   containsPath(candidate: string) {
-    const base = path.resolve(this.directory)
+    const base = path.resolve(this.workspace)
     const resolved = path.resolve(candidate)
     const rel = path.relative(base, resolved)
     if (rel === "") return true
     if (path.isAbsolute(rel) || rel.startsWith("..")) return false
     return true
   },
-  
+
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.projectID, init, dispose)
   },
-  
+
   async reload(input: { project: Info; init?: () => Promise<any> }) {
     const projectID = input.project.id
     Log.Default.info("reloading instance", { projectID })
@@ -126,7 +143,7 @@ export const Instance = {
     emit(projectID)
     return await next
   },
-  
+
   async dispose() {
     const projectID = Instance.projectID
     Log.Default.info("disposing instance", { projectID })
@@ -134,7 +151,7 @@ export const Instance = {
     cache.delete(projectID)
     emit(projectID)
   },
-  
+
   async disposeAll() {
     if (disposal.all) return disposal.all
 
