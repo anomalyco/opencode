@@ -130,7 +130,7 @@ async function sendUsageUpdate(
     })
 }
 
-export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
+export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
   return {
     create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
       return new Agent(connection, fullConfig)

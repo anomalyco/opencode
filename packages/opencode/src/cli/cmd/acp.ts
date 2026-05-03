@@ -52,7 +52,7 @@ export const AcpCommand = effectCmd({
     })
 
     const stream = ndJsonStream(input, output)
-    const agent = yield* Effect.promise(() => ACP.init({ sdk }))
+    const agent = ACP.init({ sdk })
 
     new AgentSideConnection((conn) => {
       return agent.create(conn, { sdk })
