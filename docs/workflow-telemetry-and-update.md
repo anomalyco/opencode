@@ -1,4 +1,4 @@
-# 实施工作流:opencode-for-office-deskfox 使用统计与升级通知
+# 实施工作流:DeskFox 使用统计与升级通知
 
 > **状态**:V1.0 — 全部 OQ 已解决,可进入 `/sc:implement`
 > **日期**:2026-04-29

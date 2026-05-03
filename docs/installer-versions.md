@@ -25,7 +25,7 @@
 User 实测全过(office viewer / 聊天 / 文件操作 / 设置面板 / 安装入口 5 项)。
 
 key commit: `ac5af022d`(本笔 release 起点 = bump commit 父,bump commit 是 release tag 内容)
-installer 路径: 等 GitHub Actions 跑完 `ship-prod-2026.5.3.1` tag 后,从 [GitHub Release](https://github.com/yuesoue/opencode-for-office-deskfox/releases/tag/ship-prod-2026.5.3.1) 下载
+installer 路径: 等 GitHub Actions 跑完 `ship-prod-2026.5.3.1` tag 后,从 [GitHub Release](https://github.com/yuesoue/deskfox/releases/tag/ship-prod-2026.5.3.1) 下载
 
 ---
 

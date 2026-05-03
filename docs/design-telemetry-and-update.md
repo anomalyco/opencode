@@ -1,4 +1,4 @@
-# 架构设计文档:opencode-for-office-deskfox 使用统计与升级通知
+# 架构设计文档:DeskFox 使用统计与升级通知
 
 > **状态**:V1.0 — 基于已确认需求文档 `requirements-telemetry-and-update.md` 与 Tokyo 服务器实地巡检结果
 > **日期**:2026-04-29

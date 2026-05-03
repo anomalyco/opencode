@@ -1,4 +1,4 @@
-# 需求规格文档:opencode-for-office-deskfox 使用统计与升级通知
+# 需求规格文档:DeskFox 使用统计与升级通知
 
 > **状态**:V1.0 — 经一轮 Socratic 对话确认
 > **日期**:2026-04-29
