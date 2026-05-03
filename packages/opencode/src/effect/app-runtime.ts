@@ -14,6 +14,7 @@ import { FileWatcher } from "@/file/watcher"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
+import { ModelsDev } from "@/provider/models"
 import { Provider } from "@/provider/provider"
 import { ProviderAuth } from "@/provider/auth"
 import { Agent } from "@/agent/agent"
@@ -39,6 +40,7 @@ import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { Format } from "@/format"
+import { InstanceLayer } from "@/project/instance-layer"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { Workspace } from "@/control-plane/workspace"
@@ -65,6 +67,7 @@ export const AppLayer = Layer.mergeAll(
   Storage.defaultLayer,
   Snapshot.defaultLayer,
   Plugin.defaultLayer,
+  ModelsDev.defaultLayer,
   Provider.defaultLayer,
   ProviderAuth.defaultLayer,
   Agent.defaultLayer,
@@ -93,16 +96,19 @@ export const AppLayer = Layer.mergeAll(
   Project.defaultLayer,
   Vcs.defaultLayer,
   Workspace.defaultLayer,
-  Worktree.defaultLayer,
+  Worktree.appLayer,
   Pty.defaultLayer,
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
   SyncEvent.defaultLayer,
-).pipe(Layer.provideMerge(Observability.layer))
+).pipe(Layer.provideMerge(InstanceLayer.layer), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">
+
+/** Services provided by AppRuntime — i.e. what an Effect run via AppRuntime.runPromise can yield. */
+export type AppServices = ManagedRuntime.ManagedRuntime.Services<typeof rt>
 const wrap = (effect: Parameters<typeof rt.runSync>[0]) => attach(effect as never) as never
 
 export const AppRuntime: Runtime = {
