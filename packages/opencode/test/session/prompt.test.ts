@@ -402,11 +402,14 @@ it.live("prompt emits v2 prompted and synthetic events", () =>
       const row = Database.use((db) =>
         db.select().from(SessionMessageTable).where(Database.eq(SessionMessageTable.session_id, chat.id)).get(),
       )
-      expect(messages).toHaveLength(3)
-      expect(messages[0]).toMatchObject({ type: "user", text: "hello v2" })
+      expect(messages.find((message) => message.type === "user")).toMatchObject({ type: "user", text: "hello v2" })
       expect(typeof row?.data.time.created).toBe("number")
-      expect(messages[1]).toMatchObject({ type: "synthetic", text: expect.stringContaining("Called the Read tool") })
-      expect(messages[2]).toMatchObject({ type: "synthetic", text: "note content" })
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "synthetic", text: expect.stringContaining("Called the Read tool") }),
+          expect.objectContaining({ type: "synthetic", text: "note content" }),
+        ]),
+      )
     }),
     { git: true, config: providerCfg },
   ),

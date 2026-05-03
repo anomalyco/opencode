@@ -242,7 +242,7 @@ describe("session HttpApi", () => {
         )
 
         expect(
-          yield* requestJson<SessionMessage.Message[]>(`/api/session/${parent.id}/message`, { headers }),
+          (yield* requestJson<{ items: SessionMessage.Message[] }>(`/api/session/${parent.id}/message`, { headers })).items,
         ).toMatchObject([{ type: "assistant" }])
       }),
     ),
