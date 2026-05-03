@@ -3,6 +3,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
+import { jsonrepair } from "jsonrepair"
 import { mergeDeep } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -351,6 +352,27 @@ const live: Layer.Layer<
               toolName: lower,
             }
           }
+
+          const toolInput = failed.toolCall.input
+          if (typeof toolInput === "string" && toolInput.trim().startsWith("{")) {
+            try {
+              const repaired = jsonrepair(toolInput)
+              if (repaired !== toolInput) {
+                l.info("repaired truncated tool call json", {
+                  tool: failed.toolCall.toolName,
+                  original: toolInput,
+                  repaired,
+                })
+                return {
+                  ...failed.toolCall,
+                  input: repaired,
+                }
+              }
+            } catch {
+              // jsonrepair failed, fall through to invalid tool handler
+            }
+          }
+
           return {
             ...failed.toolCall,
             input: JSON.stringify({
