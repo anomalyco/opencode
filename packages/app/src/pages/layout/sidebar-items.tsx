@@ -1,12 +1,14 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
+import { Button } from "@opencode-ai/ui/button"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
-import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -176,6 +178,11 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     if (!props.showChild) return []
     return childSessions(sessionStore.session, props.session.id, Date.now())
   })
+  const hasChildren = createMemo(() => children().length > 0)
+  const [expanded, setExpanded] = createSignal(false)
+  const [fullyExpanded, setFullyExpanded] = createSignal(false)
+  const visible = createMemo(() => children().slice(0, 3))
+  const hasMore = createMemo(() => children().length > 3 && !fullyExpanded())
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -223,6 +230,20 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         style={{ "padding-left": `${8 + (props.level ?? 0) * 16}px` }}
       >
         <div class="flex min-w-0 items-center gap-1">
+          <Show when={hasChildren()}>
+            <IconButton
+              icon={expanded() ? "chevron-down" : "chevron-right"}
+              variant="ghost"
+              class="shrink-0 size-4 rounded-xs overflow-hidden transition-[width,opacity]"
+              classList={{
+                "w-4 opacity-100 pointer-events-auto": expanded(),
+                "w-0 opacity-0 pointer-events-none": !expanded(),
+                "group-hover/session:w-4 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": !expanded(),
+              }}
+              aria-label={expanded() ? language.t("session.todo.collapse") : language.t("session.todo.expand")}
+              onClick={() => setExpanded((v) => !v)}
+            />
+          </Show>
           <div class="min-w-0 flex-1">
             <Show
               when={!tooltip()}
@@ -268,13 +289,30 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </Show>
         </div>
       </div>
-      <For each={children()}>
-        {(child) => (
-          <div class="w-full">
-            <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
-          </div>
-        )}
-      </For>
+      <Show when={hasChildren()}>
+        <Collapsible open={expanded()} onOpenChange={setExpanded}>
+          <Collapsible.Content>
+            <For each={fullyExpanded() ? children() : visible()}>
+              {(child) => (
+                <div class="w-full">
+                  <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
+                </div>
+              )}
+            </For>
+            <Show when={hasMore()}>
+              <div class="w-full" style={{ "padding-left": `${8 + ((props.level ?? 0) + 1) * 16}px` }}>
+                <Button
+                  variant="ghost"
+                  class="text-12-regular text-text-weak w-full text-left justify-start py-0.5 pl-6"
+                  onClick={() => setFullyExpanded(true)}
+                >
+                  {language.t("common.loadMore")}
+                </Button>
+              </div>
+            </Show>
+          </Collapsible.Content>
+        </Collapsible>
+      </Show>
     </>
   )
 }
