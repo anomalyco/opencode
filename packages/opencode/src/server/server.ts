@@ -8,8 +8,7 @@ import { WorkspaceID } from "@/control-plane/schema"
 import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
-import { BunHttpServer } from "@effect/platform-bun"
-import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import * as HttpApiServer from "#httpapi-server"
 import { MDNS } from "./mdns"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
 import { FenceMiddleware } from "./fence"
@@ -23,6 +22,7 @@ import { InstanceMiddleware } from "./routes/instance/middleware"
 import { WorkspaceRoutes } from "./routes/control/workspace"
 import { ExperimentalHttpApiServer } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
+import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
 import { PublicApi } from "./routes/instance/httpapi/public"
 import * as ServerBackend from "./backend"
 import type { CorsOptions } from "./cors"
@@ -236,16 +236,16 @@ async function listenLegacy(opts: ListenOptions): Promise<Listener> {
 }
 
 /**
- * Run the effect-httpapi backend on a native Effect `BunHttpServer`. This
+ * Run the effect-httpapi backend on a native Effect HTTP server. This
  * lets HttpApi routes that call `request.upgrade` (PTY connect, the
- * workspace-routing proxy WS bridge) work end-to-end — the legacy Hono
+ * workspace-routing proxy WS bridge) work end-to-end; the legacy Hono
  * adapter path can't surface `request.upgrade` because its fetch handler has
- * no reference to the bun `server` instance for `server.upgrade(...)`.
+ * no reference to the platform server instance for websocket upgrades.
  */
 async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selection): Promise<Listener> {
   log.info("server backend selected", {
     ...ServerBackend.attributes(selection),
-    "opencode.server.runtime": "bun-http-server",
+    "opencode.server.runtime": HttpApiServer.name,
   })
 
   const buildLayer = (port: number) =>
@@ -253,21 +253,26 @@ async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selec
       middleware: disposeMiddleware,
       disableLogger: true,
       disableListenLog: true,
-    }).pipe(Layer.provideMerge(BunHttpServer.layer({ port, hostname: opts.hostname })))
+    }).pipe(
+      Layer.provideMerge(WebSocketTracker.layer),
+      Layer.provideMerge(HttpApiServer.layer({ port, hostname: opts.hostname })),
+    )
 
-  // Server-level CORS options are dynamic; don't reuse the default memoized
-  // route layer (which bakes in default CORS). Mirrors `webHandler` in
-  // `routes/instance/httpapi/server.ts`.
-  const layerMemoMap = opts.cors?.length ? Layer.makeMemoMapUnsafe() : memoMap
+  // Native listeners own listener-local state such as websocket close tracking.
+  const layerMemoMap = Layer.makeMemoMapUnsafe()
 
   const start = async (port: number) => {
     const scope = Scope.makeUnsafe()
     try {
       // Effect's `HttpMiddleware` interface returns `Effect<…, any, any>` by
       // design, which leaks `R = any` through `HttpRouter.serve`. The actual
-      // requirements at this point are fully satisfied by `createRoutes` and
-      // `BunHttpServer.layer`; cast away the `any` to satisfy `runPromise`.
-      const layer = buildLayer(port) as Layer.Layer<HttpServer.HttpServer, unknown, never>
+      // requirements at this point are fully satisfied by `createRoutes` and the
+      // platform HTTP server layer; cast away the `any` to satisfy `runPromise`.
+      const layer = buildLayer(port) as Layer.Layer<
+        HttpServer.HttpServer | WebSocketTracker.Service | HttpApiServer.Service,
+        unknown,
+        never
+      >
       const ctx = await Effect.runPromise(Layer.buildWithMemoMap(layer, layerMemoMap, scope))
       return { scope, ctx }
     } catch (err) {
@@ -297,12 +302,27 @@ async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selec
   const innerUrl = new URL("http://localhost")
   innerUrl.hostname = opts.hostname
   innerUrl.port = String(port)
+  let forceStopPromise: Promise<void> | undefined
+  let stopPromise: Promise<void> | undefined
+  const forceStop = () => {
+    forceStopPromise ??= Effect.runPromiseExit(
+      Effect.gen(function* () {
+        yield* Context.get(resolved!.ctx, WebSocketTracker.Service).closeAll
+        yield* Context.get(resolved!.ctx, HttpApiServer.Service).closeAll
+      }),
+    ).then(() => undefined)
+    return forceStopPromise
+  }
 
   return {
     hostname: opts.hostname,
     port,
     url: innerUrl,
-    stop: () => Effect.runPromise(Scope.close(resolved!.scope, Exit.void)),
+    stop: (close?: boolean) => {
+      const requested = close ? forceStop() : Promise.resolve()
+      stopPromise ??= requested.then(() => Effect.runPromiseExit(Scope.close(resolved!.scope, Exit.void))).then(() => undefined)
+      return requested.then(() => stopPromise!)
+    },
   }
 }
 

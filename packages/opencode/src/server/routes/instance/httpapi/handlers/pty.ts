@@ -2,12 +2,14 @@ import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { handlePtyInput } from "@/pty/input"
 import { Shell } from "@/shell/shell"
+import { EffectBridge } from "@/effect/bridge"
 import { Effect } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
 import { CursorQuery, Params, PtyPaths } from "../groups/pty"
+import { WebSocketTracker } from "../websocket-tracker"
 
 export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handlers) =>
   Effect.gen(function* () {
@@ -80,9 +82,9 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
             : undefined
         const socket = yield* Effect.orDie((yield* HttpServerRequest.HttpServerRequest).upgrade)
         const write = yield* socket.writer
-        const services = yield* Effect.context()
+        const bridge = yield* EffectBridge.make()
         const writeScoped = (effect: Effect.Effect<void, unknown>) => {
-          Effect.runForkWith(services)(effect.pipe(Effect.catch(() => Effect.void)))
+          bridge.fork(effect.pipe(Effect.catch(() => Effect.void)))
         }
         let closed = false
         const adapter = {
@@ -101,14 +103,16 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
         }
         const handler = yield* pty.connect(params.ptyID, adapter, cursor)
         if (!handler) return HttpServerResponse.empty()
+        const unregister = yield* WebSocketTracker.register(write(WebSocketTracker.SERVER_CLOSING_EVENT()))
 
         yield* socket
           .runRaw((message) => handlePtyInput(handler, message))
           .pipe(
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
             Effect.ensuring(
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 closed = true
+                yield* unregister
                 handler.onClose()
               }),
             ),
