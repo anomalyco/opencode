@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { ServerAuth } from "@/server/auth"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
@@ -656,13 +657,7 @@ export const RunCommand = effectCmd({
       }
 
       if (args.attach) {
-        const headers = (() => {
-          const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
-          if (!password) return undefined
-          const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
-          const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
-          return { Authorization: auth }
-        })()
+        const headers = ServerAuth.headers({ password: args.password })
         const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
         return await execute(sdk)
       }
