@@ -5,7 +5,6 @@ import { Database } from "@/storage/db"
 import { SessionTable } from "../../session/session.sql"
 import { Project } from "@/project/project"
 import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceStore } from "@/project/instance-store"
 import { AppRuntime } from "@/effect/app-runtime"
 
 interface SessionStats {
@@ -70,8 +69,7 @@ export const StatsCommand = effectCmd({
   handler: Effect.fn("Cli.stats")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* run(args, ctx.project).pipe(Effect.ensuring(store.dispose(ctx)))
+    return yield* run(args, ctx.project)
   }),
 })
 

@@ -4,8 +4,6 @@ import { File } from "../../../file"
 import { Ripgrep } from "@/file/ripgrep"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
-import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceStore } from "@/project/instance-store"
 
 const FileSearchCommand = effectCmd({
   command: "search <query>",
@@ -17,13 +15,8 @@ const FileSearchCommand = effectCmd({
       description: "Search query",
     }),
   handler: Effect.fn("Cli.debug.file.search")(function* (args) {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* Effect.gen(function* () {
-      const results = yield* File.Service.use((svc) => svc.search({ query: args.query }))
-      process.stdout.write(results.join(EOL) + EOL)
-    }).pipe(Effect.ensuring(store.dispose(ctx)))
+    const results = yield* File.Service.use((svc) => svc.search({ query: args.query }))
+    process.stdout.write(results.join(EOL) + EOL)
   }),
 })
 
@@ -37,13 +30,8 @@ const FileReadCommand = effectCmd({
       description: "File path to read",
     }),
   handler: Effect.fn("Cli.debug.file.read")(function* (args) {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* Effect.gen(function* () {
-      const content = yield* File.Service.use((svc) => svc.read(args.path))
-      process.stdout.write(JSON.stringify(content, null, 2) + EOL)
-    }).pipe(Effect.ensuring(store.dispose(ctx)))
+    const content = yield* File.Service.use((svc) => svc.read(args.path))
+    process.stdout.write(JSON.stringify(content, null, 2) + EOL)
   }),
 })
 
@@ -52,13 +40,8 @@ const FileStatusCommand = effectCmd({
   describe: "show file status information",
   builder: (yargs) => yargs,
   handler: Effect.fn("Cli.debug.file.status")(function* () {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* Effect.gen(function* () {
-      const status = yield* File.Service.use((svc) => svc.status())
-      process.stdout.write(JSON.stringify(status, null, 2) + EOL)
-    }).pipe(Effect.ensuring(store.dispose(ctx)))
+    const status = yield* File.Service.use((svc) => svc.status())
+    process.stdout.write(JSON.stringify(status, null, 2) + EOL)
   }),
 })
 
@@ -72,13 +55,8 @@ const FileListCommand = effectCmd({
       description: "File path to list",
     }),
   handler: Effect.fn("Cli.debug.file.list")(function* (args) {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* Effect.gen(function* () {
-      const files = yield* File.Service.use((svc) => svc.list(args.path))
-      process.stdout.write(JSON.stringify(files, null, 2) + EOL)
-    }).pipe(Effect.ensuring(store.dispose(ctx)))
+    const files = yield* File.Service.use((svc) => svc.list(args.path))
+    process.stdout.write(JSON.stringify(files, null, 2) + EOL)
   }),
 })
 
@@ -92,13 +70,8 @@ const FileTreeCommand = effectCmd({
       default: process.cwd(),
     }),
   handler: Effect.fn("Cli.debug.file.tree")(function* (args) {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* Effect.gen(function* () {
-      const tree = yield* Effect.orDie(Ripgrep.Service.use((svc) => svc.tree({ cwd: args.dir, limit: 200 })))
-      console.log(JSON.stringify(tree, null, 2))
-    }).pipe(Effect.ensuring(store.dispose(ctx)))
+    const tree = yield* Effect.orDie(Ripgrep.Service.use((svc) => svc.tree({ cwd: args.dir, limit: 200 })))
+    console.log(JSON.stringify(tree, null, 2))
   }),
 })
 

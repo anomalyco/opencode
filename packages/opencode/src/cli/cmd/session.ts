@@ -12,8 +12,6 @@ import { Process } from "@/util/process"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
-import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceStore } from "@/project/instance-store"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -59,17 +57,12 @@ export const SessionDeleteCommand = effectCmd({
       demandOption: true,
     }),
   handler: Effect.fn("Cli.session.delete")(function* (args) {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* Effect.gen(function* () {
-      const svc = yield* Session.Service
-      const sessionID = SessionID.make(args.sessionID)
-      // Match legacy try/catch — Session.get surfaces NotFoundError as a defect.
-      yield* svc.get(sessionID).pipe(Effect.catchCause(() => fail(`Session not found: ${args.sessionID}`)))
-      yield* svc.remove(sessionID)
-      UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
-    }).pipe(Effect.ensuring(store.dispose(ctx)))
+    const svc = yield* Session.Service
+    const sessionID = SessionID.make(args.sessionID)
+    // Match legacy try/catch — Session.get surfaces NotFoundError as a defect.
+    yield* svc.get(sessionID).pipe(Effect.catchCause(() => fail(`Session not found: ${args.sessionID}`)))
+    yield* svc.remove(sessionID)
+    UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
   }),
 })
 
@@ -90,39 +83,34 @@ export const SessionListCommand = effectCmd({
         default: "table",
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* Effect.gen(function* () {
-      const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount }))
+    const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount }))
 
-      if (sessions.length === 0) return
+    if (sessions.length === 0) return
 
-      const output = args.format === "json" ? formatSessionJSON(sessions) : formatSessionTable(sessions)
+    const output = args.format === "json" ? formatSessionJSON(sessions) : formatSessionTable(sessions)
 
-      const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
+    const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
 
-      if (shouldPaginate) {
-        yield* Effect.promise(async () => {
-          const proc = Process.spawn(pagerCmd(), {
-            stdin: "pipe",
-            stdout: "inherit",
-            stderr: "inherit",
-          })
-
-          if (!proc.stdin) {
-            console.log(output)
-            return
-          }
-
-          proc.stdin.write(output)
-          proc.stdin.end()
-          await proc.exited
+    if (shouldPaginate) {
+      yield* Effect.promise(async () => {
+        const proc = Process.spawn(pagerCmd(), {
+          stdin: "pipe",
+          stdout: "inherit",
+          stderr: "inherit",
         })
-      } else {
-        console.log(output)
-      }
-    }).pipe(Effect.ensuring(store.dispose(ctx)))
+
+        if (!proc.stdin) {
+          console.log(output)
+          return
+        }
+
+        proc.stdin.write(output)
+        proc.stdin.end()
+        await proc.exited
+      })
+    } else {
+      console.log(output)
+    }
   }),
 })
 
