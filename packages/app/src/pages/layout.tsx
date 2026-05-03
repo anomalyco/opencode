@@ -182,6 +182,11 @@ export default function Layout(props: ParentProps) {
   })
   // Use this only for equality checks, never as a directory source.
   const routeKey = createMemo(() => workspaceKey(routeDir()))
+  // Treat the project rail as having no active directory while the config
+  // route is mounted. The URL still carries the project slug so existing
+  // resolvers keep working, but the icon should not look "selected".
+  const onConfigRoute = createMemo(() => /\/config(?:\/|$)/.test(location.pathname))
+  const railCurrentDir = createMemo(() => (onConfigRoute() ? "" : routeDir()))
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -3487,7 +3492,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const projectSidebarCtx: ProjectSidebarContext = {
-    currentDir: routeDir,
+    currentDir: railCurrentDir,
     sidebarReduced,
     consumeProjectClick,
     navigateToProject,
@@ -3987,6 +3992,7 @@ export default function Layout(props: ParentProps) {
         }))
       }
       configLabel={() => "Config"}
+      configActive={onConfigRoute}
       onOpenConfig={openConfig}
       settingsLabel={() => language.t("sidebar.settings")}
       settingsKeybind={() => command.keybind("settings.open")}

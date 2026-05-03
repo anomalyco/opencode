@@ -1,4 +1,16 @@
-import { batch, createEffect, createMemo, createResource, For, Match, on, Show, Switch, type JSX } from "solid-js"
+import {
+  batch,
+  createEffect,
+  createMemo,
+  createResource,
+  For,
+  Match,
+  on,
+  onMount,
+  Show,
+  Switch,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -22,6 +34,7 @@ import {
   validateCustomProvider,
 } from "@/components/dialog-custom-provider-form"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import {
   type ConfigTreeItem,
   type ConfigWorkspace,
@@ -1831,7 +1844,14 @@ export default function ConfigPage() {
   const server = useServer()
   const navigate = useNavigate()
   const params = useParams()
+  const layout = useLayout()
   const [query] = useSearchParams<{ section?: string; pick?: string }>()
+
+  onMount(() => {
+    if (platform.platform !== "desktop") return
+    if (!layout.sidebar.opened()) return
+    layout.sidebar.close()
+  })
   const cache = new Map<string, string>()
   const pending = new Map<string, Promise<string>>()
   const trees = new Map<string, TreeNode[]>()

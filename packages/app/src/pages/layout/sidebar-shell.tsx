@@ -38,6 +38,7 @@ export const SidebarContent = (props: {
   renderProjectOverlay: () => JSX.Element
   extraAgents: Accessor<SidebarExtraAgent[]>
   configLabel: Accessor<string>
+  configActive: Accessor<boolean>
   onOpenConfig: () => void
   settingsLabel: Accessor<string>
   settingsKeybind: Accessor<string | undefined>
@@ -195,6 +196,7 @@ export const SidebarContent = (props: {
               icon="sliders"
               variant="ghost"
               size="large"
+              classList={{ "bg-surface-base-active": props.configActive() }}
               onClick={props.onOpenConfig}
               aria-label={props.configLabel()}
             />
