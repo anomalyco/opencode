@@ -219,42 +219,42 @@ export function Titlebar() {
               <Icon size="small" name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} />
             </Button>
           </TooltipKeybind>
-          <div class="hidden xl:flex items-center shrink-0">
-            <Show when={params.dir}>
+          <Show when={params.dir}>
+            <div
+              class="flex items-center shrink-0 w-8 mr-1"
+              aria-hidden={layout.sidebar.opened() ? "true" : undefined}
+            >
               <div
-                class="flex items-center shrink-0 w-8 mr-1"
-                aria-hidden={layout.sidebar.opened() ? "true" : undefined}
+                class="transition-opacity"
+                classList={{
+                  "opacity-100 duration-120 ease-out": !layout.sidebar.opened(),
+                  "opacity-0 duration-120 ease-in delay-0 pointer-events-none": layout.sidebar.opened(),
+                }}
               >
-                <div
-                  class="transition-opacity"
-                  classList={{
-                    "opacity-100 duration-120 ease-out": !layout.sidebar.opened(),
-                    "opacity-0 duration-120 ease-in delay-0 pointer-events-none": layout.sidebar.opened(),
-                  }}
+                <TooltipKeybind
+                  placement="bottom"
+                  title={language.t("command.session.new")}
+                  keybind={command.keybind("session.new")}
+                  openDelay={2000}
                 >
-                  <TooltipKeybind
-                    placement="bottom"
-                    title={language.t("command.session.new")}
-                    keybind={command.keybind("session.new")}
-                    openDelay={2000}
-                  >
-                    <Button
-                      variant="ghost"
-                      icon={creating() ? "new-session-active" : "new-session"}
-                      class="titlebar-icon w-8 h-6 p-0 box-border"
-                      disabled={layout.sidebar.opened()}
-                      tabIndex={layout.sidebar.opened() ? -1 : undefined}
-                      onClick={() => {
-                        if (!params.dir) return
-                        navigate(`/${params.dir}/session`)
-                      }}
-                      aria-label={language.t("command.session.new")}
-                      aria-current={creating() ? "page" : undefined}
-                    />
-                  </TooltipKeybind>
-                </div>
+                  <Button
+                    variant="ghost"
+                    icon={creating() ? "new-session-active" : "new-session"}
+                    class="titlebar-icon w-8 h-6 p-0 box-border"
+                    disabled={layout.sidebar.opened()}
+                    tabIndex={layout.sidebar.opened() ? -1 : undefined}
+                    onClick={() => {
+                      if (!params.dir) return
+                      navigate(`/${params.dir}/session`)
+                    }}
+                    aria-label={language.t("command.session.new")}
+                    aria-current={creating() ? "page" : undefined}
+                  />
+                </TooltipKeybind>
               </div>
-            </Show>
+            </div>
+          </Show>
+          <div class="hidden xl:flex items-center shrink-0">
             <div
               class="flex items-center shrink-0"
               classList={{
