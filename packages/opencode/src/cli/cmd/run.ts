@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { ServerAuth } from "@/server/auth"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
@@ -26,7 +27,6 @@ import { ShellTool } from "../../tool/shell"
 import { ShellID } from "../../tool/shell/id"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "@/util/locale"
-import { AppRuntime } from "@/effect/app-runtime"
 
 type ToolProps<T> = {
   input: Tool.InferParameters<T>
@@ -299,6 +299,7 @@ export const RunCommand = effectCmd({
         default: false,
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
+    const agentSvc = yield* Agent.Service
     yield* Effect.promise(async () => {
       let message = [...args.message, ...(args["--"] || [])]
         .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
@@ -602,7 +603,7 @@ export const RunCommand = effectCmd({
             return name
           }
 
-          const entry = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.get(name)))
+          const entry = await Effect.runPromise(agentSvc.get(name))
           if (!entry) {
             UI.println(
               UI.Style.TEXT_WARNING_BOLD + "!",
@@ -656,13 +657,7 @@ export const RunCommand = effectCmd({
       }
 
       if (args.attach) {
-        const headers = (() => {
-          const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
-          if (!password) return undefined
-          const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
-          const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
-          return { Authorization: auth }
-        })()
+        const headers = ServerAuth.headers({ password: args.password })
         const sdk = createOpencodeClient({ baseUrl: args.attach, directory, headers })
         return await execute(sdk)
       }

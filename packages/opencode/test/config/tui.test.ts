@@ -627,3 +627,43 @@ test("merges plugin_enabled flags across config layers", async () => {
     "local.plugin": true,
   })
 })
+
+test("silently skips malformed tui.json — load failures degrade to {}", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), '{ "theme": "broken",')
+      await Bun.write(path.join(dir, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  // Project tui.json is malformed → silently skipped (logs a warning)
+  // .opencode/tui.json (lower precedence in this path) still loads
+  expect(config.theme).toBe("fallback")
+})
+
+test("silently skips non-ENOENT read failures (e.g. tui.json is a directory) — fallback layer still loads", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // tui.json exists as a DIRECTORY rather than a file → readFileString fails
+      // with EISDIR (PlatformError reason ≠ NotFound). The fix in this PR routes
+      // that through catchCause → log + skip, so a fallback layer should still load.
+      await fs.mkdir(path.join(dir, "tui.json"), { recursive: true })
+      await Bun.write(path.join(dir, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  // Did NOT crash; .opencode/tui.json (lower precedence) still loads.
+  expect(config.theme).toBe("fallback")
+})
+
+test("missing tui.json — silently treated as empty (ENOENT path)", async () => {
+  await using tmp = await tmpdir({})
+
+  // No tui.json anywhere. Should not throw.
+  const config = await getTuiConfig(tmp.path)
+  expect(config).toBeDefined()
+  // No theme set anywhere.
+  expect(config.theme).toBeUndefined()
+})
