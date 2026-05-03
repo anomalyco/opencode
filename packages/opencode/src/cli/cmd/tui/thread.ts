@@ -1,5 +1,6 @@
 import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
+import { repl } from "@/cli/cmd/repl"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"
@@ -143,6 +144,23 @@ export const TuiThreadCommand = cmd({
         [OPENCODE_PROCESS_ROLE]: "worker",
         [OPENCODE_RUN_ID]: ensureRunID(),
       })
+
+      // When the user opts into the "minimal" style, skip the TUI entirely and
+      // run an inline REPL on the current terminal instead. This avoids
+      // alt-screen takeover and keeps the experience CLI-like.
+      const earlyConfig = await TuiConfig.get()
+      if (earlyConfig.style === "minimal") {
+        const initial = await input(args.prompt)
+        await repl({
+          directory: cwd,
+          agent: args.agent,
+          model: args.model,
+          continueLast: args.continue,
+          sessionID: args.session,
+          initialPrompt: initial,
+        })
+        return
+      }
 
       const worker = new Worker(file, {
         env,

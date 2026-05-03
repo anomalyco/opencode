@@ -20,6 +20,7 @@ const KeybindsSchema = Schema.Struct({
   editor_open: keybind("<leader>e", "Open external editor"),
   theme_list: keybind("<leader>t", "List available themes"),
   sidebar_toggle: keybind("<leader>b", "Toggle sidebar"),
+  style_toggle: keybind("none", "Toggle TUI style between default and minimal"),
   scrollbar_toggle: keybind("none", "Toggle session scrollbar"),
   username_toggle: keybind("none", "Toggle username visibility"),
   status_view: keybind("<leader>s", "View status"),

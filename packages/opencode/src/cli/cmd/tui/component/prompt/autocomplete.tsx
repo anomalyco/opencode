@@ -73,6 +73,7 @@ export function Autocomplete(props: {
   setPrompt: (input: (prompt: PromptInfo) => void) => void
   setExtmark: (partIndex: number, extmarkId: number) => void
   anchor: () => BoxRenderable
+  placement?: "above" | "below"
   input: () => TextareaRenderable
   ref: (ref: AutocompleteRef) => void
   fileStyleId: number
@@ -654,7 +655,25 @@ export function Autocomplete(props: {
     const count = options().length || 1
     if (!store.visible) return Math.min(10, count)
     positionTick()
-    return Math.min(10, count, Math.max(1, props.anchor().y))
+    const anchor = props.anchor()
+    if (!anchor) return Math.min(10, count)
+    const room =
+      props.placement === "below"
+        ? Math.max(1, dimensions().height - anchor.y - anchor.height)
+        : Math.max(1, anchor.y)
+    return Math.min(10, count, room)
+  })
+
+  // Below-anchor placement needs anchor.height, which is only safe to read once
+  // the parent box has mounted (the ref fires after Autocomplete's first render).
+  // Gate the anchor access behind store.visible so we don't deref undefined.
+  const top = createMemo(() => {
+    if (!store.visible) return 0
+    if (props.placement === "below") {
+      const anchor = props.anchor()
+      return position().y + (anchor?.height ?? 0)
+    }
+    return position().y - height()
   })
 
   let scroll: ScrollBoxRenderable
@@ -664,7 +683,7 @@ export function Autocomplete(props: {
     <box
       visible={store.visible !== false}
       position="absolute"
-      top={position().y - height()}
+      top={top()}
       left={position().x}
       width={position().width}
       zIndex={100}

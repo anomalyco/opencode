@@ -157,6 +157,8 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [style, setStyle] = kv.signal<"default" | "minimal">("style", tuiConfig.style ?? "default")
+  const minimal = createMemo(() => style() === "minimal")
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
@@ -620,6 +622,16 @@ export function Session() {
       },
     },
     {
+      title: minimal() ? "Switch to default style" : "Switch to minimal style",
+      value: "session.style.toggle",
+      keybind: "style_toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        setStyle(() => (minimal() ? "default" : "minimal"))
+        dialog.clear()
+      },
+    },
+    {
       title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
       keybind: "messages_toggle_conceal",
@@ -1056,7 +1068,14 @@ export function Session() {
       }}
     >
       <box flexDirection="row">
-        <box flexGrow={1} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+        <box
+          flexGrow={1}
+          flexDirection={minimal() ? "column-reverse" : "column"}
+          paddingBottom={1}
+          paddingLeft={2}
+          paddingRight={2}
+          gap={1}
+        >
           <Show when={session()}>
             <scrollbox
               ref={(r) => (scroll = r)}
@@ -1197,6 +1216,7 @@ export function Session() {
                     visible={visible()}
                     ref={bind}
                     disabled={disabled()}
+                    placement={minimal() ? "below" : "above"}
                     onSubmit={() => {
                       toBottom()
                     }}

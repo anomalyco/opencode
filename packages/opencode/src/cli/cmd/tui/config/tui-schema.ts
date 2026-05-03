@@ -24,6 +24,10 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  style: z
+    .enum(["default", "minimal"])
+    .optional()
+    .describe("Overall TUI style: 'default' (full chrome, prompt at bottom) or 'minimal' (prompt at top)"),
 })
 
 export const TuiInfo = z
