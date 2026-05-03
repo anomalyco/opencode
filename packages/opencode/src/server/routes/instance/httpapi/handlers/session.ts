@@ -24,6 +24,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import {
+  BtwPayload,
   CommandPayload,
   DiffQuery,
   ForkPayload,
@@ -300,6 +301,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* promptSvc.command({ ...ctx.payload, sessionID: ctx.params.sessionID })
     })
 
+    const btw = Effect.fn("SessionHttpApi.btw")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof BtwPayload.Type
+    }) {
+      const text = yield* promptSvc.btw({ ...ctx.payload, sessionID: ctx.params.sessionID })
+      return { text }
+    })
+
     const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof ShellPayload.Type
@@ -379,6 +388,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("command", command)
+      .handle("btw", btw)
       .handle("shell", shell)
       .handle("revert", revert)
       .handle("unrevert", unrevert)
