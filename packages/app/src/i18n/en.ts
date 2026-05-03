@@ -23,6 +23,8 @@ export const dict = {
   "theme.scheme.dark": "Dark",
 
   "command.sidebar.toggle": "Toggle sidebar",
+  "command.trellis.tasks.open": "Open Trellis tasks",
+  "command.trellis.tasks.open.description": "Show Trellis tasks for the current project in the sidebar",
   "command.page.find": "Find in page",
   "command.page.find.description": "Search for text in the current page",
   "command.page.find.previous": "Previous match",
@@ -46,6 +48,15 @@ export const dict = {
   "command.session.previous.unseen": "Previous unread session",
   "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archive session",
+
+  "trellis.tasks.title": "Tasks",
+  "trellis.tasks.back": "Back to sessions",
+  "trellis.tasks.current": "Current",
+  "trellis.tasks.refresh": "Refresh tasks",
+  "trellis.tasks.loading": "Loading tasks…",
+  "trellis.tasks.empty": "No Trellis tasks found in this project.",
+  "trellis.tasks.noProject": "Open a project to view Trellis tasks.",
+  "trellis.tasks.desktopOnly": "Trellis tasks are available in the desktop app.",
 
   "command.palette": "Command palette",
 

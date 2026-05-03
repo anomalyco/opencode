@@ -27,6 +27,8 @@ export const dict = {
   "theme.scheme.dark": "深色",
 
   "command.sidebar.toggle": "切换侧边栏",
+  "command.trellis.tasks.open": "打开 Trellis 任务",
+  "command.trellis.tasks.open.description": "在侧边栏显示当前项目的 Trellis 任务",
 
   "command.page.find": "在页面中查找",
   "command.page.find.description": "搜索当前页面中的文本",
@@ -56,6 +58,15 @@ export const dict = {
   "command.session.previous.unseen": "上一个未读会话",
   "command.session.next.unseen": "下一个未读会话",
   "command.session.archive": "归档会话",
+
+  "trellis.tasks.title": "任务",
+  "trellis.tasks.back": "返回会话列表",
+  "trellis.tasks.current": "当前",
+  "trellis.tasks.refresh": "刷新任务",
+  "trellis.tasks.loading": "正在加载任务…",
+  "trellis.tasks.empty": "此项目中未找到 Trellis 任务。",
+  "trellis.tasks.noProject": "打开项目后查看 Trellis 任务。",
+  "trellis.tasks.desktopOnly": "Trellis 任务仅在桌面应用中可用。",
 
   "command.palette": "命令面板",
 
