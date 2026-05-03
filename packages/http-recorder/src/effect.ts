@@ -14,12 +14,13 @@ import { cassetteSecretFindings, redactHeaders, redactUrl, type SecretFinding } 
 import type { Cassette, CassetteMetadata, Interaction, ResponseSnapshot } from "./schema"
 import { cassetteFor, cassettePath, formatCassette, parseCassette } from "./storage"
 
-const isRecordMode = process.env.RECORD === "true"
-
 export const DEFAULT_REQUEST_HEADERS: ReadonlyArray<string> = ["content-type", "accept", "openai-beta"]
 const DEFAULT_RESPONSE_HEADERS: ReadonlyArray<string> = ["content-type"]
 
+export type RecordReplayMode = "record" | "replay" | "passthrough"
+
 export interface RecordReplayOptions {
+  readonly mode?: RecordReplayMode
   readonly directory?: string
   readonly metadata?: CassetteMetadata
   readonly redact?: {
@@ -51,10 +52,7 @@ const isBinaryContentType = (contentType: string | undefined) => {
   return BINARY_CONTENT_TYPES.some((token) => lower.includes(token))
 }
 
-const captureResponseBody = (
-  response: HttpClientResponse.HttpClientResponse,
-  contentType: string | undefined,
-) =>
+const captureResponseBody = (response: HttpClientResponse.HttpClientResponse, contentType: string | undefined) =>
   isBinaryContentType(contentType)
     ? response.arrayBuffer.pipe(
         Effect.map((bytes) => ({ body: Buffer.from(bytes).toString("base64"), bodyEncoding: "base64" as const })),
@@ -94,10 +92,7 @@ const unsafeCassette = (
     }),
   })
 
-export const cassetteLayer = (
-  name: string,
-  options: RecordReplayOptions = {},
-): Layer.Layer<HttpClient.HttpClient> =>
+export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): Layer.Layer<HttpClient.HttpClient> =>
   Layer.effect(
     HttpClient.HttpClient,
     Effect.gen(function* () {
@@ -108,6 +103,7 @@ export const cassetteLayer = (
       const requestHeadersAllow = options.requestHeaders ?? DEFAULT_REQUEST_HEADERS
       const responseHeadersAllow = options.responseHeaders ?? DEFAULT_RESPONSE_HEADERS
       const match = options.match ?? defaultMatcher
+      const mode = options.mode ?? "replay"
       const sequential = options.dispatch === "sequential"
       const recorded = yield* Ref.make<ReadonlyArray<Interaction>>([])
       const replay = yield* Ref.make<Cassette | undefined>(undefined)
@@ -126,7 +122,11 @@ export const cassetteLayer = (
           return {
             method: web.method,
             url: redactUrl(web.url, options.redact?.query),
-            headers: redactHeaders(Object.fromEntries(web.headers.entries()), requestHeadersAllow, options.redact?.headers),
+            headers: redactHeaders(
+              Object.fromEntries(web.headers.entries()),
+              requestHeadersAllow,
+              options.redact?.headers,
+            ),
             body,
           }
         })
@@ -136,7 +136,8 @@ export const cassetteLayer = (
           if (sequential) {
             const index = yield* Ref.get(cursor)
             const interaction = cassette.interactions[index]
-            if (!interaction) return { interaction, detail: `interaction ${index + 1} of ${cassette.interactions.length} not recorded` }
+            if (!interaction)
+              return { interaction, detail: `interaction ${index + 1} of ${cassette.interactions.length} not recorded` }
             if (!match(incoming, interaction.request)) {
               return { interaction: undefined, detail: requestDiff(interaction.request, incoming).join("\n") }
             }
@@ -159,7 +160,9 @@ export const cassetteLayer = (
         })
 
       return HttpClient.make((request) => {
-        if (isRecordMode) {
+        if (mode === "passthrough") return upstream.execute(request)
+
+        if (mode === "record") {
           return Effect.gen(function* () {
             const currentRequest = yield* snapshotRequest(request)
             const response = yield* upstream.execute(request)
@@ -175,7 +178,10 @@ export const cassetteLayer = (
             if (findings.length > 0) return yield* unsafeCassette(request, name, findings)
             yield* fileSystem.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
             yield* fileSystem.writeFileString(file, formatCassette(cassette)).pipe(Effect.orDie)
-            return HttpClientResponse.fromWeb(request, new Response(decodeResponseBody(interaction.response), interaction.response))
+            return HttpClientResponse.fromWeb(
+              request,
+              new Response(decodeResponseBody(interaction.response), interaction.response),
+            )
           })
         }
 
@@ -185,7 +191,10 @@ export const cassetteLayer = (
           const { interaction, detail } = yield* selectInteraction(cassette, incoming)
           if (!interaction) return yield* fixtureMismatch(request, name, detail)
 
-          return HttpClientResponse.fromWeb(request, new Response(decodeResponseBody(interaction.response), interaction.response))
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response(decodeResponseBody(interaction.response), interaction.response),
+          )
         })
       })
     }),

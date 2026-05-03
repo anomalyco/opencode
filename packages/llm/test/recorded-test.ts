@@ -1,6 +1,6 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { NodeFileSystem } from "@effect/platform-node"
-import { test, type TestOptions } from "bun:test"
+import { test } from "bun:test"
 import { Config, ConfigProvider, Effect, FileSystem, Layer, PlatformError } from "effect"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -10,6 +10,7 @@ import { testEffect } from "./lib/effect"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
 const LOCAL_ENV = path.resolve(__dirname, "..", ".env.local")
+const RECORDER_MODE: HttpRecorder.RecordReplayMode = process.env.RECORD === "true" ? "record" : "replay"
 
 const LOCAL_ENV_KEYS = [
   "OPENAI_API_KEY",
@@ -44,20 +45,24 @@ const loadLocalEnv = Effect.fn("RecordedTests.loadLocalEnv")(function* () {
   const contents = yield* fileSystem.readFileString(LOCAL_ENV).pipe(Effect.catch(catchMissingFile))
   const provider = ConfigProvider.fromDotEnvContents(contents)
   yield* Effect.forEach(LOCAL_ENV_KEYS, (name) =>
-    Config.string(name).parse(provider).pipe(
-      Effect.matchEffect({
-        onFailure: () => Effect.void,
-        onSuccess: (value) => Effect.sync(() => {
-          if (process.env[name] === undefined) process.env[name] = value
+    Config.string(name)
+      .parse(provider)
+      .pipe(
+        Effect.matchEffect({
+          onFailure: () => Effect.void,
+          onSuccess: (value) =>
+            Effect.sync(() => {
+              if (process.env[name] === undefined) process.env[name] = value
+            }),
         }),
-      }),
-    ),
+      ),
   )
 })
 
-if (process.env.RECORD === "true") await Effect.runPromise(loadLocalEnv().pipe(Effect.provide(NodeFileSystem.layer)))
+if (RECORDER_MODE === "record") await Effect.runPromise(loadLocalEnv().pipe(Effect.provide(NodeFileSystem.layer)))
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
+type BunTestOptions = NonNullable<Parameters<typeof test>[2]>
 
 type RecordedTestsOptions = {
   readonly prefix: string
@@ -121,7 +126,10 @@ const matchesSelected = (input: {
   const tags = input.tags.map((tag) => tag.toLowerCase())
   const names = [input.name, kebab(input.name), input.cassette].map((item) => item.toLowerCase())
 
-  if (providers.length > 0 && !providers.some((provider) => tags.includes(`provider:${provider}`) || input.prefix.toLowerCase() === provider)) {
+  if (
+    providers.length > 0 &&
+    !providers.some((provider) => tags.includes(`provider:${provider}`) || input.prefix.toLowerCase() === provider)
+  ) {
     return false
   }
   if (requiredTags.length > 0 && !requiredTags.every((tag) => tags.includes(tag))) return false
@@ -141,7 +149,7 @@ const mergeOptions = (
   return {
     ...base,
     ...override,
-    metadata: base.metadata || override.metadata ? { ...(base.metadata ?? {}), ...(override.metadata ?? {}) } : undefined,
+    metadata: base.metadata || override.metadata ? { ...base.metadata, ...override.metadata } : undefined,
   }
 }
 
@@ -155,7 +163,7 @@ export const recordedTests = (options: RecordedTestsOptions) => {
     name: string,
     caseOptions: RecordedCaseOptions,
     body: Body<A, E, RequestExecutor.Service>,
-    testOptions?: number | TestOptions,
+    testOptions?: BunTestOptions,
   ) => {
     const cassette = cassetteName(options.prefix, name, caseOptions)
     if (cassettes.has(cassette)) throw new Error(`Duplicate recorded cassette "${cassette}"`)
@@ -169,19 +177,21 @@ export const recordedTests = (options: RecordedTestsOptions) => {
       }),
     ])
 
-    if (!matchesSelected({ prefix: options.prefix, name, cassette, tags })) return test.skip(name, () => {}, testOptions)
+    if (!matchesSelected({ prefix: options.prefix, name, cassette, tags }))
+      return test.skip(name, () => {}, testOptions)
 
     const recorderOptions = mergeOptions(options.options, caseOptions.options)
     const layerOptions = {
       directory: FIXTURES_DIR,
       ...recorderOptions,
+      mode: recorderOptions?.mode ?? RECORDER_MODE,
       metadata: {
         ...recorderOptions?.metadata,
         tags,
       },
     }
 
-    if (process.env.RECORD === "true") {
+    if (layerOptions.mode === "record") {
       if (missingEnv([...(options.requires ?? []), ...(caseOptions.requires ?? [])]).length > 0) {
         return test.skip(name, () => {}, testOptions)
       }
@@ -194,17 +204,14 @@ export const recordedTests = (options: RecordedTestsOptions) => {
     ).live(name, body, testOptions)
   }
 
-  const effect = <A, E>(
-    name: string,
-    body: Body<A, E, RequestExecutor.Service>,
-    testOptions?: number | TestOptions,
-  ) => run(name, {}, body, testOptions)
+  const effect = <A, E>(name: string, body: Body<A, E, RequestExecutor.Service>, testOptions?: BunTestOptions) =>
+    run(name, {}, body, testOptions)
 
   effect.with = <A, E>(
     name: string,
     caseOptions: RecordedCaseOptions,
     body: Body<A, E, RequestExecutor.Service>,
-    testOptions?: number | TestOptions,
+    testOptions?: BunTestOptions,
   ) => run(name, caseOptions, body, testOptions)
 
   return { effect }
