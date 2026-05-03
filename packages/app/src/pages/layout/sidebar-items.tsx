@@ -127,6 +127,7 @@ const SessionRow = (props: {
             class="absolute inset-0 flex items-center justify-center transition-opacity"
             classList={{
               "group-hover/session:opacity-0": props.hasChildren(),
+              "opacity-0": props.expanded(),
             }}
           >
             <Switch>
