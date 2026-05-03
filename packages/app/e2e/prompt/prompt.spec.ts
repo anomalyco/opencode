@@ -10,7 +10,7 @@ import { cleanupSession, sessionIDFromUrl } from "../actions"
  * - Sessions belong to projects (via project_id foreign key)
  * - URLs use /projects/<id>/session/<session-id> format
  * - Files are not persisted locally (eventually will be in S3)
- * - Code execution happens in executor containers
+ * - Prompt and session flow
  */
 test("can send a prompt and receive a reply", async ({ page, sdk, project, gotoSession }) => {
   test.setTimeout(120_000)

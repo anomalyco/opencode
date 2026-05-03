@@ -23,7 +23,7 @@ export const GlobalRoutes = lazy(() =>
       describeRoute({
         summary: "Get readiness",
         description:
-          "Get comprehensive health information about the OpenCode server including database, executor, relay, and univer status.",
+          "Get comprehensive health information about the OpenCode server including database, relay, and univer status.",
         operationId: "global.readyz",
         responses: {
           200: {

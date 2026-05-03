@@ -25,7 +25,6 @@ const extraArgs = (() => {
 const services = {
   postgres: { url: "postgresql://veritly:veritly@localhost:15432/veritly", type: "database" },
   ollama: { url: "http://localhost:11435", type: "http" },
-  executor: { url: "http://localhost:18080", type: "http" },
 }
 
 // Fail-fast health checks
@@ -37,11 +36,9 @@ async function checkServices(): Promise<string[]> {
       if (config.type === "http") {
         let res: Response
         if (name === "ollama") {
-          // Ollama uses /api/tags for health check
           res = await fetch(`${config.url}/api/tags`)
         } else {
-          // Executor uses /readyz
-          res = await fetch(`${config.url}/readyz`)
+          res = await fetch(config.url)
         }
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`)
@@ -154,7 +151,6 @@ const serverEnv = {
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
   OPENCODE_E2E_MODEL: "openai/llama3.2:1b",
   OPENCODE_CLIENT: "app",
-  VERITLY_EXECUTOR_URL: "http://localhost:18080",
   DATABASE_URL: "postgresql://veritly:veritly@localhost:15432/veritly",
 }
 

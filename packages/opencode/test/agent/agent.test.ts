@@ -39,7 +39,7 @@ test("build agent has correct default properties", async () => {
       expect(build?.mode).toBe("primary")
       expect(build?.native).toBe(true)
       expect(evalPerm(build, "edit")).toBe("allow")
-      expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "micropython")).toBe("allow")
     },
   })
 })
@@ -71,6 +71,7 @@ test("explore agent denies edit and write", async () => {
       expect(evalPerm(explore, "write")).toBe("deny")
       expect(evalPerm(explore, "todoread")).toBe("deny")
       expect(evalPerm(explore, "todowrite")).toBe("deny")
+      expect(evalPerm(explore, "micropython")).toBe("allow")
     },
   })
 })
@@ -112,7 +113,7 @@ test("compaction agent denies all permissions", async () => {
       const compaction = await Agent.get("compaction")
       expect(compaction).toBeDefined()
       expect(compaction?.hidden).toBe(true)
-      expect(evalPerm(compaction, "bash")).toBe("deny")
+      expect(evalPerm(compaction, "micropython")).toBe("deny")
       expect(evalPerm(compaction, "edit")).toBe("deny")
       expect(evalPerm(compaction, "read")).toBe("deny")
     },
@@ -202,8 +203,8 @@ test("agent permission config merges with defaults", async () => {
       agent: {
         build: {
           permission: {
-            bash: {
-              "rm -rf *": "deny",
+            micropython: {
+              "raise SystemExit(1)": "deny",
             },
           },
         },
@@ -216,7 +217,7 @@ test("agent permission config merges with defaults", async () => {
       const build = await Agent.get("build")
       expect(build).toBeDefined()
       // Specific pattern is denied
-      expect(PermissionNext.evaluate("bash", "rm -rf *", build!.permission).action).toBe("deny")
+      expect(PermissionNext.evaluate("micropython", "raise SystemExit(1)", build!.permission).action).toBe("deny")
       // Edit still allowed
       expect(evalPerm(build, "edit")).toBe("allow")
     },
@@ -227,7 +228,7 @@ test("global permission config applies to all agents", async () => {
   await using tmp = await tmpdir({
     config: {
       permission: {
-        bash: "deny",
+        micropython: "deny",
       },
     },
   })
@@ -236,7 +237,7 @@ test("global permission config applies to all agents", async () => {
     fn: async () => {
       const build = await Agent.get("build")
       expect(build).toBeDefined()
-      expect(evalPerm(build, "bash")).toBe("deny")
+      expect(evalPerm(build, "micropython")).toBe("deny")
     },
   })
 })
@@ -424,7 +425,7 @@ test("legacy tools config converts to permissions", async () => {
       agent: {
         build: {
           tools: {
-            bash: false,
+            micropython: false,
             read: false,
           },
         },
@@ -435,7 +436,7 @@ test("legacy tools config converts to permissions", async () => {
     workspace: tmp.path,
     fn: async () => {
       const build = await Agent.get("build")
-      expect(evalPerm(build, "bash")).toBe("deny")
+      expect(evalPerm(build, "micropython")).toBe("deny")
       expect(evalPerm(build, "read")).toBe("deny")
     },
   })

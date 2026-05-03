@@ -18,8 +18,6 @@ metadata:
   labels:
     app: executor-dev
 spec:
-  # Failed Pod objects persist until removed (Kubernetes does not GC them like CrashLoop “slots”).
-  # revisionHistoryLimit only trims old ReplicaSets; clean Failed: kubectl delete pods -n veritly -l app=executor-dev --field-selector=status.phase=Failed
   revisionHistoryLimit: 3
   replicas: 1
   strategy:
@@ -39,11 +37,6 @@ spec:
         - name: executor
           image: opencode-veritly-executor-dev:dev
           imagePullPolicy: Always
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - name: dev-kvm
-              mountPath: /dev/kvm
           ports:
             - containerPort: 7777
               name: http
@@ -54,8 +47,8 @@ spec:
               value: "300000"
             - name: UNIVER_SDK_WS
               value: "ws://relay:8080/ws"
-            - name: VM_DATA_DIR
-              value: "/tmp/veritly-vms"
+            - name: EXECUTOR_DATA_DIR
+              value: "/tmp/veritly-executor"
           livenessProbe:
             httpGet:
               path: /livez
@@ -66,24 +59,17 @@ spec:
             httpGet:
               path: /readyz
               port: 7777
-            initialDelaySeconds: 15
-            periodSeconds: 90
-            timeoutSeconds: 180
-            failureThreshold: 4
-          # Bun + QEMU + guest copy: observed RSS; prior 1Gi limit invited eviction.
-          # Request stays below 1Gi so prod `executor` + `executor-dev` can coexist on a ~3Gi allocatable node.
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 3
           resources:
             requests:
-              memory: "768Mi"
-              cpu: "250m"
+              memory: "256Mi"
+              cpu: "100m"
             limits:
-              memory: "2Gi"
-              cpu: "1500m"
-      volumes:
-        - name: dev-kvm
-          hostPath:
-            path: /dev/kvm
-            type: CharDevice
+              memory: "512Mi"
+              cpu: "1000m"
 ---
 apiVersion: v1
 kind: Service

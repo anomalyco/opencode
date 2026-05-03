@@ -67,11 +67,6 @@ const SessionRoute = () => (
 
 const SessionIndexRoute = () => <Navigate href="session" />
 
-/** Full-page GET is handled by Vite middleware; SPA navigation loads the same URLs in an iframe. */
-function HealthIframe(props: { src: string; title: string }) {
-  return <iframe class="w-full min-h-dvh border-0 block bg-background-base" src={props.src} title={props.title} />
-}
-
 const AuthCallbackRoute = () => (
   <Suspense fallback={<Loading />}>
     <AuthCallback />
@@ -299,8 +294,6 @@ export function AppInterface(props: {
             >
               <Route path="/" component={HomeRoute} />
               <Route path="/auth/callback" component={AuthCallbackRoute} />
-              <Route path="/livez" component={() => <HealthIframe src="/livez" title="livez" />} />
-              <Route path="/readyz" component={() => <HealthIframe src="/readyz" title="readyz" />} />
               <Route path="/:dir" component={DirectoryLayout}>
                 <Route path="/" component={SessionIndexRoute} />
                 <Route path="/session/:id?" component={SessionRoute} />

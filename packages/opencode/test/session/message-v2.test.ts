@@ -292,12 +292,12 @@ describe("session.message-v2.toModelMessage", () => {
             ...basePart(assistantID, "a2"),
             type: "tool",
             callID: "call-1",
-            tool: "bash",
+            tool: "micropython",
             state: {
               status: "completed",
               input: { cmd: "ls" },
               output: "ok",
-              title: "Bash",
+              title: "MicroPython",
               metadata: {},
               time: { start: 0, end: 1 },
               attachments: [
@@ -328,7 +328,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-call",
             toolCallId: "call-1",
-            toolName: "bash",
+            toolName: "micropython",
             input: { cmd: "ls" },
             providerExecuted: undefined,
             providerOptions: { openai: { tool: "meta" } },
@@ -341,7 +341,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-result",
             toolCallId: "call-1",
-            toolName: "bash",
+            toolName: "micropython",
             output: {
               type: "content",
               value: [
@@ -384,12 +384,12 @@ describe("session.message-v2.toModelMessage", () => {
             ...basePart(assistantID, "a2"),
             type: "tool",
             callID: "call-1",
-            tool: "bash",
+            tool: "micropython",
             state: {
               status: "completed",
               input: { cmd: "ls" },
               output: "ok",
-              title: "Bash",
+              title: "MicroPython",
               metadata: {},
               time: { start: 0, end: 1 },
             },
@@ -411,7 +411,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-call",
             toolCallId: "call-1",
-            toolName: "bash",
+            toolName: "micropython",
             input: { cmd: "ls" },
             providerExecuted: undefined,
           },
@@ -423,7 +423,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-result",
             toolCallId: "call-1",
-            toolName: "bash",
+            toolName: "micropython",
             output: { type: "text", value: "ok" },
           },
         ],
@@ -453,12 +453,12 @@ describe("session.message-v2.toModelMessage", () => {
             ...basePart(assistantID, "a1"),
             type: "tool",
             callID: "call-1",
-            tool: "bash",
+            tool: "micropython",
             state: {
               status: "completed",
               input: { cmd: "ls" },
               output: "this should be cleared",
-              title: "Bash",
+              title: "MicroPython",
               metadata: {},
               time: { start: 0, end: 1, compacted: 1 },
             },
@@ -478,7 +478,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-call",
             toolCallId: "call-1",
-            toolName: "bash",
+            toolName: "micropython",
             input: { cmd: "ls" },
             providerExecuted: undefined,
           },
@@ -490,7 +490,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-result",
             toolCallId: "call-1",
-            toolName: "bash",
+            toolName: "micropython",
             output: { type: "text", value: "[Old tool result content cleared]" },
           },
         ],
@@ -520,7 +520,7 @@ describe("session.message-v2.toModelMessage", () => {
             ...basePart(assistantID, "a1"),
             type: "tool",
             callID: "call-1",
-            tool: "bash",
+            tool: "micropython",
             state: {
               status: "error",
               input: { cmd: "ls" },
@@ -545,7 +545,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-call",
             toolCallId: "call-1",
-            toolName: "bash",
+            toolName: "micropython",
             input: { cmd: "ls" },
             providerExecuted: undefined,
             providerOptions: { openai: { tool: "meta" } },
@@ -558,7 +558,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-result",
             toolCallId: "call-1",
-            toolName: "bash",
+            toolName: "micropython",
             output: { type: "error-text", value: "nope" },
             providerOptions: { openai: { tool: "meta" } },
           },
@@ -718,7 +718,7 @@ describe("session.message-v2.toModelMessage", () => {
             ...basePart(assistantID, "a1"),
             type: "tool",
             callID: "call-pending",
-            tool: "bash",
+            tool: "micropython",
             state: {
               status: "pending",
               input: { cmd: "ls" },
@@ -753,7 +753,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-call",
             toolCallId: "call-pending",
-            toolName: "bash",
+            toolName: "micropython",
             input: { cmd: "ls" },
             providerExecuted: undefined,
           },
@@ -772,7 +772,7 @@ describe("session.message-v2.toModelMessage", () => {
           {
             type: "tool-result",
             toolCallId: "call-pending",
-            toolName: "bash",
+            toolName: "micropython",
             output: { type: "error-text", value: "[Tool execution was interrupted]" },
           },
           {

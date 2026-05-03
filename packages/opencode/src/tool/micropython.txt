@@ -1,0 +1,5 @@
+Runs Python in the **connected web app** (Pyodide / WASM), not on the API host. A stub module `veritly_univer_sdk` is pre-installed (`RangeRect`, `UniverSDK`); full async relay is only available in local CPython (see system prompt).
+
+The tool waits for the browser to execute code and post results back; keep a tab open. Default behavior is CPython-compatible syntax (Pyodide).
+
+Use `workdir` only for permission checks against `${workspace}` when paths leave the project; the browser runtime has no server filesystem.

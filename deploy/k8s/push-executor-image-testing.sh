@@ -1,27 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build and push the QEMU executor image, then restart a deployment.
+# Build and push the MicroPython executor image, then restart a deployment.
 #
 # Default: tag latest, deployment executor.
 # Test Dockerfile on executor-dev only:
 #   EXECUTOR_IMAGE_TAG=dev EXECUTOR_DEPLOYMENT=executor-dev ./deploy/k8s/push-executor-image.sh
-# VM artifacts must exist first (Linux host with KVM not required for *building* the rootfs):
-#   (cd packages/executor && bun run build-vm)
-# See packages/executor/README.md
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 REGISTRY="registry.digitalocean.com/veritly-registry"
 NS="${K8S_NAMESPACE:-veritly}"
 TAG="${EXECUTOR_IMAGE_TAG:-latest}"
 DEPLOY="${EXECUTOR_DEPLOYMENT:-executor}"
-
-if [ ! -s "$ROOT/packages/executor/output/aarch64/vmlinuz" ] || [ ! -s "$ROOT/packages/executor/output/x86_64/vmlinuz" ]; then
-  echo "Missing guest bundles under packages/executor/output/{aarch64,x86_64}/" >&2
-  echo "From repo root (needs Docker):" >&2
-  echo "  (cd packages/executor && bun run build-vm)" >&2
-  exit 1
-fi
 
 cd "$ROOT"
 

@@ -651,7 +651,7 @@ export namespace Config {
           glob: PermissionRule.optional(),
           grep: PermissionRule.optional(),
           list: PermissionRule.optional(),
-          bash: PermissionRule.optional(),
+          micropython: PermissionRule.optional(),
           task: PermissionRule.optional(),
           external_directory: PermissionRule.optional(),
           todowrite: PermissionAction.optional(),

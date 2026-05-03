@@ -11,20 +11,20 @@ import PROMPT_CODEX from "./prompt/codex_header.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
 import type { Provider } from "@/provider/provider"
 
-const UNIVER_SDK_GUIDE = `# Veritly Univer Python SDK
+const UNIVER_SDK_GUIDE = `# Veritly Univer Python SDK (full client: CPython)
 
-The SDK talks to a local Bun relay that bridges agent WebSocket clients to the browser tab running Univer. The app must set VITE_UNIVER_SDK_WS so the viewer connects as role=browser; agents use role=agent (added automatically by the SDK).
+The full SDK talks to a Bun relay over WebSockets. In the **hosted web app**, the \`micropython\` tool runs user snippets in **Pyodide** with a small \`veritly_univer_sdk\` stub (\`RangeRect\`, \`UniverSDK\`); async spreadsheet calls are not wired there yet.
 
-## Prerequisites
+## Prerequisites (full CPython client)
 
-1. Relay running on the same machine as OpenCode. Default listen: ws://127.0.0.1:18766/ws (port from UNIVER_SDK_PORT, default 18766).
-2. Browser session with a spreadsheet open and connected to the relay (otherwise agent requests have no peer).
-3. Python with websockets installed.
+1. Relay running. Default: ws://127.0.0.1:18766/ws (UNIVER_SDK_PORT).
+2. Browser tab connected to the relay.
+3. CPython with the \`websockets\` package (see packages/univer-sdk/python).
 
-### Python import: hosted vs local
+### Import: browser (Pyodide) vs local CPython
 
-- Hosted / Docker: The image runs pip install on packages/univer-sdk/python at build time. python3 can import veritly_univer_sdk with no extra steps.
-- Local dev: Run bash packages/univer-sdk/python/install-local.sh once.
+- **Browser (micropython tool)**: import \`veritly_univer_sdk\` for stubs; use \`print\` and \`json\` for probes.
+- **Local CPython**: run \`bash packages/univer-sdk/python/install-local.sh\` for the full async client.
 
 ## Default URL and environment
 
@@ -37,7 +37,7 @@ UniverSDK() with no arguments uses the above. Pass an explicit URL only when nee
 
 UniverSDK("ws://127.0.0.1:18766/ws")
 
-## Quick start
+## Quick start (CPython — local)
 
 import asyncio
 from veritly_univer_sdk import RangeRect, UniverSDK
@@ -80,7 +80,7 @@ add_chart uses Univer's insert-chart path. For drawing-level commands, use execu
 
 ## Troubleshooting
 
-- UniverSDK is not connected: call await sdk.connect() before other methods.
+- UniverSDK is not connected: call await sdk.connect() before other methods (CPython).
 - Relay errors / timeout: ensure relay is up, port matches UNIVER_SDK_WS / UNIVER_SDK_PORT, and the spreadsheet tab is open with VITE_UNIVER_SDK_WS pointing at the relay.
 - Multi-host: set UNIVER_SDK_WS to the reachable WebSocket URL for that instance; browser and agent must reach the same relay.`
 
@@ -90,20 +90,19 @@ export namespace SystemPrompt {
   }
 
   export function hosted() {
-    if (!process.env.VERITLY_EXECUTOR_URL?.trim()) return []
+    if (!process.env.PUBLIC_BASE_URL?.trim()) return []
 
     const lines = [
-      "Shell commands run inside an isolated executor workspace, not on the API container.",
-      "The shell workspace path is exposed as $WORKSPACE.",
-      "Python 3 is available there.",
-      "The Python package veritly_univer_sdk is installed there.",
-      "For Univer automation, import from veritly_univer_sdk, for example: from veritly_univer_sdk import RangeRect, UniverSDK",
+      "The micropython tool runs Python in the user's browser (Pyodide), not on the API container.",
+      "Paths and workdir are checked against $WORKSPACE for permissions only; execution has no server-side filesystem.",
+      "The stub module veritly_univer_sdk exposes RangeRect and UniverSDK; full async spreadsheet I/O matches the CPython guide below once ported to Pyodide.",
+      "For Univer automation concepts and relay URLs, see the guide below (CPython quick start); in the browser use print/json and the stub types until async support lands.",
       "",
       ...UNIVER_SDK_GUIDE.split("\n"),
     ]
 
     if (process.env.UNIVER_SDK_WS?.trim() || process.env.VITE_UNIVER_SDK_WS?.trim()) {
-      lines.push("The executor shell environment includes UNIVER_SDK_WS when relay connectivity is configured.")
+      lines.push("When relay connectivity is configured, UNIVER_SDK_WS is available to local CPython tooling (not inside Pyodide unless you wire it).")
     }
 
     return lines

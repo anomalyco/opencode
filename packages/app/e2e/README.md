@@ -7,7 +7,7 @@ This directory contains end-to-end tests using Docker Compose for infrastructure
 You must have the Docker Compose environment running BEFORE running tests:
 
 ```bash
-# Start all services (postgres, ollama, executor)
+# Start all services (postgres, ollama)
 ./script/setup-e2e.sh
 
 # Or manually:
@@ -22,13 +22,13 @@ docker compose -f docker-compose.e2e.yml exec ollama ollama pull qwen2.5:0.5b
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Docker Compose Network                       │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐                     │
-│  │ Postgres │   │  Ollama  │   │ Executor │                     │
-│  │ :15432   │   │ :11434   │   │ :8080    │                     │
-│  └──────────┘   └──────────┘   └──────────┘                     │
+│  ┌──────────┐   ┌──────────┐                                    │
+│  │ Postgres │   │  Ollama  │                                    │
+│  │ :15432   │   │ :11435   │                                    │
+│  └──────────┘   └──────────┘                                    │
 └─────────────────────────────────────────────────────────────────┘
-         │              │              │
-         └──────────────┼──────────────┘
+         │              │
+         └──────────────┘
                         │
          ┌──────────────▼──────────────┐
          │      Test Runner            │
@@ -38,7 +38,6 @@ docker compose -f docker-compose.e2e.yml exec ollama ollama pull qwen2.5:0.5b
 
 - **Postgres**: Database for OpenCode server
 - **Ollama**: Local AI model (qwen2.5:0.5b - tiny 0.5B model)
-- **Executor**: Container execution environment
 
 ## Running Tests
 
@@ -67,25 +66,12 @@ This makes debugging easier - infrastructure problems are infrastructure problem
 
 ## Configuration
 
-The test runner creates a temporary config file pointing to the Compose services:
-
-```json
-{
-  "model": "openai/qwen2.5:0.5b",
-  "provider": {
-    "openai": {
-      "options": {
-        "baseURL": "http://localhost:11434/v1",
-        "apiKey": "dummy-key"
-      }
-    }
-  }
-}
-```
+The test runner creates a temporary config file pointing to the Compose services (see `packages/app/script/e2e-local.ts`).
 
 ## Troubleshooting
 
 ### Services not available
+
 ```bash
 # Check what's running
 docker compose -f docker-compose.e2e.yml ps
@@ -98,15 +84,17 @@ docker compose -f docker-compose.e2e.yml logs ollama
 ```
 
 ### Model not found
+
 ```bash
-# Check if model is in Ollama
-curl http://localhost:11434/api/tags
+# Check if model is in Ollama (host port 11435 maps to container 11434)
+curl http://localhost:11435/api/tags
 
 # Pull it manually
 docker compose -f docker-compose.e2e.yml exec ollama ollama pull qwen2.5:0.5b
 ```
 
 ### Database issues
+
 ```bash
 # Reset database
 docker compose -f docker-compose.e2e.yml down -v postgres

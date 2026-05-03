@@ -20,6 +20,7 @@ import { PermissionID } from "@/permission/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { assertHostedFilesystemEnabled } from "../hosted"
+import { ClientPython } from "@/session/client-python"
 
 const log = Log.create({ service: "server" })
 
@@ -287,6 +288,54 @@ export const SessionRoutes = lazy(() =>
         }
 
         return c.json(session)
+      },
+    )
+    .post(
+      "/:sessionID/client_python_result",
+      describeRoute({
+        summary: "Report browser Python result",
+        description:
+          "Completes a pending micropython tool call: the web app runs user code (Pyodide) and posts stdout and exit code here.",
+        operationId: "session.client_python_result",
+        responses: {
+          200: {
+            description: "Whether the result matched a pending tool call",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ accepted: z.boolean() })),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          callID: z.string(),
+          ok: z.boolean(),
+          output: z.string().optional(),
+          exitCode: z.number().int().optional(),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        const body = c.req.valid("json")
+        const accepted = ClientPython.submit({
+          sessionID,
+          callID: body.callID,
+          ok: body.ok,
+          output: body.output,
+          exitCode: body.exitCode,
+        })
+        return c.json({ accepted })
       },
     )
     .post(

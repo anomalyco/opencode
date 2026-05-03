@@ -29,26 +29,6 @@ services:
       retries: 20
       start_period: 60s
 
-  executor:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.executor
-    ports:
-      - "18080:7777"
-    environment:
-      - PORT=7777
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    devices:
-      - /dev/kvm:/dev/kvm
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7777/readyz"]
-      interval: 2s
-      timeout: 5s
-      retries: 10
-
 volumes:
   ollama-data:
     driver: local

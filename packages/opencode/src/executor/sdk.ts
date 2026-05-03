@@ -1,8 +1,5 @@
 /**
- * Executor API SDK
- * 
- * Client for the Veritly Executor API which provides isolated execution
- * environments for running bash commands, Python code, and tools.
+ * Executor API SDK — isolated MicroPython sessions on the executor host.
  */
 
 import { Log } from "../util/log"
@@ -23,63 +20,37 @@ export interface ExecResult {
   output: string
   exitCode: number
   sessionId: string
-  mode: "qemu"
-  vmId: string
+  mode: "micropython"
 }
 
 export interface SessionStatus {
   sessionId: string
   createdAt: number
   lastActivity: number
-  mode: "qemu"
-  vmId: string
-  sshPort?: number
+  mode: "micropython"
 }
 
 export type ExecutorReadyzStatic = {
-  qemuPath: string
-  qemuRunnable: boolean
-  kernelPath: string
-  kernelBytes: number | null
-  initrdPath: string | null
-  initrdBytes: number | null
-  templatePath: string
-  templateBusyboxBytes: number | null
-  templateOk: boolean
-  kvmDevice: boolean
-  platform: string
-  hostArch: string
+  micropythonBin: string
+  micropythonRunnable: boolean
+  micropythonVersion: string | null
+  libPath: string
+  libReadable: boolean
+  probeExit: number | null
+  probeOutput: string | null
 }
 
-export type ExecutorReadyzVm = {
-  probeId: string
-  vmDir: string
-  sshHost: string
-  sshPort: number
-  msToSsh: number
-  command: string
-  exitCode: number
-  commandOutput: string
-  msExec: number
-  serialTail: string | null
-}
-
-/** Same JSON as `GET /readyz`: static checks plus a real probe VM, SSH, and `echo __readyz_ok__`. */
+/** Same JSON as `GET /readyz`: MicroPython binary, bundle import probe. */
 export interface ExecutorHealth {
   ok: boolean
   service: "executor"
-  mode: "qemu"
-  guest: "aarch64" | "x86_64"
+  mode: "micropython"
   cached: boolean
   cachedAgeMs?: number
-  qemuVersion?: string
   activeSessions: number
   static: ExecutorReadyzStatic
-  vm: ExecutorReadyzVm | null
   errors: string[]
 }
-
-
 
 export class ExecutorError extends Error {
   constructor(
@@ -109,9 +80,6 @@ export class ExecutorSDK {
     return out
   }
 
-  /**
-   * Deep readiness: same as `GET /readyz` (200 only after a successful probe VM + SSH + echo).
-   */
   async health(): Promise<ExecutorHealth> {
     const response = await fetch(`${this.baseUrl}/readyz`, { headers: this.hdr() })
     if (!response.ok) {
@@ -121,51 +89,40 @@ export class ExecutorSDK {
   }
 
   /**
-   * Execute a command in a session
-   * Creates the session if it doesn't exist
+   * Run MicroPython `code` in a session workspace (created on first use).
    */
-  async exec(
-    sessionId: string,
-    command: string,
-    timeout?: number,
-  ): Promise<ExecResult> {
+  async exec(sessionId: string, code: string, timeout?: number, workdir?: string): Promise<ExecResult> {
     const url = `${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/exec`
-    
-    log.debug("Executing command", { sessionId, command: command.slice(0, 100) })
+
+    log.debug("Executing MicroPython", { sessionId, preview: code.slice(0, 120) })
 
     const response = await fetch(url, {
       method: "POST",
       headers: this.hdr({ "Content-Type": "application/json" }),
       body: JSON.stringify({
-        command,
+        code,
         timeout: timeout ?? this.defaultTimeout,
+        ...(workdir !== undefined ? { workdir } : {}),
       }),
     })
 
     if (!response.ok) {
       const error = await response.text()
-      throw new ExecutorError(
-        `Execution failed: ${error}`,
-        "EXECUTION_FAILED",
-        response.status,
-      )
+      throw new ExecutorError(`Execution failed: ${error}`, "EXECUTION_FAILED", response.status)
     }
 
     return response.json()
   }
 
-  /**
-   * Get session status
-   */
   async getSession(sessionId: string): Promise<SessionStatus> {
     const url = `${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/status`
-    
+
     const response = await fetch(url, { headers: this.hdr() })
 
     if (response.status === 404) {
       throw new ExecutorError("Session not found", "SESSION_NOT_FOUND", 404)
     }
-    
+
     if (!response.ok) {
       throw new ExecutorError("Failed to get session", "SESSION_ERROR", response.status)
     }
@@ -173,25 +130,19 @@ export class ExecutorSDK {
     return response.json()
   }
 
-  /**
-   * Close a session
-   */
   async closeSession(sessionId: string): Promise<void> {
     const url = `${this.baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/close`
-    
+
     const response = await fetch(url, { method: "POST", headers: this.hdr() })
-    
+
     if (!response.ok && response.status !== 404) {
       throw new ExecutorError("Failed to close session", "CLOSE_ERROR", response.status)
     }
   }
 
-  /**
-   * List all active sessions (admin)
-   */
   async listSessions(): Promise<Array<{ id: string; createdAt: number; lastActivity: number }>> {
     const url = `${this.baseUrl}/v1/admin/sessions`
-    
+
     const response = await fetch(url, { headers: this.hdr() })
 
     if (!response.ok) {
@@ -202,9 +153,6 @@ export class ExecutorSDK {
     return data.sessions
   }
 
-  /**
-   * Check if executor is available
-   */
   async isAvailable(): Promise<boolean> {
     try {
       const health = await this.health()
@@ -215,7 +163,6 @@ export class ExecutorSDK {
   }
 }
 
-// Export singleton factory
 export const Executor = {
   create(config: ExecutorConfig): ExecutorSDK {
     return new ExecutorSDK(config)

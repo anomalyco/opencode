@@ -1,33 +1,30 @@
-# Executor API: per-session QEMU microVMs (direct kernel + 9p root).
+# Executor API: per-session MicroPython subprocesses with bundled mpy-lib.
 FROM ubuntu:22.04
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
     curl \
-    qemu-system-arm \
-    qemu-system-x86 \
+    micropython \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-COPY packages/executor/output/aarch64 /app/output/aarch64
-COPY packages/executor/output/x86_64 /app/output/x86_64
-RUN test -s /app/output/aarch64/vmlinuz && test -s /app/output/x86_64/vmlinuz \
-  && test -d /app/output/aarch64/guest-root/bin \
-  && test -d /app/output/x86_64/guest-root/bin
+COPY packages/executor/mpy-lib /app/mpy-lib
+RUN test -s /app/mpy-lib/veritly_univer_sdk.py
 
 COPY packages/executor/package.json ./
 RUN bun install --production --no-save
 
 COPY packages/executor/src ./src
 
-RUN mkdir -p /workspace /tmp/veritly-vms
+RUN mkdir -p /tmp/veritly-executor
 
 ENV PORT=7777
-ENV VM_DATA_DIR=/tmp/veritly-vms
+ENV EXECUTOR_DATA_DIR=/tmp/veritly-executor
+ENV MICROPYTHON_LIB=/app/mpy-lib
 ENV VM_INACTIVITY_TIMEOUT_MS=300000
 
 EXPOSE 7777

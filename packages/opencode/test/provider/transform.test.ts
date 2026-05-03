@@ -730,8 +730,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           {
             type: "tool-call",
             toolCallId: "test",
-            toolName: "bash",
-            input: { command: "echo hello" },
+            toolName: "micropython",
+            input: { code: "print('hello')" },
           },
         ],
       },
@@ -781,8 +781,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       {
         type: "tool-call",
         toolCallId: "test",
-        toolName: "bash",
-        input: { command: "echo hello" },
+        toolName: "micropython",
+        input: { code: "print('hello')" },
       },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
@@ -1058,7 +1058,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
         role: "assistant",
         content: [
           { type: "text", text: "" },
-          { type: "tool-call", toolCallId: "123", toolName: "bash", input: { command: "ls" } },
+          { type: "tool-call", toolCallId: "123", toolName: "micropython", input: { code: "print(1)" } },
         ],
       },
     ] as any[]
@@ -1070,8 +1070,8 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[0]).toEqual({
       type: "tool-call",
       toolCallId: "123",
-      toolName: "bash",
-      input: { command: "ls" },
+      toolName: "micropython",
+      input: { code: "print(1)" },
     })
   })
 

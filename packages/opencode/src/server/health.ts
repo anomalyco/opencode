@@ -2,7 +2,6 @@
 import { Log } from "@/util/log"
 import { SystemPrompt } from "../session/system"
 import { getPool } from "../storage/db.pg"
-import { Executor } from "@/executor/sdk"
 
 const log = Log.create({ service: "server.health" })
 
@@ -89,13 +88,6 @@ function relayHttpHealthFromViteUniverSdkWs(): string | undefined {
   }
 }
 
-function executorUrl() {
-  const explicit = process.env.VERITLY_EXECUTOR_URL?.trim()
-  if (explicit) return explicit
-  if (explicit === "") return undefined
-  return undefined
-}
-
 function univerLicenseProbeUrl() {
   const raw = process.env.VERITLY_HEALTH_UNIVER_URL?.trim() || process.env.VITE_UNIVER_BACKEND_URL?.trim()
   if (!raw) return undefined
@@ -150,103 +142,18 @@ export function instructionCheck(): HealthCheckResult {
     return {
       name: "instructions",
       ok: true,
-      detail: "skipped (hosted executor instructions not required)",
+      detail: "skipped (hosted browser-python instructions not required)",
       latencyMs: 0,
     }
   }
 
-  const miss = ["$WORKSPACE", "veritly_univer_sdk", "UniverSDK"].filter((item) => !text.includes(item))
+  const miss = ["$WORKSPACE", "veritly_univer_sdk", "UniverSDK", "Pyodide"].filter((item) => !text.includes(item))
   return {
     name: "instructions",
     ok: miss.length === 0,
-    detail: miss.length ? `missing hosted instructions: ${miss.join(", ")}` : "executor/univer instructions present",
+    detail: miss.length ? `missing hosted instructions: ${miss.join(", ")}` : "browser-python / univer instructions present",
     latencyMs: 0,
   }
-}
-
-// Initialize executor SDK for health checks
-let executorHealthClient: ReturnType<typeof Executor.create> | null = null
-function getExecutorHealthClient() {
-  if (!executorHealthClient) {
-    const url = executorUrl()
-    if (!url) return null
-    executorHealthClient = Executor.create({ baseUrl: url })
-  }
-  return executorHealthClient
-}
-
-async function checkExecutor() {
-  const target = executorUrl()
-  if (!target) {
-    return {
-      name: "executor",
-      ok: true,
-      detail: "skipped (executor url not configured)",
-      latencyMs: 0,
-    } satisfies HealthCheckResult
-  }
-
-  return timedCheck("executor", target, async () => {
-    const client = getExecutorHealthClient()
-    if (!client) {
-      return {
-        ok: false,
-        detail: "failed to initialize executor SDK",
-      }
-    }
-
-    // Check health via SDK
-    const healthy = await client.isAvailable()
-    if (!healthy) {
-      return {
-        ok: false,
-        detail: "executor health check failed",
-      }
-    }
-
-    // Now test Python3 and Univer SDK via executor
-    const id = `health-${Date.now()}`
-    try {
-      const result = await client.exec(
-        id,
-        "python3 --version && python3 -c 'from veritly_univer_sdk import UniverSDK; print(\"Univer SDK OK\")'",
-        30000
-      )
-
-      if (result.exitCode !== 0) {
-        return {
-          ok: false,
-          detail: `python/univer sdk check failed: ${result.output}`,
-        }
-      }
-
-      // Verify output contains expected strings
-      const output = result.output || ""
-      if (!output.includes("Python 3")) {
-        return {
-          ok: false,
-          detail: "python not available in executor",
-        }
-      }
-
-      if (!output.includes("Univer SDK OK")) {
-        return {
-          ok: false,
-          detail: "univer sdk not available in executor",
-        }
-      }
-
-      return {
-        ok: true,
-        detail: `executor healthy, mode: ${result.mode || "unknown"}`,
-      }
-    } catch (error: any) {
-      return {
-        ok: false,
-        detail: `executor check failed: ${error.message}`,
-      }
-    }
-  })
 }
 
 async function checkOptionalUniver() {
@@ -288,7 +195,6 @@ export async function apiHealthReport(): Promise<ApiHealthReport> {
     checkDatabase(),
     checkOptionalUniver(),
     checkOptionalRelay(),
-    checkExecutor(),
     Promise.resolve(instructionCheck()),
   ])
   return {

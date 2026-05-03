@@ -1,67 +1,43 @@
-# Veritly QEMU Executor
+# Veritly Executor
 
-Isolated command execution: each session runs a QEMU VM with **direct kernel boot**, **`-nodefaults`**, **virtio user networking** (SSH host-forward), and a **9p-mounted** per-session root directory (copied from a minimal Alpine template). No Firecracker, no ext4 disk image for the guest root.
+HTTP service that runs **MicroPython** in per-session workspace directories on the host (no QEMU or VMs).
 
 ## Layout
 
-Guest bundles live under `packages/executor/output/<aarch64|x86_64>/`:
+- `src/server.ts` — Hono API, session lifecycle, subprocess runner
+- `mpy-lib/veritly_univer_sdk.py` — MicroPython-importable stub (`RangeRect`, `UniverSDK`); full CPython async client lives in `packages/univer-sdk/python`
 
-- `vmlinuz` — kernel  
-- `initrd.img` — optional; present when Alpine `linux-virt` ships it  
-- `guest-root/` — directory rootfs template (includes OpenSSH, Python, `veritly_univer_sdk`)
+## Local run
 
-Build (requires Docker, cross-arch supported):
+1. Install [MicroPython](https://micropython.org/) (`micropython` on `PATH`).
+2. From repo root: `bun install --cwd packages/executor` then `bun run --cwd packages/executor start`
 
-```bash
-(cd packages/executor && bun run build-vm)
-bun run --cwd packages/executor verify-artifacts
-```
+Optional env:
 
-## Modes
-
-### 1. Production — executor in the cluster
-
-- Pod is **Linux** with **`/dev/kvm`** when the node matches the guest ISA (aarch64 guest on arm64 nodes, x86_64 on amd64). Image installs `qemu-system-arm` and `qemu-system-x86`.
-- OpenCode reaches the executor via in-cluster Service DNS (e.g. `http://executor:7777`), not port-forward.
-
-### 2. Local laptop (e.g. macOS Apple Silicon)
-
-- Install QEMU: `brew install qemu`
-- Build guests (above), then: `bun run --cwd packages/executor start`
-- On Darwin, **HVF** is used for aarch64 guests; x86_64 guests use **TCG** (slow but works).
-
-### 3. Cluster dev image + port-forward (optional)
-
-Same as before: deploy `executor-dev`, `kubectl port-forward`, set `VERITLY_EXECUTOR_URL=http://127.0.0.1:7777`. SDK integration tests use this URL.
+| Variable | Purpose |
+|----------|---------|
+| `PORT` | HTTP port (default `7777`) |
+| `EXECUTOR_DATA_DIR` | Session roots (default `/tmp/veritly-executor`; `VM_DATA_DIR` still accepted) |
+| `MICROPYTHON_BIN` | Interpreter binary (default `micropython`) |
+| `MICROPYTHON_LIB` | Directory prepended to `MICROPYPATH` (default `packages/executor/mpy-lib` next to `src`) |
+| `VM_INACTIVITY_TIMEOUT_MS` | Idle session GC (default `300000`) |
+| `READYZ_INTERVAL_MS` | `/readyz` cache TTL (default `60000`; `0` disables cache) |
 
 ## API
 
-- `GET /livez` — cheap process liveness (`ok` text).
-- `GET /readyz` — deep readiness: **HTTP 200 only if** static checks pass **and** a throwaway QEMU guest boots, SSH connects, and `echo __readyz_ok__` succeeds. JSON includes `static` (paths, sizes, KVM device, template checks), `vm` (probe timings, command output, `serialTail` on failure), and `errors`. Responses within `READYZ_INTERVAL_MS` repeat the last result with `cached: true` (kube should use a period ≥ that interval and a long enough `timeoutSeconds`).
-- `POST /v1/sessions/:id/exec` — `{ command, timeout? }`
-- `GET /v1/sessions/:id/status`
-- `POST /v1/sessions/:id/close`
+- `GET /livez` — liveness
+- `GET /readyz` — MicroPython runnable + bundle import probe (`__readyz_ok__`)
+- `POST /v1/sessions/:id/exec` — JSON `{ "code": string, "timeout"?: number, "workdir"?: string }` (`workdir` is relative to the session directory; `..` rejected)
+- `GET /v1/sessions/:id/status` — session metadata
+- `POST /v1/sessions/:id/close` — drop session dir
+- `GET /v1/admin/sessions` — list active sessions
 
-## Environment (sparing)
+## Docker / Kubernetes
 
-| Variable | Role |
-|----------|------|
-| `PORT` | HTTP port (default `7777`) |
-| `VM_DATA_DIR` | Per-session VM and workspace dirs |
-| `VM_INACTIVITY_TIMEOUT_MS` | Idle cleanup |
-| `VM_MEMORY_MIB` / `VM_CPUS` | Guest sizing |
-| `SSH_BOOT_TIMEOUT_MS` | Wait for SSH after QEMU start |
-| `READYZ_INTERVAL_MS` | Min milliseconds between full `/readyz` probes (default `60000`; set `0` to disable cache) |
-| `KERNEL_PATH` / `INITRD_PATH` | Override kernel/initrd files (defaults under `output/<guest>/`) |
-| `QEMU_PATH` | Override QEMU binary |
+`docker/Dockerfile.executor` installs Ubuntu `micropython`, copies `mpy-lib`, runs Bun. Production manifests (`deploy/k8s/base/03-executor.yaml`) use normal security context (no KVM, not privileged).
 
-Guest ISA is inferred from `process.arch` (`arm64` → aarch64 bundle, else x86_64).
+## OpenCode
 
-## Docker image
+Set `VERITLY_EXECUTOR_URL` to the executor base URL. The `micropython` tool in `packages/opencode` calls this API.
 
-`docker/Dockerfile.executor` copies `packages/executor/output/aarch64` and `x86_64` into `/app/output/`. The server resolves `../output` relative to `src/`.
-
-## Troubleshooting
-
-- **`/readyz` 503**: read `errors`, `static`, and `vm.serialTail`. Often: missing guest (`build-vm`), QEMU not on `PATH`, or SSH still booting (raise `SSH_BOOT_TIMEOUT_MS`). Host checks use `guest-root/bin/busybox`, not `bin/sh` (symlink breaks on the host copy).
-- **SSH timeout**: raise `SSH_BOOT_TIMEOUT_MS`; inspect `VM_DATA_DIR/vms/<id>/serial.log` or the probe’s `serialTail` in `/readyz`.
+Integration tests: `bun run --cwd packages/opencode test:executor-sdk` (expects a reachable executor, e.g. port-forward to `executor-dev`).

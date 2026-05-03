@@ -9,7 +9,7 @@ import { cleanupSession } from "../actions"
  * - Projects are database entities with UUIDs
  * - URLs use /projects/<id>/session/<session-id> format  
  * - No local filesystem persistence (files in S3 eventually)
- * - Code execution in executor containers
+ * - Session + prompt flow against local OpenCode API
  * - Sessions are stateless and belong to database projects
  */
 

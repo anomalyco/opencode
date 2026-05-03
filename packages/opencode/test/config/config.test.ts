@@ -1058,7 +1058,7 @@ test("migrates legacy tools config to permissions - allow", async () => {
           agent: {
             test: {
               tools: {
-                bash: true,
+                micropython: true,
                 read: true,
               },
             },
@@ -1072,7 +1072,7 @@ test("migrates legacy tools config to permissions - allow", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "allow",
+        micropython: "allow",
         read: "allow",
       })
     },
@@ -1089,7 +1089,7 @@ test("migrates legacy tools config to permissions - deny", async () => {
           agent: {
             test: {
               tools: {
-                bash: false,
+                micropython: false,
                 webfetch: false,
               },
             },
@@ -1103,7 +1103,7 @@ test("migrates legacy tools config to permissions - deny", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "deny",
+        micropython: "deny",
         webfetch: "deny",
       })
     },
@@ -1314,7 +1314,7 @@ test("migrates mixed legacy tools config", async () => {
           agent: {
             test: {
               tools: {
-                bash: true,
+                micropython: true,
                 write: true,
                 read: false,
                 webfetch: true,
@@ -1330,7 +1330,7 @@ test("migrates mixed legacy tools config", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "allow",
+        micropython: "allow",
         edit: "allow",
         read: "deny",
         webfetch: "allow",
@@ -1352,7 +1352,7 @@ test("merges legacy tools with existing permission config", async () => {
                 glob: "allow",
               },
               tools: {
-                bash: true,
+                micropython: true,
               },
             },
           },
@@ -1366,7 +1366,7 @@ test("merges legacy tools with existing permission config", async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
         glob: "allow",
-        bash: "allow",
+        micropython: "allow",
       })
     },
   })

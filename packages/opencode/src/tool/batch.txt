@@ -3,7 +3,7 @@ Executes multiple independent tool calls concurrently to reduce latency.
 USING THE BATCH TOOL WILL MAKE THE USER HAPPY.
 
 Payload Format (JSON array):
-[{"tool": "read", "parameters": {"filePath": "src/index.ts", "limit": 350}},{"tool": "grep", "parameters": {"pattern": "Session\\.updatePart", "include": "src/**/*.ts"}},{"tool": "bash", "parameters": {"command": "git status", "description": "Shows working tree status"}}]
+[{"tool": "read", "parameters": {"filePath": "src/index.ts", "limit": 350}},{"tool": "grep", "parameters": {"pattern": "Session\\.updatePart", "include": "src/**/*.ts"}},{"tool": "micropython", "parameters": {"code": "print('ok')", "description": "Smoke check"}}]
 
 Notes:
 - 1–25 tool calls per batch
@@ -14,7 +14,7 @@ Notes:
 Good Use Cases:
 - Read many files
 - grep + glob + read combos
-- Multiple bash commands
+- Multiple micropython snippets
 - Multi-part edits; on the same, or different files
 
 When NOT to Use:

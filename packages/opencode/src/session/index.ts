@@ -209,6 +209,17 @@ export namespace Session {
         error: MessageV2.Assistant.shape.error,
       }),
     ),
+    ClientPythonRequest: BusEvent.define(
+      "session.client_python.request",
+      z.object({
+        sessionID: SessionID.zod,
+        messageID: MessageID.zod,
+        callID: z.string(),
+        code: z.string(),
+        timeout: z.number(),
+        workdir: z.string().optional(),
+      }),
+    ),
   }
 
   export const create = fn(
