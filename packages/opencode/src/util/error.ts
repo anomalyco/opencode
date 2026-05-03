@@ -7,7 +7,20 @@ export function errorFormat(error: unknown): string {
 
   if (typeof error === "object" && error !== null) {
     try {
-      return JSON.stringify(error, null, 2)
+      const json = JSON.stringify(error, null, 2)
+      // Plain objects whose own properties are all non-enumerable (or empty)
+      // serialize to "{}", which prints as a useless bare `{}` on stderr.
+      // Fall back to a custom toString first, then to ctor name + own prop
+      // names — anything but a bare `{}`.
+      if (json === "{}") {
+        const str = String(error)
+        if (str && str !== "[object Object]") return str
+        const ctor = error.constructor?.name && error.constructor.name !== "Object" ? error.constructor.name : ""
+        const names = Object.getOwnPropertyNames(error).filter((n) => n !== "stack")
+        const prefix = ctor || "Error"
+        return names.length === 0 ? `${prefix} (no message)` : `${prefix} { ${names.join(", ")} }`
+      }
+      return json
     } catch {
       return "Unexpected error (unserializable)"
     }

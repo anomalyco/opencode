@@ -84,5 +84,23 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
 
     return response
   })
+  // The generated client falls back to throwing a literal `{}` when the server
+  // responds with an empty / unparseable error body, which then surfaces as a
+  // bare `{}` in TUI / CLI error output. Wrap that case in a real Error so
+  // downstream formatters get a useful message + status / url / method.
+  client.interceptors.error.use((error, response, request) => {
+    if (error instanceof Error) return error
+    const status = response?.status ?? 0
+    const statusText = response?.statusText ?? ""
+    const method = request?.method ?? "?"
+    const url = request?.url ?? "?"
+    const detail =
+      typeof error === "string" && error
+        ? error
+        : error && typeof error === "object" && Object.keys(error).length > 0
+          ? JSON.stringify(error)
+          : "(empty response body)"
+    return new Error(`opencode server ${method} ${url} → ${status}${statusText ? " " + statusText : ""}: ${detail}`)
+  })
   return new OpencodeClient({ client })
 }
