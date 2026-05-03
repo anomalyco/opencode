@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">De opensource AI programmeeragent.</p>
+<p align="center">De open source AI-programmeeragent.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -44,7 +44,7 @@
 
 ---
 
-### Installation
+### Installatie
 
 ```bash
 # YOLO
@@ -57,7 +57,7 @@ choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS en Linux (aanbevolen, altijd de laatste versie)
 brew install opencode              # macOS en Linux (officiële brew optie, minder geüpdated)
 sudo pacman -S opencode            # Arch Linux (Stabiel)
-paru -S opencode-bin               # Arch Linux (Nieuwste van AUR)
+paru -S opencode-bin               # Arch Linux (Meest recente van AUR)
 mise use -g opencode               # Eender welk OS
 nix run nixpkgs#opencode           # of github:anomalyco/opencode voor de nieuwste dev branch
 ```
@@ -65,9 +65,9 @@ nix run nixpkgs#opencode           # of github:anomalyco/opencode voor de nieuws
 > [!TIP]
 > Verwijder versies ouder dan 0.1.x voor de installatie.
 
-### Desktop App (BETA)
+### Desktop-app (BETA)
 
-OpenCode is ook beschikbaar als a desktop applicatie. Download het rechtstreeks van de [releases pagina](https://github.com/anomalyco/opencode/releases) of [opencode.ai/download](https://opencode.ai/download).
+OpenCode is ook beschikbaar als desktopapplicatie. Download het rechtstreeks van de [releases-pagina](https://github.com/anomalyco/opencode/releases) of [opencode.ai/download](https://opencode.ai/download).
 
 | Platform              | Download                              |
 | --------------------- | ------------------------------------- |
@@ -83,14 +83,14 @@ brew install --cask opencode-desktop
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
-#### Installation Directory
+#### Installatiemap
 
 Het installatiescript respecteert de volgende prioriteitsvolgorde voor het installatiepad:
 
 1. `$OPENCODE_INSTALL_DIR` - Aangepaste installatiemap
 2. `$XDG_BIN_DIR` - Pad conform de XDG Base Directory Specification
 3. `$HOME/bin` - Standaardmap voor binaire bestanden van de gebruiker (indien deze bestaat of kan worden aangemaakt)
-4. `$HOME/.opencode/bin` - Standaard fallback
+4. `$HOME/.opencode/bin` - Standaard terugval
 
 ```bash
 # Voorbeelden
@@ -100,12 +100,12 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode bevat twee ingebouwde agents waartussen u kunt schakelen met de `Tab`-toets.
+OpenCode bevat twee ingebouwde agents waartussen je kunt schakelen met de `Tab`-toets.
 
 - **build** - Standaard, volledige toegang agent voor ontwikkelen
-- **plan** - Alleen-lezen agent voor analyses en codeverkenning
+- **plan** - Alleen-lezen agent voor analyse en codeverkenning
   - Standaard weigert bestandsaanpassingen 
-  - Vraagt uw toestemming voor het uitvoeren van bashcommando's
+  - Vraagt je toestemming voor het uitvoeren van bashcommando's
   - Ideaal voor onbekende codebases te ontdekken of het plannen van wijzigingen 
 
 Ook bijgevoegd is een **algemene** subagent voor complexe zoekopdrachten en taken met vele stappen.
@@ -115,29 +115,27 @@ Meer lezen over [agents](https://opencode.ai/docs/agents).
 
 ### Documentatie
 
-Voor meer info over het configureren van OpenCode, [**verwijzen we u graag door naar onze docs**](https://opencode.ai/docs).
+Voor meer info over het configureren van OpenCode, [**verwijzen we je graag door naar onze docs**](https://opencode.ai/docs).
 
 ### Contributie
 
-Indien u geïnteresseerd bent in het bijdragen aan OpenCode, lees dan alvast onze [contributing docs](./CONTRIBUTING.md) voor het indienen van een Pull Request.
+Indien je geïnteresseerd bent in het bijdragen aan OpenCode, lees dan alvast onze [contributing docs](./CONTRIBUTING.md) voor het indienen van een Pull Request.
 
 ### Bouwen op OpenCode
 
-Indien u werkt aan een project dat gerelateerd is aan OpenCode en 'opencode' gebruikt als deel van zijn naam, bijvoorbeeld "opencode-dashboard" of 'opencode-op-uwe-gsm', voeg dan alstublieft een opmerking aan je README toe om te verduidelijken dat het niet door het OpenCode team gebouwd is en op geen enkele manier aan ons gelieerd is.
+Indien je werkt aan een project dat gerelateerd is aan OpenCode en 'opencode' gebruikt als deel van zijn naam, bijvoorbeeld "opencode-dashboard" of 'opencode-op-je-gsm', voeg dan alstublieft een opmerking aan je README toe om te verduidelijken dat het niet door het OpenCode team gebouwd is en op geen enkele manier aan ons gelieerd is.
 
 ### Veelgestelde vragen
 
 #### Op welke manier verschilt dit van Claude Code?
 
-Het lijkt vrij veel op Claude Code op vlak van wat het kan. Hier zijn de grootste verschillen:
+Het lijkt vrij veel op Claude Code op vlak van functionaliteit. Hier zijn de grootste verschillen:
 
-- 100% opensource
+- 100% open source (en niet per ongeluk)
 - Niet gebonden aan één provider. We raden echter de modellen die wij aanbieden door [OpenCode Zen](https://opencode.ai/zen) aan. OpenCode kan worden gebruikt met Anthropic (Claude), OpenAI (GPT), Google (Gemini), of zelfs lokale modellen. Naarmate modellen evolueren, zullen de verschillen tussen hen kleiner worden en zullen de prijzen dalen, dus is het belangrijk om provider-agnostisch te zijn.
-- Out-of-the-box LSP support
 - Kant-en-klare LSP-ondersteuning
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
 - Een focus op TUI (Terminal UI). OpenCode is door Neovim gebruikers en de makers van [terminal.shop](https://terminal.shop) gemaakt; we blijven de limieten van wat er in de terminal mogelijk is pushen.
-- Een client/server architectuur. Dit kan bijvoorbeeld OpenCode toestaan op uw computer te draaien terwijl u het vanop afstand bestuurt met een mobiele app, betekent dat de TUI frontend slechts een van de mogelijke clients is.
+- Een client/server architectuur. Hierdoor kan OpenCode bijvoorbeeld op je computer draaien terwijl je het vanop afstand bedient via een mobiele app. De TUI-frontend is dus slechts één van de mogelijke clients.
 
 ---
 
