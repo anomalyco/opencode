@@ -68,13 +68,6 @@ const debugTerminal = (...values: unknown[]) => {
   console.debug("[terminal]", ...values)
 }
 
-const errorName = (err: unknown) => {
-  if (!err || typeof err !== "object") return
-  if (!("name" in err)) return
-  const errorName = err.name
-  return typeof errorName === "string" ? errorName : undefined
-}
-
 const useTerminalUiBindings = (input: {
   container: HTMLDivElement
   term: Term
@@ -170,6 +163,7 @@ export const Terminal = (props: TerminalProps) => {
   const server = useServer()
   const directory = sdk.directory
   const client = sdk.client
+  const inspectClient = sdk.createClient({ directory, throwOnError: false })
   const url = sdk.url
   const auth = server.current?.http
   const username = auth?.username ?? "opencode"
@@ -478,11 +472,10 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const gone = () =>
-        client.pty
+        inspectClient.pty
           .get({ ptyID: id })
-          .then(() => false)
+          .then((result) => result.response.status === 404)
           .catch((err) => {
-            if (errorName(err) === "NotFoundError") return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
