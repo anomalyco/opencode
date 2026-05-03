@@ -199,6 +199,17 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         )
       }
     },
+    "session.next.step.failed": (event) => {
+      if (currentAssistant) {
+        adapter.updateAssistant(
+          produce(currentAssistant, (draft) => {
+            draft.time.completed = event.data.timestamp
+            draft.finish = "error"
+            draft.error = event.data.error
+          }),
+        )
+      }
+    },
     "session.next.text.started": () => {
       if (currentAssistant) {
         adapter.updateAssistant(
@@ -314,7 +325,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         )
       }
     },
-    "session.next.tool.error": (event) => {
+    "session.next.tool.failed": (event) => {
       if (currentAssistant) {
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
