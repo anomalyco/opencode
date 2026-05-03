@@ -11,7 +11,7 @@
   &nbsp;·&nbsp;
   <a href="https://deskfox.ai/">🏠 官网</a>
   &nbsp;·&nbsp;
-  <a href="README.en.md">🌐 English</a>
+  <a href="README.md">🌐 English</a>
 </p>
 
 <p align="center">

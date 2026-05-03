@@ -81,6 +81,24 @@ related: ./1-spec.md ./3-changelog.md
 
 无(详见 1-spec.md "R4 override" 段)。
 
+## 修订记录
+
+### 2026-05-04 — 默认语言英文化
+
+merge dev 之后 user 反馈:**国外申请数字签名期间**(SignPath / Apple notarization / 等),GitHub 主仓门面会被国外审核方看到,英文为默认更合适。
+
+改动(直接 dev,无新 feat 分支,小动作):
+- `git mv README.md README.zh.md`(中文版降为辅版)
+- `git mv README.en.md README.md`(英文版升为主版,GitHub 默认渲染)
+- 两个 README 顶部"语言切换"链接互换:
+  * 新主 `README.md`(英文):"🇨🇳 中文" → `README.zh.md`
+  * `README.zh.md`(中文):"🌐 English" → `README.md`
+- spec.md "主版语言" 段加修订决策记录
+
+未来如果数字签名拿到 / 主战场转回国内,可再次 swap 回中文主(成本同样几分钟)。
+
+---
+
 ## 关联
 
 - 前置:`repo-migration-deskfox` / `user-rename-zoulukuang` / `gitee-release-mirror`

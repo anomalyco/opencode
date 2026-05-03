@@ -25,8 +25,8 @@ related: ./1-spec.md ./3-changelog.md
 
 ### 必须
 
-- 重写 `README.md`(中文为主版,GitHub 默认显示)
-- 新增 `README.en.md`(英文版,给国际访客)
+- 重写主 README(GitHub 默认显示)— **2026-05-04 修订:英文主版 `README.md`,中文挪到 `README.zh.md`**(原决策 README.md 中文主)
+- 提供另一语言版(给非主语言访客)
 - 复制 4 张产品截图 + 1 个 logo SVG 到 `docs/assets/`
 - 删除 21 个上游 locale 翻译文件(漂移成本不可接受)
 - README 文案 / URL 跟 `D:\project\deskfox-site` 站点稿一致(GitHub 用 `zoulukuang/deskfox`,Gitee 用 `zoulukuang/deskfox`,上游叙事写 `sst/opencode`)
@@ -41,16 +41,18 @@ related: ./1-spec.md ./3-changelog.md
 
 ### 多语言策略
 
-走 **A 方案**:中文 README.md 主版 + 英文 README.en.md,**删 22 个 locale**。
+走 **A 方案**:中英双 README + 删 22 个 locale。
 - 维护极简,跟随上游 0 冲突
-- 主受众国内 → 中文优先;国际访客 → 英文兜底
+- 主受众国内 → 中文必有;国际访客 → 英文兜底
 - 小语种用户极少且 GitHub repo 受众主要是技术 / 创作者,英文够用
 
-### 主版语言
+### 主版语言(2026-05-04 修订)
 
-`README.md` 走 **中文主**(GitHub 默认渲染这个文件)。
-- 产品定位是"面向中国办公人群"
-- 跟随 deskfox.ai 站点(中文优先 / 中英双语切换)
+**初版决策**:`README.md` 中文主版 + `README.en.md` 英文版(产品定位国内办公)
+**修订决策(2026-05-04)**:**英文主 `README.md` + 中文 `README.zh.md`**
+- 修订原因:DeskFox 当前正在**国外申请数字签名**(SignPath 等),GitHub 主仓门面会被国外审核方 / 合作方看到,英文为默认更合适
+- 中文版仍完整保留(`README.zh.md`),首屏顶部"🇨🇳 中文"快速跳转
+- deskfox.ai 站点 i18n 不变(站点本身按浏览器语言 / 用户切换显示)
 
 ### 资产位置
 

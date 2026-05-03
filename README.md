@@ -11,7 +11,7 @@
   &nbsp;·&nbsp;
   <a href="https://deskfox.ai/">🏠 Website</a>
   &nbsp;·&nbsp;
-  <a href="README.md">🇨🇳 中文</a>
+  <a href="README.zh.md">🇨🇳 中文</a>
 </p>
 
 <p align="center">
