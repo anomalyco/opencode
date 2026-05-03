@@ -24,6 +24,7 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
       return yield* workspace
         .create({
           ...ctx.payload,
+          extra: ctx.payload.extra ?? null,
           projectID: instance.project.id,
         })
         .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))

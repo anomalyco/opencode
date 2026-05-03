@@ -209,182 +209,6 @@ jobs:
             packages/opencode/dist/opencode-windows-x64
             packages/opencode/dist/opencode-windows-x64-baseline
 
-  build-tauri:
-    needs:
-      - build-cli
-      - version
-    continue-on-error: false
-    env:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
-      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - host: macos-latest
-            target: x86_64-apple-darwin
-          - host: macos-latest
-            target: aarch64-apple-darwin
-          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
-          - host: windows-2025
-            target: aarch64-pc-windows-msvc
-          - host: blacksmith-4vcpu-windows-2025
-            target: x86_64-pc-windows-msvc
-          - host: blacksmith-4vcpu-ubuntu-2404
-            target: x86_64-unknown-linux-gnu
-          - host: blacksmith-8vcpu-ubuntu-2404-arm
-            target: aarch64-unknown-linux-gnu
-    runs-on: ${{ matrix.settings.host }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-tags: true
-
-      - uses: apple-actions/import-codesign-certs@v2
-        if: ${{ runner.os == 'macOS' }}
-        with:
-          keychain: build
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Verify Certificate
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
-          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
-          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
-          echo "Certificate imported."
-
-      - name: Setup Apple API Key
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
-
-      - uses: ./.github/actions/setup-bun
-
-      - name: Azure login
-        if: runner.os == 'Windows'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: Cache apt packages
-        if: contains(matrix.settings.host, 'ubuntu')
-        uses: actions/cache@v4
-        with:
-          path: ~/apt-cache
-          key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-${{ hashFiles('.github/workflows/publish.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.settings.target }}-apt-
-
-      - name: install dependencies (ubuntu only)
-        if: contains(matrix.settings.host, 'ubuntu')
-        run: |
-          mkdir -p ~/apt-cache && chmod -R a+rw ~/apt-cache
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-          sudo chmod -R a+rw ~/apt-cache
-
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.settings.target }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: packages/desktop/src-tauri
-          shared-key: ${{ matrix.settings.target }}
-
-      - name: Prepare
-        run: |
-          cd packages/desktop
-          bun ./scripts/prepare.ts
-        env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
-          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
-          RUST_TARGET: ${{ matrix.settings.target }}
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-
-      - name: Resolve tauri portable SHA
-        if: contains(matrix.settings.host, 'ubuntu')
-        run: echo "TAURI_PORTABLE_SHA=$(git ls-remote https://github.com/tauri-apps/tauri.git refs/heads/feat/truly-portable-appimage | cut -f1)" >> "$GITHUB_ENV"
-
-      # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
-      - name: Install tauri-cli from portable appimage branch
-        uses: taiki-e/cache-cargo-install-action@v3
-        if: contains(matrix.settings.host, 'ubuntu')
-        with:
-          tool: tauri-cli
-          git: https://github.com/tauri-apps/tauri
-          # branch: feat/truly-portable-appimage
-          rev: ${{ env.TAURI_PORTABLE_SHA }}
-
-      - name: Show tauri-cli version
-        if: contains(matrix.settings.host, 'ubuntu')
-        run: cargo tauri --version
-
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
-      - name: Build and upload artifacts
-        uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
-        timeout-minutes: 60
-        with:
-          projectPath: packages/desktop
-          uploadWorkflowArtifacts: true
-          tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
-          args: --target ${{ matrix.settings.target }} --config ${{ (github.ref_name == 'beta' && './src-tauri/tauri.beta.conf.json') || './src-tauri/tauri.prod.conf.json' }} --verbose
-          updaterJsonPreferNsis: true
-          releaseId: ${{ needs.version.outputs.release }}
-          tagName: ${{ needs.version.outputs.tag }}
-          releaseDraft: true
-          releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
-          repo: ${{ (github.ref_name == 'beta' && 'opencode-beta') || '' }}
-          releaseCommitish: ${{ github.sha }}
-        env:
-          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
-          TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
-
-      - name: Verify signed Windows desktop artifacts
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $files = @(
-            "${{ github.workspace }}\packages\desktop\src-tauri\sidecars\opencode-cli-${{ matrix.settings.target }}.exe"
-          )
-          $files += Get-ChildItem "${{ github.workspace }}\packages\desktop\src-tauri\target\${{ matrix.settings.target }}\release\bundle\nsis\*.exe" | Select-Object -ExpandProperty FullName
-
-          foreach ($file in $files) {
-            $sig = Get-AuthenticodeSignature $file
-            if ($sig.Status -ne "Valid") {
-              throw "Invalid signature for ${file}: $($sig.Status)"
-            }
-          }
-
   build-electron:
     needs:
       - build-cli
@@ -524,6 +348,30 @@ jobs:
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
+      - name: Create and upload macOS .app.tar.gz
+        if: runner.os == 'macOS' && needs.version.outputs.release
+        working-directory: packages/desktop-electron/dist
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          if [[ "${{ matrix.settings.target }}" == "x86_64-apple-darwin" ]]; then
+            APP_DIR="mac"
+            OUT_NAME="opencode-desktop-mac-x64.app.tar.gz"
+          elif [[ "${{ matrix.settings.target }}" == "aarch64-apple-darwin" ]]; then
+            APP_DIR="mac-arm64"
+            OUT_NAME="opencode-desktop-mac-arm64.app.tar.gz"
+          else
+            echo "Unknown macOS target: ${{ matrix.settings.target }}"
+            exit 1
+          fi
+          APP_PATH=$(find "$APP_DIR" -maxdepth 1 -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found in $APP_DIR"
+            exit 1
+          fi
+          tar -czf "$OUT_NAME" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+          gh release upload "v${{ needs.version.outputs.version }}" "$OUT_NAME" --clobber --repo "${{ needs.version.outputs.repo }}"
+
       - name: Verify signed Windows Electron artifacts
         if: runner.os == 'Windows'
         shell: pwsh
@@ -542,7 +390,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-electron-${{ matrix.settings.target }}
+          name: opencode-desktop-${{ matrix.settings.target }}
           path: packages/desktop-electron/dist/*
 
       - uses: actions/upload-artifact@v4
@@ -556,7 +404,6 @@ jobs:
       - version
       - build-cli
       - sign-cli-windows
-      - build-tauri
       - build-electron
     if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -583,13 +430,6 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
       - uses: actions/download-artifact@v4
         with:
           name: opencode-cli
@@ -610,6 +450,13 @@ jobs:
         with:
           pattern: latest-yml-*
           path: /tmp/latest-yml
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Cache apt packages (AUR)
         uses: actions/cache@v4
@@ -639,3 +486,5 @@ jobs:
           GH_REPO: ${{ needs.version.outputs.repo }}
           NPM_CONFIG_PROVENANCE: false
           LATEST_YML_DIR: /tmp/latest-yml
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}

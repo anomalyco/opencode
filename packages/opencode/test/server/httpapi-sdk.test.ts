@@ -5,6 +5,7 @@ import { HttpRouter } from "effect/unstable/http"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
 import { Server } from "../../src/server/server"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -15,7 +16,7 @@ import { Session as SessionNs } from "@/session/session"
 import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
 
 const original = {
@@ -169,7 +170,7 @@ function sessionTitles(value: unknown) {
 
 function resetState() {
   return Effect.promise(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
     await resetDatabase()
   })
 }
@@ -226,7 +227,7 @@ function seedMessage(directory: string, sessionID: string) {
   const id = SessionID.make(sessionID)
   return call(
     async () =>
-      await Instance.provide({
+      await WithInstance.provide({
         directory,
         fn: () =>
           Effect.runPromise(
@@ -260,7 +261,7 @@ afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 

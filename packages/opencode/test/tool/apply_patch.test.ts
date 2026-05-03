@@ -4,6 +4,7 @@ import * as fs from "fs/promises"
 import { Effect, ManagedRuntime, Layer } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { LSP } from "@/lsp/lsp"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../../src/format"
@@ -97,7 +98,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir({ git: true })
     const { ctx, calls } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const modifyPath = path.join(fixture.path, "modify.txt")
@@ -149,7 +150,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir({ git: true })
     const { ctx, calls } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const original = path.join(fixture.path, "old", "name.txt")
@@ -179,7 +180,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "multi.txt")
@@ -199,7 +200,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx, calls } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const bom = String.fromCharCode(0xfeff)
@@ -228,7 +229,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "insert_only.txt")
@@ -247,7 +248,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "no_newline.txt")
@@ -269,7 +270,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const original = path.join(fixture.path, "old", "name.txt")
@@ -292,7 +293,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const original = path.join(fixture.path, "old", "name.txt")
@@ -317,7 +318,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "duplicate.txt")
@@ -335,7 +336,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const patchText = "*** Begin Patch\n*** Update File: missing.txt\n@@\n-nope\n+better\n*** End Patch"
@@ -351,7 +352,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const patchText = "*** Begin Patch\n*** Delete File: missing.txt\n*** End Patch"
@@ -365,7 +366,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const dirPath = path.join(fixture.path, "dir")
@@ -382,7 +383,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const patchText = "*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch"
@@ -396,7 +397,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "modify.txt")
@@ -414,7 +415,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const patchText =
@@ -432,7 +433,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "tail.txt")
@@ -450,7 +451,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "two_chunks.txt")
@@ -468,7 +469,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "multi_ctx.txt")
@@ -486,7 +487,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "eof_anchor.txt")
@@ -508,7 +509,7 @@ describe("tool.apply_patch freeform", () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const patchText = `cat <<'EOF'
@@ -529,7 +530,7 @@ EOF`
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const patchText = `<<EOF
@@ -550,7 +551,7 @@ EOF`
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "trailing_ws.txt")
@@ -570,7 +571,7 @@ EOF`
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "leading_ws.txt")
@@ -590,7 +591,7 @@ EOF`
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: fixture.path,
       fn: async () => {
         const target = path.join(fixture.path, "unicode.txt")

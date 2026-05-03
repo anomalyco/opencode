@@ -2,10 +2,11 @@ import { getAdapter } from "@/control-plane/adapters"
 import { WorkspaceID } from "@/control-plane/schema"
 import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
+import { EffectBridge } from "@/effect/bridge"
 import { Session } from "@/session/session"
 import { HttpApiProxy } from "./proxy"
-import * as Fence from "@/server/fence"
-import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/workspace"
+import * as Fence from "@/server/shared/fence"
+import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/shared/workspace-routing"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer } from "effect"
 import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -79,10 +80,8 @@ function missingWorkspaceResponse(id: WorkspaceID): HttpServerResponse.HttpServe
 }
 
 function resolveTarget(workspace: Workspace.Info): Effect.Effect<Target> {
-  return Effect.gen(function* () {
-    const adapter = yield* Effect.sync(() => getAdapter(workspace.projectID, workspace.type))
-    return yield* Effect.promise(() => Promise.resolve(adapter.target(workspace)))
-  })
+  const adapter = getAdapter(workspace.projectID, workspace.type)
+  return EffectBridge.fromPromise(() => adapter.target(workspace))
 }
 
 function proxyRemote(

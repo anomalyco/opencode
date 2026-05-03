@@ -12,7 +12,7 @@ import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -208,7 +208,7 @@ afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
@@ -222,15 +222,22 @@ describe("HttpApi server", () => {
   })
 
   test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
-    const honoRoutes = openApiRouteKeys(await Server.openapi())
+    const honoRoutes = openApiRouteKeys(await Server.openapiHono())
     const effectRoutes = openApiRouteKeys(effectOpenApi())
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
-    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
+    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([
+      "GET /api/session",
+      "GET /api/session/{sessionID}/context",
+      "GET /api/session/{sessionID}/message",
+      "POST /api/session/{sessionID}/compact",
+      "POST /api/session/{sessionID}/prompt",
+      "POST /api/session/{sessionID}/wait",
+    ])
   })
 
   test("matches generated OpenAPI route parameters", async () => {
-    const hono = openApiParameters(await Server.openapi())
+    const hono = openApiParameters(await Server.openapiHono())
     const effect = openApiParameters(effectOpenApi())
 
     expect(
@@ -241,7 +248,7 @@ describe("HttpApi server", () => {
   })
 
   test("matches generated OpenAPI request body shape", async () => {
-    const hono = openApiRequestBodies(await Server.openapi())
+    const hono = openApiRequestBodies(await Server.openapiHono())
     const effect = openApiRequestBodies(effectOpenApi())
 
     expect(
