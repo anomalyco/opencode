@@ -21,6 +21,14 @@ const togetherModel = OpenAICompatibleChat.togetherai({
 const togetherRequest = textRequest({ id: "recorded_togetherai_text", model: togetherModel })
 const togetherToolRequest = weatherToolRequest({ id: "recorded_togetherai_tool_call", model: togetherModel })
 
+const groqModel = OpenAICompatibleChat.groq({
+  id: "llama-3.3-70b-versatile",
+  apiKey: process.env.GROQ_API_KEY ?? "fixture",
+})
+
+const groqRequest = textRequest({ id: "recorded_groq_text", model: groqModel })
+const groqToolRequest = weatherToolRequest({ id: "recorded_groq_tool_call", model: groqModel })
+
 const openrouterModel = OpenAICompatibleChat.openrouter({
   id: "openai/gpt-4o-mini",
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
@@ -107,6 +115,35 @@ describe("OpenAI-compatible Chat recorded", () => {
       expectWeatherToolCall(response)
       expectFinish(response.events, "tool-calls")
     }),
+  )
+
+  recorded.effect.with("groq streams text", { provider: "groq", requires: ["GROQ_API_KEY"] }, () =>
+    Effect.gen(function* () {
+      const response = yield* llm.generate(groqRequest)
+
+      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
+      expectFinish(response.events, "stop")
+    }),
+  )
+
+  recorded.effect.with("groq streams tool call", { provider: "groq", requires: ["GROQ_API_KEY"], tags: ["tool"] }, () =>
+    Effect.gen(function* () {
+      const response = yield* llm.generate(groqToolRequest)
+
+      expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
+      expectWeatherToolCall(response)
+      expectFinish(response.events, "tool-calls")
+    }),
+  )
+
+  recorded.effect.with("groq llama 3.3 70b drives a tool loop", { provider: "groq", requires: ["GROQ_API_KEY"], tags: ["tool", "tool-loop", "golden"] }, () =>
+    Effect.gen(function* () {
+      expectWeatherToolLoop(yield* runWeatherToolLoop(llm, weatherToolLoopRequest({
+        id: "recorded_groq_llama_3_3_70b_tool_loop",
+        model: groqModel,
+      })))
+    }),
+    30_000,
   )
 
   recorded.effect.with("openrouter streams text", { provider: "openrouter", requires: ["OPENROUTER_API_KEY"] }, () =>
