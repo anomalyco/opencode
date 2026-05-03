@@ -16,6 +16,7 @@ import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
 import { Prompt } from "../component/prompt"
+import * as PromptIntercept from "../component/prompt/intercept"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -315,6 +316,11 @@ export function createTuiApi(input: Input): TuiPluginApi {
       },
       create(defaults, overrides) {
         return createPluginKeybind(input.keybind, defaults, overrides)
+      },
+    },
+    input: {
+      intercept(handler) {
+        return PromptIntercept.register(handler)
       },
     },
     get tuiConfig() {

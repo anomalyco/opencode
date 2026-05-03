@@ -535,6 +535,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     route,
     ui: api.ui,
     keybind: api.keybind,
+    input: api.input,
     tuiConfig: api.tuiConfig,
     kv: api.kv,
     state: api.state,

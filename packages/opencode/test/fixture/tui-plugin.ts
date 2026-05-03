@@ -172,6 +172,9 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         }
       },
     },
+    input: {
+      intercept: () => () => {},
+    },
     renderer,
     slots: {
       register: () => "fixture-slot",
