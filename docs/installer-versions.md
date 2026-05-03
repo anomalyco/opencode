@@ -11,6 +11,12 @@
 
 
 
+
+## [macOS] 2026.5.4.1 — 2026-05-04 00:05
+
+(to be filled: commits / plugin / installer path after ship)
+
+---
 ## [Windows] 2026.5.3.1 - 2026-05-03 14:04
 
 **主菜:本季首次 sync upstream 成功**(吃了 462 commits / 1157 文件 / +58k/-53k 行 — 2-3 周的所有上游改进)。
