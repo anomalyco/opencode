@@ -31,13 +31,13 @@ const SLASH_COMMANDS = [
   "export",
 ]
 
-function completer(line: string): { completions: string[]; match: string } {
+function completer(line: string): [string[], string] {
   if (!line.startsWith("/") && !line.startsWith(":")) {
-    return { completions: [], match: line }
+    return [[], line]
   }
   const partial = line.slice(1).toLowerCase()
   const hits = SLASH_COMMANDS.filter((cmd) => cmd.startsWith(partial)).map((cmd) => "/" + cmd)
-  return { completions: hits.length ? hits : SLASH_COMMANDS.map((cmd) => "/" + cmd), match: line }
+  return [hits.length ? hits : SLASH_COMMANDS.map((cmd) => "/" + cmd), line]
 }
 
 export type ReplOptions = {
@@ -243,7 +243,7 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
   }
 
   if (name === "share") {
-    const res = await sdk.session.share({ path: { id: state.sessionID } }).catch((error) => ({ error }))
+    const res = await sdk.session.share({ sessionID: state.sessionID }).catch((error) => ({ error }))
     if (res.error) {
       UI.error(res.error instanceof Error ? res.error.message : String(res.error))
       return "handled"
@@ -256,14 +256,14 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
 
   if (name === "unshare") {
     await sdk.session
-      .unshare({ path: { id: state.sessionID } })
+      .unshare({ sessionID: state.sessionID })
       .catch((e) => UI.error(e instanceof Error ? e.message : String(e)))
     UI.println(UI.Style.TEXT_DIM + "unshared" + UI.Style.TEXT_NORMAL)
     return "handled"
   }
 
   if (name === "fork") {
-    const res = await sdk.session.fork({ path: { id: state.sessionID } }).catch((error) => ({ error }))
+    const res = await sdk.session.fork({ sessionID: state.sessionID }).catch((error) => ({ error }))
     if (res.error) {
       UI.error(res.error instanceof Error ? res.error.message : String(res.error))
       return "handled"
@@ -295,29 +295,29 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
   }
 
   if (name === "undo") {
-    const list = await sdk.session.messages({ path: { id: state.sessionID } }).catch(() => undefined)
-    const messages = (list?.data ?? []).filter((m) => m.role === "user")
+    const list = await sdk.session.messages({ sessionID: state.sessionID }).catch(() => undefined)
+    const messages = (list?.data ?? []).filter((m) => m.info.role === "user")
     if (!messages.length) {
       UI.println(UI.Style.TEXT_DIM + "no messages to undo" + UI.Style.TEXT_NORMAL)
       return "handled"
     }
     const last = messages[messages.length - 1]
     await sdk.session
-      .revert({ path: { id: state.sessionID }, body: { messageID: last.id } })
+      .revert({ sessionID: state.sessionID, messageID: last.info.id })
       .catch((e) => UI.error(e instanceof Error ? e.message : String(e)))
     UI.println(UI.Style.TEXT_DIM + "undone" + UI.Style.TEXT_NORMAL)
     return "handled"
   }
 
   if (name === "redo") {
-    const info = await sdk.session.get({ path: { id: state.sessionID } }).catch(() => undefined)
+    const info = await sdk.session.get({ sessionID: state.sessionID }).catch(() => undefined)
     const revertID = info?.data?.revert?.messageID
     if (!revertID) {
       UI.println(UI.Style.TEXT_DIM + "nothing to redo" + UI.Style.TEXT_NORMAL)
       return "handled"
     }
     await sdk.session
-      .unrevert({ path: { id: state.sessionID } })
+      .unrevert({ sessionID: state.sessionID })
       .catch((e) => UI.error(e instanceof Error ? e.message : String(e)))
     UI.println(UI.Style.TEXT_DIM + "redone" + UI.Style.TEXT_NORMAL)
     return "handled"
@@ -350,7 +350,7 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
       return "handled"
     }
     await sdk.session
-      .summarize({ path: { id: state.sessionID }, body: { modelID, providerID } })
+      .summarize({ sessionID: state.sessionID, modelID, providerID })
       .catch((e) => UI.error(e instanceof Error ? e.message : String(e)))
     UI.println(UI.Style.TEXT_DIM + "compacting..." + UI.Style.TEXT_NORMAL)
     return "handled"
@@ -362,15 +362,15 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
       return "handled"
     }
     await sdk.session
-      .update({ path: { id: state.sessionID }, body: { title: args } })
+      .update({ sessionID: state.sessionID, title: args })
       .catch((e) => UI.error(e instanceof Error ? e.message : String(e)))
     UI.println(UI.Style.TEXT_DIM + `renamed → ${args}` + UI.Style.TEXT_NORMAL)
     return "handled"
   }
 
   if (name === "timeline") {
-    const list = await sdk.session.messages({ path: { id: state.sessionID } }).catch(() => undefined)
-    const messages = (list?.data ?? []).filter((m) => m.role === "user")
+    const list = await sdk.session.messages({ sessionID: state.sessionID }).catch(() => undefined)
+    const messages = (list?.data ?? []).filter((m) => m.info.role === "user")
     if (!messages.length) {
       UI.println(UI.Style.TEXT_DIM + "no messages" + UI.Style.TEXT_NORMAL)
       return "handled"
@@ -379,7 +379,7 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
     for (let i = 0; i < messages.length; i++) {
       const m = messages[i]
       const msg = await sdk.session
-        .message({ path: { id: state.sessionID, messageID: m.id } })
+        .message({ sessionID: state.sessionID, messageID: m.info.id })
         .catch(() => undefined)
       const text = (msg?.data?.parts ?? [])
         .filter((p) => p.type === "text" && !(p as any).synthetic)
@@ -398,11 +398,11 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
   }
 
   if (name === "copy") {
-    const messages = await sdk.session.messages({ path: { id: state.sessionID } }).catch(() => undefined)
+    const messages = await sdk.session.messages({ sessionID: state.sessionID }).catch(() => undefined)
     const parts: string[] = []
     for (const m of messages?.data ?? []) {
       const msg = await sdk.session
-        .message({ path: { id: state.sessionID, messageID: m.id } })
+        .message({ sessionID: state.sessionID, messageID: m.info.id })
         .catch(() => undefined)
       for (const p of msg?.data?.parts ?? []) {
         if (p.type === "text" && !(p as any).synthetic) {
@@ -423,13 +423,13 @@ async function dispatch(sdk: OpencodeClient, state: State, line: string): Promis
 
   if (name === "export") {
     const filename = args || `session-${state.sessionID.slice(0, 8)}.md`
-    const messages = await sdk.session.messages({ path: { id: state.sessionID } }).catch(() => undefined)
+    const messages = await sdk.session.messages({ sessionID: state.sessionID }).catch(() => undefined)
     const sections: string[] = []
     for (const m of messages?.data ?? []) {
       const msg = await sdk.session
-        .message({ path: { id: state.sessionID, messageID: m.id } })
+        .message({ sessionID: state.sessionID, messageID: m.info.id })
         .catch(() => undefined)
-      const role = m.role === "user" ? "## User" : "## Assistant"
+      const role = m.info.role === "user" ? "## User" : "## Assistant"
       const texts = (msg?.data?.parts ?? [])
         .filter((p) => p.type === "text" && !(p as any).synthetic)
         .map((p) => (p as any).text)
