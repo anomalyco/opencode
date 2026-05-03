@@ -117,42 +117,63 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 查 by-tag(幂等检测)
-          existing_status=$(curl -s -o /tmp/existing.json -w "%{http_code}" \
-            "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases/tags/$TAG?access_token=$GITEE_TOKEN")
+          # 策略:always-try-create + on-fail-fallback-list
+          # 原因:Gitee `GET /releases/tags/<tag>` 在 release 不存在时返 200/null(非 404),
+          # 不能仅凭 status code 判断 release 是否已存在。改用"先创建,失败再查列表"。
 
-          if [ "$existing_status" = "200" ]; then
-            release_id=$(jq -r '.id' /tmp/existing.json)
-            echo "[found existing] Gitee release id=$release_id for tag=$TAG"
-          else
-            echo "[create] Gitee release $TAG (status was $existing_status)"
-            # body 从前一 step 落到 /tmp/release-body.md,jq --rawfile 读进来安全编码
-            payload=$(jq -nc \
-              --arg token "$GITEE_TOKEN" \
-              --arg tag "$TAG" \
-              --arg name "${NAME:-$TAG}" \
-              --rawfile body /tmp/release-body.md \
-              --arg branch "$TARGET_BRANCH" \
-              --argjson prerelease "${PRERELEASE:-false}" \
-              '{
-                access_token: $token,
-                tag_name: $tag,
-                name: $name,
-                body: (if ($body | length) > 0 then $body else "Mirrored from GitHub Release." end),
-                prerelease: $prerelease,
-                target_commitish: $branch
-              }')
-            create_response=$(curl -sf -X POST \
-              "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases" \
-              -H "Content-Type: application/json;charset=UTF-8" \
-              -d "$payload")
-            release_id=$(echo "$create_response" | jq -r '.id')
-            if [ -z "$release_id" ] || [ "$release_id" = "null" ]; then
-              echo "::error::Gitee release create failed. Response:"
-              echo "$create_response"
+          # 1. 构造 payload(body 走 --rawfile 防特殊字符破坏 JSON)
+          payload=$(jq -nc \
+            --arg token "$GITEE_TOKEN" \
+            --arg tag "$TAG" \
+            --arg name "${NAME:-$TAG}" \
+            --rawfile body /tmp/release-body.md \
+            --arg branch "$TARGET_BRANCH" \
+            --argjson prerelease "${PRERELEASE:-false}" \
+            '{
+              access_token: $token,
+              tag_name: $tag,
+              name: $name,
+              body: (if ($body | length) > 0 then $body else "Mirrored from GitHub Release." end),
+              prerelease: $prerelease,
+              target_commitish: $branch
+            }')
+
+          # 2. 尝试创建
+          echo "[create attempt] POST Gitee release for tag=$TAG"
+          create_status=$(curl -s -o /tmp/create-resp.json -w "%{http_code}" \
+            --connect-timeout 30 --max-time 60 -X POST \
+            "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases" \
+            -H "Content-Type: application/json;charset=UTF-8" \
+            -d "$payload")
+          echo "[create status] $create_status"
+
+          if [ "$create_status" = "200" ] || [ "$create_status" = "201" ]; then
+            release_id=$(jq -r '.id // empty' /tmp/create-resp.json)
+            if [ -n "$release_id" ]; then
+              echo "[created] Gitee release id=$release_id"
+            fi
+          fi
+
+          # 3. fallback:create 失败(可能是 release 已存在)→ 列表里找
+          if [ -z "${release_id:-}" ] || [ "${release_id:-}" = "null" ]; then
+            echo "[fallback] create returned status=$create_status,response:"
+            cat /tmp/create-resp.json || true
+            echo ""
+            echo "[fallback] listing releases to find tag=$TAG..."
+            list_status=$(curl -s -o /tmp/list-resp.json -w "%{http_code}" \
+              --connect-timeout 30 --max-time 60 \
+              "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases?access_token=$GITEE_TOKEN&per_page=100")
+            if [ "$list_status" != "200" ]; then
+              echo "::error::list releases failed (status=$list_status)"
+              cat /tmp/list-resp.json || true
               exit 1
             fi
-            echo "[created] Gitee release id=$release_id"
+            release_id=$(jq -r --arg tag "$TAG" '.[] | select(.tag_name == $tag) | .id' /tmp/list-resp.json | head -n1)
+            if [ -z "$release_id" ] || [ "$release_id" = "null" ]; then
+              echo "::error::release not found in list AND create failed — abort"
+              exit 1
+            fi
+            echo "[found via list] Gitee release id=$release_id"
           fi
 
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
@@ -178,7 +199,9 @@ jobs:
             fi
 
             echo "[upload] $filename ($filesize bytes)..."
+            # connect-timeout 30s + max-time 600s(10 分钟,50MB 应远低于此)
             http_code=$(curl -s -o /tmp/upload-resp.json -w "%{http_code}" -X POST \
+              --connect-timeout 30 --max-time 600 \
               "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
               -F "access_token=$GITEE_TOKEN" \
               -F "file=@$f")
