@@ -261,8 +261,8 @@ AI SDK-style mocked tests are still the right tool for exhaustive parser weirdne
 Reference examples:
 
 - `test/provider/openai-chat-tool-loop.recorded.test.ts` is the current recorded multi-interaction tool-loop scaffold.
-- `test/provider/openai-compatible-chat.recorded.test.ts` shows provider-matrix cassettes for generic OpenAI-compatible providers, including OpenRouter text/tool recordings.
-- When a first-class golden loop reaches the full standard above, add its relative path here and prefer copying that structure for new providers.
+- `test/provider/openai-compatible-chat.recorded.test.ts` shows provider-matrix cassettes for generic OpenAI-compatible providers, including OpenRouter text/tool recordings and OpenRouter golden loops for baseline and flagship routes.
+- Prefer copying the OpenRouter golden-loop structure in `test/provider/openai-compatible-chat.recorded.test.ts` when adding new provider/protocol golden cassettes.
 
 ## TODO
 
@@ -349,3 +349,4 @@ Reference examples:
 - [x] Bedrock Converse basic text and tool-call cassettes (recorded against `us.amazon.nova-micro-v1:0` in us-east-1). Cache-hint cassettes still TODO.
 - [ ] Vertex Gemini and Vertex Anthropic basic/tool cassettes after the Vertex adapter/patch shape is decided.
 - [ ] Gateway/OpenRouter routing-header cassettes after routing support lands.
+- [x] OpenRouter OpenAI-compatible Chat golden tool-loop cassettes for `openai/gpt-4o-mini`, `openai/gpt-5.5`, and `anthropic/claude-opus-4.7`.
