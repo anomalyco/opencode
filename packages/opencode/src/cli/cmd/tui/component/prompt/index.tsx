@@ -44,6 +44,7 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import { useTuiConfig } from "../../context/tui-config.tsx"
 
 export type PromptProps = {
   sessionID?: string
@@ -1046,6 +1047,8 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  const tuiConfig = useTuiConfig()
+
   return (
     <>
       <Autocomplete
@@ -1451,7 +1454,10 @@ export function Prompt(props: PromptProps) {
                     <Match when={usage()}>
                       {(item) => (
                         <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+                          {[
+                            tuiConfig.session_bar.context ? item().context : undefined,
+                            tuiConfig.session_bar.cost ? item().cost : undefined,
+                          ].filter(Boolean).join(" · ")}
                         </text>
                       )}
                     </Match>

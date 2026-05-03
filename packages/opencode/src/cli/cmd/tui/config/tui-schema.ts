@@ -24,6 +24,10 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  session_bar: z.object({
+    context: z.boolean().default(true).describe("Show session bar context"),
+    cost: z.boolean().default(true).describe("Show session bar cost"),
+  }).default({context: true, cost: true}).describe("Session bar settings"),
 })
 
 export const TuiInfo = z
