@@ -551,7 +551,7 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
-test("resolveModel picks only valid opencode free listings", async () => {
+test("resolveSelection picks only valid opencode free listings", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -610,8 +610,8 @@ test("resolveModel picks only valid opencode free listings", async () => {
 
       spyOn(Math, "random").mockReturnValue(0)
 
-      const model = await Provider.resolveModel("free")
-      const parsed = Provider.parseModel(model)
+      const result = await Provider.resolveSelection("free")
+      const parsed = Provider.parseModel(result.model!)
 
       expect(String(parsed.providerID)).toBe("opencode")
       expect(listedModels).toContain(String(parsed.modelID))
@@ -690,6 +690,73 @@ test("resolveSelection falls back to no variant when the chosen free model has n
     expect(result.model).toBe("opencode/plain-free")
     expect(result.variant).toBeUndefined()
   })
+})
+
+test("resolveSelection passes through when model is undefined", async () => {
+  const result = await Provider.resolveSelection(undefined, "any")
+  expect(result.model).toBeUndefined()
+  expect(result.variant).toBe("any")
+})
+
+test("resolveSelection short-circuits any with an explicit non-free model", async () => {
+  const result = await Provider.resolveSelection("opencode/big-pickle", "any")
+  expect(result.model).toBe("opencode/big-pickle")
+  expect(result.variant).toBe("any")
+})
+
+test("resolveSelection throws with actionable message when no free models are available", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            opencode: {
+              whitelist: ["paid-only"],
+              options: { apiKey: "test-api-key" },
+              models: {
+                "paid-only": {
+                  name: "Paid Only",
+                  cost: { input: 1, output: 2, cache_read: 0, cache_write: 0 },
+                  limit: { context: 128000, output: 4096 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      let caught: Error | undefined
+      try {
+        await Provider.resolveSelection("free")
+      } catch (e) {
+        caught = e as Error
+      }
+      expect(caught).toBeDefined()
+      expect(caught!.message).toContain("OPENCODE_API_KEY")
+      expect(caught!.message).toContain("-free")
+    },
+  })
+})
+
+test("isListed accepts big-pickle and -free suffix, rejects everything else", () => {
+  const make = (id: string) =>
+    ({
+      id,
+      providerID: "opencode",
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    }) as any
+  expect(Provider.isListed(make("big-pickle"))).toBe(true)
+  expect(Provider.isListed(make("foo-free"))).toBe(true)
+  expect(Provider.isListed(make("nemotron-3-super-free"))).toBe(true)
+  expect(Provider.isListed(make("foo"))).toBe(false)
+  expect(Provider.isListed(make("gpt-5-nano"))).toBe(false)
+  expect(Provider.isListed(make("free"))).toBe(false)
 })
 
 test("defaultModel returns first available model when no config set", async () => {

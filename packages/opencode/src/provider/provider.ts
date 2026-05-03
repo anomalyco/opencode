@@ -1821,7 +1821,11 @@ export function sort<T extends { id: string }>(models: T[]) {
 const FREE = "free"
 export const ANY = "any"
 
-function isFree(model: Model) {
+// Models eligible for the free pool: ones whose id ends in "-free", plus
+// the legacy alias "big-pickle" which predates the suffix convention.
+const FREE_LEGACY_IDS = new Set(["big-pickle"])
+
+export function isFree(model: Model) {
   const extra = model.cost.experimentalOver200K
   return (
     model.providerID === ProviderID.opencode &&
@@ -1833,8 +1837,8 @@ function isFree(model: Model) {
   )
 }
 
-function isListed(model: Model) {
-  return model.id === "big-pickle" || model.id.endsWith("-free")
+export function isListed(model: Model) {
+  return FREE_LEGACY_IDS.has(model.id) || model.id.endsWith("-free")
 }
 
 function freeVariants(model: Model) {
@@ -1851,18 +1855,24 @@ export async function resolveSelection(model?: string, variant?: string) {
   const providers = await runPromise((svc) => svc.list())
   const provider = providers[ProviderID.opencode]
   const models = sort(Object.values(provider?.models ?? {}).filter((item) => isFree(item) && isListed(item)))
+  // Selection is unseeded by design: same `--model free` invocation in two
+  // terminals lands on different models. Useful for exploration; not a bug.
   const pick = models[Math.floor(Math.random() * models.length)]
-  if (!pick) throw new Error("No free opencode models found")
-  const next = variant === "any" ? freeVariants(pick) : []
-  const value = variant !== "any" ? variant : next[Math.floor(Math.random() * next.length)]
+  if (!pick)
+    throw new Error(
+      `No free opencode models found. The opencode provider must be configured (set OPENCODE_API_KEY) and at least one model in its catalog must satisfy: cost = 0, id is "big-pickle" or ends with "-free".`,
+    )
+  const value =
+    variant === ANY
+      ? (() => {
+          const choices = freeVariants(pick)
+          return choices[Math.floor(Math.random() * choices.length)]
+        })()
+      : variant
   return {
     model: `${pick.providerID}/${pick.id}`,
     variant: value,
   }
-}
-
-export async function resolveModel(model: string) {
-  return (await resolveSelection(model)).model!
 }
 
 export function parseModel(model: string) {
