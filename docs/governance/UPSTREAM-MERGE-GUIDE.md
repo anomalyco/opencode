@@ -97,6 +97,91 @@ git commit
 2. **不要把 fork 改动当上游覆盖掉** — `git checkout --theirs` 慎用,会把 fork commit 全干掉
 3. **拿不准的 conflict 留着,跑测试再判断** — `bun run typecheck` + DeskFox release build 测试一遍
 
+### 4.4 现场冲突分类 playbook(2026-05-03 实战补充)
+
+> 2026-05-02 上游 sync 实战(尝试 merge upstream/dev 417 commit,5 个冲突文件)摸到的 5 类典型冲突,各配解法。
+> 这一节的目的:下次 merge 不需要从头摸索,按类型对号入座。
+
+#### 类型 1:`bun.lock`(机械,几乎每次 merge 都有)
+
+- 直接重生成:`bun install`,push 前比对 catalog 版本
+- **不要手解** — lockfile 几千行,手解必错
+
+#### 类型 2:`package.json` 双 dep 加(机械)
+
+- 两侧各加了不同 dep,撞在同一 alphabet 位置
+- **解法**:两个都保留,按字母序排好(或照原文件实际顺序;有的 package.json 不严格 alpha)
+- ⚠️ 副作用警示:**接受 upstream 新 dep 等于接受其代码引用进树**,如果上游是引入像 `@sentry/solid` 这种 telemetry 性质的依赖,merge 落地后 grep 一下 import 出现位置,决定是用还是 stub 掉(可能产出 follow-up feature 修)
+
+#### 类型 3:import path 改(机械,但要看上游意图)
+
+- 例:`@opencode-ai/shared/util/path` → `@opencode-ai/core/util/path`(2026-05 上游把 `packages/shared` 整个改名为 `packages/core`)
+- **解法**:**跟上游 rename**(原 path 已不存在,坚持等于 build 立即挂)
+- **例外**:fork-only import(像 `@opencode-ai/branding/logo`,DeskFox 自家品牌)保留我们的写法
+
+#### 类型 4:策略路线分歧(语义,最常见的"要决策")
+
+上游和我们对**同一功能**采用不同实现路线。需要评估"上游路线是否更通用",通用就接上游 + 改 fork callers 适配;不通用则坚持我们的并加 / 更新 FORK marker。
+
+| 已知典型 | fork 路线 | 上游路线 | 默认建议 |
+|---|---|---|---|
+| 禁升级(`UPDATER_ENABLED` flag)| 方法**不暴露**(`...(UPDATER_ENABLED ? { checkUpdate } : {})`),callers 用 `if (!platform.checkUpdate) return` 短路 | 方法**始终暴露**,内部 `if (!UPDATER_ENABLED) return early`,update 改名 `updateAndRestart` | **接上游**(callers 改用 `if (!UPDATER_ENABLED)` 哨兵,适配 `updateAndRestart` 名字),长期维护成本低 |
+| 品牌 logo(`Mark` 组件)| `import { Mark } from "@opencode-ai/branding/logo"`(fork-only branding 包) | `import { Mark } from "@opencode-ai/ui/logo"` | **保留 fork**(DeskFox 品牌,不能跟上游) |
+| claude-code plugin prompt loop | fork 改了 step-finish part 兜底(R4 override case 1) | 上游可能后续也动这块 | **看上游是否真解决了 root cause**,是则可以接上游退掉我们的 override;否则保留 |
+
+⚠️ 不要"两边都保留" — 同一功能两套实现 = 死代码 + 行为不一致 + 后续 merge 还冲突。
+
+#### 类型 5:同 schema 双改(语义,最棘手)
+
+上游迁了底层(如 Zod → Effect Schema),我们又给 schema 加了字段,撞死。
+
+- **典型**:`packages/opencode/src/file/index.ts` 的 `Content.encoding` enum
+  - 上游:`Schema.optional(Schema.Literal("base64"))`(Effect Schema 改写)
+  - 我们:`z.enum(["base64", "office-pdf-ref"]).optional()`(office-installer-macos feature)
+
+- **解法 — 接受上游骨架 + fork 字段补回 + FORK marker**:
+  ```ts
+  // 解后:
+  encoding: Schema.optional(Schema.Literals(["base64", "office-pdf-ref"])),
+  // FORK: office-installer-macos 增 PDF-ref encoding,fetch 走专用 endpoint 2026-05-XX
+  ```
+
+- **长期治理(R1 三级跳第 1 步)**:把 fork 对上游 schema 的字段补充外移到 fork-only 文件,用 **TS module augmentation** 或 **runtime 约定**(类型层面 `Content & { encoding?: "office-pdf-ref" }`,schema 检验在 fork-only 包装函数里),消除这类冲突永不复发。当某个字段补充开始**反复 merge 冲突**(如 `office-pdf-ref` 两次以上 merge 都冲突),就开 single-feature 把它外移。
+
+### 4.5 关键工具:`effect-zod` adapter
+
+上游 2026-04 起把核心 schema(`Content` / `Info` / `Auth.Info` / `message-v2.*` 等)从 Zod 迁到 Effect Schema,**但同时保留了 Zod 接口**,通过 `packages/opencode/src/util/effect-zod.ts`(329 行)的 `zod()` 转换器:
+
+```ts
+// 上游模式:
+const _Content = Schema.Struct({...})
+export const Content = Object.assign(_Content, { zod: zod(_Content) })
+// 或更新模式(用 withStatics):
+export const Content = Schema.Struct({...}).pipe(withStatics((s) => ({ zod: zod(s) })))
+```
+
+**对 fork 的意义**:
+- fork 老 callers 写 `Content.parse(x)` 不再有效(Effect Schema 没 `.parse`),改 `Content.zod.parse(x)` 即可
+- `Content.zod.safeParse(x)` / `Content.zod.shape` 同理
+- merge 落地后 grep 一遍 `Content\.parse|Content\.safeParse|Content\.shape` 找出全部点,统一改 `.zod` 访问
+- **fork 自己的 Zod schema 一行不用动** — adapter 已让两套语法共存,fork 内部 Zod 写法完全合法
+
+### 4.6 整体推进顺序(实战 SOP)
+
+```
+1. fetch upstream + 打 pre-rebase tag(必做,见 §3)
+2. checkout dev + git merge upstream/dev --no-commit  ← 不要立即 commit,先看 conflict
+3. 解类型 1(bun.lock)— bun install 重生成
+4. 解类型 2/3(机械)— 几分钟内搞定
+5. 类型 4 一个个评估 — 拿不准就停下问 user(典型对照表见 §4.4)
+6. 类型 5 一个个解 — 接受上游骨架 + fork 字段补回 + 加/更新 FORK marker
+7. 检查 .zod 访问改写(类型 5 之后必跟):grep `Content.parse` 等改 `.zod.parse`
+8. typecheck:bun run typecheck(必清 *.tsbuildinfo + .ts-dist + .turbo/cache 后重跑,避免增量缓存假装通过 — 详见 features/post-sync-build-fix/3-changelog.md)
+9. release build:.\packages\branding\scripts\build-deskfox.ps1 -Env dev -NoBundle 端到端通
+10. 8 + 9 全过 → git commit merge → §5 后续 checklist
+11. 任何一步炸 → git reset --hard pre-rebase-<日期>(或 merge 阶段炸用 git merge --abort),退回出发点重新规划
+```
+
 ## 5. Merge 后 — checklist
 
 ```bash
@@ -171,5 +256,6 @@ git reset --hard pre-rebase-<日期>
 1. 把 fork-only 内容**全放** `docs/` + `packages/branding/` + 改动日志.md(0 冲突)
 2. 改上游文件**必有** FORK marker(冲突时一眼能辨)
 3. Merge 前**必打** `pre-rebase-<日期>` tag(出问题能回)
-4. Merge 后**必跑** typecheck + release build + installer 重打验证
-5. 漂移 / 侵入 / override 三指标定期算,异常先治后吃
+4. Merge 操作时**先 `--no-commit`**,按 §4.4 五类对号入座解冲突,§4.6 顺序推进
+5. Merge 后**必跑** typecheck(清缓存,避免增量假通过)+ release build + installer 重打验证
+6. 漂移 / 侵入 / override 三指标定期算,异常先治后吃
