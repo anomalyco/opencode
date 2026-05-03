@@ -9,7 +9,7 @@ fork. Do not apply or retain a fork patch unless it has an entry here.
 |---|---|---:|---|
 | `upstream-dev` | Mirror of `anomalyco/opencode:dev` | `387220f368ca3a31d94b4be3937d9d825ebd888c` | 2026-05-03 |
 | `devflow/base` | Rebase base for devflow patch stack | `387220f368ca3a31d94b4be3937d9d825ebd888c` | 2026-05-03 |
-| `devflow/hojo` | Curated compatibility patch stack | Integrated through `#16598` local Effect-path adaptation | 2026-05-03 |
+| `devflow/hojo` | Curated compatibility patch stack | Integrated through tool hook local Effect-path adaptations | 2026-05-03 |
 | `devflow/release` | Tested branch consumed by devflow users | TBD | TBD |
 
 Local clone: `/Users/jvanzyl/js/jopen/hojo-opencode`.
@@ -25,9 +25,9 @@ Before pushing devflow branches, create or choose a fork remote explicitly.
 | `#16598` | `feat: add session.stopping hook for plugins` | OPEN | `e19f58e5458a9cdf91645c0adb6827b438af1329` | `devflow/pr-16598-session-stopping` | Local Effect-path adaptation on `devflow/hojo` | `/loop` continuation / Claude `Stop` parity | Medium: loop re-entry can create infinite loops if plugin state is wrong | Upstream merges and rebase includes it | Integrated |
 | `#15412` | `feat(plugin): include parent agent context in hook inputs` | OPEN | `0b389890a6d3c8f0dc5aceb9a5427def1f2934fb` | `devflow/pr-15412-parent-agent-context` | `22441217f`, `c56adc7bf`, `a8df203ff` on `devflow/hojo` | Agent identity and parent-agent context for boundary enforcement | Medium: hook payload shape conflicts possible | Upstream merges and rebase includes it | Integrated |
 | `#19470` | `feat(opencode): wire permission.ask plugin hook` | OPEN | `e115ed5ef6171f193e83441469631107f901e666` | `devflow/pr-19470-permission-ask` | `e115ed5ef6171f193e83441469631107f901e666` | Plugin participation in permission decisions | Medium: permission flow is security-sensitive | Upstream merges and rebase includes it | Failing Tests |
-| `#22654` | `feat(plugin): expose ask() on tool.execute.before hook` | OPEN | `d6b78a2fa9d1d5c77c3419686057a7767cca151f` | TBD | TBD | Interactive pre-tool enforcement path | Medium: depends on permission API shape | Upstream merges and rebase includes it | Not Applied |
-| `#20053` | `fix: Allow plugin hooks to mutate tool call args before context creation` | OPEN | `9803c23bdbce96aa25d822451a320e508f32a14b` | TBD | TBD | Argument normalization before execution | High: touches tool execution path | Upstream merges and rebase includes it | Not Applied |
-| `#21150` | `fix(session): fire tool.execute.after hook after MCP output assembly` | OPEN | `5ed52021b4ba8e3358aeb315915230995e26e682` | TBD | TBD | Accurate post-tool telemetry | Low/Medium: timing-sensitive | Upstream merges and rebase includes it | Not Applied |
+| `#22654` | `feat(plugin): expose ask() on tool.execute.before hook` | OPEN | `d6b78a2fa9d1d5c77c3419686057a7767cca151f` | TBD | `9a827917d` local adaptation on `devflow/hojo` | Interactive pre-tool enforcement path | Medium: depends on permission API shape | Upstream merges and rebase includes it | Integrated |
+| `#20053` | `fix: Allow plugin hooks to mutate tool call args before context creation` | OPEN | `9803c23bdbce96aa25d822451a320e508f32a14b` | TBD | `9a827917d` local adaptation on `devflow/hojo` | Argument normalization before execution | High: touches tool execution path | Upstream merges and rebase includes it | Integrated |
+| `#21150` | `fix(session): fire tool.execute.after hook after MCP output assembly` | OPEN | `5ed52021b4ba8e3358aeb315915230995e26e682` | TBD | `9a827917d` local adaptation on `devflow/hojo` | Accurate post-tool telemetry | Low/Medium: timing-sensitive | Upstream merges and rebase includes it | Integrated |
 
 ## Strong Candidates
 
@@ -66,3 +66,9 @@ gh pr view <number> --repo anomalyco/opencode --json number,state,mergedAt,close
 ```
 
 Update this file whenever upstream state or head SHA changes.
+
+## Local Adaptation Notes
+
+- `#16598`, `#22654`, `#20053`, and `#21150` target older prompt-loop shapes or lack the parent-agent context already present on `devflow/hojo`. Prefer the local Effect-path adaptations over direct cherry-picks unless upstream converges on the same current architecture.
+- `#19470` remains excluded because its isolated branch has a failing permission isolation test.
+- `#15224` remains excluded because direct cherry-pick creates a large `packages/opencode/src/session/prompt.ts` conflict; reimplement a minimal current-code `session.start` hook if startup telemetry becomes the next priority.

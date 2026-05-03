@@ -9,10 +9,10 @@ Status values: `Not Started`, `Partial`, `Blocked`, `Parity`, `Not Applicable`.
 | Skills | `skills/<name>/SKILL.md` | Native OpenCode skills | None | Not Started | TBD |
 | `/flow` command | Claude command markdown | OpenCode command markdown with converted frontmatter | None | Not Started | TBD |
 | `/loop` command | Claude `Stop` hook re-enters loop | OpenCode `session.stopping` injects follow-up message | PR `#16598` | Partial | `session.stopping` hook integrated on `devflow/hojo`; targeted test and package typechecks pass. Command/frontmatter adapter work remains. |
-| Pre-tool edit/write enforcement | Claude `PreToolUse` hook chain blocks exit 2 | OpenCode `tool.execute.before` adapter throws on exit 2 | Existing plugin hook plus adapter | Not Started | TBD |
-| Pre-tool bash enforcement | Claude `PreToolUse Bash` hook chain blocks exit 2 | OpenCode `tool.execute.before` adapter throws on exit 2 | Existing plugin hook plus adapter | Not Started | TBD |
+| Pre-tool edit/write enforcement | Claude `PreToolUse` hook chain blocks exit 2 | OpenCode `tool.execute.before` adapter throws on exit 2 | Existing plugin hook plus adapter; `#22654`/`#20053` behavior | Partial | Hook input now exposes `ask()` and propagates mutated args before tool execution. Devflow adapter not implemented yet. |
+| Pre-tool bash enforcement | Claude `PreToolUse Bash` hook chain blocks exit 2 | OpenCode `tool.execute.before` adapter throws on exit 2 | Existing plugin hook plus adapter; `#22654`/`#20053` behavior | Partial | Hook substrate is ready for blocking/interactive enforcement; adapter not implemented yet. |
 | `apply_patch` enforcement | Claude uses `MultiEdit` | Adapter parses OpenCode `apply_patch` patch paths and applies write enforcement | None | Not Started | TBD |
-| Post-tool telemetry | Claude `PostToolUse` hooks | OpenCode `tool.execute.after` adapter | PR `#21150` improves MCP timing | Not Started | TBD |
+| Post-tool telemetry | Claude `PostToolUse` hooks | OpenCode `tool.execute.after` adapter | PR `#21150` improves MCP timing | Partial | MCP `tool.execute.after` now receives assembled final output and can mutate returned output. Devflow telemetry adapter not implemented yet. |
 | Session start telemetry | Claude `SessionStart` | OpenCode `session.start` | PR `#15224` | Blocked | TBD |
 | Compaction reinforcement | Claude compact matcher reinjects rules | OpenCode compaction plugin hook | Existing `experimental.session.compacting` | Not Started | TBD |
 | Subagent start telemetry | Claude `SubagentStart` | OpenCode task/tool/session context | PR `#15412` | Partial | `#15412` integrated on `devflow/hojo`; `bun test test/plugin/parent-agent.test.ts` and package typechecks pass. Adapter work remains. |
