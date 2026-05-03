@@ -1,128 +1,119 @@
-import { Identifier } from "@/id/id"
-import { NonNegativeInt, withStatics } from "@/util/schema"
-import * as DateTime from "effect/DateTime"
+import { SessionID } from "@/session/schema"
+import { NonNegativeInt } from "@/util/schema"
+import { EventV2 } from "./event"
+import { FileAttachment, Prompt } from "./session-prompt"
 import { Schema } from "effect"
+export { FileAttachment }
+import { ToolOutput } from "./tool-output"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { V2Schema } from "./schema"
 
-export namespace SessionEvent {
-  export const ID = Schema.String.pipe(
-    Schema.brand("Session.Event.ID"),
-    withStatics((s) => ({
-      create: () => s.make(Identifier.create("evt", "ascending")),
-    })),
-  )
-  export type ID = Schema.Schema.Type<typeof ID>
-  type Stamp = Schema.Schema.Type<typeof Schema.DateTimeUtc>
-  type BaseInput = {
-    id?: ID
-    metadata?: Record<string, unknown>
-    timestamp?: Stamp
-  }
+export const Source = Schema.Struct({
+  start: NonNegativeInt,
+  end: NonNegativeInt,
+  text: Schema.String,
+}).annotate({
+  identifier: "session.next.event.source",
+})
+export type Source = Schema.Schema.Type<typeof Source>
 
-  const Base = {
-    id: ID,
-    metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
-    timestamp: Schema.DateTimeUtc,
-  }
+const Base = {
+  timestamp: V2Schema.DateTimeUtcFromMillis,
+  sessionID: SessionID,
+}
 
-  export class Source extends Schema.Class<Source>("Session.Event.Source")({
-    start: NonNegativeInt,
-    end: NonNegativeInt,
-    text: Schema.String,
-  }) {}
-
-  export class FileAttachment extends Schema.Class<FileAttachment>("Session.Event.FileAttachment")({
-    uri: Schema.String,
-    mime: Schema.String,
-    name: Schema.String.pipe(Schema.optional),
-    description: Schema.String.pipe(Schema.optional),
-    source: Source.pipe(Schema.optional),
-  }) {
-    static create(input: FileAttachment) {
-      return new FileAttachment({
-        uri: input.uri,
-        mime: input.mime,
-        name: input.name,
-        description: input.description,
-        source: input.source,
-      })
-    }
-  }
-
-  export class AgentAttachment extends Schema.Class<AgentAttachment>("Session.Event.AgentAttachment")({
-    name: Schema.String,
-    source: Source.pipe(Schema.optional),
-  }) {}
-
-  export class RetryError extends Schema.Class<RetryError>("Session.Event.Retry.Error")({
-    message: Schema.String,
-    statusCode: NonNegativeInt.pipe(Schema.optional),
-    isRetryable: Schema.Boolean,
-    responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-    responseBody: Schema.String.pipe(Schema.optional),
-    metadata: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  }) {}
-
-  export class Prompt extends Schema.Class<Prompt>("Session.Event.Prompt")({
+export const AgentSwitched = EventV2.define({
+  type: "session.next.agent.switched",
+  aggregate: "sessionID",
+  version: 1,
+  schema: {
     ...Base,
-    type: Schema.Literal("prompt"),
-    text: Schema.String,
-    files: Schema.Array(FileAttachment).pipe(Schema.optional),
-    agents: Schema.Array(AgentAttachment).pipe(Schema.optional),
-  }) {
-    static create(input: BaseInput & { text: string; files?: FileAttachment[]; agents?: AgentAttachment[] }) {
-      return new Prompt({
-        id: input.id ?? ID.create(),
-        type: "prompt",
-        timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-        metadata: input.metadata,
-        text: input.text,
-        files: input.files,
-        agents: input.agents,
-      })
-    }
-  }
+    agent: Schema.String,
+  },
+})
+export type AgentSwitched = Schema.Schema.Type<typeof AgentSwitched>
 
-  export class Synthetic extends Schema.Class<Synthetic>("Session.Event.Synthetic")({
+export const ModelSwitched = EventV2.define({
+  type: "session.next.model.switched",
+  aggregate: "sessionID",
+  version: 1,
+  schema: {
     ...Base,
-    type: Schema.Literal("synthetic"),
-    text: Schema.String,
-  }) {
-    static create(input: BaseInput & { text: string }) {
-      return new Synthetic({
-        id: input.id ?? ID.create(),
-        type: "synthetic",
-        timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-        metadata: input.metadata,
-        text: input.text,
-      })
-    }
-  }
+    id: ModelID,
+    providerID: ProviderID,
+    variant: Schema.String.pipe(Schema.optional),
+  },
+})
+export type ModelSwitched = Schema.Schema.Type<typeof ModelSwitched>
 
-  export namespace Step {
-    export class Started extends Schema.Class<Started>("Session.Event.Step.Started")({
+export const Prompted = EventV2.define({
+  type: "session.next.prompted",
+  aggregate: "sessionID",
+  version: 1,
+  schema: {
+    ...Base,
+    prompt: Prompt,
+  },
+})
+export type Prompted = Schema.Schema.Type<typeof Prompted>
+
+export const Synthetic = EventV2.define({
+  type: "session.next.synthetic",
+  aggregate: "sessionID",
+  schema: {
+    ...Base,
+    text: Schema.String,
+  },
+})
+export type Synthetic = Schema.Schema.Type<typeof Synthetic>
+
+export namespace Shell {
+  export const Started = EventV2.define({
+    type: "session.next.shell.started",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("step.started"),
+      callID: Schema.String,
+      command: Schema.String,
+    },
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
+
+  export const Ended = EventV2.define({
+    type: "session.next.shell.ended",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      callID: Schema.String,
+      output: Schema.String,
+    },
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
+}
+
+export namespace Step {
+  export const Started = EventV2.define({
+    type: "session.next.step.started",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      agent: Schema.String,
       model: Schema.Struct({
         id: Schema.String,
         providerID: Schema.String,
         variant: Schema.String.pipe(Schema.optional),
       }),
-    }) {
-      static create(input: BaseInput & { model: { id: string; providerID: string; variant?: string } }) {
-        return new Started({
-          id: input.id ?? ID.create(),
-          type: "step.started",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          model: input.model,
-        })
-      }
-    }
+      snapshot: Schema.String.pipe(Schema.optional),
+    },
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
 
-    export class Ended extends Schema.Class<Ended>("Session.Event.Step.Ended")({
+  export const Ended = EventV2.define({
+    type: "session.next.step.ended",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("step.ended"),
-      reason: Schema.String,
+      finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
         input: NonNegativeInt,
@@ -133,177 +124,118 @@ export namespace SessionEvent {
           write: NonNegativeInt,
         }),
       }),
-    }) {
-      static create(input: BaseInput & { reason: string; cost: number; tokens: Ended["tokens"] }) {
-        return new Ended({
-          id: input.id ?? ID.create(),
-          type: "step.ended",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          reason: input.reason,
-          cost: input.cost,
-          tokens: input.tokens,
-        })
-      }
-    }
-  }
+      snapshot: Schema.String.pipe(Schema.optional),
+    },
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
+}
 
-  export namespace Text {
-    export class Started extends Schema.Class<Started>("Session.Event.Text.Started")({
+export namespace Text {
+  export const Started = EventV2.define({
+    type: "session.next.text.started",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("text.started"),
-    }) {
-      static create(input: BaseInput = {}) {
-        return new Started({
-          id: input.id ?? ID.create(),
-          type: "text.started",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-        })
-      }
-    }
+    },
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
 
-    export class Delta extends Schema.Class<Delta>("Session.Event.Text.Delta")({
+  export const Delta = EventV2.define({
+    type: "session.next.text.delta",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("text.delta"),
       delta: Schema.String,
-    }) {
-      static create(input: BaseInput & { delta: string }) {
-        return new Delta({
-          id: input.id ?? ID.create(),
-          type: "text.delta",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          delta: input.delta,
-        })
-      }
-    }
+    },
+  })
+  export type Delta = Schema.Schema.Type<typeof Delta>
 
-    export class Ended extends Schema.Class<Ended>("Session.Event.Text.Ended")({
+  export const Ended = EventV2.define({
+    type: "session.next.text.ended",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("text.ended"),
       text: Schema.String,
-    }) {
-      static create(input: BaseInput & { text: string }) {
-        return new Ended({
-          id: input.id ?? ID.create(),
-          type: "text.ended",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          text: input.text,
-        })
-      }
-    }
-  }
+    },
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
+}
 
-  export namespace Reasoning {
-    export class Started extends Schema.Class<Started>("Session.Event.Reasoning.Started")({
+export namespace Reasoning {
+  export const Started = EventV2.define({
+    type: "session.next.reasoning.started",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("reasoning.started"),
-    }) {
-      static create(input: BaseInput = {}) {
-        return new Started({
-          id: input.id ?? ID.create(),
-          type: "reasoning.started",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-        })
-      }
-    }
+      reasoningID: Schema.String,
+    },
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
 
-    export class Delta extends Schema.Class<Delta>("Session.Event.Reasoning.Delta")({
+  export const Delta = EventV2.define({
+    type: "session.next.reasoning.delta",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("reasoning.delta"),
+      reasoningID: Schema.String,
       delta: Schema.String,
-    }) {
-      static create(input: BaseInput & { delta: string }) {
-        return new Delta({
-          id: input.id ?? ID.create(),
-          type: "reasoning.delta",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          delta: input.delta,
-        })
-      }
-    }
+    },
+  })
+  export type Delta = Schema.Schema.Type<typeof Delta>
 
-    export class Ended extends Schema.Class<Ended>("Session.Event.Reasoning.Ended")({
+  export const Ended = EventV2.define({
+    type: "session.next.reasoning.ended",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("reasoning.ended"),
+      reasoningID: Schema.String,
       text: Schema.String,
-    }) {
-      static create(input: BaseInput & { text: string }) {
-        return new Ended({
-          id: input.id ?? ID.create(),
-          type: "reasoning.ended",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          text: input.text,
-        })
-      }
-    }
-  }
+    },
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
+}
 
-  export namespace Tool {
-    export namespace Input {
-      export class Started extends Schema.Class<Started>("Session.Event.Tool.Input.Started")({
+export namespace Tool {
+  export namespace Input {
+    export const Started = EventV2.define({
+      type: "session.next.tool.input.started",
+      aggregate: "sessionID",
+      schema: {
         ...Base,
         callID: Schema.String,
         name: Schema.String,
-        type: Schema.Literal("tool.input.started"),
-      }) {
-        static create(input: BaseInput & { callID: string; name: string }) {
-          return new Started({
-            id: input.id ?? ID.create(),
-            type: "tool.input.started",
-            timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-            metadata: input.metadata,
-            callID: input.callID,
-            name: input.name,
-          })
-        }
-      }
+      },
+    })
+    export type Started = Schema.Schema.Type<typeof Started>
 
-      export class Delta extends Schema.Class<Delta>("Session.Event.Tool.Input.Delta")({
+    export const Delta = EventV2.define({
+      type: "session.next.tool.input.delta",
+      aggregate: "sessionID",
+      schema: {
         ...Base,
         callID: Schema.String,
-        type: Schema.Literal("tool.input.delta"),
         delta: Schema.String,
-      }) {
-        static create(input: BaseInput & { callID: string; delta: string }) {
-          return new Delta({
-            id: input.id ?? ID.create(),
-            type: "tool.input.delta",
-            timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-            metadata: input.metadata,
-            callID: input.callID,
-            delta: input.delta,
-          })
-        }
-      }
+      },
+    })
+    export type Delta = Schema.Schema.Type<typeof Delta>
 
-      export class Ended extends Schema.Class<Ended>("Session.Event.Tool.Input.Ended")({
+    export const Ended = EventV2.define({
+      type: "session.next.tool.input.ended",
+      aggregate: "sessionID",
+      schema: {
         ...Base,
         callID: Schema.String,
-        type: Schema.Literal("tool.input.ended"),
         text: Schema.String,
-      }) {
-        static create(input: BaseInput & { callID: string; text: string }) {
-          return new Ended({
-            id: input.id ?? ID.create(),
-            type: "tool.input.ended",
-            timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-            metadata: input.metadata,
-            callID: input.callID,
-            text: input.text,
-          })
-        }
-      }
-    }
+      },
+    })
+    export type Ended = Schema.Schema.Type<typeof Ended>
+  }
 
-    export class Called extends Schema.Class<Called>("Session.Event.Tool.Called")({
+  export const Called = EventV2.define({
+    type: "session.next.tool.called",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("tool.called"),
       callID: Schema.String,
       tool: Schema.String,
       input: Schema.Record(Schema.String, Schema.Unknown),
@@ -311,148 +243,155 @@ export namespace SessionEvent {
         executed: Schema.Boolean,
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       }),
-    }) {
-      static create(
-        input: BaseInput & {
-          callID: string
-          tool: string
-          input: Record<string, unknown>
-          provider: Called["provider"]
-        },
-      ) {
-        return new Called({
-          id: input.id ?? ID.create(),
-          type: "tool.called",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          callID: input.callID,
-          tool: input.tool,
-          input: input.input,
-          provider: input.provider,
-        })
-      }
-    }
+    },
+  })
+  export type Called = Schema.Schema.Type<typeof Called>
 
-    export class Success extends Schema.Class<Success>("Session.Event.Tool.Success")({
+  export const Progress = EventV2.define({
+    type: "session.next.tool.progress",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("tool.success"),
       callID: Schema.String,
-      title: Schema.String,
-      output: Schema.String.pipe(Schema.optional),
-      attachments: Schema.Array(FileAttachment).pipe(Schema.optional),
+      structured: ToolOutput.Structured,
+      content: Schema.Array(ToolOutput.Content),
+    },
+  })
+  export type Progress = Schema.Schema.Type<typeof Progress>
+
+  export const Success = EventV2.define({
+    type: "session.next.tool.success",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      callID: Schema.String,
+      structured: ToolOutput.Structured,
+      content: Schema.Array(ToolOutput.Content),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       }),
-    }) {
-      static create(
-        input: BaseInput & {
-          callID: string
-          title: string
-          output?: string
-          attachments?: FileAttachment[]
-          provider: Success["provider"]
-        },
-      ) {
-        return new Success({
-          id: input.id ?? ID.create(),
-          type: "tool.success",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          callID: input.callID,
-          title: input.title,
-          output: input.output,
-          attachments: input.attachments,
-          provider: input.provider,
-        })
-      }
-    }
+    },
+  })
+  export type Success = Schema.Schema.Type<typeof Success>
 
-    export class Error extends Schema.Class<Error>("Session.Event.Tool.Error")({
+  export const Error = EventV2.define({
+    type: "session.next.tool.error",
+    aggregate: "sessionID",
+    schema: {
       ...Base,
-      type: Schema.Literal("tool.error"),
       callID: Schema.String,
-      error: Schema.String,
+      error: Schema.Struct({
+        type: Schema.String,
+        message: Schema.String,
+      }),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
       }),
-    }) {
-      static create(input: BaseInput & { callID: string; error: string; provider: Error["provider"] }) {
-        return new Error({
-          id: input.id ?? ID.create(),
-          type: "tool.error",
-          timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-          metadata: input.metadata,
-          callID: input.callID,
-          error: input.error,
-          provider: input.provider,
-        })
-      }
-    }
-  }
+    },
+  })
+  export type Error = Schema.Schema.Type<typeof Error>
+}
 
-  export class Retried extends Schema.Class<Retried>("Session.Event.Retried")({
+export const RetryError = Schema.Struct({
+  message: Schema.String,
+  statusCode: NonNegativeInt.pipe(Schema.optional),
+  isRetryable: Schema.Boolean,
+  responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+  responseBody: Schema.String.pipe(Schema.optional),
+  metadata: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+}).annotate({
+  identifier: "session.next.retry_error",
+})
+export type RetryError = Schema.Schema.Type<typeof RetryError>
+
+export const Retried = EventV2.define({
+  type: "session.next.retried",
+  aggregate: "sessionID",
+  schema: {
     ...Base,
-    type: Schema.Literal("retried"),
     attempt: NonNegativeInt,
     error: RetryError,
-  }) {
-    static create(input: BaseInput & { attempt: number; error: RetryError }) {
-      return new Retried({
-        id: input.id ?? ID.create(),
-        type: "retried",
-        timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-        metadata: input.metadata,
-        attempt: input.attempt,
-        error: input.error,
-      })
-    }
-  }
+  },
+})
+export type Retried = Schema.Schema.Type<typeof Retried>
 
-  export class Compacted extends Schema.Class<Compacted>("Session.Event.Compated")({
-    ...Base,
-    type: Schema.Literal("compacted"),
-    auto: Schema.Boolean,
-    overflow: Schema.Boolean.pipe(Schema.optional),
-  }) {
-    static create(input: BaseInput & { auto: boolean; overflow?: boolean }) {
-      return new Compacted({
-        id: input.id ?? ID.create(),
-        type: "compacted",
-        timestamp: input.timestamp ?? DateTime.makeUnsafe(Date.now()),
-        metadata: input.metadata,
-        auto: input.auto,
-        overflow: input.overflow,
-      })
-    }
-  }
-
-  export const Event = Schema.Union(
-    [
-      Prompt,
-      Synthetic,
-      Step.Started,
-      Step.Ended,
-      Text.Started,
-      Text.Delta,
-      Text.Ended,
-      Tool.Input.Started,
-      Tool.Input.Delta,
-      Tool.Input.Ended,
-      Tool.Called,
-      Tool.Success,
-      Tool.Error,
-      Reasoning.Started,
-      Reasoning.Delta,
-      Reasoning.Ended,
-      Retried,
-      Compacted,
-    ],
-    {
-      mode: "oneOf",
+export namespace Compaction {
+  export const Started = EventV2.define({
+    type: "session.next.compaction.started",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
     },
-  ).pipe(Schema.toTaggedUnion("type"))
-  export type Event = Schema.Schema.Type<typeof Event>
-  export type Type = Event["type"]
+  })
+  export type Started = Schema.Schema.Type<typeof Started>
+
+  export const Delta = EventV2.define({
+    type: "session.next.compaction.delta",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      text: Schema.String,
+    },
+  })
+
+  export const Ended = EventV2.define({
+    type: "session.next.compaction.ended",
+    aggregate: "sessionID",
+    schema: {
+      ...Base,
+      text: Schema.String,
+      include: Schema.String.pipe(Schema.optional),
+    },
+  })
+  export type Ended = Schema.Schema.Type<typeof Ended>
 }
+
+export const All = Schema.Union(
+  [
+    AgentSwitched,
+    ModelSwitched,
+    Prompted,
+    Synthetic,
+    Shell.Started,
+    Shell.Ended,
+    Step.Started,
+    Step.Ended,
+    Text.Started,
+    Text.Delta,
+    Text.Ended,
+    Tool.Input.Started,
+    Tool.Input.Delta,
+    Tool.Input.Ended,
+    Tool.Called,
+    Tool.Progress,
+    Tool.Success,
+    Tool.Error,
+    Reasoning.Started,
+    Reasoning.Delta,
+    Reasoning.Ended,
+    Retried,
+    Compaction.Started,
+    Compaction.Delta,
+    Compaction.Ended,
+  ],
+  {
+    mode: "oneOf",
+  },
+).pipe(Schema.toTaggedUnion("type"))
+
+// user
+// assistant
+// assistant
+// assistant
+// user
+// compaction marker
+// -> text
+// assistant
+
+export type Event = Schema.Schema.Type<typeof All>
+export type Type = Event["type"]
+
+export * as SessionEvent from "./session-event"

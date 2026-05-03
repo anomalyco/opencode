@@ -9,6 +9,7 @@ import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
@@ -16,7 +17,9 @@ import { Session } from "@/session/session"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@/storage/db"
-import { SessionTable } from "@/session/session.sql"
+import { SessionMessageTable, SessionTable } from "@/session/session.sql"
+import { SessionMessage } from "../../src/v2/session-message"
+import * as DateTime from "effect/DateTime"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
@@ -44,7 +47,7 @@ function pathFor(path: string, params: Record<string, string>) {
 function createSession(directory: string, input?: Session.CreateInput) {
   return Effect.promise(
     async () =>
-      await Instance.provide({
+      await WithInstance.provide({
         directory,
         fn: () => runSession(Session.Service.use((svc) => svc.create(input))),
       }),
@@ -54,7 +57,7 @@ function createSession(directory: string, input?: Session.CreateInput) {
 function createTextMessage(directory: string, sessionID: SessionID, text: string) {
   return Effect.promise(
     async () =>
-      await Instance.provide({
+      await WithInstance.provide({
         directory,
         fn: () =>
           runSession(
@@ -202,6 +205,46 @@ describe("session HttpApi", () => {
             { headers },
           ),
         ).toMatchObject({ info: { id: message.info.id } })
+
+        yield* Effect.promise(() =>
+          WithInstance.provide({
+            directory: tmp.path,
+            fn: async () => {
+              const message = new SessionMessage.Assistant({
+                id: SessionMessage.ID.create(),
+                type: "assistant",
+                agent: "build",
+                model: { id: "model", providerID: "provider" },
+                time: { created: DateTime.makeUnsafe(1) },
+                content: [],
+              })
+              Database.use((db) =>
+                db
+                  .insert(SessionMessageTable)
+                  .values([
+                    {
+                      id: message.id,
+                      session_id: parent.id,
+                      type: message.type,
+                      time_created: 1,
+                      data: {
+                        time: { created: 1 },
+                        agent: message.agent,
+                        model: message.model,
+                        content: message.content,
+                      } as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+                    },
+                  ])
+                  .run(),
+              )
+            },
+          }),
+        )
+
+        expect(
+          (yield* requestJson<{ items: SessionMessage.Message[] }>(`/api/session/${parent.id}/message`, { headers }))
+            .items,
+        ).toMatchObject([{ type: "assistant" }])
       }),
     ),
   )

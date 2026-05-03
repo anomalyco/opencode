@@ -5,6 +5,7 @@ import fs from "fs/promises"
 import path from "path"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { provideInstance, tmpdir } from "../fixture/fixture"
 
 const run = <A, E>(eff: Effect.Effect<A, E, File.Service>) =>
@@ -30,7 +31,7 @@ describe("file fsmonitor", () => {
     const before = await $`git fsmonitor--daemon status`.cwd(tmp.path).quiet().nothrow()
     expect(before.exitCode).not.toBe(0)
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         await status()
@@ -55,7 +56,7 @@ describe("file fsmonitor", () => {
     const before = await $`git fsmonitor--daemon status`.cwd(tmp.path).quiet().nothrow()
     expect(before.exitCode).not.toBe(0)
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         await read("tracked.txt")

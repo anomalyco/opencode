@@ -24,6 +24,7 @@ export function payloads() {
     .map(([type, def]) => {
       return z
         .object({
+          id: z.string(),
           type: z.literal(type),
           properties: zodObject(def.properties),
         })
@@ -39,6 +40,7 @@ export function effectPayloads() {
     .entries()
     .map(([type, def]) =>
       Schema.Struct({
+        id: Schema.String,
         type: Schema.Literal(type),
         properties: def.properties,
       }).annotate({ identifier: `Event.${type}` }),
