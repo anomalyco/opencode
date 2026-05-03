@@ -97,6 +97,9 @@ const SessionRow = (props: {
   hasPermissions: Accessor<boolean>
   hasError: Accessor<boolean>
   unseenCount: Accessor<number>
+  hasChildren: Accessor<boolean>
+  expanded: Accessor<boolean>
+  onToggleChildren: () => void
   clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
   warmPress: () => void
@@ -115,27 +118,48 @@ const SessionRow = (props: {
         props.clearHoverProjectSoon()
       }}
     >
-      <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
-        <div
-          class="shrink-0 size-6 flex items-center justify-center"
-          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+      <div
+        class="shrink-0 size-6 flex items-center justify-center"
+        style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+      >
+        <Show
+          when={props.hasChildren()}
+          fallback={
+            <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
+              <Switch>
+                <Match when={props.isWorking()}>
+                  <Spinner class="size-[15px]" />
+                </Match>
+                <Match when={props.hasPermissions()}>
+                  <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+                </Match>
+                <Match when={props.hasError()}>
+                  <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+                </Match>
+                <Match when={props.unseenCount() > 0}>
+                  <div class="size-1.5 rounded-full bg-text-interactive-base" />
+                </Match>
+              </Switch>
+            </Show>
+          }
         >
-          <Switch>
-            <Match when={props.isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={props.hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={props.hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={props.unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-      </Show>
+          <IconButton
+            icon={props.expanded() ? "chevron-down" : "chevron-right"}
+            variant="ghost"
+            size="small"
+            class="size-6 rounded-xs transition-opacity"
+            classList={{
+              "opacity-0 group-hover/session:opacity-100": !props.expanded(),
+            }}
+            aria-label={props.expanded() ? "Collapse" : "Expand"}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              props.onToggleChildren()
+            }}
+          />
+        </Show>
+      </div>
       <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
     </A>
   )
@@ -215,6 +239,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       hasPermissions={hasPermissions}
       hasError={hasError}
       unseenCount={unseenCount}
+      hasChildren={hasChildren}
+      expanded={expanded}
+      onToggleChildren={() => setExpanded((v) => !v)}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
       warmPress={() => warm(2, "high")}
@@ -230,21 +257,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         style={{ "padding-left": `${8 + (props.level ?? 0) * 16}px` }}
       >
         <div class="flex min-w-0 items-center gap-1">
-          <div class="shrink-0 size-6 flex items-center justify-center">
-            <Show when={hasChildren()}>
-              <IconButton
-                icon={expanded() ? "chevron-down" : "chevron-right"}
-                variant="ghost"
-                size="small"
-                class="size-6 rounded-xs transition-opacity"
-                classList={{
-                  "opacity-0 group-hover/session:opacity-100": !expanded(),
-                }}
-                aria-label={expanded() ? language.t("session.todo.collapse") : language.t("session.todo.expand")}
-                onClick={() => setExpanded((v) => !v)}
-              />
-            </Show>
-          </div>
           <div class="min-w-0 flex-1">
             <Show
               when={!tooltip()}
