@@ -130,12 +130,17 @@ export namespace Server {
           },
         }),
       )
-      .get("/livez", (c) => c.text("ok"))
-      .get("/readyz", async (c) => {
-        const report = await apiHealthReportSimple()
-        return c.json(report, report.ok ? 200 : 503)
+      .use("*", async (c, next) => {
+        if (c.req.method !== "GET") return next()
+        const path = c.req.path.split("?")[0].replace(/\/+$/, "") || "/"
+        if (path === "/livez") return c.text("ok")
+        if (path === "/readyz") {
+          const report = await apiHealthReportSimple()
+          return c.json(report, report.ok ? 200 : 503)
+        }
+        if (path === "/debug") return c.text("debug ok")
+        return next()
       })
-      .get("/debug", (c) => c.text("debug ok"))
       .use(async (c, next) => {
         if (c.req.method === "OPTIONS") return next()
         if (isPublicHealthPath(c.req.path)) return next()

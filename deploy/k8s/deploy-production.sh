@@ -127,9 +127,18 @@ echo "Step 9: Syncing env from .env.production..."
 echo -e "${GREEN}✅ Env synced${NC}"
 echo ""
 
-echo "Step 10: Removing legacy workloads..."
-kubectl delete deployment executor-api opencode -n veritly --ignore-not-found >/dev/null 2>&1 || true
-kubectl delete service executor-api opencode -n veritly --ignore-not-found >/dev/null 2>&1 || true
+echo "Step 10: Removing legacy workloads (executor + old monolith names)..."
+# Executor removed in favour of Pyodide in-browser; delete any leftover objects by common names.
+kubectl delete deployment executor-api executor-dev executor opencode -n veritly --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete service executor-api executor-dev executor opencode -n veritly --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete ingress veritly-executor-sticky executor-sticky executor-api ingress-executor -n veritly --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete hpa executor executor-api executor-dev -n veritly --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete pdb executor executor-api executor-dev -n veritly --ignore-not-found >/dev/null 2>&1 || true
+# Catch any remaining executor-* resources (names vary across older manifests).
+while read -r line; do
+  [ -z "${line:-}" ] && continue
+  kubectl delete -n veritly "$line" --ignore-not-found >/dev/null 2>&1 || true
+done < <(kubectl get deploy,svc,ing,hpa,pdb -n veritly -o name 2>/dev/null | grep -i executor || true)
 echo -e "${GREEN}✅ Legacy workloads removed${NC}"
 echo ""
 

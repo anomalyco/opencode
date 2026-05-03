@@ -205,5 +205,6 @@ export async function apiHealthReport(): Promise<ApiHealthReport> {
 }
 
 export function isPublicHealthPath(path: string) {
-  return path === "/livez" || path === "/readyz" || path === "/global/readyz"
+  const base = path.split("?")[0].replace(/\/+$/, "") || "/"
+  return base === "/livez" || base === "/readyz" || base === "/global/readyz" || base === "/debug"
 }

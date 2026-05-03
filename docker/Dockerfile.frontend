@@ -6,6 +6,7 @@ RUN printf '{\n  "name": "@veritly/frontend",\n  "version": "1.0.0",\n  "private
 
 COPY packages/app/dist /app/dist
 COPY packages/app/server.ts /app/server.ts
+COPY packages/app/script/frontend-health-runtime.ts /app/script/frontend-health-runtime.ts
 
 ENV PORT=80
 ENV FRONTEND_DIST_DIR=/app/dist
