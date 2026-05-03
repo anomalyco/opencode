@@ -49,10 +49,7 @@ export function initPosthog(): void {
   }
 }
 
-export function captureVeritly(
-  event: string,
-  props?: Record<string, unknown>,
-): void {
+export function captureVeritly(event: string, props?: Record<string, unknown>): void {
   if (!inited) return
   const merged = { ...browserSurfaceProps(), ...activeTraceContextProps(), ...props }
   posthog.capture(event, merged)

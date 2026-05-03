@@ -610,7 +610,9 @@ export namespace SessionPrompt {
       },
       async ask(req) {
         const merged = PermissionNext.merge(input.agent.permission, input.session.permission ?? [])
-        const cleanRuleset = merged.filter((r): r is PermissionNext.Rule => r != null && typeof r === "object" && "permission" in r)
+        const cleanRuleset = merged.filter(
+          (r): r is PermissionNext.Rule => r != null && typeof r === "object" && "permission" in r,
+        )
         await PermissionNext.ask({
           ...req,
           sessionID: input.session.id,

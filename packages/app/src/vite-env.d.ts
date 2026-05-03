@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+declare module "*.py?raw" {
+  const source: string
+  export default source
+}
+
 interface ImportMetaEnv {
   /** Hosted API origin for the main OpenCode HTTP API. */
   readonly VITE_OPENCODE_SERVER_URL?: string

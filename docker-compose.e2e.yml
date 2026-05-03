@@ -23,7 +23,7 @@ services:
     volumes:
       - ollama-data:/root/.ollama
     healthcheck:
-      test: ["CMD-SHELL", "ollama list | grep -q qwen2.5"]
+      test: ["CMD-SHELL", "ollama list | grep -q llama3.2"]
       interval: 5s
       timeout: 5s
       retries: 20

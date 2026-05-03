@@ -11,20 +11,20 @@ import PROMPT_CODEX from "./prompt/codex_header.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
 import type { Provider } from "@/provider/provider"
 
-const UNIVER_SDK_GUIDE = `# Veritly Univer Python SDK (full client: CPython)
+const UNIVER_SDK_GUIDE = `# Veritly Univer Python SDK (relay + async client)
 
-The full SDK talks to a Bun relay over WebSockets. In the **hosted web app**, the \`micropython\` tool runs user snippets in **Pyodide** with a small \`veritly_univer_sdk\` stub (\`RangeRect\`, \`UniverSDK\`); async spreadsheet calls are not wired there yet.
+The same \`veritly_univer_sdk\` source runs in **local CPython** (uses the \`websockets\` package) and in the **hosted web app Pyodide** tool (uses the browser WebSocket to the relay). Both need the relay plus a browser tab on the spreadsheet with \`VITE_UNIVER_SDK_WS\` so the tab connects as \`role=browser\`.
 
-## Prerequisites (full CPython client)
+## Prerequisites
 
 1. Relay running. Default: ws://127.0.0.1:18766/ws (UNIVER_SDK_PORT).
-2. Browser tab connected to the relay.
-3. CPython with the \`websockets\` package (see packages/univer-sdk/python).
+2. Browser tab connected to the relay (spreadsheet open).
+3. **Local CPython**: \`bash packages/univer-sdk/python/install-local.sh\` installs \`websockets\` + editable SDK.
+4. **Pyodide (pyodide tool)**: never use \`asyncio.run(...)\`; define \`async def main(): ...\` only (the tool invokes \`main\` for you). Then \`await sdk.connect()\` and the same async methods as below.
 
-### Import: browser (Pyodide) vs local CPython
+### Import
 
-- **Browser (micropython tool)**: import \`veritly_univer_sdk\` for stubs; use \`print\` and \`json\` for probes.
-- **Local CPython**: run \`bash packages/univer-sdk/python/install-local.sh\` for the full async client.
+\`from veritly_univer_sdk import RangeRect, UniverSDK\` in both environments.
 
 ## Default URL and environment
 
@@ -62,6 +62,8 @@ async def main() -> None:
 
 asyncio.run(main())
 
+For the **pyodide** tool in the browser: reuse the same \`async def main()\` body but **omit** \`asyncio.run(main())\`. The tool wraps your snippet in an async runner and **auto-invokes** \`main\` when it exists (async or sync). \`asyncio.run\` conflicts with Pyodide’s already-running event loop unless stack switching (JSPI) is available, so omitting it is the portable pattern.
+
 ## Operations (relay op names)
 
 | Python method | op | Notes |
@@ -80,8 +82,9 @@ add_chart uses Univer's insert-chart path. For drawing-level commands, use execu
 
 ## Troubleshooting
 
-- UniverSDK is not connected: call await sdk.connect() before other methods (CPython).
+- UniverSDK is not connected: call await sdk.connect() before other methods (CPython or Pyodide).
 - Relay errors / timeout: ensure relay is up, port matches UNIVER_SDK_WS / UNIVER_SDK_PORT, and the spreadsheet tab is open with VITE_UNIVER_SDK_WS pointing at the relay.
+- **Pyodide / pyodide tool**: **never** use \`asyncio.run(...)\`. Use \`async def main(): ...\` only; the tool runs \`main\` for you.
 - Multi-host: set UNIVER_SDK_WS to the reachable WebSocket URL for that instance; browser and agent must reach the same relay.`
 
 export namespace SystemPrompt {
@@ -93,16 +96,18 @@ export namespace SystemPrompt {
     if (!process.env.PUBLIC_BASE_URL?.trim()) return []
 
     const lines = [
-      "The micropython tool runs Python in the user's browser (Pyodide), not on the API container.",
+      "The pyodide tool runs Python in the user's browser (Pyodide / WASM), not on the API container.",
       "Paths and workdir are checked against $WORKSPACE for permissions only; execution has no server-side filesystem.",
-      "The stub module veritly_univer_sdk exposes RangeRect and UniverSDK; full async spreadsheet I/O matches the CPython guide below once ported to Pyodide.",
-      "For Univer automation concepts and relay URLs, see the guide below (CPython quick start); in the browser use print/json and the stub types until async support lands.",
+      "The pyodide tool loads the real veritly_univer_sdk in the browser (WebSocket to the same relay as the spreadsheet tab).",
+      "In pyodide tool snippets: never use asyncio.run(); use async def main only (the tool invokes main after your code).",
       "",
       ...UNIVER_SDK_GUIDE.split("\n"),
     ]
 
     if (process.env.UNIVER_SDK_WS?.trim() || process.env.VITE_UNIVER_SDK_WS?.trim()) {
-      lines.push("When relay connectivity is configured, UNIVER_SDK_WS is available to local CPython tooling (not inside Pyodide unless you wire it).")
+      lines.push(
+        "When relay connectivity is configured, Pyodide inherits the app relay URL for UNIVER_SDK_WS unless the snippet overrides UniverSDK(ws_url=...).",
+      )
     }
 
     return lines

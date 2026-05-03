@@ -6,7 +6,7 @@ import z from "zod"
 import { createSdkForServer } from "@/utils/server"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
-import { dispatchClientPython } from "./client-python-dispatch"
+import { dispatchPyodideRequest, type PyodideSseProps } from "./pyodide-dispatch"
 
 const abortError = z.object({
   name: z.literal("AbortError"),
@@ -87,10 +87,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
             if (skip.has(deltaKey(event.projectID, props.messageID, props.partID))) continue
           }
           emitter.emit(event.projectID, event.payload)
-          if (event.payload.type === "session.client_python.request") {
-            void dispatchClientPython({
+          const bus = event.payload as { type: string; properties: PyodideSseProps }
+          if (bus.type === "session.pyodide.request") {
+            void dispatchPyodideRequest({
               base: currentServer.http.url,
-              props: event.payload.properties,
+              props: bus.properties,
             })
           }
         }

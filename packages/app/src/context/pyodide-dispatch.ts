@@ -1,6 +1,6 @@
-import { runClientPython } from "@/lib/run-client-python"
+import { runPyodide } from "@/lib/run-pyodide"
 
-export type ClientPythonProps = {
+export type PyodideSseProps = {
   sessionID: string
   messageID: string
   callID: string
@@ -9,14 +9,14 @@ export type ClientPythonProps = {
   workdir?: string
 }
 
-/** Handles `session.client_python.request` from the global SSE stream: run Pyodide, POST `/session/.../client_python_result`. */
-export async function dispatchClientPython(input: { base: string; props: ClientPythonProps }) {
-  const url = `${input.base.replace(/\/+$/, "")}/session/${encodeURIComponent(input.props.sessionID)}/client_python_result`
+/** Handles `session.pyodide.request` from the global SSE stream: run Pyodide, POST `/session/.../pyodide_result`. */
+export async function dispatchPyodideRequest(input: { base: string; props: PyodideSseProps }) {
+  const url = `${input.base.replace(/\/+$/, "")}/session/${encodeURIComponent(input.props.sessionID)}/pyodide_result`
   let ok = true
   let output = ""
   let exitCode = 0
   try {
-    const r = await runClientPython(input.props.code, input.props.timeout)
+    const r = await runPyodide(input.props.code, input.props.timeout)
     output = r.output
     exitCode = r.exitCode
   } catch (err) {

@@ -43,11 +43,8 @@ export function initBrowserOtel(): void {
 
   if (!axiomToken || !axiomDataset) return
 
-  const viaProxy =
-    import.meta.env.DEV || import.meta.env.VITE_PUBLIC_AXIOM_OTLP_VIA_PROXY === "true"
-  const url = viaProxy
-    ? `${window.location.origin}/__veritly/axiom-otlp-traces`
-    : `${axiomBase}/v1/traces`
+  const viaProxy = import.meta.env.DEV || import.meta.env.VITE_PUBLIC_AXIOM_OTLP_VIA_PROXY === "true"
+  const url = viaProxy ? `${window.location.origin}/__veritly/axiom-otlp-traces` : `${axiomBase}/v1/traces`
   const headers: Record<string, string> = {
     Authorization: `Bearer ${axiomToken}`,
     "X-Axiom-Dataset": axiomDataset,
@@ -60,9 +57,7 @@ export function initBrowserOtel(): void {
     "deployment.environment": import.meta.env.PROD ? "production" : import.meta.env.MODE || "development",
   })
 
-  const processor = import.meta.env.DEV
-    ? new SimpleSpanProcessor(exporter)
-    : new SimpleSpanProcessor(exporter)
+  const processor = import.meta.env.DEV ? new SimpleSpanProcessor(exporter) : new SimpleSpanProcessor(exporter)
 
   const provider = new WebTracerProvider({
     resource,

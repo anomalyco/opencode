@@ -8,7 +8,6 @@ import { type ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 
-
 import { Database, NotFoundError } from "../storage/db.pg"
 import { eq, and, or, gte, isNull, desc, like, inArray, lt } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
@@ -209,8 +208,8 @@ export namespace Session {
         error: MessageV2.Assistant.shape.error,
       }),
     ),
-    ClientPythonRequest: BusEvent.define(
-      "session.client_python.request",
+    PyodideRequest: BusEvent.define(
+      "session.pyodide.request",
       z.object({
         sessionID: SessionID.zod,
         messageID: MessageID.zod,
@@ -340,9 +339,9 @@ export namespace Session {
 
   export const get = fn(SessionID.zod, async (id) => {
     const row = await Database.use(async (db) => {
-      const rows = await db.select().from(SessionTable).where(eq(SessionTable.id, id));
-      return rows[0];
-    });
+      const rows = await db.select().from(SessionTable).where(eq(SessionTable.id, id))
+      return rows[0]
+    })
     if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
     return fromRow(row)
   })
@@ -355,8 +354,12 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
     await Database.use(async (db) => {
-      const rows = await db.update(SessionTable).set({ share_url: share.url }).where(eq(SessionTable.id, id)).returning();
-      const row = rows[0];
+      const rows = await db
+        .update(SessionTable)
+        .set({ share_url: share.url })
+        .where(eq(SessionTable.id, id))
+        .returning()
+      const row = rows[0]
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
@@ -369,8 +372,8 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
     await Database.use(async (db) => {
-      const rows = await db.update(SessionTable).set({ share_url: null }).where(eq(SessionTable.id, id)).returning();
-      const row = rows[0];
+      const rows = await db.update(SessionTable).set({ share_url: null }).where(eq(SessionTable.id, id)).returning()
+      const row = rows[0]
       if (!row) throw new NotFoundError({ message: `Session not found: ${id}` })
       const info = fromRow(row)
       Database.effect(() => Bus.publish(Event.Updated, { info }))
@@ -536,12 +539,7 @@ export namespace Session {
     },
   )
 
-  export async function* list(input?: {
-    roots?: boolean
-    start?: number
-    search?: string
-    limit?: number
-  }) {
+  export async function* list(input?: { roots?: boolean; start?: number; search?: string; limit?: number }) {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
     if (input?.roots) {
@@ -670,7 +668,8 @@ export namespace Session {
     const time_updated = Date.now()
     const { id, sessionID, ...data } = msg
     await Database.use(async (db) => {
-      await db.insert(MessageTable)
+      await db
+        .insert(MessageTable)
         .values({
           id,
           session_id: sessionID,
@@ -696,7 +695,8 @@ export namespace Session {
     async (input) => {
       // CASCADE delete handles parts automatically
       await Database.use(async (db) => {
-        await db.delete(MessageTable)
+        await db
+          .delete(MessageTable)
           .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
         Database.effect(() =>
           Bus.publish(MessageV2.Event.Removed, {
@@ -717,8 +717,7 @@ export namespace Session {
     }),
     async (input) => {
       await Database.use(async (db) => {
-        await db.delete(PartTable)
-          .where(and(eq(PartTable.id, input.partID), eq(PartTable.session_id, input.sessionID)))
+        await db.delete(PartTable).where(and(eq(PartTable.id, input.partID), eq(PartTable.session_id, input.sessionID)))
         Database.effect(() =>
           Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: input.sessionID,
@@ -737,7 +736,8 @@ export namespace Session {
     const { id, messageID, sessionID, ...data } = part
     const time = Date.now()
     await Database.use(async (db) => {
-      await db.insert(PartTable)
+      await db
+        .insert(PartTable)
         .values({
           id,
           message_id: messageID,

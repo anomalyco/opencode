@@ -131,4 +131,5 @@ const table = sqliteTable("session", {
 
 - We do not support any fallback behavior and backwards compatibility. Treat everything as a Greenfield change.
 Prioritise doing this properly than not breaking old stuff, go ahead and break old stuff if it makes this cleaner. 
-- Stop adding env variables everywhere, do it more sparingly and when necessary, not even change needs a flag. 
+- Stop adding env variables everywhere, do it more sparingly and when necessary, not even change needs a flag.
+- DO NOT use ?? as a fallback mechanism, use if (!defined) throw error assertion style. We don't want fallbacks.

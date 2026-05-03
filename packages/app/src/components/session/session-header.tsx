@@ -156,7 +156,9 @@ export function SessionHeader() {
               </div>
 
               <Show when={hotkey()}>
-                {(keybind) => <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>}
+                {(keybind) => (
+                  <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
+                )}
               </Show>
             </Button>
           </Portal>

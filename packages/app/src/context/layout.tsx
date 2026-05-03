@@ -169,11 +169,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return next
       })()
 
-      if (
-        migratedReview === review &&
-        migratedFileTree === fileTree &&
-        migratedSessionTabs === sessionTabs
-      ) {
+      if (migratedReview === review && migratedFileTree === fileTree && migratedSessionTabs === sessionTabs) {
         return value
       }
 

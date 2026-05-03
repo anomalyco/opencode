@@ -1,18 +1,19 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
-import { MicropythonTool } from "../../src/tool/micropython"
-import { Instance } from "../../src/project/instance"
+import fs from "fs/promises"
+import { PyodideTool } from "../../src/tool/pyodide"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
+import { withPyodideSdk } from "../fixture/pyodide-sdk"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
-  callID: "",
+  messageID: MessageID.ascending(),
+  callID: "call_tool_test",
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
@@ -21,74 +22,13 @@ const ctx = {
 }
 
 const projectRoot = path.join(__dirname, "../..")
-const originalFetch = globalThis.fetch
-const originalUrl = process.env.VERITLY_EXECUTOR_URL
 
-function outFor(code: string) {
-  if (code.includes("print('test')")) return "test\n"
-  if (code.includes("print('hello')")) return "hello\n"
-  if (code.includes("print('foo')") && code.includes("print('bar')")) return "foo\nbar\n"
-
-  const m = code.match(/for i in range\((\d+)\)/)
-  if (m) {
-    const n = Number(m[1])
-    return Array.from({ length: n }, (_, i) => String(i + 1)).join("\n") + "\n"
-  }
-
-  const bytes = code.match(/print\('a' \* (\d+)\)/)
-  if (bytes) return "a".repeat(Number(bytes[1])) + "\n"
-
-  return ""
-}
-
-beforeEach(() => {
-  process.env.VERITLY_EXECUTOR_URL = "http://executor.test"
-  globalThis.fetch = (async (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-    if (url.endsWith("/readyz")) {
-      return Response.json({
-        ok: true,
-        service: "executor",
-        mode: "micropython",
-        cached: false,
-        activeSessions: 0,
-        static: {
-          micropythonBin: "micropython",
-          micropythonRunnable: true,
-          micropythonVersion: "test",
-          libPath: "/lib",
-          libReadable: true,
-          probeExit: 0,
-          probeOutput: "__readyz_ok__",
-        },
-        errors: [],
-      })
-    }
-    if (!url.includes("/exec")) {
-      return new Response("not found", { status: 404 })
-    }
-    const body = JSON.parse(String(init?.body ?? "{}")) as { code?: string }
-    return Response.json({
-      output: outFor(body.code ?? ""),
-      exitCode: 0,
-      sessionId: "ses_test",
-      mode: "micropython",
-    })
-  }) as typeof fetch
-})
-
-afterEach(() => {
-  globalThis.fetch = originalFetch
-  if (originalUrl) process.env.VERITLY_EXECUTOR_URL = originalUrl
-  else delete process.env.VERITLY_EXECUTOR_URL
-})
-
-describe("tool.micropython", () => {
+describe("tool.pyodide", () => {
   test("basic", async () => {
-    await Instance.provide({
+    await withPyodideSdk({
       workspace: projectRoot,
       fn: async () => {
-        const t = await MicropythonTool.init()
+        const t = await PyodideTool.init()
         const result = await t.execute(
           {
             code: "print('test')",
@@ -103,13 +43,13 @@ describe("tool.micropython", () => {
   })
 })
 
-describe("tool.micropython permissions", () => {
-  test("asks for micropython permission with correct pattern", async () => {
+describe("tool.pyodide permissions", () => {
+  test("asks for pyodide permission with correct pattern", async () => {
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await withPyodideSdk({
       workspace: tmp.path,
       fn: async () => {
-        const t = await MicropythonTool.init()
+        const t = await PyodideTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
@@ -125,7 +65,7 @@ describe("tool.micropython permissions", () => {
           testCtx,
         )
         expect(requests.length).toBe(1)
-        expect(requests[0].permission).toBe("micropython")
+        expect(requests[0].permission).toBe("pyodide")
         expect(requests[0].patterns).toContain("print('hello')")
       },
     })
@@ -133,10 +73,10 @@ describe("tool.micropython permissions", () => {
 
   test("asks for external_directory permission when workdir is outside project", async () => {
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await withPyodideSdk({
       workspace: tmp.path,
       fn: async () => {
-        const t = await MicropythonTool.init()
+        const t = await PyodideTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
@@ -154,17 +94,18 @@ describe("tool.micropython permissions", () => {
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain(path.join(os.tmpdir(), "*"))
+        const tmpResolved = await fs.realpath(os.tmpdir())
+        expect(extDirReq!.patterns).toContain(path.join(tmpResolved, "*"))
       },
     })
   })
 
   test("includes always patterns for auto-approval", async () => {
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await withPyodideSdk({
       workspace: tmp.path,
       fn: async () => {
-        const t = await MicropythonTool.init()
+        const t = await PyodideTool.init()
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
@@ -186,12 +127,12 @@ describe("tool.micropython permissions", () => {
   })
 })
 
-describe("tool.micropython truncation", () => {
+describe("tool.pyodide truncation", () => {
   test("truncates output exceeding line limit", async () => {
-    await Instance.provide({
+    await withPyodideSdk({
       workspace: projectRoot,
       fn: async () => {
-        const t = await MicropythonTool.init()
+        const t = await PyodideTool.init()
         const lineCount = Truncate.MAX_LINES + 500
         const result = await t.execute(
           {
@@ -208,10 +149,10 @@ describe("tool.micropython truncation", () => {
   })
 
   test("truncates output exceeding byte limit", async () => {
-    await Instance.provide({
+    await withPyodideSdk({
       workspace: projectRoot,
       fn: async () => {
-        const t = await MicropythonTool.init()
+        const t = await PyodideTool.init()
         const byteCount = Truncate.MAX_BYTES + 10000
         const result = await t.execute(
           {
@@ -228,10 +169,10 @@ describe("tool.micropython truncation", () => {
   })
 
   test("does not truncate small output", async () => {
-    await Instance.provide({
+    await withPyodideSdk({
       workspace: projectRoot,
       fn: async () => {
-        const t = await MicropythonTool.init()
+        const t = await PyodideTool.init()
         const result = await t.execute(
           {
             code: "print('hello')",
@@ -240,17 +181,16 @@ describe("tool.micropython truncation", () => {
           ctx,
         )
         expect((result.metadata as { truncated?: boolean }).truncated).toBe(false)
-        const eol = process.platform === "win32" ? "\r\n" : "\n"
-        expect(result.output).toBe(`hello${eol}`)
+        expect(result.output).toBe("hello\n")
       },
     })
   })
 
   test("full output is saved to file when truncated", async () => {
-    await Instance.provide({
+    await withPyodideSdk({
       workspace: projectRoot,
       fn: async () => {
-        const t = await MicropythonTool.init()
+        const t = await PyodideTool.init()
         const lineCount = Truncate.MAX_LINES + 100
         const result = await t.execute(
           {

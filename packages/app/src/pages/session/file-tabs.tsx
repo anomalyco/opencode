@@ -503,10 +503,7 @@ export function FileTabContent(props: { tab: string }) {
   )
 
   return (
-    <Tabs.Content
-      value={props.tab}
-      class="relative mt-3 flex min-h-0 flex-1 flex-col overflow-hidden"
-    >
+    <Tabs.Content value={props.tab} class="relative mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
       <Switch>
         <Match when={spreadsheet() && state()?.loaded && Boolean(path())}>
           <div class="flex min-h-0 flex-1 flex-col px-6 py-4">
@@ -514,8 +511,8 @@ export function FileTabContent(props: { tab: string }) {
               when={spreadsheetUnit()}
               fallback={
                 <div class="text-text-weak text-sm">
-                  Spreadsheet has no Univer unit (missing unitId). Open the file from the workspace tree after USIP sync,
-                  or check veritly-usip /v1/files/content for this path.
+                  Spreadsheet has no Univer unit (missing unitId). Open the file from the workspace tree after USIP
+                  sync, or check veritly-usip /v1/files/content for this path.
                 </div>
               }
             >
@@ -549,9 +546,7 @@ export function FileTabContent(props: { tab: string }) {
               <Match when={state()?.loading}>
                 <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
               </Match>
-              <Match when={state()?.error}>
-                {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
-              </Match>
+              <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
             </Switch>
           </ScrollView>
         </Match>

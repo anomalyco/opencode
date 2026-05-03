@@ -10,7 +10,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
   sessionID: SessionID.make("ses_test"),
-  messageID: MessageID.make(""),
+  messageID: MessageID.ascending(),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -94,10 +94,13 @@ Use this skill.
           const dir = path.join(tmp.path, ".opencode", "skill", "tool-skill")
           const file = path.resolve(dir, "scripts", "demo.txt")
 
-          expect(requests.length).toBe(1)
-          expect(requests[0].permission).toBe("skill")
-          expect(requests[0].patterns).toContain("tool-skill")
-          expect(requests[0].always).toContain("tool-skill")
+          expect(requests).toEqual([
+            expect.objectContaining({
+              permission: "skill",
+              patterns: expect.arrayContaining(["tool-skill"]),
+              always: expect.arrayContaining(["tool-skill"]),
+            }),
+          ])
 
           expect(result.metadata.dir).toBe(dir)
           expect(result.output).toContain(`<skill_content name="tool-skill">`)

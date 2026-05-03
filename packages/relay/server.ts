@@ -1,6 +1,6 @@
 import { ServerWebSocket } from "bun"
 
-const port = Number(process.env.PORT ?? process.env.UNIVER_SDK_PORT ?? "8080")
+const port = Number(process.env.PORT ?? process.env.UNIVER_SDK_PORT ?? "18766")
 const wsDebug = process.env.VERITLY_WS_DEBUG === "1"
 
 const MESSAGING_SYSTEM = "veritly_relay"

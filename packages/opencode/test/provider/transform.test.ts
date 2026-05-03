@@ -730,7 +730,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           {
             type: "tool-call",
             toolCallId: "test",
-            toolName: "micropython",
+            toolName: "pyodide",
             input: { code: "print('hello')" },
           },
         ],
@@ -781,7 +781,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       {
         type: "tool-call",
         toolCallId: "test",
-        toolName: "micropython",
+        toolName: "pyodide",
         input: { code: "print('hello')" },
       },
     ])
@@ -1058,7 +1058,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
         role: "assistant",
         content: [
           { type: "text", text: "" },
-          { type: "tool-call", toolCallId: "123", toolName: "micropython", input: { code: "print(1)" } },
+          { type: "tool-call", toolCallId: "123", toolName: "pyodide", input: { code: "print(1)" } },
         ],
       },
     ] as any[]
@@ -1070,7 +1070,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[0]).toEqual({
       type: "tool-call",
       toolCallId: "123",
-      toolName: "micropython",
+      toolName: "pyodide",
       input: { code: "print(1)" },
     })
   })

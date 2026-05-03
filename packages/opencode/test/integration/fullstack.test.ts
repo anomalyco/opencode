@@ -10,330 +10,391 @@ const TEST_TIMEOUT = 300000 // 5 minutes
 describe.skipIf(process.env.OPENCODE_FULL_STACK_TEST !== "1")(
   "Full Stack Integration (Postgres + Server + Client SDK)",
   () => {
-  // Cleanup after all tests
-  afterAll(async () => {
-    await cleanupFullStack()
-  })
-
-  test("health check returns ok", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const health = await client.health()
-      expect(health.ok).toBe(true)
+    // Cleanup after all tests
+    afterAll(async () => {
+      await cleanupFullStack()
     })
-  })
 
-  test("server is available", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const available = await client.isAvailable()
-      expect(available).toBe(true)
-    })
-  })
+    test(
+      "health check returns ok",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const health = await client.health()
+          expect(health.ok).toBe(true)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-  test("creates a project", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const project = await client.createProject({
-        name: "Integration Test Project",
-      })
+    test(
+      "server is available",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const available = await client.isAvailable()
+          expect(available).toBe(true)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      expect(project.id).toBeDefined()
-      expect(project.name).toBe("Integration Test Project")
-      expect(project.time.created).toBeGreaterThan(0)
-      expect(project.time.updated).toBeGreaterThan(0)
-    })
-  })
+    test(
+      "creates a project",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const project = await client.createProject({
+            name: "Integration Test Project",
+          })
 
-  test("lists projects after creation", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      // Create a project
-      await client.createProject({ name: "List Test Project" })
+          expect(project.id).toBeDefined()
+          expect(project.name).toBe("Integration Test Project")
+          expect(project.time.created).toBeGreaterThan(0)
+          expect(project.time.updated).toBeGreaterThan(0)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      // List projects
-      const projects = await client.listProjects()
+    test(
+      "lists projects after creation",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          // Create a project
+          await client.createProject({ name: "List Test Project" })
 
-      expect(projects.length).toBeGreaterThanOrEqual(1)
-      expect(projects.some(p => p.name === "List Test Project")).toBe(true)
-    })
-  })
+          // List projects
+          const projects = await client.listProjects()
 
-  test("gets project by ID", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      // Create a project
-      const created = await client.createProject({ name: "Get Test Project" })
+          expect(projects.length).toBeGreaterThanOrEqual(1)
+          expect(projects.some((p) => p.name === "List Test Project")).toBe(true)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      // Get by ID
-      const fetched = await client.getProject(created.id)
+    test(
+      "gets project by ID",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          // Create a project
+          const created = await client.createProject({ name: "Get Test Project" })
 
-      expect(fetched.id).toBe(created.id)
-      expect(fetched.name).toBe(created.name)
-    })
-  })
+          // Get by ID
+          const fetched = await client.getProject(created.id)
 
-  test("creates a session for a project", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      // Create project first
-      const project = await client.createProject({
-        name: "Session Test Project",
-      })
+          expect(fetched.id).toBe(created.id)
+          expect(fetched.name).toBe(created.name)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      // Create session
-      const session = await client.createSession({
-        projectId: project.id,
-        title: "Test Session",
-      })
+    test(
+      "creates a session for a project",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          // Create project first
+          const project = await client.createProject({
+            name: "Session Test Project",
+          })
 
-      expect(session.id).toBeDefined()
-      expect(session.projectID).toBe(project.id)
-      expect(session.title).toBe("Test Session")
-      expect(session.slug).toBeDefined()
-      // Sessions are stateless - no directory field anymore
-      expect("directory" in session).toBe(false)
-      expect(session.time.created).toBeGreaterThan(0)
-    })
-  })
+          // Create session
+          const session = await client.createSession({
+            projectId: project.id,
+            title: "Test Session",
+          })
 
-  test("lists sessions for a project", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      // Create project and session
-      const project = await client.createProject({
-        name: "List Sessions Project",
-      })
+          expect(session.id).toBeDefined()
+          expect(session.projectID).toBe(project.id)
+          expect(session.title).toBe("Test Session")
+          expect(session.slug).toBeDefined()
+          // Sessions are stateless - no directory field anymore
+          expect("directory" in session).toBe(false)
+          expect(session.time.created).toBeGreaterThan(0)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      await client.createSession({
-        projectId: project.id,
-        title: "Session 1",
-      })
+    test(
+      "lists sessions for a project",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          // Create project and session
+          const project = await client.createProject({
+            name: "List Sessions Project",
+          })
 
-      await client.createSession({
-        projectId: project.id,
-        title: "Session 2",
-      })
+          await client.createSession({
+            projectId: project.id,
+            title: "Session 1",
+          })
 
-      // List sessions
-      const sessions = await client.listSessions(project.id)
+          await client.createSession({
+            projectId: project.id,
+            title: "Session 2",
+          })
 
-      expect(sessions.length).toBeGreaterThanOrEqual(2)
-      expect(sessions.some(s => s.title === "Session 1")).toBe(true)
-      expect(sessions.some(s => s.title === "Session 2")).toBe(true)
-    })
-  })
+          // List sessions
+          const sessions = await client.listSessions(project.id)
 
-  test("gets session by ID", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const project = await client.createProject({
-        name: "Get Session Project",
-      })
+          expect(sessions.length).toBeGreaterThanOrEqual(2)
+          expect(sessions.some((s) => s.title === "Session 1")).toBe(true)
+          expect(sessions.some((s) => s.title === "Session 2")).toBe(true)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      const created = await client.createSession({
-        projectId: project.id,
-        title: "Session to Get",
-      })
+    test(
+      "gets session by ID",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const project = await client.createProject({
+            name: "Get Session Project",
+          })
 
-      const fetched = await client.getSession(created.id)
+          const created = await client.createSession({
+            projectId: project.id,
+            title: "Session to Get",
+          })
 
-      expect(fetched.id).toBe(created.id)
-      expect(fetched.title).toBe(created.title)
-      expect(fetched.projectID).toBe(project.id)
-    })
-  })
+          const fetched = await client.getSession(created.id)
 
-  test("creates child session (fork)", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const project = await client.createProject({
-        name: "Fork Test Project",
-      })
+          expect(fetched.id).toBe(created.id)
+          expect(fetched.title).toBe(created.title)
+          expect(fetched.projectID).toBe(project.id)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      const parent = await client.createSession({
-        projectId: project.id,
-        title: "Parent Session",
-      })
+    test(
+      "creates child session (fork)",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const project = await client.createProject({
+            name: "Fork Test Project",
+          })
 
-      const child = await client.createSession({
-        projectId: project.id,
-        title: "Child Session",
-        parentId: parent.id,
-      })
+          const parent = await client.createSession({
+            projectId: project.id,
+            title: "Parent Session",
+          })
 
-      expect(child.parentID).toBe(parent.id)
-      expect(child.projectID).toBe(project.id)
-    })
-  })
+          const child = await client.createSession({
+            projectId: project.id,
+            title: "Child Session",
+            parentId: parent.id,
+          })
 
-  test("sends a message in a session", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const project = await client.createProject({
-        name: "Message Test Project",
-      })
+          expect(child.parentID).toBe(parent.id)
+          expect(child.projectID).toBe(project.id)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      const session = await client.createSession({
-        projectId: project.id,
-        title: "Message Session",
-      })
+    test(
+      "sends a message in a session",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const project = await client.createProject({
+            name: "Message Test Project",
+          })
 
-      // Send a message
-      const message = await client.sendMessage({
-        sessionId: session.id,
-        content: "Hello, this is a test message from the integration test!",
-      })
+          const session = await client.createSession({
+            projectId: project.id,
+            title: "Message Session",
+          })
 
-      expect(message.info.id).toBeDefined()
-      expect(message.info.sessionID).toBe(session.id)
-      expect(message.info.role).toBe("user")
-      expect(message.info.content).toBe("Hello, this is a test message from the integration test!")
-    })
-  })
+          // Send a message
+          const message = await client.sendMessage({
+            sessionId: session.id,
+            content: "Hello, this is a test message from the integration test!",
+          })
 
-  test("lists messages in a session", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const project = await client.createProject({
-        name: "List Messages Project",
-      })
+          expect(message.info.id).toBeDefined()
+          expect(message.info.sessionID).toBe(session.id)
+          expect(message.info.role).toBe("user")
+          expect(message.info.content).toBe("Hello, this is a test message from the integration test!")
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      const session = await client.createSession({
-        projectId: project.id,
-        title: "List Messages Session",
-      })
+    test(
+      "lists messages in a session",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const project = await client.createProject({
+            name: "List Messages Project",
+          })
 
-      // Send multiple messages
-      await client.sendMessage({
-        sessionId: session.id,
-        content: "Message 1",
-      })
+          const session = await client.createSession({
+            projectId: project.id,
+            title: "List Messages Session",
+          })
 
-      await client.sendMessage({
-        sessionId: session.id,
-        content: "Message 2",
-      })
+          // Send multiple messages
+          await client.sendMessage({
+            sessionId: session.id,
+            content: "Message 1",
+          })
 
-      // List messages
-      const messages = await client.listMessages(session.id)
+          await client.sendMessage({
+            sessionId: session.id,
+            content: "Message 2",
+          })
 
-      expect(messages.length).toBeGreaterThanOrEqual(2)
-      expect(messages.some(m => m.info.content === "Message 1")).toBe(true)
-      expect(messages.some(m => m.info.content === "Message 2")).toBe(true)
-    })
-  })
+          // List messages
+          const messages = await client.listMessages(session.id)
 
-  test("sends 'hi' to Big Pickle (AI)", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const project = await client.createProject({
-        name: "Big Pickle Test Project",
-      })
+          expect(messages.length).toBeGreaterThanOrEqual(2)
+          expect(messages.some((m) => m.info.content === "Message 1")).toBe(true)
+          expect(messages.some((m) => m.info.content === "Message 2")).toBe(true)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      const session = await client.createSession({
-        projectId: project.id,
-        title: "Big Pickle Session",
-      })
+    test(
+      "sends 'hi' to Big Pickle (AI)",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const project = await client.createProject({
+            name: "Big Pickle Test Project",
+          })
 
-      // Send greeting to Big Pickle
-      const message = await client.sendMessage({
-        sessionId: session.id,
-        content: "Hi Big Pickle! This is an automated integration test saying hello!",
-      })
+          const session = await client.createSession({
+            projectId: project.id,
+            title: "Big Pickle Session",
+          })
 
-      expect(message.info.id).toBeDefined()
-      expect(message.info.content).toContain("Big Pickle")
-      
-      // The message should be stored
-      const messages = await client.listMessages(session.id)
-      expect(messages.some(m => m.info.content.includes("Big Pickle"))).toBe(true)
-    })
-  })
+          // Send greeting to Big Pickle
+          const message = await client.sendMessage({
+            sessionId: session.id,
+            content: "Hi Big Pickle! This is an automated integration test saying hello!",
+          })
 
-  test("deletes a session", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const project = await client.createProject({
-        name: "Delete Session Project",
-      })
+          expect(message.info.id).toBeDefined()
+          expect(message.info.content).toContain("Big Pickle")
 
-      const session = await client.createSession({
-        projectId: project.id,
-        title: "Session to Delete",
-      })
+          // The message should be stored
+          const messages = await client.listMessages(session.id)
+          expect(messages.some((m) => m.info.content.includes("Big Pickle"))).toBe(true)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      // Delete the session
-      const result = await client.deleteSession(session.id)
-      expect(result).toBe(true)
+    test(
+      "deletes a session",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const project = await client.createProject({
+            name: "Delete Session Project",
+          })
 
-      // Session should no longer be listable
-      const sessions = await client.listSessions(project.id)
-      expect(sessions.some(s => s.id === session.id)).toBe(false)
-    })
-  })
+          const session = await client.createSession({
+            projectId: project.id,
+            title: "Session to Delete",
+          })
 
-  test("full workflow: project → session → message → verify", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      // Step 1: Create project
-      const project = await client.createProject({
-        name: "Full Workflow Project",
-      })
-      expect(project.id).toBeDefined()
+          // Delete the session
+          const result = await client.deleteSession(session.id)
+          expect(result).toBe(true)
 
-      // Step 2: Create session
-      const session = await client.createSession({
-        projectId: project.id,
-        title: "Full Workflow Session",
-      })
-      expect(session.projectID).toBe(project.id)
+          // Session should no longer be listable
+          const sessions = await client.listSessions(project.id)
+          expect(sessions.some((s) => s.id === session.id)).toBe(false)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      // Step 3: Send messages
-      const msg1 = await client.sendMessage({
-        sessionId: session.id,
-        content: "First message in full workflow test",
-      })
-      expect(msg1.info.sessionID).toBe(session.id)
+    test(
+      "full workflow: project → session → message → verify",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          // Step 1: Create project
+          const project = await client.createProject({
+            name: "Full Workflow Project",
+          })
+          expect(project.id).toBeDefined()
 
-      const msg2 = await client.sendMessage({
-        sessionId: session.id,
-        content: "Second message - hi from integration test!",
-      })
-      expect(msg2.info.sessionID).toBe(session.id)
+          // Step 2: Create session
+          const session = await client.createSession({
+            projectId: project.id,
+            title: "Full Workflow Session",
+          })
+          expect(session.projectID).toBe(project.id)
 
-      // Step 4: Verify messages are stored
-      const messages = await client.listMessages(session.id)
-      expect(messages.length).toBeGreaterThanOrEqual(2)
-      
-      // Step 5: Verify session is in list
-      const sessions = await client.listSessions(project.id)
-      expect(sessions.some(s => s.id === session.id)).toBe(true)
+          // Step 3: Send messages
+          const msg1 = await client.sendMessage({
+            sessionId: session.id,
+            content: "First message in full workflow test",
+          })
+          expect(msg1.info.sessionID).toBe(session.id)
 
-      // Step 6: Verify project is in list
-      const projects = await client.listProjects()
-      expect(projects.some(p => p.id === project.id)).toBe(true)
+          const msg2 = await client.sendMessage({
+            sessionId: session.id,
+            content: "Second message - hi from integration test!",
+          })
+          expect(msg2.info.sessionID).toBe(session.id)
 
-      log.info("Full workflow test completed successfully!")
-    })
-  })
+          // Step 4: Verify messages are stored
+          const messages = await client.listMessages(session.id)
+          expect(messages.length).toBeGreaterThanOrEqual(2)
 
-  test("session isolation: sessions don't share data", { timeout: TEST_TIMEOUT }, async () => {
-    await withFullStack(async ({ client }) => {
-      const project = await client.createProject({
-        name: "Isolation Test Project",
-      })
+          // Step 5: Verify session is in list
+          const sessions = await client.listSessions(project.id)
+          expect(sessions.some((s) => s.id === session.id)).toBe(true)
 
-      // Create two sessions
-      const session1 = await client.createSession({
-        projectId: project.id,
-        title: "Session 1",
-      })
+          // Step 6: Verify project is in list
+          const projects = await client.listProjects()
+          expect(projects.some((p) => p.id === project.id)).toBe(true)
 
-      const session2 = await client.createSession({
-        projectId: project.id,
-        title: "Session 2",
-      })
+          Log.create({ service: "fullstack-test" }).info("Full workflow test completed successfully!")
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
 
-      // Send message in session 1
-      await client.sendMessage({
-        sessionId: session1.id,
-        content: "Message in session 1",
-      })
+    test(
+      "session isolation: sessions don't share data",
+      async () => {
+        await withFullStack(async ({ client }) => {
+          const project = await client.createProject({
+            name: "Isolation Test Project",
+          })
 
-      // Session 2 should not have session 1's messages
-      const session2Messages = await client.listMessages(session2.id)
-      expect(session2Messages.some(m => m.info.content === "Message in session 1")).toBe(false)
+          // Create two sessions
+          const session1 = await client.createSession({
+            projectId: project.id,
+            title: "Session 1",
+          })
 
-      // Session 1 should have its message
-      const session1Messages = await client.listMessages(session1.id)
-      expect(session1Messages.some(m => m.info.content === "Message in session 1")).toBe(true)
-    })
-  })
-})
+          const session2 = await client.createSession({
+            projectId: project.id,
+            title: "Session 2",
+          })
+
+          // Send message in session 1
+          await client.sendMessage({
+            sessionId: session1.id,
+            content: "Message in session 1",
+          })
+
+          // Session 2 should not have session 1's messages
+          const session2Messages = await client.listMessages(session2.id)
+          expect(session2Messages.some((m) => m.info.content === "Message in session 1")).toBe(false)
+
+          // Session 1 should have its message
+          const session1Messages = await client.listMessages(session1.id)
+          expect(session1Messages.some((m) => m.info.content === "Message in session 1")).toBe(true)
+        })
+      },
+      { timeout: TEST_TIMEOUT },
+    )
+  },
+)

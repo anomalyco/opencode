@@ -7,8 +7,8 @@ describe("instructionCheck", () => {
   beforeEach(() => {
     env = {
       UNIVER_SDK_WS: process.env["UNIVER_SDK_WS"],
-      VERITLY_EXECUTOR_URL: process.env["VERITLY_EXECUTOR_URL"],
       VITE_UNIVER_SDK_WS: process.env["VITE_UNIVER_SDK_WS"],
+      PUBLIC_BASE_URL: process.env["PUBLIC_BASE_URL"],
     }
   })
 
@@ -22,20 +22,20 @@ describe("instructionCheck", () => {
     }
   })
 
-  test("passes when hosted executor instructions are present", () => {
-    process.env["VERITLY_EXECUTOR_URL"] = "http://executor:7777"
+  test("passes when hosted browser-python instructions are present", () => {
+    process.env["PUBLIC_BASE_URL"] = "https://app.example.com"
     process.env["UNIVER_SDK_WS"] = "ws://relay:8080/ws"
 
     const result = instructionCheck()
 
     expect(result.ok).toBe(true)
-    expect(result.detail).toContain("executor/univer instructions present")
+    expect(result.detail).toContain("pyodide / univer instructions present")
   })
 
-  test("skips when hosted executor instructions are not needed", () => {
+  test("skips when hosted browser-python instructions are not needed", () => {
     delete process.env["UNIVER_SDK_WS"]
-    delete process.env["VERITLY_EXECUTOR_URL"]
     delete process.env["VITE_UNIVER_SDK_WS"]
+    delete process.env["PUBLIC_BASE_URL"]
 
     const result = instructionCheck()
 

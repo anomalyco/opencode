@@ -4,9 +4,7 @@ import { WORKOS_SESSION_COOKIE_NAME } from "@veritly/auth-shared"
  * Headers to authenticate server tests with a **real** sealed WorkOS session
  * (same value as the `wos-session` browser cookie, or `export WORKOS_SESSION_DATA=...` from staging test session).
  */
-export function workosSessionTestHeaders():
-  | { headers: { cookie: string } }
-  | { skip: true; reason: string } {
+export function workosSessionTestHeaders(): { headers: { cookie: string } } | { skip: true; reason: string } {
   const sealed = process.env["WORKOS_SESSION_DATA"]?.trim()
   if (!sealed) {
     return {

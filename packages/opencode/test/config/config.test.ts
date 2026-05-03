@@ -250,7 +250,7 @@ test("resolves env templates in account config with account token", async () => 
   const originalToken = Account.token
   const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
 
-  Account.active = mock(() => ({
+  Account.active = mock(async () => ({
     id: AccountID.make("account-1"),
     email: "user@example.com",
     url: "https://control.example.com",
@@ -734,10 +734,8 @@ test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", as
   }
 })
 
-// TODO: This test installs npm dependencies which requires filesystem access.
-// With stateless architecture, dependencies will be managed in executor containers.
-// Skip until testcontainer executor is available.
-test.skip("installs dependencies in writable OPENCODE_CONFIG_DIR (needs testcontainer)", async () => {
+// Skipped: runs a real dependency install into OPENCODE_CONFIG_DIR (slow / CI-sensitive).
+test.skip("installs dependencies in writable OPENCODE_CONFIG_DIR (slow install)", async () => {
   await using tmp = await tmpdir<string>({
     init: async (dir) => {
       const cfg = path.join(dir, "configdir")
@@ -1058,7 +1056,7 @@ test("migrates legacy tools config to permissions - allow", async () => {
           agent: {
             test: {
               tools: {
-                micropython: true,
+                pyodide: true,
                 read: true,
               },
             },
@@ -1072,7 +1070,7 @@ test("migrates legacy tools config to permissions - allow", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
-        micropython: "allow",
+        pyodide: "allow",
         read: "allow",
       })
     },
@@ -1089,7 +1087,7 @@ test("migrates legacy tools config to permissions - deny", async () => {
           agent: {
             test: {
               tools: {
-                micropython: false,
+                pyodide: false,
                 webfetch: false,
               },
             },
@@ -1103,7 +1101,7 @@ test("migrates legacy tools config to permissions - deny", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
-        micropython: "deny",
+        pyodide: "deny",
         webfetch: "deny",
       })
     },
@@ -1314,7 +1312,7 @@ test("migrates mixed legacy tools config", async () => {
           agent: {
             test: {
               tools: {
-                micropython: true,
+                pyodide: true,
                 write: true,
                 read: false,
                 webfetch: true,
@@ -1330,7 +1328,7 @@ test("migrates mixed legacy tools config", async () => {
     fn: async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
-        micropython: "allow",
+        pyodide: "allow",
         edit: "allow",
         read: "deny",
         webfetch: "allow",
@@ -1352,7 +1350,7 @@ test("merges legacy tools with existing permission config", async () => {
                 glob: "allow",
               },
               tools: {
-                micropython: true,
+                pyodide: true,
               },
             },
           },
@@ -1366,7 +1364,7 @@ test("merges legacy tools with existing permission config", async () => {
       const config = await Config.get()
       expect(config.agent?.["test"]?.permission).toEqual({
         glob: "allow",
-        micropython: "allow",
+        pyodide: "allow",
       })
     },
   })

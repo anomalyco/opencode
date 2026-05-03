@@ -101,12 +101,6 @@ spec:
                   key: PUBLIC_BASE_URL
             - name: VERITLY_HEALTH_RELAY_URL
               value: "http://relay:8080/readyz"
-            # Default: ClusterIP Service (sessionAffinity on executor Service — see `03-executor.yaml`).
-            # Optional L7 stickiness by URL path: apply `03c-executor-sticky-ingress.yaml`, then set:
-            #   VERITLY_EXECUTOR_URL=http://ingress-nginx-controller.ingress-nginx.svc.cluster.local
-            #   VERITLY_EXECUTOR_HTTP_HOST=executor-sticky.internal
-            - name: VERITLY_EXECUTOR_URL
-              value: "http://executor:7777"
           livenessProbe:
             httpGet:
               path: /livez

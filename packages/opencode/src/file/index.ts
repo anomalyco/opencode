@@ -344,14 +344,14 @@ export namespace File {
     let fetching = false
 
     const isGlobalHome = Instance.workspace === Global.Path.home && Instance.project.id === "global"
-    
+
     // Virtual projects (e.g., /projects/<id>) don't have a local filesystem
     const isVirtualProject = Instance.workspace.startsWith("/projects/") && !isGlobalHome
 
     const fn = async (result: Entry) => {
       // Disable scanning if in root of file system
       if (Instance.workspace === path.parse(Instance.workspace).root) return
-      
+
       // Virtual projects have no local files - files come from executor
       if (isVirtualProject) {
         result.files = []
@@ -359,7 +359,7 @@ export namespace File {
         cache = result
         return
       }
-      
+
       fetching = true
 
       if (isGlobalHome) {

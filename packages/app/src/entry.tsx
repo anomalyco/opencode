@@ -12,9 +12,11 @@ import { handleNotificationClick } from "@/utils/notification-click"
 import { runtimeOpencodeServerUrl } from "@/lib/runtime-config"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
+import { installE2eDevPyodideHook } from "@/lib/e2e-dev-hooks"
 
 initPosthog()
 initBrowserOtel()
+installE2eDevPyodideHook()
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 

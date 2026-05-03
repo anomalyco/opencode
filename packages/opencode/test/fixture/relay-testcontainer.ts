@@ -1,15 +1,16 @@
 /**
  * Relay Testcontainer Fixture
- * 
+ *
  * Spawns the Veritly relay server in a container.
  * The relay WebSocket server connects backend (agents) to browser.
- * 
+ *
  * For testing, we simulate both sides:
  * - Agent: Uses RelaySDK to send commands
  * - Browser: Simulated WebSocket client that receives and responds
  */
 
-import { GenericContainer, StartedTestContainer, Wait } from "testcontainers"
+import path from "path"
+import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers"
 import { Log } from "../../src/util/log"
 import { Relay } from "../../src/relay/sdk"
 import type { RelayRequest, RelayResponse } from "../../src/relay/sdk"
@@ -39,8 +40,9 @@ export class SimulatedBrowser {
   private handlers = new Map<string, (params: unknown) => Promise<unknown>>()
 
   constructor(relayUrl: string) {
-    // Switch from agent URL to browser URL
-    this.relayUrl = relayUrl.replace("role=agent", "role=browser")
+    const u = new URL(relayUrl)
+    u.searchParams.set("role", "browser")
+    this.relayUrl = u.toString()
   }
 
   /**
@@ -122,12 +124,15 @@ export async function startRelayContainer(): Promise<RelayTestContext> {
   // Use Bun image and mount relay code
   const container = await new GenericContainer("oven/bun:1.1")
     .withExposedPorts(8080)
-    .withBindMounts([{
-      source: path.join(repoRoot, "packages/relay"),
-      target: "/relay",
-      bindMode: "ro",
-    }])
+    .withBindMounts([
+      {
+        source: path.join(repoRoot, "packages/relay"),
+        target: "/relay",
+        mode: "ro",
+      },
+    ])
     .withWorkingDir("/relay")
+    .withEnvironment({ PORT: "8080" })
     .withCommand(["bun", "run", "server.ts"])
     .withWaitStrategy(Wait.forHttp("/readyz", 8080))
     .withStartupTimeout(30000)
@@ -187,17 +192,14 @@ export async function cleanupAllRelayContainers(): Promise<void> {
 /**
  * Test helper
  */
-export async function withRelay<T>(
-  fn: (ctx: RelayTestContext, browser: SimulatedBrowser) => Promise<T>,
-): Promise<T> {
+export async function withRelay<T>(fn: (ctx: RelayTestContext, browser: SimulatedBrowser) => Promise<T>): Promise<T> {
   const ctx = await startRelayContainer()
   const browser = new SimulatedBrowser(ctx.relayUrl)
-  browser = new SimulatedBrowser(ctx.relayUrl)
   await browser.connect()
-  
+
   // Also connect agent
   await ctx.agent.connect()
-  
+
   try {
     return await fn(ctx, browser)
   } finally {

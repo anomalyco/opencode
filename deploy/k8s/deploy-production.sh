@@ -15,8 +15,8 @@ NC='\033[0m' # No Color
 REGISTRY="registry.digitalocean.com/veritly-registry"
 CLUSTER_ID="602c73dd-37fe-4c00-a23e-1aa027878fa2"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-REPOS=("relay" "opencode-api" "opencode-frontend" "executor")
-APPS=("relay" "opencode-api" "opencode-frontend" "executor")
+REPOS=("relay" "opencode-api" "opencode-frontend")
+APPS=("relay" "opencode-api" "opencode-frontend")
 
 clean_repo() {
     local repo="$1"
@@ -91,10 +91,6 @@ docker buildx inspect --bootstrap >/dev/null
 # Build relay
 echo "Building relay..."
 docker buildx build --platform linux/amd64 -f docker/Dockerfile.relay -t $REGISTRY/relay:latest --push .
-
-# Build executor (new one)
-echo "Building executor..."
-docker buildx build --platform linux/amd64 -f docker/Dockerfile.executor -t $REGISTRY/executor:latest --push .
 
 # Build opencode API
 echo "Building opencode-api..."

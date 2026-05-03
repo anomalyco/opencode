@@ -634,8 +634,6 @@ test("snapshot state isolation between projects", async () => {
   })
 })
 
-
-
 test("track with no changes returns same hash", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({

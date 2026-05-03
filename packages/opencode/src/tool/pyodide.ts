@@ -3,42 +3,52 @@ import { createHash } from "node:crypto"
 import { trace, SpanStatusCode } from "@opentelemetry/api"
 import { Tool } from "./tool"
 import path from "path"
-import DESCRIPTION from "./micropython.txt"
+import DESCRIPTION from "./pyodide.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import fs from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag.ts"
-import { ClientPython } from "@/session/client-python"
+import { PyodideBridge } from "@/session/pyodide-bridge"
 import { Truncate } from "./truncation"
+import type { MessageID, SessionID } from "@/session/schema"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
-export const log = Log.create({ service: "micropython-tool" })
+export const log = Log.create({ service: "pyodide-tool" })
 
 async function run(
-  sessionID: string,
-  messageID: string,
+  sessionID: SessionID,
+  messageID: MessageID,
   callID: string,
   code: string,
   timeout: number,
   workdir?: string,
 ) {
-  return ClientPython.run({ sessionID, messageID, callID, code, timeout, ...(workdir !== undefined ? { workdir } : {}) })
+  return PyodideBridge.run({
+    sessionID,
+    messageID,
+    callID,
+    code,
+    timeout,
+    ...(workdir !== undefined ? { workdir } : {}),
+  })
 }
 
-export const MicropythonTool = Tool.define("micropython", async () => ({
+export const PyodideTool = Tool.define("pyodide", async () => ({
   description: DESCRIPTION.replaceAll("${workspace}", Instance.workspace)
     .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
     .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
   parameters: z.object({
-    code: z.string().describe("MicroPython-style source; executed in the connected browser (Pyodide), not on the API host."),
+    code: z
+      .string()
+      .describe("Python source executed in the connected browser with Pyodide (WASM), not on the API host."),
     timeout: z.number().describe("Optional timeout in milliseconds").optional(),
     workdir: z
       .string()
       .describe(
-        `Directory relative to ${Instance.workspace} (permission path only). Browser runs have no server filesystem; this is ignored at runtime.`,
+        `Directory relative to ${Instance.workspace} (permission path only). The browser has no server filesystem; ignored at runtime.`,
       )
       .optional(),
     description: z
@@ -49,14 +59,14 @@ export const MicropythonTool = Tool.define("micropython", async () => ({
   }),
   async execute(params, ctx) {
     const tracer = trace.getTracer("veritly-session")
-    return tracer.startActiveSpan("micropython.execute", async (span) => {
+    return tracer.startActiveSpan("pyodide.execute", async (span) => {
       const t0 = Date.now()
       const hash = createHash("sha256").update(params.code).digest("hex").slice(0, 16)
-      span.setAttribute("veritly.tool.name", "micropython")
+      span.setAttribute("veritly.tool.name", "pyodide")
       span.setAttribute("veritly.tool.code_sha256_prefix", hash)
 
       if (!ctx.callID) {
-        throw new Error("micropython tool requires a tool call id (client execution handshake).")
+        throw new Error("pyodide tool requires a tool call id (browser handshake).")
       }
 
       try {
@@ -80,7 +90,7 @@ export const MicropythonTool = Tool.define("micropython", async () => ({
         }
 
         await ctx.ask({
-          permission: "micropython",
+          permission: "pyodide",
           patterns: [params.code],
           always: [params.code],
           metadata: {},
@@ -96,10 +106,10 @@ export const MicropythonTool = Tool.define("micropython", async () => ({
         let output = result.output
         const meta: string[] = []
         if (result.exitCode === 124) {
-          meta.push(`micropython tool terminated after exceeding timeout ${timeout} ms`)
+          meta.push(`pyodide tool terminated after exceeding timeout ${timeout} ms`)
         }
         if (meta.length) {
-          output += "\n\n<micropython_metadata>\n" + meta.join("\n") + "\n</micropython_metadata>"
+          output += "\n\n<pyodide_metadata>\n" + meta.join("\n") + "\n</pyodide_metadata>"
         }
 
         span.setAttribute("process.exit_code", result.exitCode)

@@ -124,5 +124,8 @@ export default defineConfig(({ mode }) => {
     build: {
       target: "esnext",
     },
+    optimizeDeps: {
+      exclude: ["pyodide"],
+    },
   }
 })

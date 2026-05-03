@@ -26,7 +26,9 @@ function diagLevelFromEnv(): number {
     ERROR: DiagLogLevel.ERROR,
     NONE: DiagLogLevel.NONE,
   }
-  return table[raw] ?? DiagLogLevel.WARN
+  const level = table[raw]
+  if (level !== undefined) return level
+  return DiagLogLevel.WARN
 }
 
 export type InitVeritlyTracerOptions = {

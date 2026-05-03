@@ -1,121 +1,121 @@
-import { createMemo, For, Match, Switch } from "solid-js";
-import { Button } from "@opencode-ai/ui/button";
-import { Logo } from "@opencode-ai/ui/logo";
-import { useNavigate } from "@solidjs/router";
-import { Icon } from "@opencode-ai/ui/icon";
-import { DateTime } from "luxon";
-import { useDialog } from "@opencode-ai/ui/context/dialog";
-import { DialogCreateProject } from "@/components/dialog-create-project";
-import { DialogSelectServer } from "@/components/dialog-select-server";
-import { useServer } from "@/context/server";
-import { useGlobalSync } from "@/context/global-sync";
-import { useLanguage } from "@/context/language";
-import { captureVeritly } from "@/lib/telemetry/posthog";
+import { createMemo, For, Match, Switch } from "solid-js"
+import { Button } from "@opencode-ai/ui/button"
+import { Logo } from "@opencode-ai/ui/logo"
+import { useNavigate } from "@solidjs/router"
+import { Icon } from "@opencode-ai/ui/icon"
+import { DateTime } from "luxon"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogCreateProject } from "@/components/dialog-create-project"
+import { DialogSelectServer } from "@/components/dialog-select-server"
+import { useServer } from "@/context/server"
+import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
+import { captureVeritly } from "@/lib/telemetry/posthog"
 
 export default function Home() {
-	const sync = useGlobalSync();
-	const dialog = useDialog();
-	const navigate = useNavigate();
-	const server = useServer();
-	const language = useLanguage();
-	const recent = createMemo(() => {
-		return sync.data.project
-			.slice()
-			.sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
-			.slice(0, 5);
-	});
+  const sync = useGlobalSync()
+  const dialog = useDialog()
+  const navigate = useNavigate()
+  const server = useServer()
+  const language = useLanguage()
+  const recent = createMemo(() => {
+    return sync.data.project
+      .slice()
+      .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+      .slice(0, 5)
+  })
 
-	const serverDotClass = createMemo(() => {
-		const healthy = server.healthy();
-		if (healthy === true) return "bg-icon-success-base";
-		if (healthy === false) return "bg-icon-critical-base";
-		return "bg-border-weak-base";
-	});
+  const serverDotClass = createMemo(() => {
+    const healthy = server.healthy()
+    if (healthy === true) return "bg-icon-success-base"
+    if (healthy === false) return "bg-icon-critical-base"
+    return "bg-border-weak-base"
+  })
 
-	function openProject(projectID: string, source: "recent" | "create_dialog" | "empty_state") {
-		captureVeritly("project_opened", { source });
-		server.projects.touch(projectID);
-		navigate(`/${projectID}`);
-	}
+  function openProject(projectID: string, source: "recent" | "create_dialog" | "empty_state") {
+    captureVeritly("project_opened", { source })
+    server.projects.touch(projectID)
+    navigate(`/${projectID}`)
+  }
 
-	function rememberProject(project: (typeof sync.data.project)[number]) {
-		const next = sync.data.project.slice();
-		const index = next.findIndex((item) => item.id === project.id);
-		if (index >= 0) next[index] = project;
-		else next.unshift(project);
-		sync.set("project", next);
-	}
+  function rememberProject(project: (typeof sync.data.project)[number]) {
+    const next = sync.data.project.slice()
+    const index = next.findIndex((item) => item.id === project.id)
+    if (index >= 0) next[index] = project
+    else next.unshift(project)
+    sync.set("project", next)
+  }
 
-	function chooseProject(from: "toolbar" | "empty_state") {
-		const source = from === "empty_state" ? "empty_state" : "create_dialog";
-		dialog.show(() => (
-			<DialogCreateProject
-				onCreate={(project) => {
-					rememberProject(project);
-					openProject(project.id, source);
-				}}
-			/>
-		));
-	}
+  function chooseProject(from: "toolbar" | "empty_state") {
+    const source = from === "empty_state" ? "empty_state" : "create_dialog"
+    dialog.show(() => (
+      <DialogCreateProject
+        onCreate={(project) => {
+          rememberProject(project)
+          openProject(project.id, source)
+        }}
+      />
+    ))
+  }
 
-	return (
-		<div class="mx-auto mt-55 w-full md:w-auto px-4">
-			<Logo class="md:w-xl opacity-12" />
-			<Button
-				size="large"
-				variant="ghost"
-				class="mt-4 mx-auto text-14-regular text-text-weak"
-				onClick={() => dialog.show(() => <DialogSelectServer />)}
-			>
-				<div
-					classList={{
-						"size-2 rounded-full": true,
-						[serverDotClass()]: true,
-					}}
-				/>
-				{server.name}
-			</Button>
-			<Switch>
-				<Match when={sync.data.project.length > 0}>
-					<div class="mt-20 w-full flex flex-col gap-4">
-						<div class="flex gap-2 items-center justify-between pl-3">
-							<div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
-							<Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={() => chooseProject("toolbar")}>
-								New project
-							</Button>
-						</div>
-						<ul class="flex flex-col gap-2">
-							<For each={recent()}>
-								{(project) => (
-									<Button
-										size="large"
-										variant="ghost"
-										class="text-14-mono text-left justify-between px-3"
-										onClick={() => openProject(project.id, "recent")}
-									>
-										{project.name ?? project.id}
-										<div class="text-14-regular text-text-weak">
-											{DateTime.fromMillis(Number(project.time.updated ?? project.time.created)).toRelative()}
-										</div>
-									</Button>
-								)}
-							</For>
-						</ul>
-					</div>
-				</Match>
-				<Match when={true}>
-					<div class="mt-30 mx-auto flex flex-col items-center gap-3">
-						<Icon name="folder-add-left" size="large" />
-						<div class="flex flex-col gap-1 items-center justify-center">
-							<div class="text-14-medium text-text-strong">No projects yet</div>
-							<div class="text-12-regular text-text-weak">Create your first project to start working.</div>
-						</div>
-						<Button class="px-3 mt-1" onClick={() => chooseProject("empty_state")}>
-							Create project
-						</Button>
-					</div>
-				</Match>
-			</Switch>
-		</div>
-	);
+  return (
+    <div class="mx-auto mt-55 w-full md:w-auto px-4">
+      <Logo class="md:w-xl opacity-12" />
+      <Button
+        size="large"
+        variant="ghost"
+        class="mt-4 mx-auto text-14-regular text-text-weak"
+        onClick={() => dialog.show(() => <DialogSelectServer />)}
+      >
+        <div
+          classList={{
+            "size-2 rounded-full": true,
+            [serverDotClass()]: true,
+          }}
+        />
+        {server.name}
+      </Button>
+      <Switch>
+        <Match when={sync.data.project.length > 0}>
+          <div class="mt-20 w-full flex flex-col gap-4">
+            <div class="flex gap-2 items-center justify-between pl-3">
+              <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
+              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={() => chooseProject("toolbar")}>
+                New project
+              </Button>
+            </div>
+            <ul class="flex flex-col gap-2">
+              <For each={recent()}>
+                {(project) => (
+                  <Button
+                    size="large"
+                    variant="ghost"
+                    class="text-14-mono text-left justify-between px-3"
+                    onClick={() => openProject(project.id, "recent")}
+                  >
+                    {project.name ?? project.id}
+                    <div class="text-14-regular text-text-weak">
+                      {DateTime.fromMillis(Number(project.time.updated ?? project.time.created)).toRelative()}
+                    </div>
+                  </Button>
+                )}
+              </For>
+            </ul>
+          </div>
+        </Match>
+        <Match when={true}>
+          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
+            <Icon name="folder-add-left" size="large" />
+            <div class="flex flex-col gap-1 items-center justify-center">
+              <div class="text-14-medium text-text-strong">No projects yet</div>
+              <div class="text-12-regular text-text-weak">Create your first project to start working.</div>
+            </div>
+            <Button class="px-3 mt-1" onClick={() => chooseProject("empty_state")}>
+              Create project
+            </Button>
+          </div>
+        </Match>
+      </Switch>
+    </div>
+  )
 }

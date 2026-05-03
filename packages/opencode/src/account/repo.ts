@@ -44,10 +44,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
 
       const err = (cause: unknown) =>
         new AccountRepoError({
-          message:
-            cause instanceof Error
-              ? `Database operation failed: ${cause.message}`
-              : "Database operation failed",
+          message: cause instanceof Error ? `Database operation failed: ${cause.message}` : "Database operation failed",
           cause,
         })
 
@@ -97,7 +94,8 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
 
       const remove = Effect.fn("AccountRepo.remove")((accountID: AccountID) =>
         tx(async (db) => {
-          await db.update(AccountStateTable)
+          await db
+            .update(AccountStateTable)
             .set({ active_account_id: null, active_org_id: null })
             .where(eq(AccountStateTable.active_account_id, accountID))
           await db.delete(AccountTable).where(eq(AccountTable.id, accountID))
@@ -112,9 +110,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
         query(async (db) => {
           const rows = await db.select().from(AccountTable).where(eq(AccountTable.id, accountID))
           return rows[0]
-        }).pipe(
-          Effect.map(Option.fromNullishOr),
-        ),
+        }).pipe(Effect.map(Option.fromNullishOr)),
       )
 
       const persistToken = Effect.fn("AccountRepo.persistToken")((input) =>
@@ -133,7 +129,8 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
       const persistAccount = Effect.fn("AccountRepo.persistAccount")((input) =>
         tx(async (db) => {
           const now = Date.now()
-          await db.insert(AccountTable)
+          await db
+            .insert(AccountTable)
             .values({
               id: input.id,
               email: input.email,

@@ -15,16 +15,20 @@ describe("Session.listGlobal", () => {
   test("lists sessions across projects with project metadata", async () => {
     await using first = await tmpdir({ git: true })
     await using second = await tmpdir({ git: true })
-    const firstProject = (await Project.createForDirectory({
-      workspace: first.path,
-      name: "global-first",
-      tenantUserId: "user_test",
-    })).project
-    const secondProject = (await Project.createForDirectory({
-      workspace: second.path,
-      name: "global-second",
-      tenantUserId: "user_test",
-    })).project
+    const firstProject = (
+      await Project.createForDirectory({
+        workspace: first.path,
+        name: "global-first",
+        tenantUserId: "user_test",
+      })
+    ).project
+    const secondProject = (
+      await Project.createForDirectory({
+        workspace: second.path,
+        name: "global-second",
+        tenantUserId: "user_test",
+      })
+    ).project
 
     const firstSession = await Instance.provide({
       project: firstProject,
@@ -53,11 +57,13 @@ describe("Session.listGlobal", () => {
 
   test("excludes archived sessions by default", async () => {
     await using tmp = await tmpdir({ git: true })
-    const project = (await Project.createForDirectory({
-      workspace: tmp.path,
-      name: "global-archived",
-      tenantUserId: "user_test",
-    })).project
+    const project = (
+      await Project.createForDirectory({
+        workspace: tmp.path,
+        name: "global-archived",
+        tenantUserId: "user_test",
+      })
+    ).project
 
     const archived = await Instance.provide({
       workspace: tmp.path,
@@ -84,11 +90,13 @@ describe("Session.listGlobal", () => {
 
   test("supports cursor pagination", async () => {
     await using tmp = await tmpdir({ git: true })
-    const project = (await Project.createForDirectory({
-      workspace: tmp.path,
-      name: "global-cursor",
-      tenantUserId: "user_test",
-    })).project
+    const project = (
+      await Project.createForDirectory({
+        workspace: tmp.path,
+        name: "global-cursor",
+        tenantUserId: "user_test",
+      })
+    ).project
 
     const first = await Instance.provide({
       workspace: tmp.path,
@@ -105,11 +113,11 @@ describe("Session.listGlobal", () => {
     // Sessions are stateless - no directory field anymore
     // We filter by project via the Instance context
     const allSessions = await list({ limit: 200 })
-    const projectSessions = allSessions.filter(s => s.projectID === project.id)
-    
+    const projectSessions = allSessions.filter((s) => s.projectID === project.id)
+
     expect(projectSessions.length).toBeGreaterThanOrEqual(2)
-    expect(projectSessions.map(s => s.id)).toContain(first.id)
-    expect(projectSessions.map(s => s.id)).toContain(second.id)
+    expect(projectSessions.map((s) => s.id)).toContain(first.id)
+    expect(projectSessions.map((s) => s.id)).toContain(second.id)
 
     // Cursor pagination still works without directory filter
     const page = await list({ limit: 1 })

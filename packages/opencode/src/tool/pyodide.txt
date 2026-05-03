@@ -1,0 +1,9 @@
+Runs **CPython-compatible** Python in the connected web app via **Pyodide** (WASM; first load downloads the runtime, on the order of ~20MB). Not executed on the API host.
+
+**Instruction — do not use `asyncio.run`:** Never call `asyncio.run(...)`, including `asyncio.run(main())`. Pyodide already has an asyncio loop; `asyncio.run` raises *RuntimeError: asyncio.run() cannot be called from a running event loop*. Put entry logic in **`async def main(): ...`** only; the tool **runs `main` for you** after your snippet (awaits it if it is async, calls it if it is sync).
+
+The real `veritly_univer_sdk` module is loaded into Pyodide (same source as `packages/univer-sdk/python/veritly_univer_sdk.py`). Under Pyodide it uses the browser `WebSocket` to the relay as `role=agent`; `UNIVER_SDK_WS` defaults from the app’s relay URL (`VITE_UNIVER_SDK_WS` / runtime config). Use `await sdk.connect()` then `get_active_document`, `get_range`, etc., when a spreadsheet tab is open and connected as `role=browser`.
+
+The tool waits for the browser to run Pyodide and POST results back; keep a session tab open.
+
+Use `workdir` only for permission checks against `${workspace}` when paths leave the project; the browser has no server filesystem.

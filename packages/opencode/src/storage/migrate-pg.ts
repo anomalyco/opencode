@@ -28,9 +28,7 @@ export async function runPostgresMigrations() {
   `)
 
   // Get already applied migrations
-  const { rows: applied } = await pool.query(
-    'SELECT hash FROM "__drizzle_migrations"'
-  )
+  const { rows: applied } = await pool.query('SELECT hash FROM "__drizzle_migrations"')
   const appliedHashes = new Set(applied.map((r: { hash: string }) => r.hash))
 
   for (const entry of entries) {
@@ -62,10 +60,7 @@ export async function runPostgresMigrations() {
     }
 
     // Record as applied
-    await pool.query(
-      'INSERT INTO "__drizzle_migrations" (hash) VALUES ($1)',
-      [entry]
-    )
+    await pool.query('INSERT INTO "__drizzle_migrations" (hash) VALUES ($1)', [entry])
   }
 
   console.log("PostgreSQL migrations completed successfully")

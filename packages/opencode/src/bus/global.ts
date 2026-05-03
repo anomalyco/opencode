@@ -1,10 +1,10 @@
-import { EventEmitter } from "events";
+import { EventEmitter } from "events"
 
 export const GlobalBus = new EventEmitter<{
-	event: [
-		{
-			projectID: string
-			payload: any
-		},
-	]
+  event: [
+    {
+      projectID: string
+      payload: any
+    },
+  ]
 }>()

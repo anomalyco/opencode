@@ -45,7 +45,6 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 
-
 const DEFAULT_CHUNK_TIMEOUT = 120_000
 
 export namespace Provider {

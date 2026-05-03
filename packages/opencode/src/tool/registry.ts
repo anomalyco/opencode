@@ -1,6 +1,6 @@
 import { PlanExitTool } from "./plan"
 import { QuestionTool } from "./question"
-import { MicropythonTool } from "./micropython"
+import { PyodideTool } from "./pyodide"
 import { EditTool } from "./edit"
 import { EmptyGlobTool, GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -103,7 +103,7 @@ export namespace ToolRegistry {
     return [
       InvalidTool,
       ...(question ? [QuestionTool] : []),
-      MicropythonTool,
+      PyodideTool,
       ...(hostedFsDisabled ? [EmptyGlobTool] : [ReadTool, GlobTool, GrepTool, EditTool, WriteTool]),
       TaskTool,
       WebFetchTool,

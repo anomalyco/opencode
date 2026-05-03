@@ -124,12 +124,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     if (rect.width < 1 || rect.height < 1) return false
 
     const { clientX, clientY } = event
-    return (
-      clientX >= rect.left &&
-      clientX < rect.right &&
-      clientY >= rect.top &&
-      clientY < rect.bottom
-    )
+    return clientX >= rect.left && clientX < rect.right && clientY >= rect.top && clientY < rect.bottom
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {

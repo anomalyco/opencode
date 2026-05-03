@@ -1,10 +1,10 @@
 /**
  * Veritly Relay SDK
- * 
+ *
  * Client for the WebSocket relay that forwards commands from backend (agents)
  * to browser for execution. The browser executes Univer SDK commands and
  * returns responses through the relay.
- * 
+ *
  * Architecture:
  *   Backend (Agent) -> Relay -> Browser -> executes -> Browser -> Relay -> Backend
  */
@@ -14,7 +14,7 @@ import { Log } from "../util/log"
 const log = Log.create({ service: "relay-sdk" })
 
 export interface RelayConfig {
-  relayUrl: string  // ws://host:port/relay/ws?role=agent
+  relayUrl: string // ws://host:port/relay/ws?role=agent
   timeout?: number
 }
 
@@ -48,11 +48,14 @@ export class RelayError extends Error {
 export class RelaySDK {
   private ws: WebSocket | null = null
   private config: RelayConfig
-  private pending = new Map<string, {
-    resolve: (value: RelayResponse) => void
-    reject: (error: Error) => void
-    timeout: ReturnType<typeof setTimeout>
-  }>()
+  private pending = new Map<
+    string,
+    {
+      resolve: (value: RelayResponse) => void
+      reject: (error: Error) => void
+      timeout: ReturnType<typeof setTimeout>
+    }
+  >()
   private reconnectAttempts = 0
   private maxReconnectAttempts = 3
   private connected = false
@@ -85,13 +88,13 @@ export class RelaySDK {
           log.info("Connected to relay")
           this.connected = true
           this.reconnectAttempts = 0
-          
+
           // Flush any queued messages
           while (this.messageQueue.length > 0) {
             const msg = this.messageQueue.shift()
             if (msg) this.send(msg)
           }
-          
+
           resolve()
         }
 
@@ -107,7 +110,7 @@ export class RelaySDK {
         this.ws.onclose = (event) => {
           log.info("Disconnected from relay", { code: event.code, reason: event.reason })
           this.connected = false
-          
+
           // Reject all pending requests
           for (const [id, pending] of this.pending.entries()) {
             pending.reject(new RelayError("Connection closed", "CONN_CLOSED"))
@@ -242,14 +245,23 @@ export class RelaySDK {
   /**
    * Get relay health status
    */
-  async health(): Promise<{ ok: boolean; browserConnected: boolean; agentCount: number }> {
-    const url = this.config.relayUrl.replace("ws://", "http://").replace("wss://", "https://").split("?")[0].replace("/relay/ws", "/relay/readyz")
-    
+  async health(): Promise<{
+    ok: boolean
+    browserConnected: boolean
+    agentCount: number
+    service?: string
+  }> {
+    const url = this.config.relayUrl
+      .replace("ws://", "http://")
+      .replace("wss://", "https://")
+      .split("?")[0]
+      .replace("/relay/ws", "/relay/readyz")
+
     const response = await fetch(url)
     if (!response.ok) {
       throw new RelayError("Health check failed", "HEALTH_FAILED")
     }
-    
+
     return response.json()
   }
 }

@@ -4,7 +4,7 @@ This file is the API contract for Python/AI clients talking to the local relay a
 
 ## Transport
 
-- WebSocket URL (agent): `ws://127.0.0.1:18766/ws?role=agent` (relay default port `18766`, overridable via `UNIVER_SDK_PORT` on the Bun relay).
+- WebSocket URL (agent): `ws://127.0.0.1:18766/ws?role=agent` (relay default port `18766` when `PORT` / `UNIVER_SDK_PORT` are unset; Docker/k8s images set `PORT=8080` explicitly).
 - Python `UniverSDK` defaults: no-arg constructor → `UNIVER_SDK_WS` env if set, else `ws://127.0.0.1:{UNIVER_SDK_PORT}/ws` with `UNIVER_SDK_PORT` defaulting to `18766`.
 - After each request, Python waits for one JSON response on the same socket. If the browser never answers (tab closed, sheet not loaded, main thread stuck), that wait can hang. `UNIVER_SDK_CALL_TIMEOUT_SEC` caps this wait (default `30`).
 - Request JSON: `{ "id": "<string>", "op": "<operation>", "params": { ... } }`
@@ -142,3 +142,20 @@ This file is the API contract for Python/AI clients talking to the local relay a
 - `id` (required): Univer command id passed to `univerAPI.executeCommand`.
 - `params` (optional): plain object; omit or `{}` when not needed.
 - result: command-specific (Univer).
+
+## Troubleshooting (local CPython “doesn’t work”)
+
+1. **Same Python you installed**  
+   Run scripts with the same interpreter you used for `install-local.sh`, e.g. `python3 myscript.py` after `python3 -m pip install -e ...`. A different `python` on PATH may not see `veritly_univer_sdk`.
+
+2. **Relay reachable on the URL Python uses**  
+   Defaults: relay listens on `PORT` or `UNIVER_SDK_PORT` or **18766**; Python defaults to `ws://127.0.0.1:18766/ws` unless `UNIVER_SDK_WS` is set. If you start the relay with only `PORT=8080`, set `export UNIVER_SDK_WS=ws://127.0.0.1:8080/ws` (or `UNIVER_SDK_PORT=8080`) before running Python.
+
+3. **Browser must be connected before RPCs**  
+   Open a Veritly session and the **spreadsheet** tab so the app opens `VITE_UNIVER_SDK_WS?role=browser`. Relay `/readyz` should show `"browserConnected": true`. If it is `false`, Python gets `browser is not connected` or hangs until timeout.
+
+4. **Smoke test**  
+   From repo root: `python3 packages/univer-sdk/python/smoke_relay.py` — checks `/readyz`, agent WebSocket, `get_active_document`, and a small `get_range`.
+
+5. **Timeouts**  
+   If the tab is open but busy, increase `UNIVER_SDK_CALL_TIMEOUT_SEC` (default `30`).

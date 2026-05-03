@@ -283,7 +283,7 @@ export namespace ACP {
                 const content: ToolCallContent[] = []
                 if (output) {
                   const hash = Hash.fast(output)
-                  if (part.tool === "micropython") {
+                  if (part.tool === "pyodide") {
                     if (this.streamSnapshots.get(part.callID) === hash) {
                       await this.connection
                         .sessionUpdate({
@@ -1079,7 +1079,7 @@ export namespace ACP {
     }
 
     private streamOutput(part: ToolPart) {
-      if (part.tool !== "micropython") return
+      if (part.tool !== "pyodide") return
       if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
       const output = part.state.metadata["output"]
       if (typeof output !== "string") return
@@ -1481,7 +1481,7 @@ export namespace ACP {
   function toToolKind(toolName: string): ToolKind {
     const tool = toolName.toLocaleLowerCase()
     switch (tool) {
-      case "micropython":
+      case "pyodide":
         return "execute"
       case "webfetch":
         return "fetch"
@@ -1516,7 +1516,7 @@ export namespace ACP {
       case "glob":
       case "grep":
         return input["path"] ? [{ path: input["path"] }] : []
-      case "micropython":
+      case "pyodide":
         return []
       case "list":
         return input["path"] ? [{ path: input["path"] }] : []

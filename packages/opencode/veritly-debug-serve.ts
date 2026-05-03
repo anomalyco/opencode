@@ -26,10 +26,6 @@ if (!process.env.WORKOS_REDIRECT_URI?.trim()) {
   process.env.WORKOS_REDIRECT_URI = `http://${host}:${port}/auth/callback`
 }
 
-if (!process.env.VERITLY_EXECUTOR_URL?.trim()) {
-  process.env.VERITLY_EXECUTOR_URL = "http://localhost:7777"
-}
-
 process.env.OPENCODE_PROJECTS_ROOT = path.join(repoRoot, ".veritly", "projects")
 
 log(`root=${opencodeRoot}`)

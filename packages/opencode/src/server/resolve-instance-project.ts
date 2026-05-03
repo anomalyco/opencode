@@ -22,9 +22,7 @@ export async function resolveInstanceProject(c: Context): Promise<R> {
     return c.json({ error: "DATABASE_URL must be postgresql:// for API project resolution" }, 503)
   }
 
-  const id =
-    c.req.query("project")?.trim() ||
-    c.req.header("x-opencode-project")?.trim()
+  const id = c.req.query("project")?.trim() || c.req.header("x-opencode-project")?.trim()
 
   if (id) {
     const info = await Project.get(ProjectID.make(id))

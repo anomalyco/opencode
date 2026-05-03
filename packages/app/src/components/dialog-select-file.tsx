@@ -35,12 +35,7 @@ type Entry = {
 type DialogSelectFileMode = "all" | "files"
 
 const ENTRY_LIMIT = 5
-const COMMON_COMMAND_IDS = [
-  "session.new",
-  "session.previous",
-  "session.next",
-  "review.toggle",
-] as const
+const COMMON_COMMAND_IDS = ["session.new", "session.previous", "session.next", "review.toggle"] as const
 
 const uniqueEntries = (items: Entry[]) => {
   const seen = new Set<string>()

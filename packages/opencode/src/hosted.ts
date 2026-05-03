@@ -1,4 +1,3 @@
-
 import { Server } from "./server/server"
 import { Log } from "./util/log"
 

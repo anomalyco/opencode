@@ -48,7 +48,11 @@ export async function uploadOfficeFile(
   return res.json()
 }
 
-export async function registerOfficeUnit(workspaceRelativePath: string, unitId: string, options?: { projectId?: string }) {
+export async function registerOfficeUnit(
+  workspaceRelativePath: string,
+  unitId: string,
+  options?: { projectId?: string },
+) {
   const base = filesApiBase()
   const res = await fetch(new URL("/v1/files/register-unit", `${base}/`), {
     method: "POST",
@@ -80,13 +84,15 @@ export async function readOfficeFile(workspaceRelativePath: string, options?: { 
     const text = await res.text().catch(() => "")
     throw new Error(`office read failed ${res.status}: ${text.slice(0, 300)}`)
   }
-  return res.json() as Promise<FileContent & {
-    type: "binary"
-    encoding: "base64"
-    mimeType?: string
-    unitId?: string
-    unitKind?: "sheet" | "doc" | "slide"
-  }>
+  return res.json() as Promise<
+    FileContent & {
+      type: "binary"
+      encoding: "base64"
+      mimeType?: string
+      unitId?: string
+      unitKind?: "sheet" | "doc" | "slide"
+    }
+  >
 }
 
 export async function resolveOfficeFile(workspaceRelativePath: string, options?: { projectId?: string }) {

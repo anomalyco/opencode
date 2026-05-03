@@ -18,6 +18,6 @@
       }
     ]
   },
-  "include": ["src/**/*.ts", "script/**/*.ts", "veritly-debug-serve.ts", "bunfig.toml", "package.json"],
-  "exclude": ["test", "node_modules", "dist", "ts-dist"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "script/**/*.ts", "veritly-debug-serve.ts", "bunfig.toml", "package.json"],
+  "exclude": ["node_modules", "dist", "ts-dist"]
 }

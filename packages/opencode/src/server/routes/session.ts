@@ -20,7 +20,7 @@ import { PermissionID } from "@/permission/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { assertHostedFilesystemEnabled } from "../hosted"
-import { ClientPython } from "@/session/client-python"
+import { PyodideBridge } from "@/session/pyodide-bridge"
 
 const log = Log.create({ service: "server" })
 
@@ -291,12 +291,12 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
-      "/:sessionID/client_python_result",
+      "/:sessionID/pyodide_result",
       describeRoute({
-        summary: "Report browser Python result",
+        summary: "Report browser Pyodide result",
         description:
-          "Completes a pending micropython tool call: the web app runs user code (Pyodide) and posts stdout and exit code here.",
-        operationId: "session.client_python_result",
+          "Completes a pending pyodide tool call: the web app runs Pyodide (WASM) and posts stdout and exit code here.",
+        operationId: "session.pyodide_result",
         responses: {
           200: {
             description: "Whether the result matched a pending tool call",
@@ -328,7 +328,7 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         await Session.get(sessionID)
         const body = c.req.valid("json")
-        const accepted = ClientPython.submit({
+        const accepted = PyodideBridge.submit({
           sessionID,
           callID: body.callID,
           ok: body.ok,

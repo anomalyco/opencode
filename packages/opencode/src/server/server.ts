@@ -90,421 +90,425 @@ export namespace Server {
 
   export const createApp = (opts: { cors?: string[] }): Hono => {
     const app = new Hono()
-    return (
-      app
-        .use("*", veritlyHonoOtelMiddleware("veritly-opencode"))
-        .onError((err, c) => {
-          log.error("failed", {
-            error: err,
-          })
-          if (err instanceof NamedError) {
-            let status: ContentfulStatusCode
-            if (err instanceof NotFoundError) status = 404
-            else if (err instanceof Provider.ModelNotFoundError) status = 400
-            else if (err.name.startsWith("Worktree")) status = 400
-            else status = 500
-            return c.json(err.toObject(), { status })
-          }
-          if (err instanceof HTTPException) return err.getResponse()
-          const message = err instanceof Error && err.stack ? err.stack : err.toString()
-          return c.json(new NamedError.Unknown({ message }).toObject(), {
-            status: 500,
-          })
+    return app
+      .use("*", veritlyHonoOtelMiddleware("veritly-opencode"))
+      .onError((err, c) => {
+        log.error("failed", {
+          error: err,
         })
-        .use(cors({
+        if (err instanceof NamedError) {
+          let status: ContentfulStatusCode
+          if (err instanceof NotFoundError) status = 404
+          else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else if (err.name.startsWith("Worktree")) status = 400
+          else status = 500
+          return c.json(err.toObject(), { status })
+        }
+        if (err instanceof HTTPException) return err.getResponse()
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
+        return c.json(new NamedError.Unknown({ message }).toObject(), {
+          status: 500,
+        })
+      })
+      .use(
+        cors({
           credentials: true,
           origin(input) {
             if (!input) return
             if (input.startsWith("http://localhost:")) return input
             if (input.startsWith("http://127.0.0.1:")) return input
-            if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
+            if (
+              input === "tauri://localhost" ||
+              input === "http://tauri.localhost" ||
+              input === "https://tauri.localhost"
+            )
               return input
             if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
             if (/^https:\/\/([a-z0-9-]+\.)*veritly\.co\.uk$/.test(input)) return input
             if (opts?.cors?.includes(input)) return input
             return
           },
-        }))
-        .get("/livez", (c) => c.text("ok"))
-        .get("/readyz", async (c) => {
-          const report = await apiHealthReportSimple()
-          return c.json(report, report.ok ? 200 : 503)
-        })
-        .get("/debug", (c) => c.text("debug ok"))
-        .use(async (c, next) => {
-          if (c.req.method === "OPTIONS") return next()
-          if (isPublicHealthPath(c.req.path)) return next()
-          if (
-            c.req.path.startsWith("/auth/login") ||
-            c.req.path.startsWith("/auth/callback") ||
-            c.req.path.startsWith("/auth/logout") ||
-            c.req.path.startsWith("/auth/session")
-          )
-            return next()
-
-          const workosConfigured = isOpencodeWorkosEnabled()
-          if (!workosConfigured) {
-            const password = Flag.OPENCODE_SERVER_PASSWORD
-            if (!password) return next()
-            return next()
-          }
-          if (process.env["OPENCODE_E2E_USER_ID"]) return next()
-
-          const sessionData = getCookie(c, WORKOS_SESSION_COOKIE_NAME)
-          if (!sessionData) {
-            return c.json({ error: "Unauthorized" }, 401)
-          }
-
-          try {
-            const cookiePassword = requireCookiePassword(process.env["COOKIE_PASSWORD"])
-            const apiKey = process.env["WORKOS_API_KEY"]
-            const clientId = process.env["WORKOS_CLIENT_ID"]
-
-            if (!apiKey || !clientId) {
-              return c.json({ error: "WorkOS not configured" }, 500)
-            }
-
-            const workos = createWorkOSClient({ apiKey, clientId })
-            const result = await validateWorkosSession({ workos, sessionData, cookiePassword })
-
-            if (!result.ok) {
-              return c.json({ error: "Invalid session" }, 401)
-            }
-
-            // If session was refreshed, update the cookie with new session data
-            if (result.refreshedSessionData) {
-              setCookie(c, WORKOS_SESSION_COOKIE_NAME, result.refreshedSessionData, getCookieOptions())
-            }
-          } catch {
-            return c.json({ error: "Authentication failed" }, 401)
-          }
-
+        }),
+      )
+      .get("/livez", (c) => c.text("ok"))
+      .get("/readyz", async (c) => {
+        const report = await apiHealthReportSimple()
+        return c.json(report, report.ok ? 200 : 503)
+      })
+      .get("/debug", (c) => c.text("debug ok"))
+      .use(async (c, next) => {
+        if (c.req.method === "OPTIONS") return next()
+        if (isPublicHealthPath(c.req.path)) return next()
+        if (
+          c.req.path.startsWith("/auth/login") ||
+          c.req.path.startsWith("/auth/callback") ||
+          c.req.path.startsWith("/auth/logout") ||
+          c.req.path.startsWith("/auth/session")
+        )
           return next()
-        })
-        .use(async (c, next) => {
-          const skipLogging = c.req.path === "/log"
-          if (!skipLogging) {
-            log.info("request", {
-              method: c.req.method,
-              path: c.req.path,
-            })
+
+        const workosConfigured = isOpencodeWorkosEnabled()
+        if (!workosConfigured) {
+          const password = Flag.OPENCODE_SERVER_PASSWORD
+          if (!password) return next()
+          return next()
+        }
+        if (process.env["OPENCODE_E2E_USER_ID"]) return next()
+
+        const sessionData = getCookie(c, WORKOS_SESSION_COOKIE_NAME)
+        if (!sessionData) {
+          return c.json({ error: "Unauthorized" }, 401)
+        }
+
+        try {
+          const cookiePassword = requireCookiePassword(process.env["COOKIE_PASSWORD"])
+          const apiKey = process.env["WORKOS_API_KEY"]
+          const clientId = process.env["WORKOS_CLIENT_ID"]
+
+          if (!apiKey || !clientId) {
+            return c.json({ error: "WorkOS not configured" }, 500)
           }
-          const timer = log.time("request", {
+
+          const workos = createWorkOSClient({ apiKey, clientId })
+          const result = await validateWorkosSession({ workos, sessionData, cookiePassword })
+
+          if (!result.ok) {
+            return c.json({ error: "Invalid session" }, 401)
+          }
+
+          // If session was refreshed, update the cookie with new session data
+          if (result.refreshedSessionData) {
+            setCookie(c, WORKOS_SESSION_COOKIE_NAME, result.refreshedSessionData, getCookieOptions())
+          }
+        } catch {
+          return c.json({ error: "Authentication failed" }, 401)
+        }
+
+        return next()
+      })
+      .use(async (c, next) => {
+        const skipLogging = c.req.path === "/log"
+        if (!skipLogging) {
+          log.info("request", {
             method: c.req.method,
             path: c.req.path,
           })
-          await next()
-          if (!skipLogging) {
-            timer.stop()
+        }
+        const timer = log.time("request", {
+          method: c.req.method,
+          path: c.req.path,
+        })
+        await next()
+        if (!skipLogging) {
+          timer.stop()
+        }
+      })
+      .route("/global", GlobalRoutes())
+      .route("/auth", AuthRoutes)
+      .put(
+        "/auth/:providerID",
+        describeRoute({
+          summary: "Set auth credentials",
+          description: "Set authentication credentials",
+          operationId: "auth.set",
+          responses: {
+            200: {
+              description: "Successfully set authentication credentials",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            providerID: z.string(),
+          }),
+        ),
+        validator("json", Auth.Info),
+        async (c) => {
+          const providerID = c.req.valid("param").providerID
+          const info = c.req.valid("json")
+          await Auth.set(providerID, info)
+          return c.json(true)
+        },
+      )
+      .delete(
+        "/auth/:providerID",
+        describeRoute({
+          summary: "Remove auth credentials",
+          description: "Remove authentication credentials",
+          operationId: "auth.remove",
+          responses: {
+            200: {
+              description: "Successfully removed authentication credentials",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            providerID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const providerID = c.req.valid("param").providerID
+          await Auth.remove(providerID)
+          return c.json(true)
+        },
+      )
+      .use(async (c, next) => {
+        if (c.req.path === "/log") return next()
+        const resolved = await resolveInstanceProject(c)
+        if (resolved instanceof Response) return resolved
+        const project = resolved
+        return Instance.provide({
+          project,
+          init: InstanceBootstrap,
+          async fn() {
+            return next()
+          },
+        })
+      })
+      .get(
+        "/doc",
+        openAPIRouteHandler(app, {
+          documentation: {
+            info: {
+              title: "opencode",
+              version: "0.0.3",
+              description: "opencode api",
+            },
+            openapi: "3.1.1",
+          },
+        }),
+      )
+      .use(
+        validator(
+          "query",
+          z.object({
+            project: z.string().optional(),
+          }),
+        ),
+      )
+      .route("/project", ProjectRoutes())
+      .route("/config", ConfigRoutes())
+      .route("/experimental", ExperimentalRoutes())
+      .route("/session", SessionRoutes())
+      .route("/permission", PermissionRoutes())
+      .route("/question", QuestionRoutes())
+      .route("/provider", ProviderRoutes())
+      .route("/mcp", McpRoutes())
+      .post(
+        "/instance/dispose",
+        describeRoute({
+          summary: "Dispose instance",
+          description: "Clean up and dispose the current OpenCode instance, releasing all resources.",
+          operationId: "instance.dispose",
+          responses: {
+            200: {
+              description: "Instance disposed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await Instance.dispose()
+          return c.json(true)
+        },
+      )
+      .get(
+        "/command",
+        describeRoute({
+          summary: "List commands",
+          description: "Get a list of all available commands in the OpenCode system.",
+          operationId: "command.list",
+          responses: {
+            200: {
+              description: "List of commands",
+              content: {
+                "application/json": {
+                  schema: resolver(Command.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const commands = await Command.list()
+          return c.json(commands)
+        },
+      )
+      .post(
+        "/log",
+        describeRoute({
+          summary: "Write log",
+          description: "Write a log entry to the server logs with specified level and metadata.",
+          operationId: "app.log",
+          responses: {
+            200: {
+              description: "Log entry written successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            service: z.string().meta({ description: "Service name for the log entry" }),
+            level: z.enum(["debug", "info", "error", "warn"]).meta({ description: "Log level" }),
+            message: z.string().meta({ description: "Log message" }),
+            extra: z
+              .record(z.string(), z.any())
+              .optional()
+              .meta({ description: "Additional metadata for the log entry" }),
+          }),
+        ),
+        async (c) => {
+          const { service, level, message, extra } = c.req.valid("json")
+          const logger = Log.create({ service })
+
+          switch (level) {
+            case "debug":
+              logger.debug(message, extra)
+              break
+            case "info":
+              logger.info(message, extra)
+              break
+            case "error":
+              logger.error(message, extra)
+              break
+            case "warn":
+              logger.warn(message, extra)
+              break
           }
-        })
-        .route("/global", GlobalRoutes())
-        .route("/auth", AuthRoutes)
-        .put(
-          "/auth/:providerID",
-          describeRoute({
-            summary: "Set auth credentials",
-            description: "Set authentication credentials",
-            operationId: "auth.set",
-            responses: {
-              200: {
-                description: "Successfully set authentication credentials",
-                content: {
-                  "application/json": {
-                    schema: resolver(z.boolean()),
-                  },
-                },
-              },
-              ...errors(400),
-            },
-          }),
-          validator(
-            "param",
-            z.object({
-              providerID: z.string(),
-            }),
-          ),
-          validator("json", Auth.Info),
-          async (c) => {
-            const providerID = c.req.valid("param").providerID
-            const info = c.req.valid("json")
-            await Auth.set(providerID, info)
-            return c.json(true)
-          },
-        )
-        .delete(
-          "/auth/:providerID",
-          describeRoute({
-            summary: "Remove auth credentials",
-            description: "Remove authentication credentials",
-            operationId: "auth.remove",
-            responses: {
-              200: {
-                description: "Successfully removed authentication credentials",
-                content: {
-                  "application/json": {
-                    schema: resolver(z.boolean()),
-                  },
-                },
-              },
-              ...errors(400),
-            },
-          }),
-          validator(
-            "param",
-            z.object({
-              providerID: z.string(),
-            }),
-          ),
-          async (c) => {
-            const providerID = c.req.valid("param").providerID
-            await Auth.remove(providerID)
-            return c.json(true)
-          },
-        )
-        .use(async (c, next) => {
-          if (c.req.path === "/log") return next()
-          const resolved = await resolveInstanceProject(c)
-          if (resolved instanceof Response) return resolved
-          const project = resolved
-          return Instance.provide({
-            project,
-            init: InstanceBootstrap,
-            async fn() {
-              return next()
-            },
-          })
-        })
-        .get(
-          "/doc",
-          openAPIRouteHandler(app, {
-            documentation: {
-              info: {
-                title: "opencode",
-                version: "0.0.3",
-                description: "opencode api",
-              },
-              openapi: "3.1.1",
-            },
-          }),
-        )
-        .use(
-          validator(
-            "query",
-            z.object({
-              project: z.string().optional(),
-            }),
-          ),
-        )
-        .route("/project", ProjectRoutes())
-        .route("/config", ConfigRoutes())
-        .route("/experimental", ExperimentalRoutes())
-        .route("/session", SessionRoutes())
-        .route("/permission", PermissionRoutes())
-        .route("/question", QuestionRoutes())
-        .route("/provider", ProviderRoutes())
-        .route("/mcp", McpRoutes())
-        .post(
-          "/instance/dispose",
-          describeRoute({
-            summary: "Dispose instance",
-            description: "Clean up and dispose the current OpenCode instance, releasing all resources.",
-            operationId: "instance.dispose",
-            responses: {
-              200: {
-                description: "Instance disposed",
-                content: {
-                  "application/json": {
-                    schema: resolver(z.boolean()),
-                  },
-                },
-              },
-            },
-          }),
-          async (c) => {
-            await Instance.dispose()
-            return c.json(true)
-          },
-        )
-        .get(
-          "/command",
-          describeRoute({
-            summary: "List commands",
-            description: "Get a list of all available commands in the OpenCode system.",
-            operationId: "command.list",
-            responses: {
-              200: {
-                description: "List of commands",
-                content: {
-                  "application/json": {
-                    schema: resolver(Command.Info.array()),
-                  },
-                },
-              },
-            },
-          }),
-          async (c) => {
-            const commands = await Command.list()
-            return c.json(commands)
-          },
-        )
-        .post(
-          "/log",
-          describeRoute({
-            summary: "Write log",
-            description: "Write a log entry to the server logs with specified level and metadata.",
-            operationId: "app.log",
-            responses: {
-              200: {
-                description: "Log entry written successfully",
-                content: {
-                  "application/json": {
-                    schema: resolver(z.boolean()),
-                  },
-                },
-              },
-              ...errors(400),
-            },
-          }),
-          validator(
-            "json",
-            z.object({
-              service: z.string().meta({ description: "Service name for the log entry" }),
-              level: z.enum(["debug", "info", "error", "warn"]).meta({ description: "Log level" }),
-              message: z.string().meta({ description: "Log message" }),
-              extra: z
-                .record(z.string(), z.any())
-                .optional()
-                .meta({ description: "Additional metadata for the log entry" }),
-            }),
-          ),
-          async (c) => {
-            const { service, level, message, extra } = c.req.valid("json")
-            const logger = Log.create({ service })
 
-            switch (level) {
-              case "debug":
-                logger.debug(message, extra)
-                break
-              case "info":
-                logger.info(message, extra)
-                break
-              case "error":
-                logger.error(message, extra)
-                break
-              case "warn":
-                logger.warn(message, extra)
-                break
-            }
-
-            return c.json(true)
-          },
-        )
-        .get(
-          "/agent",
-          describeRoute({
-            summary: "List agents",
-            description: "Get a list of all available AI agents in the OpenCode system.",
-            operationId: "app.agents",
-            responses: {
-              200: {
-                description: "List of agents",
-                content: {
-                  "application/json": {
-                    schema: resolver(Agent.Info.array()),
-                  },
+          return c.json(true)
+        },
+      )
+      .get(
+        "/agent",
+        describeRoute({
+          summary: "List agents",
+          description: "Get a list of all available AI agents in the OpenCode system.",
+          operationId: "app.agents",
+          responses: {
+            200: {
+              description: "List of agents",
+              content: {
+                "application/json": {
+                  schema: resolver(Agent.Info.array()),
                 },
               },
             },
-          }),
-          async (c) => {
-            const modes = await Agent.list()
-            return c.json(modes)
           },
-        )
-        .get(
-          "/event",
-          describeRoute({
-            summary: "Subscribe to events",
-            description: "Get events",
-            operationId: "event.subscribe",
-            responses: {
-              200: {
-                description: "Event stream",
-                content: {
-                  "text/event-stream": {
-                    schema: resolver(BusEvent.payloads()),
-                  },
+        }),
+        async (c) => {
+          const modes = await Agent.list()
+          return c.json(modes)
+        },
+      )
+      .get(
+        "/event",
+        describeRoute({
+          summary: "Subscribe to events",
+          description: "Get events",
+          operationId: "event.subscribe",
+          responses: {
+            200: {
+              description: "Event stream",
+              content: {
+                "text/event-stream": {
+                  schema: resolver(BusEvent.payloads()),
                 },
               },
             },
-          }),
-          async (c) => {
-            log.info("event connected")
-            c.header("X-Accel-Buffering", "no")
-            c.header("X-Content-Type-Options", "nosniff")
-            return streamSSE(c, async (stream) => {
-              await new Promise<void>((resolve) => {
-                let done = false
-                let heartbeat: ReturnType<typeof setInterval> | undefined
+          },
+        }),
+        async (c) => {
+          log.info("event connected")
+          c.header("X-Accel-Buffering", "no")
+          c.header("X-Content-Type-Options", "nosniff")
+          return streamSSE(c, async (stream) => {
+            await new Promise<void>((resolve) => {
+              let done = false
+              let heartbeat: ReturnType<typeof setInterval> | undefined
 
-                const stop = (reason: string) => {
-                  if (done) return
-                  done = true
-                  if (heartbeat) clearInterval(heartbeat)
-                  unsub()
-                  c.req.raw.signal.removeEventListener("abort", abort)
-                  log.info("event disconnected", { reason })
-                  resolve()
-                }
+              const stop = (reason: string) => {
+                if (done) return
+                done = true
+                if (heartbeat) clearInterval(heartbeat)
+                unsub()
+                c.req.raw.signal.removeEventListener("abort", abort)
+                log.info("event disconnected", { reason })
+                resolve()
+              }
 
-                const send = (event: unknown) =>
-                  stream
-                    .writeSSE({
-                      data: JSON.stringify(event),
-                    })
-                    .then(
-                      () => true,
-                      () => {
-                        stop("write")
-                        return false
-                      },
-                    )
-
-                const unsub = Bus.subscribeAll((event) => {
-                  void send(event).then((ok) => {
-                    if (!ok || event.type !== Bus.InstanceDisposed.type) return
-                    stream.close()
+              const send = (event: unknown) =>
+                stream
+                  .writeSSE({
+                    data: JSON.stringify(event),
                   })
+                  .then(
+                    () => true,
+                    () => {
+                      stop("write")
+                      return false
+                    },
+                  )
+
+              const unsub = Bus.subscribeAll((event) => {
+                void send(event).then((ok) => {
+                  if (!ok || event.type !== Bus.InstanceDisposed.type) return
+                  stream.close()
                 })
+              })
 
-                const abort = () => stop("abort")
+              const abort = () => stop("abort")
 
-                stream.onAbort(abort)
-                c.req.raw.signal.addEventListener("abort", abort, { once: true })
+              stream.onAbort(abort)
+              c.req.raw.signal.addEventListener("abort", abort, { once: true })
+              void send({
+                type: "server.connected",
+                properties: {},
+              })
+
+              heartbeat = setInterval(() => {
                 void send({
-                  type: "server.connected",
+                  type: "server.heartbeat",
                   properties: {},
                 })
-
-                heartbeat = setInterval(() => {
-                  void send({
-                    type: "server.heartbeat",
-                    properties: {},
-                  })
-                }, 10_000)
-              })
+              }, 10_000)
             })
-          },
-        )
-        .all("/*", async (c) => {
-          const path = c.req.path
-          const local = await serveLocalApp(path)
-          if (local) return local
+          })
+        },
+      )
+      .all("/*", async (c) => {
+        const path = c.req.path
+        const local = await serveLocalApp(path)
+        if (local) return local
 
-          return c.json({ error: "Not found", path }, 404)
-        })
-    )
+        return c.json({ error: "Not found", path }, 404)
+      })
   }
 
   export async function openapi() {
@@ -525,11 +529,7 @@ export namespace Server {
   /** @deprecated do not use this dumb shit */
   export let url: URL
 
-  export function listen(opts: {
-    port: number
-    hostname: string
-    cors?: string[]
-  }) {
+  export function listen(opts: { port: number; hostname: string; cors?: string[] }) {
     url = new URL(`http://${opts.hostname}:${opts.port}`)
     const app = createApp(opts)
     const args = {

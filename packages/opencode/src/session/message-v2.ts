@@ -785,7 +785,13 @@ export namespace MessageV2 {
       db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id),
     )
     return rows.map(
-      (row) => ({ ...(row.data as object), id: row.id, sessionID: row.session_id, messageID: row.message_id }) as MessageV2.Part,
+      (row) =>
+        ({
+          ...(row.data as object),
+          id: row.id,
+          sessionID: row.session_id,
+          messageID: row.message_id,
+        }) as MessageV2.Part,
     )
   })
 
@@ -796,8 +802,8 @@ export namespace MessageV2 {
     }),
     async (input): Promise<WithParts> => {
       const row = await Database.use(async (db) => {
-        const rows = await db.select().from(MessageTable).where(eq(MessageTable.id, input.messageID));
-        return rows[0];
+        const rows = await db.select().from(MessageTable).where(eq(MessageTable.id, input.messageID))
+        return rows[0]
       })
       if (!row) throw new Error(`Message not found: ${input.messageID}`)
       const info = { ...(row.data as object), id: row.id, sessionID: row.session_id } as MessageV2.Info

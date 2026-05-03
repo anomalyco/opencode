@@ -154,9 +154,9 @@ export namespace ShareNext {
 
   async function get(sessionID: SessionID) {
     const row = await Database.use(async (db) => {
-      const rows = await db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID));
-      return rows[0];
-    });
+      const rows = await db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID))
+      return rows[0]
+    })
     if (!row) return
     return { id: row.id, secret: row.secret, url: row.url }
   }

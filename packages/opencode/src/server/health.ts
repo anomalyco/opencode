@@ -1,4 +1,3 @@
-
 import { Log } from "@/util/log"
 import { SystemPrompt } from "../session/system"
 import { getPool } from "../storage/db.pg"
@@ -142,7 +141,7 @@ export function instructionCheck(): HealthCheckResult {
     return {
       name: "instructions",
       ok: true,
-      detail: "skipped (hosted browser-python instructions not required)",
+      detail: "skipped (hosted pyodide / univer instructions not required)",
       latencyMs: 0,
     }
   }
@@ -151,7 +150,7 @@ export function instructionCheck(): HealthCheckResult {
   return {
     name: "instructions",
     ok: miss.length === 0,
-    detail: miss.length ? `missing hosted instructions: ${miss.join(", ")}` : "browser-python / univer instructions present",
+    detail: miss.length ? `missing hosted instructions: ${miss.join(", ")}` : "pyodide / univer instructions present",
     latencyMs: 0,
   }
 }

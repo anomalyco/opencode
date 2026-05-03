@@ -30,18 +30,17 @@ export namespace Todo {
     await Database.use(async (db) => {
       await db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID))
       if (input.todos.length === 0) return
-      await db.insert(TodoTable)
-        .values(
-          input.todos.map((todo, position) => ({
-            session_id: input.sessionID,
-            content: todo.content,
-            status: todo.status,
-            priority: todo.priority,
-            position,
-            time_created: Date.now(),
-            time_updated: Date.now(),
-          })),
-        )
+      await db.insert(TodoTable).values(
+        input.todos.map((todo, position) => ({
+          session_id: input.sessionID,
+          content: todo.content,
+          status: todo.status,
+          priority: todo.priority,
+          position,
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })),
+      )
     })
     Bus.publish(Event.Updated, input)
   }

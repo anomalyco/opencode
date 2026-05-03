@@ -1,6 +1,6 @@
 /**
  * OpenCode API Client SDK
- * 
+ *
  * Type-safe client for the OpenCode API. Can be used by:
  * - Frontend applications
  * - Integration tests
@@ -81,14 +81,9 @@ export class OpenCodeClient {
     this.tenantUserId = config.tenantUserId
   }
 
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-    headers?: Record<string, string>,
-  ): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
     const url = `${this.baseUrl}${path}`
-    
+
     const requestHeaders: Record<string, string> = {
       "Content-Type": "application/json",
       ...headers,
@@ -109,11 +104,7 @@ export class OpenCodeClient {
 
     if (!response.ok) {
       const errorText = await response.text()
-      throw new OpenCodeError(
-        `API error: ${response.status} ${errorText}`,
-        "API_ERROR",
-        response.status,
-      )
+      throw new OpenCodeError(`API error: ${response.status} ${errorText}`, "API_ERROR", response.status)
     }
 
     // Handle empty responses (204 No Content)
@@ -126,18 +117,12 @@ export class OpenCodeClient {
 
   // ============ Projects ============
 
-  async createProject(input: {
-    name: string
-  }): Promise<Project> {
+  async createProject(input: { name: string }): Promise<Project> {
     // Project creation goes through the project init API
-    const result = await this.request<Project>(
-      "POST",
-      "/project",
-      {
-        name: input.name,
-        tenantUserId: this.tenantUserId || "test_user",
-      },
-    )
+    const result = await this.request<Project>("POST", "/project", {
+      name: input.name,
+      tenantUserId: this.tenantUserId || "test_user",
+    })
     return result
   }
 
@@ -151,20 +136,12 @@ export class OpenCodeClient {
 
   // ============ Sessions ============
 
-  async createSession(input: {
-    projectId: string
-    title?: string
-    parentId?: string
-  }): Promise<Session> {
-    return this.request<Session>(
-      "POST",
-      "/session",
-      {
-        projectID: input.projectId,
-        title: input.title,
-        parentID: input.parentId,
-      },
-    )
+  async createSession(input: { projectId: string; title?: string; parentId?: string }): Promise<Session> {
+    return this.request<Session>("POST", "/session", {
+      projectID: input.projectId,
+      title: input.title,
+      parentID: input.parentId,
+    })
   }
 
   async listSessions(projectId?: string): Promise<Session[]> {
@@ -182,19 +159,11 @@ export class OpenCodeClient {
 
   // ============ Messages ============
 
-  async sendMessage(input: {
-    sessionId: string
-    content: string
-    agent?: string
-  }): Promise<Message> {
-    return this.request<Message>(
-      "POST",
-      `/session/${input.sessionId}/message`,
-      {
-        content: input.content,
-        agent: input.agent,
-      },
-    )
+  async sendMessage(input: { sessionId: string; content: string; agent?: string }): Promise<Message> {
+    return this.request<Message>("POST", `/session/${input.sessionId}/message`, {
+      content: input.content,
+      agent: input.agent,
+    })
   }
 
   async listMessages(sessionId: string, limit?: number): Promise<Message[]> {

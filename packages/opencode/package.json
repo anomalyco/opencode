@@ -9,8 +9,6 @@
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 120000",
     "test:full-stack": "OPENCODE_FULL_STACK_TEST=1 bun test --timeout 300000 ./test/integration/fullstack.test.ts",
-    "test:executor-sdk": "bun test --timeout 180000 ./test/executor/sdk.test.ts",
-    "executor-dev:k8s-tunnel": "bash ./script/executor-dev-k8s-tunnel.sh",
     "build": "bun run script/build.ts",
     "dev": "bun --env-file=../../.env.development ./script/dev.ts",
     "workos:dev-session": "bun --env-file=../../.env.development ./script/workos-dev-session.ts",

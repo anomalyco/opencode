@@ -136,7 +136,7 @@ export namespace Agent {
             grep: "allow",
             glob: "allow",
             list: "allow",
-            micropython: "allow",
+            pyodide: "allow",
             webfetch: "allow",
             websearch: "allow",
             codesearch: "allow",

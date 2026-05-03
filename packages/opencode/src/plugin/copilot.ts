@@ -230,7 +230,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                     headers: {
                       Accept: "application/json",
                       "Content-Type": "application/json",
-                "User-Agent": `opencode/${process.env.OPENCODE_VERSION ?? "dev"}`,
+                      "User-Agent": `opencode/${process.env.OPENCODE_VERSION ?? "dev"}`,
                     },
                     body: JSON.stringify({
                       client_id: CLIENT_ID,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { execSync, spawn, spawnSync } from "node:child_process"
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
-import { delimiter, resolve } from "node:path"
+import { resolve } from "node:path"
 
 const root = import.meta.dir
 const envPath = resolve(root, ".env.development")
@@ -23,7 +23,7 @@ file.split(/\r?\n/).forEach((line) => {
 })
 
 if (idx === -1 || !name) {
-  console.error("Usage: bun local-dev.ts --service <backend|frontend|relay|executor|all>")
+  console.error("Usage: bun local-dev.ts --service <backend|frontend|relay|all>")
   process.exit(1)
 }
 
@@ -44,23 +44,6 @@ function num(name: string) {
     process.exit(1)
   }
   return value
-}
-
-function ensureUniverSdkInstalled(python: string) {
-  const found = spawnSync("python3", ["-m", "pip", "show", "veritly_univer_sdk"], {
-    cwd: root,
-    stdio: "ignore",
-  })
-  if (found.status === 0) return
-
-  const installed = spawnSync("python3", ["-m", "pip", "install", "-e", python], {
-    cwd: root,
-    stdio: "inherit",
-  })
-  if (installed.status === 0) return
-
-  console.error("Failed to install packages/univer-sdk/python for the local executor.")
-  process.exit(installed.status ?? 1)
 }
 
 function kill(pid: number) {
@@ -166,7 +149,6 @@ const svc = {
       DATABASE_URL: env("DATABASE_URL"),
       PUBLIC_BASE_URL: `http://${env("DEV_FRONTEND_HOST")}:${env("DEV_FRONTEND_PORT")}`,
       WORKOS_REDIRECT_URI: `http://${host}:${port}/auth/callback`,
-      VERITLY_EXECUTOR_URL: env("VERITLY_EXECUTOR_URL"),
       UNIVER_SDK_WS: env("UNIVER_SDK_WS"),
       VITE_UNIVER_SDK_WS: env("VITE_UNIVER_SDK_WS"),
     })
@@ -181,26 +163,6 @@ const svc = {
       PORT: port,
     })
   },
-  executor: async () => {
-    process.env["VERITLY_EXECUTOR_URL"] =
-    process.env["VERITLY_EXECUTOR_URL"]?.trim() || "http://127.0.0.1:7777"
-    const port = new URL(env("VERITLY_EXECUTOR_URL")).port || "7777"
-    const python = resolve(root, "packages/univer-sdk/python")
-    ensureUniverSdkInstalled(python)
-    const user = execSync("python3 -c 'import site; print(site.getusersitepackages())'", {
-      cwd: root,
-      stdio: "pipe",
-    })
-      .toString()
-      .trim()
-    const path = [python, user, process.env.PYTHONPATH?.trim()].filter(Boolean).join(delimiter)
-    clear(Number(port))
-    await boot(resolve(root, "packages/executor/src/server.ts"), [], {
-      PORT: port,
-      EXECUTOR_RUNTIME: process.env.EXECUTOR_RUNTIME?.trim() || "dangerous-local",
-      PYTHONPATH: path,
-    })
-  },
 } as const
 
 if (name === "all") {
@@ -211,8 +173,8 @@ if (name === "all") {
   ensureInfra()
   const self = import.meta.path
   const bun = process.execPath
-  const order = ["backend", "relay", "executor", "frontend"] as const
-  console.log("[dev:all] Starting backend, relay, executor, and frontend (Postgres: docker/infra-deps-local-debugging.yml).")
+  const order = ["backend", "relay", "frontend"] as const
+  console.log("[dev:all] Starting backend, relay, and frontend (Postgres: docker/infra-deps-local-debugging.yml).")
   const childRest = rest.filter((a) => a !== "all")
   const children: ReturnType<typeof spawn>[] = []
   for (const s of order) {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
+import { ProjectID } from "../../src/project/schema"
 import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 
@@ -36,7 +37,7 @@ describe("tool.webfetch", () => {
     await withFetch(
       async () => new Response(bytes, { status: 200, headers: { "content-type": "IMAGE/PNG; charset=binary" } }),
       async () => {
-        const project = { id: "test-project", time: { created: 0, updated: 0 } }
+        const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
         await Instance.provide({
           project,
           fn: async () => {
@@ -66,7 +67,7 @@ describe("tool.webfetch", () => {
           headers: { "content-type": "image/svg+xml; charset=UTF-8" },
         }),
       async () => {
-        const project = { id: "test-project", time: { created: 0, updated: 0 } }
+        const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
         await Instance.provide({
           project,
           fn: async () => {
@@ -88,7 +89,7 @@ describe("tool.webfetch", () => {
           headers: { "content-type": "text/plain; charset=utf-8" },
         }),
       async () => {
-        const project = { id: "test-project", time: { created: 0, updated: 0 } }
+        const project = { id: ProjectID.make("test-project"), time: { created: 0, updated: 0 } }
         await Instance.provide({
           project,
           fn: async () => {

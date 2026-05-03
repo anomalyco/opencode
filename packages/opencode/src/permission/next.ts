@@ -112,10 +112,10 @@ export namespace PermissionNext {
   const state = Instance.state(async () => {
     const projectID = Instance.project.id
     const row = await Database.use(async (db) => {
-      const rows = await db.select().from(PermissionTable).where(eq(PermissionTable.project_id, projectID));
-      return rows[0];
-    });
-      const stored = Array.isArray(row?.data) ? (row.data as Ruleset) : ([] as Ruleset)
+      const rows = await db.select().from(PermissionTable).where(eq(PermissionTable.project_id, projectID))
+      return rows[0]
+    })
+    const stored = Array.isArray(row?.data) ? (row.data as Ruleset) : ([] as Ruleset)
 
     const pending: Record<
       string,
@@ -238,7 +238,9 @@ export namespace PermissionNext {
   )
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-    const merged = merge(...rulesets).filter((rule): rule is Rule => rule != null && typeof rule === "object" && "permission" in rule)
+    const merged = merge(...rulesets).filter(
+      (rule): rule is Rule => rule != null && typeof rule === "object" && "permission" in rule,
+    )
     log.info("evaluate", { permission, pattern, ruleset: merged })
     const match = merged.findLast(
       (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),

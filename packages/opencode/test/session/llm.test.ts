@@ -44,7 +44,7 @@ describe("session.llm.hasToolCalls", () => {
           {
             type: "tool-call",
             toolCallId: "call-123",
-            toolName: "micropython",
+            toolName: "pyodide",
           },
         ],
       },
@@ -60,7 +60,7 @@ describe("session.llm.hasToolCalls", () => {
           {
             type: "tool-result",
             toolCallId: "call-123",
-            toolName: "micropython",
+            toolName: "pyodide",
           },
         ],
       },

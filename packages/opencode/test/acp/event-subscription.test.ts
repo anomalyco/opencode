@@ -389,7 +389,7 @@ describe("acp.agent event subscription", () => {
             properties: {
               id: "perm_1",
               sessionID: sessionA,
-              permission: "micropython",
+              permission: "pyodide",
               patterns: ["*"],
               metadata: {},
               always: [],
@@ -448,7 +448,7 @@ describe("acp.agent event subscription", () => {
             properties: {
               id: "perm_a",
               sessionID: sessionA,
-              permission: "micropython",
+              permission: "pyodide",
               patterns: ["*"],
               metadata: {},
               always: [],
@@ -493,7 +493,7 @@ describe("acp.agent event subscription", () => {
     })
   })
 
-  test("streams running micropython output snapshots and de-dupes identical snapshots", async () => {
+  test("streams running pyodide output snapshots and de-dupes identical snapshots", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       workspace: tmp.path,
@@ -507,7 +507,7 @@ describe("acp.agent event subscription", () => {
           controller.push(
             toolEvent(sessionId, cwd, {
               callID: "call_1",
-              tool: "micropython",
+              tool: "pyodide",
               status: "running",
               input,
               metadata: { output },
@@ -539,7 +539,7 @@ describe("acp.agent event subscription", () => {
         controller.push(
           toolEvent(sessionId, cwd, {
             callID: "call_mpy",
-            tool: "micropython",
+            tool: "pyodide",
             status: "running",
             input: { command: "echo hi", description: "run command" },
             metadata: { output: "hi\n" },
@@ -593,7 +593,7 @@ describe("acp.agent event subscription", () => {
                 {
                   type: "tool",
                   callID: "call_1",
-                  tool: "micropython",
+                  tool: "pyodide",
                   state: {
                     status: "running",
                     input,
@@ -610,7 +610,7 @@ describe("acp.agent event subscription", () => {
         controller.push(
           toolEvent(sessionId, cwd, {
             callID: "call_1",
-            tool: "micropython",
+            tool: "pyodide",
             status: "running",
             input,
             metadata: { output: "hi\nthere\n" },
@@ -631,7 +631,7 @@ describe("acp.agent event subscription", () => {
     })
   })
 
-  test("clears micropython snapshot marker on pending state", async () => {
+  test("clears pyodide snapshot marker on pending state", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       workspace: tmp.path,
@@ -644,7 +644,7 @@ describe("acp.agent event subscription", () => {
         controller.push(
           toolEvent(sessionId, cwd, {
             callID: "call_1",
-            tool: "micropython",
+            tool: "pyodide",
             status: "running",
             input,
             metadata: { output: "a" },
@@ -653,7 +653,7 @@ describe("acp.agent event subscription", () => {
         controller.push(
           toolEvent(sessionId, cwd, {
             callID: "call_1",
-            tool: "micropython",
+            tool: "pyodide",
             status: "pending",
             input,
             raw: '{"command":"echo hello"}',
@@ -662,7 +662,7 @@ describe("acp.agent event subscription", () => {
         controller.push(
           toolEvent(sessionId, cwd, {
             callID: "call_1",
-            tool: "micropython",
+            tool: "pyodide",
             status: "running",
             input,
             metadata: { output: "a" },

@@ -34,18 +34,18 @@ describe("Session.create with virtual project handle", () => {
         // Verify the session was created successfully
         expect(session.id).toBeDefined()
         expect(session.projectID).toBe(project.id)
-        
+
         // Sessions are stateless - no directory field anymore
         expect("directory" in session).toBe(false)
-        
+
         // Verify we can retrieve the session
         const retrieved = await Session.get(session.id)
         expect(retrieved.id).toBe(session.id)
         expect("directory" in retrieved).toBe(false)
-        
+
         // Verify session appears in list
         const sessions = await Array.fromAsync(Session.list())
-        expect(sessions.some(s => s.id === session.id)).toBe(true)
+        expect(sessions.some((s) => s.id === session.id)).toBe(true)
       },
     })
   })
@@ -70,7 +70,7 @@ describe("Session.create with virtual project handle", () => {
 
         // Sessions are stateless - no directory field anymore
         expect("directory" in session).toBe(false)
-        
+
         // Session should still be fully functional
         expect(session.title).toBe("test-session-stateless")
         expect(session.slug).toBeDefined()
@@ -133,7 +133,7 @@ describe("Session.create with virtual project handle", () => {
         // Verify we can still interact with the session
         // (messages would normally go through the executor API in stateless mode)
         const sessions = await Array.fromAsync(Session.list())
-        const found = sessions.find(s => s.id === session.id)
+        const found = sessions.find((s) => s.id === session.id)
         expect(found).toBeDefined()
         expect("directory" in found!).toBe(false)
       },

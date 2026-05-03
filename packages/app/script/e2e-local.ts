@@ -4,10 +4,10 @@ import path from "node:path"
 
 /**
  * E2E Test Runner - Docker Compose Edition
- * 
+ *
  * PREREQUISITES (run these first):
  *   ./script/setup-e2e.sh
- * 
+ *
  * This script DOES NOT start containers. It FAILS FAST if services are unavailable.
  */
 
@@ -30,7 +30,7 @@ const services = {
 // Fail-fast health checks
 async function checkServices(): Promise<string[]> {
   const errors: string[] = []
-  
+
   for (const [name, config] of Object.entries(services)) {
     try {
       if (config.type === "http") {
@@ -49,20 +49,21 @@ async function checkServices(): Promise<string[]> {
       errors.push(`${name}: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
-  
+
   return errors
 }
 
 async function waitForServer(url: string, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs
+  const probe = `${url.replace(/\/+$/, "")}/readyz`
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${url}/global/readyz`)
+      const res = await fetch(probe)
       if (res.ok) return
     } catch {}
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
   }
-  throw new Error(`Server not ready at ${url} after ${timeoutMs}ms`)
+  throw new Error(`Server not ready at ${probe} after ${timeoutMs}ms`)
 }
 
 // Main
@@ -82,10 +83,10 @@ if (errors.length > 0) {
   process.exit(1)
 }
 
-// Get Ollama model info
 const ollamaRes = await fetch("http://localhost:11435/api/tags")
-const ollamaData = await ollamaRes.json()
-const models = ollamaData.models?.map((m: any) => m.name) || []
+const ollamaData = (await ollamaRes.json()) as { models?: Array<{ name: string }> }
+const modelRows = ollamaData.models
+const models = Array.isArray(modelRows) ? modelRows.map((m) => m.name) : []
 console.log(`[E2E] Available models: ${models.join(", ")}`)
 
 if (!models.includes("llama3.2:1b")) {
@@ -130,7 +131,8 @@ await fs.writeFile(
 )
 
 const serverPort = 14096
-const webPort = 3000
+const webPort = 4096
+const appOrigin = `http://127.0.0.1:${webPort}`
 
 const serverEnv = {
   ...process.env,
@@ -140,6 +142,9 @@ const serverEnv = {
   OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
   OPENCODE_DISABLE_MODELS_FETCH: "true",
   OPENCODE_WORKOS_ENABLED: "true",
+  /** Quiet OpenTelemetry `diag.*` (e.g. “OTLP traces configured”, per-export lines). OTLP export still runs. */
+  OTEL_LOG_LEVEL: "none",
+  VERITLY_OTLP_EXPORT_DEBUG: "0",
   OPENCODE_TEST_HOME: path.join(sandbox, "home"),
   XDG_DATA_HOME: path.join(sandbox, "share"),
   XDG_CACHE_HOME: path.join(sandbox, "cache"),
@@ -152,11 +157,13 @@ const serverEnv = {
   OPENCODE_E2E_MODEL: "openai/llama3.2:1b",
   OPENCODE_CLIENT: "app",
   DATABASE_URL: "postgresql://veritly:veritly@localhost:15432/veritly",
+  PUBLIC_BASE_URL: appOrigin,
+  WORKOS_REDIRECT_URI: `${appOrigin}/auth/callback`,
 }
 
 const runnerEnv = {
   ...serverEnv,
-  PLAYWRIGHT_BASE_URL: `http://127.0.0.1:${webPort}`,
+  PLAYWRIGHT_BASE_URL: appOrigin,
   PLAYWRIGHT_SERVER_HOST: "127.0.0.1",
   PLAYWRIGHT_SERVER_PORT: String(serverPort),
   VITE_OPENCODE_SERVER_HOST: "127.0.0.1",
@@ -177,11 +184,10 @@ const cleanup = async () => {
   if (seed && seed.exitCode === null) seed.kill("SIGTERM")
   if (runner && runner.exitCode === null) runner.kill("SIGTERM")
 
-  const jobs = [
-    inst?.Instance.disposeAll(),
-    server?.stop(),
-    keepSandbox ? undefined : fs.rm(sandbox, { recursive: true, force: true }),
-  ].filter(Boolean)
+  const jobs: Promise<unknown>[] = []
+  if (inst !== undefined) jobs.push(Promise.resolve(inst.Instance.disposeAll()))
+  if (server !== undefined) jobs.push(Promise.resolve(server.stop()))
+  if (!keepSandbox) jobs.push(fs.rm(sandbox, { recursive: true, force: true }))
   await Promise.allSettled(jobs)
 }
 
@@ -220,8 +226,7 @@ try {
     inst = await import("../../opencode/src/project/instance")
     server = servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
     console.log(`[E2E] OpenCode server listening on http://127.0.0.1:${serverPort}`)
-    
-    // Wait for server to be ready
+
     await waitForServer(`http://127.0.0.1:${serverPort}`)
     console.log("[E2E] Server is ready")
 

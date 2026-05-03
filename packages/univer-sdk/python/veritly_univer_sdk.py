@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
-import websockets
-from websockets.asyncio.client import ClientConnection
+_PYODIDE = sys.platform == "emscripten"
+
+if not _PYODIDE:
+    import websockets
 
 
 @dataclass(frozen=True)
@@ -56,10 +59,87 @@ def _resolve_ws_url(explicit: str | None) -> str:
     return f"ws://127.0.0.1:{port}/ws"
 
 
+def default_agent_ws_url(explicit: str | None = None) -> str:
+    """WebSocket URL the `UniverSDK` constructor would use (for diagnostics)."""
+    return _resolve_ws_url(explicit)
+
+
+async def _browser_ws_connect(url: str) -> Any:
+    """Pyodide / Emscripten: browser WebSocket (same-origin rules as the host tab)."""
+    from pyodide.ffi import create_proxy
+
+    import js
+
+    loop = asyncio.get_running_loop()
+    ws = js.WebSocket.new(url)
+    open_fut: asyncio.Future[None] = loop.create_future()
+    incoming: asyncio.Queue[str | None] = asyncio.Queue()
+    proxies: list[Any] = []
+
+    def on_open(_event: object | None = None) -> None:
+        if not open_fut.done():
+            open_fut.set_result(None)
+
+    def on_message(event: object) -> None:
+        d = getattr(event, "data", "")
+        if not isinstance(d, str):
+            d = str(d)
+        incoming.put_nowait(d)
+
+    def on_error(_event: object | None = None) -> None:
+        if not open_fut.done():
+            open_fut.set_exception(UniverSDKError("WebSocket error"))
+        incoming.put_nowait(None)
+
+    def on_close(_event: object | None = None) -> None:
+        if not open_fut.done():
+            open_fut.set_exception(UniverSDKError("WebSocket closed before open"))
+        incoming.put_nowait(None)
+
+    proxies.append(create_proxy(on_open))
+    proxies.append(create_proxy(on_message))
+    proxies.append(create_proxy(on_error))
+    proxies.append(create_proxy(on_close))
+
+    ws.addEventListener("open", proxies[0])
+    ws.addEventListener("message", proxies[1])
+    ws.addEventListener("error", proxies[2])
+    ws.addEventListener("close", proxies[3])
+
+    await open_fut
+
+    class Conn:
+        __slots__ = ("_incoming", "_proxies", "_ws")
+
+        def __init__(self) -> None:
+            self._ws = ws
+            self._incoming = incoming
+            self._proxies = proxies
+
+        async def send(self, data: str) -> None:
+            self._ws.send(data)
+
+        async def recv(self) -> str:
+            item = await self._incoming.get()
+            if item is None:
+                raise UniverSDKError("WebSocket closed")
+            return item
+
+        async def close(self) -> None:
+            try:
+                self._ws.close(1000, "client close")
+            finally:
+                for p in self._proxies:
+                    p.destroy()
+                self._proxies.clear()
+
+    return Conn()
+
+
 class UniverSDK:
     def __init__(self, ws_url: str | None = None) -> None:
         self._ws_url = _resolve_ws_url(ws_url)
-        self._conn: ClientConnection | None = None
+        self._conn: Any = None
         self._lock = asyncio.Lock()
 
     async def connect(self) -> None:
@@ -68,6 +148,9 @@ class UniverSDK:
         url = self._ws_url if "?" in self._ws_url else f"{self._ws_url}?role=agent"
         if "role=" not in url:
             url = f"{url}&role=agent"
+        if _PYODIDE:
+            self._conn = await _browser_ws_connect(url)
+            return
         self._conn = await websockets.connect(url)
 
     async def close(self) -> None:
