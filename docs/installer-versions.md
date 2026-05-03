@@ -11,6 +11,24 @@
 
 
 
+## [Windows] 2026.5.3.1 - 2026-05-03 14:04
+
+**主菜:本季首次 sync upstream 成功**(吃了 462 commits / 1157 文件 / +58k/-53k 行 — 2-3 周的所有上游改进)。
+
+主要内容:
+- **sync-2026-05-03-2** ([changelog](features/sync-2026-05-03-2/3-changelog.md)) — upstream 462 commit 全 take,8 个 conflict 全 resolve,含 Effect HttpApi infra 大 PR / shared→core rename / Updater API rename(update→updateAndRestart + 加 relaunch)等
+- **office-routes-effect-httpapi** ([changelog](features/office-routes-effect-httpapi/3-changelog.md)) — fork 的 4 个 office routes(`/file/office-pdf` + `/office-tooling/{status,install,progress}`)迁到 PublicApi,httpapi-mode SDK 含 fork office method
+- **updater-disable-adapter-rollback** ([changelog](features/updater-disable-adapter-rollback/3-changelog.md)) — Updates 段控件灰显恢复(撤回早些时候 sentinel pattern UX bug)
+- **win-bun-install-fix** ([changelog](features/win-bun-install-fix/3-changelog.md)) — Windows install 不再被 tree-sitter-powershell native build 阻断(对 dev env 影响,user 不感知)
+- **changelog-archive-pre-v2** + **zod-schema-bridge** + **post-sync-build-fix** + **sync-2026-05-03-aborted** + **dev-typecheck-fix** + **updater-disable-adapter** — sync 链路相关 prep / postmortem / 治理沉淀,详见 [改动日志.md](../改动日志.md)
+
+User 实测全过(office viewer / 聊天 / 文件操作 / 设置面板 / 安装入口 5 项)。
+
+key commit: `ac5af022d`(本笔 release 起点 = bump commit 父,bump commit 是 release tag 内容)
+installer 路径: 等 GitHub Actions 跑完 `ship-prod-2026.5.3.1` tag 后,从 [GitHub Release](https://github.com/yuesoue/opencode-for-office-deskfox/releases/tag/ship-prod-2026.5.3.1) 下载
+
+---
+
 ## [Windows] 2026.5.1.2 - 2026-05-01 22:20
 
 (待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
