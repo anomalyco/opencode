@@ -37,6 +37,11 @@
       "bun": "./src/server/adapter.bun.ts",
       "node": "./src/server/adapter.node.ts",
       "default": "./src/server/adapter.bun.ts"
+    },
+    "#httpapi-server": {
+      "bun": "./src/server/httpapi-server.node.ts",
+      "node": "./src/server/httpapi-server.node.ts",
+      "default": "./src/server/httpapi-server.node.ts"
     }
   },
   "devDependencies": {

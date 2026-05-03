@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
 import * as Log from "@opencode-ai/core/util/log"
-import * as Fence from "./fence"
+import * as Fence from "./shared/fence"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
 import { AppRuntime } from "@/effect/app-runtime"

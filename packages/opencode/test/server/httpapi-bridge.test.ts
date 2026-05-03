@@ -222,7 +222,7 @@ describe("HttpApi server", () => {
   })
 
   test("covers every generated OpenAPI route with Effect HttpApi contracts", async () => {
-    const honoRoutes = openApiRouteKeys(await Server.openapi())
+    const honoRoutes = openApiRouteKeys(await Server.openapiHono())
     const effectRoutes = openApiRouteKeys(effectOpenApi())
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
@@ -237,7 +237,7 @@ describe("HttpApi server", () => {
   })
 
   test("matches generated OpenAPI route parameters", async () => {
-    const hono = openApiParameters(await Server.openapi())
+    const hono = openApiParameters(await Server.openapiHono())
     const effect = openApiParameters(effectOpenApi())
 
     expect(
@@ -248,7 +248,7 @@ describe("HttpApi server", () => {
   })
 
   test("matches generated OpenAPI request body shape", async () => {
-    const hono = openApiRequestBodies(await Server.openapi())
+    const hono = openApiRequestBodies(await Server.openapiHono())
     const effect = openApiRequestBodies(effectOpenApi())
 
     expect(

@@ -46,7 +46,7 @@ afterEach(async () => {
 
 describe("tui HttpApi bridge", () => {
   test("documents legacy bad request responses", async () => {
-    const legacy = await Server.openapi()
+    const legacy = await Server.openapiHono()
     const effect = OpenApi.fromApi(TuiApi)
     for (const path of [TuiPaths.appendPrompt, TuiPaths.executeCommand, TuiPaths.publish, TuiPaths.selectSession]) {
       expect(legacy.paths[path].post?.responses?.[400]).toBeDefined()
