@@ -174,10 +174,7 @@ export default defineConfig({
       sidebar: [
         "",
         "config",
-        "providers",
         "network",
-        "enterprise",
-        "troubleshooting",
         {
           label: "Windows",
           translations: {
@@ -202,6 +199,9 @@ export default defineConfig({
           },
           link: "windows-wsl",
         },
+        "providers",
+        "enterprise",
+        "troubleshooting",
         {
           label: "Usage",
           translations: {
