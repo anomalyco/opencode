@@ -1,6 +1,6 @@
 ---
 feat-id: release-mac-ci
-status: in-progress
+status: done
 related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
@@ -19,9 +19,12 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | 3 | 写 `.github/workflows/release-mac-deskfox.yml`(对照 win 版)| ✅ |
 | 4 | 写 2-plan(本文档)+ 3-changelog 框架 | ✅ |
 | 5 | 同步 `docs/features/INDEX.md` + `改动日志.md` 索引 | ✅ |
-| 6 | commit 主体 + push origin | ⏳ |
-| 7 | user 在 GitHub Actions UI 触发 workflow_dispatch (env=dev) 测试 build | ⏳ |
-| 8 | 实测通过后,user 决定是否合 dev + 走正式 ship-mac-prod tag | ⏳ |
+| 6 | commit 主体(2 笔:`3c7877225` 三文档+索引 / `9a80c7dc9` workflow)| ✅ |
+| 7 | 本地 build-deskfox.sh -Env dev 实测出 .dmg | ✅(2026-05-02 22:13)|
+| 8 | rebase 到新 dev(`ac5af022d`)— resolve 2 文件冲突,chore-crlf auto-drop | ✅ |
+| 9 | 回填 commit hash + status: done(本笔补全 commit)| ✅ |
+| 10 | merge feat → dev(--no-ff,保留拓扑)+ 删本地 feat 分支 | ⏳(user 拍板时机)|
+| 11 | push origin + dispatch dev 模式 GitHub Actions 验 | ⏳(user 决定 push 时机)|
 
 ---
 
