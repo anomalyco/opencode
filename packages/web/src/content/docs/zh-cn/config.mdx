@@ -238,7 +238,7 @@ opencode run "Hello world"
 
 `small_model` 选项为标题生成等轻量级任务配置单独的模型。默认情况下，如果您的提供商有更便宜的模型可用，OpenCode 会尝试使用该模型，否则会回退到您的主模型。
 
-提供商选项可以包括 `timeout` 和 `setCacheKey`：
+提供商选项可以包括 `timeout`、`chunkTimeout` 和 `setCacheKey`：
 
 ```json title="opencode.json"
 {
@@ -247,6 +247,7 @@ opencode run "Hello world"
     "anthropic": {
       "options": {
         "timeout": 600000,
+        "chunkTimeout": 30000,
         "setCacheKey": true
       }
     }
@@ -255,6 +256,7 @@ opencode run "Hello world"
 ```
 
 - `timeout` - 请求超时时间，单位为毫秒（默认值：300000）。设置为 `false` 可禁用超时。
+- `chunkTimeout` - 流式响应 chunk 之间的超时时间（毫秒）。如果在指定时间内没有收到 chunk，请求将被中止。这可以捕获 provider 静默断开的情况——TCP 连接保持但 SSE 流停止。对于流式不稳定的 provider，推荐设置为 `15000`–`30000`（15–30 秒）。此配置也会传递到 AI SDK 的 `timeout.chunkMs`，在流消费层提供额外的安全保障。
 - `setCacheKey` - 确保始终为指定提供商设置缓存键。
 
 您还可以配置[本地模型](/docs/models#local)。[了解更多](/docs/models)。
