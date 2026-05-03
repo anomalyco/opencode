@@ -17,6 +17,7 @@ import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
+import { computePromptTraits } from "./traits"
 import { assign } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
@@ -557,17 +558,11 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    const capture =
-      store.mode === "normal"
-        ? auto()?.visible
-          ? (["escape", "navigate", "submit", "tab"] as const)
-          : (["tab"] as const)
-        : undefined
-    input.traits = {
-      capture,
-      suspend: !!props.disabled || store.mode === "shell",
-      status: store.mode === "shell" ? "SHELL" : undefined,
-    }
+    input.traits = computePromptTraits({
+      mode: store.mode,
+      disabled: !!props.disabled,
+      autocompleteVisible: !!auto()?.visible,
+    })
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
@@ -755,9 +750,18 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
+    const variant = local.model.variant.current()
     let sessionID = props.sessionID
     if (sessionID == null) {
-      const res = await sdk.client.session.create({ workspace: props.workspaceID })
+      const res = await sdk.client.session.create({
+        workspace: props.workspaceID,
+        agent: agent.name,
+        model: {
+          providerID: selectedModel.providerID,
+          id: selectedModel.modelID,
+          variant,
+        },
+      })
 
       if (res.error) {
         console.log("Creating a session failed:", res.error)
@@ -797,7 +801,6 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const variant = local.model.variant.current()
     const editorSelection = editorContext()
     const currentEditorSelectionKey = editorSelectionKey(editorSelection)
     const editorParts =

@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import type * as Tool from "./tool"
-import { Instance } from "../project/instance"
+import { containsPath } from "../project/instance-context"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 type Kind = "file" | "directory"
@@ -24,7 +24,7 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
 
   const ins = yield* InstanceState.context
   const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
-  if (Instance.containsPath(full, ins)) return
+  if (containsPath(full, ins)) return
 
   const kind = options?.kind ?? "file"
   const dir = kind === "directory" ? full : path.dirname(full)

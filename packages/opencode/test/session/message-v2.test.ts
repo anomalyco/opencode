@@ -469,6 +469,13 @@ describe("session.message-v2.toModelMessage", () => {
           },
           {
             ...basePart(assistantID, "a2"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { openai: { reasoning: "meta" } },
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "a3"),
             type: "tool",
             callID: "call-1",
             tool: "bash",
@@ -495,6 +502,7 @@ describe("session.message-v2.toModelMessage", () => {
         role: "assistant",
         content: [
           { type: "text", text: "done" },
+          { type: "text", text: "thinking" },
           {
             type: "tool-call",
             toolCallId: "call-1",
@@ -612,7 +620,7 @@ describe("session.message-v2.toModelMessage", () => {
               status: "completed",
               input: { cmd: "ls" },
               output: "abcdefghij",
-              title: "Bash",
+              title: "Shell",
               metadata: {},
               time: { start: 0, end: 1 },
             },
@@ -732,9 +740,9 @@ describe("session.message-v2.toModelMessage", () => {
       "12179",
       "4575",
       "",
-      "<bash_metadata>",
+      "<shell_metadata>",
       "User aborted the command",
-      "</bash_metadata>",
+      "</shell_metadata>",
     ].join("\n")
 
     const input: MessageV2.WithParts[] = [
