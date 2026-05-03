@@ -5,7 +5,6 @@ import { Database } from "@/storage/db"
 import { SessionTable } from "../../session/session.sql"
 import { Project } from "@/project/project"
 import { InstanceRef } from "@/effect/instance-ref"
-import { AppRuntime } from "@/effect/app-runtime"
 
 interface SessionStats {
   totalSessions: number
@@ -69,38 +68,28 @@ export const StatsCommand = effectCmd({
   handler: Effect.fn("Cli.stats")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return
-    return yield* run(args, ctx.project)
-  }),
-})
-
-const run = (
-  args: { days?: number; tools?: number; models?: unknown; project?: string },
-  currentProject: Project.Info,
-) =>
-  Effect.promise(async () => {
-    const stats = await aggregateSessionStats(args.days, args.project, currentProject)
-
+    const stats = yield* aggregateSessionStats(args.days, args.project, ctx.project)
     let modelLimit: number | undefined
     if (args.models === true) {
       modelLimit = Infinity
     } else if (typeof args.models === "number") {
       modelLimit = args.models
     }
-
     displayStats(stats, args.tools, modelLimit)
-  })
+  }),
+})
 
-async function getAllSessions(): Promise<Session.Info[]> {
-  const rows = Database.use((db) => db.select().from(SessionTable).all())
-  return rows.map((row) => Session.fromRow(row))
-}
+const getAllSessions = Effect.sync(() =>
+  Database.use((db) => db.select().from(SessionTable).all()).map((row) => Session.fromRow(row)),
+)
 
-export async function aggregateSessionStats(
+const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
   days?: number,
   projectFilter?: string,
   currentProject?: Project.Info,
-): Promise<SessionStats> {
-  const sessions = await getAllSessions()
+) {
+  const svc = yield* Session.Service
+  const sessions = yield* getAllSessions
   const MS_IN_DAY = 24 * 60 * 60 * 1000
 
   const cutoffTime = (() => {
@@ -169,122 +158,111 @@ export async function aggregateSessionStats(
 
   const sessionTotalTokens: number[] = []
 
-  const BATCH_SIZE = 20
-  for (let i = 0; i < filteredSessions.length; i += BATCH_SIZE) {
-    const batch = filteredSessions.slice(i, i + BATCH_SIZE)
+  const results = yield* Effect.forEach(
+    filteredSessions,
+    (session) =>
+      Effect.gen(function* () {
+        const messages = yield* svc.messages({ sessionID: session.id })
 
-    const batchPromises = batch.map(async (session) => {
-      const messages = await AppRuntime.runPromise(
-        Session.Service.use((svc) => svc.messages({ sessionID: session.id })),
-      )
+        let sessionCost = 0
+        let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        let sessionToolUsage: Record<string, number> = {}
+        let sessionModelUsage: Record<
+          string,
+          {
+            messages: number
+            tokens: { input: number; output: number; cache: { read: number; write: number } }
+            cost: number
+          }
+        > = {}
 
-      let sessionCost = 0
-      let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-      let sessionToolUsage: Record<string, number> = {}
-      let sessionModelUsage: Record<
-        string,
-        {
-          messages: number
-          tokens: {
-            input: number
-            output: number
-            cache: {
-              read: number
-              write: number
+        for (const message of messages) {
+          if (message.info.role === "assistant") {
+            sessionCost += message.info.cost || 0
+
+            const modelKey = `${message.info.providerID}/${message.info.modelID}`
+            if (!sessionModelUsage[modelKey]) {
+              sessionModelUsage[modelKey] = {
+                messages: 0,
+                tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                cost: 0,
+              }
+            }
+            sessionModelUsage[modelKey].messages++
+            sessionModelUsage[modelKey].cost += message.info.cost || 0
+
+            if (message.info.tokens) {
+              sessionTokens.input += message.info.tokens.input || 0
+              sessionTokens.output += message.info.tokens.output || 0
+              sessionTokens.reasoning += message.info.tokens.reasoning || 0
+              sessionTokens.cache.read += message.info.tokens.cache?.read || 0
+              sessionTokens.cache.write += message.info.tokens.cache?.write || 0
+
+              sessionModelUsage[modelKey].tokens.input += message.info.tokens.input || 0
+              sessionModelUsage[modelKey].tokens.output +=
+                (message.info.tokens.output || 0) + (message.info.tokens.reasoning || 0)
+              sessionModelUsage[modelKey].tokens.cache.read += message.info.tokens.cache?.read || 0
+              sessionModelUsage[modelKey].tokens.cache.write += message.info.tokens.cache?.write || 0
             }
           }
-          cost: number
-        }
-      > = {}
 
-      for (const message of messages) {
-        if (message.info.role === "assistant") {
-          sessionCost += message.info.cost || 0
-
-          const modelKey = `${message.info.providerID}/${message.info.modelID}`
-          if (!sessionModelUsage[modelKey]) {
-            sessionModelUsage[modelKey] = {
-              messages: 0,
-              tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-              cost: 0,
+          for (const part of message.parts) {
+            if (part.type === "tool" && part.tool) {
+              sessionToolUsage[part.tool] = (sessionToolUsage[part.tool] || 0) + 1
             }
           }
-          sessionModelUsage[modelKey].messages++
-          sessionModelUsage[modelKey].cost += message.info.cost || 0
-
-          if (message.info.tokens) {
-            sessionTokens.input += message.info.tokens.input || 0
-            sessionTokens.output += message.info.tokens.output || 0
-            sessionTokens.reasoning += message.info.tokens.reasoning || 0
-            sessionTokens.cache.read += message.info.tokens.cache?.read || 0
-            sessionTokens.cache.write += message.info.tokens.cache?.write || 0
-
-            sessionModelUsage[modelKey].tokens.input += message.info.tokens.input || 0
-            sessionModelUsage[modelKey].tokens.output +=
-              (message.info.tokens.output || 0) + (message.info.tokens.reasoning || 0)
-            sessionModelUsage[modelKey].tokens.cache.read += message.info.tokens.cache?.read || 0
-            sessionModelUsage[modelKey].tokens.cache.write += message.info.tokens.cache?.write || 0
-          }
         }
 
-        for (const part of message.parts) {
-          if (part.type === "tool" && part.tool) {
-            sessionToolUsage[part.tool] = (sessionToolUsage[part.tool] || 0) + 1
-          }
+        return {
+          messageCount: messages.length,
+          sessionCost,
+          sessionTokens,
+          sessionTotalTokens:
+            sessionTokens.input +
+            sessionTokens.output +
+            sessionTokens.reasoning +
+            sessionTokens.cache.read +
+            sessionTokens.cache.write,
+          sessionToolUsage,
+          sessionModelUsage,
+          earliestTime: cutoffTime > 0 ? session.time.updated : session.time.created,
+          latestTime: session.time.updated,
+        }
+      }),
+    { concurrency: 20 },
+  )
+
+  for (const result of results) {
+    earliestTime = Math.min(earliestTime, result.earliestTime)
+    latestTime = Math.max(latestTime, result.latestTime)
+    sessionTotalTokens.push(result.sessionTotalTokens)
+
+    stats.totalMessages += result.messageCount
+    stats.totalCost += result.sessionCost
+    stats.totalTokens.input += result.sessionTokens.input
+    stats.totalTokens.output += result.sessionTokens.output
+    stats.totalTokens.reasoning += result.sessionTokens.reasoning
+    stats.totalTokens.cache.read += result.sessionTokens.cache.read
+    stats.totalTokens.cache.write += result.sessionTokens.cache.write
+
+    for (const [tool, count] of Object.entries(result.sessionToolUsage)) {
+      stats.toolUsage[tool] = (stats.toolUsage[tool] || 0) + count
+    }
+
+    for (const [model, usage] of Object.entries(result.sessionModelUsage)) {
+      if (!stats.modelUsage[model]) {
+        stats.modelUsage[model] = {
+          messages: 0,
+          tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          cost: 0,
         }
       }
-
-      return {
-        messageCount: messages.length,
-        sessionCost,
-        sessionTokens,
-        sessionTotalTokens:
-          sessionTokens.input +
-          sessionTokens.output +
-          sessionTokens.reasoning +
-          sessionTokens.cache.read +
-          sessionTokens.cache.write,
-        sessionToolUsage,
-        sessionModelUsage,
-        earliestTime: cutoffTime > 0 ? session.time.updated : session.time.created,
-        latestTime: session.time.updated,
-      }
-    })
-
-    const batchResults = await Promise.all(batchPromises)
-
-    for (const result of batchResults) {
-      earliestTime = Math.min(earliestTime, result.earliestTime)
-      latestTime = Math.max(latestTime, result.latestTime)
-      sessionTotalTokens.push(result.sessionTotalTokens)
-
-      stats.totalMessages += result.messageCount
-      stats.totalCost += result.sessionCost
-      stats.totalTokens.input += result.sessionTokens.input
-      stats.totalTokens.output += result.sessionTokens.output
-      stats.totalTokens.reasoning += result.sessionTokens.reasoning
-      stats.totalTokens.cache.read += result.sessionTokens.cache.read
-      stats.totalTokens.cache.write += result.sessionTokens.cache.write
-
-      for (const [tool, count] of Object.entries(result.sessionToolUsage)) {
-        stats.toolUsage[tool] = (stats.toolUsage[tool] || 0) + count
-      }
-
-      for (const [model, usage] of Object.entries(result.sessionModelUsage)) {
-        if (!stats.modelUsage[model]) {
-          stats.modelUsage[model] = {
-            messages: 0,
-            tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            cost: 0,
-          }
-        }
-        stats.modelUsage[model].messages += usage.messages
-        stats.modelUsage[model].tokens.input += usage.tokens.input
-        stats.modelUsage[model].tokens.output += usage.tokens.output
-        stats.modelUsage[model].tokens.cache.read += usage.tokens.cache.read
-        stats.modelUsage[model].tokens.cache.write += usage.tokens.cache.write
-        stats.modelUsage[model].cost += usage.cost
-      }
+      stats.modelUsage[model].messages += usage.messages
+      stats.modelUsage[model].tokens.input += usage.tokens.input
+      stats.modelUsage[model].tokens.output += usage.tokens.output
+      stats.modelUsage[model].tokens.cache.read += usage.tokens.cache.read
+      stats.modelUsage[model].tokens.cache.write += usage.tokens.cache.write
+      stats.modelUsage[model].cost += usage.cost
     }
   }
 
@@ -313,7 +291,7 @@ export async function aggregateSessionStats(
         : sessionTotalTokens[mid]
 
   return stats
-}
+})
 
 export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
   const width = 56
