@@ -18,10 +18,9 @@ import type {
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
+import { effectCmd } from "../effect-cmd"
 import { ModelsDev } from "@/provider/models"
-import { Instance } from "@/project/instance"
-import { WithInstance } from "@/project/with-instance"
-import { bootstrap } from "../bootstrap"
+import { InstanceRef } from "@/effect/instance-ref"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
 import type { SessionID } from "../../session/schema"
@@ -200,13 +199,14 @@ export const GithubCommand = cmd({
   async handler() {},
 })
 
-export const GithubInstallCommand = cmd({
+export const GithubInstallCommand = effectCmd({
   command: "install",
   describe: "install the GitHub agent",
-  async handler() {
-    await WithInstance.provide({
-      directory: process.cwd(),
-      async fn() {
+  handler: Effect.fn("Cli.github.install")(function* () {
+    const maybeCtx = yield* InstanceRef
+    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    const ctx = maybeCtx
+    yield* Effect.promise(async () => {
         {
           UI.empty()
           prompts.intro("Install GitHub agent")
@@ -254,7 +254,7 @@ export const GithubInstallCommand = cmd({
           }
 
           async function getAppInfo() {
-            const project = Instance.project
+            const project = ctx.project
             if (project.vcs !== "git") {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
@@ -262,14 +262,14 @@ export const GithubInstallCommand = cmd({
 
             // Get repo info
             const info = await AppRuntime.runPromise(
-              Git.Service.use((git) => git.run(["remote", "get-url", "origin"], { cwd: Instance.worktree })),
+              Git.Service.use((git) => git.run(["remote", "get-url", "origin"], { cwd: ctx.worktree })),
             ).then((x) => x.text().trim())
             const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
-            return { owner: parsed.owner, repo: parsed.repo, root: Instance.worktree }
+            return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree }
           }
 
           async function promptProvider() {
@@ -420,12 +420,11 @@ jobs:
             prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
           }
         }
-      },
     })
-  },
+  }),
 })
 
-export const GithubRunCommand = cmd({
+export const GithubRunCommand = effectCmd({
   command: "run",
   describe: "run the GitHub agent",
   builder: (yargs) =>
@@ -438,8 +437,10 @@ export const GithubRunCommand = cmd({
         type: "string",
         describe: "GitHub personal access token (github_pat_********)",
       }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
+  handler: Effect.fn("Cli.github.run")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return yield* Effect.die("InstanceRef not provided")
+    yield* Effect.promise(async () => {
       const isMock = args.token || args.event
 
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
@@ -502,21 +503,21 @@ export const GithubRunCommand = cmd({
           : "issue"
         : undefined
       const gitText = async (args: string[]) => {
-        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
+        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: ctx.worktree })))
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result.text().trim()
       }
       const gitRun = async (args: string[]) => {
-        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
+        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: ctx.worktree })))
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result
       }
       const gitStatus = (args: string[]) =>
-        AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: Instance.worktree })))
+        AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: ctx.worktree })))
       const commitChanges = async (summary: string, actor?: string) => {
         const args = ["commit", "-m", summary]
         if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)
@@ -1646,5 +1647,5 @@ query($owner: String!, $repo: String!, $number: Int!) {
         })
       }
     })
-  },
+  }),
 })
