@@ -427,20 +427,33 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           execute(args, options) {
             return run.promise(
               Effect.gen(function* () {
-                const ctx = context(args, options)
+                const out = { args }
+                const ask = (req: any) =>
+                  run.promise(
+                    permission
+                      .ask({
+                        ...req,
+                        sessionID: input.session.id,
+                        tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+                        ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+                      })
+                      .pipe(Effect.orDie),
+                  )
                 yield* plugin.trigger(
                   "tool.execute.before",
                   {
                     tool: item.id,
-                    sessionID: ctx.sessionID,
+                    sessionID: input.session.id,
                     messageID: input.processor.message.id,
-                    callID: ctx.callID,
-                    agent: ctx.agent,
+                    callID: options.toolCallId,
+                    agent: input.agent.name,
                     parentAgent: input.parentAgent,
+                    ask,
                   },
-                  { args },
+                  out,
                 )
-                const result = yield* item.execute(args, ctx)
+                const ctx = context(out.args, options)
+                const result = yield* item.execute(out.args, ctx)
                 const output = {
                   ...result,
                   attachments: result.attachments?.map((attachment) => ({
@@ -457,7 +470,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     sessionID: ctx.sessionID,
                     messageID: input.processor.message.id,
                     callID: ctx.callID,
-                    args,
+                    args: out.args,
                     agent: ctx.agent,
                     parentAgent: input.parentAgent,
                   },
@@ -483,22 +496,35 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         item.execute = (args, opts) =>
           run.promise(
             Effect.gen(function* () {
-              const ctx = context(args, opts)
+              const out = { args }
+              const ask = (req: any) =>
+                run.promise(
+                  permission
+                    .ask({
+                      ...req,
+                      sessionID: input.session.id,
+                      tool: { messageID: input.processor.message.id, callID: opts.toolCallId },
+                      ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+                    })
+                    .pipe(Effect.orDie),
+                )
               yield* plugin.trigger(
                 "tool.execute.before",
                 {
                   tool: key,
-                  sessionID: ctx.sessionID,
+                  sessionID: input.session.id,
                   messageID: input.processor.message.id,
                   callID: opts.toolCallId,
-                  agent: ctx.agent,
+                  agent: input.agent.name,
                   parentAgent: input.parentAgent,
+                  ask,
                 },
-                { args },
+                out,
               )
+              const ctx = context(out.args, opts)
               const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
                 yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-                return yield* Effect.promise(() => execute(args, opts))
+                return yield* Effect.promise(() => execute(out.args, opts))
               }).pipe(
                 Effect.withSpan("Tool.execute", {
                   attributes: {
@@ -509,20 +535,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   },
                 }),
               )
-              yield* plugin.trigger(
-                "tool.execute.after",
-                {
-                  tool: key,
-                  sessionID: ctx.sessionID,
-                  messageID: input.processor.message.id,
-                  callID: opts.toolCallId,
-                  args,
-                  agent: ctx.agent,
-                  parentAgent: input.parentAgent,
-                },
-                result,
-              )
-
               const textParts: string[] = []
               const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
               for (const contentItem of result.content) {
@@ -566,6 +578,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 })),
                 content: result.content,
               }
+              yield* plugin.trigger(
+                "tool.execute.after",
+                {
+                  tool: key,
+                  sessionID: ctx.sessionID,
+                  messageID: input.processor.message.id,
+                  callID: opts.toolCallId,
+                  args: out.args,
+                  agent: ctx.agent,
+                  parentAgent: input.parentAgent,
+                },
+                output,
+              )
               if (opts.abortSignal?.aborted) {
                 yield* input.processor.completeToolCall(opts.toolCallId, output)
               }
@@ -630,6 +655,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         subagent_type: task.agent,
         command: task.command,
       }
+      const taskAgent = yield* agents.get(task.agent)
+      if (!taskAgent) {
+        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+        const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+        const error = new NamedError.Unknown({ message: `Agent not found: "${task.agent}".${hint}` })
+        yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+        throw error
+      }
+      const out = { args: taskArgs }
       yield* plugin.trigger(
         "tool.execute.before",
         {
@@ -639,23 +673,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           callID: part.id,
           agent: lastUser.agent,
           parentAgent: lastUser.parentAgent,
+          ask: (req: any) =>
+            Effect.runPromise(
+              permission
+                .ask({
+                  ...req,
+                  sessionID,
+                  tool: { messageID: assistantMessage.id, callID: part.id },
+                  ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                })
+                .pipe(Effect.orDie),
+            ),
         },
-        { args: taskArgs },
+        out,
       )
-
-      const taskAgent = yield* agents.get(task.agent)
-      if (!taskAgent) {
-        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
-        const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-        const error = new NamedError.Unknown({ message: `Agent not found: "${task.agent}".${hint}` })
-        yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
-        throw error
-      }
+      const nextTaskArgs = out.args
 
       let error: Error | undefined
       const taskAbort = new AbortController()
       const result = yield* taskTool
-        .execute(taskArgs, {
+        .execute(nextTaskArgs, {
           agent: task.agent,
           parentAgent: lastUser.agent,
           messageID: assistantMessage.id,
@@ -724,7 +761,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID,
           messageID: assistantMessage.id,
           callID: part.id,
-          args: taskArgs,
+          args: nextTaskArgs,
           agent: lastUser.agent,
           parentAgent: lastUser.parentAgent,
         },
@@ -740,7 +777,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           ...part,
           state: {
             status: "completed",
-            input: part.state.input,
+            input: nextTaskArgs,
             title: result.title,
             metadata: result.metadata,
             output: result.output,
@@ -761,7 +798,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               end: Date.now(),
             },
             metadata: part.state.status === "pending" ? undefined : part.state.metadata,
-            input: part.state.input,
+            input: nextTaskArgs,
           },
         } satisfies MessageV2.ToolPart)
       }

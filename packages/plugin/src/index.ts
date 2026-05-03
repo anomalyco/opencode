@@ -216,6 +216,13 @@ export type ProviderHook = {
   models?: (provider: ProviderV2, ctx: ProviderHookContext) => Promise<Record<string, ModelV2>>
 }
 
+export type ToolExecuteBeforeAsk = (input: {
+  permission: string
+  patterns: string[]
+  always: string[]
+  metadata: Record<string, any>
+}) => Promise<void>
+
 /** @deprecated Use AuthOAuthResult instead. */
 export type AuthOuathResult = AuthOAuthResult
 
@@ -281,7 +288,15 @@ export interface Hooks {
     output: { stop: boolean; message?: string },
   ) => Promise<void>
   "tool.execute.before"?: (
-    input: { tool: string; sessionID: string; messageID: string; callID: string; agent?: string; parentAgent?: string },
+    input: {
+      tool: string
+      sessionID: string
+      messageID: string
+      callID: string
+      agent?: string
+      parentAgent?: string
+      ask: ToolExecuteBeforeAsk
+    },
     output: { args: any },
   ) => Promise<void>
   "shell.env"?: (
