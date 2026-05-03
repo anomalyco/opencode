@@ -72,5 +72,3 @@ export function waitEffect(workspaceID: WorkspaceID, state: State, signal?: Abor
 export async function wait(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
   await AppRuntime.runPromise(waitEffect(workspaceID, state, signal))
 }
-
-export const fenceLogger = log
