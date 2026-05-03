@@ -2,7 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "aaa2ebeb-caa4-478d-8365-4fc595d16856",
-  "prevIds": ["66cbe0d7-def0-451b-b88a-7608513a9b44"],
+  "prevIds": ["61f807f9-6398-4067-be05-804acc2561bc"],
   "ddl": [
     {
       "name": "account_state",
@@ -37,7 +37,7 @@
       "entityType": "tables"
     },
     {
-      "name": "session_entry",
+      "name": "session_message",
       "entityType": "tables"
     },
     {
@@ -598,7 +598,7 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "type": "text",
@@ -608,7 +608,7 @@
       "generated": null,
       "name": "session_id",
       "entityType": "columns",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "type": "text",
@@ -618,7 +618,7 @@
       "generated": null,
       "name": "type",
       "entityType": "columns",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "type": "integer",
@@ -628,7 +628,7 @@
       "generated": null,
       "name": "time_created",
       "entityType": "columns",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "type": "integer",
@@ -638,7 +638,7 @@
       "generated": null,
       "name": "time_updated",
       "entityType": "columns",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "type": "text",
@@ -648,7 +648,7 @@
       "generated": null,
       "name": "data",
       "entityType": "columns",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "type": "text",
@@ -1112,9 +1112,9 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
-      "name": "fk_session_entry_session_id_session_id_fk",
+      "name": "fk_session_message_session_id_session_id_fk",
       "entityType": "fks",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "columns": ["project_id"],
@@ -1226,8 +1226,8 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "session_entry_pk",
-      "table": "session_entry",
+      "name": "session_message_pk",
+      "table": "session_message",
       "entityType": "pks"
     },
     {
@@ -1322,9 +1322,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "session_entry_session_idx",
+      "name": "session_message_session_idx",
       "entityType": "indexes",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "columns": [
@@ -1340,9 +1340,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "session_entry_session_type_idx",
+      "name": "session_message_session_type_idx",
       "entityType": "indexes",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "columns": [
@@ -1354,9 +1354,9 @@
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "session_entry_time_created_idx",
+      "name": "session_message_time_created_idx",
       "entityType": "indexes",
-      "table": "session_entry"
+      "table": "session_message"
     },
     {
       "columns": [

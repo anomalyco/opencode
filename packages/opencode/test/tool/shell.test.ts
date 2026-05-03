@@ -6,6 +6,7 @@ import { Config } from "@/config/config"
 import { Shell } from "../../src/shell/shell"
 import { ShellTool } from "../../src/tool/shell"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
@@ -140,7 +141,7 @@ const mustTruncate = (result: {
 
 describe("tool.shell", () => {
   each("basic", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -163,7 +164,7 @@ describe("tool.shell", () => {
     await using tmp = await tmpdir({
       config: { shell: "fish" },
     })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initBash()
@@ -190,7 +191,7 @@ describe("tool.shell", () => {
 describe("tool.shell permissions", () => {
   each("asks for bash permission with correct pattern", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initShell()
@@ -213,7 +214,7 @@ describe("tool.shell permissions", () => {
 
   each("asks for bash permission with multiple commands", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initShell()
@@ -239,7 +240,7 @@ describe("tool.shell permissions", () => {
     test(
       `parses PowerShell conditionals for permission prompts [${item.label}]`,
       withShell(item, async () => {
-        await Instance.provide({
+        await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
             const bash = await initShell()
@@ -269,7 +270,7 @@ describe("tool.shell permissions", () => {
       `uses PowerShell cmdlet prefixes for always-allow prompts [${item.label}]`,
       withShell(item, async () => {
         await using tmp = await tmpdir()
-        await Instance.provide({
+        await WithInstance.provide({
           directory: tmp.path,
           fn: async () => {
             const bash = await initShell()
@@ -297,7 +298,7 @@ describe("tool.shell permissions", () => {
   }
 
   each("asks for external_directory permission for wildcard external paths", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -333,7 +334,7 @@ describe("tool.shell permissions", () => {
               await Bun.write(path.join(dir, "outside.txt"), "x")
             },
           })
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initShell()
@@ -366,7 +367,7 @@ describe("tool.shell permissions", () => {
       test(
         `asks for external_directory permission for PowerShell paths after switches [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initShell()
@@ -396,7 +397,7 @@ describe("tool.shell permissions", () => {
       test(
         `asks for nested PowerShell command permissions [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initShell()
@@ -428,7 +429,7 @@ describe("tool.shell permissions", () => {
         `asks for external_directory permission for drive-relative PowerShell paths [${item.label}]`,
         withShell(item, async () => {
           await using tmp = await tmpdir()
-          await Instance.provide({
+          await WithInstance.provide({
             directory: tmp.path,
             fn: async () => {
               const bash = await initShell()
@@ -458,7 +459,7 @@ describe("tool.shell permissions", () => {
       test(
         `asks for external_directory permission for $HOME PowerShell paths [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initShell()
@@ -489,7 +490,7 @@ describe("tool.shell permissions", () => {
         `asks for external_directory permission for $PWD PowerShell paths [${item.label}]`,
         withShell(item, async () => {
           await using tmp = await tmpdir()
-          await Instance.provide({
+          await WithInstance.provide({
             directory: tmp.path,
             fn: async () => {
               const bash = await initBash()
@@ -519,7 +520,7 @@ describe("tool.shell permissions", () => {
       test(
         `asks for external_directory permission for $PSHOME PowerShell paths [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initBash()
@@ -553,7 +554,7 @@ describe("tool.shell permissions", () => {
           const prev = process.env[key]
           delete process.env[key]
           try {
-            await Instance.provide({
+            await WithInstance.provide({
               directory: projectRoot,
               fn: async () => {
                 const bash = await initShell()
@@ -588,7 +589,7 @@ describe("tool.shell permissions", () => {
       test(
         `asks for external_directory permission for PowerShell env paths [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initBash()
@@ -617,7 +618,7 @@ describe("tool.shell permissions", () => {
       test(
         `asks for external_directory permission for PowerShell FileSystem paths [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initBash()
@@ -649,7 +650,7 @@ describe("tool.shell permissions", () => {
       test(
         `asks for external_directory permission for braced PowerShell env paths [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initBash()
@@ -681,7 +682,7 @@ describe("tool.shell permissions", () => {
       test(
         `treats Set-Location like cd for permissions [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initBash()
@@ -712,7 +713,7 @@ describe("tool.shell permissions", () => {
       test(
         `does not add nested PowerShell expressions to permission prompts [${item.label}]`,
         withShell(item, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initShell()
@@ -741,7 +742,7 @@ describe("tool.shell permissions", () => {
     test(
       "asks for external_directory permission for cmd file commands [cmd]",
       withShell(cmdShell, async () => {
-        await Instance.provide({
+        await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
             const bash = await initShell()
@@ -766,7 +767,7 @@ describe("tool.shell permissions", () => {
 
   each("asks for external_directory permission when cd to parent", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initBash()
@@ -791,7 +792,7 @@ describe("tool.shell permissions", () => {
 
   each("asks for external_directory permission when workdir is outside project", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initBash()
@@ -821,7 +822,7 @@ describe("tool.shell permissions", () => {
       const err = new Error("stop after permission")
       await using outerTmp = await tmpdir()
       await using tmp = await tmpdir()
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           const bash = await initBash()
@@ -857,7 +858,7 @@ describe("tool.shell permissions", () => {
       test(
         "uses Git Bash /tmp semantics for external workdir",
         withShell({ label: "bash", shell: bash }, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initBash()
@@ -889,7 +890,7 @@ describe("tool.shell permissions", () => {
       test(
         "uses Git Bash /tmp semantics for external file paths",
         withShell({ label: "bash", shell: bash }, async () => {
-          await Instance.provide({
+          await WithInstance.provide({
             directory: projectRoot,
             fn: async () => {
               const bash = await initBash()
@@ -926,7 +927,7 @@ describe("tool.shell permissions", () => {
       },
     })
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initBash()
@@ -959,7 +960,7 @@ describe("tool.shell permissions", () => {
         await Bun.write(path.join(dir, "tmpfile"), "x")
       },
     })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initBash()
@@ -981,7 +982,7 @@ describe("tool.shell permissions", () => {
 
   each("includes always patterns for auto-approval", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initBash()
@@ -1004,7 +1005,7 @@ describe("tool.shell permissions", () => {
 
   each("does not ask for bash permission when command is cd only", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initShell()
@@ -1026,7 +1027,7 @@ describe("tool.shell permissions", () => {
 
   each("matches redirects in permission pattern", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initShell()
@@ -1049,7 +1050,7 @@ describe("tool.shell permissions", () => {
 
   each("always pattern has space before wildcard to not include different commands", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await initBash()
@@ -1065,7 +1066,7 @@ describe("tool.shell permissions", () => {
 
 describe("tool.shell abort", () => {
   test("preserves output when aborted", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -1099,7 +1100,7 @@ describe("tool.shell abort", () => {
   }, 15_000)
 
   test("terminates command on timeout", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -1121,7 +1122,7 @@ describe("tool.shell abort", () => {
   }, 15_000)
 
   test.skipIf(process.platform === "win32")("captures stderr in output", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -1142,7 +1143,7 @@ describe("tool.shell abort", () => {
   })
 
   test("returns non-zero exit code", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -1161,7 +1162,7 @@ describe("tool.shell abort", () => {
   })
 
   test("streams metadata updates progressively", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initBash()
@@ -1192,7 +1193,7 @@ describe("tool.shell abort", () => {
 
 describe("tool.shell truncation", () => {
   test("truncates output exceeding line limit", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -1214,7 +1215,7 @@ describe("tool.shell truncation", () => {
   })
 
   test("truncates output exceeding byte limit", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -1236,7 +1237,7 @@ describe("tool.shell truncation", () => {
   })
 
   test("does not truncate small output", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()
@@ -1256,7 +1257,7 @@ describe("tool.shell truncation", () => {
   })
 
   test("full output is saved to file when truncated", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const bash = await initShell()

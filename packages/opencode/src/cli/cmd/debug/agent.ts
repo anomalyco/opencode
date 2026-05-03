@@ -11,7 +11,6 @@ import { Permission } from "../../../permission"
 import { iife } from "../../../util/iife"
 import { effectCmd, fail } from "../../effect-cmd"
 import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceStore } from "@/project/instance-store"
 import type { InstanceContext } from "@/project/instance"
 
 export const AgentCommand = effectCmd({
@@ -35,8 +34,7 @@ export const AgentCommand = effectCmd({
   handler: Effect.fn("Cli.debug.agent")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* run(args, ctx).pipe(Effect.ensuring(store.dispose(ctx)))
+    return yield* run(args, ctx)
   }),
 })
 

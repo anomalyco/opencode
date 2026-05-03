@@ -1,8 +1,8 @@
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import * as Log from "@opencode-ai/core/util/log"
-import { Instance } from "@/project/instance"
-import { InstanceStore } from "@/project/instance-store"
+import { InstanceRuntime } from "@/project/instance-runtime"
+import { WithInstance } from "@/project/with-instance"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
@@ -10,8 +10,10 @@ import { GlobalBus } from "@/bus/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
-import { AppRuntime, getBootstrapRunEffect } from "@/effect/app-runtime"
+import { AppRuntime } from "@/effect/app-runtime"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { Effect } from "effect"
+import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 
 ensureProcessMetadata("worker")
 
@@ -75,21 +77,26 @@ export const rpc = {
     return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: input.directory,
-      init: await getBootstrapRunEffect(),
       fn: async () => {
         await upgrade().catch(() => {})
       },
     })
   },
   async reload() {
-    await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.invalidate(true)))
+    await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const cfg = yield* Config.Service
+        yield* cfg.invalidate()
+        yield* disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true })
+      }),
+    )
   },
   async shutdown() {
     Log.Default.info("worker shutting down")
 
-    await InstanceStore.disposeAllInstances()
+    await InstanceRuntime.disposeAllInstances()
     if (server) await server.stop(true)
   },
 }
