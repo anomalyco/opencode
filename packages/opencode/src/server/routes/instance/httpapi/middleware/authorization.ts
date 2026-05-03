@@ -1,10 +1,11 @@
-import { ConfigService } from "@/effect/config-service"
-import { Config, Context, Effect, Encoding, Layer, Option, Redacted } from "effect"
+import { ServerAuth } from "@/server/auth"
+import { Effect, Encoding, Layer, Redacted } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiError, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
+const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
 
 export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   "@opencode/ExperimentalHttpApiAuthorization",
@@ -17,39 +18,16 @@ export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   },
 ) {}
 
-export class ServerAuthConfig extends ConfigService.Service<ServerAuthConfig>()(
-  "@opencode/ExperimentalHttpApiServerAuthConfig",
-  {
-    password: Config.string("OPENCODE_SERVER_PASSWORD").pipe(Config.option),
-    username: Config.string("OPENCODE_SERVER_USERNAME").pipe(Config.withDefault("opencode")),
-  },
-) {}
-
 function validateCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
-  credential: { readonly username: string; readonly password: Redacted.Redacted },
-  config: Context.Service.Shape<typeof ServerAuthConfig>,
+  credential: ServerAuth.DecodedCredentials,
+  config: ServerAuth.Info,
 ) {
   return Effect.gen(function* () {
-    if (!isAuthRequired(config)) return yield* effect
-    if (!isCredentialAuthorized(credential, config)) return yield* new HttpApiError.Unauthorized({})
+    if (!ServerAuth.required(config)) return yield* effect
+    if (!ServerAuth.authorized(credential, config)) return yield* new HttpApiError.Unauthorized({})
     return yield* effect
   })
-}
-
-function isAuthRequired(config: Context.Service.Shape<typeof ServerAuthConfig>) {
-  return Option.isSome(config.password) && config.password.value !== ""
-}
-
-function isCredentialAuthorized(
-  credential: { readonly username: string; readonly password: Redacted.Redacted },
-  config: Context.Service.Shape<typeof ServerAuthConfig>,
-) {
-  return (
-    Option.isSome(config.password) &&
-    credential.username === config.username &&
-    Redacted.value(credential.password) === config.password.value
-  )
 }
 
 function decodeCredential(input: string) {
@@ -77,19 +55,24 @@ function decodeCredential(input: string) {
 
 function validateRawCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
-  credential: { readonly username: string; readonly password: Redacted.Redacted },
-  config: Context.Service.Shape<typeof ServerAuthConfig>,
+  credential: ServerAuth.DecodedCredentials,
+  config: ServerAuth.Info,
 ) {
-  if (!isAuthRequired(config)) return effect
-  if (!isCredentialAuthorized(credential, config))
-    return Effect.succeed(HttpServerResponse.empty({ status: UNAUTHORIZED }))
+  if (!ServerAuth.required(config)) return effect
+  if (!ServerAuth.authorized(credential, config))
+    return Effect.succeed(
+      HttpServerResponse.empty({
+        status: UNAUTHORIZED,
+        headers: { "www-authenticate": WWW_AUTHENTICATE },
+      }),
+    )
   return effect
 }
 
 export const authorizationRouterMiddleware = HttpRouter.middleware()(
   Effect.gen(function* () {
-    const config = yield* ServerAuthConfig
-    if (!isAuthRequired(config)) return (effect) => effect
+    const config = yield* ServerAuth.Config
+    if (!ServerAuth.required(config)) return (effect) => effect
 
     return (effect) =>
       Effect.gen(function* () {
@@ -116,7 +99,7 @@ export const authorizationRouterMiddleware = HttpRouter.middleware()(
 export const authorizationLayer = Layer.effect(
   Authorization,
   Effect.gen(function* () {
-    const config = yield* ServerAuthConfig
+    const config = yield* ServerAuth.Config
     return Authorization.of({
       basic: (effect, { credential }) => validateCredential(effect, credential, config),
       authToken: (effect, { credential }) =>

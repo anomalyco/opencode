@@ -7,7 +7,19 @@ export function errorFormat(error: unknown): string {
 
   if (typeof error === "object" && error !== null) {
     try {
-      return JSON.stringify(error, null, 2)
+      const json = JSON.stringify(error, null, 2)
+      // Plain objects whose own properties are all non-enumerable (or empty)
+      // serialize to "{}", which prints as a useless bare `{}` on stderr.
+      // Fall back to a custom toString first, then to ctor name + own prop names.
+      if (json === "{}") {
+        const str = String(error)
+        if (str && str !== "[object Object]") return str
+        const ctor = error.constructor?.name
+        const prefix = ctor && ctor !== "Object" ? ctor : "Error"
+        const names = Object.getOwnPropertyNames(error)
+        return names.length === 0 ? `${prefix} (no message)` : `${prefix} { ${names.join(", ")} }`
+      }
+      return json
     } catch {
       return "Unexpected error (unserializable)"
     }
@@ -34,7 +46,7 @@ export function errorMessage(error: unknown): string {
   if (text && text !== "[object Object]") return text
 
   const formatted = errorFormat(error)
-  if (formatted && formatted !== "{}") return formatted
+  if (formatted) return formatted
   return "unknown error"
 }
 
@@ -45,7 +57,7 @@ export function errorData(error: unknown) {
       message: errorMessage(error),
       stack: error.stack,
       cause: error.cause === undefined ? undefined : errorFormat(error.cause),
-      formatted: errorFormatted(error),
+      formatted: errorFormat(error),
     }
   }
 
@@ -53,7 +65,7 @@ export function errorData(error: unknown) {
     return {
       type: typeof error,
       message: errorMessage(error),
-      formatted: errorFormatted(error),
+      formatted: errorFormat(error),
     }
   }
 
@@ -71,12 +83,6 @@ export function errorData(error: unknown) {
 
   if (typeof data.message !== "string") data.message = errorMessage(error)
   if (typeof data.type !== "string") data.type = error.constructor?.name
-  data.formatted = errorFormatted(error)
+  data.formatted = errorFormat(error)
   return data
-}
-
-function errorFormatted(error: unknown) {
-  const formatted = errorFormat(error)
-  if (formatted !== "{}") return formatted
-  return String(error)
 }

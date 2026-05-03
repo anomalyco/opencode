@@ -40,7 +40,7 @@ import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { Format } from "@/format"
-import { InstanceStore } from "@/project/instance-store"
+import { InstanceLayer } from "@/project/instance-layer"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { Workspace } from "@/control-plane/workspace"
@@ -93,17 +93,16 @@ export const AppLayer = Layer.mergeAll(
   Truncate.defaultLayer,
   ToolRegistry.defaultLayer,
   Format.defaultLayer,
-  InstanceStore.defaultLayer,
   Project.defaultLayer,
   Vcs.defaultLayer,
   Workspace.defaultLayer,
-  Worktree.defaultLayer,
+  Worktree.appLayer,
   Pty.defaultLayer,
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
   SyncEvent.defaultLayer,
-).pipe(Layer.provideMerge(Observability.layer))
+).pipe(Layer.provideMerge(InstanceLayer.layer), Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">
