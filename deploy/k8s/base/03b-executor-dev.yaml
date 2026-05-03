@@ -18,6 +18,9 @@ metadata:
   labels:
     app: executor-dev
 spec:
+  # Failed Pod objects persist until removed (Kubernetes does not GC them like CrashLoop “slots”).
+  # revisionHistoryLimit only trims old ReplicaSets; clean Failed: kubectl delete pods -n veritly -l app=executor-dev --field-selector=status.phase=Failed
+  revisionHistoryLimit: 3
   replicas: 1
   strategy:
     type: RollingUpdate

@@ -1,7 +1,7 @@
 /**
- * Executor tests require an explicit URL so failures point to the exact target pod/service.
- * Example:
- *   VERITLY_EXECUTOR_URL=http://127.0.0.1:7777 bun test ./test/executor/sdk.test.ts
+ * Executor SDK tests call a real executor on the cluster (`executor-dev`) reachable after
+ * port-forward. Default URL matches `packages/opencode/script/executor-dev-k8s-tunnel.sh`
+ * (`127.0.0.1:7777`). Override with `VERITLY_EXECUTOR_URL` if you use another local port.
  */
 
 import { Executor, type ExecutorSDK } from "../../src/executor/sdk"
@@ -19,12 +19,6 @@ export interface ExecutorFixture {
   terminate(): Promise<void>
   readonly sdk: ExecutorSDK
   readonly url: string
-}
-
-export function executorBaseUrl() {
-  const ext = process.env.VERITLY_EXECUTOR_URL?.trim()
-  if (ext) return ext
-  throw new Error("Set VERITLY_EXECUTOR_URL for executor integration tests (no implicit kubectl tunnel)")
 }
 
 async function assertHealth(url: string) {
@@ -69,8 +63,8 @@ class ExecutorFixtureImpl implements ExecutorFixture {
   }
 
   async #runInit() {
-    const url = executorBaseUrl()
-    journal().info("using explicit executor url for tests", { url })
+    const url = process.env.VERITLY_EXECUTOR_URL?.trim() || "http://127.0.0.1:7777"
+    journal().info("using executor url for tests", { url })
     await assertHealth(url)
     this.#url = url
     this.#sdk = Executor.create({ baseUrl: url })

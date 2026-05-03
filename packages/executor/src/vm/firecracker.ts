@@ -184,7 +184,7 @@ export async function start(input: { id: string; dir: string; rootfsPath: string
       guest_mac: mac(input.id),
       host_dev_name: dev,
     })
-    await fcReq(sock, "POST", "/actions", { action_type: "InstanceStart" })
+    await fcReq(sock, "PUT", "/actions", { action_type: "InstanceStart" })
 
     const relay = spawn(
       SOCAT_PATH,

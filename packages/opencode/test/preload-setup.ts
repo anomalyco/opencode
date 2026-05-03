@@ -20,7 +20,6 @@ export async function installTestEnv(): Promise<() => Promise<void>> {
 
   const testManagedConfigDir = path.join(dir, "managed")
   process.env["OPENCODE_TEST_MANAGED_CONFIG_DIR"] = testManagedConfigDir
-  process.env["EXECUTOR_TEST_VM_ACCEL"] = process.env["EXECUTOR_TEST_VM_ACCEL"]?.trim() || "tcg"
 
   const cacheDir = path.join(dir, "cache", "opencode")
   await fs.mkdir(cacheDir, { recursive: true })

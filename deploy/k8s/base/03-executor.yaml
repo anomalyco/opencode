@@ -6,6 +6,9 @@ metadata:
   labels:
     app: executor
 spec:
+  # Old ReplicaSets only (not Failed Pods): kubectl still lists Evicted/OOM/phase=Failed Pods until deleted.
+  # Churn: eviction → Deployment replaces pod → another Failed object on the node; fix limits/probes/image to stop churn.
+  revisionHistoryLimit: 5
   # Raise node RAM before increasing — each replica holds FC VMs (896Mi request / 2.5Gi cap each).
   replicas: 2
   strategy:

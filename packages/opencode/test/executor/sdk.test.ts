@@ -3,17 +3,15 @@ import { ExecutorError, type ExecutorSDK } from "../../src/executor/sdk"
 import { executorFixture } from "../fixture/executor-remote"
 
 /**
- * Set `VERITLY_EXECUTOR_URL` to the exact executor endpoint under test.
- * The VM guest image is expected to include `veritly_univer_sdk` (rootfs build contract).
+ * Targets `executor-dev` on the cluster (default URL `http://127.0.0.1:7777` = tunnel script port).
+ * Override with `VERITLY_EXECUTOR_URL` if needed. Guest image must include `veritly_univer_sdk`.
  */
 const ms = 180000
 
 const fx = executorFixture()
 let sdk: ExecutorSDK
 
-const executorUrl = process.env.VERITLY_EXECUTOR_URL?.trim()
-
-describe.skipIf(!executorUrl)("Executor SDK", () => {
+describe("Executor SDK", () => {
   beforeAll(async () => {
     await fx.init()
     sdk = fx.sdk
