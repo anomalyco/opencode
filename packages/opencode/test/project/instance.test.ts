@@ -221,7 +221,7 @@ describe("InstanceStore", () => {
     }),
   )
 
-  it.live("keeps Instance.provide as the legacy ALS wrapper", () =>
+  it.live("provides legacy Promise callers with instance ALS", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
 

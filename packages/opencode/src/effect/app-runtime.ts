@@ -96,7 +96,7 @@ export const AppLayer = Layer.mergeAll(
   Project.defaultLayer,
   Vcs.defaultLayer,
   Workspace.defaultLayer,
-  Worktree.defaultLayer,
+  Worktree.appLayer,
   Pty.defaultLayer,
   Installation.defaultLayer,
   ShareNext.defaultLayer,

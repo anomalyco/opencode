@@ -584,13 +584,14 @@ export const layer: Layer.Layer<
   }),
 )
 
-export const defaultLayer = layer.pipe(
+export const appLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(Project.defaultLayer),
-  Layer.provide(InstanceLayer.layer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
 )
+
+export const defaultLayer = appLayer.pipe(Layer.provide(InstanceLayer.layer))
 
 export * as Worktree from "."

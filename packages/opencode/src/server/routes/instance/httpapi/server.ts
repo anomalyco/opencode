@@ -178,7 +178,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       ToolRegistry.defaultLayer,
       Vcs.defaultLayer,
       Workspace.defaultLayer,
-      Worktree.defaultLayer,
+      Worktree.appLayer,
       Bus.layer,
       AppFileSystem.defaultLayer,
       FetchHttpClient.layer,
