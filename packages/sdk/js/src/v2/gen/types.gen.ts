@@ -58,6 +58,7 @@ export type Event =
   | EventSessionNextShellEnded
   | EventSessionNextStepStarted
   | EventSessionNextStepEnded
+  | EventSessionNextStepFailed
   | EventSessionNextTextStarted
   | EventSessionNextTextDelta
   | EventSessionNextTextEnded
@@ -70,7 +71,7 @@ export type Event =
   | EventSessionNextToolCalled
   | EventSessionNextToolProgress
   | EventSessionNextToolSuccess
-  | EventSessionNextToolError
+  | EventSessionNextToolFailed
   | EventSessionNextRetried
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
@@ -823,6 +824,7 @@ export type GlobalEvent = {
     | EventSessionNextShellEnded
     | EventSessionNextStepStarted
     | EventSessionNextStepEnded
+    | EventSessionNextStepFailed
     | EventSessionNextTextStarted
     | EventSessionNextTextDelta
     | EventSessionNextTextEnded
@@ -835,7 +837,7 @@ export type GlobalEvent = {
     | EventSessionNextToolCalled
     | EventSessionNextToolProgress
     | EventSessionNextToolSuccess
-    | EventSessionNextToolError
+    | EventSessionNextToolFailed
     | EventSessionNextRetried
     | EventSessionNextCompactionStarted
     | EventSessionNextCompactionDelta
@@ -857,6 +859,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextShellEnded
     | SyncEventSessionNextStepStarted
     | SyncEventSessionNextStepEnded
+    | SyncEventSessionNextStepFailed
     | SyncEventSessionNextTextStarted
     | SyncEventSessionNextTextDelta
     | SyncEventSessionNextTextEnded
@@ -869,7 +872,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextToolCalled
     | SyncEventSessionNextToolProgress
     | SyncEventSessionNextToolSuccess
-    | SyncEventSessionNextToolError
+    | SyncEventSessionNextToolFailed
     | SyncEventSessionNextRetried
     | SyncEventSessionNextCompactionStarted
     | SyncEventSessionNextCompactionDelta
@@ -1973,6 +1976,22 @@ export type SyncEventSessionNextStepEnded = {
   }
 }
 
+export type SyncEventSessionNextStepFailed = {
+  type: "sync"
+  name: "session.next.step.failed.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    error: {
+      type: string
+      message: string
+    }
+  }
+}
+
 export type SyncEventSessionNextTextStarted = {
   type: "sync"
   name: "session.next.text.started.1"
@@ -2157,9 +2176,9 @@ export type SyncEventSessionNextToolSuccess = {
   }
 }
 
-export type SyncEventSessionNextToolError = {
+export type SyncEventSessionNextToolFailed = {
   type: "sync"
-  name: "session.next.tool.error.1"
+  name: "session.next.tool.failed.1"
   id: string
   seq: number
   aggregateID: "sessionID"
@@ -2710,6 +2729,19 @@ export type EventSessionNextStepEnded = {
   }
 }
 
+export type EventSessionNextStepFailed = {
+  id: string
+  type: "session.next.step.failed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    error: {
+      type: string
+      message: string
+    }
+  }
+}
+
 export type EventSessionNextTextStarted = {
   id: string
   type: "session.next.text.started"
@@ -2870,9 +2902,9 @@ export type EventSessionNextToolSuccess = {
   }
 }
 
-export type EventSessionNextToolError = {
+export type EventSessionNextToolFailed = {
   id: string
-  type: "session.next.tool.error"
+  type: "session.next.tool.failed"
   properties: {
     timestamp: number
     sessionID: string
@@ -3162,7 +3194,10 @@ export type SessionMessageAssistant = {
       write: number
     }
   }
-  error?: string
+  error?: {
+    type: string
+    message: string
+  }
 }
 
 export type SessionMessageCompaction = {
