@@ -82,7 +82,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
-import { formatTranscript } from "../../util/transcript"
+import { formatFinishReason, formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -1362,6 +1362,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
   })
 
+  const finishLabel = createMemo(() => formatFinishReason(props.message.finish))
+
   const duration = createMemo(() => {
     if (!final()) return 0
     if (!props.message.time.completed) return 0
@@ -1432,6 +1434,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
+              </Show>
+              <Show when={!props.message.error && finishLabel()}>
+                <span style={{ fg: theme.textMuted }}> · {finishLabel()}</span>
               </Show>
             </text>
           </box>

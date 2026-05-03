@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   formatAssistantHeader,
+  formatFinishReason,
   formatMessage,
   formatPart,
   formatTranscript,
@@ -108,6 +109,64 @@ describe("transcript", () => {
       const msg = { ...baseMsg, agent: "plan" }
       const result = formatAssistantHeader(msg, true)
       expect(result).toContain("Plan")
+    })
+
+    test("appends finish reason when truncated by length limit", () => {
+      const msg = { ...baseMsg, finish: "length" }
+      const result = formatAssistantHeader(msg, true)
+      expect(result).toBe("## Assistant (Build · claude-sonnet-4-20250514 · 5.4s · truncated by length limit)\n\n")
+    })
+
+    test("appends finish reason when stopped by content filter", () => {
+      const msg = { ...baseMsg, finish: "content-filter" }
+      const result = formatAssistantHeader(msg, true)
+      expect(result).toBe("## Assistant (Build · claude-sonnet-4-20250514 · 5.4s · stopped by content filter)\n\n")
+    })
+
+    test("appends finish reason when ended with error", () => {
+      const msg = { ...baseMsg, finish: "error" }
+      const result = formatAssistantHeader(msg, true)
+      expect(result).toBe("## Assistant (Build · claude-sonnet-4-20250514 · 5.4s · ended with error)\n\n")
+    })
+
+    test("omits finish reason for normal stop", () => {
+      const msg = { ...baseMsg, finish: "stop" }
+      const result = formatAssistantHeader(msg, true)
+      expect(result).toBe("## Assistant (Build · claude-sonnet-4-20250514 · 5.4s)\n\n")
+    })
+
+    test("omits finish reason when not included in metadata", () => {
+      const msg = { ...baseMsg, finish: "length" }
+      const result = formatAssistantHeader(msg, false)
+      expect(result).toBe("## Assistant\n\n")
+    })
+  })
+
+  describe("formatFinishReason", () => {
+    test("returns label for length", () => {
+      expect(formatFinishReason("length")).toBe("truncated by length limit")
+    })
+
+    test("returns label for content-filter", () => {
+      expect(formatFinishReason("content-filter")).toBe("stopped by content filter")
+    })
+
+    test("returns label for error", () => {
+      expect(formatFinishReason("error")).toBe("ended with error")
+    })
+
+    test("returns empty string for stop", () => {
+      expect(formatFinishReason("stop")).toBe("")
+    })
+
+    test("returns empty string for tool-calls", () => {
+      expect(formatFinishReason("tool-calls")).toBe("")
+    })
+
+    test("returns empty string for unknown values", () => {
+      expect(formatFinishReason("other")).toBe("")
+      expect(formatFinishReason("unknown")).toBe("")
+      expect(formatFinishReason(undefined)).toBe("")
     })
   })
 

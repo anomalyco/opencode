@@ -77,8 +77,24 @@ export function formatAssistantHeader(
     msg.time.completed && msg.time.created ? ((msg.time.completed - msg.time.created) / 1000).toFixed(1) + "s" : ""
 
   const modelName = Model.name(providers, msg.providerID, msg.modelID)
+  const finishLabel = formatFinishReason(msg.finish)
 
-  return `## Assistant (${Locale.titlecase(msg.agent)} · ${modelName}${duration ? ` · ${duration}` : ""})\n\n`
+  return `## Assistant (${Locale.titlecase(msg.agent)} · ${modelName}${duration ? ` · ${duration}` : ""}${
+    finishLabel ? ` · ${finishLabel}` : ""
+  })\n\n`
+}
+
+export function formatFinishReason(finish: string | undefined): string {
+  switch (finish) {
+    case "length":
+      return "truncated by length limit"
+    case "content-filter":
+      return "stopped by content filter"
+    case "error":
+      return "ended with error"
+    default:
+      return ""
+  }
 }
 
 export function formatPart(part: Part, options: TranscriptOptions): string {
