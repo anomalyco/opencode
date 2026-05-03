@@ -284,29 +284,29 @@ const createPlatform = (): Platform => {
       }
     })(),
 
-    // FORK: UPDATER_ENABLED=false 时不暴露 checkUpdate/update,所有 UI 入口(layout polling /
-    // settings UI / error 页 / 菜单)通过现有的 if (!platform.checkUpdate) return 自动短路
-    // 失效,无需逐个改 UI(禁自动升级 2026-04-28)
-    ...(UPDATER_ENABLED
-      ? {
-          checkUpdate: async () => {
-            const next = await check().catch(() => null)
-            if (!next) return { updateAvailable: false }
-            const ok = await next
-              .download()
-              .then(() => true)
-              .catch(() => false)
-            if (!ok) return { updateAvailable: false }
-            update = next
-            return { updateAvailable: true, version: next.version }
-          },
-          update: async () => {
-            if (!update) return
-            if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
-            await update.install().catch(() => undefined)
-          },
-        }
-      : {}),
+    // FORK: 走上游 sentinel 风格(每方法首行 if (!UPDATER_ENABLED) return),UI 留着,
+    // 后端短路 — 未来 fork 自家 updater 上线时翻 UPDATER_ENABLED=true,菜单/设置/polling
+    // 自动亮,无需回头改 UI(updater-disable-adapter 2026-05-03)
+    // 注:保留 update 旧名 + 旧行为(install only,无 relaunch)— upstream 后续把
+    // update → updateAndRestart 的 rename + 加 relaunch 留给 upstream merge 时
+    // 自然 take 上游(rename 是 one-time event 不需要预 do)
+    checkUpdate: async () => {
+      if (!UPDATER_ENABLED) return { updateAvailable: false }
+      const next = await check().catch(() => null)
+      if (!next) return { updateAvailable: false }
+      const ok = await next
+        .download()
+        .then(() => true)
+        .catch(() => false)
+      if (!ok) return { updateAvailable: false }
+      update = next
+      return { updateAvailable: true, version: next.version }
+    },
+    update: async () => {
+      if (!UPDATER_ENABLED || !update) return
+      if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
+      await update.install().catch(() => undefined)
+    },
 
     restart: async () => {
       await commands.killSidecar().catch(() => undefined)
