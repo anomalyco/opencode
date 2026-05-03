@@ -15,7 +15,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ServerAuth } from "../../src/server/auth"
 import { authorizationRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
-import { serveUIEffect } from "../../src/server/shared/ui"
+import { serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
 import { Server } from "../../src/server/server"
 
 void Log.init({ print: false })
@@ -182,6 +182,39 @@ describe("HttpApi UI fallback", () => {
     expect(response.headers.get("content-length")).not.toBe("999")
     expect(response.headers.get("content-type")).toContain("text/javascript")
     expect(await response.text()).toBe("console.log('ok')")
+  })
+
+  test("serves embedded UI assets when Bun can read them but access reports missing", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    let readPath: string | undefined
+
+    const response = await Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        return yield* serveEmbeddedUIEffect(
+          "/assets/app.js",
+          {
+            ...fs,
+            existsSafe: () => Effect.die("embedded UI should not rely on filesystem access checks"),
+            readFile: (path) => {
+              readPath = path
+              return path === "/$bunfs/root/assets/app.js"
+                ? Effect.succeed(new TextEncoder().encode("console.log('embedded')"))
+                : Effect.die(`unexpected embedded UI path: ${path}`)
+            },
+          },
+          { "assets/app.js": "/$bunfs/root/assets/app.js" },
+        )
+      }).pipe(
+        Effect.provide(AppFileSystem.defaultLayer),
+        Effect.map(HttpServerResponse.toWeb),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(readPath).toBe("/$bunfs/root/assets/app.js")
+    expect(response.headers.get("content-type")).toContain("text/javascript")
+    expect(await response.text()).toBe("console.log('embedded')")
   })
 
   test("keeps matched API routes ahead of the UI fallback", async () => {
