@@ -2,6 +2,7 @@ import { afterEach, expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { QuestionID } from "../../src/question/schema"
 import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
@@ -398,7 +399,7 @@ it.live("pending question rejects on instance dispose", () =>
 
     expect(yield* waitForPending(1).pipe(provideInstance(dir))).toHaveLength(1)
     yield* Effect.promise(() =>
-      Instance.provide({ directory: dir, fn: () => InstanceRuntime.disposeInstance(Instance.current) }),
+      WithInstance.provide({ directory: dir, fn: () => InstanceRuntime.disposeInstance(Instance.current) }),
     )
 
     const exit = yield* Fiber.await(fiber)
