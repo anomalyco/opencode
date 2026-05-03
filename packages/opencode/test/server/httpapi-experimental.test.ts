@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { GlobalBus } from "@/bus/global"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { Session } from "@/session/session"
@@ -10,7 +10,8 @@ import { Database } from "@/storage/db"
 import * as Log from "@opencode-ai/core/util/log"
 import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { waitGlobalBusEventPromise } from "./global-bus"
 
 void Log.init({ print: false })
 
@@ -31,26 +32,15 @@ function createSession(input?: Session.CreateInput) {
 }
 
 async function waitReady(directory: string) {
-  return await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      GlobalBus.off("event", onEvent)
-      reject(new Error("timed out waiting for worktree.ready"))
-    }, 10_000)
-
-    function onEvent(event: { directory?: string; payload: { type?: string } }) {
-      if (event.payload.type !== Worktree.Event.Ready.type || event.directory !== directory) return
-      clearTimeout(timer)
-      GlobalBus.off("event", onEvent)
-      resolve()
-    }
-
-    GlobalBus.on("event", onEvent)
+  await waitGlobalBusEventPromise({
+    message: "timed out waiting for worktree.ready",
+    predicate: (event) => event.payload.type === Worktree.Event.Ready.type && event.directory === directory,
   })
 }
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
@@ -137,12 +127,12 @@ describe("experimental HttpApi", () => {
   test("serves global session list through Hono bridge", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
 
-    const first = await Instance.provide({
+    const first = await WithInstance.provide({
       directory: tmp.path,
       fn: async () => createSession({ title: "page-one" }),
     })
     await new Promise((resolve) => setTimeout(resolve, 5))
-    const second = await Instance.provide({
+    const second = await WithInstance.provide({
       directory: tmp.path,
       fn: async () => createSession({ title: "page-two" }),
     })

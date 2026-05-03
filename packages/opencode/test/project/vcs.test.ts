@@ -3,10 +3,11 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { GlobalBus } from "../../src/bus/global"
 import { Vcs } from "@/project/vcs"
 
@@ -18,7 +19,7 @@ const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe
 // ---------------------------------------------------------------------------
 
 async function withVcs(directory: string, body: () => Promise<void>) {
-  return Instance.provide({
+  return WithInstance.provide({
     directory,
     fn: async () => {
       await AppRuntime.runPromise(
@@ -36,7 +37,7 @@ async function withVcs(directory: string, body: () => Promise<void>) {
 }
 
 function withVcsOnly(directory: string, body: () => Promise<void>) {
-  return Instance.provide({
+  return WithInstance.provide({
     directory,
     fn: async () => {
       await AppRuntime.runPromise(
@@ -85,7 +86,7 @@ function nextBranchUpdate(directory: string, timeout = 10_000) {
 
 describeVcs("Vcs", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("branch() returns current branch name", async () => {
@@ -158,7 +159,7 @@ describeVcs("Vcs", () => {
 
 describe("Vcs diff", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("defaultBranch() falls back to main", async () => {

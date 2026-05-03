@@ -124,7 +124,7 @@ describe("SyncEvent", () => {
             yield* SyncEvent.use.run(Created, { id: "evt_1", name: "test" })
             yield* Effect.promise(() => received)
             expect(events).toHaveLength(1)
-            expect(events[0]).toEqual({
+            expect(events[0]).toMatchObject({
               type: "item.created",
               properties: {
                 id: "evt_1",

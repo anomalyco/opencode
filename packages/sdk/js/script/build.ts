@@ -9,7 +9,7 @@ import path from "path"
 
 import { createClient } from "@hey-api/openapi-ts"
 
-const openapiSource = process.env.OPENCODE_SDK_OPENAPI === "httpapi" ? "httpapi" : "hono"
+const openapiSource = process.env.OPENCODE_SDK_OPENAPI === "hono" ? "hono" : "httpapi"
 const opencode = path.resolve(dir, "../../opencode")
 
 if (openapiSource === "httpapi") {

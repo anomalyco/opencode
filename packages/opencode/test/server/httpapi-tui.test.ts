@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import type { Context } from "hono"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { GlobalBus } from "../../src/bus/global"
 import { TuiEvent } from "../../src/cli/cmd/tui/event"
 import { SessionID } from "../../src/session/schema"
 import { Instance } from "../../src/project/instance"
@@ -11,7 +10,8 @@ import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { OpenApi } from "effect/unstable/httpapi"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { waitGlobalBusEventPromise } from "./global-bus"
 
 void Log.init({ print: false })
 
@@ -23,14 +23,9 @@ function app(experimental = true) {
 }
 
 function nextCommandExecute() {
-  return new Promise<unknown>((resolve) => {
-    const listener = (event: { payload: { type?: string; properties?: { command?: unknown } } }) => {
-      if (event.payload.type !== TuiEvent.CommandExecute.type) return
-      GlobalBus.off("event", listener)
-      resolve(event.payload.properties?.command)
-    }
-    GlobalBus.on("event", listener)
-  })
+  return waitGlobalBusEventPromise({
+    predicate: (event) => event.payload.type === TuiEvent.CommandExecute.type,
+  }).then((event) => event.payload.properties?.command)
 }
 
 async function expectTrue(path: string, headers: Record<string, string>, body?: unknown) {
@@ -45,7 +40,7 @@ async function expectTrue(path: string, headers: Record<string, string>, body?: 
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
