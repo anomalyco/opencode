@@ -122,18 +122,23 @@ export const mapper = () => {
 
   const finish = (event: Extract<LLMEvent, { type: "request-finish" | "step-finish" }>, includeFinal: boolean) => {
     const reason = finishReason(event.reason)
+    const eventUsage = usage(event.usage)
+    const eventResponse = response()
+    const payload = {
+      finishReason: reason,
+      rawFinishReason: event.reason,
+      usage: eventUsage,
+      response: eventResponse,
+      providerMetadata: undefined,
+    }
     const events = [
       ...closeOpenParts(state),
       {
         type: "finish-step" as const,
-        finishReason: reason,
-        rawFinishReason: event.reason,
-        usage: usage(event.usage),
-        response: response(),
-        providerMetadata: undefined,
+        ...payload,
       },
       ...(includeFinal
-        ? [{ type: "finish" as const, finishReason: reason, rawFinishReason: event.reason, usage: usage(event.usage), totalUsage: usage(event.usage), response: response(), providerMetadata: undefined }]
+        ? [{ type: "finish" as const, ...payload, totalUsage: eventUsage }]
         : []),
     ]
     state.text.clear()

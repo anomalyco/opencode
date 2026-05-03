@@ -110,6 +110,7 @@ export const cassetteLayer = (
       const match = options.match ?? defaultMatcher
       const sequential = options.dispatch === "sequential"
       const recorded = yield* Ref.make<ReadonlyArray<Interaction>>([])
+      const replay = yield* Ref.make<Cassette | undefined>(undefined)
       const cursor = yield* Ref.make(0)
 
       const snapshotRequest = (request: HttpClientRequest.HttpClientRequest) =>
@@ -146,6 +147,17 @@ export const cassetteLayer = (
           return { interaction, detail: interaction ? "" : mismatchDetail(cassette, incoming) }
         })
 
+      const loadReplay = (request: HttpClientRequest.HttpClientRequest) =>
+        Effect.gen(function* () {
+          const cached = yield* Ref.get(replay)
+          if (cached) return cached
+          const cassette = parseCassette(
+            yield* fileSystem.readFileString(file).pipe(Effect.mapError(() => fixtureMissing(request, name))),
+          )
+          yield* Ref.set(replay, cassette)
+          return cassette
+        })
+
       return HttpClient.make((request) => {
         if (isRecordMode) {
           return Effect.gen(function* () {
@@ -168,9 +180,7 @@ export const cassetteLayer = (
         }
 
         return Effect.gen(function* () {
-          const cassette = parseCassette(
-            yield* fileSystem.readFileString(file).pipe(Effect.mapError(() => fixtureMissing(request, name))),
-          )
+          const cassette = yield* loadReplay(request)
           const incoming = yield* snapshotRequest(request)
           const { interaction, detail } = yield* selectInteraction(cassette, incoming)
           if (!interaction) return yield* fixtureMismatch(request, name, detail)

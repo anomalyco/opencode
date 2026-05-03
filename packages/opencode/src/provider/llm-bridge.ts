@@ -42,6 +42,7 @@ const PROVIDERS: Record<string, ProviderResolverShape> = {
 }
 
 const REASONING_EFFORTS = new Set<ReasoningEffort>(ReasoningEfforts)
+const CACHE_PROTOCOLS = new Set<ProviderResolution["protocol"]>(["anthropic-messages", "bedrock-converse"])
 
 const stringOption = (options: Record<string, unknown>, key: string) => {
   const value = options[key]
@@ -111,8 +112,8 @@ const capabilities = (input: Input, resolution: ProviderResolution) => {
       // Both Anthropic Messages and Bedrock Converse honour positional cache
       // markers — Anthropic via `cache_control` on content blocks, Bedrock via
       // its `cachePoint` marker block (added to BedrockConverse in 9d7d518ac).
-      prompt: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
-      contentBlocks: ["anthropic-messages", "bedrock-converse"].includes(resolution.protocol),
+      prompt: CACHE_PROTOCOLS.has(resolution.protocol),
+      contentBlocks: CACHE_PROTOCOLS.has(resolution.protocol),
     },
     reasoning: {
       efforts: reasoningEfforts(input),

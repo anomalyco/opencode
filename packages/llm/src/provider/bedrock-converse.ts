@@ -722,6 +722,7 @@ const initialFrameBuffer: FrameBufferState = { buffer: new Uint8Array(0), offset
 
 const appendChunk = (state: FrameBufferState, chunk: Uint8Array): FrameBufferState => {
   const remaining = state.buffer.length - state.offset
+  if (remaining === 0) return { buffer: chunk, offset: 0 }
   // Compact: drop the consumed prefix and append the new chunk in one alloc.
   // This bounds buffer growth to at most one network chunk past the live
   // window, regardless of stream length.
