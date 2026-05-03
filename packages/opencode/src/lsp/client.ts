@@ -276,7 +276,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
         },
       },
     }),
-    INITIALIZE_TIMEOUT_MS,
+    input.server.initializeTimeout ?? INITIALIZE_TIMEOUT_MS,
   ).catch((err) => {
     logger.error("initialize error", { error: err })
     throw new InitializeError(
