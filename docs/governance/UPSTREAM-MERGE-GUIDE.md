@@ -173,7 +173,7 @@ export const Content = Schema.Struct({...}).pipe(withStatics((s) => ({ zod: zod(
 ```
 1. fetch upstream + 打 pre-rebase tag(必做,见 §3)
 2. checkout dev + git merge upstream/dev --no-commit  ← 不要立即 commit,先看 conflict
-3. 解类型 1(bun.lock)— bun install 重生成
+3. 解类型 1(bun.lock)— **不要删 lock 重 install**,见 §4.7
 4. 解类型 2/3(机械)— 几分钟内搞定
 5. 类型 4 一个个评估 — 拿不准就停下问 user(典型对照表见 §4.4)
 6. 类型 5 一个个解 — 接受上游骨架 + fork 字段补回 + 加/更新 FORK marker
@@ -183,6 +183,29 @@ export const Content = Schema.Struct({...}).pipe(withStatics((s) => ({ zod: zod(
 10. 8 + 9 全过 → git commit merge → §5 后续 checklist
 11. 任何一步炸 → git reset --hard pre-rebase-<日期>(或 merge 阶段炸用 git merge --abort),退回出发点重新规划
 ```
+
+### 4.7 bun.lock 处理方法学(2026-05-03 实战补充)
+
+**别删 lock 重 install** —— 删了之后 `bun install` 会让所有 `*` / `^x.y.z` 风格的版本约束自由 resolve 到最新,可能撞坏依赖(2026-05-03 sync 在 `poe-oauth: *` 上踩到 → 自动升 `0.0.7` → 带坏的 `mcp-oauth@1.0.0` → bun module 加载 SyntaxError 阻断 SDK regen)。
+
+**正确做法**:
+
+```bash
+# 选 A:take 上游 bun.lock 当起点(推荐 — 跟上游对齐最稳)
+git checkout --theirs bun.lock
+bun install                     # 增量 reconcile,只对齐 fork 私有 deps
+
+# 选 B:take fork bun.lock,只增量上游新加的 deps
+git checkout --ours bun.lock
+bun install                     # 增量
+
+# 选 C(慎用):删 lock 全 reresolve
+rm bun.lock && bun install      # 仅在 A/B 都炸时退而求其次
+```
+
+**判定**:choose A 当上游版本没动太多关键 deps;choose B 当 fork 自己锁了关键版本(rare);choose C 当 lock 文件本身坏掉 / format 不兼容。
+
+> ⚠️ 推荐顺序 A > B > C。**永远不要 C 后不验证 module 加载**(像 mcp-oauth 这种没 export 的 bug 静默无声,直到 SDK regen 才爆)。
 
 ## 5. Merge 后 — checklist
 
@@ -243,6 +266,8 @@ git reset --hard pre-rebase-<日期>
 | rebase 中途退出导致工作树半残 | rebase 冲突没解完 / `git stash` 忘 pop | `git rebase --abort` 回到 rebase 前;若已 commit,reset 到 pre-rebase-tag |
 | merge 后 typecheck 大量错 | 上游重构了 API,fork 引用过时 | 不要硬删 fork 代码;按上游新 API 适配,保留 fork 行为(可能要更新 FORK marker 的 reason) |
 | **`merge --abort` 后 typecheck 突然几百错** | **sync 分支 install 升过依赖版本(catalog),abort 后 git checkout 回 lock,但 node_modules symlinks 物理状态没 rollback,同一个 codebase 看到两份不同版本的 effect/library** | **`bun install` 一次,bun 检测到 symlinks 跟 lock 不一致会重新对齐;再跑 typecheck 验证 0 错。2026-05-03 dev-typecheck-fix 验证过(555 错 → 0 错,无代码改动)** |
+| **删 bun.lock 重 install 后 SDK regen 神秘报 module 加载错** | **`*` / `^x.y.z` 风格的依赖约束自由 resolve 到最新,可能拉到带 bug 的 transitive dep(2026-05-03 `poe-oauth: *` 自动升到 0.0.7 → 带坏的 `mcp-oauth@1.0.0` → "Export named 'X' not found"阻断 SDK 生成)** | **不要删 lock,take 任一边 lock 再 `bun install` 增量更新。详 §4.7。已踩坑必看** |
+| **`OPENCODE_SDK_OPENAPI=httpapi`(默认)生成的 SDK 缺 fork 的 Hono routes** | **上游 `--httpapi` 走 Effect HttpApi 的 PublicApi,fork 用 Hono 加的 routes(/file/office-pdf 等)不在 PublicApi 里 → SDK 缺这些 method** | **要么把 fork routes 迁到 PublicApi(参 features/office-routes-effect-httpapi/),要么 fork build 改用 `OPENCODE_SDK_OPENAPI=hono`(但会丢上游 Effect-only 的新 type 如 SessionMessageData) → 双轨互斥,只能选一边** |
 | installer build 失败 | 上游改了 tauri 配置 / 依赖,品牌注入路径漂了 | 看 packages/branding/scripts/build-deskfox.ps1 + tauri-overrides;必要时同步更新 override |
 | 桌面快捷方式 icon 还是老的 | Windows iconcache 卡 | 见 features/installer-打包/3-changelog.md 弯路 5(也存为 memory) |
 | dev 分支 push 拒收(non-fast-forward)| 双端 origin 一端有 force push 历史不一致 | `git push origin dev --force-with-lease`(谨慎);先 ls-remote 对比两端 HEAD |
@@ -267,3 +292,5 @@ git reset --hard pre-rebase-<日期>
 4. Merge 操作时**先 `--no-commit`**,按 §4.4 五类对号入座解冲突,§4.6 顺序推进
 5. Merge 后(**或 abort 后**)**必跑** `bun install` reconcile node_modules → typecheck(清缓存,避免增量假通过)→ release build → installer 重打验证
 6. 漂移 / 侵入 / override 三指标定期算,异常先治后吃
+7. **bun.lock 别删!** 解 lock 冲突走 `git checkout --theirs/--ours bun.lock && bun install`,详 §4.7。直接 `rm bun.lock` 会让 `*` deps 自由乱升撞坑
+8. **fork 加 Hono route 是技术债** —— 上游 SDK 默认走 `--httpapi`,Hono routes 不进 PublicApi → SDK 缺 method。新 fork 后端 route **必须**进 PublicApi(参 features/office-routes-effect-httpapi/)
