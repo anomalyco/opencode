@@ -1,7 +1,7 @@
 ---
 mode: primary
 hidden: true
-model: opencode/minimax-m2.5
+model: opencode/qwen3.6-plus
 color: "#44BA81"
 tools:
   "*": false
