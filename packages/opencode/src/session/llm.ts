@@ -333,6 +333,14 @@ const live: Layer.Layer<
         ? (yield* InstanceState.context).project.id
         : undefined
 
+      // Pass chunkTimeout from provider/model options to streamText for AI SDK-level
+      // chunk idle timeout detection. This catches silenced stream dropouts where
+      // the TCP connection stays open but no SSE chunks arrive.
+      const chunkTimeout = typeof options["chunkTimeout"] === "number" ? options["chunkTimeout"] : undefined
+      if (chunkTimeout) {
+        l.debug("chunk idle timeout configured", { chunkTimeout })
+      }
+
       return streamText({
         onError(error) {
           l.error("stream error", {
@@ -369,6 +377,9 @@ const live: Layer.Layer<
         toolChoice: input.toolChoice,
         maxOutputTokens: params.maxOutputTokens,
         abortSignal: input.abort,
+        // Stream chunk idle timeout: aborts if no SSE chunk arrives within the window.
+        // Catches silent provider dropouts that keep the TCP connection alive but stop sending data.
+        ...(chunkTimeout ? { timeout: { chunkMs: chunkTimeout } } : {}),
         headers: {
           ...(input.model.providerID.startsWith("opencode")
             ? {
