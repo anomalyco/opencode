@@ -100,15 +100,28 @@ release: published 事件
 #### 用户使用流程(每次 release)
 
 ```
+[user 做]
 1. pack-installer.ps1 -Env prod    # 本地 build + bump + commit + tag
 2. git push origin --tags          # 触发 release-deskfox.yml
-3. (GitHub Actions build .exe + 创 draft Release ~10 min)
+3. (等 GitHub Actions build .exe + 创 draft Release,~10 min)
 4. 在 GitHub web UI Edit draft → Publish release
 5. (release-mirror-gitee-deskfox 触发,~30 秒在 Gitee 创 release 元数据)
-6. mirror-asset-to-gitee.ps1 -Tag ship-prod-X    # 本地秒传 .exe 到 Gitee
+
+[Claude 做(2026-05-04 起 SOP)]
+6. user 一句话告知"传 gitee 了 / release 完了 / publish 了 ship-X" 之类
+   → Claude 跑:mirror-asset-to-gitee.ps1 -Tag ship-prod-X
+   → 5-10 秒 .exe 上传完,贴 Gitee URL 给 user
 ```
 
-第 6 步是新增的 user 操作,**约 5-10 秒**,可接受。
+**职责分工设计**:
+- workflow / web UI 的步骤(1-5)只能 user 在自己机器上做(本地 build / web 点 publish)
+- 第 6 步是结构性需要"国内 IP"的步骤,GitHub Actions 跑不通,只能本机
+- 但 user 不想每次手动跑命令 → Claude 接手第 6 步
+- Claude 子进程能读 user 设的 User 作用域 env var `GITEE_TOKEN`,token 持久化无须重设
+
+详见两条 memory:
+- `feedback_gitee_release_upload_claude_owns.md` — Claude 主动执行规则
+- `project_gitee_token_user_env.md` — token 存放位置 / 续期 / 撤销
 
 ### 实测结果
 
