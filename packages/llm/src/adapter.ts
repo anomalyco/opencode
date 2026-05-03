@@ -327,4 +327,6 @@ const makeClient = (options: ClientOptions): LLMClient => {
 
 export const LLMClient = { make: makeClient }
 
+export const client = makeClient
+
 export * as Adapter from "./adapter"

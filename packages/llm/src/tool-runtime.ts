@@ -1,11 +1,10 @@
 import { Effect, Stream } from "effect"
 import type { Concurrency } from "effect/Types"
 import type { LLMClient } from "./adapter"
+import { Conversation } from "./conversation"
 import type { RequestExecutor } from "./executor"
 import * as LLM from "./llm"
 import {
-  type ContentPart,
-  type FinishReason,
   type LLMError,
   type LLMEvent,
   type LLMRequest,
@@ -73,31 +72,27 @@ export const run = <T extends Tools>(
   const loop = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const state: StepState = { assistantContent: [], toolCalls: [], finishReason: undefined }
+        const state = Conversation.empty()
 
         const modelStream = client.stream(request).pipe(
-          Stream.tap((event) => Effect.sync(() => accumulate(state, event))),
+          Stream.tap((event) => Effect.sync(() => Conversation.mutate(state, event))),
         )
 
         const continuation = Stream.unwrap(
           Effect.gen(function* () {
-            if (state.finishReason !== "tool-calls" || state.toolCalls.length === 0) return Stream.empty
+            if (!Conversation.needsClientToolResults(state)) return Stream.empty
             if (options.stopWhen?.({ step, request })) return Stream.empty
             if (step + 1 >= maxSteps) return Stream.empty
 
             const dispatched = yield* Effect.forEach(
-              state.toolCalls,
+              state.clientToolCalls,
               (call) => dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
               { concurrency },
             )
-            const followUp = LLM.updateRequest(request, {
-              messages: [
-                ...request.messages,
-                LLM.assistant(state.assistantContent),
-                ...dispatched.map(([call, result]) =>
-                  LLM.toolMessage({ id: call.id, name: call.name, result }),
-                ),
-              ],
+            const followUp = Conversation.continueRequest({
+              request,
+              state,
+              results: dispatched.map(([call, result]) => ({ id: call.id, name: call.name, result })),
             })
 
             return Stream.fromIterable(dispatched.flatMap(([call, result]) => emitEvents(call, result))).pipe(
@@ -113,90 +108,22 @@ export const run = <T extends Tools>(
   return loop(initialRequest, 0)
 }
 
-interface StepState {
-  assistantContent: ContentPart[]
-  toolCalls: ToolCallPart[]
-  finishReason: FinishReason | undefined
-}
-
-const accumulate = (state: StepState, event: LLMEvent) => {
-  if (event.type === "text-delta") {
-    appendStreamingText(state, "text", event.text, { metadata: event.metadata })
-    return
-  }
-  if (event.type === "reasoning-delta") {
-    appendStreamingText(state, "reasoning", event.text, { encrypted: event.encrypted, metadata: event.metadata })
-    return
-  }
-  if (event.type === "tool-call") {
-    const part = LLM.toolCall({
-      id: event.id,
-      name: event.name,
-      input: event.input,
-      providerExecuted: event.providerExecuted,
-      metadata: event.metadata,
-    })
-    state.assistantContent.push(part)
-    // Provider-executed tools are dispatched by the provider; the runtime must
-    // not invoke a client handler. The matching `tool-result` event arrives
-    // later in the same stream and is folded into `assistantContent` so the
-    // next round's message history carries it.
-    if (!event.providerExecuted) state.toolCalls.push(part)
-    return
-  }
-  if (event.type === "tool-result" && event.providerExecuted) {
-    state.assistantContent.push(LLM.toolResult({
-      id: event.id,
-      name: event.name,
-      result: event.result,
-      providerExecuted: true,
-    }))
-    return
-  }
-  if (event.type === "request-finish") {
-    state.finishReason = event.reason
-  }
-}
-
-const appendStreamingText = (
-  state: StepState,
-  type: "text" | "reasoning",
-  text: string,
-  options: { readonly encrypted?: string; readonly metadata?: Record<string, unknown> } = {},
-) => {
-  const last = state.assistantContent.at(-1)
-  const canMergeSignedReasoning = type === "reasoning" && text === "" && options.encrypted && last?.type === "reasoning"
-  const canMergeText = last?.type === type && !options.metadata && !last.metadata && !options.encrypted
-  if (canMergeSignedReasoning || canMergeText) {
-    state.assistantContent[state.assistantContent.length - 1] = {
-      ...last,
-      text: `${last.text}${text}`,
-      ...(type === "reasoning" && options.encrypted ? { encrypted: options.encrypted } : {}),
-      metadata: options.metadata ? { ...(last.metadata ?? {}), ...options.metadata } : last.metadata,
-    }
-    return
-  }
-  state.assistantContent.push({
-    type,
-    text,
-    ...(type === "reasoning" && options.encrypted ? { encrypted: options.encrypted } : {}),
-    ...(options.metadata ? { metadata: options.metadata } : {}),
-  })
-}
-
-const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<ToolResultValue> => {
+const dispatch = Effect.fn("ToolRuntime.dispatch")(function* (tools: Tools, call: ToolCallPart) {
   const tool = tools[call.name]
-  if (!tool) return Effect.succeed({ type: "error" as const, value: `Unknown tool: ${call.name}` })
+  if (!tool) return { type: "error" as const, value: `Unknown tool: ${call.name}` }
 
-  return decodeAndExecute(tool, call.input).pipe(
+  return yield* decodeAndExecute(tool, call.input).pipe(
     Effect.catchTag("LLM.ToolFailure", (failure) =>
       Effect.succeed({ type: "error" as const, value: failure.message } satisfies ToolResultValue),
     ),
   )
-}
+})
 
-const decodeAndExecute = (tool: AnyTool, input: unknown): Effect.Effect<ToolResultValue, ToolFailure> =>
-  tool._decode(input).pipe(
+const decodeAndExecute = Effect.fn("ToolRuntime.decodeAndExecute")(function* (
+  tool: AnyTool,
+  input: unknown,
+) {
+  return yield* tool._decode(input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
     Effect.flatMap((decoded) => tool.execute(decoded)),
     Effect.flatMap((value) =>
@@ -211,6 +138,7 @@ const decodeAndExecute = (tool: AnyTool, input: unknown): Effect.Effect<ToolResu
     ),
     Effect.map((encoded): ToolResultValue => ({ type: "json", value: encoded })),
   )
+})
 
 const emitEvents = (call: ToolCallPart, result: ToolResultValue): ReadonlyArray<LLMEvent> =>
   result.type === "error"

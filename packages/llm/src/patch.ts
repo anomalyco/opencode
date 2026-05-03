@@ -93,7 +93,7 @@ export const request = (id: string, input: PatchInput<LLMRequest>) => make(`requ
 
 export const prompt = (id: string, input: PatchInput<LLMRequest>) => make(`prompt.${id}`, "prompt", input)
 
-export const toolSchema = (id: string, input: PatchInput<ToolDefinition>) => make(`schema.${id}`, "tool-schema", input)
+export const toolSchema = (id: string, input: PatchInput<ToolDefinition>) => make(`tool-schema.${id}`, "tool-schema", input)
 
 export const target = <A>(id: string, input: PatchInput<A>) => make(`target.${id}`, "target", input)
 

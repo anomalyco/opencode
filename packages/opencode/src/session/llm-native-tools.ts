@@ -1,11 +1,9 @@
 import {
-  LLM,
+  Conversation,
   type LLMClient,
   type LLMError,
   type LLMEvent,
   type LLMRequest,
-  type FinishReason,
-  type ContentPart,
   type RequestExecutor,
 } from "@opencode-ai/llm"
 import { safeValidateTypes } from "@ai-sdk/provider-utils"
@@ -18,75 +16,10 @@ import type { Tool as OpenCodeTool } from "@/tool/tool"
 // a different ceiling.
 export const DEFAULT_MAX_STEPS = 10
 
-// What we care about from the round's events to (a) decide whether to start
-// another round and (b) build the continuation request's message history.
-interface RoundState {
-  finishReason: FinishReason | undefined
-  // Echoed back as the next round's assistant message — text deltas merged
-  // into a single text part, reasoning deltas into a single reasoning part,
-  // tool calls appended in order. Provider-executed tool results are also
-  // appended here so the provider sees the full hosted-tool round-trip.
-  assistantContent: ContentPart[]
+interface RoundState extends Conversation.State {
   // Client-side tool dispatches. One entry per `tool-call` event we forked
   // a handler for, populated when the handler completes.
-  toolResults: Array<{ id: string; name: string; result: unknown }>
-}
-
-const appendStreamingText = (
-  state: RoundState,
-  type: "text" | "reasoning",
-  text: string,
-  options: { readonly encrypted?: string; readonly metadata?: Record<string, unknown> } = {},
-) => {
-  const last = state.assistantContent.at(-1)
-  const canMergeSignedReasoning = type === "reasoning" && text === "" && options.encrypted && last?.type === "reasoning"
-  const canMergeText = last?.type === type && !options.metadata && !last.metadata && !options.encrypted
-  if (canMergeSignedReasoning || canMergeText) {
-    state.assistantContent[state.assistantContent.length - 1] = {
-      ...last,
-      text: `${last.text}${text}`,
-      ...(type === "reasoning" && options.encrypted ? { encrypted: options.encrypted } : {}),
-      metadata: options.metadata ? { ...(last.metadata ?? {}), ...options.metadata } : last.metadata,
-    }
-    return
-  }
-  state.assistantContent.push({
-    type,
-    text,
-    ...(type === "reasoning" && options.encrypted ? { encrypted: options.encrypted } : {}),
-    ...(options.metadata ? { metadata: options.metadata } : {}),
-  })
-}
-
-const accumulate = (state: RoundState, event: LLMEvent) => {
-  if (event.type === "text-delta") return appendStreamingText(state, "text", event.text, { metadata: event.metadata })
-  if (event.type === "reasoning-delta") return appendStreamingText(state, "reasoning", event.text, { encrypted: event.encrypted, metadata: event.metadata })
-  if (event.type === "tool-call") {
-    state.assistantContent.push(
-      LLM.toolCall({
-        id: event.id,
-        name: event.name,
-        input: event.input,
-        providerExecuted: event.providerExecuted,
-        metadata: event.metadata,
-      }),
-    )
-    return
-  }
-  if (event.type === "tool-result" && event.providerExecuted) {
-    state.assistantContent.push(
-      LLM.toolResult({
-        id: event.id,
-        name: event.name,
-        result: event.result,
-        providerExecuted: true,
-      }),
-    )
-    return
-  }
-  if (event.type === "request-finish") {
-    state.finishReason = event.reason
-  }
+  toolResults: Conversation.ToolResultInput[]
 }
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
@@ -241,7 +174,7 @@ const runOneRound = (
   Effect.gen(function* () {
     const queue = yield* Queue.unbounded<LLMEvent, LLMError | Cause.Done>()
     const fiberSet = yield* FiberSet.make<unknown, never>()
-    const state: RoundState = { finishReason: undefined, assistantContent: [], toolResults: [] }
+    const state: RoundState = { ...Conversation.empty(), toolResults: [] }
     const done = yield* Deferred.make<RoundState>()
 
     yield* Effect.forkScoped(
@@ -249,15 +182,16 @@ const runOneRound = (
         yield* client.stream(request).pipe(
           Stream.runForEach((event) =>
             Effect.gen(function* () {
-              accumulate(state, event)
+              const deltas = Conversation.mutate(state, event)
               yield* Queue.offer(queue, event)
-              if (event.type === "tool-call" && !event.providerExecuted) {
+              const call = Conversation.clientToolCallAdded(deltas)
+              if (call) {
                 yield* FiberSet.run(
                   fiberSet,
-                  Effect.exit(dispatchTool(event, tools, nativeTools, abort)).pipe(
+                  Effect.exit(dispatchTool(call, tools, nativeTools, abort)).pipe(
                     Effect.flatMap((exit) =>
                       Effect.gen(function* () {
-                        const resultEvent = Exit.isSuccess(exit) ? exit.value : dispatchFailureEvent(event, exit.cause)
+                        const resultEvent = Exit.isSuccess(exit) ? exit.value : dispatchFailureEvent(call, exit.cause)
                         if (resultEvent.type === "tool-result") {
                           state.toolResults.push({
                             id: resultEvent.id,
@@ -288,21 +222,6 @@ const runOneRound = (
 
     return { events: Stream.fromQueue(queue), done }
   })
-
-// Build the next round's `LLMRequest` by appending the assistant message that
-// echoes everything the round produced (text, reasoning, tool calls, hosted
-// tool results) plus a `tool` role message per dispatched result. Lowering
-// of these LLM-shaped messages back to the provider wire format is handled
-// inside the existing adapter `prepare` step.
-const continuationRequest = (request: LLMRequest, state: RoundState): LLMRequest => {
-  const assistant = LLM.message({ role: "assistant", content: state.assistantContent })
-  const toolMessages = state.toolResults.map((entry) =>
-    LLM.toolMessage({ id: entry.id, name: entry.name, result: entry.result }),
-  )
-  return LLM.updateRequest(request, {
-    messages: [...request.messages, assistant, ...toolMessages],
-  })
-}
 
 /**
  * Run a multi-round model+tool stream with streaming dispatch within each
@@ -336,7 +255,14 @@ export const runWithTools = (input: {
             if (state.finishReason !== "tool-calls") return Stream.empty
             if (state.toolResults.length === 0) return Stream.empty
             if (step + 1 >= maxSteps) return Stream.empty
-            return round(continuationRequest(request, state), step + 1)
+            return round(
+              Conversation.continueRequest({
+                request,
+                state,
+                results: state.toolResults,
+              }),
+              step + 1,
+            )
           }),
         )
         return events.pipe(Stream.concat(continuation))

@@ -1,4 +1,5 @@
 export * from "./adapter"
+export * from "./conversation"
 export * from "./executor"
 export * from "./patch"
 export * from "./schema"

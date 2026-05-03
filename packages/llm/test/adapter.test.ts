@@ -202,7 +202,7 @@ describe("llm adapter", () => {
       expect(prepared.patchTrace.map((item) => item.id)).toEqual([
         "request.test.id",
         "prompt.test.message",
-        "schema.test.description",
+        "tool-schema.test.description",
       ])
     }),
   )

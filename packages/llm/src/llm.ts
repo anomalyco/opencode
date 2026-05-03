@@ -142,7 +142,11 @@ export const toolResult = (input: ToolResultInput): ToolResultPart => ({
 export const toolMessage = (input: ToolResultPart | ToolResultInput) =>
   message({ role: "tool", content: ["type" in input ? input : toolResult(input)] })
 
+export const toolResultMessage = toolMessage
+
 export const toolChoiceName = (name: string) => new ToolChoice({ type: "tool", name })
+
+export const toolChoiceFor = toolChoiceName
 
 const isToolChoiceMode = (value: string): value is ToolChoiceMode =>
   value === "auto" || value === "none" || value === "required"
@@ -173,6 +177,8 @@ export const requestInput = (input: LLMRequest): RequestInput => ({
   metadata: input.metadata,
   native: input.native,
 })
+
+export const toRequestInput = requestInput
 
 export const request = (input: RequestInput) => {
   const { system: requestSystem, prompt, messages, tools, toolChoice: requestToolChoice, generation: requestGeneration, ...rest } = input
