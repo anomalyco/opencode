@@ -60,6 +60,7 @@ import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
+import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
@@ -88,6 +89,7 @@ import { useTuiConfig } from "../../context/tui-config"
 import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
+import { showBtwDialog } from "../../component/dialog-btw"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 
@@ -514,6 +516,31 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Side question",
+      value: "session.btw",
+      category: "Session",
+      slash: {
+        name: "btw",
+      },
+      onSelect: async (dialog) => {
+        dialog.clear()
+        const question = await DialogPrompt.show(dialog, "Side Question", {
+          placeholder: "Ask a quick question...",
+        })
+        if (!question) return
+        void showBtwDialog(
+          dialog,
+          question,
+          sdk.client.session
+            .btw({
+              sessionID: route.sessionID,
+              question,
+            })
+            .then((res) => res.data?.text ?? "No response"),
+        )
       },
     },
     {
