@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import path from "path"
 import { Instance } from "../../src/project/instance"
-import { Session as SessionNs } from "../../src/session"
+import { WithInstance } from "../../src/project/with-instance"
+import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 
 const root = path.join(__dirname, "../..")
 void Log.init({ print: false })
@@ -28,6 +29,9 @@ const svc = {
   },
   updatePart<T extends MessageV2.Part>(part: T) {
     return run(SessionNs.Service.use((svc) => svc.updatePart(part)))
+  },
+  fork(input: { sessionID: SessionID; messageID?: MessageID }) {
+    return run(SessionNs.Service.use((svc) => svc.fork(input)))
   },
 }
 
@@ -120,7 +124,7 @@ async function addCompactionPart(sessionID: SessionID, messageID: MessageID, tai
 
 describe("MessageV2.page", () => {
   test("returns sync result", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -136,7 +140,7 @@ describe("MessageV2.page", () => {
   })
 
   test("pages backward with opaque cursors", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -164,7 +168,7 @@ describe("MessageV2.page", () => {
   })
 
   test("returns items in chronological order within a page", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -179,7 +183,7 @@ describe("MessageV2.page", () => {
   })
 
   test("returns empty items for session with no messages", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -195,7 +199,7 @@ describe("MessageV2.page", () => {
   })
 
   test("throws NotFoundError for non-existent session", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const fake = "non-existent-session" as SessionID
@@ -205,7 +209,7 @@ describe("MessageV2.page", () => {
   })
 
   test("handles exact limit boundary", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -222,7 +226,7 @@ describe("MessageV2.page", () => {
   })
 
   test("limit of 1 returns single newest message", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -239,7 +243,7 @@ describe("MessageV2.page", () => {
   })
 
   test("hydrates multiple parts per message", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -263,7 +267,7 @@ describe("MessageV2.page", () => {
   })
 
   test("accepts cursors from fractional timestamps", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -281,7 +285,7 @@ describe("MessageV2.page", () => {
   })
 
   test("messages with same timestamp are ordered by id", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -301,7 +305,7 @@ describe("MessageV2.page", () => {
   })
 
   test("does not return messages from other sessions", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const a = await svc.create({})
@@ -323,7 +327,7 @@ describe("MessageV2.page", () => {
   })
 
   test("large limit returns all messages without cursor", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -343,7 +347,7 @@ describe("MessageV2.page", () => {
 
 describe("MessageV2.stream", () => {
   test("yields items newest first", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -358,7 +362,7 @@ describe("MessageV2.stream", () => {
   })
 
   test("yields nothing for empty session", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -372,7 +376,7 @@ describe("MessageV2.stream", () => {
   })
 
   test("yields single message", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -388,7 +392,7 @@ describe("MessageV2.stream", () => {
   })
 
   test("hydrates parts for each yielded message", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -406,7 +410,7 @@ describe("MessageV2.stream", () => {
   })
 
   test("handles sets exceeding internal page size", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -423,7 +427,7 @@ describe("MessageV2.stream", () => {
   })
 
   test("is a sync generator", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -444,7 +448,7 @@ describe("MessageV2.stream", () => {
 
 describe("MessageV2.parts", () => {
   test("returns parts for a message", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -461,7 +465,7 @@ describe("MessageV2.parts", () => {
   })
 
   test("returns empty array for message with no parts", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -476,7 +480,7 @@ describe("MessageV2.parts", () => {
   })
 
   test("returns multiple parts in order", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -509,7 +513,7 @@ describe("MessageV2.parts", () => {
   })
 
   test("returns empty for non-existent message id", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         await svc.create({})
@@ -520,7 +524,7 @@ describe("MessageV2.parts", () => {
   })
 
   test("parts contain sessionID and messageID", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -538,7 +542,7 @@ describe("MessageV2.parts", () => {
 
 describe("MessageV2.get", () => {
   test("returns message with hydrated parts", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -557,7 +561,7 @@ describe("MessageV2.get", () => {
   })
 
   test("throws NotFoundError for non-existent message", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -572,7 +576,7 @@ describe("MessageV2.get", () => {
   })
 
   test("scopes by session id", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const a = await svc.create({})
@@ -590,7 +594,7 @@ describe("MessageV2.get", () => {
   })
 
   test("returns message with multiple parts", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -613,7 +617,7 @@ describe("MessageV2.get", () => {
   })
 
   test("returns assistant message with correct role", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -639,7 +643,7 @@ describe("MessageV2.get", () => {
   })
 
   test("returns message with zero parts", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -657,7 +661,7 @@ describe("MessageV2.get", () => {
 
 describe("MessageV2.filterCompacted", () => {
   test("returns all messages when no compaction", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -674,7 +678,7 @@ describe("MessageV2.filterCompacted", () => {
   })
 
   test("stops at compaction boundary and returns chronological order", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -718,7 +722,7 @@ describe("MessageV2.filterCompacted", () => {
   })
 
   test("does not break on compaction part without matching summary", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -736,7 +740,7 @@ describe("MessageV2.filterCompacted", () => {
   })
 
   test("skips assistant with error even if marked as summary", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -761,7 +765,7 @@ describe("MessageV2.filterCompacted", () => {
   })
 
   test("skips assistant without finish even if marked as summary", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -782,7 +786,7 @@ describe("MessageV2.filterCompacted", () => {
   })
 
   test("retains original tail when compaction stores tail_start_id", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -837,8 +841,74 @@ describe("MessageV2.filterCompacted", () => {
     })
   })
 
+  test("fork remaps compaction tail_start_id for filterCompacted", async () => {
+    await WithInstance.provide({
+      directory: root,
+      fn: async () => {
+        const session = await svc.create({})
+
+        const u1 = await addUser(session.id, "first")
+        const a1 = await addAssistant(session.id, u1, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a1,
+          type: "text",
+          text: "first reply",
+        })
+
+        const u2 = await addUser(session.id, "second")
+        const a2 = await addAssistant(session.id, u2, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a2,
+          type: "text",
+          text: "second reply",
+        })
+
+        const c1 = await addUser(session.id)
+        await addCompactionPart(session.id, c1, u2)
+        const s1 = await addAssistant(session.id, c1, { summary: true, finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: s1,
+          type: "text",
+          text: "summary",
+        })
+
+        const u3 = await addUser(session.id, "third")
+        const a3 = await addAssistant(session.id, u3, { finish: "end_turn" })
+        await svc.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: a3,
+          type: "text",
+          text: "third reply",
+        })
+
+        const parentFiltered = MessageV2.filterCompacted(MessageV2.stream(session.id))
+        expect(parentFiltered.map((item) => item.info.id)).toEqual([u2, a2, c1, s1, u3, a3])
+
+        const forked = await svc.fork({ sessionID: session.id })
+        const childFiltered = MessageV2.filterCompacted(MessageV2.stream(forked.id))
+        expect(childFiltered).toHaveLength(parentFiltered.length)
+
+        const tailPart = childFiltered.flatMap((m) => m.parts).find((p) => p.type === "compaction")
+        expect(tailPart?.type).toBe("compaction")
+        if (!tailPart || tailPart.type !== "compaction") throw new Error("Expected forked compaction part")
+        expect(tailPart.tail_start_id).toBeDefined()
+        expect(childFiltered.some((m) => m.info.id === tailPart.tail_start_id)).toBe(true)
+
+        await svc.remove(forked.id)
+        await svc.remove(session.id)
+      },
+    })
+  })
+
   test("retains an assistant tail when compaction starts inside a turn", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -902,7 +972,7 @@ describe("MessageV2.filterCompacted", () => {
   })
 
   test("prefers latest compaction boundary when repeated compactions exist", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -1024,7 +1094,7 @@ describe("MessageV2.cursor", () => {
 
 describe("MessageV2 consistency", () => {
   test("page hydration matches get for each message", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -1043,7 +1113,7 @@ describe("MessageV2 consistency", () => {
   })
 
   test("parts from get match standalone parts call", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -1059,7 +1129,7 @@ describe("MessageV2 consistency", () => {
   })
 
   test("stream collects same messages as exhaustive page iteration", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})
@@ -1086,7 +1156,7 @@ describe("MessageV2 consistency", () => {
   })
 
   test("filterCompacted of full stream returns same as Array.from when no compaction", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: root,
       fn: async () => {
         const session = await svc.create({})

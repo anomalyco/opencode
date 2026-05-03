@@ -14,6 +14,7 @@ import {
   ServerConnection,
   useCommand,
 } from "@opencode-ai/app"
+import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { readImage } from "@tauri-apps/plugin-clipboard-manager"
@@ -284,13 +285,14 @@ const createPlatform = (): Platform => {
       }
     })(),
 
-    // FORK: UPDATER_ENABLED=false 时不暴露 checkUpdate/update,所有 UI 入口(layout polling /
-    // settings UI / error 页 / 菜单)通过现有的 `if (!platform.checkUpdate) return` 自动短路
-    // 失效 + `disabled={!platform.checkUpdate}` 把控件灰显。**不要换 sentinel pattern** —
+    // FORK: UPDATER_ENABLED=false 时不暴露 checkUpdate/updateAndRestart,所有 UI 入口
+    // (layout polling / settings UI / error 页 / 菜单)通过 `if (!platform.checkUpdate) return`
+    // 自动短路 + `disabled={!platform.checkUpdate}` 把控件灰显。**不要换 sentinel pattern** —
     // 那会让 method 永远存在 → controls 全部变可点 → "立即检查" 按钮发"已是最新"假 toast
     // (updater-disable-adapter rollback 2026-05-03)
     // 未来 fork 自家 updater 上线时:翻 UPDATER_ENABLED=true,spread 自动恢复 method,
     // controls 自动 enabled,无须回头删 conditional。
+    // 注:method 名 + 行为跟上游 update→updateAndRestart rename 走(install + relaunch 原子)
     ...(UPDATER_ENABLED
       ? {
           checkUpdate: async () => {
@@ -304,10 +306,15 @@ const createPlatform = (): Platform => {
             update = next
             return { updateAvailable: true, version: next.version }
           },
-          update: async () => {
+          updateAndRestart: async () => {
             if (!update) return
             if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
-            await update.install().catch(() => undefined)
+            const installed = await update
+              .install()
+              .then(() => true)
+              .catch(() => false)
+            if (!installed) return
+            await relaunch()
           },
         }
       : {}),

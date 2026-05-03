@@ -1,6 +1,6 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
-// FORK: office-pdf-ref protocol — side-band MIME marker shared with opencode/file/index.ts 2026-05-03
-import { isOfficePdfRefMime } from "@opencode-ai/shared/office-pdf-protocol"
+// FORK: office-pdf-ref protocol — side-band MIME marker shared with opencode/file/index.ts;跟上游 shared → core rename 走 2026-05-03
+import { isOfficePdfRefMime } from "@opencode-ai/core/office-pdf-protocol"
 
 export type MediaKind = "image" | "audio" | "svg" | "pdf"
 

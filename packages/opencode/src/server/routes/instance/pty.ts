@@ -1,17 +1,46 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import type { UpgradeWebSocket } from "hono/ws"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import z from "zod"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
-import { NotFoundError } from "@/storage"
+import { Shell } from "@/shell/shell"
+import { NotFoundError } from "@/storage/storage"
 import { errors } from "../../error"
 import { jsonRequest, runRequest } from "./trace"
 
+const ShellItem = z.object({
+  path: z.string(),
+  name: z.string(),
+  acceptable: z.boolean(),
+})
+const decodePtyID = Schema.decodeUnknownSync(PtyID)
+
 export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
   return new Hono()
+    .get(
+      "/shells",
+      describeRoute({
+        summary: "List available shells",
+        description: "Get a list of available shells on the system.",
+        operationId: "pty.shells",
+        responses: {
+          200: {
+            description: "List of shells",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(ShellItem)),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(await Shell.list())
+      },
+    )
     .get(
       "/",
       describeRoute({
@@ -23,7 +52,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             description: "List of sessions",
             content: {
               "application/json": {
-                schema: resolver(Pty.Info.array()),
+                schema: resolver(Pty.Info.zod.array()),
               },
             },
           },
@@ -46,18 +75,18 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             description: "Created session",
             content: {
               "application/json": {
-                schema: resolver(Pty.Info),
+                schema: resolver(Pty.Info.zod),
               },
             },
           },
           ...errors(400),
         },
       }),
-      validator("json", Pty.CreateInput),
+      validator("json", Pty.CreateInput.zod),
       async (c) =>
         jsonRequest("PtyRoutes.create", c, function* () {
           const pty = yield* Pty.Service
-          return yield* pty.create(c.req.valid("json"))
+          return yield* pty.create(c.req.valid("json") as Pty.CreateInput)
         }),
     )
     .get(
@@ -71,7 +100,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             description: "Session info",
             content: {
               "application/json": {
-                schema: resolver(Pty.Info),
+                schema: resolver(Pty.Info.zod),
               },
             },
           },
@@ -105,7 +134,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
             description: "Updated session",
             content: {
               "application/json": {
-                schema: resolver(Pty.Info),
+                schema: resolver(Pty.Info.zod),
               },
             },
           },
@@ -113,11 +142,11 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
         },
       }),
       validator("param", z.object({ ptyID: PtyID.zod })),
-      validator("json", Pty.UpdateInput),
+      validator("json", Pty.UpdateInput.zod),
       async (c) =>
         jsonRequest("PtyRoutes.update", c, function* () {
           const pty = yield* Pty.Service
-          return yield* pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
+          return yield* pty.update(c.req.valid("param").ptyID, c.req.valid("json") as Pty.UpdateInput)
         }),
     )
     .delete(
@@ -171,7 +200,7 @@ export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
           onClose: () => void
         }
 
-        const id = PtyID.zod.parse(c.req.param("ptyID"))
+        const id = decodePtyID(c.req.param("ptyID"))
         const cursor = (() => {
           const value = c.req.query("cursor")
           if (!value) return

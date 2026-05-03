@@ -6,7 +6,8 @@ import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 // FORK: 直接从 branding 包 import 以拿到 variant prop 的类型 2026-04-26
 import { Mark } from "@opencode-ai/branding/logo"
-import { getDirectory, getFilename } from "@opencode-ai/shared/util/path"
+// FORK: 跟上游 shared → core rename 走 2026-05-03
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"

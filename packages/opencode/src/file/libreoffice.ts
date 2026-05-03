@@ -2,8 +2,10 @@ import fs from "fs/promises"
 import path from "path"
 import os from "os"
 import crypto from "crypto"
-import { Global } from "../global"
-import { Log, Process } from "../util"
+// FORK: 跟上游 Global/Log 迁到 @opencode-ai/core 走;Process 留 opencode 内部 2026-05-03
+import { Global } from "@opencode-ai/core/global"
+import * as Log from "@opencode-ai/core/util/log"
+import { Process } from "@/util/process"
 import { detectSofficePath } from "./office-installer"
 
 const log = Log.create({ service: "libreoffice" })

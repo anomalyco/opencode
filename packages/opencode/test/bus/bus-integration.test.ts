@@ -1,18 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import z from "zod"
+import { Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import { WithInstance } from "../../src/project/with-instance"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
-const TestEvent = BusEvent.define("test.integration", z.object({ value: z.number() }))
+const TestEvent = BusEvent.define("test.integration", Schema.Struct({ value: Schema.Number }))
 
 function withInstance(directory: string, fn: () => Promise<void>) {
-  return Instance.provide({ directory, fn })
+  return WithInstance.provide({ directory, fn })
 }
 
 describe("Bus integration: acquireRelease subscriber pattern", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(() => disposeAllInstances())
 
   test("subscriber via callback facade receives events and cleans up on unsub", async () => {
     await using tmp = await tmpdir()
@@ -42,7 +43,7 @@ describe("Bus integration: acquireRelease subscriber pattern", () => {
     await using tmp = await tmpdir()
     const received: Array<{ type: string; value?: number }> = []
 
-    const OtherEvent = BusEvent.define("test.other", z.object({ value: z.number() }))
+    const OtherEvent = BusEvent.define("test.other", Schema.Struct({ value: Schema.Number }))
 
     await withInstance(tmp.path, async () => {
       Bus.subscribeAll((evt) => {
@@ -78,7 +79,7 @@ describe("Bus integration: acquireRelease subscriber pattern", () => {
       await Bun.sleep(10)
     })
 
-    await Instance.disposeAll()
+    await disposeAllInstances()
     await Bun.sleep(50)
 
     expect(received).toEqual([1])

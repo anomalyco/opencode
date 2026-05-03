@@ -2,7 +2,7 @@ export * as ConfigVariable from "./variable"
 
 import path from "path"
 import os from "os"
-import { Filesystem } from "@/util"
+import { Filesystem } from "@/util/filesystem"
 import { InvalidError } from "./error"
 
 type ParseSource =
