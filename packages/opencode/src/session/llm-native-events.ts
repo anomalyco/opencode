@@ -139,7 +139,14 @@ export const mapper = () => {
     state.text.clear()
     state.reasoning.clear()
     state.toolInput.clear()
+    state.toolInputs.clear()
     return events
+  }
+
+  const consumeToolInput = (id: string) => {
+    const input = state.toolInputs.get(id) ?? {}
+    state.toolInputs.delete(id)
+    return input
   }
 
   const map = (event: LLMEvent): ReadonlyArray<SessionEvent> => {
@@ -180,19 +187,19 @@ export const mapper = () => {
         ]
       case "tool-result":
         if (event.result.type === "error") {
-          return [{ type: "tool-error", toolCallId: event.id, toolName: event.name, input: state.toolInputs.get(event.id) ?? {}, error: stringifyResult(event.result) }]
+          return [{ type: "tool-error", toolCallId: event.id, toolName: event.name, input: consumeToolInput(event.id), error: stringifyResult(event.result) }]
         }
         return [
           {
             type: "tool-result",
             toolCallId: event.id,
             toolName: event.name,
-            input: state.toolInputs.get(event.id) ?? {},
+            input: consumeToolInput(event.id),
             output: toolResultOutput(event.result),
           },
         ]
       case "tool-error":
-        return [{ type: "tool-error", toolCallId: event.id, toolName: event.name, input: state.toolInputs.get(event.id) ?? {}, error: event.message }]
+        return [{ type: "tool-error", toolCallId: event.id, toolName: event.name, input: consumeToolInput(event.id), error: event.message }]
       case "step-finish":
         return finish(event, false)
       case "request-finish":
@@ -203,7 +210,14 @@ export const mapper = () => {
     return []
   }
 
-  const flush = (): ReadonlyArray<SessionEvent> => closeOpenParts(state)
+  const flush = (): ReadonlyArray<SessionEvent> => {
+    const events = closeOpenParts(state)
+    state.text.clear()
+    state.reasoning.clear()
+    state.toolInput.clear()
+    state.toolInputs.clear()
+    return events
+  }
 
   return { map, flush }
 }

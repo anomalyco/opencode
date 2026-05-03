@@ -177,7 +177,7 @@ const dispatchFailureEvent = (
 const dispatchTool = (
   call: { readonly id: string; readonly name: string; readonly input: unknown },
   tools: Record<string, Tool>,
-  nativeTools: ReadonlyArray<OpenCodeTool.Def>,
+  nativeTools: ReadonlyMap<string, OpenCodeTool.Def>,
   abort: AbortSignal,
 ): Effect.Effect<LLMEvent> =>
   Effect.gen(function* () {
@@ -192,7 +192,7 @@ const dispatchTool = (
         message: `Unknown tool: ${call.name}`,
       } satisfies LLMEvent
     }
-    const exit = yield* Effect.exit(executeTool(call, tool, nativeTools.find((item) => item.id === call.name), abort))
+    const exit = yield* Effect.exit(executeTool(call, tool, nativeTools.get(call.name), abort))
     if (Exit.isSuccess(exit)) {
       return {
         type: "tool-result",
@@ -228,7 +228,7 @@ const runOneRound = (
   client: LLMClient,
   request: LLMRequest,
   tools: Record<string, Tool>,
-  nativeTools: ReadonlyArray<OpenCodeTool.Def>,
+  nativeTools: ReadonlyMap<string, OpenCodeTool.Def>,
   abort: AbortSignal,
 ): Effect.Effect<
   {
@@ -325,10 +325,11 @@ export const runWithTools = (input: {
   readonly maxSteps?: number
 }): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> => {
   const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS
+  const nativeTools = new Map((input.nativeTools ?? []).map((tool) => [tool.id, tool] as const))
   const round = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const { events, done } = yield* runOneRound(input.client, request, input.tools, input.nativeTools ?? [], input.abort)
+        const { events, done } = yield* runOneRound(input.client, request, input.tools, nativeTools, input.abort)
         const continuation = Stream.unwrap(
           Effect.gen(function* () {
             const state = yield* Deferred.await(done)

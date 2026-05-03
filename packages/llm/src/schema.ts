@@ -107,29 +107,35 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   ttlSeconds: Schema.optional(Schema.Number),
 }) {}
 
-export const SystemPart = Schema.Struct({
-  type: Schema.Literal("text"),
+const TypeStruct = <const Type extends string, const Fields extends Schema.Struct.Fields>(
+  type: Type,
+  identifier: string,
+  fields: Fields,
+) => Schema.Struct({
+  type: Schema.tag(type),
+  ...fields,
+}).annotate({ identifier })
+
+export const SystemPart = TypeStruct("text", "LLM.SystemPart", {
   text: Schema.String,
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.SystemPart" })
+})
 export type SystemPart = Schema.Schema.Type<typeof SystemPart>
 
-export const TextPart = Schema.Struct({
-  type: Schema.Literal("text"),
+export const TextPart = TypeStruct("text", "LLM.Content.Text", {
   text: Schema.String,
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.Content.Text" })
+})
 export type TextPart = Schema.Schema.Type<typeof TextPart>
 
-export const MediaPart = Schema.Struct({
-  type: Schema.Literal("media"),
+export const MediaPart = TypeStruct("media", "LLM.Content.Media", {
   mediaType: Schema.String,
   data: Schema.Union([Schema.String, Schema.Uint8Array]),
   filename: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.Content.Media" })
+})
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
 export const ToolResultValue = Schema.Struct({
@@ -138,32 +144,29 @@ export const ToolResultValue = Schema.Struct({
 }).annotate({ identifier: "LLM.ToolResult" })
 export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>
 
-export const ToolCallPart = Schema.Struct({
-  type: Schema.Literal("tool-call"),
+export const ToolCallPart = TypeStruct("tool-call", "LLM.Content.ToolCall", {
   id: Schema.String,
   name: Schema.String,
   input: Schema.Unknown,
   providerExecuted: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.Content.ToolCall" })
+})
 export type ToolCallPart = Schema.Schema.Type<typeof ToolCallPart>
 
-export const ToolResultPart = Schema.Struct({
-  type: Schema.Literal("tool-result"),
+export const ToolResultPart = TypeStruct("tool-result", "LLM.Content.ToolResult", {
   id: Schema.String,
   name: Schema.String,
   result: ToolResultValue,
   providerExecuted: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.Content.ToolResult" })
+})
 export type ToolResultPart = Schema.Schema.Type<typeof ToolResultPart>
 
-export const ReasoningPart = Schema.Struct({
-  type: Schema.Literal("reasoning"),
+export const ReasoningPart = TypeStruct("reasoning", "LLM.Content.Reasoning", {
   text: Schema.String,
   encrypted: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "LLM.Content.Reasoning" })
+})
 export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
 
 export const ContentPart = Schema.Union([TextPart, MediaPart, ToolCallPart, ToolResultPart, ReasoningPart]).pipe(
@@ -212,10 +215,10 @@ export class CacheIntent extends Schema.Class<CacheIntent>("LLM.CacheIntent")({
 }) {}
 
 export const ResponseFormat = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text") }),
-  Schema.Struct({ type: Schema.Literal("json"), schema: JsonSchema }),
-  Schema.Struct({ type: Schema.Literal("tool"), tool: ToolDefinition }),
-])
+  TypeStruct("text", "LLM.ResponseFormat.Text", {}),
+  TypeStruct("json", "LLM.ResponseFormat.Json", { schema: JsonSchema }),
+  TypeStruct("tool", "LLM.ResponseFormat.Tool", { tool: ToolDefinition }),
+]).pipe(Schema.toTaggedUnion("type"))
 export type ResponseFormat = Schema.Schema.Type<typeof ResponseFormat>
 
 export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
@@ -243,44 +246,35 @@ export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
-const EventStruct = <const Type extends string, const Fields extends Schema.Struct.Fields>(
-  type: Type,
-  identifier: string,
-  fields: Fields,
-) => Schema.Struct({
-  type: Schema.tag(type),
-  ...fields,
-}).annotate({ identifier })
-
-export const RequestStart = EventStruct("request-start", "LLM.Event.RequestStart", {
+export const RequestStart = TypeStruct("request-start", "LLM.Event.RequestStart", {
   id: Schema.String,
   model: ModelRef,
 })
 export type RequestStart = Schema.Schema.Type<typeof RequestStart>
 
-export const StepStart = EventStruct("step-start", "LLM.Event.StepStart", {
+export const StepStart = TypeStruct("step-start", "LLM.Event.StepStart", {
   index: Schema.Number,
 })
 export type StepStart = Schema.Schema.Type<typeof StepStart>
 
-export const TextStart = EventStruct("text-start", "LLM.Event.TextStart", {
+export const TextStart = TypeStruct("text-start", "LLM.Event.TextStart", {
   id: Schema.String,
 })
 export type TextStart = Schema.Schema.Type<typeof TextStart>
 
-export const TextDelta = EventStruct("text-delta", "LLM.Event.TextDelta", {
+export const TextDelta = TypeStruct("text-delta", "LLM.Event.TextDelta", {
   id: Schema.optional(Schema.String),
   text: Schema.String,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 })
 export type TextDelta = Schema.Schema.Type<typeof TextDelta>
 
-export const TextEnd = EventStruct("text-end", "LLM.Event.TextEnd", {
+export const TextEnd = TypeStruct("text-end", "LLM.Event.TextEnd", {
   id: Schema.String,
 })
 export type TextEnd = Schema.Schema.Type<typeof TextEnd>
 
-export const ReasoningDelta = EventStruct("reasoning-delta", "LLM.Event.ReasoningDelta", {
+export const ReasoningDelta = TypeStruct("reasoning-delta", "LLM.Event.ReasoningDelta", {
   id: Schema.optional(Schema.String),
   text: Schema.String,
   encrypted: Schema.optional(Schema.String),
@@ -288,14 +282,14 @@ export const ReasoningDelta = EventStruct("reasoning-delta", "LLM.Event.Reasonin
 })
 export type ReasoningDelta = Schema.Schema.Type<typeof ReasoningDelta>
 
-export const ToolInputDelta = EventStruct("tool-input-delta", "LLM.Event.ToolInputDelta", {
+export const ToolInputDelta = TypeStruct("tool-input-delta", "LLM.Event.ToolInputDelta", {
   id: Schema.String,
   name: Schema.String,
   text: Schema.String,
 })
 export type ToolInputDelta = Schema.Schema.Type<typeof ToolInputDelta>
 
-export const ToolCall = EventStruct("tool-call", "LLM.Event.ToolCall", {
+export const ToolCall = TypeStruct("tool-call", "LLM.Event.ToolCall", {
   id: Schema.String,
   name: Schema.String,
   input: Schema.Unknown,
@@ -304,7 +298,7 @@ export const ToolCall = EventStruct("tool-call", "LLM.Event.ToolCall", {
 })
 export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 
-export const ToolResult = EventStruct("tool-result", "LLM.Event.ToolResult", {
+export const ToolResult = TypeStruct("tool-result", "LLM.Event.ToolResult", {
   id: Schema.String,
   name: Schema.String,
   result: ToolResultValue,
@@ -312,27 +306,27 @@ export const ToolResult = EventStruct("tool-result", "LLM.Event.ToolResult", {
 })
 export type ToolResult = Schema.Schema.Type<typeof ToolResult>
 
-export const ToolError = EventStruct("tool-error", "LLM.Event.ToolError", {
+export const ToolError = TypeStruct("tool-error", "LLM.Event.ToolError", {
   id: Schema.String,
   name: Schema.String,
   message: Schema.String,
 })
 export type ToolError = Schema.Schema.Type<typeof ToolError>
 
-export const StepFinish = EventStruct("step-finish", "LLM.Event.StepFinish", {
+export const StepFinish = TypeStruct("step-finish", "LLM.Event.StepFinish", {
   index: Schema.Number,
   reason: FinishReason,
   usage: Schema.optional(Usage),
 })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
-export const RequestFinish = EventStruct("request-finish", "LLM.Event.RequestFinish", {
+export const RequestFinish = TypeStruct("request-finish", "LLM.Event.RequestFinish", {
   reason: FinishReason,
   usage: Schema.optional(Usage),
 })
 export type RequestFinish = Schema.Schema.Type<typeof RequestFinish>
 
-export const ProviderErrorEvent = EventStruct("provider-error", "LLM.Event.ProviderError", {
+export const ProviderErrorEvent = TypeStruct("provider-error", "LLM.Event.ProviderError", {
   message: Schema.String,
   retryable: Schema.optional(Schema.Boolean),
 })
