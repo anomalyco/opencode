@@ -10,6 +10,7 @@ import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Token } from "@/util/token"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
@@ -792,7 +793,7 @@ describe("session.compaction.prune", () => {
 describe("session.compaction.process", () => {
   test("throws when parent is not a user message", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -822,7 +823,7 @@ describe("session.compaction.process", () => {
 
   test("publishes compacted event on continue", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -872,7 +873,7 @@ describe("session.compaction.process", () => {
 
   test("marks summary message as errored on compact result", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -910,7 +911,7 @@ describe("session.compaction.process", () => {
 
   test("adds synthetic continue prompt when auto is enabled", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -951,7 +952,7 @@ describe("session.compaction.process", () => {
 
   test("persists tail_start_id for retained recent turns", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -998,7 +999,7 @@ describe("session.compaction.process", () => {
 
   test("shrinks retained tail to fit preserve token budget", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1047,7 +1048,7 @@ describe("session.compaction.process", () => {
         captured = JSON.stringify(input.messages)
       }),
     )
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1096,7 +1097,7 @@ describe("session.compaction.process", () => {
         captured = JSON.stringify(input.messages)
       }),
     )
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1155,7 +1156,7 @@ describe("session.compaction.process", () => {
         captured = JSON.stringify(input.messages)
       }),
     )
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1218,7 +1219,7 @@ describe("session.compaction.process", () => {
 
   test("allows plugins to disable synthetic continue prompt", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1261,7 +1262,7 @@ describe("session.compaction.process", () => {
 
   test("replays the prior user turn on overflow when earlier context exists", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1309,7 +1310,7 @@ describe("session.compaction.process", () => {
 
   test("falls back to overflow guidance when no replayable turn exists", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1369,7 +1370,7 @@ describe("session.compaction.process", () => {
     )
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1443,7 +1444,7 @@ describe("session.compaction.process", () => {
     const ready = defer()
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1545,7 +1546,7 @@ describe("session.compaction.process", () => {
     )
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1587,7 +1588,7 @@ describe("session.compaction.process", () => {
     )
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1639,7 +1640,7 @@ describe("session.compaction.process", () => {
     )
 
     await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1707,7 +1708,7 @@ describe("session.compaction.process", () => {
     stub.push(reply("summary one"))
     stub.push(reply("summary two"))
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -1779,7 +1780,7 @@ describe("session.compaction.process", () => {
 
   test("ignores previous summaries when sizing the retained tail", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})

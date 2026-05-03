@@ -5,6 +5,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { bootstrap as cliBootstrap } from "../../src/cli/bootstrap"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { InstanceMiddleware } from "../../src/server/routes/instance/middleware"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
@@ -50,7 +51,7 @@ async function bootstrapFixture() {
 test("Instance.provide runs InstanceBootstrap before fn (boundary invariant)", async () => {
   await using tmp = await bootstrapFixture()
 
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => "ok",
   })

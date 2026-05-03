@@ -1,12 +1,8 @@
 import { context, type InstanceContext } from "./instance-context"
-import type { Effect } from "effect"
 
 export type { InstanceContext } from "./instance-context"
 
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: Effect.Effect<void>; fn: () => R }): Promise<R> {
-    return (await import("./with-instance")).WithInstance.provide(input)
-  },
   get current() {
     return context.use()
   },

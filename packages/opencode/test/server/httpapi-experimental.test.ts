@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { Session } from "@/session/session"
@@ -126,12 +127,12 @@ describe("experimental HttpApi", () => {
   test("serves global session list through Hono bridge", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
 
-    const first = await Instance.provide({
+    const first = await WithInstance.provide({
       directory: tmp.path,
       fn: async () => createSession({ title: "page-one" }),
     })
     await new Promise((resolve) => setTimeout(resolve, 5))
-    const second = await Instance.provide({
+    const second = await WithInstance.provide({
       directory: tmp.path,
       fn: async () => createSession({ title: "page-two" }),
     })

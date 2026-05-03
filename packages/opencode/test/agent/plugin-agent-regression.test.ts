@@ -4,6 +4,7 @@ import { pathToFileURL } from "url"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
@@ -39,7 +40,7 @@ test("plugin-registered agents appear in Agent.list", async () => {
     },
   })
 
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
       const agents = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))

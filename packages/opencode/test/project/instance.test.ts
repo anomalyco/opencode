@@ -5,6 +5,7 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { InstanceStore } from "../../src/project/instance-store"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -225,7 +226,7 @@ describe("InstanceStore", () => {
       const dir = yield* tmpdirScoped({ git: true })
 
       const directory = yield* Effect.promise(() =>
-        Instance.provide({
+        WithInstance.provide({
           directory: dir,
           fn: () => Instance.directory,
         }),
@@ -241,7 +242,7 @@ describe("InstanceStore", () => {
       const dir = yield* tmpdirScoped()
 
       const directory = yield* Effect.promise(() =>
-        Instance.provide({
+        WithInstance.provide({
           directory: dir,
           init: Effect.sync(() => {
             expect(() => Instance.current).toThrow()

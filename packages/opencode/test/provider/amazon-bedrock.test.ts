@@ -5,6 +5,7 @@ import { unlink } from "fs/promises"
 import { ProviderID } from "../../src/provider/schema"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { Global } from "@opencode-ai/core/global"
@@ -43,7 +44,7 @@ test("Bedrock: config region takes precedence over AWS_REGION env var", async ()
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_REGION", "us-east-1")
@@ -68,7 +69,7 @@ test("Bedrock: falls back to AWS_REGION env var when no config region", async ()
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_REGION", "eu-west-1")
@@ -123,7 +124,7 @@ test("Bedrock: loads when bearer token from auth.json is present", async () => {
       }),
     )
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       init: Effect.promise(async () => {
         set("AWS_PROFILE", "")
@@ -169,7 +170,7 @@ test("Bedrock: config profile takes precedence over AWS_PROFILE env var", async 
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_PROFILE", "default")
@@ -201,7 +202,7 @@ test("Bedrock: includes custom endpoint in options when specified", async () => 
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_PROFILE", "default")
@@ -234,7 +235,7 @@ test("Bedrock: autoloads when AWS_WEB_IDENTITY_TOKEN_FILE is present", async () 
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_WEB_IDENTITY_TOKEN_FILE", "/var/run/secrets/eks.amazonaws.com/serviceaccount/token")
@@ -277,7 +278,7 @@ test("Bedrock: model with us. prefix should not be double-prefixed", async () =>
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_PROFILE", "default")
@@ -314,7 +315,7 @@ test("Bedrock: model with global. prefix should not be prefixed", async () => {
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_PROFILE", "default")
@@ -350,7 +351,7 @@ test("Bedrock: model with eu. prefix should not be double-prefixed", async () =>
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_PROFILE", "default")
@@ -386,7 +387,7 @@ test("Bedrock: model without prefix in US region should get us. prefix added", a
       )
     },
   })
-  await Instance.provide({
+  await WithInstance.provide({
     directory: tmp.path,
     init: Effect.promise(async () => {
       set("AWS_PROFILE", "default")

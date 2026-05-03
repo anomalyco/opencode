@@ -6,6 +6,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import {
   disposeAllInstances,
@@ -1006,7 +1007,7 @@ it.live("pending permission rejects on instance dispose", () =>
 
     expect(yield* waitForPending(1).pipe(run)).toHaveLength(1)
     yield* Effect.promise(() =>
-      Instance.provide({ directory: dir, fn: () => void InstanceRuntime.disposeInstance(Instance.current) }),
+      WithInstance.provide({ directory: dir, fn: () => void InstanceRuntime.disposeInstance(Instance.current) }),
     )
 
     const exit = yield* Fiber.await(fiber)

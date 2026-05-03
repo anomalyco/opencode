@@ -9,6 +9,7 @@ import { Workspace } from "../../src/control-plane/workspace"
 import { PermissionID } from "../../src/permission/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
@@ -44,7 +45,7 @@ function pathFor(path: string, params: Record<string, string>) {
 function createSession(directory: string, input?: Session.CreateInput) {
   return Effect.promise(
     async () =>
-      await Instance.provide({
+      await WithInstance.provide({
         directory,
         fn: () => runSession(Session.Service.use((svc) => svc.create(input))),
       }),
@@ -54,7 +55,7 @@ function createSession(directory: string, input?: Session.CreateInput) {
 function createTextMessage(directory: string, sessionID: SessionID, text: string) {
   return Effect.promise(
     async () =>
-      await Instance.provide({
+      await WithInstance.provide({
         directory,
         fn: () =>
           runSession(

@@ -5,6 +5,7 @@ import path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Worktree } from "../../src/worktree"
 import { disposeAllInstances, provideInstance, provideTmpdirInstance } from "../fixture/fixture"
@@ -138,7 +139,7 @@ describe("Worktree", () => {
             expect(props.branch).toBe(info.branch)
 
             yield* Effect.promise(() =>
-              Instance.provide({
+              WithInstance.provide({
                 directory: info.directory,
                 fn: () => InstanceRuntime.disposeInstance(Instance.current),
               }),
@@ -163,7 +164,7 @@ describe("Worktree", () => {
 
             yield* Effect.promise(() => ready)
             yield* Effect.promise(() =>
-              Instance.provide({
+              WithInstance.provide({
                 directory: info.directory,
                 fn: () => InstanceRuntime.disposeInstance(Instance.current),
               }),
