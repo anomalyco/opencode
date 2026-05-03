@@ -14,6 +14,7 @@ import { Database } from "@/storage/db"
 import { ProjectID } from "@/project/schema"
 import { ProjectTable } from "@/project/project.sql"
 import { Instance } from "@/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID, MessageID, PartID } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
@@ -101,7 +102,7 @@ afterEach(async () => {
 
 async function withInstance<T>(fn: (dir: string) => T | Promise<T>) {
   await using tmp = await tmpdir({ git: true })
-  return Instance.provide({
+  return WithInstance.provide({
     directory: tmp.path,
     fn: () => fn(tmp.path),
   })

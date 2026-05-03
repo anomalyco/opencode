@@ -122,6 +122,7 @@ export const Client = lazy(() => {
 })
 
 export function close() {
+  if (!Client.loaded()) return
   Client().$client.close()
   Client.reset()
 }
