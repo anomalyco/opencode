@@ -38,3 +38,4 @@ jobs:
           OPENCODE_VERSION: ${{ steps.version.outputs.version }}
           OPENCODE_RELEASE: "true"
           GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
