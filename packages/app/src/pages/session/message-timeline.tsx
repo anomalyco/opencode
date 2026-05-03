@@ -15,8 +15,8 @@ import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TextField } from "@opencode-ai/ui/text-field"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
-import { Binary } from "@opencode-ai/util/binary"
-import { getFilename } from "@opencode-ai/util/path"
+import { Binary } from "@opencode-ai/core/util/binary"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -259,7 +259,7 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync.data.session_status[id] ?? idle
   })
-  const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+  const working = createMemo(() => sessionStatus().type !== "idle")
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
@@ -642,10 +642,10 @@ export function MessageTimeline(props: {
             onClick={props.onResumeScroll}
           >
             <div
-              class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-[var(--gray-dark-7)] bg-[color-mix(in_srgb,var(--gray-dark-3)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--gray-dark-8)] [--icon-base:var(--gray-dark-10)] group-hover:[--icon-base:var(--gray-dark-11)]"
+              class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-border-weaker-base bg-[color-mix(in_srgb,var(--surface-raised-stronger-non-alpha)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--border-weak-base)] group-hover:[--icon-base:var(--icon-hover)]"
               style={{
                 "box-shadow":
-                  "0 51px 60px 0 rgba(0,0,0,0.13), 0 15.375px 18.088px 0 rgba(0,0,0,0.19), 0 6.386px 7.513px 0 rgba(0,0,0,0.25), 0 2.31px 2.717px 0 rgba(0,0,0,0.38)",
+                  "0 51px 60px 0 rgba(0,0,0,0.10), 0 15px 18px 0 rgba(0,0,0,0.12), 0 6.386px 7.513px 0 rgba(0,0,0,0.12), 0 2.31px 2.717px 0 rgba(0,0,0,0.20)",
               }}
             >
               <Icon name="arrow-down-to-line" size="small" />
@@ -721,7 +721,7 @@ export function MessageTimeline(props: {
                   "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
                 }}
               >
-                <Show when={workingStatus() !== "hidden"}>
+                <Show when={workingStatus() !== "hidden" && settings.general.showSessionProgressBar()}>
                   <div
                     data-component="session-progress"
                     data-state={workingStatus()}
@@ -791,7 +791,7 @@ export function MessageTimeline(props: {
                             data-slot="session-title-child"
                             value={title.draft}
                             disabled={titleMutation.isPending}
-                            class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
+                            class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px] pl-1 -ml-1"
                             style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
                             onInput={(event) => setTitle("draft", event.currentTarget.value)}
                             onKeyDown={(event) => {
@@ -812,7 +812,7 @@ export function MessageTimeline(props: {
                       </Show>
                     </div>
                   </div>
-                  <Show when={sessionID()}>
+                  <Show when={sessionID()} keyed>
                     {(id) => (
                       <div class="shrink-0 flex items-center gap-3">
                         <SessionContextUsage placement="bottom" />
@@ -878,12 +878,12 @@ export function MessageTimeline(props: {
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
+                                <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item
-                                  onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
+                                  onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
                                 >
                                   <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>

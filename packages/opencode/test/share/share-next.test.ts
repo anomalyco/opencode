@@ -3,18 +3,19 @@ import { beforeEach, describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
-import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account"
-import { Account } from "../../src/account"
+import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
+import { Account } from "../../src/account/account"
 import { AccountRepo } from "../../src/account/repo"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
-import { Config } from "../../src/config/config"
-import { Provider } from "../../src/provider/provider"
-import { Session } from "../../src/session"
+import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
+import { Session } from "@/session/session"
 import type { SessionID } from "../../src/session/schema"
-import { ShareNext } from "../../src/share/share-next"
+import { ShareNext } from "@/share/share-next"
 import { SessionShareTable } from "../../src/share/share.sql"
-import { Database, eq } from "../../src/storage/db"
+import { Database } from "@/storage/db"
+import { eq } from "drizzle-orm"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { testEffect } from "../lib/effect"
@@ -55,7 +56,7 @@ function wired(client: HttpClient.HttpClient) {
   return Layer.mergeAll(
     Bus.layer,
     ShareNext.layer,
-    Session.layer,
+    Session.defaultLayer,
     AccountRepo.layer,
     NodeFileSystem.layer,
     CrossSpawnSpawner.defaultLayer,
@@ -72,7 +73,7 @@ const share = (id: SessionID) =>
   Database.use((db) => db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, id)).get())
 
 const seed = (url: string, org?: string) =>
-  AccountRepo.use((repo) =>
+  AccountRepo.Service.use((repo) =>
     repo.persistAccount({
       id: AccountID.make("account-1"),
       email: "user@example.com",

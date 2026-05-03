@@ -1,10 +1,9 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import { Log } from "../util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { Installation } from "../installation"
-import { Auth, OAUTH_DUMMY_KEY } from "../auth"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
-import { ProviderTransform } from "@/provider/transform"
-import { ModelID, ProviderID } from "@/provider/schema"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 
@@ -15,6 +14,7 @@ const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.2", "gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini"])
 
 interface PkceCodes {
   verifier: string
@@ -359,37 +359,44 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 
 export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
   return {
+    provider: {
+      id: "openai",
+      async models(provider, ctx) {
+        if (ctx.auth?.type !== "oauth") return provider.models
+
+        return Object.fromEntries(
+          Object.entries(provider.models)
+            .filter(([, model]) => {
+              if (ALLOWED_MODELS.has(model.api.id)) return true
+              const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
+              return match ? parseFloat(match[1]) > 5.4 : false
+            })
+            .map(([modelID, model]) => [
+              modelID,
+              {
+                ...model,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cache: { read: 0, write: 0 },
+                },
+                limit: model.id.includes("gpt-5.5")
+                  ? {
+                      context: 400_000,
+                      input: 272_000,
+                      output: 128_000,
+                    }
+                  : model.limit,
+              },
+            ]),
+        )
+      },
+    },
     auth: {
       provider: "openai",
-      async loader(getAuth, provider) {
+      async loader(getAuth) {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
-
-        // Filter models to only allowed Codex models for OAuth
-        const allowedModels = new Set([
-          "gpt-5.1-codex",
-          "gpt-5.1-codex-max",
-          "gpt-5.1-codex-mini",
-          "gpt-5.2",
-          "gpt-5.2-codex",
-          "gpt-5.3-codex",
-          "gpt-5.4",
-          "gpt-5.4-mini",
-        ])
-        for (const modelId of Object.keys(provider.models)) {
-          if (modelId.includes("codex")) continue
-          if (allowedModels.has(modelId)) continue
-          delete provider.models[modelId]
-        }
-
-        // Zero out costs for Codex (included with ChatGPT subscription)
-        for (const model of Object.values(provider.models)) {
-          model.cost = {
-            input: 0,
-            output: 0,
-            cache: { read: 0, write: 0 },
-          }
-        }
 
         return {
           apiKey: OAUTH_DUMMY_KEY,
@@ -512,7 +519,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "User-Agent": `opencode/${Installation.VERSION}`,
+                "User-Agent": `opencode/${InstallationVersion}`,
               },
               body: JSON.stringify({ client_id: CLIENT_ID }),
             })
@@ -536,7 +543,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
-                      "User-Agent": `opencode/${Installation.VERSION}`,
+                      "User-Agent": `opencode/${InstallationVersion}`,
                     },
                     body: JSON.stringify({
                       device_auth_id: deviceData.device_auth_id,
@@ -596,7 +603,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
     "chat.headers": async (input, output) => {
       if (input.model.providerID !== "openai") return
       output.headers.originator = "opencode"
-      output.headers["User-Agent"] = `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
+      output.headers["User-Agent"] = `opencode/${InstallationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers.session_id = input.sessionID
     },
     "chat.params": async (input, output) => {

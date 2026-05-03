@@ -3,6 +3,7 @@ import { ACP } from "../../src/acp/agent"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import type { Event, EventMessagePartUpdated, ToolStatePending, ToolStateRunning } from "@opencode-ai/sdk/v2"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { tmpdir } from "../fixture/fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
@@ -58,6 +59,7 @@ function toolEvent(
           raw: opts.raw,
         }
   const payload: EventMessagePartUpdated = {
+    id: `evt_${opts.callID}`,
     type: "message.part.updated",
     properties: {
       sessionID: sessionId,
@@ -262,7 +264,7 @@ function createFakeAgent() {
 describe("acp.agent event subscription", () => {
   test("routes message.part.delta by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, updates, stop } = createFakeAgent()
@@ -295,9 +297,49 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("does not emit user_message_chunk for live prompt parts", async () => {
+    await using tmp = await tmpdir()
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: sessionId,
+              time: Date.now(),
+              part: {
+                id: "part_1",
+                sessionID: sessionId,
+                messageID: "msg_user",
+                type: "text",
+                text: "hello",
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(
+          sessionUpdates
+            .filter((u) => u.sessionId === sessionId)
+            .some((u) => u.update.sessionUpdate === "user_message_chunk"),
+        ).toBe(false)
+
+        stop()
+      },
+    })
+  })
+
   test("keeps concurrent sessions isolated when message.part.delta events are interleaved", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, chunks, stop } = createFakeAgent()
@@ -349,7 +391,7 @@ describe("acp.agent event subscription", () => {
 
   test("does not create additional event subscriptions on repeated loadSession()", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const { agent, calls, stop } = createFakeAgent()
@@ -371,7 +413,7 @@ describe("acp.agent event subscription", () => {
 
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const permissionReplies: string[] = []
@@ -410,7 +452,7 @@ describe("acp.agent event subscription", () => {
 
   test("permission prompt on session A does not block message updates for session B", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const permissionReplies: string[] = []
@@ -423,9 +465,9 @@ describe("acp.agent event subscription", () => {
 
         // Make permission request for session A block until we release it
         const originalRequestPermission = connection.requestPermission.bind(connection)
-        let permissionCalls = 0
+        let _permissionCalls = 0
         connection.requestPermission = async (params: RequestPermissionParams) => {
-          permissionCalls++
+          _permissionCalls++
           if (params.sessionId.endsWith("1")) {
             await permissionABlocking
           }
@@ -497,7 +539,7 @@ describe("acp.agent event subscription", () => {
 
   test("streams running bash output snapshots and de-dupes identical snapshots", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -531,7 +573,7 @@ describe("acp.agent event subscription", () => {
 
   test("emits synthetic pending before first running update for any tool", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -576,7 +618,7 @@ describe("acp.agent event subscription", () => {
 
   test("does not emit duplicate synthetic pending after replayed running tool", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop, sdk } = createFakeAgent()
@@ -635,7 +677,7 @@ describe("acp.agent event subscription", () => {
 
   test("clears bash snapshot marker on pending state", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()

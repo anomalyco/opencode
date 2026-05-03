@@ -18,10 +18,7 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
   },
-  modifyBody: (body: Record<string, any>) => ({
-    ...body,
-    ...(workspaceID ? { safety_identifier: workspaceID } : {}),
-  }),
+  modifyBody: (body: Record<string, any>) => body,
   createBinaryStreamDecoder: () => undefined,
   streamSeparator: "\n\n",
   createUsageParser: () => {
@@ -36,7 +33,7 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
         let json
         try {
           json = JSON.parse(data.slice(6)) as { response?: { usage?: Usage } }
-        } catch (e) {
+        } catch {
           return
         }
 

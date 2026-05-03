@@ -77,7 +77,7 @@ export const AppIcon: Component<AppIconProps> = (props) => {
       alt={local.alt ?? ""}
       draggable={local.draggable ?? false}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     />

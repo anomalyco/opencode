@@ -102,7 +102,7 @@ Bestehende Dateien werden dabei ueberschrieben.
 
 :::note
 Das Tool `write` wird ueber die Berechtigung `edit` gesteuert.
-`edit` gilt fuer alle Datei-Aenderungen (`edit`, `write`, `patch`, `multiedit`).
+`edit` gilt fuer alle Datei-Aenderungen (`edit`, `write`, `patch`).
 :::
 
 ---
@@ -158,23 +158,6 @@ Sucht nach Dateien mit Glob-Mustern wie `**/*.js` oder `src/**/*.ts`. Gibt passe
 
 ---
 
-### list
-
-Listet Dateien und Verzeichnisse in einem Pfad auf.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Dieses Tool listet Verzeichnisinhalte auf. Es akzeptiert Glob-Muster zum Filtern der Ergebnisse.
-
----
-
 ### lsp (experimentell)
 
 Interagiere mit deinen konfigurierten LSP-Servern fuer Code-Intelligence-Features wie Definitionen, Referenzen, Hover-Infos und Call-Hierarchien.
@@ -214,7 +197,7 @@ Wendet Patches auf Dateien an.
 Dieses Tool wendet Patch-Dateien auf deine Codebasis an. Nuetzlich fuer Diffs und Patches aus verschiedenen Quellen.
 
 :::note
-Das Tool `patch` wird ueber die Berechtigung `edit` gesteuert, welche alle Datei-Aenderungen abdeckt (`edit`, `write`, `patch`, `multiedit`).
+Das Tool `patch` wird ueber die Berechtigung `edit` gesteuert, welche alle Datei-Aenderungen abdeckt (`edit`, `write`, `patch`).
 :::
 
 ---
@@ -350,7 +333,7 @@ Dazu gehoeren Datenbanken, API-Integrationen und Drittanbieter-Services.
 
 ## Interna
 
-Intern verwenden Tools wie `grep`, `glob` und `list` [ripgrep](https://github.com/BurntSushi/ripgrep).
+Intern verwenden Tools wie `grep` und `glob` [ripgrep](https://github.com/BurntSushi/ripgrep).
 Standardmaessig beachtet ripgrep `.gitignore`, daher werden dort aufgefuehrte Dateien und Ordner nicht durchsucht.
 
 ---

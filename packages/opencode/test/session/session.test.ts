@@ -1,64 +1,84 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Session } from "../../src/session"
+import { Session as SessionNs } from "@/session/session"
 import { Bus } from "../../src/bus"
-import { Log } from "../../src/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { MessageV2 } from "../../src/session/message-v2"
-import { MessageID, PartID } from "../../src/session/schema"
+import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
-Log.init({ print: false })
+void Log.init({ print: false })
+
+function create(input?: SessionNs.CreateInput) {
+  return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create(input)))
+}
+
+function get(id: SessionID) {
+  return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.get(id)))
+}
+
+function remove(id: SessionID) {
+  return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.remove(id)))
+}
+
+function updateMessage<T extends MessageV2.Info>(msg: T) {
+  return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.updateMessage(msg)))
+}
+
+function updatePart<T extends MessageV2.Part>(part: T) {
+  return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.updatePart(part)))
+}
 
 describe("session.created event", () => {
   test("should emit session.created event when session is created", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         let eventReceived = false
-        let receivedInfo: Session.Info | undefined
+        let receivedInfo: SessionNs.Info | undefined
 
-        const unsub = Bus.subscribe(Session.Event.Created, (event) => {
+        const unsub = Bus.subscribe(SessionNs.Event.Created, (event) => {
           eventReceived = true
-          receivedInfo = event.properties.info as Session.Info
+          receivedInfo = event.properties.info as SessionNs.Info
         })
 
-        const session = await Session.create({})
-
+        const info = await create({})
         await new Promise((resolve) => setTimeout(resolve, 100))
-
         unsub()
 
         expect(eventReceived).toBe(true)
         expect(receivedInfo).toBeDefined()
-        expect(receivedInfo?.id).toBe(session.id)
-        expect(receivedInfo?.projectID).toBe(session.projectID)
-        expect(receivedInfo?.directory).toBe(session.directory)
-        expect(receivedInfo?.title).toBe(session.title)
+        expect(receivedInfo?.id).toBe(info.id)
+        expect(receivedInfo?.projectID).toBe(info.projectID)
+        expect(receivedInfo?.directory).toBe(info.directory)
+        expect(receivedInfo?.path).toBe(info.path)
+        expect(receivedInfo?.title).toBe(info.title)
 
-        await Session.remove(session.id)
+        await remove(info.id)
       },
     })
   })
 
   test("session.created event should be emitted before session.updated", async () => {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const events: string[] = []
 
-        const unsubCreated = Bus.subscribe(Session.Event.Created, () => {
+        const unsubCreated = Bus.subscribe(SessionNs.Event.Created, () => {
           events.push("created")
         })
 
-        const unsubUpdated = Bus.subscribe(Session.Event.Updated, () => {
+        const unsubUpdated = Bus.subscribe(SessionNs.Event.Updated, () => {
           events.push("updated")
         })
 
-        const session = await Session.create({})
-
+        const info = await create({})
         await new Promise((resolve) => setTimeout(resolve, 100))
-
         unsubCreated()
         unsubUpdated()
 
@@ -66,7 +86,7 @@ describe("session.created event", () => {
         expect(events).toContain("updated")
         expect(events.indexOf("created")).toBeLessThan(events.indexOf("updated"))
 
-        await Session.remove(session.id)
+        await remove(info.id)
       },
     })
   })
@@ -76,15 +96,15 @@ describe("step-finish token propagation via Bus event", () => {
   test(
     "non-zero tokens propagate through PartUpdated event",
     async () => {
-      await Instance.provide({
+      await WithInstance.provide({
         directory: projectRoot,
         fn: async () => {
-          const session = await Session.create({})
+          const info = await create({})
 
           const messageID = MessageID.ascending()
-          await Session.updateMessage({
+          await updateMessage({
             id: messageID,
-            sessionID: session.id,
+            sessionID: info.id,
             role: "user",
             time: { created: Date.now() },
             agent: "user",
@@ -93,9 +113,12 @@ describe("step-finish token propagation via Bus event", () => {
             mode: "",
           } as unknown as MessageV2.Info)
 
+          // Bus subscribers receive readonly Schema.Type payloads; `MessageV2.Part`
+          // is the mutable domain type. Cast bridges the two — safe because the
+          // test only reads the value afterwards.
           let received: MessageV2.Part | undefined
           const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, (event) => {
-            received = event.properties.part
+            received = event.properties.part as MessageV2.Part
           })
 
           const tokens = {
@@ -109,15 +132,14 @@ describe("step-finish token propagation via Bus event", () => {
           const partInput = {
             id: PartID.ascending(),
             messageID,
-            sessionID: session.id,
+            sessionID: info.id,
             type: "step-finish" as const,
             reason: "stop",
             cost: 0.005,
             tokens,
           }
 
-          await Session.updatePart(partInput)
-
+          await updatePart(partInput)
           await new Promise((resolve) => setTimeout(resolve, 100))
 
           expect(received).toBeDefined()
@@ -133,10 +155,32 @@ describe("step-finish token propagation via Bus event", () => {
           expect(received).not.toBe(partInput)
 
           unsub()
-          await Session.remove(session.id)
+          await remove(info.id)
         },
       })
     },
     { timeout: 30000 },
   )
+})
+
+describe("Session", () => {
+  test("remove works without an instance", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const info = await WithInstance.provide({
+      directory: tmp.path,
+      fn: () => create({ title: "remove-without-instance" }),
+    })
+
+    await expect(async () => {
+      await remove(info.id)
+    }).not.toThrow()
+
+    let missing = false
+    await get(info.id).catch(() => {
+      missing = true
+    })
+
+    expect(missing).toBe(true)
+  })
 })

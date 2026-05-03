@@ -4,7 +4,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
-import { TuiConfig } from "../../../src/config/tui"
+import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
@@ -31,15 +31,18 @@ test("adds tui plugin at runtime from spec", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+  const config: TuiConfig.Info = {
     plugin: [],
     plugin_origins: undefined,
-  })
+  }
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi())
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi(),
+      config,
+    })
 
     await expect(TuiPluginRuntime.addPlugin(tmp.extra.spec)).resolves.toBe(true)
     await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("called")
@@ -54,7 +57,6 @@ test("adds tui plugin at runtime from spec", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
@@ -72,10 +74,10 @@ test("retries runtime add for file plugins after dependency wait", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+  const config: TuiConfig.Info = {
     plugin: [],
     plugin_origins: undefined,
-  })
+  }
   const wait = spyOn(TuiConfig, "waitForDependencies").mockImplementation(async () => {
     await Bun.write(
       path.join(tmp.extra.mod, "index.ts"),
@@ -91,7 +93,10 @@ test("retries runtime add for file plugins after dependency wait", async () => {
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi())
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi(),
+      config,
+    })
 
     await expect(TuiPluginRuntime.addPlugin(tmp.extra.spec)).resolves.toBe(true)
     await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("called")
@@ -100,7 +105,6 @@ test("retries runtime add for file plugins after dependency wait", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }

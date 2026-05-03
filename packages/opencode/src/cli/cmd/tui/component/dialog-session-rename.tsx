@@ -19,7 +19,7 @@ export function DialogSessionRename(props: DialogSessionRenameProps) {
       title="Rename session"
       value={session()?.title}
       onConfirm={(value) => {
-        sdk.client.session.update({
+        void sdk.client.session.update({
           sessionID: props.session,
           title: value,
         })

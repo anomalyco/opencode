@@ -1,12 +1,15 @@
 import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { AppRuntime } from "../../src/effect/app-runtime"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { GlobalBus } from "../../src/bus/global"
-import { Vcs } from "../../src/project/vcs"
+import { Vcs } from "@/project/vcs"
 
 // Skip in CI — native @parcel/watcher binding needed
 const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
@@ -16,11 +19,17 @@ const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe
 // ---------------------------------------------------------------------------
 
 async function withVcs(directory: string, body: () => Promise<void>) {
-  return Instance.provide({
+  return WithInstance.provide({
     directory,
     fn: async () => {
-      FileWatcher.init()
-      Vcs.init()
+      await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const watcher = yield* FileWatcher.Service
+          const vcs = yield* Vcs.Service
+          yield* watcher.init()
+          yield* vcs.init()
+        }),
+      )
       await Bun.sleep(500)
       await body()
     },
@@ -28,10 +37,15 @@ async function withVcs(directory: string, body: () => Promise<void>) {
 }
 
 function withVcsOnly(directory: string, body: () => Promise<void>) {
-  return Instance.provide({
+  return WithInstance.provide({
     directory,
     fn: async () => {
-      Vcs.init()
+      await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          yield* vcs.init()
+        }),
+      )
       await body()
     },
   })
@@ -72,14 +86,19 @@ function nextBranchUpdate(directory: string, timeout = 10_000) {
 
 describeVcs("Vcs", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("branch() returns current branch name", async () => {
     await using tmp = await tmpdir({ git: true })
 
     await withVcs(tmp.path, async () => {
-      const branch = await Vcs.branch()
+      const branch = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.branch()
+        }),
+      )
       expect(branch).toBeDefined()
       expect(typeof branch).toBe("string")
     })
@@ -89,7 +108,12 @@ describeVcs("Vcs", () => {
     await using tmp = await tmpdir()
 
     await withVcs(tmp.path, async () => {
-      const branch = await Vcs.branch()
+      const branch = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.branch()
+        }),
+      )
       expect(branch).toBeUndefined()
     })
   })
@@ -122,7 +146,12 @@ describeVcs("Vcs", () => {
       await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
 
       await pending
-      const current = await Vcs.branch()
+      const current = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.branch()
+        }),
+      )
       expect(current).toBe(branch)
     })
   })
@@ -130,7 +159,7 @@ describeVcs("Vcs", () => {
 
 describe("Vcs diff", () => {
   afterEach(async () => {
-    await Instance.disposeAll()
+    await disposeAllInstances()
   })
 
   test("defaultBranch() falls back to main", async () => {
@@ -138,7 +167,12 @@ describe("Vcs diff", () => {
     await $`git branch -M main`.cwd(tmp.path).quiet()
 
     await withVcsOnly(tmp.path, async () => {
-      const branch = await Vcs.defaultBranch()
+      const branch = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.defaultBranch()
+        }),
+      )
       expect(branch).toBe("main")
     })
   })
@@ -149,7 +183,12 @@ describe("Vcs diff", () => {
     await $`git config init.defaultBranch trunk`.cwd(tmp.path).quiet()
 
     await withVcsOnly(tmp.path, async () => {
-      const branch = await Vcs.defaultBranch()
+      const branch = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.defaultBranch()
+        }),
+      )
       expect(branch).toBe("trunk")
     })
   })
@@ -162,7 +201,12 @@ describe("Vcs diff", () => {
     await $`git worktree add -b feature/test ${dir} HEAD`.cwd(tmp.path).quiet()
 
     await withVcsOnly(dir, async () => {
-      const [branch, base] = await Promise.all([Vcs.branch(), Vcs.defaultBranch()])
+      const [branch, base] = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* Effect.all([vcs.branch(), vcs.defaultBranch()], { concurrency: 2 })
+        }),
+      )
       expect(branch).toBe("feature/test")
       expect(base).toBe("main")
     })
@@ -176,7 +220,12 @@ describe("Vcs diff", () => {
     await fs.writeFile(path.join(tmp.path, "file.txt"), "changed\n", "utf-8")
 
     await withVcsOnly(tmp.path, async () => {
-      const diff = await Vcs.diff("git")
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
       expect(diff).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -193,7 +242,12 @@ describe("Vcs diff", () => {
     await fs.writeFile(path.join(tmp.path, weird), "hello\n", "utf-8")
 
     await withVcsOnly(tmp.path, async () => {
-      const diff = await Vcs.diff("git")
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("git")
+        }),
+      )
       expect(diff).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -214,7 +268,12 @@ describe("Vcs diff", () => {
     await $`git commit --no-gpg-sign -m "branch file"`.cwd(tmp.path).quiet()
 
     await withVcsOnly(tmp.path, async () => {
-      const diff = await Vcs.diff("branch")
+      const diff = await AppRuntime.runPromise(
+        Effect.gen(function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff("branch")
+        }),
+      )
       expect(diff).toEqual(
         expect.arrayContaining([
           expect.objectContaining({

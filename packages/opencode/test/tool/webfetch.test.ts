@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+import { Agent } from "../../src/agent/agent"
+import { Truncate } from "@/tool/truncate"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 
@@ -13,13 +18,22 @@ const ctx = {
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
-  metadata: () => {},
-  ask: async () => {},
+  metadata: () => Effect.void,
+  ask: () => Effect.void,
 }
 
 async function withFetch(fetch: (req: Request) => Response | Promise<Response>, fn: (url: URL) => Promise<void>) {
   using server = Bun.serve({ port: 0, fetch })
   await fn(server.url)
+}
+
+function exec(args: { url: string; format: "text" | "markdown" | "html" }) {
+  return WebFetchTool.pipe(
+    Effect.flatMap((info) => info.init()),
+    Effect.flatMap((tool) => tool.execute(args, ctx)),
+    Effect.provide(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer)),
+    Effect.runPromise,
+  )
 }
 
 describe("tool.webfetch", () => {
@@ -28,14 +42,10 @@ describe("tool.webfetch", () => {
     await withFetch(
       () => new Response(bytes, { status: 200, headers: { "content-type": "IMAGE/PNG; charset=binary" } }),
       async (url) => {
-        await Instance.provide({
+        await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
-            const result = await webfetch.execute(
-              { url: new URL("/image.png", url).toString(), format: "markdown" },
-              ctx,
-            )
+            const result = await exec({ url: new URL("/image.png", url).toString(), format: "markdown" })
             expect(result.output).toBe("Image fetched successfully")
             expect(result.attachments).toBeDefined()
             expect(result.attachments?.length).toBe(1)
@@ -60,11 +70,10 @@ describe("tool.webfetch", () => {
           headers: { "content-type": "image/svg+xml; charset=UTF-8" },
         }),
       async (url) => {
-        await Instance.provide({
+        await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
-            const result = await webfetch.execute({ url: new URL("/image.svg", url).toString(), format: "html" }, ctx)
+            const result = await exec({ url: new URL("/image.svg", url).toString(), format: "html" })
             expect(result.output).toContain("<svg")
             expect(result.attachments).toBeUndefined()
           },
@@ -81,11 +90,10 @@ describe("tool.webfetch", () => {
           headers: { "content-type": "text/plain; charset=utf-8" },
         }),
       async (url) => {
-        await Instance.provide({
+        await WithInstance.provide({
           directory: projectRoot,
           fn: async () => {
-            const webfetch = await WebFetchTool.init()
-            const result = await webfetch.execute({ url: new URL("/file.txt", url).toString(), format: "text" }, ctx)
+            const result = await exec({ url: new URL("/file.txt", url).toString(), format: "text" })
             expect(result.output).toBe("hello from webfetch")
             expect(result.attachments).toBeUndefined()
           },

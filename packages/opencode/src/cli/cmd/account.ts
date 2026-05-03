@@ -1,8 +1,9 @@
 import { cmd } from "./cmd"
 import { Duration, Effect, Match, Option } from "effect"
 import { UI } from "../ui"
-import { AccountID, Account, OrgID, PollExpired, type PollResult } from "@/account"
-import { type AccountError } from "@/account/schema"
+import { Account } from "@/account/account"
+import { AccountID, OrgID, PollExpired, type PollResult, type AccountError } from "@/account/schema"
+import { effectCmd } from "../effect-cmd"
 import * as Prompt from "../effect/prompt"
 import open from "open"
 
@@ -171,60 +172,65 @@ const openEffect = Effect.fn("open")(function* () {
   yield* Prompt.outro("Opened " + url)
 })
 
-export const LoginCommand = cmd({
+export const LoginCommand = effectCmd({
   command: "login <url>",
   describe: false,
+  instance: false,
   builder: (yargs) =>
     yargs.positional("url", {
       describe: "server URL",
       type: "string",
       demandOption: true,
     }),
-  async handler(args) {
+  handler: Effect.fn("Cli.account.login")(function* (args) {
     UI.empty()
-    await Account.runPromise((_svc) => loginEffect(args.url))
-  },
+    yield* Effect.orDie(loginEffect(args.url))
+  }),
 })
 
-export const LogoutCommand = cmd({
+export const LogoutCommand = effectCmd({
   command: "logout [email]",
   describe: false,
+  instance: false,
   builder: (yargs) =>
     yargs.positional("email", {
       describe: "account email to log out from",
       type: "string",
     }),
-  async handler(args) {
+  handler: Effect.fn("Cli.account.logout")(function* (args) {
     UI.empty()
-    await Account.runPromise((_svc) => logoutEffect(args.email))
-  },
+    yield* Effect.orDie(logoutEffect(args.email))
+  }),
 })
 
-export const SwitchCommand = cmd({
+export const SwitchCommand = effectCmd({
   command: "switch",
   describe: false,
-  async handler() {
+  instance: false,
+  handler: Effect.fn("Cli.account.switch")(function* () {
     UI.empty()
-    await Account.runPromise((_svc) => switchEffect())
-  },
+    yield* Effect.orDie(switchEffect())
+  }),
 })
 
-export const OrgsCommand = cmd({
+export const OrgsCommand = effectCmd({
   command: "orgs",
   describe: false,
-  async handler() {
+  instance: false,
+  handler: Effect.fn("Cli.account.orgs")(function* () {
     UI.empty()
-    await Account.runPromise((_svc) => orgsEffect())
-  },
+    yield* Effect.orDie(orgsEffect())
+  }),
 })
 
-export const OpenCommand = cmd({
+export const OpenCommand = effectCmd({
   command: "open",
   describe: false,
-  async handler() {
+  instance: false,
+  handler: Effect.fn("Cli.account.open")(function* () {
     UI.empty()
-    await Account.runPromise((_svc) => openEffect())
-  },
+    yield* Effect.orDie(openEffect())
+  }),
 })
 
 export const ConsoleCommand = cmd({
