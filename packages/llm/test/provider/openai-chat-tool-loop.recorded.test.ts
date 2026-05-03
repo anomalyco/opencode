@@ -1,10 +1,8 @@
-import { describe, expect } from "bun:test"
-import { Effect, Stream } from "effect"
-import { LLM, LLMEvent } from "../../src"
+import { describe } from "bun:test"
+import { Effect } from "effect"
 import { LLMClient } from "../../src/adapter"
 import { OpenAIChat } from "../../src/provider/openai-chat"
-import { ToolRuntime } from "../../src/tool-runtime"
-import { weatherRuntimeTool } from "../recorded-scenarios"
+import { expectWeatherToolLoop, runWeatherToolLoop, weatherToolLoopRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 // Multi-interaction recorded test: drives the typed `ToolRuntime` against a
@@ -18,12 +16,9 @@ const model = OpenAIChat.model({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
 })
 
-const request = LLM.request({
+const request = weatherToolLoopRequest({
   id: "recorded_openai_chat_tool_loop",
   model,
-  system: "Use the get_weather tool, then answer in one short sentence.",
-  prompt: "What is the weather in Paris?",
-  generation: { maxTokens: 80, temperature: 0 },
 })
 
 const recorded = recordedTests({
@@ -37,26 +32,10 @@ const openai = LLMClient.make({ adapters: [OpenAIChat.adapter] })
 describe("OpenAI Chat tool-loop recorded", () => {
   recorded.effect.with("drives a tool loop end-to-end", { tags: ["tool", "tool-loop"] }, () =>
     Effect.gen(function* () {
-      const events = Array.from(
-        yield* ToolRuntime.run(openai, { request, tools: { get_weather: weatherRuntimeTool } }).pipe(Stream.runCollect),
-      )
-
       // Two model rounds: tool-call + tool-result + final answer. Two
       // `request-finish` events confirm both interactions in the cassette
       // were dispatched in order.
-      const finishes = events.filter(LLMEvent.is.requestFinish)
-      expect(finishes).toHaveLength(2)
-      expect(finishes[0]?.reason).toBe("tool-calls")
-      expect(finishes.at(-1)?.reason).toBe("stop")
-
-      const toolResult = events.find(LLMEvent.is.toolResult)
-      expect(toolResult).toMatchObject({
-        type: "tool-result",
-        name: "get_weather",
-        result: { type: "json", value: { temperature: 22, condition: "sunny" } },
-      })
-
-      expect(LLM.outputText({ events })).toContain("Paris")
+      expectWeatherToolLoop(yield* runWeatherToolLoop(openai, request))
     }),
   )
 })

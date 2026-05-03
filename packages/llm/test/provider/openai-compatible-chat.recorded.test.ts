@@ -1,10 +1,9 @@
 import { describe, expect } from "bun:test"
-import { Effect, Stream } from "effect"
-import { LLM, LLMEvent, type ModelRef } from "../../src"
+import { Effect } from "effect"
+import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { OpenAICompatibleChat } from "../../src/provider/openai-compatible-chat"
-import { ToolRuntime } from "../../src/tool-runtime"
-import { expectFinish, expectWeatherToolCall, textRequest, weatherRuntimeTool, weatherToolRequest } from "../recorded-scenarios"
+import { expectFinish, expectWeatherToolCall, expectWeatherToolLoop, runWeatherToolLoop, textRequest, weatherToolLoopRequest, weatherToolRequest } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const deepseekModel = OpenAICompatibleChat.deepseek({
@@ -40,31 +39,29 @@ const openrouterOpus47Model = OpenAICompatibleChat.openrouter({
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
 })
 
-const openrouterToolLoopRequest = (input: { readonly id: string; readonly model: ModelRef }) =>
-  LLM.request({
-    id: input.id,
-    model: input.model,
-    system: "Use the get_weather tool exactly once, then answer in one short sentence.",
-    prompt: "What is the weather in Paris?",
-    generation: { maxTokens: 200 },
-  })
-
 const recorded = recordedTests({ prefix: "openai-compatible-chat", protocol: "openai-compatible-chat" })
 const llm = LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] })
 
-const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
-  const finishes = events.filter(LLMEvent.is.requestFinish)
-  expect(finishes).toHaveLength(2)
-  expect(finishes[0]?.reason).toBe("tool-calls")
-  expect(finishes.at(-1)?.reason).toBe("stop")
-
-  expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
-    type: "tool-result",
-    name: "get_weather",
-    result: { type: "json", value: { temperature: 22, condition: "sunny" } },
-  })
-  expect(LLM.outputText({ events })).toContain("Paris")
-}
+const openrouterToolLoops = [
+  {
+    name: "openrouter gpt-4o-mini drives a tool loop",
+    id: "recorded_openrouter_gpt_4o_mini_tool_loop",
+    model: openrouterModel,
+    tags: ["tool", "tool-loop", "golden"],
+  },
+  {
+    name: "openrouter gpt-5.5 drives a tool loop",
+    id: "recorded_openrouter_gpt_5_5_tool_loop",
+    model: openrouterGpt55Model,
+    tags: ["tool", "tool-loop", "golden", "flagship"],
+  },
+  {
+    name: "openrouter claude opus 4.7 drives a tool loop",
+    id: "recorded_openrouter_claude_opus_4_7_tool_loop",
+    model: openrouterOpus47Model,
+    tags: ["tool", "tool-loop", "golden", "flagship"],
+  },
+] as const
 
 describe("OpenAI-compatible Chat recorded", () => {
   recorded.effect.with("deepseek streams text", { provider: "deepseek", requires: ["DEEPSEEK_API_KEY"] }, () =>
@@ -114,36 +111,15 @@ describe("OpenAI-compatible Chat recorded", () => {
     }),
   )
 
-  recorded.effect.with("openrouter gpt-4o-mini drives a tool loop", { provider: "openrouter", requires: ["OPENROUTER_API_KEY"], tags: ["tool", "tool-loop", "golden"] }, () =>
-    Effect.gen(function* () {
-      expectWeatherToolLoop(Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: openrouterToolLoopRequest({ id: "recorded_openrouter_gpt_4o_mini_tool_loop", model: openrouterModel }),
-          tools: { get_weather: weatherRuntimeTool },
-        }).pipe(Stream.runCollect),
-      ))
-    }),
-  )
-
-  recorded.effect.with("openrouter gpt-5.5 drives a tool loop", { provider: "openrouter", requires: ["OPENROUTER_API_KEY"], tags: ["tool", "tool-loop", "golden", "flagship"] }, () =>
-    Effect.gen(function* () {
-      expectWeatherToolLoop(Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: openrouterToolLoopRequest({ id: "recorded_openrouter_gpt_5_5_tool_loop", model: openrouterGpt55Model }),
-          tools: { get_weather: weatherRuntimeTool },
-        }).pipe(Stream.runCollect),
-      ))
-    }),
-  )
-
-  recorded.effect.with("openrouter claude opus 4.7 drives a tool loop", { provider: "openrouter", requires: ["OPENROUTER_API_KEY"], tags: ["tool", "tool-loop", "golden", "flagship"] }, () =>
-    Effect.gen(function* () {
-      expectWeatherToolLoop(Array.from(
-        yield* ToolRuntime.run(llm, {
-          request: openrouterToolLoopRequest({ id: "recorded_openrouter_claude_opus_4_7_tool_loop", model: openrouterOpus47Model }),
-          tools: { get_weather: weatherRuntimeTool },
-        }).pipe(Stream.runCollect),
-      ))
-    }),
+  openrouterToolLoops.forEach((scenario) =>
+    recorded.effect.with(scenario.name, { provider: "openrouter", requires: ["OPENROUTER_API_KEY"], tags: scenario.tags }, () =>
+      Effect.gen(function* () {
+        expectWeatherToolLoop(yield* runWeatherToolLoop(llm, weatherToolLoopRequest({
+          id: scenario.id,
+          model: scenario.model,
+          system: "Use the get_weather tool exactly once, then answer in one short sentence.",
+        })))
+      }),
+    ),
   )
 })
