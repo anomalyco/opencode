@@ -230,20 +230,24 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         style={{ "padding-left": `${8 + (props.level ?? 0) * 16}px` }}
       >
         <div class="flex min-w-0 items-center gap-1">
-          <Show when={hasChildren()}>
-            <IconButton
-              icon={expanded() ? "chevron-down" : "chevron-right"}
-              variant="ghost"
-              class="shrink-0 size-4 rounded-xs overflow-hidden transition-[width,opacity]"
-              classList={{
-                "w-4 opacity-100 pointer-events-auto": expanded(),
-                "w-0 opacity-0 pointer-events-none": !expanded(),
-                "group-hover/session:w-4 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": !expanded(),
-              }}
-              aria-label={expanded() ? language.t("session.todo.collapse") : language.t("session.todo.expand")}
-              onClick={() => setExpanded((v) => !v)}
-            />
-          </Show>
+          <div
+            class="shrink-0 size-4 flex items-center justify-center transition-opacity"
+            classList={{
+              "opacity-0 pointer-events-none": !hasChildren(),
+              "group-hover/session:opacity-100 group-hover/session:pointer-events-auto": !expanded(),
+            }}
+          >
+            <Show when={hasChildren()}>
+              <IconButton
+                icon={expanded() ? "chevron-down" : "chevron-right"}
+                variant="ghost"
+                size="small"
+                class="size-4 rounded-xs"
+                aria-label={expanded() ? language.t("session.todo.collapse") : language.t("session.todo.expand")}
+                onClick={() => setExpanded((v) => !v)}
+              />
+            </Show>
+          </div>
           <div class="min-w-0 flex-1">
             <Show
               when={!tooltip()}
