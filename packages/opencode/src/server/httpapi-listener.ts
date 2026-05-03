@@ -13,6 +13,7 @@ import { WithInstance } from "@/project/with-instance"
 import { Pty } from "@/pty"
 import { handlePtyInput } from "@/pty/input"
 import { PtyID } from "@/pty/schema"
+import { PtyPaths } from "@/server/routes/instance/httpapi/groups/pty"
 import { ExperimentalHttpApiServer } from "@/server/routes/instance/httpapi/server"
 import * as Log from "@opencode-ai/core/util/log"
 import type { CorsOptions } from "./cors"
@@ -46,7 +47,8 @@ type WsState = WsKind & {
   closed: boolean
 }
 
-const ptyConnectPattern = /^\/pty\/([^/]+)\/connect$/
+// Derive from the OpenAPI path so this stays in sync if the route literal moves.
+const ptyConnectPattern = new RegExp(`^${PtyPaths.connect.replace(/:[^/]+/g, "([^/]+)")}$`)
 
 function parseCursor(value: string | null): number | undefined {
   if (!value) return undefined

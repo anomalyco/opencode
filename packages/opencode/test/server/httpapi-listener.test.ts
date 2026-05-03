@@ -73,6 +73,10 @@ describe("native HttpApi listener", () => {
           ws.addEventListener("error", () => reject(new Error("ws error before open")), { once: true })
         })
 
+        const closed = new Promise<void>((resolve) => {
+          ws.addEventListener("close", () => resolve(), { once: true })
+        })
+
         ws.addEventListener("message", (event) => {
           const data = event.data
           messages.push(typeof data === "string" ? data : new TextDecoder().decode(data as ArrayBuffer))
@@ -88,6 +92,10 @@ describe("native HttpApi listener", () => {
         ws.close(1000, "done")
 
         expect(messages.some((m) => m.includes("ping-listener"))).toBe(true)
+        // Verify close event fires (handler.onClose path runs and the
+        // Bun.serve websocket lifecycle reaches close).
+        await closed
+        expect(ws.readyState).toBe(WebSocket.CLOSED)
       } finally {
         await fetch(`${listener.url.origin}${PtyPaths.remove.replace(":ptyID", info.id)}`, {
           method: "DELETE",
