@@ -6,8 +6,6 @@ import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { ModelsDev } from "@/provider/models"
 
-const getModels = () => AppRuntime.runPromise(ModelsDev.Service.use((s) => s.get()))
-const refreshModels = () => AppRuntime.runPromise(ModelsDev.Service.use((s) => s.refresh(true)))
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
@@ -241,46 +239,45 @@ export const ProvidersListCommand = effectCmd({
   handler: Effect.fn("Cli.providers.list")(function* (_args) {
     const authSvc = yield* Auth.Service
     const modelsDev = yield* ModelsDev.Service
-    yield* Effect.promise(async () => {
+
+    UI.empty()
+    const authPath = path.join(Global.Path.data, "auth.json")
+    const homedir = os.homedir()
+    const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
+    prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
+    const results = Object.entries(yield* Effect.orDie(authSvc.all()))
+    const database = yield* modelsDev.get()
+
+    for (const [providerID, result] of results) {
+      const name = database[providerID]?.name || providerID
+      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+    }
+
+    prompts.outro(`${results.length} credentials`)
+
+    const activeEnvVars: Array<{ provider: string; envVar: string }> = []
+
+    for (const [providerID, provider] of Object.entries(database)) {
+      for (const envVar of provider.env) {
+        if (process.env[envVar]) {
+          activeEnvVars.push({
+            provider: provider.name || providerID,
+            envVar,
+          })
+        }
+      }
+    }
+
+    if (activeEnvVars.length > 0) {
       UI.empty()
-      const authPath = path.join(Global.Path.data, "auth.json")
-      const homedir = os.homedir()
-      const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
-      prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-      const results = Object.entries(await Effect.runPromise(authSvc.all()))
-      const database = await Effect.runPromise(modelsDev.get())
+      prompts.intro("Environment")
 
-      for (const [providerID, result] of results) {
-        const name = database[providerID]?.name || providerID
-        prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      for (const { provider, envVar } of activeEnvVars) {
+        prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
 
-      prompts.outro(`${results.length} credentials`)
-
-      const activeEnvVars: Array<{ provider: string; envVar: string }> = []
-
-      for (const [providerID, provider] of Object.entries(database)) {
-        for (const envVar of provider.env) {
-          if (process.env[envVar]) {
-            activeEnvVars.push({
-              provider: provider.name || providerID,
-              envVar,
-            })
-          }
-        }
-      }
-
-      if (activeEnvVars.length > 0) {
-        UI.empty()
-        prompts.intro("Environment")
-
-        for (const { provider, envVar } of activeEnvVars) {
-          prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
-        }
-
-        prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
-      }
-    })
+      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
+    }
   }),
 })
 
@@ -306,185 +303,174 @@ export const ProvidersLoginCommand = effectCmd({
   handler: Effect.fn("Cli.providers.login")(function* (args) {
     const cfgSvc = yield* Config.Service
     const pluginSvc = yield* Plugin.Service
-    yield* Effect.promise(async () => {
-      UI.empty()
-      prompts.intro("Add credential")
-      if (args.url) {
-        const url = args.url.replace(/\/+$/, "")
-        const wellknown = (await fetch(`${url}/.well-known/opencode`).then((x) => x.json())) as {
-          auth: { command: string[]; env: string }
-        }
-        prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-        const proc = Process.spawn(wellknown.auth.command, {
-          stdout: "pipe",
-          stderr: "inherit",
-        })
-        if (!proc.stdout) {
-          prompts.log.error("Failed")
-          prompts.outro("Done")
-          return
-        }
-        const [exit, token] = await Promise.all([proc.exited, text(proc.stdout)])
-        if (exit !== 0) {
-          prompts.log.error("Failed")
-          prompts.outro("Done")
-          return
-        }
-        await put(url, {
-          type: "wellknown",
-          key: wellknown.auth.env,
-          token: token.trim(),
-        })
-        prompts.log.success("Logged into " + url)
+    const modelsDev = yield* ModelsDev.Service
+    const authSvc = yield* Auth.Service
+
+    UI.empty()
+    prompts.intro("Add credential")
+    if (args.url) {
+      const url = args.url.replace(/\/+$/, "")
+      const wellknown = (yield* Effect.promise(() =>
+        fetch(`${url}/.well-known/opencode`).then((x) => x.json()),
+      )) as { auth: { command: string[]; env: string } }
+      prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+      const proc = Process.spawn(wellknown.auth.command, { stdout: "pipe", stderr: "inherit" })
+      if (!proc.stdout) {
+        prompts.log.error("Failed")
         prompts.outro("Done")
         return
       }
-      await refreshModels().catch(() => {})
-
-      const config = await Effect.runPromise(cfgSvc.get())
-
-      const disabled = new Set(config.disabled_providers ?? [])
-      const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
-
-      const providers = await getModels().then((x) => {
-        const filtered: Record<string, (typeof x)[string]> = {}
-        for (const [key, value] of Object.entries(x)) {
-          if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
-            filtered[key] = value
-          }
-        }
-        return filtered
-      })
-      const hooks = await Effect.runPromise(pluginSvc.list())
-
-      const priority: Record<string, number> = {
-        opencode: 0,
-        openai: 1,
-        "github-copilot": 2,
-        google: 3,
-        anthropic: 4,
-        openrouter: 5,
-        vercel: 6,
+      const [exit, token] = yield* Effect.promise(() => Promise.all([proc.exited, text(proc.stdout!)]))
+      if (exit !== 0) {
+        prompts.log.error("Failed")
+        prompts.outro("Done")
+        return
       }
-      const pluginProviders = resolvePluginProviders({
-        hooks,
-        existingProviders: providers,
-        disabled,
-        enabled,
-        providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
-      })
-      const options = [
-        ...pipe(
-          providers,
-          values(),
-          sortBy(
-            (x) => priority[x.id] ?? 99,
-            (x) => x.name ?? x.id,
-          ),
-          map((x) => ({
-            label: x.name,
-            value: x.id,
-            hint: {
-              opencode: "recommended",
-              openai: "ChatGPT Plus/Pro or API key",
-            }[x.id],
-          })),
+      yield* Effect.orDie(authSvc.set(url, { type: "wellknown", key: wellknown.auth.env, token: token.trim() }))
+      prompts.log.success("Logged into " + url)
+      prompts.outro("Done")
+      return
+    }
+    yield* Effect.ignore(modelsDev.refresh(true))
+
+    const config = yield* cfgSvc.get()
+
+    const disabled = new Set(config.disabled_providers ?? [])
+    const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+
+    const allProviders = yield* modelsDev.get()
+    const providers: Record<string, (typeof allProviders)[string]> = {}
+    for (const [key, value] of Object.entries(allProviders)) {
+      if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) providers[key] = value
+    }
+    const hooks = yield* pluginSvc.list()
+
+    const priority: Record<string, number> = {
+      opencode: 0,
+      openai: 1,
+      "github-copilot": 2,
+      google: 3,
+      anthropic: 4,
+      openrouter: 5,
+      vercel: 6,
+    }
+    const pluginProviders = resolvePluginProviders({
+      hooks,
+      existingProviders: providers,
+      disabled,
+      enabled,
+      providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
+    })
+    const options = [
+      ...pipe(
+        providers,
+        values(),
+        sortBy(
+          (x) => priority[x.id] ?? 99,
+          (x) => x.name ?? x.id,
         ),
-        ...pluginProviders.map((x) => ({
+        map((x) => ({
           label: x.name,
           value: x.id,
-          hint: "plugin",
+          hint: {
+            opencode: "recommended",
+            openai: "ChatGPT Plus/Pro or API key",
+          }[x.id],
         })),
-      ]
+      ),
+      ...pluginProviders.map((x) => ({
+        label: x.name,
+        value: x.id,
+        hint: "plugin",
+      })),
+    ]
 
-      let provider: string
-      if (args.provider) {
-        const input = args.provider
-        const byID = options.find((x) => x.value === input)
-        const byName = options.find((x) => x.label.toLowerCase() === input.toLowerCase())
-        const match = byID ?? byName
-        if (!match) {
-          prompts.log.error(`Unknown provider "${input}"`)
-          process.exit(1)
-        }
-        provider = match.value
-      } else {
-        const selected = await prompts.autocomplete({
+    let provider: string
+    if (args.provider) {
+      const input = args.provider
+      const byID = options.find((x) => x.value === input)
+      const byName = options.find((x) => x.label.toLowerCase() === input.toLowerCase())
+      const match = byID ?? byName
+      if (!match) {
+        prompts.log.error(`Unknown provider "${input}"`)
+        process.exit(1)
+      }
+      provider = match.value
+    } else {
+      const selected = yield* Effect.promise(() =>
+        prompts.autocomplete({
           message: "Select provider",
           maxItems: 8,
-          options: [
-            ...options,
-            {
-              value: "other",
-              label: "Other",
-            },
-          ],
-        })
-        if (prompts.isCancel(selected)) throw new UI.CancelledError()
-        provider = selected as string
-      }
+          options: [...options, { value: "other", label: "Other" }],
+        }),
+      )
+      if (prompts.isCancel(selected)) yield* Effect.die(new UI.CancelledError())
+      provider = selected as string
+    }
 
-      const plugin = hooks.findLast((x) => x.auth?.provider === provider)
-      if (plugin && plugin.auth) {
-        const handled = await handlePluginAuth({ auth: plugin.auth }, provider, args.method)
+    const plugin = hooks.findLast((x) => x.auth?.provider === provider)
+    if (plugin && plugin.auth) {
+      const handled = yield* Effect.promise(() => handlePluginAuth({ auth: plugin.auth! }, provider, args.method))
+      if (handled) return
+    }
+
+    if (provider === "other") {
+      const custom = yield* Effect.promise(() =>
+        prompts.text({
+          message: "Enter provider id",
+          validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
+        }),
+      )
+      if (prompts.isCancel(custom)) yield* Effect.die(new UI.CancelledError())
+      provider = (custom as string).replace(/^@ai-sdk\//, "")
+
+      const customPlugin = hooks.findLast((x) => x.auth?.provider === provider)
+      if (customPlugin && customPlugin.auth) {
+        const handled = yield* Effect.promise(() =>
+          handlePluginAuth({ auth: customPlugin.auth! }, provider, args.method),
+        )
         if (handled) return
       }
 
-      if (provider === "other") {
-        const custom = await prompts.text({
-          message: "Enter provider id",
-          validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
-        })
-        if (prompts.isCancel(custom)) throw new UI.CancelledError()
-        provider = custom.replace(/^@ai-sdk\//, "")
+      prompts.log.warn(
+        `This only stores a credential for ${provider} - you will need configure it in opencode.json, check the docs for examples.`,
+      )
+    }
 
-        const customPlugin = hooks.findLast((x) => x.auth?.provider === provider)
-        if (customPlugin && customPlugin.auth) {
-          const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.method)
-          if (handled) return
-        }
+    if (provider === "amazon-bedrock") {
+      prompts.log.info(
+        "Amazon Bedrock authentication priority:\n" +
+          "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
+          "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
+          "Configure via opencode.json options (profile, region, endpoint) or\n" +
+          "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
+      )
+    }
 
-        prompts.log.warn(
-          `This only stores a credential for ${provider} - you will need configure it in opencode.json, check the docs for examples.`,
-        )
-      }
+    if (provider === "opencode") {
+      prompts.log.info("Create an api key at https://opencode.ai/auth")
+    }
 
-      if (provider === "amazon-bedrock") {
-        prompts.log.info(
-          "Amazon Bedrock authentication priority:\n" +
-            "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
-            "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
-            "Configure via opencode.json options (profile, region, endpoint) or\n" +
-            "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
-        )
-      }
+    if (provider === "vercel") {
+      prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
+    }
 
-      if (provider === "opencode") {
-        prompts.log.info("Create an api key at https://opencode.ai/auth")
-      }
+    if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
+      prompts.log.info(
+        "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
+      )
+    }
 
-      if (provider === "vercel") {
-        prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
-      }
-
-      if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
-        prompts.log.info(
-          "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
-        )
-      }
-
-      const key = await prompts.password({
+    const key = yield* Effect.promise(() =>
+      prompts.password({
         message: "Enter your API key",
         validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-      })
-      if (prompts.isCancel(key)) throw new UI.CancelledError()
-      await put(provider, {
-        type: "api",
-        key,
-      })
+      }),
+    )
+    if (prompts.isCancel(key)) yield* Effect.die(new UI.CancelledError())
+    yield* Effect.orDie(authSvc.set(provider, { type: "api", key: key as string }))
 
-      prompts.outro("Done")
-    })
+    prompts.outro("Done")
   }),
 })
 
@@ -496,26 +482,27 @@ export const ProvidersLogoutCommand = effectCmd({
   handler: Effect.fn("Cli.providers.logout")(function* (_args) {
     const authSvc = yield* Auth.Service
     const modelsDev = yield* ModelsDev.Service
-    yield* Effect.promise(async () => {
-      UI.empty()
-      const credentials: Array<[string, Auth.Info]> = Object.entries(await Effect.runPromise(authSvc.all()))
-      prompts.intro("Remove credential")
-      if (credentials.length === 0) {
-        prompts.log.error("No credentials found")
-        return
-      }
-      const database = await Effect.runPromise(modelsDev.get())
-      const selected = await prompts.select({
+
+    UI.empty()
+    const credentials: Array<[string, Auth.Info]> = Object.entries(yield* Effect.orDie(authSvc.all()))
+    prompts.intro("Remove credential")
+    if (credentials.length === 0) {
+      prompts.log.error("No credentials found")
+      return
+    }
+    const database = yield* modelsDev.get()
+    const selected = yield* Effect.promise(() =>
+      prompts.select({
         message: "Select provider",
         options: credentials.map(([key, value]) => ({
           label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
           value: key,
         })),
-      })
-      if (prompts.isCancel(selected)) throw new UI.CancelledError()
-      const providerID = selected as string
-      await Effect.runPromise(authSvc.remove(providerID))
-      prompts.outro("Logout successful")
-    })
+      }),
+    )
+    if (prompts.isCancel(selected)) yield* Effect.die(new UI.CancelledError())
+    const providerID = selected as string
+    yield* Effect.orDie(authSvc.remove(providerID))
+    prompts.outro("Logout successful")
   }),
 })
