@@ -119,35 +119,38 @@ const SessionRow = (props: {
       }}
     >
       <div
-        class="shrink-0 size-6 flex items-center justify-center"
+        class="shrink-0 size-6 flex items-center justify-center relative"
         style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
       >
-        <Show
-          when={props.hasChildren()}
-          fallback={
-            <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
-              <Switch>
-                <Match when={props.isWorking()}>
-                  <Spinner class="size-[15px]" />
-                </Match>
-                <Match when={props.hasPermissions()}>
-                  <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-                </Match>
-                <Match when={props.hasError()}>
-                  <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-                </Match>
-                <Match when={props.unseenCount() > 0}>
-                  <div class="size-1.5 rounded-full bg-text-interactive-base" />
-                </Match>
-              </Switch>
-            </Show>
-          }
-        >
+        <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
+          <div
+            class="absolute inset-0 flex items-center justify-center transition-opacity"
+            classList={{
+              "group-hover/session:opacity-0": props.hasChildren(),
+            }}
+          >
+            <Switch>
+              <Match when={props.isWorking()}>
+                <Spinner class="size-[15px]" />
+              </Match>
+              <Match when={props.hasPermissions()}>
+                <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+              </Match>
+              <Match when={props.hasError()}>
+                <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+              </Match>
+              <Match when={props.unseenCount() > 0}>
+                <div class="size-1.5 rounded-full bg-text-interactive-base" />
+              </Match>
+            </Switch>
+          </div>
+        </Show>
+        <Show when={props.hasChildren()}>
           <IconButton
             icon={props.expanded() ? "chevron-down" : "chevron-right"}
             variant="ghost"
             size="small"
-            class="size-6 rounded-xs transition-opacity"
+            class="absolute inset-0 size-6 rounded-xs transition-opacity"
             classList={{
               "opacity-0 group-hover/session:opacity-100": !props.expanded(),
             }}
