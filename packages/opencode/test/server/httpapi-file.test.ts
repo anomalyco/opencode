@@ -6,7 +6,7 @@ import { FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
 import { Instance } from "../../src/project/instance"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 
 void Log.init({ print: false })
 
@@ -28,7 +28,7 @@ function request(route: string, directory: string, query?: Record<string, string
 }
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
