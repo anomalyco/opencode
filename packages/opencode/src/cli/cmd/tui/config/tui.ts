@@ -105,7 +105,17 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
 
   const loadFile = (filepath: string): Effect.Effect<Info> =>
     Effect.gen(function* () {
-      const text = yield* afs.readFileStringSafe(filepath).pipe(Effect.orDie)
+      // Silent-swallow non-NotFound read errors (perms, EISDIR, IO) → log + skip.
+      // Matches how parse/schema/plugin failures in load() are handled — every
+      // broken-config path degrades gracefully rather than crashing TUI startup.
+      const text = yield* afs.readFileStringSafe(filepath).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            log.warn("failed to read tui config", { path: filepath, cause })
+            return undefined
+          }),
+        ),
+      )
       if (!text) return {} as Info
       return yield* load(text, filepath)
     })
