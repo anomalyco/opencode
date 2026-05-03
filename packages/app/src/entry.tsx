@@ -6,6 +6,7 @@ import { AppBaseProviders, AppInterface } from "@/app"
 import { type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
+import { currentServerUrl, runtimeBasePath } from "@/utils/base-path"
 import { handleNotificationClick } from "@/utils/notification-click"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
@@ -102,7 +103,7 @@ const getCurrentUrl = () => {
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
-  return location.origin
+  return currentServerUrl()
 }
 
 const getDefaultUrl = () => {
@@ -152,6 +153,7 @@ if (root instanceof HTMLElement) {
       <PlatformProvider value={platform}>
         <AppBaseProviders>
           <AppInterface
+            basePath={runtimeBasePath()}
             defaultServer={ServerConnection.Key.make(getDefaultUrl())}
             servers={[server]}
             disableHealthCheck

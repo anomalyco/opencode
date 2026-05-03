@@ -1,6 +1,7 @@
 import type { Argv, InferredOptionTypes } from "yargs"
 import { Config } from "@/config/config"
 import { AppRuntime } from "@/effect/app-runtime"
+import { normalizeBasePath } from "@/server/base-path"
 
 const options = {
   port: {
@@ -12,6 +13,11 @@ const options = {
     type: "string" as const,
     describe: "hostname to listen on",
     default: "127.0.0.1",
+  },
+  "base-path": {
+    type: "string" as const,
+    describe: "URL prefix to mount the server under",
+    default: "",
   },
   mdns: {
     type: "boolean" as const,
@@ -44,11 +50,15 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
 export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Config.Info) {
   const portExplicitlySet = process.argv.includes("--port")
   const hostnameExplicitlySet = process.argv.includes("--hostname")
+  const basePathExplicitlySet = process.argv.includes("--base-path")
   const mdnsExplicitlySet = process.argv.includes("--mdns")
   const mdnsDomainExplicitlySet = process.argv.includes("--mdns-domain")
   const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
   const mdnsDomain = mdnsDomainExplicitlySet ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
   const port = portExplicitlySet ? args.port : (config?.server?.port ?? args.port)
+  const basePath = normalizeBasePath(
+    basePathExplicitlySet ? args["base-path"] : (config?.server?.basePath ?? args["base-path"]),
+  )
   const hostname = hostnameExplicitlySet
     ? args.hostname
     : mdns && !config?.server?.hostname
@@ -58,5 +68,5 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, basePath, mdns, mdnsDomain, cors }
 }

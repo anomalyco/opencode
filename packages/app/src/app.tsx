@@ -43,6 +43,7 @@ import { ServerConnection, ServerProvider, serverName, useServer } from "@/conte
 import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
+import { runtimeBasePath, stripBrowserBasePath } from "@/utils/base-path"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
@@ -52,7 +53,7 @@ const loadSession = () => import("@/pages/session")
 const Session = lazy(loadSession)
 const Loading = () => <div class="size-full" />
 
-if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
+if (typeof location === "object" && /\/session(?:\/|$)/.test(stripBrowserBasePath(location.pathname, runtimeBasePath()))) {
   void loadSession()
 }
 
@@ -294,6 +295,7 @@ function ServerKey(props: ParentProps) {
 
 export function AppInterface(props: {
   children?: JSX.Element
+  basePath?: string
   defaultServer: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
@@ -312,6 +314,7 @@ export function AppInterface(props: {
               <GlobalSyncProvider>
                 <Dynamic
                   component={props.router ?? Router}
+                  base={props.basePath}
                   root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
                 >
                   <Route path="/" component={HomeRoute} />

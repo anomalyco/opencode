@@ -72,13 +72,13 @@ function app(input?: { password?: string; username?: string }) {
   }
 }
 
-function uiApp(input?: { password?: string; username?: string; client?: Layer.Layer<HttpClient.HttpClient> }) {
+function uiApp(input?: { password?: string; username?: string; basePath?: string; client?: Layer.Layer<HttpClient.HttpClient> }) {
   const handler = HttpRouter.toWebHandler(
     HttpRouter.use((router) =>
       Effect.gen(function* () {
         const fs = yield* AppFileSystem.Service
         const client = yield* HttpClient.HttpClient
-        yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
+        yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }, input?.basePath ?? ""))
       }),
     ).pipe(
       Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))),
@@ -186,12 +186,57 @@ describe("HttpApi UI fallback", () => {
     expect(await response.text()).toBe("console.log('ok')")
   })
 
+  test("strips configured base path before proxied asset fetch", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
+    let proxiedUrl: string | undefined
+
+    const response = await uiApp({
+      basePath: "/opencode",
+      client: httpClient(new Response("console.log('ok')", { headers: { "content-type": "text/javascript" } }), (request) => {
+        proxiedUrl = request.url
+      }),
+    }).request("/opencode/assets/app.js")
+
+    expect(response.status).toBe(200)
+    expect(proxiedUrl).toBe("https://app.opencode.ai/assets/app.js")
+  })
+
+  test("injects runtime base path into proxied html", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI = true
+
+    const response = await uiApp({
+      basePath: "/opencode",
+      client: httpClient(
+        new Response("<html><head></head><body>opencode</body></html>", {
+          headers: { "content-type": "text/html" },
+        }),
+      ),
+    }).request("/opencode/")
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('<meta name="opencode-base-path" content="/opencode">')
+  })
+
   test("keeps matched API routes ahead of the UI fallback", async () => {
     Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
 
     const response = await Server.Default().app.request("/session/nope")
 
     expect(response.status).toBe(404)
+  })
+
+  test("keeps matched API routes ahead of the UI fallback under a configured base path", async () => {
+    const legacyRoot = await Server.Legacy({ basePath: "/opencode" }).app.request("/session/nope")
+    const legacyPrefixed = await Server.Legacy({ basePath: "/opencode" }).app.request("/opencode/session/nope")
+    expect(legacyPrefixed.status).toBe(legacyRoot.status)
+
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    const httpapiRoot = await Server.Default({ basePath: "/opencode" }).app.request("/session/nope")
+    const httpapi = await Server.Default({ basePath: "/opencode" }).app.request("/opencode/session/nope")
+
+    expect(httpapi.status).toBe(httpapiRoot.status)
   })
 
   test("requires server password for the web UI", async () => {

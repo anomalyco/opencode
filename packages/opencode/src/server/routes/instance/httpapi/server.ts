@@ -72,6 +72,10 @@ import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import * as ServerBackend from "@/server/backend"
 
+type RouteOptions = CorsOptions & {
+  basePath?: string
+}
+
 export const context = Context.makeUnsafe<unknown>(new Map())
 
 const runtime = HttpRouter.middleware()(
@@ -131,18 +135,19 @@ const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe
   ]),
 )
 
-const uiRoute = HttpRouter.use((router) =>
+const uiRoute = (basePath = "") =>
+  HttpRouter.use((router) =>
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const client = yield* HttpClient.HttpClient
-    yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
+    yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }, basePath))
   }),
 ).pipe(Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuthConfig.defaultLayer))))
 
-export function createRoutes(corsOptions?: CorsOptions) {
-  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute).pipe(
+export function createRoutes(opts: RouteOptions = {}) {
+  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, uiRoute(opts.basePath)).pipe(
     Layer.provide([
-      cors(corsOptions),
+      cors(opts),
       runtime,
       Account.defaultLayer,
       Agent.defaultLayer,
@@ -200,9 +205,9 @@ const defaultWebHandler = lazy(() =>
   }),
 )
 
-export function webHandler(corsOptions?: CorsOptions) {
-  if (!corsOptions?.cors?.length) return defaultWebHandler()
-  return HttpRouter.toWebHandler(createRoutes(corsOptions), {
+export function webHandler(opts: RouteOptions = {}) {
+  if (!opts.basePath && !opts.cors?.length) return defaultWebHandler()
+  return HttpRouter.toWebHandler(createRoutes(opts), {
     // Server-level CORS options are dynamic; don't reuse the default route layer memoized without them.
     memoMap: Layer.makeMemoMapUnsafe(),
     middleware: disposeMiddleware,

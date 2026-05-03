@@ -48,17 +48,20 @@ export const WebCommand = effectCmd({
 
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
-      const localhostUrl = `http://localhost:${server.port}`
-      UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
+      const localhostUrl = new URL(server.url)
+      localhostUrl.hostname = "localhost"
+      UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl.toString())
 
       // Show network IPs for remote access
       const networkIPs = getNetworkIPs()
       if (networkIPs.length > 0) {
         for (const ip of networkIPs) {
+          const networkUrl = new URL(server.url)
+          networkUrl.hostname = ip
           UI.println(
             UI.Style.TEXT_INFO_BOLD + "  Network access:    ",
             UI.Style.TEXT_NORMAL,
-            `http://${ip}:${server.port}`,
+            networkUrl.toString(),
           )
         }
       }

@@ -19,6 +19,7 @@ import { WorkspaceRoutes } from "./routes/control/workspace"
 import { ExperimentalHttpApiServer } from "./routes/instance/httpapi/server"
 import * as ServerBackend from "./backend"
 import type { CorsOptions } from "./cors"
+import { rewriteRequestBasePath } from "./base-path"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -42,8 +43,13 @@ type ServerApp = {
 type ListenOptions = CorsOptions & {
   port: number
   hostname: string
+  basePath?: string
   mdns?: boolean
   mdnsDomain?: string
+}
+
+type ServerOptions = CorsOptions & {
+  basePath?: string
 }
 
 const DefaultHono = lazy(() =>
@@ -57,9 +63,16 @@ function select() {
 
 export const backend = select
 
-export const Default = () => {
+export const Default = (opts: ServerOptions = {}) => {
+  if (!opts.basePath && !opts.cors?.length) {
+    const selected = select()
+    return selected.backend === "effect-httpapi" ? DefaultHttpApi() : DefaultHono()
+  }
+
   const selected = select()
-  return selected.backend === "effect-httpapi" ? DefaultHttpApi() : DefaultHono()
+  return selected.backend === "effect-httpapi"
+    ? withBackend(selected, createHttpApi(opts))
+    : withBackend(selected, createHono(opts, selected))
 }
 
 function create(opts: ListenOptions) {
@@ -69,7 +82,7 @@ function create(opts: ListenOptions) {
     : withBackend(selected, createHono(opts, selected))
 }
 
-export function Legacy(opts: CorsOptions = {}) {
+export function Legacy(opts: ServerOptions = {}) {
   return withBackend({ backend: "hono", reason: "explicit" }, createHono(opts, { backend: "hono", reason: "explicit" }))
 }
 
@@ -82,12 +95,26 @@ function withBackend<T extends { app: ServerApp; runtime: unknown }>(selection: 
   return built
 }
 
-function createHttpApi(corsOptions?: CorsOptions) {
-  const handler = ExperimentalHttpApiServer.webHandler(corsOptions).handler
+function toRequest(input: string | URL | Request, init?: RequestInit) {
+  return input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init)
+}
+
+function withBasePathHono(app: Hono, basePath: string | undefined) {
+  if (!basePath) return app
+
+  const fetch = app.fetch.bind(app)
+  app.fetch = ((request, env, executionCtx) =>
+    fetch(rewriteRequestBasePath(request, basePath), env, executionCtx)) as typeof app.fetch
+  app.request = ((input, init) => fetch(rewriteRequestBasePath(toRequest(input, init), basePath))) as typeof app.request
+  return app
+}
+
+function createHttpApi(opts: ServerOptions = {}) {
+  const handler = ExperimentalHttpApiServer.webHandler(opts).handler
   const app: ServerApp = {
-    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
+    fetch: (request: Request) => handler(rewriteRequestBasePath(request, opts.basePath ?? ""), ExperimentalHttpApiServer.context),
     request(input, init) {
-      return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
+      return app.fetch(rewriteRequestBasePath(toRequest(input, init), opts.basePath ?? ""))
     },
   }
   return {
@@ -96,15 +123,18 @@ function createHttpApi(corsOptions?: CorsOptions) {
   }
 }
 
-function createHono(opts: CorsOptions, selection: ServerBackend.Selection = ServerBackend.force(select(), "hono")) {
+function createHono(opts: ServerOptions, selection: ServerBackend.Selection = ServerBackend.force(select(), "hono")) {
   const backendAttributes = ServerBackend.attributes(selection)
-  const app = new Hono()
+  const app = withBasePathHono(
+    new Hono()
     .onError(ErrorMiddleware)
     .use(AuthMiddleware)
     .use(LoggerMiddleware(backendAttributes))
     .use(CompressionMiddleware)
     .use(CorsMiddleware(opts))
-    .route("/global", GlobalRoutes())
+    .route("/global", GlobalRoutes()),
+    opts.basePath,
+  )
 
   const runtime = adapter.create(app)
 
@@ -126,13 +156,13 @@ function createHono(opts: CorsOptions, selection: ServerBackend.Selection = Serv
   workspaceApp.route("/", workspaceLegacyApp)
 
   return {
-    app: app
-      .route("/", ControlPlaneRoutes())
-      .route("/", workspaceApp)
-      .route("/", InstanceRoutes(runtime.upgradeWebSocket))
-      .route("/", UIRoutes()),
-    runtime,
-  }
+      app: app
+        .route("/", ControlPlaneRoutes())
+        .route("/", workspaceApp)
+        .route("/", InstanceRoutes(runtime.upgradeWebSocket))
+        .route("/", UIRoutes(opts.basePath ?? "")),
+      runtime,
+    }
 }
 
 export async function openapi() {
@@ -163,6 +193,7 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
   const next = new URL("http://localhost")
   next.hostname = opts.hostname
   next.port = String(server.port)
+  next.pathname = opts.basePath ? `${opts.basePath}/` : "/"
   url = next
 
   const mdns =

@@ -8,6 +8,7 @@ import { getMimeType } from "hono/utils/mime"
 import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
 import { ProxyUtil } from "../proxy-util"
+import { stripBasePath } from "../base-path"
 
 const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   ? Promise.resolve(null)
@@ -20,6 +21,11 @@ const UI_UPSTREAM = new URL("https://app.opencode.ai")
 
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+
+function injectBasePath(body: string, basePath: string) {
+  if (!basePath) return body
+  return body.replace("</head>", `<meta name="opencode-base-path" content="${basePath}"></head>`)
+}
 
 function themePreloadHash(body: string) {
   return body.match(/<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i)
@@ -49,9 +55,9 @@ function embeddedUI() {
   return embeddedUIPromise
 }
 
-export async function serveUI(request: Request) {
+export async function serveUI(request: Request, basePath = "") {
   const embeddedWebUI = await embeddedUI()
-  const path = new URL(request.url).pathname
+  const path = stripBasePath(new URL(request.url).pathname, basePath)
 
   if (embeddedWebUI) {
     const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
@@ -61,7 +67,8 @@ export async function serveUI(request: Request) {
       const mime = getMimeType(match) ?? "text/plain"
       const headers = new Headers({ "content-type": mime })
       if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-      return new Response(new Uint8Array(await fs.readFile(match)), { headers })
+      if (!mime.startsWith("text/html")) return new Response(new Uint8Array(await fs.readFile(match)), { headers })
+      return new Response(injectBasePath(await fs.readFile(match, "utf8"), basePath), { headers })
     }
 
     return Response.json({ error: "Not Found" }, { status: 404 })
@@ -71,21 +78,22 @@ export async function serveUI(request: Request) {
     raw: request,
     headers: ProxyUtil.headers(request, { host: UI_UPSTREAM.host }),
   })
-  const match = response.headers.get("content-type")?.includes("text/html")
-    ? themePreloadHash(await response.clone().text())
-    : undefined
+  const html = response.headers.get("content-type")?.includes("text/html") ? injectBasePath(await response.clone().text(), basePath) : undefined
+  const match = html ? themePreloadHash(html) : undefined
   const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
   response.headers.set("Content-Security-Policy", csp(hash))
+  if (html) return new Response(html, { status: response.status, headers: response.headers })
   return response
 }
 
 export function serveUIEffect(
   request: HttpServerRequest.HttpServerRequest,
   services: { fs: AppFileSystem.Interface; client: HttpClient.HttpClient },
+  basePath = "",
 ) {
   return Effect.gen(function* () {
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI())
-    const path = new URL(request.url, "http://localhost").pathname
+    const path = stripBasePath(new URL(request.url, "http://localhost").pathname, basePath)
 
     if (embeddedWebUI) {
       const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
@@ -95,7 +103,8 @@ export function serveUIEffect(
         const mime = getMimeType(match) ?? "text/plain"
         const headers = new Headers({ "content-type": mime })
         if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
-        return HttpServerResponse.raw(yield* services.fs.readFile(match), { headers })
+        if (!mime.startsWith("text/html")) return HttpServerResponse.raw(yield* services.fs.readFile(match), { headers })
+        return HttpServerResponse.text(injectBasePath(yield* services.fs.readFileString(match), basePath), { headers })
       }
 
       return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
@@ -110,7 +119,7 @@ export function serveUIEffect(
     const headers = proxyResponseHeaders(response.headers)
 
     if (response.headers["content-type"]?.includes("text/html")) {
-      const body = yield* response.text
+      const body = injectBasePath(yield* response.text, basePath)
       const match = themePreloadHash(body)
       headers.set("Content-Security-Policy", csp(match ? createHash("sha256").update(match[2]).digest("base64") : ""))
       return HttpServerResponse.text(body, { status: response.status, headers })
@@ -124,4 +133,4 @@ export function serveUIEffect(
   })
 }
 
-export const UIRoutes = (): Hono => new Hono().all("/*", (c) => serveUI(c.req.raw))
+export const UIRoutes = (basePath = ""): Hono => new Hono().all("/*", (c) => serveUI(c.req.raw, basePath))

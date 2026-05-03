@@ -7,6 +7,7 @@ export const Server = Schema.Struct({
     description: "Port to listen on",
   }),
   hostname: Schema.optional(Schema.String).annotate({ description: "Hostname to listen on" }),
+  basePath: Schema.optional(Schema.String).annotate({ description: "URL prefix to mount the server under" }),
   mdns: Schema.optional(Schema.Boolean).annotate({ description: "Enable mDNS service discovery" }),
   mdnsDomain: Schema.optional(Schema.String).annotate({
     description: "Custom domain name for mDNS service (default: opencode.local)",
