@@ -14,6 +14,7 @@ import {
   ServerConnection,
   useCommand,
 } from "@opencode-ai/app"
+import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { readImage } from "@tauri-apps/plugin-clipboard-manager"
@@ -297,10 +298,15 @@ const createPlatform = (): Platform => {
       return { updateAvailable: true, version: next.version }
     },
 
-    update: async () => {
+    updateAndRestart: async () => {
       if (!UPDATER_ENABLED || !update) return
       if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
-      await update.install().catch(() => undefined)
+      const installed = await update
+        .install()
+        .then(() => true)
+        .catch(() => false)
+      if (!installed) return
+      await relaunch()
     },
 
     restart: async () => {

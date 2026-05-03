@@ -1,7 +1,9 @@
 import { Duration, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 
-const URL = "https://mcp.exa.ai/mcp"
+const URL = process.env.EXA_API_KEY
+  ? `https://mcp.exa.ai/mcp?exaApiKey=${encodeURIComponent(process.env.EXA_API_KEY)}`
+  : "https://mcp.exa.ai/mcp"
 
 const McpResult = Schema.Struct({
   result: Schema.Struct({
@@ -31,11 +33,6 @@ export const SearchArgs = Schema.Struct({
   numResults: Schema.Number,
   livecrawl: Schema.String,
   contextMaxCharacters: Schema.optional(Schema.Number),
-})
-
-export const CodeArgs = Schema.Struct({
-  query: Schema.String,
-  tokensNum: Schema.Number,
 })
 
 const McpRequest = <F extends Schema.Struct.Fields>(args: Schema.Struct<F>) =>

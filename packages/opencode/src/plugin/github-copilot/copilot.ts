@@ -1,9 +1,8 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Model } from "@opencode-ai/sdk/v2"
-import { Installation } from "@/installation"
-import { InstallationVersion } from "@/installation/version"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
-import { Log } from "../../util"
+import * as Log from "@opencode-ai/core/util/log"
 import { setTimeout as sleep } from "node:timers/promises"
 import { CopilotModels } from "./models"
 import { MessageV2 } from "@/session/message-v2"
@@ -334,6 +333,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
       // Match github copilot cli, omit maxOutputTokens for gpt models
       if (incoming.model.api.id.includes("gpt")) {
         output.maxOutputTokens = undefined
+      }
+
+      // GitHub Copilot's /v1/messages shim rejects the GA `eager_input_streaming`
+      // field on tool definitions ("Extra inputs are not permitted"). Opt out of
+      // the @ai-sdk/anthropic default so it stops injecting the field.
+      if (incoming.model.api.npm === "@ai-sdk/anthropic") {
+        output.options.toolStreaming = false
       }
     },
     "chat.headers": async (incoming, output) => {

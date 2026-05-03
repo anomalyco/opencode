@@ -2,25 +2,24 @@ import { afterEach, describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
-import { LSP } from "../../src/lsp"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
-import { Truncate } from "../../src/tool"
-import { Tool } from "../../src/tool"
-import { Filesystem } from "../../src/util"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { Truncate } from "@/tool/truncate"
+import { Tool } from "@/tool/tool"
+import { Filesystem } from "@/util/filesystem"
+import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Npm } from "@opencode-ai/shared/npm"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 const ctx = {
@@ -256,28 +255,28 @@ describe("tool.read env file permissions", () => {
 })
 
 describe("tool.read truncation", () => {
-  it.live("truncates large file by bytes and sets truncated metadata", () =>
+  it.instance("truncates large file by bytes and sets truncated metadata", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
+      const test = yield* TestInstance
       const base = yield* load(path.join(FIXTURES_DIR, "models-api.json"))
       const target = 60 * 1024
       const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
-      yield* put(path.join(dir, "large.json"), content)
+      yield* put(path.join(test.directory, "large.json"), content)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "large.json") })
+      const result = yield* run({ filePath: path.join(test.directory, "large.json") })
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Output capped at")
       expect(result.output).toContain("Use offset=")
     }),
   )
 
-  it.live("truncates by line count when limit is specified", () =>
+  it.instance("truncates by line count when limit is specified", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
+      const test = yield* TestInstance
       const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
-      yield* put(path.join(dir, "many-lines.txt"), lines)
+      yield* put(path.join(test.directory, "many-lines.txt"), lines)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "many-lines.txt"), limit: 10 })
+      const result = yield* run({ filePath: path.join(test.directory, "many-lines.txt"), limit: 10 })
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Showing lines 1-10 of 100")
       expect(result.output).toContain("Use offset=11")
@@ -287,12 +286,12 @@ describe("tool.read truncation", () => {
     }),
   )
 
-  it.live("does not truncate small file", () =>
+  it.instance("does not truncate small file", () =>
     Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
-      yield* put(path.join(dir, "small.txt"), "hello world")
+      const test = yield* TestInstance
+      yield* put(path.join(test.directory, "small.txt"), "hello world")
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "small.txt") })
+      const result = yield* run({ filePath: path.join(test.directory, "small.txt") })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file")
     }),
@@ -395,6 +394,19 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  it.live("detects attachment media from file contents", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01])
+      yield* put(path.join(dir, "image.bin"), jpeg)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "image.bin") })
+      expect(result.output).toBe("Image read successfully")
+      expect(result.attachments?.[0].mime).toBe("image/jpeg")
+      expect(result.attachments?.[0].url.startsWith("data:image/jpeg;base64,")).toBe(true)
+    }),
+  )
+
   it.live("large image files are properly attached without error", () =>
     Effect.gen(function* () {
       const result = yield* exec(FIXTURES_DIR, { filePath: path.join(FIXTURES_DIR, "large-image.png") })
@@ -426,6 +438,24 @@ root_type Monster;`
       expect(result.attachments).toBeUndefined()
       expect(result.output).toContain("namespace MyGame")
       expect(result.output).toContain("table Monster")
+    }),
+  )
+
+  it.live("falls through unsupported image mime types to text", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const cases = [
+        ["image.bmp", "BM text content"],
+        ["photo.tiff", "II text content"],
+        ["photo.avif", "avif text content"],
+      ] as const
+
+      for (const item of cases) {
+        yield* put(path.join(dir, item[0]), item[1])
+        const result = yield* exec(dir, { filePath: path.join(dir, item[0]) })
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain(item[1])
+      }
     }),
   )
 })

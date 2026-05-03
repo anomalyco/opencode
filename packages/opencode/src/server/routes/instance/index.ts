@@ -2,20 +2,20 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import type { UpgradeWebSocket } from "hono/ws"
 import { Context, Effect } from "effect"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import z from "zod"
 import { Format } from "@/format"
 import { TuiRoutes } from "./tui"
 import { Instance } from "@/project/instance"
-import { Vcs } from "@/project"
+import { InstanceRuntime } from "@/project/instance-runtime"
+import { Vcs } from "@/project/vcs"
 import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
-import { Global } from "@/global"
-import { LSP } from "@/lsp"
+import { Global } from "@opencode-ai/core/global"
+import { LSP } from "@/lsp/lsp"
 import { Command } from "@/command"
 import { QuestionRoutes } from "./question"
 import { PermissionRoutes } from "./permission"
-import { Flag } from "@/flag/flag"
-import { ExperimentalHttpApiServer } from "./httpapi/server"
 import { ProjectRoutes } from "./project"
 import { SessionRoutes } from "./session"
 import { PtyRoutes } from "./pty"
@@ -26,26 +26,134 @@ import { ExperimentalRoutes } from "./experimental"
 import { ProviderRoutes } from "./provider"
 import { EventRoutes } from "./event"
 import { SyncRoutes } from "./sync"
-import { AppRuntime } from "@/effect/app-runtime"
+import { InstanceMiddleware } from "./middleware"
+import { jsonRequest } from "./trace"
+import { ExperimentalHttpApiServer } from "./httpapi/server"
+import { EventPaths } from "./httpapi/event"
+import { ExperimentalPaths } from "./httpapi/groups/experimental"
+import { FilePaths } from "./httpapi/groups/file"
+import { InstancePaths } from "./httpapi/groups/instance"
+import { McpPaths } from "./httpapi/groups/mcp"
+import { PtyPaths } from "./httpapi/groups/pty"
+import { SessionPaths } from "./httpapi/groups/session"
+import { SyncPaths } from "./httpapi/groups/sync"
+import { TuiPaths } from "./httpapi/groups/tui"
+import { WorkspacePaths } from "./httpapi/groups/workspace"
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
   const app = new Hono()
+  const handler = ExperimentalHttpApiServer.webHandler().handler
+  const context = Context.empty() as Context.Context<unknown>
+
+  app.all("/api/*", (c) => handler(c.req.raw, context))
 
   if (Flag.OPENCODE_EXPERIMENTAL_HTTPAPI) {
-    const handler = ExperimentalHttpApiServer.webHandler().handler
-    const context = Context.empty() as Context.Context<unknown>
+    app.get(EventPaths.event, (c) => handler(c.req.raw, context))
     app.get("/question", (c) => handler(c.req.raw, context))
     app.post("/question/:requestID/reply", (c) => handler(c.req.raw, context))
     app.post("/question/:requestID/reject", (c) => handler(c.req.raw, context))
     app.get("/permission", (c) => handler(c.req.raw, context))
     app.post("/permission/:requestID/reply", (c) => handler(c.req.raw, context))
+    app.get("/config", (c) => handler(c.req.raw, context))
+    app.patch("/config", (c) => handler(c.req.raw, context))
     app.get("/config/providers", (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.console, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.consoleOrgs, (c) => handler(c.req.raw, context))
+    app.post(ExperimentalPaths.consoleSwitch, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.tool, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.toolIDs, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
+    app.post(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
+    app.delete(ExperimentalPaths.worktree, (c) => handler(c.req.raw, context))
+    app.post(ExperimentalPaths.worktreeReset, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.session, (c) => handler(c.req.raw, context))
+    app.get(ExperimentalPaths.resource, (c) => handler(c.req.raw, context))
     app.get("/provider", (c) => handler(c.req.raw, context))
     app.get("/provider/auth", (c) => handler(c.req.raw, context))
     app.post("/provider/:providerID/oauth/authorize", (c) => handler(c.req.raw, context))
     app.post("/provider/:providerID/oauth/callback", (c) => handler(c.req.raw, context))
     app.get("/project", (c) => handler(c.req.raw, context))
     app.get("/project/current", (c) => handler(c.req.raw, context))
+    app.post("/project/git/init", (c) => handler(c.req.raw, context))
+    app.patch("/project/:projectID", (c) => handler(c.req.raw, context))
+    app.get(FilePaths.findText, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.findFile, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.findSymbol, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.list, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.content, (c) => handler(c.req.raw, context))
+    app.get(FilePaths.status, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.path, (c) => handler(c.req.raw, context))
+    app.post(InstancePaths.dispose, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.vcs, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.vcsDiff, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.command, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.agent, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.skill, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.lsp, (c) => handler(c.req.raw, context))
+    app.get(InstancePaths.formatter, (c) => handler(c.req.raw, context))
+    app.get(McpPaths.status, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.status, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.auth, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.authCallback, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.authAuthenticate, (c) => handler(c.req.raw, context))
+    app.delete(McpPaths.auth, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.connect, (c) => handler(c.req.raw, context))
+    app.post(McpPaths.disconnect, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.start, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.replay, (c) => handler(c.req.raw, context))
+    app.post(SyncPaths.history, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.list, (c) => handler(c.req.raw, context))
+    app.post(PtyPaths.create, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.get, (c) => handler(c.req.raw, context))
+    app.put(PtyPaths.update, (c) => handler(c.req.raw, context))
+    app.delete(PtyPaths.remove, (c) => handler(c.req.raw, context))
+    app.get(PtyPaths.connect, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.list, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.status, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.get, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.children, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.todo, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.diff, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.messages, (c) => handler(c.req.raw, context))
+    app.get(SessionPaths.message, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.create, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.remove, (c) => handler(c.req.raw, context))
+    app.patch(SessionPaths.update, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.init, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.fork, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.abort, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.share, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.share, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.summarize, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.prompt, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.promptAsync, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.command, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.shell, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.revert, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.unrevert, (c) => handler(c.req.raw, context))
+    app.post(SessionPaths.permissions, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.deleteMessage, (c) => handler(c.req.raw, context))
+    app.delete(SessionPaths.deletePart, (c) => handler(c.req.raw, context))
+    app.patch(SessionPaths.updatePart, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.appendPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openHelp, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openSessions, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openThemes, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.openModels, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.submitPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.clearPrompt, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.executeCommand, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.showToast, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.publish, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.selectSession, (c) => handler(c.req.raw, context))
+    app.get(TuiPaths.controlNext, (c) => handler(c.req.raw, context))
+    app.post(TuiPaths.controlResponse, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.adapters, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.list, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.list, (c) => handler(c.req.raw, context))
+    app.get(WorkspacePaths.status, (c) => handler(c.req.raw, context))
+    app.delete(WorkspacePaths.remove, (c) => handler(c.req.raw, context))
+    app.post(WorkspacePaths.sessionRestore, (c) => handler(c.req.raw, context))
   }
 
   return app
@@ -80,7 +188,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
         },
       }),
       async (c) => {
-        await Instance.dispose()
+        await InstanceRuntime.disposeInstance(Instance.current)
         return c.json(true)
       },
     )
@@ -134,25 +242,20 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "VCS info",
             content: {
               "application/json": {
-                schema: resolver(Vcs.Info),
+                schema: resolver(Vcs.Info.zod),
               },
             },
           },
         },
       }),
-      async (c) => {
-        return c.json(
-          await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const vcs = yield* Vcs.Service
-              const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
-                concurrency: 2,
-              })
-              return { branch, default_branch }
-            }),
-          ),
-        )
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.vcs.get", c, function* () {
+          const vcs = yield* Vcs.Service
+          const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
+            concurrency: 2,
+          })
+          return { branch, default_branch }
+        }),
     )
     .get(
       "/vcs/diff",
@@ -165,7 +268,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "VCS diff",
             content: {
               "application/json": {
-                schema: resolver(Vcs.FileDiff.array()),
+                schema: resolver(Vcs.FileDiff.zod.array()),
               },
             },
           },
@@ -174,19 +277,14 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
       validator(
         "query",
         z.object({
-          mode: Vcs.Mode,
+          mode: Vcs.Mode.zod,
         }),
       ),
-      async (c) => {
-        return c.json(
-          await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              const vcs = yield* Vcs.Service
-              return yield* vcs.diff(c.req.valid("query").mode)
-            }),
-          ),
-        )
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.vcs.diff", c, function* () {
+          const vcs = yield* Vcs.Service
+          return yield* vcs.diff(c.req.valid("query").mode)
+        }),
     )
     .get(
       "/command",
@@ -199,16 +297,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "List of commands",
             content: {
               "application/json": {
-                schema: resolver(Command.Info.array()),
+                schema: resolver(Command.Info.zod.array()),
               },
             },
           },
         },
       }),
-      async (c) => {
-        const commands = await AppRuntime.runPromise(Command.Service.use((svc) => svc.list()))
-        return c.json(commands)
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.command.list", c, function* () {
+          const svc = yield* Command.Service
+          return yield* svc.list()
+        }),
     )
     .get(
       "/agent",
@@ -221,16 +320,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "List of agents",
             content: {
               "application/json": {
-                schema: resolver(Agent.Info.array()),
+                schema: resolver(Agent.Info.zod.array()),
               },
             },
           },
         },
       }),
-      async (c) => {
-        const modes = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))
-        return c.json(modes)
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.agent.list", c, function* () {
+          const svc = yield* Agent.Service
+          return yield* svc.list()
+        }),
     )
     .get(
       "/skill",
@@ -243,21 +343,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "List of skills",
             content: {
               "application/json": {
-                schema: resolver(Skill.Info.array()),
+                schema: resolver(Skill.Info.zod.array()),
               },
             },
           },
         },
       }),
-      async (c) => {
-        const skills = await AppRuntime.runPromise(
-          Effect.gen(function* () {
-            const skill = yield* Skill.Service
-            return yield* skill.all()
-          }),
-        )
-        return c.json(skills)
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.skill.list", c, function* () {
+          const skill = yield* Skill.Service
+          return yield* skill.all()
+        }),
     )
     .get(
       "/lsp",
@@ -270,16 +366,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "LSP server status",
             content: {
               "application/json": {
-                schema: resolver(LSP.Status.array()),
+                schema: resolver(LSP.Status.zod.array()),
               },
             },
           },
         },
       }),
-      async (c) => {
-        const items = await AppRuntime.runPromise(LSP.Service.use((lsp) => lsp.status()))
-        return c.json(items)
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.lsp.status", c, function* () {
+          const lsp = yield* LSP.Service
+          return yield* lsp.status()
+        }),
     )
     .get(
       "/formatter",
@@ -292,14 +389,16 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
             description: "Formatter status",
             content: {
               "application/json": {
-                schema: resolver(Format.Status.array()),
+                schema: resolver(Format.Status.zod.array()),
               },
             },
           },
         },
       }),
-      async (c) => {
-        return c.json(await AppRuntime.runPromise(Format.Service.use((svc) => svc.status())))
-      },
+      async (c) =>
+        jsonRequest("InstanceRoutes.formatter.status", c, function* () {
+          const svc = yield* Format.Service
+          return yield* svc.status()
+        }),
     )
 }

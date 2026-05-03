@@ -1,10 +1,10 @@
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionID, MessageID } from "@/session/schema"
 import { zod } from "@/util/effect-zod"
-import { Log } from "@/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { withStatics } from "@/util/schema"
 import { QuestionID } from "./schema"
 
@@ -94,9 +94,9 @@ class Rejected extends Schema.Class<Rejected>("QuestionRejected")({
 }) {}
 
 export const Event = {
-  Asked: BusEvent.define("question.asked", Request.zod),
-  Replied: BusEvent.define("question.replied", zod(Replied)),
-  Rejected: BusEvent.define("question.rejected", zod(Rejected)),
+  Asked: BusEvent.define("question.asked", Request),
+  Replied: BusEvent.define("question.replied", Replied),
+  Rejected: BusEvent.define("question.rejected", Rejected),
 }
 
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("QuestionRejectedError", {}) {
@@ -194,7 +194,7 @@ export const layer = Layer.effect(
       yield* bus.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
-        answers: input.answers,
+        answers: input.answers.map((a) => [...a]),
       })
       yield* Deferred.succeed(existing.deferred, input.answers)
     })

@@ -1,19 +1,22 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { tmpdir } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
+import { provideTestInstance, tmpdir } from "../fixture/fixture"
+import { InstanceRuntime } from "@/project/instance-runtime"
 import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
-import { Config } from "../../src/config"
-import { Global } from "../../src/global"
-import { Filesystem } from "../../src/util"
+import { Config } from "@/config/config"
+import { Global } from "@opencode-ai/core/global"
+import { Filesystem } from "@/util/filesystem"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Effect, Layer } from "effect"
 import { CurrentWorkingDirectory } from "@/cli/cmd/tui/config/cwd"
 import { ConfigPlugin } from "@/config/plugin"
 
 const wintest = process.platform === "win32" ? test : test.skip
-const clear = (wait = false) => AppRuntime.runPromise(Config.Service.use((svc) => svc.invalidate(wait)))
+const clear = async (wait = false) => {
+  await AppRuntime.runPromise(Config.Service.use((svc) => svc.invalidate()))
+  if (wait) await InstanceRuntime.disposeAllInstances()
+}
 const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
 
 beforeEach(async () => {
@@ -87,7 +90,7 @@ test("keeps server and tui plugin merge semantics aligned", async () => {
     },
   })
 
-  await Instance.provide({
+  await provideTestInstance({
     directory: tmp.path,
     fn: async () => {
       const server = await load()

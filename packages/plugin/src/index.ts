@@ -45,11 +45,11 @@ export type WorkspaceTarget =
       headers?: HeadersInit
     }
 
-export type WorkspaceAdaptor = {
+export type WorkspaceAdapter = {
   name: string
   description: string
   configure(config: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
-  create(config: WorkspaceInfo, from?: WorkspaceInfo): Promise<void>
+  create(config: WorkspaceInfo, env: Record<string, string | undefined>, from?: WorkspaceInfo): Promise<void>
   remove(config: WorkspaceInfo): Promise<void>
   target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
 }
@@ -60,7 +60,7 @@ export type PluginInput = {
   directory: string
   worktree: string
   experimental_workspace: {
-    register(type: string, adaptor: WorkspaceAdaptor): void
+    register(type: string, adapter: WorkspaceAdapter): void
   }
   serverUrl: URL
   $: BunShell
