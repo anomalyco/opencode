@@ -5,6 +5,7 @@ import { HttpApiError, HttpApiMiddleware, HttpApiSecurity } from "effect/unstabl
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
+const WWW_AUTHENTICATE = "Basic realm=\"opencode\""
 
 export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   "@opencode/ExperimentalHttpApiAuthorization",
@@ -82,7 +83,12 @@ function validateRawCredential<A, E, R>(
 ) {
   if (!isAuthRequired(config)) return effect
   if (!isCredentialAuthorized(credential, config))
-    return Effect.succeed(HttpServerResponse.empty({ status: UNAUTHORIZED }))
+    return Effect.succeed(
+      HttpServerResponse.empty({
+        status: UNAUTHORIZED,
+        headers: { "www-authenticate": WWW_AUTHENTICATE },
+      }),
+    )
   return effect
 }
 
