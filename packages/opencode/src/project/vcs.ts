@@ -27,7 +27,9 @@ const merge = (...lists: Git.Item[][]) => {
   return [...out.values()]
 }
 
-const quoted = (value: string) => {
+const emptyBatch = () => ({ patches: new Map<string, string>(), capped: false })
+
+const parseQuotedPath = (value: string) => {
   let out = ""
   for (let idx = 1; idx < value.length; idx++) {
     const char = value[idx]
@@ -46,38 +48,43 @@ const quoted = (value: string) => {
   }
 }
 
-const unquote = (value: string) => {
+const parsePathToken = (value: string) => {
   if (!value.startsWith('"')) return value.split("\t")[0]
-  return quoted(value)?.value ?? value
+  return parseQuotedPath(value)?.value ?? value
 }
 
-const diffFile = (value: string | undefined) => {
+const fileFromDiffPath = (value: string | undefined) => {
   if (!value || value === "/dev/null") return
-  const file = unquote(value)
+  const file = parsePathToken(value)
   if (file.startsWith("a/") || file.startsWith("b/")) return file.slice(2)
   return file
 }
 
-const chunkFile = (chunk: string) => {
+const fileFromGitHeader = (header: string) => {
+  if (header.startsWith('"')) {
+    const first = parseQuotedPath(header)
+    const second = first ? header.slice(first.end).trimStart() : undefined
+    if (!second) return
+    if (!second.startsWith('"')) return fileFromDiffPath(second)
+    return fileFromDiffPath(parseQuotedPath(second)?.value)
+  }
+
+  const separator = header.indexOf(" b/")
+  if (separator === -1) return
+  return fileFromDiffPath(header.slice(separator + 1))
+}
+
+const fileFromPatchChunk = (chunk: string) => {
   const next = /^\+\+\+ (.+)$/m.exec(chunk)?.[1]
   const before = /^--- (.+)$/m.exec(chunk)?.[1]
-  const file = diffFile(next) ?? diffFile(before)
+  const file = fileFromDiffPath(next) ?? fileFromDiffPath(before)
   if (file) return file
 
   const header = /^diff --git (.+)$/m.exec(chunk)?.[1]
-  if (!header) return
-  if (header.startsWith('"')) {
-    const first = quoted(header)
-    const second = first ? header.slice(first.end).trimStart() : undefined
-    if (!second) return
-    return diffFile(second.startsWith('"') ? quoted(second)?.value : second)
-  }
-  const separator = header.indexOf(" b/")
-  if (separator === -1) return
-  return diffFile(header.slice(separator + 1))
+  return fileFromGitHeader(header ?? "")
 }
 
-const splitPatches = (patch: Git.Patch) => {
+const splitGitPatch = (patch: Git.Patch) => {
   const starts = [...patch.text.matchAll(/^diff --git /gm)].map((match) => match.index)
   const chunks = starts.map((start, index) => patch.text.slice(start, starts[index + 1] ?? patch.text.length))
   if (!patch.truncated) return chunks
@@ -94,8 +101,8 @@ const batchPatches = Effect.fnUntraced(function* (git: Git.Interface, cwd: strin
   if (result.truncated) log.warn("batched patch exceeded byte limit", { max: MAX_TOTAL_PATCH_BYTES })
 
   return {
-    patches: splitPatches(result).reduce((acc, patch, index) => {
-      const file = chunkFile(patch) ?? list[index]?.file
+    patches: splitGitPatch(result).reduce((acc, patch, index) => {
+      const file = fileFromPatchChunk(patch) ?? list[index]?.file
       if (!file) return acc
       acc.set(file, (acc.get(file) ?? "") + patch)
       return acc
@@ -126,6 +133,22 @@ const totalPatch = (file: string, patch: string, total: number) => {
   return { patch: emptyPatch(file), capped: true }
 }
 
+const patchForItem = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  cwd: string,
+  ref: string | undefined,
+  item: Git.Item,
+  batch: { patches: Map<string, string>; capped: boolean },
+  capped: boolean,
+) {
+  if (capped) return emptyPatch(item.file)
+
+  const batched = batch.patches.get(item.file)
+  if (batched !== undefined) return batched
+  if (item.code !== "??" && batch.capped) return emptyPatch(item.file)
+  return yield* nativePatch(git, cwd, ref, item)
+})
+
 const files = Effect.fnUntraced(function* (
   git: Git.Interface,
   cwd: string,
@@ -140,10 +163,7 @@ const files = Effect.fnUntraced(function* (
 
   for (const item of list.toSorted((a, b) => a.file.localeCompare(b.file))) {
     const stat = map.get(item.file) ?? (item.status === "added" ? yield* git.statUntracked(cwd, item.file) : undefined)
-    const patch = capped
-      ? emptyPatch(item.file)
-      : (batch.patches.get(item.file) ??
-        (item.code !== "??" && batch.capped ? emptyPatch(item.file) : yield* nativePatch(git, cwd, ref, item)))
+    const patch = yield* patchForItem(git, cwd, ref, item, batch, capped)
     const result: { patch: string; capped: boolean } = capped
       ? { patch, capped: true }
       : totalPatch(item.file, patch, total)
@@ -164,8 +184,7 @@ const files = Effect.fnUntraced(function* (
   return next
 })
 
-const track = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string | undefined) {
-  if (!ref) return yield* files(git, cwd, ref, yield* git.status(cwd), new Map(), { patches: new Map(), capped: false })
+const diffAgainstRef = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string) {
   const [list, stats, extra] = yield* Effect.all([git.diff(cwd, ref), git.stats(cwd, ref), git.status(cwd)], {
     concurrency: 3,
   })
@@ -182,21 +201,9 @@ const track = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref:
   )
 })
 
-const compare = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string) {
-  const [list, stats, extra] = yield* Effect.all([git.diff(cwd, ref), git.stats(cwd, ref), git.status(cwd)], {
-    concurrency: 3,
-  })
-  return yield* files(
-    git,
-    cwd,
-    ref,
-    merge(
-      list,
-      extra.filter((item) => item.code === "??"),
-    ),
-    nums(stats),
-    yield* batchPatches(git, cwd, ref, list),
-  )
+const track = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string | undefined) {
+  if (!ref) return yield* files(git, cwd, ref, yield* git.status(cwd), new Map(), emptyBatch())
+  return yield* diffAgainstRef(git, cwd, ref)
 })
 
 export const Mode = Schema.Literals(["git", "branch"]).pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -307,7 +314,7 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
         if (value.current && value.current === value.root.name) return []
         const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
         if (!ref) return []
-        return yield* compare(git, ctx.directory, ref)
+        return yield* diffAgainstRef(git, ctx.directory, ref)
       }),
     })
   }),
