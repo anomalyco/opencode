@@ -33,6 +33,32 @@ function isLocalHost(url: string) {
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
 
+export function resolveServerList(input: {
+  props?: Array<ServerConnection.Any>
+  stored: StoredServer[]
+}): Array<ServerConnection.Any> {
+  const servers = [
+    ...input.stored.map((value) =>
+      typeof value === "string"
+        ? {
+            type: "http" as const,
+            http: { url: value },
+          }
+        : value,
+    ),
+    ...(input.props ?? []),
+  ]
+
+  const deduped = new Map(
+    servers.map((value) => {
+      const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
+      return [ServerConnection.key(conn), conn]
+    }),
+  )
+
+  return [...deduped.values()]
+}
+
 export namespace ServerConnection {
   type Base = { displayName?: string }
 
@@ -40,6 +66,7 @@ export namespace ServerConnection {
     url: string
     username?: string
     password?: string
+    authToken?: boolean
   }
 
   // Regular web connections
@@ -113,26 +140,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
-      const servers = [
-        ...(props.servers ?? []),
-        ...store.list.map((value) =>
-          typeof value === "string"
-            ? {
-                type: "http" as const,
-                http: { url: value },
-              }
-            : value,
-        ),
-      ]
-
-      const deduped = new Map(
-        servers.map((value) => {
-          const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
-          return [ServerConnection.key(conn), conn]
-        }),
-      )
-
-      return [...deduped.values()]
+      return resolveServerList({ stored: store.list, props: props.servers })
     })
 
     const [state, setState] = createStore({

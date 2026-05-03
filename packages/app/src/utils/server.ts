@@ -1,6 +1,22 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { ServerConnection } from "@/context/server"
 
+export function authFromToken(token: string | null) {
+  if (!token) return
+  try {
+    const decoded = atob(token)
+    const separator = decoded.indexOf(":")
+    if (separator === -1) return
+    return {
+      username: decoded.slice(0, separator) || "opencode",
+      password: decoded.slice(separator + 1),
+      authToken: true,
+    }
+  } catch {
+    return
+  }
+}
+
 export function createSdkForServer({
   server,
   ...config
