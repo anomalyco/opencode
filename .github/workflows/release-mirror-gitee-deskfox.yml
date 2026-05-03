@@ -1,0 +1,173 @@
+# [fork-only] DeskFox release 镜像到 Gitee
+#
+# 触发:GitHub Release 从 draft 转 publish 时(user 手动 publish 才触发)
+#
+# 行为:
+#   1. 拉 GitHub Release 全部附件(.exe / .dmg)
+#   2. 在 Gitee zoulukuang/deskfox 创建对应 Release(同 tag/name/body/prerelease)
+#   3. 把附件上传到 Gitee Release
+#
+# 依赖 secret:
+#   GITEE_TOKEN — Gitee Personal Access Token,scope `projects` 即可
+#   配置位置:GitHub repo Settings → Secrets and variables → Actions → New repository secret
+#   获取方式:Gitee → 设置 → 私人令牌 → 生成新令牌
+#
+# 设计文档:docs/features/gitee-release-mirror/1-spec.md
+#
+# 文件名规则(强制):*-deskfox.yml,跟上游 0 重名,pre-commit hook 自动豁免
+
+name: release-mirror-gitee-deskfox
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    name: Mirror release to Gitee
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      GITEE_OWNER: zoulukuang
+      GITEE_REPO: deskfox
+      GITEE_API: https://gitee.com/api/v5
+      TARGET_BRANCH: dev
+      MAX_ASSET_SIZE: 104857600  # 100 MB,Gitee 单文件上限
+
+    steps:
+      - name: Validate GITEE_TOKEN secret
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "::error::GITEE_TOKEN secret not configured."
+            echo "::error::Configure at: Settings → Secrets and variables → Actions → New repository secret"
+            echo "::error::Token scope required: projects (Gitee → 设置 → 私人令牌)"
+            exit 1
+          fi
+          # 探测 token 有效性(查 user info)
+          status=$(curl -sf -o /dev/null -w "%{http_code}" \
+            "$GITEE_API/user?access_token=$GITEE_TOKEN" || echo "fail")
+          if [ "$status" != "200" ]; then
+            echo "::error::GITEE_TOKEN invalid or expired (status=$status)"
+            exit 1
+          fi
+          echo "[ok] GITEE_TOKEN valid"
+
+      - name: Download GitHub release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir release-assets
+          echo "[downloaded]"
+          ls -la release-assets/
+          # 至少 1 个附件才有意义同步;空 release 直接退出
+          if [ -z "$(ls -A release-assets)" ]; then
+            echo "::warning::Release has no assets, nothing to mirror — exiting cleanly"
+            exit 0
+          fi
+
+      - name: Find or create Gitee release
+        id: gitee_release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+          NAME: ${{ github.event.release.name }}
+          BODY: ${{ github.event.release.body }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+
+          # 查 by-tag(幂等检测)
+          existing_status=$(curl -s -o /tmp/existing.json -w "%{http_code}" \
+            "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases/tags/$TAG?access_token=$GITEE_TOKEN")
+
+          if [ "$existing_status" = "200" ]; then
+            release_id=$(jq -r '.id' /tmp/existing.json)
+            echo "[found existing] Gitee release id=$release_id for tag=$TAG"
+          else
+            echo "[create] Gitee release $TAG (status was $existing_status)"
+            # 用 jq 安全构造 JSON(避免 body 里特殊字符破坏 JSON)
+            payload=$(jq -nc \
+              --arg token "$GITEE_TOKEN" \
+              --arg tag "$TAG" \
+              --arg name "${NAME:-$TAG}" \
+              --arg body "${BODY:-Mirrored from GitHub Release.}" \
+              --arg branch "$TARGET_BRANCH" \
+              --argjson prerelease "${PRERELEASE:-false}" \
+              '{
+                access_token: $token,
+                tag_name: $tag,
+                name: $name,
+                body: $body,
+                prerelease: $prerelease,
+                target_commitish: $branch
+              }')
+            create_response=$(curl -sf -X POST \
+              "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases" \
+              -H "Content-Type: application/json;charset=UTF-8" \
+              -d "$payload")
+            release_id=$(echo "$create_response" | jq -r '.id')
+            if [ -z "$release_id" ] || [ "$release_id" = "null" ]; then
+              echo "::error::Gitee release create failed. Response:"
+              echo "$create_response"
+              exit 1
+            fi
+            echo "[created] Gitee release id=$release_id"
+          fi
+
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Upload assets to Gitee release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          RELEASE_ID: ${{ steps.gitee_release.outputs.release_id }}
+        run: |
+          set -uo pipefail
+
+          fail_count=0
+          ok_count=0
+
+          for f in release-assets/*; do
+            [ -f "$f" ] || continue
+            filename=$(basename "$f")
+            filesize=$(stat -c%s "$f")
+
+            if [ "$filesize" -gt "$MAX_ASSET_SIZE" ]; then
+              echo "::warning::$filename size $filesize > $MAX_ASSET_SIZE bytes (Gitee 100MB limit), skipping"
+              continue
+            fi
+
+            echo "[upload] $filename ($filesize bytes)..."
+            http_code=$(curl -s -o /tmp/upload-resp.json -w "%{http_code}" -X POST \
+              "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
+              -F "access_token=$GITEE_TOKEN" \
+              -F "file=@$f")
+
+            if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
+              echo "[ok] $filename uploaded"
+              ok_count=$((ok_count + 1))
+            else
+              echo "::warning::$filename upload failed (status=$http_code):"
+              cat /tmp/upload-resp.json || true
+              fail_count=$((fail_count + 1))
+            fi
+          done
+
+          echo ""
+          echo "[summary] uploaded=$ok_count failed=$fail_count"
+          echo "[gitee release URL] https://gitee.com/$GITEE_OWNER/$GITEE_REPO/releases/tag/${{ github.event.release.tag_name }}"
+
+          if [ "$fail_count" -gt 0 ]; then
+            echo "::warning::$fail_count asset(s) failed to upload — see log above"
+            # 不 fail workflow,允许部分成功(release 至少建出来了)
+          fi
