@@ -46,7 +46,7 @@ export type Properties<Def extends Definition = Definition> = EffectSchema.Schem
 
 export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
-type ProjectorFunc = (db: Database.TxOrDb, data: unknown) => void
+type ProjectorFunc = (db: Database.TxOrDb, data: unknown, event: Event) => void
 type ConvertEvent = (type: string, data: Event["data"]) => unknown | Promise<unknown>
 type PublishContext = {
   instance?: InstanceContext
@@ -255,7 +255,7 @@ export function define<
 
 export function project<Def extends Definition>(
   def: Def,
-  func: (db: Database.TxOrDb, data: Event<Def>["data"]) => void,
+  func: (db: Database.TxOrDb, data: Event<Def>["data"], event: Event<Def>) => void,
 ): [Definition, ProjectorFunc] {
   return [def, func as ProjectorFunc]
 }
@@ -277,7 +277,7 @@ function process<Def extends Definition>(
   // idempotent: need to ignore any events already logged
 
   Database.transaction((tx) => {
-    projector(tx, event.data)
+    projector(tx, event.data, event)
 
     if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
       tx.insert(EventSequenceTable)
@@ -308,7 +308,7 @@ function process<Def extends Definition>(
         }
 
         const result = convertEvent(def.type, event.data)
-        const publish = (data: unknown) => ProjectBus.publish(def, data as Properties<Def>)
+        const publish = (data: unknown) => ProjectBus.publish(def, data as Properties<Def>, { id: event.id })
         if (result instanceof Promise) {
           void result.then(publish)
         } else {

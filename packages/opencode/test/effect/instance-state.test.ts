@@ -4,7 +4,7 @@ import { $ } from "bun"
 import { Context, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { Instance } from "../../src/project/instance"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(CrossSpawnSpawner.defaultLayer)
@@ -19,7 +19,7 @@ const tmpdirGitScoped = Effect.gen(function* () {
 })
 
 afterEach(async () => {
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 it.live("InstanceState caches values per directory", () =>
@@ -69,7 +69,7 @@ it.live("InstanceState invalidates on reload", () =>
     )
 
     const a = yield* access(state, dir)
-    yield* Effect.promise(() => Instance.reload({ directory: dir }))
+    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
     const b = yield* access(state, dir)
 
     expect(a).not.toBe(b)
@@ -94,7 +94,7 @@ it.live("InstanceState invalidates on disposeAll", () =>
 
     yield* access(state, one)
     yield* access(state, two)
-    yield* Effect.promise(() => Instance.disposeAll())
+    yield* Effect.promise(disposeAllInstances)
 
     expect(seen.sort()).toEqual([one, two].sort())
   }),
@@ -269,7 +269,7 @@ it.live("InstanceState correct after interleaved init and dispose", () =>
 
       const [, b] = yield* Effect.all(
         [
-          Effect.promise(() => Instance.reload({ directory: one })),
+          Effect.promise(() => reloadTestInstance({ directory: one })),
           Test.use((svc) => svc.get()).pipe(provideInstance(two)),
         ],
         { concurrency: "unbounded" },
