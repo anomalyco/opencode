@@ -5,8 +5,12 @@ import { Workspace } from "@/control-plane/workspace"
 import { EffectBridge } from "@/effect/bridge"
 import { Session } from "@/session/session"
 import { HttpApiProxy } from "./proxy"
-import * as Fence from "@/server/fence"
-import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/workspace"
+import * as Fence from "@/server/shared/fence"
+import {
+  getWorkspaceRouteSessionID,
+  isLocalWorkspaceRoute,
+  workspaceProxyURL,
+} from "@/server/shared/workspace-routing"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer } from "effect"
 import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
