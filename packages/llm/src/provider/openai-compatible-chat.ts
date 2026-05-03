@@ -61,7 +61,17 @@ export const deepseek = (input: ProviderFamilyModelInput) => familyModel(familie
 
 export const fireworks = (input: ProviderFamilyModelInput) => familyModel(families.fireworks, input)
 
+export const groq = (input: ProviderFamilyModelInput) => familyModel(families.groq, input)
+
+export const mistral = (input: ProviderFamilyModelInput) => familyModel(families.mistral, input)
+
+export const openrouter = (input: ProviderFamilyModelInput) => familyModel(families.openrouter, input)
+
+export const perplexity = (input: ProviderFamilyModelInput) => familyModel(families.perplexity, input)
+
 export const togetherai = (input: ProviderFamilyModelInput) => familyModel(families.togetherai, input)
+
+export const venice = (input: ProviderFamilyModelInput) => familyModel(families.venice, input)
 
 export const includeUsage = adapter.patch("include-usage", {
   reason: "request final usage chunk from OpenAI-compatible Chat streaming responses",

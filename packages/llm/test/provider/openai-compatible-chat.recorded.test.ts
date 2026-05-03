@@ -21,6 +21,14 @@ const togetherModel = OpenAICompatibleChat.togetherai({
 const togetherRequest = textRequest({ id: "recorded_togetherai_text", model: togetherModel })
 const togetherToolRequest = weatherToolRequest({ id: "recorded_togetherai_tool_call", model: togetherModel })
 
+const openrouterModel = OpenAICompatibleChat.openrouter({
+  id: "openai/gpt-4o-mini",
+  apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
+})
+
+const openrouterRequest = textRequest({ id: "recorded_openrouter_text", model: openrouterModel })
+const openrouterToolRequest = weatherToolRequest({ id: "recorded_openrouter_tool_call", model: openrouterModel })
+
 const recorded = recordedTests({ prefix: "openai-compatible-chat", protocol: "openai-compatible-chat" })
 const llm = LLMClient.make({ adapters: [OpenAICompatibleChat.adapter] })
 
@@ -46,6 +54,25 @@ describe("OpenAI-compatible Chat recorded", () => {
   recorded.effect.with("togetherai streams tool call", { provider: "togetherai", requires: ["TOGETHER_AI_API_KEY"], tags: ["tool"] }, () =>
     Effect.gen(function* () {
       const response = yield* llm.generate(togetherToolRequest)
+
+      expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
+      expectWeatherToolCall(response)
+      expectFinish(response.events, "tool-calls")
+    }),
+  )
+
+  recorded.effect.with("openrouter streams text", { provider: "openrouter", requires: ["OPENROUTER_API_KEY"] }, () =>
+    Effect.gen(function* () {
+      const response = yield* llm.generate(openrouterRequest)
+
+      expect(LLM.outputText(response)).toMatch(/^Hello!?$/)
+      expectFinish(response.events, "stop")
+    }),
+  )
+
+  recorded.effect.with("openrouter streams tool call", { provider: "openrouter", requires: ["OPENROUTER_API_KEY"], tags: ["tool"] }, () =>
+    Effect.gen(function* () {
+      const response = yield* llm.generate(openrouterToolRequest)
 
       expect(response.events.some((event) => event.type === "tool-input-delta")).toBe(true)
       expectWeatherToolCall(response)
