@@ -158,6 +158,7 @@ if (root instanceof HTMLElement) {
   clearAuthToken()
   const server: ServerConnection.Http = {
     type: "http",
+    authToken: !!auth,
     http: {
       url: getCurrentUrl(),
       ...auth,

@@ -49,12 +49,13 @@ export function resolveServerList(input: {
     ...(input.props ?? []),
   ]
 
-  const deduped = new Map(
-    servers.map((value) => {
-      const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
-      return [ServerConnection.key(conn), conn]
-    }),
-  )
+  const deduped = new Map<ServerConnection.Key, ServerConnection.Any>()
+  for (const value of servers) {
+    const conn: ServerConnection.Any = "type" in value ? value : { type: "http", http: value }
+    const key = ServerConnection.key(conn)
+    if (deduped.has(key) && conn.type === "http" && !conn.authToken) continue
+    deduped.set(key, conn)
+  }
 
   return [...deduped.values()]
 }
@@ -66,13 +67,13 @@ export namespace ServerConnection {
     url: string
     username?: string
     password?: string
-    authToken?: boolean
   }
 
   // Regular web connections
   export type Http = {
     type: "http"
     http: HttpBase
+    authToken?: boolean
   } & Base
 
   export type Sidecar = {
@@ -182,7 +183,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
       if (!url_) return
-      const conn = { ...input, http: { ...input.http, url: url_ } }
+      const conn: ServerConnection.Http = { ...input, authToken: undefined, http: { ...input.http, url: url_ } }
       return batch(() => {
         const existing = store.list.findIndex((x) => url(x) === url_)
         if (existing !== -1) {

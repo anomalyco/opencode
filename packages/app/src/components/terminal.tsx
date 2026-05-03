@@ -511,7 +511,7 @@ export const Terminal = (props: TerminalProps) => {
             sameOrigin,
             username,
             password,
-            authToken: auth?.authToken,
+            authToken: server.current?.type === "http" ? server.current.authToken : false,
           }),
         )
         socket.binaryType = "arraybuffer"
