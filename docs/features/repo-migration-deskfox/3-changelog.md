@@ -6,6 +6,8 @@ related: ./3-changelog.md
 
 # repo-migration-deskfox — changelog
 
+> **2026-05-04 增补**:user 在主仓迁移完成后将 GitHub 用户名 `yuesoue` 改名为 `zoulukuang`(对齐 Gitee 用户名),详见 [`user-rename-zoulukuang/3-changelog.md`](../user-rename-zoulukuang/3-changelog.md)。本文档保留迁移当时的 username `yuesoue` 不动 —— 历史叙述准确性优先于"现状一致";现在的真实仓库地址是 `github.com/zoulukuang/deskfox`。
+
 ## 触发
 
 2026-05-03 上游 PR 工作时撞墙:`yuesoue/opencode-for-office-deskfox` 在 GitHub 上 `isFork: false, parent: null` —— 不是 GitHub 意义上的 fork(当年是 clone+rename+push,没经过 fork 按钮)。`gh pr create` 跨仓需要 fork 关系,直接撞死。

@@ -20,7 +20,7 @@ related: ./1-spec.md
 - [x] workflow_dispatch 手动触发 dev 模式,build 跑通
 - [x] 本地 bump → commit → tag `ship-prod-2026.5.1.2` → push,自动出 draft Release
 - [x] draft Release 内容正确(SHA256 对、文案对、附件能下载)
-- [x] 首笔 GitHub Release 公开发布:[ship-prod-2026.5.1.2](https://github.com/yuesoue/opencode-for-office-deskfox/releases/tag/ship-prod-2026.5.1.2)(2026-05-01)
+- [x] 首笔 GitHub Release 公开发布:[ship-prod-2026.5.1.2](https://github.com/zoulukuang/opencode-for-office-deskfox/releases/tag/ship-prod-2026.5.1.2)(2026-05-01;原 owner `yuesoue`,2026-05-04 user 改名 `zoulukuang`)
 
 ## 回退方法
 

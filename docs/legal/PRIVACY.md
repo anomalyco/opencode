@@ -17,7 +17,7 @@ Welcome to **DeskFox** (the "Software"). DeskFox is an **open-source desktop too
 ### Why You Can Trust This Policy
 
 This Software is **fully open source**. The source code is hosted on two public repositories:
-- GitHub: https://github.com/yuesoue/deskfox
+- GitHub: https://github.com/zoulukuang/deskfox
 - Gitee: https://gitee.com/zoulukuang/opencode-for-office-deskfox
 
 **You can audit the code yourself** to verify whether what we say in this policy is true — what we collect, what we don't, and how data leaves your machine. This is a stronger privacy guarantee than any legal promise.
@@ -276,7 +276,7 @@ This is a **privacy advantage** of this Software relative to typical SaaS tools,
 
 | Repository | URL | Role |
 |---|---|---|
-| GitHub | https://github.com/yuesoue/deskfox | Primary / Issues / PRs |
+| GitHub | https://github.com/zoulukuang/deskfox | Primary / Issues / PRs |
 | Gitee | https://gitee.com/zoulukuang/opencode-for-office-deskfox | China mirror / two-way sync |
 | Upstream | https://github.com/sst/opencode | We fork from this (MIT) |
 
@@ -466,10 +466,10 @@ As an individual open-source project, this Software **does not maintain a privat
 
 | Purpose | Channel |
 |---|---|
-| Privacy policy questions / exercise of data subject rights | GitHub Issues: https://github.com/yuesoue/deskfox/issues (please include "Privacy" in the title for routing) |
+| Privacy policy questions / exercise of data subject rights | GitHub Issues: https://github.com/zoulukuang/deskfox/issues (please include "Privacy" in the title for routing) |
 | Software bug reports / feature requests | Same as above |
 | Gitee feedback | Gitee Issues: https://gitee.com/zoulukuang/opencode-for-office-deskfox/issues |
-| **Security vulnerability disclosure** (private channel) | Submit privately via GitHub Security Advisory: https://github.com/yuesoue/deskfox/security/advisories/new (**please do not** disclose unfixed security issues in public Issues) |
+| **Security vulnerability disclosure** (private channel) | Submit privately via GitHub Security Advisory: https://github.com/zoulukuang/deskfox/security/advisories/new (**please do not** disclose unfixed security issues in public Issues) |
 
 If your request involves personal information you'd rather not disclose in a public Issue (e.g., when exercising data subject rights and identity verification is needed), the Security Advisory channel above is also available for private submission.
 
