@@ -17,7 +17,7 @@ import {
   authorizationRouterMiddleware,
 } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
-import { serveUIEffect } from "../../src/server/routes/ui"
+import { serveUIEffect } from "../../src/server/shared/ui"
 import { Server } from "../../src/server/server"
 
 void Log.init({ print: false })

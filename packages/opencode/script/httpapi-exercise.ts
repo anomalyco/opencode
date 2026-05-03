@@ -182,7 +182,7 @@ type Runtime = {
   Todo: (typeof import("../src/session/todo"))["Todo"]
   Worktree: (typeof import("../src/worktree"))["Worktree"]
   Project: (typeof import("../src/project/project"))["Project"]
-  Tui: typeof import("../src/server/routes/instance/tui")
+  Tui: typeof import("../src/server/shared/tui-control")
   disposeAllInstances: (typeof import("../test/fixture/fixture"))["disposeAllInstances"]
   tmpdir: (typeof import("../test/fixture/fixture"))["tmpdir"]
   resetDatabase: (typeof import("../test/fixture/db"))["resetDatabase"]
@@ -203,7 +203,7 @@ function runtime() {
     const todo = await import("../src/session/todo")
     const worktree = await import("../src/worktree")
     const project = await import("../src/project/project")
-    const tui = await import("../src/server/routes/instance/tui")
+    const tui = await import("../src/server/shared/tui-control")
     const fixture = await import("../test/fixture/fixture")
     const db = await import("../test/fixture/db")
     return {
