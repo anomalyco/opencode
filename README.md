@@ -11,131 +11,215 @@
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
-
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="https://github.com/iamcheyan/opencode/actions"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/iamcheyan/opencode/build-cli.yml?style=flat-square&branch=main" /></a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
 
-### Installation
+## 🎯 About This Fork
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+This is a fork of [opencode](https://github.com/anomalyco/opencode) that focuses on providing a **minimal CLI mode** by default.
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
-```
+### Why This Fork?
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+The original opencode has a powerful TUI (Terminal User Interface) mode, but we believe many developers prefer a simpler, text-based interface. This fork was created to serve users who:
 
-### Desktop App (BETA)
+1. **Work in remote environments**: SSH sessions, tmux, CI/CD pipelines where rich TUI rendering may not work well
+2. **Prefer minimal interfaces**: Developers who like plain text terminals that integrate with their existing workflow
+3. **Need better accessibility**: Screen readers and assistive technologies work better with simple text interfaces
+4. **Want resource efficiency**: The minimal mode uses significantly less memory and CPU
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+### What's Different?
 
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
+| Feature | Upstream (anomalyco/opencode) | This Fork (iamcheyan/opencode) |
+|---------|------------------------------|--------------------------------|
+| **Default Mode** | TUI (Terminal UI) | **Minimal CLI (REPL)** |
+| **Interface** | Rich, interactive TUI | Simple, text-based readline |
+| **Resource Usage** | Higher | **Lower** |
+| **Terminal Compatibility** | Requires good terminal support | **Works everywhere** |
+| **Accessibility** | Limited | **Better screen reader support** |
 
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
+### Key Features
 
-#### Installation Directory
-
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
-
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
-### FAQ
-
-#### How is this different from Claude Code?
-
-It's very similar to Claude Code in terms of capability. Here are the key differences:
-
-- 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
-- Built-in opt-in LSP support
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
-- A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
+- ✅ **Default Minimal Mode**: Starts in REPL mode by default - no configuration needed
+- ✅ **22 Slash Commands**: Full command support matching TUI functionality
+- ✅ **Tab Autocomplete**: Easy command completion
+- ✅ **Session Management**: Create, fork, share, export sessions
+- ✅ **Cross-Platform**: Builds for macOS, Linux, and Windows
+- ✅ **Upstream Sync**: Regular synchronization with upstream for latest features and fixes
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+## 📦 Installation
+
+### Download Binary (Recommended)
+
+Download the latest binary for your platform from the [Releases](https://github.com/iamcheyan/opencode/releases) page.
+
+**Available platforms:**
+- macOS (Apple Silicon & Intel)
+- Linux (x64, ARM64, musl variants)
+- Windows (x64, ARM64)
+
+### Using npm
+
+```bash
+npm install -g opencode-ai
+```
+
+### Using curl
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+---
+
+## 🚀 Quick Start
+
+### Basic Usage
+
+```bash
+# Start minimal CLI mode (default)
+opencode
+
+# Start with a specific directory
+opencode /path/to/project
+
+# Continue last session
+opencode --continue
+
+# Start with initial prompt
+opencode -p "Help me refactor this function"
+```
+
+### Slash Commands
+
+Once in the REPL, type `/` and press Tab to see all available commands:
+
+```
+/new               Create new session
+/sessions          List recent sessions
+/fork              Fork current session
+/share             Share session
+/export            Export to file
+/model [name]      Switch model
+/agent [name]      Switch agent
+/thinking          Toggle thinking display
+/timestamps        Toggle timestamps
+/help              Show all commands
+```
+
+### Switching to TUI Mode
+
+If you want to use the original TUI mode:
+
+```bash
+# Use TUI mode
+opencode --mode tui
+
+# Or use the upstream version
+# Download from: https://github.com/anomalyco/opencode
+```
+
+---
+
+## 🔧 Development
+
+### Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/iamcheyan/opencode.git
+cd opencode
+
+# Install dependencies
+bun install
+
+# Build CLI binaries
+cd packages/opencode
+bun run script/build.ts
+```
+
+### Syncing with Upstream
+
+This fork regularly syncs with upstream to get the latest features and bug fixes:
+
+```bash
+# Add upstream remote
+git remote add upstream https://github.com/anomalyco/opencode.git
+
+# Fetch upstream changes
+git fetch upstream
+
+# Merge upstream changes
+git merge upstream/dev
+
+# Resolve conflicts (if any)
+# Our default minimal mode is preserved
+```
+
+---
+
+## 📋 Fork Maintenance
+
+### How We Stay Updated
+
+1. **Regular Sync**: We sync with upstream weekly
+2. **Conflict Resolution**: Our minimal mode is preserved during merges
+3. **Testing**: All changes are tested before release
+4. **Versioning**: We follow upstream versioning with `-minimal` suffix
+
+### Release Process
+
+```bash
+# Create a new release
+git tag v0.1.0-minimal
+git push origin v0.1.0-minimal
+
+# GitHub Actions automatically builds binaries
+# for all platforms
+```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Focus Areas
+
+- Improving the minimal CLI experience
+- Adding new slash commands
+- Performance optimizations
+- Better terminal compatibility
+
+---
+
+## 📄 License
+
+This project is licensed under the same terms as the original opencode. See [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+This fork would not be possible without the excellent work of the [opencode team](https://github.com/anomalyco/opencode). We are grateful for their open source contribution.
+
+---
+
+## 📞 Contact
+
+- **Issues**: [GitHub Issues](https://github.com/iamcheyan/opencode/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/iamcheyan/opencode/discussions)
+- **Discord**: [opencode Discord](https://opencode.ai/discord)
+
+---
+
+## 🔗 Links
+
+- **Upstream**: [anomalyco/opencode](https://github.com/anomalyco/opencode)
+- **Website**: [opencode.ai](https://opencode.ai)
+- **Documentation**: [opencode.ai/docs](https://opencode.ai/docs)

@@ -1,0 +1,76 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # Run every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync with upstream
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync upstream
+        run: |
+          # Add upstream remote if not exists
+          git remote add upstream https://github.com/anomalyco/opencode.git || true
+
+          # Fetch upstream changes
+          git fetch upstream
+
+          # Check if there are changes
+          LOCAL=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse upstream/dev)
+
+          if [ "$LOCAL" = "$UPSTREAM" ]; then
+            echo "Already up to date!"
+            exit 0
+          fi
+
+          # Merge upstream changes
+          if git merge upstream/dev --no-edit; then
+            echo "Merge successful!"
+          else
+            echo "Merge conflicts detected. Resolving..."
+
+            # Keep our version of conflicted files
+            git checkout --ours packages/opencode/src/cli/cmd/tui/thread.ts
+            git checkout --ours README.md
+
+            # Stage resolved files
+            git add packages/opencode/src/cli/cmd/tui/thread.ts
+            git add README.md
+
+            # Commit the merge
+            git commit -m "merge: sync with upstream, preserve minimal mode default"
+            echo "Conflicts resolved!"
+          fi
+
+      - name: Push changes
+        run: git push origin main
+
+      - name: Create PR (if conflicts)
+        if: failure()
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: "merge: sync with upstream"
+          body: |
+            This PR syncs our fork with upstream opencode.
+
+            **Note**: There were merge conflicts that need manual resolution.
+            Our minimal mode default is preserved.
+
+            Please review and merge.
+          branch: sync-upstream
+          labels: sync, upstream

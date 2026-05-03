@@ -113,6 +113,12 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("mode", {
+        type: "string",
+        choices: ["minimal", "tui"],
+        default: "minimal",
+        describe: "interface mode: 'minimal' (default, text-based REPL) or 'tui' (full terminal UI)",
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
@@ -145,11 +151,11 @@ export const TuiThreadCommand = cmd({
         [OPENCODE_RUN_ID]: ensureRunID(),
       })
 
-      // When the user opts into the "minimal" style, skip the TUI entirely and
-      // run an inline REPL on the current terminal instead. This avoids
-      // alt-screen takeover and keeps the experience CLI-like.
-      const earlyConfig = await TuiConfig.get()
-      if (earlyConfig.style === "minimal") {
+      // Default to minimal REPL mode for this fork.
+      // This provides a lightweight, text-based interface that works
+      // in all terminal environments (SSH, tmux, CI/CD).
+      // Users can switch to TUI mode with --mode tui flag.
+      if (args.mode === "minimal") {
         const initial = await input(args.prompt)
         await repl({
           directory: cwd,
