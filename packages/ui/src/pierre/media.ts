@@ -1,4 +1,6 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
+// FORK: office-pdf-ref protocol — side-band MIME marker shared with opencode/file/index.ts 2026-05-03
+import { isOfficePdfRefMime } from "@opencode-ai/shared/office-pdf-protocol"
 
 export type MediaKind = "image" | "audio" | "svg" | "pdf"
 
@@ -127,8 +129,9 @@ export function arrayBufferFromMediaValue(value: MediaValue): Uint8Array | undef
 }
 
 export function isOfficePdfRef(value: MediaValue): boolean {
+  // FORK: detect via vendor MIME instead of encoding enum 2026-05-03
   const record = mediaRecord(value)
-  return record?.encoding === "office-pdf-ref"
+  return isOfficePdfRefMime(typeof record?.mimeType === "string" ? record.mimeType : undefined)
 }
 
 export function svgTextFromValue(value: MediaValue) {

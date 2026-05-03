@@ -2,6 +2,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect"
 
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+// FORK: office-pdf-ref protocol — side-band MIME marker shared with ui/pierre/media.ts 2026-05-03
+import { OFFICE_PDF_REF_MIME } from "@opencode-ai/shared/office-pdf-protocol"
 import { Git } from "@/git"
 import { Effect, Layer, Context, Scope } from "effect"
 import * as Stream from "effect/Stream"
@@ -66,7 +68,7 @@ export const Content = z
         index: z.string().optional(),
       })
       .optional(),
-    encoding: z.enum(["base64", "office-pdf-ref"]).optional(),
+    encoding: z.enum(["base64"]).optional(),
     mimeType: z.string().optional(),
   })
   .meta({
@@ -561,15 +563,16 @@ export const layer = Layer.effect(
           LibreOffice.convertToPdf(full).catch(() => undefined),
         )
         if (!pdfBytes) return { type: "binary" as const, content: "" }
-        // Return a lightweight reference. The frontend fetches the actual
-        // PDF bytes via /file/office-pdf to avoid base64-blowing memory on
-        // large decks (a 300MB PPTX → 300MB PDF would 2x in base64 + JSON).
+        // FORK-BEGIN: office-pdf-ref via vendor MIME (side-band protocol) 2026-05-03
+        // Avoid extending Content.encoding enum so upstream Content schema
+        // rewrites stay 0-conflict. Frontend detects via isOfficePdfRefMime
+        // and fetches actual PDF bytes from /file/office-pdf endpoint.
         return {
           type: "text" as const,
           content: "",
-          mimeType: "application/pdf",
-          encoding: "office-pdf-ref" as const,
+          mimeType: OFFICE_PDF_REF_MIME,
         }
+        // FORK-END
       }
 
       const knownText = isTextByExtension(file) || isTextByName(file)
