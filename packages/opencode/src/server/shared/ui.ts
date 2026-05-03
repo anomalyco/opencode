@@ -2,7 +2,6 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { getMimeType } from "hono/utils/mime"
 import { createHash } from "node:crypto"
 import { ProxyUtil } from "../proxy-util"
 
@@ -59,7 +58,7 @@ export function serveUIEffect(
       if (!match) return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 
       if (yield* services.fs.existsSafe(match)) {
-        const mime = getMimeType(match) ?? "text/plain"
+        const mime = AppFileSystem.mimeType(match)
         const headers = new Headers({ "content-type": mime })
         if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
         return HttpServerResponse.raw(yield* services.fs.readFile(match), { headers })

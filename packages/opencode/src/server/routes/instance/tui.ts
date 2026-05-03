@@ -18,8 +18,6 @@ import {
   submitTuiResponse,
 } from "@/server/shared/tui-control"
 
-export { TuiRequest, nextTuiRequest, submitTuiRequest, submitTuiResponse }
-
 export async function callTui(ctx: Context) {
   const body = await ctx.req.json()
   submitTuiRequest({

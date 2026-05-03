@@ -1,11 +1,8 @@
 import type { MiddlewareHandler } from "hono"
 import * as Log from "@opencode-ai/core/util/log"
-import { HEADER, diff, load, parse, wait, waitEffect, type State } from "./shared/fence"
+import { HEADER, diff, load } from "./shared/fence"
 
-export { HEADER, diff, load, parse, wait, waitEffect }
-export type { State }
-
-const log = Log.create({ service: "fence" })
+const log = Log.create({ service: "fence-middleware" })
 
 export const FenceMiddleware: MiddlewareHandler = async (c, next) => {
   if (c.req.method === "GET" || c.req.method === "HEAD" || c.req.method === "OPTIONS") return next()

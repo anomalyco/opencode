@@ -17,8 +17,6 @@ import {
   workspaceProxyURL,
 } from "./shared/workspace-routing"
 
-export { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL }
-
 async function getSessionWorkspace(url: URL) {
   const id = getWorkspaceRouteSessionID(url)
   if (!id) return null

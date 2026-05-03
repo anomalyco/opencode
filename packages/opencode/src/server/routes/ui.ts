@@ -1,19 +1,10 @@
 import fs from "node:fs/promises"
 import { createHash } from "node:crypto"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
-import { getMimeType } from "hono/utils/mime"
 import { ProxyUtil } from "../proxy-util"
-import {
-  DEFAULT_CSP,
-  UI_UPSTREAM,
-  csp,
-  embeddedUI,
-  themePreloadHash,
-  upstreamURL,
-} from "../shared/ui"
-
-export { serveUIEffect } from "../shared/ui"
+import { DEFAULT_CSP, UI_UPSTREAM, csp, embeddedUI, themePreloadHash, upstreamURL } from "../shared/ui"
 
 export async function serveUI(request: Request) {
   const embeddedWebUI = await embeddedUI()
@@ -24,7 +15,7 @@ export async function serveUI(request: Request) {
     if (!match) return Response.json({ error: "Not Found" }, { status: 404 })
 
     if (await fs.exists(match)) {
-      const mime = getMimeType(match) ?? "text/plain"
+      const mime = AppFileSystem.mimeType(match)
       const headers = new Headers({ "content-type": mime })
       if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
       return new Response(new Uint8Array(await fs.readFile(match)), { headers })
