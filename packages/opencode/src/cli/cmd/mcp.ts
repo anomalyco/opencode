@@ -80,19 +80,17 @@ function listState() {
   })
 }
 
-async function authState() {
-  return AppRuntime.runPromise(
-    Effect.gen(function* () {
-      const cfg = yield* Config.Service
-      const mcp = yield* MCP.Service
-      const config = yield* cfg.get()
-      const auth = yield* Effect.all(
-        Object.fromEntries(oauthServers(config).map(([name]) => [name, mcp.getAuthStatus(name)])),
-        { concurrency: "unbounded" },
-      )
-      return { config, auth }
-    }),
-  )
+function authState() {
+  return Effect.gen(function* () {
+    const cfg = yield* Config.Service
+    const mcp = yield* MCP.Service
+    const config = yield* cfg.get()
+    const auth = yield* Effect.all(
+      Object.fromEntries(oauthServers(config).map(([name]) => [name, mcp.getAuthStatus(name)])),
+      { concurrency: "unbounded" },
+    )
+    return { config, auth }
+  })
 }
 
 export const McpCommand = cmd({
@@ -187,7 +185,7 @@ export const McpAuthCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Authentication")
 
-        const { config, auth } = await authState()
+        const { config, auth } = await AppRuntime.runPromise(authState())
         const mcpServers = config.mcp ?? {}
         const servers = oauthServers(config)
 
@@ -308,39 +306,34 @@ export const McpAuthCommand = cmd({
   },
 })
 
-export const McpAuthListCommand = cmd({
+export const McpAuthListCommand = effectCmd({
   command: "list",
   aliases: ["ls"],
   describe: "list OAuth-capable MCP servers and their auth status",
-  async handler() {
-    await WithInstance.provide({
-      directory: process.cwd(),
-      async fn() {
-        UI.empty()
-        prompts.intro("MCP OAuth Status")
+  handler: Effect.fn("Cli.mcp.auth.list")(function* () {
+    UI.empty()
+    prompts.intro("MCP OAuth Status")
 
-        const { config, auth } = await authState()
-        const servers = oauthServers(config)
+    const { config, auth } = yield* authState()
+    const servers = oauthServers(config)
 
-        if (servers.length === 0) {
-          prompts.log.warn("No OAuth-capable MCP servers configured")
-          prompts.outro("Done")
-          return
-        }
+    if (servers.length === 0) {
+      prompts.log.warn("No OAuth-capable MCP servers configured")
+      prompts.outro("Done")
+      return
+    }
 
-        for (const [name, serverConfig] of servers) {
-          const authStatus = auth[name]
-          const icon = getAuthStatusIcon(authStatus)
-          const statusText = getAuthStatusText(authStatus)
-          const url = serverConfig.url
+    for (const [name, serverConfig] of servers) {
+      const authStatus = auth[name]
+      const icon = getAuthStatusIcon(authStatus)
+      const statusText = getAuthStatusText(authStatus)
+      const url = serverConfig.url
 
-          prompts.log.info(`${icon} ${name} ${UI.Style.TEXT_DIM}${statusText}\n    ${UI.Style.TEXT_DIM}${url}`)
-        }
+      prompts.log.info(`${icon} ${name} ${UI.Style.TEXT_DIM}${statusText}\n    ${UI.Style.TEXT_DIM}${url}`)
+    }
 
-        prompts.outro(`${servers.length} OAuth-capable server(s)`)
-      },
-    })
-  },
+    prompts.outro(`${servers.length} OAuth-capable server(s)`)
+  }),
 })
 
 export const McpLogoutCommand = cmd({
