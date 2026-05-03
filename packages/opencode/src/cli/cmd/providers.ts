@@ -1,6 +1,6 @@
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
-import { effectCmd } from "../effect-cmd"
+import { CliError, effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
 import * as Prompt from "../effect/prompt"
 import { ModelsDev } from "@/provider/models"
@@ -13,6 +13,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Plugin } from "../../plugin"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "@/util/process"
+import { errorMessage } from "@/util/error"
 import { text } from "node:stream/consumers"
 import { Effect, Option } from "effect"
 
@@ -27,6 +28,12 @@ const put = Effect.fn("Cli.providers.put")(function* (key: string, info: Auth.In
   const auth = yield* Auth.Service
   yield* Effect.orDie(auth.set(key, info))
 })
+
+const cliTry = <Value>(message: string, fn: () => PromiseLike<Value>) =>
+  Effect.tryPromise({
+    try: fn,
+    catch: (error) => new CliError({ message: message + errorMessage(error) }),
+  })
 
 const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
   plugin: { auth: PluginAuth },
@@ -48,10 +55,9 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
     }
     const match = plugin.auth.methods.findIndex((x) => x.label.toLowerCase() === methodName.toLowerCase())
     if (match === -1) {
-      yield* Prompt.log.error(
+      return yield* fail(
         `Unknown method "${methodName}" for ${provider}. Available: ${plugin.auth.methods.map((x) => x.label).join(", ")}`,
       )
-      process.exit(1)
     }
     return match
   })
@@ -86,7 +92,7 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
   }
 
   if (method.type === "oauth") {
-    const authorize = yield* Effect.orDie(Effect.tryPromise(() => method.authorize(inputs)))
+    const authorize = yield* cliTry("Failed to authorize: ", () => method.authorize(inputs))
 
     if (authorize.url) {
       yield* Prompt.log.info("Go to: " + authorize.url)
@@ -98,7 +104,7 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
       }
       const spinner = Prompt.spinner()
       yield* spinner.start("Waiting for authorization...")
-      const result = yield* Effect.orDie(Effect.tryPromise(() => authorize.callback()))
+      const result = yield* cliTry("Failed to authorize: ", () => authorize.callback())
       if (result.type === "failed") {
         yield* spinner.stop("Failed to authorize", 1)
       }
@@ -130,7 +136,7 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
         validate: (x) => (x && x.length > 0 ? undefined : "Required"),
       })
       const authorizationCode = yield* promptValue(code)
-      const result = yield* Effect.orDie(Effect.tryPromise(() => authorize.callback(authorizationCode)))
+      const result = yield* cliTry("Failed to authorize: ", () => authorize.callback(authorizationCode))
       if (result.type === "failed") {
         yield* Prompt.log.error("Failed to authorize")
       }
@@ -179,7 +185,7 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
       return true
     }
 
-    const result = yield* Effect.orDie(Effect.tryPromise(() => authorizeApi(inputs)))
+    const result = yield* cliTry("Failed to authorize: ", () => authorizeApi(inputs))
     if (result.type === "failed") {
       yield* Prompt.log.error("Failed to authorize")
     }
@@ -306,28 +312,28 @@ export const ProvidersLoginCommand = effectCmd({
         type: "string",
       }),
   handler: Effect.fn("Cli.providers.login")(function* (args) {
-    const cfgSvc = yield* Config.Service
-    const pluginSvc = yield* Plugin.Service
-    const modelsDev = yield* ModelsDev.Service
     const authSvc = yield* Auth.Service
 
     UI.empty()
     yield* Prompt.intro("Add credential")
     if (args.url) {
       const url = args.url.replace(/\/+$/, "")
-      const wellknown = (yield* Effect.orDie(
-        Effect.tryPromise(() => fetch(`${url}/.well-known/opencode`).then((x) => x.json())),
+      const wellknown = (yield* cliTry(`Failed to load auth provider metadata from ${url}: `, () =>
+        fetch(`${url}/.well-known/opencode`).then((x) => x.json()),
       )) as {
         auth: { command: string[]; env: string }
       }
       yield* Prompt.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-      const proc = Process.spawn(wellknown.auth.command, { stdout: "pipe", stderr: "inherit" })
+      const abort = new AbortController()
+      const proc = Process.spawn(wellknown.auth.command, { stdout: "pipe", stderr: "inherit", abort: abort.signal })
       if (!proc.stdout) {
         yield* Prompt.log.error("Failed")
         yield* Prompt.outro("Done")
         return
       }
-      const [exit, token] = yield* Effect.orDie(Effect.tryPromise(() => Promise.all([proc.exited, text(proc.stdout!)])))
+      const [exit, token] = yield* cliTry("Failed to run auth provider command: ", () =>
+        Promise.all([proc.exited, text(proc.stdout!)]),
+      ).pipe(Effect.ensuring(Effect.sync(() => abort.abort())))
       if (exit !== 0) {
         yield* Prompt.log.error("Failed")
         yield* Prompt.outro("Done")
@@ -338,6 +344,10 @@ export const ProvidersLoginCommand = effectCmd({
       yield* Prompt.outro("Done")
       return
     }
+
+    const cfgSvc = yield* Config.Service
+    const pluginSvc = yield* Plugin.Service
+    const modelsDev = yield* ModelsDev.Service
     yield* Effect.ignore(modelsDev.refresh(true))
 
     const config = yield* cfgSvc.get()
@@ -399,8 +409,7 @@ export const ProvidersLoginCommand = effectCmd({
       const byName = options.find((x) => x.label.toLowerCase() === input.toLowerCase())
       const match = byID ?? byName
       if (!match) {
-        yield* Prompt.log.error(`Unknown provider "${input}"`)
-        process.exit(1)
+        return yield* fail(`Unknown provider "${input}"`)
       }
       provider = match.value
     } else {
