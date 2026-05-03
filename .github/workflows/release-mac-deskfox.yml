@@ -1,0 +1,215 @@
+# [fork-only] DeskFox release 自动化(macOS)— push ship-mac-* tag 触发,build .dmg + 发 GitHub Release
+#
+# 触发方式:
+#   1. push tag `ship-mac-prod-<version>` (例:ship-mac-prod-2026.5.2.1)
+#      → build prod .dmg + 创建 draft Release(user 审查后手动发布)
+#   2. push tag `ship-mac-beta-<version>`
+#      → build beta .dmg + 创建 draft Release
+#   3. workflow_dispatch (Actions UI 手动触发)
+#      → 只 archive 产物作 artifact,不发 Release(用于测试 workflow 本身)
+#
+# 前置流程(本地):
+#   1. bash packages/branding/scripts/bump-installer-version.sh -Platform macOS
+#      (算下一个版本号 + 写 placeholder 到 docs/installer-versions.md;Mac 无 .iss,版本号靠 tag 传入)
+#   2. 提交这次 bump:git add ...; git commit -m "..."
+#   3. 打 ship tag:git tag ship-mac-prod-<bumped-version>
+#   4. push:git push origin <branch> --tags
+#   5. (本 workflow 自动接管,build + 发 draft Release)
+#   6. 在 docs/installer-versions.md 把 placeholder 填完整
+#   7. 在 GitHub UI 把 draft Release 转 publish
+#
+# 架构:arm64 only(aarch64-apple-darwin)。universal binary 暂未实现。
+# 签名:**不签**。Gatekeeper "右键打开"惯例,详见 docs/governance/数字签名问题.md。
+# 文件名规则(强制):*-deskfox.yml,跟上游 0 重名,pre-commit hook 自动豁免
+
+name: release-mac-deskfox
+
+on:
+  push:
+    tags:
+      - 'ship-mac-prod-*'
+      - 'ship-mac-beta-*'
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'Build env'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - beta
+          - prod
+
+permissions:
+  contents: write    # 创建 GitHub Release 必需
+
+jobs:
+  build:
+    name: Build & Release (macOS)
+    runs-on: macos-latest    # 2024 起默认 Apple Silicon (arm64)
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Parse env / version / mode
+        id: meta
+        shell: bash
+        run: |
+          set -e
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV_NAME="${{ inputs.env }}"
+            TODAY=$(date '+%Y.%-m.%-d')
+            VERSION="${TODAY}.dispatch${GITHUB_RUN_NUMBER}"
+            IS_RELEASE="false"
+            echo "[meta] dispatch mode: env=$ENV_NAME / version=$VERSION"
+          else
+            TAG="${{ github.ref_name }}"
+            if [[ "$TAG" =~ ^ship-mac-(prod|beta)-(.+)$ ]]; then
+              ENV_NAME="${BASH_REMATCH[1]}"
+              VERSION="${BASH_REMATCH[2]}"
+              IS_RELEASE="true"
+              echo "[meta] tag mode: env=$ENV_NAME / version=$VERSION"
+            else
+              echo "[meta] tag format must be ship-mac-(prod|beta)-<version>: $TAG" >&2
+              exit 1
+            fi
+          fi
+          echo "env=$ENV_NAME"        >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"     >> "$GITHUB_OUTPUT"
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust (aarch64-apple-darwin)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/desktop/src-tauri/target
+          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: bun install
+        run: bun install
+
+      - name: Build DeskFox.app + .dmg
+        # build-deskfox.sh 内嵌 sidecar 自动 build(预 detect RUST_TARGET=aarch64-apple-darwin)
+        run: |
+          bash packages/branding/scripts/build-deskfox.sh -Env ${{ steps.meta.outputs.env }}
+
+      - name: Rename .dmg with installer version
+        # tauri 出的 .dmg 文件名取自 package.json version(上游 contract,不改)
+        # 这里 mv 成 installer 版本号命名,与 Win 端 DeskFox-YYYY.M.D.N-setup.exe 对齐
+        shell: bash
+        run: |
+          set -e
+          VERSION="${{ steps.meta.outputs.version }}"
+          DMG_DIR="packages/desktop/src-tauri/target/release/bundle/dmg"
+          if [[ ! -d "$DMG_DIR" ]]; then
+            echo "[rename] dmg dir not found: $DMG_DIR" >&2
+            exit 1
+          fi
+          shopt -s nullglob
+          DMGS=("$DMG_DIR"/*.dmg)
+          if [[ ${#DMGS[@]} -eq 0 ]]; then
+            echo "[rename] no .dmg in $DMG_DIR" >&2
+            exit 1
+          fi
+          for dmg in "${DMGS[@]}"; do
+            base=$(basename "$dmg")
+            without_ext="${base%.dmg}"
+            arch_part="${without_ext##*_}"          # 取最后 _ 之后(arch,如 aarch64)
+            rest="${without_ext%_*}"                # 去掉 _arch
+            product_part="${rest%_*}"               # 去掉 _<oldver>(剩 productName)
+            new_name="${product_part}-${VERSION}_${arch_part}.dmg"
+            if [[ "$base" != "$new_name" ]]; then
+              mv "$dmg" "$DMG_DIR/$new_name"
+              echo "[rename] $base → $new_name"
+            fi
+          done
+
+      - name: Locate dmg artifact
+        id: artifact
+        shell: bash
+        run: |
+          set -e
+          DMG_DIR="packages/desktop/src-tauri/target/release/bundle/dmg"
+          DMG=$(ls "$DMG_DIR"/*.dmg 2>/dev/null | head -1)
+          if [[ -z "$DMG" || ! -f "$DMG" ]]; then
+            echo "[artifact] dmg not found" >&2
+            exit 1
+          fi
+          FILENAME=$(basename "$DMG")
+          SIZE=$(stat -f%z "$DMG")
+          MB=$(awk -v s="$SIZE" 'BEGIN { printf "%.2f", s/1048576 }')
+          HASH=$(shasum -a 256 "$DMG" | awk '{print $1}')
+          echo "path=$DMG"          >> "$GITHUB_OUTPUT"
+          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
+          echo "size_mb=$MB"        >> "$GITHUB_OUTPUT"
+          echo "sha256=$HASH"       >> "$GITHUB_OUTPUT"
+          echo "[artifact] $FILENAME ($MB MB) SHA256=$HASH"
+
+      - name: Upload artifact (always — dispatch / tag 都上传)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deskfox-mac-${{ steps.meta.outputs.env }}-${{ steps.meta.outputs.version }}
+          path: ${{ steps.artifact.outputs.path }}
+          retention-days: 30
+
+      - name: Create GitHub Release (draft, push-tag 模式才创建)
+        if: steps.meta.outputs.is_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: DeskFox ${{ steps.meta.outputs.version }} (mac${{ steps.meta.outputs.env == 'beta' && ' beta' || '' }})
+          draft: true
+          body: |
+            ## DeskFox `${{ steps.meta.outputs.version }}` (mac ${{ steps.meta.outputs.env }})
+
+            **commit**: `${{ github.sha }}`
+            **tag**: `${{ github.ref_name }}`
+
+            ### 安装包
+
+            - 文件:`${{ steps.artifact.outputs.filename }}`
+            - 大小:${{ steps.artifact.outputs.size_mb }} MB
+            - 架构:Apple Silicon(arm64,aarch64-apple-darwin)
+            - SHA256:`${{ steps.artifact.outputs.sha256 }}`
+
+            ### ⚠️ 安装提示(macOS Gatekeeper)
+
+            本 .dmg **未经数字签名**,首次打开 .app 会被 Gatekeeper 提示"无法验证开发者"。
+
+            - **简易方法**:右键(或 Control + 单击)`.app` → 选"打开" → 弹窗里再点"打开"
+            - **彻底去 quarantine**(若已拷到 Applications):
+              ```bash
+              xattr -cr /Applications/DeskFox.app
+              ```
+
+            这是因为 fork 项目尚未配置 Apple Developer ID,**不是恶意软件**。
+
+            ### 验证完整性
+
+            ```bash
+            shasum -a 256 ~/Downloads/${{ steps.artifact.outputs.filename }}
+            ```
+
+            输出的 hash 应当与上方 SHA256 一致。
+          files: ${{ steps.artifact.outputs.path }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
