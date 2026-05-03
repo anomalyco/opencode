@@ -3,7 +3,15 @@ import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/adapter"
 import { Gemini } from "../../src/provider/gemini"
-import { expectFinish, expectWeatherToolCall, textRequest, weatherToolRequest } from "../recorded-scenarios"
+import {
+  expectFinish,
+  expectWeatherToolCall,
+  expectWeatherToolLoop,
+  runWeatherToolLoop,
+  textRequest,
+  weatherToolLoopRequest,
+  weatherToolRequest,
+} from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
 const model = Gemini.model({
@@ -40,5 +48,23 @@ describe("Gemini recorded", () => {
       expectWeatherToolCall(response)
       expectFinish(response.events, "tool-calls")
     }),
+  )
+
+  recorded.effect.with(
+    "drives a tool loop",
+    { tags: ["tool", "tool-loop", "golden"] },
+    () =>
+      Effect.gen(function* () {
+        expectWeatherToolLoop(
+          yield* runWeatherToolLoop(
+            gemini,
+            weatherToolLoopRequest({
+              id: "recorded_gemini_tool_loop",
+              model,
+            }),
+          ),
+        )
+      }),
+    30_000,
   )
 })

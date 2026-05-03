@@ -46,7 +46,16 @@ describe("OpenAI Responses adapter", () => {
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
       yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] })
-        .generate(LLM.updateRequest(request, { model: LLM.model({ ...model, queryParams: { "api-version": "v1" } }) }))
+        .generate(
+          LLM.updateRequest(request, {
+            model: OpenAIResponses.model({
+              id: model.id,
+              baseURL: model.baseURL,
+              headers: model.headers,
+              queryParams: { "api-version": "v1" },
+            }),
+          }),
+        )
         .pipe(
           Effect.provide(
             dynamicResponse((input) =>
@@ -69,8 +78,9 @@ describe("OpenAI Responses adapter", () => {
         .generate(
           LLM.updateRequest(request, {
             model: LLM.model({
-              ...model,
+              id: model.id,
               provider: "azure",
+              protocol: model.protocol,
               baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
               apiKey: "azure-key",
               headers: { authorization: "Bearer stale" },
@@ -171,10 +181,77 @@ describe("OpenAI Responses adapter", () => {
       )
 
       expect(prepared.target).toMatchObject({
-        input: [
-          { role: "user", content: [{ type: "input_text", text: "Search for Effect." }] },
-          item,
-        ],
+        input: [{ role: "user", content: [{ type: "input_text", text: "Search for Effect." }] }, item],
+      })
+    }),
+  )
+
+  it.effect("round-trips hosted tool error items in assistant history", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "web_search_call",
+        id: "ws_1",
+        status: "failed",
+        action: { type: "search", query: "effect 4" },
+        error: { code: "search_failed", message: "Search failed" },
+      }
+      const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(
+        LLM.request({
+          id: "req_hosted_error_history",
+          model,
+          messages: [
+            LLM.user("Search for Effect."),
+            LLM.assistant([
+              LLM.toolCall({ id: "ws_1", name: "web_search", input: item.action, providerExecuted: true }),
+              LLM.toolResult({
+                id: "ws_1",
+                name: "web_search",
+                result: { type: "error", value: item },
+                providerExecuted: true,
+              }),
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        input: [{ role: "user", content: [{ type: "input_text", text: "Search for Effect." }] }, item],
+      })
+    }),
+  )
+
+  it.effect("round-trips mcp hosted tool fields in assistant history", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "mcp_call",
+        id: "mcp_1",
+        status: "completed",
+        server_label: "docs",
+        name: "search_docs",
+        arguments: '{"query":"effect"}',
+        output: [{ type: "text", text: "Effect docs" }],
+      }
+      const prepared = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] }).prepare(
+        LLM.request({
+          id: "req_mcp_history",
+          model,
+          messages: [
+            LLM.user("Search docs."),
+            LLM.assistant([
+              LLM.toolCall({
+                id: "mcp_1",
+                name: "mcp",
+                input: { server_label: "docs", name: "search_docs", arguments: '{"query":"effect"}' },
+                providerExecuted: true,
+              }),
+              LLM.toolResult({ id: "mcp_1", name: "mcp", result: item, providerExecuted: true }),
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.target).toMatchObject({
+        input: [{ role: "user", content: [{ type: "input_text", text: "Search docs." }] }, item],
       })
     }),
   )
@@ -286,7 +363,9 @@ describe("OpenAI Responses adapter", () => {
         .generate(request)
         .pipe(Effect.provide(fixedResponse(body)))
 
-      const callsAndResults = response.events.filter((event) => event.type === "tool-call" || event.type === "tool-result")
+      const callsAndResults = response.events.filter(
+        (event) => event.type === "tool-call" || event.type === "tool-result",
+      )
       expect(callsAndResults).toEqual([
         {
           type: "tool-call",
@@ -340,6 +419,40 @@ describe("OpenAI Responses adapter", () => {
         result: { type: "json", value: item },
         providerExecuted: true,
       })
+    }),
+  )
+
+  it.effect("decodes hosted tool errors as provider-executed error results", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "web_search_call",
+        id: "ws_1",
+        status: "failed",
+        action: { type: "search", query: "effect 4" },
+        error: { code: "search_failed", message: "Search failed" },
+      }
+      const response = yield* LLMClient.make({ adapters: [OpenAIResponses.adapter] })
+        .generate(request)
+        .pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { type: "response.output_item.done", item },
+                { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+              ),
+            ),
+          ),
+        )
+
+      expect(response.events.filter((event) => event.type === "tool-result")).toEqual([
+        {
+          type: "tool-result",
+          id: "ws_1",
+          name: "web_search",
+          result: { type: "error", value: item },
+          providerExecuted: true,
+        },
+      ])
     }),
   )
 

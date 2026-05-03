@@ -24,9 +24,7 @@ export const weatherRuntimeTool = tool({
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.succeed(
-      city === "Paris"
-        ? { temperature: 22, condition: "sunny" }
-        : { temperature: 0, condition: "unknown" },
+      city === "Paris" ? { temperature: 22, condition: "sunny" } : { temperature: 0, condition: "unknown" },
     ),
 })
 
@@ -71,9 +69,10 @@ export const weatherToolLoopRequest = (input: {
     model: input.model,
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
     prompt: "What is the weather in Paris?",
-    generation: input.temperature === false
-      ? { maxTokens: input.maxTokens ?? 80 }
-      : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
+    generation:
+      input.temperature === false
+        ? { maxTokens: input.maxTokens ?? 80 }
+        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
   })
 
 export const runWeatherToolLoop = (client: LLMClient, request: LLMRequest) =>
@@ -112,5 +111,6 @@ export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
 
   const output = LLM.outputText({ events })
   expect(output).toContain("Paris")
+  expect(output).toMatch(/sunny|22/i)
   expect(output.trim().length).toBeGreaterThan(0)
 }

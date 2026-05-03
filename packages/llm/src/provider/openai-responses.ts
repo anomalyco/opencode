@@ -69,6 +69,8 @@ const OpenAIResponsesHostedToolItem = Schema.Struct({
   container_id: Schema.optional(Schema.String),
   outputs: Schema.optional(Schema.Unknown),
   server_label: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
+  arguments: Schema.optional(Schema.String),
   output: Schema.optional(Schema.Unknown),
   error: Schema.optional(Schema.Unknown),
 })
@@ -124,9 +126,13 @@ export type OpenAIResponsesTarget = Schema.Schema.Type<typeof OpenAIResponsesTar
 
 const OpenAIResponsesUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
-  input_tokens_details: Schema.optional(Schema.NullOr(Schema.Struct({ cached_tokens: Schema.optional(Schema.Number) }))),
+  input_tokens_details: Schema.optional(
+    Schema.NullOr(Schema.Struct({ cached_tokens: Schema.optional(Schema.Number) })),
+  ),
   output_tokens: Schema.optional(Schema.Number),
-  output_tokens_details: Schema.optional(Schema.NullOr(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) }))),
+  output_tokens_details: Schema.optional(
+    Schema.NullOr(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) })),
+  ),
   total_tokens: Schema.optional(Schema.Number),
 })
 type OpenAIResponsesUsage = Schema.Schema.Type<typeof OpenAIResponsesUsage>
@@ -185,8 +191,6 @@ interface ParserState {
 
 const invalid = ProviderShared.invalidRequest
 
-
-
 const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   type: "function",
   name: tool.name,
@@ -212,8 +216,8 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
 const decodeHostedToolItem = Schema.decodeUnknownEffect(OpenAIResponsesHostedToolItem)
 
 const lowerHostedToolResult = Effect.fn("OpenAIResponses.lowerHostedToolResult")(function* (part: ToolResultPart) {
-  if (part.result.type !== "json") {
-    return yield* invalid(`OpenAI Responses hosted tool result for ${part.name} must be a JSON item`)
+  if (part.result.type !== "json" && part.result.type !== "error") {
+    return yield* invalid(`OpenAI Responses hosted tool result for ${part.name} must be a JSON or error item`)
   }
   const item = yield* decodeHostedToolItem(part.result.value).pipe(Effect.mapError((error) => invalid(error.message)))
   if (HOSTED_TOOL_NAMES[item.type] !== part.name) {
@@ -237,7 +241,8 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     if (message.role === "user") {
       const content: TextPart[] = []
       for (const part of message.content) {
-        if (part.type !== "text") return yield* invalid(`OpenAI Responses user messages only support text content for now`)
+        if (part.type !== "text")
+          return yield* invalid(`OpenAI Responses user messages only support text content for now`)
         content.push(part)
       }
       input.push({ role: "user", content: content.map((part) => ({ type: "input_text", text: part.text })) })
@@ -261,7 +266,9 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           input.push(yield* lowerHostedToolResult(part))
           continue
         }
-        return yield* invalid(`OpenAI Responses assistant messages only support text, tool-call, and hosted tool-result content for now`)
+        return yield* invalid(
+          `OpenAI Responses assistant messages only support text, tool-call, and hosted tool-result content for now`,
+        )
       }
       flushAssistantText(input, content)
       continue
@@ -319,7 +326,10 @@ const pushToolDelta = (tools: Record<string, ProviderShared.ToolAccumulator>, it
     return { ...current, input: `${current.input}${delta}` }
   })
 
-const finishToolCall = (tools: Record<string, ProviderShared.ToolAccumulator>, item: NonNullable<OpenAIResponsesChunk["item"]>) =>
+const finishToolCall = (
+  tools: Record<string, ProviderShared.ToolAccumulator>,
+  item: NonNullable<OpenAIResponsesChunk["item"]>,
+) =>
   Effect.gen(function* () {
     if (item.type !== "function_call" || !item.id || !item.call_id || !item.name) return [] as ReadonlyArray<LLMEvent>
     const raw = item.arguments ?? tools[item.id]?.input ?? ""
@@ -355,9 +365,7 @@ const hostedToolInput = (item: OpenAIResponsesStreamItem): unknown => {
 // outputs / sources / status without re-decoding.
 const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
   const isError = typeof item.error !== "undefined" && item.error !== null
-  return isError
-    ? ({ type: "error" as const, value: item.error })
-    : ({ type: "json" as const, value: item })
+  return isError ? { type: "error" as const, value: item } : { type: "json" as const, value: item }
 }
 
 const isHostedToolType = (type: string): type is keyof typeof HOSTED_TOOL_NAMES => type in HOSTED_TOOL_NAMES
@@ -377,32 +385,39 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
     }
 
     if (chunk.type === "response.output_item.added" && chunk.item?.type === "function_call" && chunk.item.id) {
-      return [{
-        hasFunctionCall: state.hasFunctionCall,
-        tools: {
-          ...state.tools,
-          [chunk.item.id]: {
-            id: chunk.item.call_id ?? chunk.item.id,
-            name: chunk.item.name ?? "",
-            input: chunk.item.arguments ?? "",
+      return [
+        {
+          hasFunctionCall: state.hasFunctionCall,
+          tools: {
+            ...state.tools,
+            [chunk.item.id]: {
+              id: chunk.item.call_id ?? chunk.item.id,
+              name: chunk.item.name ?? "",
+              input: chunk.item.arguments ?? "",
+            },
           },
         },
-      }, []] as const
+        [],
+      ] as const
     }
 
     if (chunk.type === "response.function_call_arguments.delta" && chunk.item_id && chunk.delta) {
       const current = yield* pushToolDelta(state.tools, chunk.item_id, chunk.delta)
-      return [{ hasFunctionCall: state.hasFunctionCall, tools: { ...state.tools, [chunk.item_id]: current } }, [
-        { type: "tool-input-delta" as const, id: current.id, name: current.name, text: chunk.delta },
-      ]] as const
+      return [
+        { hasFunctionCall: state.hasFunctionCall, tools: { ...state.tools, [chunk.item_id]: current } },
+        [{ type: "tool-input-delta" as const, id: current.id, name: current.name, text: chunk.delta }],
+      ] as const
     }
 
     if (chunk.type === "response.output_item.done" && chunk.item?.type === "function_call") {
       const events = yield* finishToolCall(state.tools, chunk.item)
-      return [{
-        hasFunctionCall: events.length > 0 ? true : state.hasFunctionCall,
-        tools: withoutTool(state.tools, chunk.item.id),
-      }, events] as const
+      return [
+        {
+          hasFunctionCall: events.length > 0 ? true : state.hasFunctionCall,
+          tools: withoutTool(state.tools, chunk.item.id),
+        },
+        events,
+      ] as const
     }
 
     if (chunk.type === "response.output_item.done" && chunk.item && isHostedToolItem(chunk.item)) {
@@ -410,11 +425,23 @@ const processChunk = (state: ParserState, chunk: OpenAIResponsesChunk) =>
     }
 
     if (chunk.type === "response.completed" || chunk.type === "response.incomplete") {
-      return [state, [{ type: "request-finish" as const, reason: mapFinishReason(chunk, state.hasFunctionCall), usage: mapUsage(chunk.response?.usage) }]] as const
+      return [
+        state,
+        [
+          {
+            type: "request-finish" as const,
+            reason: mapFinishReason(chunk, state.hasFunctionCall),
+            usage: mapUsage(chunk.response?.usage),
+          },
+        ],
+      ] as const
     }
 
     if (chunk.type === "error") {
-      return [state, [{ type: "provider-error" as const, message: chunk.message ?? chunk.code ?? "OpenAI Responses stream error" }]] as const
+      return [
+        state,
+        [{ type: "provider-error" as const, message: chunk.message ?? chunk.code ?? "OpenAI Responses stream error" }],
+      ] as const
     }
 
     return [state, []] as const
@@ -456,7 +483,8 @@ export const model = (input: OpenAIResponsesModelInput) =>
     ...input,
     provider: "openai",
     protocol: "openai-responses",
-    capabilities: input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true, providerExecuted: true } }),
+    capabilities:
+      input.capabilities ?? capabilities({ tools: { calls: true, streamingInput: true, providerExecuted: true } }),
   })
 
 export * as OpenAIResponses from "./openai-responses"

@@ -31,25 +31,28 @@ type Row = Usage & {
   readonly pricingSource: string
 }
 
-const isRecord = (value: unknown): value is JsonRecord => value !== null && typeof value === "object" && !Array.isArray(value)
+const isRecord = (value: unknown): value is JsonRecord =>
+  value !== null && typeof value === "object" && !Array.isArray(value)
 
-const asNumber = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : 0
+const asNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0)
 
-const asString = (value: unknown) => typeof value === "string" ? value : undefined
+const asString = (value: unknown) => (typeof value === "string" ? value : undefined)
 
 const readJson = async (file: string) => JSON.parse(await Bun.file(file).text()) as unknown
 
-const walk = async (dir: string): Promise<ReadonlyArray<string>> =>
-  (await fs.readdir(dir, { withFileTypes: true })).flatMap((entry) => {
-    const file = path.join(dir, entry.name)
-    return entry.isDirectory() ? [] : [file]
-  }).concat(
-    ...(await Promise.all(
-      (await fs.readdir(dir, { withFileTypes: true }))
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => walk(path.join(dir, entry.name))),
-    )),
-  )
+const walk = async (dir: string): Promise<ReadonlyArray<string>> => {
+  const entries = await fs.readdir(dir, { withFileTypes: true })
+  return entries
+    .flatMap((entry) => {
+      const file = path.join(dir, entry.name)
+      return entry.isDirectory() ? [] : [file]
+    })
+    .concat(
+      ...(await Promise.all(
+        entries.filter((entry) => entry.isDirectory()).map((entry) => walk(path.join(dir, entry.name))),
+      )),
+    )
+}
 
 const providerFromUrl = (url: string) => {
   if (url.includes("api.openai.com")) return "openai"
@@ -93,7 +96,8 @@ const pricingFor = (models: JsonRecord, provider: string, model: string) => {
     if (!isRecord(providerEntry) || !isRecord(providerEntry.models)) continue
     for (const modelID of modelAliases(model)) {
       const modelEntry = providerEntry.models[modelID]
-      if (isRecord(modelEntry) && isRecord(modelEntry.cost)) return { pricing: modelEntry.cost as Pricing, source: `${providerID}/${modelID}` }
+      if (isRecord(modelEntry) && isRecord(modelEntry.cost))
+        return { pricing: modelEntry.cost as Pricing, source: `${providerID}/${modelID}` }
     }
   }
   return { pricing: undefined, source: "missing" }
@@ -102,12 +106,13 @@ const pricingFor = (models: JsonRecord, provider: string, model: string) => {
 const estimateCost = (usage: Usage, pricing: Pricing | undefined) => {
   if (!pricing) return 0
   return (
-    usage.inputTokens * (pricing.input ?? 0) +
-    usage.outputTokens * (pricing.output ?? 0) +
-    usage.cacheReadTokens * (pricing.cache_read ?? 0) +
-    usage.cacheWriteTokens * (pricing.cache_write ?? 0) +
-    usage.reasoningTokens * (pricing.reasoning ?? 0)
-  ) / 1_000_000
+    (usage.inputTokens * (pricing.input ?? 0) +
+      usage.outputTokens * (pricing.output ?? 0) +
+      usage.cacheReadTokens * (pricing.cache_read ?? 0) +
+      usage.cacheWriteTokens * (pricing.cache_write ?? 0) +
+      usage.reasoningTokens * (pricing.reasoning ?? 0)) /
+    1_000_000
+  )
 }
 
 const emptyUsage = (): Usage => ({
@@ -134,13 +139,20 @@ const usageFromObject = (usage: unknown): Usage => {
   const completionDetails = isRecord(usage.completion_tokens_details) ? usage.completion_tokens_details : {}
   const inputDetails = isRecord(usage.input_tokens_details) ? usage.input_tokens_details : {}
   const outputDetails = isRecord(usage.output_tokens_details) ? usage.output_tokens_details : {}
+  const geminiInput = asNumber(usage.promptTokenCount)
+  const geminiReasoning = asNumber(usage.thoughtsTokenCount)
   const cacheWriteTokens = asNumber(promptDetails.cache_write_tokens) + asNumber(inputDetails.cache_write_tokens)
   return {
-    inputTokens: asNumber(usage.prompt_tokens) + asNumber(usage.input_tokens),
-    outputTokens: asNumber(usage.completion_tokens) + asNumber(usage.output_tokens),
-    cacheReadTokens: asNumber(promptDetails.cached_tokens) + asNumber(inputDetails.cached_tokens),
+    inputTokens: asNumber(usage.prompt_tokens) + asNumber(usage.input_tokens) + geminiInput,
+    outputTokens:
+      asNumber(usage.completion_tokens) + asNumber(usage.output_tokens) + asNumber(usage.candidatesTokenCount),
+    cacheReadTokens:
+      asNumber(promptDetails.cached_tokens) +
+      asNumber(inputDetails.cached_tokens) +
+      asNumber(usage.cachedContentTokenCount),
     cacheWriteTokens,
-    reasoningTokens: asNumber(completionDetails.reasoning_tokens) + asNumber(outputDetails.reasoning_tokens),
+    reasoningTokens:
+      asNumber(completionDetails.reasoning_tokens) + asNumber(outputDetails.reasoning_tokens) + geminiReasoning,
     reportedCost: asNumber(usage.cost),
   }
 }
@@ -160,22 +172,26 @@ const jsonPayloads = (body: string) =>
       }
     })
 
-const usageFromResponseBody = (body: string) =>
-  jsonPayloads(body).reduce<Usage>((usage, payload) => {
-    if (!isRecord(payload)) return usage
-    return addUsage(usage, addUsage(usageFromObject(payload.usage), usageFromObject(isRecord(payload.response) ? payload.response.usage : undefined)))
-  }, emptyUsage())
+const usageFromPayload = (payload: JsonRecord) =>
+  addUsage(
+    addUsage(usageFromObject(payload.usage), usageFromObject(payload.usageMetadata)),
+    usageFromObject(isRecord(payload.response) ? payload.response.usage : undefined),
+  )
+
+const usageFromResponseBody = (body: string): Usage =>
+  jsonPayloads(body).filter(isRecord).map(usageFromPayload).reduce(addUsage, emptyUsage())
 
 const modelFromRequest = (request: unknown) => {
   if (!isRecord(request)) return "unknown"
+  const urlModel = asString(request.url)?.match(/\/models\/([^/:?]+):/)?.[1]
   const requestBody = asString(request.body)
-  if (!requestBody) return "unknown"
+  if (!requestBody) return urlModel ? decodeURIComponent(urlModel) : "unknown"
   try {
     const body = JSON.parse(requestBody) as unknown
     if (!isRecord(body)) return "unknown"
-    return asString(body.model) ?? "unknown"
+    return asString(body.model) ?? (urlModel ? decodeURIComponent(urlModel) : "unknown")
   } catch {
-    return "unknown"
+    return urlModel ? decodeURIComponent(urlModel) : "unknown"
   }
 }
 
@@ -185,12 +201,14 @@ const rowFor = (models: JsonRecord, file: string, cassette: unknown): Row | unde
   if (!first || !isRecord(first.request)) return undefined
   const provider = providerFromUrl(asString(first.request.url) ?? "")
   const model = modelFromRequest(first.request)
-  const usage = cassette.interactions.filter(isRecord).reduce<Usage>((total, interaction) => {
-    if (!isRecord(interaction.response)) return total
-    const responseBody = asString(interaction.response.body)
-    if (!responseBody) return total
-    return addUsage(total, usageFromResponseBody(responseBody))
-  }, emptyUsage())
+  const usage = cassette.interactions
+    .filter(isRecord)
+    .map((interaction) => {
+      if (!isRecord(interaction.response)) return emptyUsage()
+      const responseBody = asString(interaction.response.body)
+      return responseBody ? usageFromResponseBody(responseBody) : emptyUsage()
+    })
+    .reduce(addUsage, emptyUsage())
   const priced = pricingFor(models, provider, model)
   return {
     cassette: path.relative(RECORDINGS_DIR, file),
@@ -202,20 +220,26 @@ const rowFor = (models: JsonRecord, file: string, cassette: unknown): Row | unde
   }
 }
 
-const money = (value: number) => value === 0 ? "$0.000000" : `$${value.toFixed(6)}`
+const money = (value: number) => (value === 0 ? "$0.000000" : `$${value.toFixed(6)}`)
 const tokens = (value: number) => value.toLocaleString("en-US")
 
-const models = await (await fetch(MODELS_DEV_URL)).json() as JsonRecord
-const rows = (await Promise.all(
-  (await walk(RECORDINGS_DIR))
-    .filter((file) => file.endsWith(".json"))
-    .map(async (file) => rowFor(models, file, await readJson(file))),
-)).filter((row): row is Row => row !== undefined)
+const fetchedModels = await (await fetch(MODELS_DEV_URL)).json()
+const models = isRecord(fetchedModels) ? fetchedModels : {}
+const rows = (
+  await Promise.all(
+    (await walk(RECORDINGS_DIR))
+      .filter((file) => file.endsWith(".json"))
+      .map(async (file) => rowFor(models, file, await readJson(file))),
+  )
+).filter((row): row is Row => row !== undefined)
 
-const totals = rows.reduce((total, row) => ({
-  ...addUsage(total, row),
-  estimatedCost: total.estimatedCost + row.estimatedCost,
-}), { ...emptyUsage(), estimatedCost: 0 })
+const totals = rows.reduce(
+  (total, row) => ({
+    ...addUsage(total, row),
+    estimatedCost: total.estimatedCost + row.estimatedCost,
+  }),
+  { ...emptyUsage(), estimatedCost: 0 },
+)
 
 console.log("# Recording Cost Report")
 console.log("")
@@ -226,7 +250,9 @@ console.log(`Estimated cost: ${money(totals.estimatedCost)}`)
 console.log("")
 console.log("| Provider | Model | Input | Output | Reasoning | Reported | Estimated | Pricing | Cassette |")
 console.log("|---|---:|---:|---:|---:|---:|---:|---|---|")
-for (const row of rows.toSorted((a, b) => (b.reportedCost + b.estimatedCost) - (a.reportedCost + a.estimatedCost))) {
+for (const row of rows.toSorted((a, b) => b.reportedCost + b.estimatedCost - (a.reportedCost + a.estimatedCost))) {
   if (row.inputTokens + row.outputTokens + row.reasoningTokens + row.reportedCost + row.estimatedCost === 0) continue
-  console.log(`| ${row.provider} | ${row.model} | ${tokens(row.inputTokens)} | ${tokens(row.outputTokens)} | ${tokens(row.reasoningTokens)} | ${money(row.reportedCost)} | ${money(row.estimatedCost)} | ${row.pricingSource} | ${row.cassette} |`)
+  console.log(
+    `| ${row.provider} | ${row.model} | ${tokens(row.inputTokens)} | ${tokens(row.outputTokens)} | ${tokens(row.reasoningTokens)} | ${money(row.reportedCost)} | ${money(row.estimatedCost)} | ${row.pricingSource} | ${row.cassette} |`,
+  )
 }
