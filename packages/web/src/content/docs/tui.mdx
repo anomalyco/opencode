@@ -365,6 +365,10 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
   "session_bar": {
     "context": true,
     "cost": true
+  },
+  "sidebar": {
+    "context": true,
+    "cost": true
   }
 }
 ```
@@ -381,6 +385,8 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `session_bar.context` - Show token usage context in the session bar.
 - `session_bar.cost` - Show estimated cost in the session bar.
+- `sidebar.context` - Show token usage and context percentage in the sidebar.
+- `sidebar.cost` - Show estimated cost in the sidebar.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
 

@@ -28,6 +28,10 @@ export const TuiOptions = z.object({
     context: z.boolean().default(true).describe("Show session bar context"),
     cost: z.boolean().default(true).describe("Show session bar cost"),
   }).default({context: true, cost: true}).describe("Session bar settings"),
+  sidebar: z.object({
+    context: z.boolean().default(true).describe("Show sidebar context"),
+    cost: z.boolean().default(true).describe("Show sidebar cost"),
+  }).default({context: true, cost: true}).describe("Sidebar settings"),
 })
 
 export const TuiInfo = z
