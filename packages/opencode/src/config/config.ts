@@ -355,15 +355,7 @@ export const layer = Layer.effect(
     const env = yield* Env.Service
     const npmSvc = yield* Npm.Service
 
-    const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
-      return yield* fs.readFileString(filepath).pipe(
-        Effect.catchIf(
-          (e) => e.reason._tag === "NotFound",
-          () => Effect.succeed(undefined),
-        ),
-        Effect.orDie,
-      )
-    })
+    const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
 
     const loadConfig = Effect.fnUntraced(function* (
       text: string,
