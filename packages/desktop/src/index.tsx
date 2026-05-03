@@ -100,6 +100,26 @@ type GenericagentTest = {
   ok: boolean
   logs: string[]
 }
+type DesktopTrellisTask = {
+  id: string
+  name: string
+  title: string
+  status: string
+  priority?: string
+  assignee?: string
+  package?: string
+  parent?: string
+  children: string[]
+  createdAt?: string
+  completedAt?: string
+  path: string
+  current: boolean
+}
+type DesktopTrellisTaskList = {
+  root: string
+  current?: string
+  tasks: DesktopTrellisTask[]
+}
 type DesktopPlatform = Platform & {
   getHermesConfig: () => Promise<HermesConfig>
   setHermesConfig: (config: HermesConfig) => Promise<void> | void
@@ -109,6 +129,7 @@ type DesktopPlatform = Platform & {
   setGenericagentConfig: (config: GenericagentConfig) => Promise<void> | void
   testGenericagentConfig: (config: GenericagentConfig) => Promise<GenericagentTest>
   abortGenericagentTest: () => Promise<boolean>
+  listTrellisTasks: (directory: string) => Promise<DesktopTrellisTaskList>
 }
 
 function startupShell() {
@@ -427,6 +448,29 @@ const createPlatform = (): DesktopPlatform => {
 
     async listConfigFiles(directory) {
       return commands.listConfigFiles(directory ?? null)
+    },
+
+    async listTrellisTasks(directory: string) {
+      const data = await commands.listTrellisTasks(directory)
+      return {
+        root: data.root,
+        current: data.current ?? undefined,
+        tasks: data.tasks.map((task) => ({
+          id: task.id,
+          name: task.name,
+          title: task.title,
+          status: task.status,
+          priority: task.priority ?? undefined,
+          assignee: task.assignee ?? undefined,
+          package: task.package ?? undefined,
+          parent: task.parent ?? undefined,
+          children: task.children,
+          createdAt: task.createdAt ?? undefined,
+          completedAt: task.completedAt ?? undefined,
+          path: task.path,
+          current: task.current,
+        })),
+      }
     },
 
     async listConfigDirectory(path: string) {

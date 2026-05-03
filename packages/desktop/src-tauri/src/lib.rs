@@ -74,6 +74,32 @@ struct ConfigTreeItem {
 }
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct TrellisTask {
+    id: String,
+    name: String,
+    title: String,
+    status: String,
+    priority: Option<String>,
+    assignee: Option<String>,
+    package: Option<String>,
+    parent: Option<String>,
+    children: Vec<String>,
+    created_at: Option<String>,
+    completed_at: Option<String>,
+    path: String,
+    current: bool,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct TrellisTaskList {
+    root: String,
+    current: Option<String>,
+    tasks: Vec<TrellisTask>,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
     url: String,
     username: Option<String>,
@@ -483,6 +509,124 @@ fn list_config_files(directory: Option<String>) -> Vec<ConfigFile> {
     }
 
     list
+}
+
+fn trellis_text(value: &serde_json::Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(String::from)
+}
+
+fn trellis_children(value: &serde_json::Value) -> Vec<String> {
+    value
+        .get("children")
+        .and_then(|item| item.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str())
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn normalize_current_task(root: &PathBuf, raw: &str) -> Option<String> {
+    let text = raw.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    let path = PathBuf::from(text);
+    let task = if path.is_absolute() {
+        path.file_name().and_then(|name| name.to_str())
+    } else {
+        path.file_name().and_then(|name| name.to_str()).or(Some(text))
+    };
+
+    task.filter(|item| root.join(".trellis").join("tasks").join(item).is_dir())
+        .map(String::from)
+}
+
+#[tauri::command]
+#[specta::specta]
+fn list_trellis_tasks(directory: String) -> Result<TrellisTaskList, String> {
+    let root = PathBuf::from(directory);
+    let trellis = root.join(".trellis");
+    let tasks = trellis.join("tasks");
+    let current = fs::read_to_string(trellis.join(".current-task"))
+        .ok()
+        .and_then(|raw| normalize_current_task(&root, &raw));
+
+    let Ok(entries) = fs::read_dir(&tasks) else {
+        return Ok(TrellisTaskList {
+            root: root.to_string_lossy().to_string(),
+            current,
+            tasks: Vec::new(),
+        });
+    };
+
+    let mut list = Vec::new();
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if name == "archive" || name.starts_with('.') {
+            continue;
+        }
+
+        let file = path.join("task.json");
+        let text = fs::read_to_string(&file)
+            .map_err(|err| format!("Failed to read Trellis task {}: {err}", file.to_string_lossy()))?;
+        let data = serde_json::from_str::<serde_json::Value>(&text)
+            .map_err(|err| format!("Failed to parse Trellis task {}: {err}", file.to_string_lossy()))?;
+
+        let id = trellis_text(&data, "id").unwrap_or_else(|| name.to_string());
+        let task_name = trellis_text(&data, "name").unwrap_or_else(|| id.clone());
+        let title = trellis_text(&data, "title").unwrap_or_else(|| task_name.clone());
+        let status = trellis_text(&data, "status").unwrap_or_else(|| "unknown".to_string());
+        let active = current.as_ref().is_some_and(|item| item == name || item == &id);
+
+        list.push(TrellisTask {
+            id,
+            name: task_name,
+            title,
+            status,
+            priority: trellis_text(&data, "priority"),
+            assignee: trellis_text(&data, "assignee"),
+            package: trellis_text(&data, "package"),
+            parent: trellis_text(&data, "parent"),
+            children: trellis_children(&data),
+            created_at: trellis_text(&data, "createdAt"),
+            completed_at: trellis_text(&data, "completedAt"),
+            path: path.to_string_lossy().to_string(),
+            current: active,
+        });
+    }
+
+    list.sort_by(|a, b| {
+        b.current
+            .cmp(&a.current)
+            .then_with(|| a.status.cmp(&b.status))
+            .then_with(|| a.priority.cmp(&b.priority))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    Ok(TrellisTaskList {
+        root: root.to_string_lossy().to_string(),
+        current,
+        tasks: list,
+    })
 }
 
 #[tauri::command]
@@ -2178,6 +2322,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_default_editor,
             set_default_editor,
             list_config_files,
+            list_trellis_tasks,
             get_config_workspace,
             list_config_directory,
             read_config_file,
