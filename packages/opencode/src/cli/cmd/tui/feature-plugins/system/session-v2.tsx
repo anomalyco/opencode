@@ -559,20 +559,26 @@ function InlineTool(props: {
         if (previous.height > 1 || previous.id.startsWith("text-")) setMargin(1)
       }}
     >
-      <Switch>
-        <Match when={props.spinner}>
-          <Spinner color={theme.text}>{props.children}</Spinner>
-        </Match>
-        <Match when={true}>
-          <text paddingLeft={3} fg={props.complete ? theme.textMuted : theme.text}>
-            <Show fallback={<>~ {props.pending}</>} when={props.complete}>
-              {props.icon} {props.children}
-            </Show>
-          </text>
-        </Match>
-      </Switch>
+      <box flexDirection="row">
+        <box width={3} flexShrink={0}>
+          <Show
+            when={props.spinner}
+            fallback={<text fg={props.complete ? theme.textMuted : theme.text}>{props.complete ? props.icon : "~"}</text>}
+          >
+            <Spinner color={theme.text} />
+          </Show>
+        </box>
+        <text fg={props.complete ? theme.textMuted : theme.text}>
+          <Show fallback={props.pending} when={props.complete || props.spinner}>
+            {props.children}
+          </Show>
+        </text>
+      </box>
       <Show when={error() && !denied()}>
-        <text fg={theme.error}>{error()}</text>
+        <box flexDirection="row">
+          <box width={3} flexShrink={0} />
+          <text fg={theme.error}>{error()}</text>
+        </box>
       </Show>
     </box>
   )
