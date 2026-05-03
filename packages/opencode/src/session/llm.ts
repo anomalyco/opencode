@@ -351,6 +351,21 @@ const live: Layer.Layer<
               toolName: lower,
             }
           }
+          const toolName = failed.toolCall.toolName
+          const rawInput = failed.toolCall.input
+          const isEmptyArgs = rawInput == null || (typeof rawInput === "object" && Object.keys(rawInput).length === 0)
+          if (isEmptyArgs && ["apply_patch"].includes(toolName)) {
+            l.info("repairing empty tool args", { tool: toolName })
+            return {
+              ...failed.toolCall,
+              input: JSON.stringify({
+                _empty_args_repair: true,
+                tool: toolName,
+                message: "Model provided empty tool args. Please retry with valid arguments."
+              }),
+              toolName: "invalid",
+            }
+          }
           return {
             ...failed.toolCall,
             input: JSON.stringify({
