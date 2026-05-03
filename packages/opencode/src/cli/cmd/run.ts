@@ -1,10 +1,10 @@
 import type { Argv } from "yargs"
 import path from "path"
 import { pathToFileURL } from "url"
+import { Effect } from "effect"
 import { UI } from "../ui"
-import { cmd } from "./cmd"
+import { effectCmd } from "../effect-cmd"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
@@ -203,11 +203,17 @@ function normalizePath(input?: string) {
   return input
 }
 
-export const RunCommand = cmd({
+export const RunCommand = effectCmd({
   command: "run [message..]",
   describe: "run opencode with a message",
-  builder: (yargs: Argv) => {
-    return yargs
+  // --attach connects to a remote server (no local instance needed); the
+  // default path runs an in-process server and needs the project instance.
+  instance: (args) => !args.attach,
+  // For --dir without --attach, load instance for the resolved target dir.
+  // The handler also chdirs (preserving the legacy order: chdir → file resolution).
+  directory: (args) => (args.dir && !args.attach ? path.resolve(process.cwd(), args.dir) : process.cwd()),
+  builder: (yargs: Argv) =>
+    yargs
       .positional("message", {
         describe: "message to send",
         type: "string",
@@ -291,9 +297,9 @@ export const RunCommand = cmd({
         type: "boolean",
         describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
         default: false,
-      })
-  },
-  handler: async (args) => {
+      }),
+  handler: Effect.fn("Cli.run")(function* (args) {
+    yield* Effect.promise(async () => {
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
@@ -661,13 +667,14 @@ export const RunCommand = cmd({
       return await execute(sdk)
     }
 
-    await bootstrap(process.cwd(), async () => {
-      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = new Request(input, init)
-        return Server.Default().app.fetch(request)
-      }) as typeof globalThis.fetch
-      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
-      await execute(sdk)
+    // Default path: effectCmd already loaded the instance via InstanceStore.provide
+    // (see `instance: (args) => !args.attach`), so no bootstrap() wrap needed here.
+    const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init)
+      return Server.Default().app.fetch(request)
+    }) as typeof globalThis.fetch
+    const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
+    await execute(sdk)
     })
-  },
+  }),
 })
