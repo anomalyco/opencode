@@ -37,10 +37,14 @@ interface EffectCmdOpts<Args, A> {
    * directly under AppRuntime — it can yield any `AppServices` but must not
    * yield `InstanceRef` (it'd be undefined, causing a defect).
    *
+   * Function form: `(args) => boolean` decides per-invocation. Useful for
+   * commands like `run --attach <url>` where one flag flips between local
+   * (needs instance) and remote (doesn't).
+   *
    * Use `false` for commands that don't read project state (e.g. `models`,
    * `serve`, `web`, `account`, `db`, `upgrade`).
    */
-  instance?: boolean
+  instance?: boolean | ((args: Args) => boolean)
   /** Defaults to process.cwd(). Override for commands that take a directory positional. */
   directory?: (args: Args) => string
   handler: (args: Args) => Effect.Effect<A, CliError, AppServices | InstanceStore.Service>
@@ -72,7 +76,8 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
     async handler(rawArgs) {
       // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
       const args = rawArgs as unknown as Args
-      if (opts.instance === false) {
+      const useInstance = typeof opts.instance === "function" ? opts.instance(args) : opts.instance !== false
+      if (!useInstance) {
         await AppRuntime.runPromise(opts.handler(args))
         return
       }
