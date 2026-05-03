@@ -3,6 +3,7 @@ import path from "path"
 import { Effect } from "effect"
 import type { Tool } from "@/tool/tool"
 import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
 import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
@@ -38,7 +39,7 @@ describe("tool.assertExternalDirectory", () => {
   test("no-ops for empty target", async () => {
     const { requests, ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: "/tmp",
       fn: async () => {
         await assertExternalDirectory(ctx)
@@ -51,7 +52,7 @@ describe("tool.assertExternalDirectory", () => {
   test("no-ops for paths inside Instance.directory", async () => {
     const { requests, ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: "/tmp/project",
       fn: async () => {
         await assertExternalDirectory(ctx, path.join("/tmp/project", "file.txt"))
@@ -68,7 +69,7 @@ describe("tool.assertExternalDirectory", () => {
     const target = "/tmp/outside/file.txt"
     const expected = glob(path.join(path.dirname(target), "*"))
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory,
       fn: async () => {
         await assertExternalDirectory(ctx, target)
@@ -88,7 +89,7 @@ describe("tool.assertExternalDirectory", () => {
     const target = "/tmp/outside"
     const expected = glob(path.join(target, "*"))
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory,
       fn: async () => {
         await assertExternalDirectory(ctx, target, { kind: "directory" })
@@ -104,7 +105,7 @@ describe("tool.assertExternalDirectory", () => {
   test("skips prompting when bypass=true", async () => {
     const { requests, ctx } = makeCtx()
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: "/tmp/project",
       fn: async () => {
         await assertExternalDirectory(ctx, "/tmp/outside/file.txt", { bypass: true })
@@ -131,7 +132,7 @@ describe("tool.assertExternalDirectory", () => {
         .replaceAll("\\", "/")
         .toLowerCase()
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await assertExternalDirectory(ctx, alt)
@@ -152,7 +153,7 @@ describe("tool.assertExternalDirectory", () => {
       const root = path.parse(tmp.path).root
       const target = path.join(root, "boot.ini")
 
-      await Instance.provide({
+      await WithInstance.provide({
         directory: tmp.path,
         fn: async () => {
           await assertExternalDirectory(ctx, target)

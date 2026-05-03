@@ -5,7 +5,6 @@ import { CliError, effectCmd } from "../effect-cmd"
 import { Database } from "@/storage/db"
 import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
 import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceStore } from "@/project/instance-store"
 import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
@@ -88,13 +87,9 @@ export const ImportCommand = effectCmd({
       demandOption: true,
     }),
   handler: Effect.fn("Cli.import")(function* (args) {
-    // effectCmd always provides InstanceRef via InstanceStore.Service.provide; this is an invariant.
     const ctx = yield* InstanceRef
     if (!ctx) return yield* Effect.die("InstanceRef not provided")
-    const store = yield* InstanceStore.Service
-    // Ensure store.dispose runs disposers and emits server.instance.disposed
-    // on every exit path: success, early return, typed failure, defect, interrupt.
-    return yield* runImport(args.file, ctx.project.id).pipe(Effect.ensuring(store.dispose(ctx)))
+    return yield* runImport(args.file, ctx.project.id)
   }),
 })
 

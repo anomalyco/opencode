@@ -1,7 +1,8 @@
 import z from "zod"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Global } from "@opencode-ai/core/global"
-import { Instance } from "../project/instance"
+import { InstanceLayer } from "@/project/instance-layer"
+import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
@@ -159,7 +160,12 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Git.Service | Project.Service
+  | AppFileSystem.Service
+  | Path.Path
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Git.Service
+  | Project.Service
+  | InstanceStore.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -169,6 +175,7 @@ export const layer: Layer.Layer<
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const gitSvc = yield* Git.Service
     const project = yield* Project.Service
+    const store = yield* InstanceStore.Service
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -251,13 +258,10 @@ export const layer: Layer.Layer<
         return
       }
 
-      const booted = yield* Effect.promise(() =>
-        Instance.provide({
-          directory: info.directory,
-          fn: () => undefined,
-        })
-          .then(() => true)
-          .catch((error) => {
+      const booted = yield* store.load({ directory: info.directory }).pipe(
+        Effect.as(true),
+        Effect.catch((error) =>
+          Effect.sync(() => {
             const message = errorMessage(error)
             log.error("worktree bootstrap failed", { directory: info.directory, message })
             GlobalBus.emit("event", {
@@ -268,6 +272,7 @@ export const layer: Layer.Layer<
             })
             return false
           }),
+        ),
       )
       if (!booted) return
 
@@ -579,12 +584,14 @@ export const layer: Layer.Layer<
   }),
 )
 
-export const defaultLayer = layer.pipe(
+export const appLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
 )
+
+export const defaultLayer = appLayer.pipe(Layer.provide(InstanceLayer.layer))
 
 export * as Worktree from "."

@@ -50,7 +50,20 @@ const FILES = new Set([
   "new-item",
   "rename-item",
 ])
-const CMD_FILES = new Set(["copy", "del", "dir", "erase", "md", "mkdir", "move", "rd", "ren", "rename", "rmdir", "type"])
+const CMD_FILES = new Set([
+  "copy",
+  "del",
+  "dir",
+  "erase",
+  "md",
+  "mkdir",
+  "move",
+  "rd",
+  "ren",
+  "rename",
+  "rmdir",
+  "type",
+])
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
 

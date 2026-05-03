@@ -8,12 +8,10 @@ const PS = new Set(["powershell", "pwsh"])
 const CMD = new Set(["cmd"])
 
 const descriptions = {
-  bash:
-    "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
+  bash: "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
   powershell:
     'Clear, concise description of what this command does in 5-10 words. Examples:\nInput: Get-ChildItem -LiteralPath "."\nOutput: Lists current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: New-Item -ItemType Directory -Path "tmp"\nOutput: Creates directory tmp',
-  cmd:
-    'Clear, concise description of what this command does in 5-10 words. Examples:\nInput: dir\nOutput: Lists current directory\n\nInput: if exist "package.json" type "package.json"\nOutput: Prints package.json when it exists\n\nInput: mkdir tmp\nOutput: Creates directory tmp',
+  cmd: 'Clear, concise description of what this command does in 5-10 words. Examples:\nInput: dir\nOutput: Lists current directory\n\nInput: if exist "package.json" type "package.json"\nOutput: Prints package.json when it exists\n\nInput: mkdir tmp\nOutput: Creates directory tmp',
 }
 
 export type Limits = {

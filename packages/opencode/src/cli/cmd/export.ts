@@ -6,8 +6,6 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 import { Effect } from "effect"
-import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceStore } from "@/project/instance-store"
 
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value
@@ -234,10 +232,7 @@ export const ExportCommand = effectCmd({
         type: "boolean",
       }),
   handler: Effect.fn("Cli.export")(function* (args) {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const store = yield* InstanceStore.Service
-    return yield* run(args).pipe(Effect.ensuring(store.dispose(ctx)))
+    return yield* run(args)
   }),
 })
 
