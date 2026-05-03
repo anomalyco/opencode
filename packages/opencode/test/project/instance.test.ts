@@ -237,21 +237,4 @@ describe("InstanceStore", () => {
     }),
   )
 
-  it.live("does not install legacy ALS around Effect init", () =>
-    Effect.gen(function* () {
-      const dir = yield* tmpdirScoped()
-
-      const directory = yield* Effect.promise(() =>
-        WithInstance.provide({
-          directory: dir,
-          init: Effect.sync(() => {
-            expect(() => Instance.current).toThrow()
-          }),
-          fn: () => Instance.directory,
-        }),
-      )
-
-      expect(directory).toBe(dir)
-    }),
-  )
 })
