@@ -11,6 +11,7 @@ import { ProjectID } from "@/project/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { SessionEvent } from "./session-event"
 import { V2Schema } from "./schema"
+import { optionalOmitUndefined } from "@/util/schema"
 
 export const Delivery = Schema.Union([Schema.Literal("immediate"), Schema.Literal("deferred")]).annotate({
   identifier: "Session.Delivery",
@@ -21,20 +22,20 @@ export const DefaultDelivery = "immediate" satisfies Delivery
 
 export class Info extends Schema.Class<Info>("Session.Info")({
   id: SessionID,
-  parentID: SessionID.pipe(Schema.optional),
+  parentID: optionalOmitUndefined(SessionID),
   projectID: ProjectID,
-  workspaceID: WorkspaceID.pipe(Schema.optional),
-  path: Schema.String.pipe(Schema.optional),
-  agent: Schema.String.pipe(Schema.optional),
+  workspaceID: optionalOmitUndefined(WorkspaceID),
+  path: optionalOmitUndefined(Schema.String),
+  agent: optionalOmitUndefined(Schema.String),
   model: Schema.Struct({
     id: ModelID,
     providerID: ProviderID,
-    variant: Schema.String.pipe(Schema.optional),
-  }).pipe(Schema.optional),
+    variant: optionalOmitUndefined(Schema.String),
+  }).pipe(optionalOmitUndefined),
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
     updated: V2Schema.DateTimeUtcFromMillis,
-    archived: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    archived: optionalOmitUndefined(V2Schema.DateTimeUtcFromMillis),
   }),
   title: Schema.String,
   /*
@@ -109,7 +110,7 @@ export const layer = Layer.effect(
       decodeMessage({ ...row.data, id: row.id, type: row.type })
 
     function fromRow(row: typeof SessionTable.$inferSelect): Info {
-      return {
+      return new Info({
         id: SessionID.make(row.id),
         projectID: ProjectID.make(row.project_id),
         workspaceID: row.workspace_id ? WorkspaceID.make(row.workspace_id) : undefined,
@@ -129,7 +130,7 @@ export const layer = Layer.effect(
           updated: DateTime.makeUnsafe(row.time_updated),
           archived: row.time_archived ? DateTime.makeUnsafe(row.time_archived) : undefined,
         },
-      }
+      })
     }
 
     const result: Interface = {
