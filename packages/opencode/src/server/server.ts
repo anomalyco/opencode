@@ -207,16 +207,21 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
   }
 
   let closing: Promise<void> | undefined
+  let mdnsUnpublished = false
+  const unpublish = () => {
+    if (!mdns || mdnsUnpublished) return
+    mdnsUnpublished = true
+    MDNS.unpublish()
+  }
   return {
     hostname: inner.hostname,
     port: inner.port,
     url: next,
     stop(close?: boolean) {
-      closing ??= (async () => {
-        if (mdns) MDNS.unpublish()
-        await inner.stop(close)
-      })()
-      return closing
+      unpublish()
+      const next = inner.stop(close)
+      closing ??= next
+      return close ? next.then(() => closing!) : closing
     },
   }
 }
@@ -258,9 +263,6 @@ async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selec
       Layer.provideMerge(HttpApiServer.layer({ port, hostname: opts.hostname })),
     )
 
-  // Native listeners own listener-local state such as websocket close tracking.
-  const layerMemoMap = Layer.makeMemoMapUnsafe()
-
   const start = async (port: number) => {
     const scope = Scope.makeUnsafe()
     try {
@@ -273,7 +275,7 @@ async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selec
         unknown,
         never
       >
-      const ctx = await Effect.runPromise(Layer.buildWithMemoMap(layer, layerMemoMap, scope))
+      const ctx = await Effect.runPromise(Layer.buildWithMemoMap(layer, Layer.makeMemoMapUnsafe(), scope))
       return { scope, ctx }
     } catch (err) {
       await Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => undefined)
@@ -307,8 +309,8 @@ async function listenHttpApi(opts: ListenOptions, selection: ServerBackend.Selec
   const forceStop = () => {
     forceStopPromise ??= Effect.runPromiseExit(
       Effect.gen(function* () {
-        yield* Context.get(resolved!.ctx, WebSocketTracker.Service).closeAll
         yield* Context.get(resolved!.ctx, HttpApiServer.Service).closeAll
+        yield* Context.get(resolved!.ctx, WebSocketTracker.Service).closeAll
       }),
     ).then(() => undefined)
     return forceStopPromise

@@ -82,6 +82,8 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
             : undefined
         const socket = yield* Effect.orDie((yield* HttpServerRequest.HttpServerRequest).upgrade)
         const write = yield* socket.writer
+        const registered = yield* WebSocketTracker.register(write(WebSocketTracker.SERVER_CLOSING_EVENT()))
+        if (!registered) return HttpServerResponse.empty()
         const bridge = yield* EffectBridge.make()
         const writeScoped = (effect: Effect.Effect<void, unknown>) => {
           bridge.fork(effect.pipe(Effect.catch(() => Effect.void)))
@@ -103,16 +105,14 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
         }
         const handler = yield* pty.connect(params.ptyID, adapter, cursor)
         if (!handler) return HttpServerResponse.empty()
-        const unregister = yield* WebSocketTracker.register(write(WebSocketTracker.SERVER_CLOSING_EVENT()))
 
         yield* socket
           .runRaw((message) => handlePtyInput(handler, message))
           .pipe(
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
             Effect.ensuring(
-              Effect.gen(function* () {
+              Effect.sync(() => {
                 closed = true
-                yield* unregister
                 handler.onClose()
               }),
             ),
