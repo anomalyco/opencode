@@ -627,3 +627,27 @@ test("merges plugin_enabled flags across config layers", async () => {
     "local.plugin": true,
   })
 })
+
+test("silently skips malformed tui.json — load failures degrade to {}", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), '{ "theme": "broken",')
+      await Bun.write(path.join(dir, ".opencode", "tui.json"), JSON.stringify({ theme: "fallback" }))
+    },
+  })
+
+  const config = await getTuiConfig(tmp.path)
+  // Project tui.json is malformed → silently skipped (logs a warning)
+  // .opencode/tui.json (lower precedence in this path) still loads
+  expect(config.theme).toBe("fallback")
+})
+
+test("missing tui.json — silently treated as empty (ENOENT path)", async () => {
+  await using tmp = await tmpdir({})
+
+  // No tui.json anywhere. Should not throw.
+  const config = await getTuiConfig(tmp.path)
+  expect(config).toBeDefined()
+  // No theme set anywhere.
+  expect(config.theme).toBeUndefined()
+})

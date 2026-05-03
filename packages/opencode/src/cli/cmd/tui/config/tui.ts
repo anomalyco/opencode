@@ -71,18 +71,17 @@ function normalize(raw: Record<string, unknown>) {
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
   const afs = yield* AppFileSystem.Service
 
-  const resolvePlugins = (config: Info, configFilepath: string) =>
+  const resolvePlugins = (config: Info, configFilepath: string): Effect.Effect<Info> =>
     Effect.gen(function* () {
-      if (!config.plugin) return config
-      for (let i = 0; i < config.plugin.length; i++) {
-        config.plugin[i] = yield* Effect.promise(() =>
-          ConfigPlugin.resolvePluginSpec(config.plugin![i], configFilepath),
-        )
+      const plugins = config.plugin
+      if (!plugins) return config
+      for (let i = 0; i < plugins.length; i++) {
+        plugins[i] = yield* Effect.promise(() => ConfigPlugin.resolvePluginSpec(plugins[i], configFilepath))
       }
       return config
     })
 
-  const load = (text: string, configFilepath: string) =>
+  const load = (text: string, configFilepath: string): Effect.Effect<Info> =>
     Effect.gen(function* () {
       const expanded = yield* Effect.promise(() =>
         ConfigVariable.substitute({ text, type: "path", path: configFilepath, missing: "empty" }),
@@ -94,6 +93,8 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       const validated = ConfigParse.schema(Info, normalize(data), configFilepath)
       return yield* resolvePlugins(validated, configFilepath)
     }).pipe(
+      // catchCause (not tapErrorCause + orElseSucceed) because ConfigParse.jsonc/.schema
+      // can sync-throw — those become defects, which orElseSucceed wouldn't catch.
       Effect.catchCause((cause) =>
         Effect.sync(() => {
           log.warn("invalid tui config", { path: configFilepath, cause })
@@ -102,7 +103,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       ),
     )
 
-  const loadFile = (filepath: string) =>
+  const loadFile = (filepath: string): Effect.Effect<Info> =>
     Effect.gen(function* () {
       const text = yield* afs.readFileStringSafe(filepath).pipe(Effect.orDie)
       if (!text) return {} as Info
