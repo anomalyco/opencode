@@ -336,7 +336,7 @@ export const McpAuthListCommand = effectCmd({
   }),
 })
 
-export const McpLogoutCommand = cmd({
+export const McpLogoutCommand = effectCmd({
   command: "logout [name]",
   describe: "remove OAuth credentials for an MCP server",
   builder: (yargs) =>
@@ -344,57 +344,54 @@ export const McpLogoutCommand = cmd({
       describe: "name of the MCP server",
       type: "string",
     }),
-  async handler(args) {
-    await WithInstance.provide({
-      directory: process.cwd(),
-      async fn() {
-        UI.empty()
-        prompts.intro("MCP OAuth Logout")
+  handler: Effect.fn("Cli.mcp.logout")(function* (args) {
+    UI.empty()
+    prompts.intro("MCP OAuth Logout")
 
-        const credentials = await AppRuntime.runPromise(McpAuth.Service.use((auth) => auth.all()))
-        const serverNames = Object.keys(credentials)
+    const credentials = yield* McpAuth.Service.use((auth) => auth.all())
+    const serverNames = Object.keys(credentials)
 
-        if (serverNames.length === 0) {
-          prompts.log.warn("No MCP OAuth credentials stored")
-          prompts.outro("Done")
-          return
-        }
+    if (serverNames.length === 0) {
+      prompts.log.warn("No MCP OAuth credentials stored")
+      prompts.outro("Done")
+      return
+    }
 
-        let serverName = args.name
-        if (!serverName) {
-          const selected = await prompts.select({
-            message: "Select MCP server to logout",
-            options: serverNames.map((name) => {
-              const entry = credentials[name]
-              const hasTokens = !!entry.tokens
-              const hasClient = !!entry.clientInfo
-              let hint = ""
-              if (hasTokens && hasClient) hint = "tokens + client"
-              else if (hasTokens) hint = "tokens"
-              else if (hasClient) hint = "client registration"
-              return {
-                label: name,
-                value: name,
-                hint,
-              }
-            }),
-          })
-          if (prompts.isCancel(selected)) throw new UI.CancelledError()
-          serverName = selected
-        }
+    let serverName = args.name
+    if (!serverName) {
+      const selected = yield* Effect.promise(() =>
+        prompts.select({
+          message: "Select MCP server to logout",
+          options: serverNames.map((name) => {
+            const entry = credentials[name]
+            const hasTokens = !!entry.tokens
+            const hasClient = !!entry.clientInfo
+            let hint = ""
+            if (hasTokens && hasClient) hint = "tokens + client"
+            else if (hasTokens) hint = "tokens"
+            else if (hasClient) hint = "client registration"
+            return {
+              label: name,
+              value: name,
+              hint,
+            }
+          }),
+        }),
+      )
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      serverName = selected
+    }
 
-        if (!credentials[serverName]) {
-          prompts.log.error(`No credentials found for: ${serverName}`)
-          prompts.outro("Done")
-          return
-        }
+    if (!credentials[serverName]) {
+      prompts.log.error(`No credentials found for: ${serverName}`)
+      prompts.outro("Done")
+      return
+    }
 
-        await AppRuntime.runPromise(MCP.Service.use((mcp) => mcp.removeAuth(serverName)))
-        prompts.log.success(`Removed OAuth credentials for ${serverName}`)
-        prompts.outro("Done")
-      },
-    })
-  },
+    yield* MCP.Service.use((mcp) => mcp.removeAuth(serverName))
+    prompts.log.success(`Removed OAuth credentials for ${serverName}`)
+    prompts.outro("Done")
+  }),
 })
 
 async function resolveConfigPath(baseDir: string, global = false) {
