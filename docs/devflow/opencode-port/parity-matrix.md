@@ -13,7 +13,7 @@ Status values: `Not Started`, `Partial`, `Blocked`, `Parity`, `Not Applicable`.
 | Pre-tool bash enforcement | Claude `PreToolUse Bash` hook chain blocks exit 2 | OpenCode `tool.execute.before` adapter throws on exit 2 | Existing plugin hook plus adapter; `#22654`/`#20053` behavior | Partial | Hook substrate is ready for blocking/interactive enforcement; adapter not implemented yet. |
 | `apply_patch` enforcement | Claude uses `MultiEdit` | Adapter parses OpenCode `apply_patch` patch paths and applies write enforcement | None | Not Started | TBD |
 | Post-tool telemetry | Claude `PostToolUse` hooks | OpenCode `tool.execute.after` adapter | PR `#21150` improves MCP timing | Partial | MCP `tool.execute.after` now receives assembled final output and can mutate returned output. Devflow telemetry adapter not implemented yet. |
-| Session start telemetry | Claude `SessionStart` | OpenCode `session.start` | PR `#15224` | Blocked | TBD |
+| Session start telemetry | Claude `SessionStart` | OpenCode `session.start` | PR `#15224` | Partial | `session.start` hook integrated on `devflow/hojo`; targeted test verifies first-call context injection. Devflow adapter not implemented yet. |
 | Compaction reinforcement | Claude compact matcher reinjects rules | OpenCode compaction plugin hook | Existing `experimental.session.compacting` | Not Started | TBD |
 | Subagent start telemetry | Claude `SubagentStart` | OpenCode task/tool/session context | PR `#15412` | Partial | `#15412` integrated on `devflow/hojo`; `bun test test/plugin/parent-agent.test.ts` and package typechecks pass. Adapter work remains. |
 | Subagent stop telemetry | Claude `SubagentStop` | OpenCode child session/task completion event | Needs validation | Not Started | TBD |

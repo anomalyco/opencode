@@ -9,7 +9,7 @@ fork. Do not apply or retain a fork patch unless it has an entry here.
 |---|---|---:|---|
 | `upstream-dev` | Mirror of `anomalyco/opencode:dev` | `387220f368ca3a31d94b4be3937d9d825ebd888c` | 2026-05-03 |
 | `devflow/base` | Rebase base for devflow patch stack | `387220f368ca3a31d94b4be3937d9d825ebd888c` | 2026-05-03 |
-| `devflow/hojo` | Curated compatibility patch stack | Integrated through tool hook local Effect-path adaptations | 2026-05-03 |
+| `devflow/hojo` | Curated compatibility patch stack | Integrated through `session.start` local Effect-path adaptation | 2026-05-03 |
 | `devflow/release` | Tested branch consumed by devflow users | TBD | TBD |
 
 Local clone: `/Users/jvanzyl/js/jopen/hojo-opencode`.
@@ -33,7 +33,7 @@ Before pushing devflow branches, create or choose a fork remote explicitly.
 
 | PR | Title | Upstream State | Upstream Head | Fork Branch | Fork Commit | Devflow Gap Closed | Risk | Decision | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| `#15224` | `feat(plugin): add session.start hook for session initialization` | OPEN | `d71089b5c41cd86369a11874b7c37a4856acd1a4` | `devflow/pr-15224-session-start` | `d71089b5c41cd86369a11874b7c37a4856acd1a4` | SessionStart-like event | Low/Medium | Absorb unless conflicts are severe | Integration Conflict |
+| `#15224` | `feat(plugin): add session.start hook for session initialization` | OPEN | `d71089b5c41cd86369a11874b7c37a4856acd1a4` | `devflow/pr-15224-session-start` | Local Effect-path adaptation on `devflow/hojo` | SessionStart-like event | Low/Medium | Upstream merges and rebase includes it | Integrated |
 | `#23650` | `feat: add session.turn.completed bus event for plugin hooks` | OPEN | `4c644353f4d350672b1f86b2718cbbf04730a145` | `devflow/pr-23650-turn-completed` | `9ca1de490` on `devflow/hojo` | Per-turn telemetry and future review UX | Low | Upstream merges and rebase includes it | Integrated |
 | `#19519` | `feat: allow tool.execute.after hooks to inject AI-visible messages` | OPEN | `4e19d1474fd793e1e79876e16e9a5cc84fdd9b24` | TBD | TBD | Hook feedback visible to agent | Medium | Defer until core adapter works | Not Applied |
 | `#21773` | `feat(bash): expand shell.env hook context with messageID and agent` | OPEN | `ded5a9bb03096d07e56c6c45b2305b5c58aba3dc` | TBD | TBD | Session/agent-aware hook subprocess env | Low | Absorb with context improvements | Not Applied |
@@ -69,6 +69,6 @@ Update this file whenever upstream state or head SHA changes.
 
 ## Local Adaptation Notes
 
-- `#16598`, `#22654`, `#20053`, and `#21150` target older prompt-loop shapes or lack the parent-agent context already present on `devflow/hojo`. Prefer the local Effect-path adaptations over direct cherry-picks unless upstream converges on the same current architecture.
+- `#15224`, `#16598`, `#22654`, `#20053`, and `#21150` target older prompt-loop shapes or lack the parent-agent context already present on `devflow/hojo`. Prefer the local Effect-path adaptations over direct cherry-picks unless upstream converges on the same current architecture.
 - `#19470` remains excluded because its isolated branch has a failing permission isolation test.
-- `#15224` remains excluded because direct cherry-pick creates a large `packages/opencode/src/session/prompt.ts` conflict; reimplement a minimal current-code `session.start` hook if startup telemetry becomes the next priority.
+- `#15224` direct cherry-pick created a large `packages/opencode/src/session/prompt.ts` conflict. The local adaptation adds the plugin hook type, triggers it before the first normal session model call, and prepends returned context to the system prompt.

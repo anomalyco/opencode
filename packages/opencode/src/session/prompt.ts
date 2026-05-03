@@ -1606,6 +1606,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
           msgs = yield* insertReminders({ messages: msgs, agent, session })
+          const sessionStartContext = !msgs.some((m) => m.info.role === "assistant")
+            ? (yield* plugin.trigger(
+                "session.start",
+                { sessionID, directory: session.directory, projectID: session.projectID },
+                { context: [] as string[] },
+              )).context
+            : []
 
           const msg: MessageV2.Assistant = {
             id: MessageID.ascending(),
@@ -1682,7 +1689,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            const system = [...sessionStartContext, ...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({

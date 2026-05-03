@@ -82,10 +82,17 @@ Observed result on 2026-05-03:
   4 assertions.
 
 Session start PR `#15224`:
-- No narrow committed test file was identified yet beyond package typecheck and
-  build.
-- The PR branch includes a demo plugin package and script; if used, document the
-  exact command here before claiming runtime coverage.
+
+```bash
+cd /Users/jvanzyl/js/jopen/hojo-opencode/packages/opencode
+bun test test/plugin/session-start.test.ts
+```
+
+Observed result on 2026-05-03:
+- On `devflow/hojo`, the adapted Effect-path hook test has 1 pass, 0 fail,
+  2 assertions.
+- The test verifies plugin-provided context is injected into the first session
+  model call and not injected into a later model call in the same session.
 
 Parent agent context PR `#15412`:
 

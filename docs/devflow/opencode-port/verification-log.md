@@ -51,6 +51,11 @@ Record verification evidence here before claiming any parity milestone.
 | 2026-05-03 | `bun run typecheck` in `packages/opencode` after tool hook adaptation | PASS | `tsgo --noEmit` completed successfully. |
 | 2026-05-03 | `bun run typecheck` in `packages/plugin` after tool hook adaptation | PASS | `tsgo --noEmit` completed successfully. |
 | 2026-05-03 | `bun test test/plugin/parent-agent.test.ts test/plugin/session-stopping.test.ts` in `packages/opencode` after tool hook adaptation | PASS | 7 tests passed, 0 failed, 9 assertions. |
+| 2026-05-03 | `bun test test/plugin/session-start.test.ts` in `packages/opencode` after `session.start` adaptation | PASS | 1 test passed, 0 failed, 2 assertions. Verifies returned context is injected on the first session model call and not on a later model call in the same session. |
+| 2026-05-03 | `bun test test/plugin/parent-agent.test.ts test/plugin/session-stopping.test.ts test/plugin/session-start.test.ts` in `packages/opencode` after `session.start` adaptation | PASS | 8 tests passed, 0 failed, 11 assertions. |
+| 2026-05-03 | `bun run typecheck` in `packages/opencode` after `session.start` adaptation | PASS | `tsgo --noEmit` completed successfully. |
+| 2026-05-03 | `bun run typecheck` in `packages/plugin` after `session.start` adaptation | PASS | `tsgo --noEmit` completed successfully. |
+| 2026-05-03 | `bun run build` in `packages/plugin` after `session.start` adaptation | PASS | `tsc` completed successfully. |
 | TBD | `PYTHONPATH=src python3 -m pytest` | TBD | Current hook/unit baseline |
 | TBD | `./install.sh --target claude --root /tmp/devflow-claude-test install` | TBD | Claude install regression |
 | TBD | `./install.sh --target opencode --root /tmp/devflow-opencode-test install` | TBD | OpenCode install |
