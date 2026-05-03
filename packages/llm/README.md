@@ -228,3 +228,13 @@ bun test
 ```
 
 Recorded tests use `@opencode-ai/http-recorder`. To update recordings, run the relevant test with `RECORD=true` and inspect the cassette for redaction before committing.
+
+Use the credential helper to see which local keys are present and add missing ones to `packages/llm/.env.local`:
+
+```sh
+bun run setup:recording-env
+bun run setup:recording-env -- --check
+bun run setup:recording-env -- --providers groq,openrouter,xai
+```
+
+`.env.local` is ignored by git. Shared team credentials should live in a password manager or vault; this helper only writes your local test environment.
