@@ -1,141 +1,113 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
+  <img src="docs/assets/branding/logo-horizontal.svg" alt="DeskFox.Ai" width="420">
 </p>
-<p align="center">The open source AI coding agent.</p>
+
+<p align="center"><strong>桌面 AI 助理 · 办公场景专用 AI Agent</strong></p>
+
+<p align="center"><sub>CLEVER · CALM · ALWAYS ON YOUR DESK</sub></p>
+
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/zoulukuang/deskfox/releases/latest">📥 下载最新版</a>
+  &nbsp;·&nbsp;
+  <a href="https://deskfox.ai/">🏠 官网</a>
+  &nbsp;·&nbsp;
+  <a href="README.en.md">🌐 English</a>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="https://github.com/zoulukuang/deskfox/releases"><img src="https://img.shields.io/github/v/release/zoulukuang/deskfox?display_name=tag&label=latest&style=flat-square" alt="latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT" /></a>
+  <a href="https://github.com/sst/opencode"><img src="https://img.shields.io/badge/forked%20from-sst%2Fopencode-black?style=flat-square" alt="forked from sst/opencode" /></a>
 </p>
-
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
 
-### Installation
+> 写邮件、改报告、整 Excel、读 PDF、做 PPT 草稿 — 办公里这些反复但费时的事,给 DeskFox 说句话就行。
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+<p align="center">
+  <img src="docs/assets/screenshots/hero.png" alt="DeskFox 主界面 — 项目侧栏 + 对话面板 + 文件树三栏布局" width="900">
+</p>
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
-```
+## ✨ 为什么选 DeskFox
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+- 🔓 **开源透明** — 代码全公开,本地优先,你的数据始终是你的
+- 🌍 **来自 sst/opencode 社区** — fork 自全球开发者每天审视的开源项目,工程基础稳定;我们的工作是把它"翻译"成办公人也能用
+- 🎁 **零门槛上手** — 内置 OpenCode Zen 免费模型(MiniMax / Hy3 / Nemotron 等),装上就能聊,不用充值不用申请 API
+- 🤖 **多模型一键切换** — Claude / GPT / Gemini / 国产模型 + Zen 免费网关,统一界面,API key 始终在你机器上
 
-### Desktop App (BETA)
+## 🎯 适合场景
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+| 场景 | 你能做什么 |
+|---|---|
+| 📄 **文档伴侣** | Word / Excel / PDF / Markdown 直接预览,加聊天上下文,让 AI 改写、总结、答疑 |
+| ✍️ **写作起草** | 邮件 / 周报 / 述职 / 会议纪要 / 合同初稿 — 一句话讲清楚要点,AI 帮你成稿 |
+| 📊 **数据梳理** | Excel 公式 / CSV 清洗 / 数据透视思路 / 简单可视化 |
+| 🔐 **隐私敏感** | 文件不离开本地、聊天历史本地存、API key 直连模型方不经第三方中转 |
 
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
+## 🖼️ 文件预览能力
 
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
+不只是聊天,DeskFox **直接在主界面预览各种格式文件**,一键加进对话上下文让 AI 帮你处理:
 
-#### Installation Directory
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/assets/screenshots/preview-pdf.png" alt="PDF 预览" width="280"><br>
+      <sub><b>📄 PDF / Word / Markdown</b><br>原版式 + 文本提取双模式</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/assets/screenshots/preview-pptx.png" alt="PPT 预览" width="280"><br>
+      <sub><b>📊 Excel / PowerPoint</b><br>表格 / 幻灯片直接渲染</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/assets/screenshots/preview-video.png" alt="视频预览" width="280"><br>
+      <sub><b>🎬 视频 / 音频 / 图片</b><br>多媒体内置播放</sub>
+    </td>
+  </tr>
+</table>
 
-The install script respects the following priority order for the installation path:
+每个文件标签可以**右键 → 加到聊天**,把内容塞进当前对话上下文 — 让 AI 答疑、改写、总结。
 
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
+## 📥 下载安装
 
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
+| 平台 | 国际(GitHub Release)| 国内镜像(Gitee)|
+|---|---|---|
+| **Windows** | [releases/latest](https://github.com/zoulukuang/deskfox/releases/latest) | [Gitee Release](https://gitee.com/zoulukuang/deskfox/releases/) |
+| **macOS (Apple Silicon)** | [releases/latest](https://github.com/zoulukuang/deskfox/releases/latest) | [Gitee Release](https://gitee.com/zoulukuang/deskfox/releases/) |
 
-### Agents
+国内访问 GitHub 慢的话,优先走 Gitee 镜像。
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+> **首次启动小提示**(因开源 fork 项目暂未配代码签名证书,**不是恶意软件**):
+> - **Windows**:SmartScreen 拦截 → 点 "更多信息 → 仍要运行"
+> - **macOS**:Gatekeeper 拦截 → 应用图标右键 → "打开" → 同意一次
+>
+> 详细缘由见 [`docs/governance/数字签名问题.md`](docs/governance/数字签名问题.md)
 
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
+## 🌱 项目透明
 
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+**DeskFox.Ai** 是 [`sst/opencode`](https://github.com/sst/opencode) 的 fork 项目。原项目是给程序员用的 AI 编码工具,我们 fork 出来,**定位调整为面向办公人群的日常 AI 工作伴侣**。具体做了:
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+- 🎨 **界面精简** — 去掉编程专属 UI,重新组织对话流和文件操作
+- 🦊 **品牌重塑** — DeskFox 视觉系统(Bundle ID / 图标 / 文案),与上游 0 命名空间共享
+- 📄 **文档预览能力** — Word / Excel / PDF / Markdown 直接看,可一键加进聊天上下文
+- 📦 **打包发布工程化** — Windows + macOS 三档(prod / beta / dev)build,GitHub Actions 自动 release,Gitee 镜像同步
 
-### Documentation
+完整改动索引见 [`改动日志.md`](改动日志.md);治理规范见 [`docs/governance/`](docs/governance/);跟随上游升级 SOP 见 [`docs/governance/UPSTREAM-MERGE-GUIDE.md`](docs/governance/UPSTREAM-MERGE-GUIDE.md)。
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+## 🌐 相关链接
 
-### Contributing
+| | |
+|---|---|
+| 🏠 官网 | [deskfox.ai](https://deskfox.ai/) |
+| 📦 GitHub Release | [releases/latest](https://github.com/zoulukuang/deskfox/releases/latest) |
+| 🇨🇳 Gitee 镜像 | [zoulukuang/deskfox](https://gitee.com/zoulukuang/deskfox) |
+| 🐛 问题反馈 | [Issues](https://github.com/zoulukuang/deskfox/issues) |
+| 🔒 隐私协议 | [中文](docs/legal/隐私协议.md) · [English](docs/legal/PRIVACY.md) |
+| ⬆️ 上游 | [sst/opencode](https://github.com/sst/opencode) |
 
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
+## 📄 协议
 
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
-### FAQ
-
-#### How is this different from Claude Code?
-
-It's very similar to Claude Code in terms of capability. Here are the key differences:
-
-- 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
-- Built-in opt-in LSP support
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
-- A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
+[MIT](LICENSE) — 与上游 [`sst/opencode`](https://github.com/sst/opencode) 保持一致。所有改动公开在 GitHub,跟随上游升级。
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+<p align="center"><sub>© 2026 DeskFox.Ai · 基于 MIT 协议开源 · fork from sst/opencode</sub></p>

@@ -1,0 +1,47 @@
+<svg width="720" height="200" viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- DeskFox Horizontal Logo - 水平组合 (官网/邮件签名/名片) -->
+  <defs>
+    <linearGradient id="bgH" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#243353"/>
+      <stop offset="100%" stop-color="#172238"/>
+    </linearGradient>
+    <linearGradient id="faceH" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#9DBBE3"/>
+      <stop offset="100%" stop-color="#7295C4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 左侧图标 -->
+  <g transform="translate(20, 20)">
+    <rect width="160" height="160" rx="36" fill="url(#bgH)"/>
+    <g transform="translate(80, 84) scale(1.4)">
+      <path d="M -42,-6 L -22,-44 L -11,-7 Z" fill="#7295C4"/>
+      <path d="M -35,-12 L -24,-35 L -17,-14 Z" fill="#FF9A7A"/>
+      <path d="M 42,-6 L 22,-44 L 11,-7 Z" fill="#7295C4"/>
+      <path d="M 35,-12 L 24,-35 L 17,-14 Z" fill="#FF9A7A"/>
+      <path d="M -42,-6 L 42,-6 L 0,42 Z" fill="url(#faceH)"/>
+      <path d="M -14,11 L 14,11 L 0,32 Z" fill="#F4F7FB"/>
+      <circle cx="-14" cy="3" r="3.2" fill="#172238"/>
+      <circle cx="14" cy="3" r="3.2" fill="#172238"/>
+    </g>
+  </g>
+
+  <!-- 右侧文字组 -->
+  <g transform="translate(210, 0)" font-family="'Inter', 'Segoe UI', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif" font-weight="800">
+    <!-- DeskFox - textLength 锁定宽度,免受字体回退影响 -->
+    <text x="0" y="116" font-size="76" fill="#1F2D44" textLength="182" lengthAdjust="spacingAndGlyphs">Desk</text>
+    <text x="182" y="116" font-size="76" fill="#7295C4" textLength="84" lengthAdjust="spacingAndGlyphs">Fo</text>
+    <!-- 三角 X - 紧贴 Fo 之后 -->
+    <g transform="translate(266, 64)">
+      <path d="M 0,52 L 0,44 L 42,0 L 42,8 Z" fill="#7295C4"/>
+      <path d="M 0,0 L 8,0 L 42,44 L 42,52 Z" fill="#1F2D44"/>
+      <!-- 中心珊瑚三角 - 居中至两条笔画中线交叉 (~23, 24) -->
+      <path d="M 18,21 L 28,21 L 23,29 Z" fill="#FF9A7A"/>
+    </g>
+    <!-- ".Ai" 域名后缀 - 点用独立小圆,Ai 与 Desk 同色 -->
+    <circle cx="320" cy="112" r="5" fill="#1F2D44"/>
+    <text x="330" y="116" font-size="76" fill="#1F2D44" textLength="72" lengthAdjust="spacingAndGlyphs">Ai</text>
+    <!-- Slogan -->
+    <text x="2" y="148" font-size="16" fill="#6B7C9A" letter-spacing="3.5" font-weight="500">CLEVER · CALM · ALWAYS ON YOUR DESK</text>
+  </g>
+</svg>
