@@ -89,20 +89,17 @@ Use `testEffect(...)` from `test/lib/effect.ts` for tests that exercise Effect s
 ```typescript
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(MyService.defaultLayer))
 
 describe("my service", () => {
-  it.live("does the thing", () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        const svc = yield* MyService.Service
-        const out = yield* svc.run()
-        expect(out).toEqual("ok")
-      }),
-    ),
+  it.instance("does the thing", () =>
+    Effect.gen(function* () {
+      const svc = yield* MyService.Service
+      const out = yield* svc.run()
+      expect(out).toEqual("ok")
+    }),
   )
 })
 ```
@@ -111,6 +108,7 @@ describe("my service", () => {
 
 - Use `it.effect(...)` when the test should run with `TestClock` and `TestConsole`.
 - Use `it.live(...)` when the test depends on real time, filesystem mtimes, child processes, git, locks, or other live OS behavior.
+- Use `it.instance(...)` for live Effect tests that need a scoped temporary directory and instance context.
 - Most integration-style tests in this package use `it.live(...)`.
 
 ### Effect Fixtures
@@ -122,7 +120,20 @@ Prefer the Effect-aware helpers from `fixture/fixture.ts` instead of building a 
 - `provideTmpdirInstance((dir) => effect, options?)` is the convenience helper. It creates a temp directory, binds it as the active instance, and disposes the instance on cleanup.
 - `provideTmpdirServer((input) => effect, options?)` does the same, but also provides the test LLM server.
 
-Use `provideTmpdirInstance(...)` by default when a test only needs one temp instance. Use `tmpdirScoped()` plus `provideInstance(...)` when a test needs multiple directories, custom setup before binding, or needs to switch instance context within one test.
+Use `it.instance(...)` by default when a test only needs one temp instance. Yield `TestInstance` from `fixture/fixture.ts` when the test needs the temp directory path:
+
+```typescript
+import { TestInstance } from "../fixture/fixture"
+
+it.instance("uses the temp directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    expect(test.directory).toContain("opencode-test-")
+  }),
+)
+```
+
+Use `provideTmpdirInstance(...)` or `tmpdirScoped()` plus `provideInstance(...)` when a test needs multiple directories, custom setup before binding, needs to switch instance context within one test, or explicitly tests instance disposal/reload lifetime.
 
 ### Style
 
@@ -130,4 +141,4 @@ Use `provideTmpdirInstance(...)` by default when a test only needs one temp inst
 - Keep the test body inside `Effect.gen(function* () { ... })`.
 - Yield services directly with `yield* MyService.Service` or `yield* MyTool`.
 - Avoid custom `ManagedRuntime`, `attach(...)`, or ad hoc `run(...)` wrappers when `testEffect(...)` already provides the runtime.
-- When a test needs instance-local state, prefer `provideTmpdirInstance(...)` or `provideInstance(...)` over manual `Instance.provide(...)` inside Promise-style tests.
+- When a test needs instance-local state, prefer `it.instance(...)` over manual `Instance.provide(...)` inside Promise-style tests.

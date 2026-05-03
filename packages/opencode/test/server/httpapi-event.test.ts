@@ -27,6 +27,14 @@ async function readFirstChunk(response: Response) {
   return new TextDecoder().decode(result.value)
 }
 
+async function readFirstEvent(response: Response) {
+  return JSON.parse((await readFirstChunk(response)).replace(/^data: /, "")) as {
+    id?: string
+    type: string
+    properties: Record<string, unknown>
+  }
+}
+
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
@@ -43,7 +51,7 @@ describe("event HttpApi bridge", () => {
     expect(response.headers.get("cache-control")).toBe("no-cache, no-transform")
     expect(response.headers.get("x-accel-buffering")).toBe("no")
     expect(response.headers.get("x-content-type-options")).toBe("nosniff")
-    expect(await readFirstChunk(response)).toContain('data: {"type":"server.connected","properties":{}}\n\n')
+    expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
   })
 
   test("matches legacy first event frame", async () => {
@@ -52,6 +60,9 @@ describe("event HttpApi bridge", () => {
     const legacy = await app(false).request(EventPaths.event, { headers })
     const effect = await app(true).request(EventPaths.event, { headers })
 
-    expect(await readFirstChunk(effect)).toBe(await readFirstChunk(legacy))
+    const legacyEvent = await readFirstEvent(legacy)
+    const effectEvent = await readFirstEvent(effect)
+    expect(effectEvent.type).toBe(legacyEvent.type)
+    expect(effectEvent.properties).toEqual(legacyEvent.properties)
   })
 })

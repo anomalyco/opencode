@@ -750,9 +750,18 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
+    const variant = local.model.variant.current()
     let sessionID = props.sessionID
     if (sessionID == null) {
-      const res = await sdk.client.session.create({ workspace: props.workspaceID })
+      const res = await sdk.client.session.create({
+        workspace: props.workspaceID,
+        agent: agent.name,
+        model: {
+          providerID: selectedModel.providerID,
+          id: selectedModel.modelID,
+          variant,
+        },
+      })
 
       if (res.error) {
         console.log("Creating a session failed:", res.error)
@@ -792,7 +801,6 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const variant = local.model.variant.current()
     const editorSelection = editorContext()
     const currentEditorSelectionKey = editorSelectionKey(editorSelection)
     const editorParts =

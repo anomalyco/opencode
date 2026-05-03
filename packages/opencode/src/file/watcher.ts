@@ -123,7 +123,9 @@ export const layer = Layer.effect(
           const cfgIgnores = cfg.watcher?.ignore ?? []
 
           if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-            yield* subscribe(ctx.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(ctx.directory)])
+            yield* Effect.forkScoped(
+              subscribe(ctx.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(ctx.directory)]),
+            )
           }
 
           if (ctx.project.vcs === "git") {
@@ -135,7 +137,7 @@ export const layer = Layer.effect(
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                 (entry) => entry !== "HEAD",
               )
-              yield* subscribe(vcsDir, ignore)
+              yield* Effect.forkScoped(subscribe(vcsDir, ignore))
             }
           }
         },

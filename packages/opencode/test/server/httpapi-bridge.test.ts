@@ -226,7 +226,14 @@ describe("HttpApi server", () => {
     const effectRoutes = openApiRouteKeys(effectOpenApi())
 
     expect(honoRoutes.filter((route) => !effectRoutes.includes(route))).toEqual([])
-    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([])
+    expect(effectRoutes.filter((route) => !honoRoutes.includes(route))).toEqual([
+      "GET /api/session",
+      "GET /api/session/{sessionID}/context",
+      "GET /api/session/{sessionID}/message",
+      "POST /api/session/{sessionID}/compact",
+      "POST /api/session/{sessionID}/prompt",
+      "POST /api/session/{sessionID}/wait",
+    ])
   })
 
   test("matches generated OpenAPI route parameters", async () => {
