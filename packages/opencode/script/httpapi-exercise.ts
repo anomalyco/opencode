@@ -1506,7 +1506,7 @@ const main = Effect.gen(function* () {
   const options = parseOptions(Bun.argv.slice(2))
   const modules = yield* Effect.promise(() => runtime())
   const effectRoutes = routeKeys(OpenApi.fromApi(modules.PublicApi))
-  const honoRoutes = routeKeys(yield* Effect.promise(() => modules.Server.openapi()))
+  const honoRoutes = routeKeys(yield* Effect.promise(() => modules.Server.openapiHono()))
   const selected = scenarios.filter((scenario) => matches(options, scenario))
   const missing = effectRoutes.filter((route) => !scenarios.some((scenario) => route === routeKey(scenario)))
   const extra = scenarios.filter((scenario) => !effectRoutes.includes(routeKey(scenario)))
