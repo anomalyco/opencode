@@ -163,7 +163,6 @@ export const Terminal = (props: TerminalProps) => {
   const server = useServer()
   const directory = sdk.directory
   const client = sdk.client
-  const inspectClient = sdk.createClient({ directory, throwOnError: false })
   const url = sdk.url
   const auth = server.current?.http
   const username = auth?.username ?? "opencode"
@@ -472,8 +471,8 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const gone = () =>
-        inspectClient.pty
-          .get({ ptyID: id })
+        client.pty
+          .get({ ptyID: id }, { throwOnError: false })
           .then((result) => result.response.status === 404)
           .catch((err) => {
             debugTerminal("failed to inspect terminal session", err)
