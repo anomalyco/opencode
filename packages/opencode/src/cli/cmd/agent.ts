@@ -1,6 +1,5 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
-import { AppRuntime } from "@/effect/app-runtime"
 import { UI } from "../ui"
 import { Global } from "@opencode-ai/core/global"
 import { Agent } from "../../agent/agent"
@@ -66,6 +65,7 @@ const AgentCreateCommand = effectCmd({
     const maybeCtx = yield* InstanceRef
     if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
     const ctx = maybeCtx
+    const agentSvc = yield* Agent.Service
     yield* Effect.promise(async () => {
       const cliPath = args.path
       const cliDescription = args.description
@@ -127,9 +127,7 @@ const AgentCreateCommand = effectCmd({
       const spinner = prompts.spinner()
       spinner.start("Generating agent configuration...")
       const model = args.model ? Provider.parseModel(args.model) : undefined
-      const generated = await AppRuntime.runPromise(
-        Agent.Service.use((svc) => svc.generate({ description, model })),
-      ).catch((error) => {
+      const generated = await Effect.runPromise(agentSvc.generate({ description, model })).catch((error) => {
         spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
         if (isFullyNonInteractive) process.exit(1)
         throw new UI.CancelledError()

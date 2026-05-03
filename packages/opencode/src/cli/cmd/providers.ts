@@ -239,19 +239,16 @@ export const ProvidersListCommand = effectCmd({
   // Lists global credentials + provider env vars; no project instance needed.
   instance: false,
   handler: Effect.fn("Cli.providers.list")(function* (_args) {
+    const authSvc = yield* Auth.Service
+    const modelsDev = yield* ModelsDev.Service
     yield* Effect.promise(async () => {
       UI.empty()
       const authPath = path.join(Global.Path.data, "auth.json")
       const homedir = os.homedir()
       const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
       prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-      const results = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const auth = yield* Auth.Service
-          return Object.entries(yield* auth.all())
-        }),
-      )
-      const database = await getModels()
+      const results = Object.entries(await Effect.runPromise(authSvc.all()))
+      const database = await Effect.runPromise(modelsDev.get())
 
       for (const [providerID, result] of results) {
         const name = database[providerID]?.name || providerID
@@ -307,6 +304,8 @@ export const ProvidersLoginCommand = effectCmd({
         type: "string",
       }),
   handler: Effect.fn("Cli.providers.login")(function* (args) {
+    const cfgSvc = yield* Config.Service
+    const pluginSvc = yield* Plugin.Service
     yield* Effect.promise(async () => {
       UI.empty()
       prompts.intro("Add credential")
@@ -342,7 +341,7 @@ export const ProvidersLoginCommand = effectCmd({
       }
       await refreshModels().catch(() => {})
 
-      const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
+      const config = await Effect.runPromise(cfgSvc.get())
 
       const disabled = new Set(config.disabled_providers ?? [])
       const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
@@ -356,12 +355,7 @@ export const ProvidersLoginCommand = effectCmd({
         }
         return filtered
       })
-      const hooks = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const plugin = yield* Plugin.Service
-          return yield* plugin.list()
-        }),
-      )
+      const hooks = await Effect.runPromise(pluginSvc.list())
 
       const priority: Record<string, number> = {
         opencode: 0,
@@ -500,20 +494,17 @@ export const ProvidersLogoutCommand = effectCmd({
   // Removes a global auth credential; no project instance needed.
   instance: false,
   handler: Effect.fn("Cli.providers.logout")(function* (_args) {
+    const authSvc = yield* Auth.Service
+    const modelsDev = yield* ModelsDev.Service
     yield* Effect.promise(async () => {
       UI.empty()
-      const credentials: Array<[string, Auth.Info]> = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const auth = yield* Auth.Service
-          return Object.entries(yield* auth.all())
-        }),
-      )
+      const credentials: Array<[string, Auth.Info]> = Object.entries(await Effect.runPromise(authSvc.all()))
       prompts.intro("Remove credential")
       if (credentials.length === 0) {
         prompts.log.error("No credentials found")
         return
       }
-      const database = await getModels()
+      const database = await Effect.runPromise(modelsDev.get())
       const selected = await prompts.select({
         message: "Select provider",
         options: credentials.map(([key, value]) => ({
@@ -523,12 +514,7 @@ export const ProvidersLogoutCommand = effectCmd({
       })
       if (prompts.isCancel(selected)) throw new UI.CancelledError()
       const providerID = selected as string
-      await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const auth = yield* Auth.Service
-          yield* auth.remove(providerID)
-        }),
-      )
+      await Effect.runPromise(authSvc.remove(providerID))
       prompts.outro("Logout successful")
     })
   }),

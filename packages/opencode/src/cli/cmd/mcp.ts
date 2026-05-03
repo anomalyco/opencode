@@ -19,7 +19,6 @@ import { Global } from "@opencode-ai/core/global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
 import { Bus } from "../../bus"
-import { AppRuntime } from "../../effect/app-runtime"
 import { Effect } from "effect"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
@@ -606,11 +605,13 @@ export const McpDebugCommand = effectCmd({
       demandOption: true,
     }),
   handler: Effect.fn("Cli.mcp.debug")(function* (args) {
+    const config = yield* Config.Service.use((cfg) => cfg.get())
+    const mcp = yield* MCP.Service
+    const auth = yield* McpAuth.Service
     yield* Effect.promise(async () => {
       UI.empty()
       prompts.intro("MCP OAuth Debug")
 
-      const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
       const mcpServers = config.mcp ?? {}
       const serverName = args.name
 
@@ -636,15 +637,11 @@ export const McpDebugCommand = effectCmd({
       prompts.log.info(`Server: ${serverName}`)
       prompts.log.info(`URL: ${serverConfig.url}`)
 
-      // Check stored auth status
-      const { authStatus, entry } = await AppRuntime.runPromise(
-        Effect.gen(function* () {
-          const mcp = yield* MCP.Service
-          const auth = yield* McpAuth.Service
-          return {
-            authStatus: yield* mcp.getAuthStatus(serverName),
-            entry: yield* auth.get(serverName),
-          }
+      // Check stored auth status — services already in hand, run inline.
+      const { authStatus, entry } = await Effect.runPromise(
+        Effect.all({
+          authStatus: mcp.getAuthStatus(serverName),
+          entry: auth.get(serverName),
         }),
       )
       prompts.log.info(`Auth status: ${getAuthStatusIcon(authStatus)} ${getAuthStatusText(authStatus)}`)
@@ -704,11 +701,6 @@ export const McpDebugCommand = effectCmd({
 
           // Try to discover OAuth metadata
           const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
-          const auth = await AppRuntime.runPromise(
-            Effect.gen(function* () {
-              return yield* McpAuth.Service
-            }),
-          )
           const authProvider = new McpOAuthProvider(
             serverName,
             serverConfig.url,
