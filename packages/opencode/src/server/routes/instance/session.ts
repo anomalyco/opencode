@@ -985,6 +985,40 @@ export const SessionRoutes = lazy(() =>
         }),
     )
     .post(
+      "/:sessionID/btw",
+      describeRoute({
+        summary: "Side question",
+        description: "Ask a quick side question without adding to the conversation history.",
+        operationId: "session.btw",
+        responses: {
+          200: {
+            description: "Side question answer",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ text: z.string() })),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator("json", zodObject(SessionPrompt.BtwInput).omit({ sessionID: true })),
+      async (c) =>
+        jsonRequest("SessionRoutes.btw", c, function* () {
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json") as Omit<SessionPrompt.BtwInput, "sessionID">
+          const svc = yield* SessionPrompt.Service
+          const text = yield* svc.btw({ ...body, sessionID })
+          return { text }
+        }),
+    )
+    .post(
       "/:sessionID/shell",
       describeRoute({
         summary: "Run shell command",

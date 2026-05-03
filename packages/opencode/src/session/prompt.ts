@@ -84,6 +84,7 @@ export interface Interface {
   readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
   readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
+  readonly btw: (input: BtwInput) => Effect.Effect<string>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -1639,6 +1640,54 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     )
 
+    const btw = Effect.fn("SessionPrompt.btw")(function* (input: BtwInput) {
+      yield* elog.info("btw", { sessionID: input.sessionID, question: input.question })
+      const session = yield* sessions.get(input.sessionID)
+      const mdl =
+        input.model ??
+        ((yield* provider.getSmallModel(session.model?.providerID)) ??
+          (yield* provider.getModel(session.model!.providerID, session.model!.modelID)))
+      const ag = yield* agents.get("build")
+      if (!ag) {
+        const error = new NamedError.Unknown({ message: `Agent not found: "build".` })
+        yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+        throw error
+      }
+      const msgs = yield* MessageV2.filterCompactedEffect(input.sessionID)
+      const modelMsgs = yield* MessageV2.toModelMessagesEffect(msgs, mdl)
+      const text = yield* llm
+        .stream({
+          agent: ag,
+          user: {
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: input.sessionID,
+            time: { created: Date.now() },
+            model: { providerID: mdl.providerID, modelID: mdl.modelID },
+          },
+          system: [
+            "You are answering a quick side question. The user wants a brief answer based on the conversation context. Do not use any tools. Keep your response concise.",
+          ],
+          tools: {},
+          model: mdl,
+          sessionID: input.sessionID,
+          small: true,
+          messages: [
+            ...modelMsgs,
+            { role: "user", content: `Quick question (answer briefly, no tools): ${input.question}` },
+          ],
+        })
+        .pipe(
+          Stream.filter((e): e is Extract<LLM.Event, { type: "text-delta" }> => e.type === "text-delta"),
+          Stream.map((e) => e.text),
+          Stream.mkString,
+          Effect.orDie,
+        )
+      return text
+        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .trim()
+    })
+
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
       yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
       const cmd = yield* commands.get(input.command)
@@ -1762,6 +1811,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       loop,
       shell,
       command,
+      btw,
       resolvePromptParts,
     })
   }),
@@ -1869,6 +1919,13 @@ export const CommandInput = Schema.Struct({
   ),
 }).pipe(withStatics((s) => ({ zod: zod(s) })))
 export type CommandInput = Schema.Schema.Type<typeof CommandInput>
+
+export const BtwInput = Schema.Struct({
+  sessionID: SessionID,
+  question: Schema.String,
+  model: Schema.optional(Schema.String),
+}).pipe(withStatics((s) => ({ zod: zod(s) })))
+export type BtwInput = Schema.Schema.Type<typeof BtwInput>
 
 /** @internal Exported for testing */
 export function createStructuredOutputTool(input: {

@@ -59,6 +59,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  BTW: "btw",
 } as const
 
 export interface Interface {
@@ -98,6 +99,15 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.BTW] = {
+        name: Default.BTW,
+        description: "ask a quick side question without adding to the conversation",
+        source: "command",
+        get template() {
+          return "$ARGUMENTS"
+        },
+        hints: ["$ARGUMENTS"],
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
