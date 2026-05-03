@@ -43,6 +43,7 @@ import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
+import { showBtwDialog } from "../dialog-btw"
 import { useArgs } from "@tui/context/args"
 
 export type PromptProps = {
@@ -832,6 +833,20 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (inputText.startsWith("/btw ") || inputText === "/btw") {
+      const question = inputText.slice(5).trim()
+      if (question && sessionID) {
+        void showBtwDialog(
+          dialog,
+          question,
+          sdk.client.session
+            .btw({
+              sessionID,
+              question,
+            })
+            .then((res) => res.data?.text ?? "No response"),
+        )
+      }
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
