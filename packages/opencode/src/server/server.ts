@@ -5,6 +5,7 @@ import { lazy } from "@/util/lazy"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { WorkspaceID } from "@/control-plane/schema"
+import { OpenApi } from "effect/unstable/httpapi"
 import { MDNS } from "./mdns"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
 import { FenceMiddleware } from "./fence"
@@ -17,6 +18,7 @@ import { WorkspaceRouterMiddleware } from "./workspace"
 import { InstanceMiddleware } from "./routes/instance/middleware"
 import { WorkspaceRoutes } from "./routes/control/workspace"
 import { ExperimentalHttpApiServer } from "./routes/instance/httpapi/server"
+import { PublicApi } from "./routes/instance/httpapi/public"
 import * as ServerBackend from "./backend"
 import type { CorsOptions } from "./cors"
 
@@ -135,7 +137,30 @@ function createHono(opts: CorsOptions, selection: ServerBackend.Selection = Serv
   }
 }
 
+/**
+ * Generate the OpenAPI document used by the SDK build.
+ *
+ * Since the Effect HttpApi backend now covers every Hono route (plus the new
+ * `/api/session/*` v2 routes — see `httpapi-bridge.test.ts` for the parity
+ * audit), `Server.openapi()` derives the spec from `OpenApi.fromApi(PublicApi)`.
+ * `PublicApi` is `OpenCodeHttpApi` annotated with the `matchLegacyOpenApi`
+ * transform that injects instance query parameters, strips Effect's optional
+ * null arms, normalizes component names, and patches SSE response schemas so
+ * the generated SDK keeps the legacy Hono shape.
+ *
+ * The Hono-derived spec is still reachable via `openapiHono()` so reviewers
+ * can diff the two outputs while the Hono backend lingers; once the Hono
+ * backend is deleted that helper goes with it.
+ */
 export async function openapi() {
+  return OpenApi.fromApi(PublicApi)
+}
+
+/**
+ * Hono-derived OpenAPI spec, retained for parity diffing only. Delete once
+ * the Hono backend is removed.
+ */
+export async function openapiHono() {
   // Build a fresh app with all routes registered directly so
   // hono-openapi can see describeRoute metadata (`.route()` wraps
   // handlers when the sub-app has a custom errorHandler, which

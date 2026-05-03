@@ -1,7 +1,7 @@
 ---
 mode: primary
 hidden: true
-model: opencode/qwen3.6-plus
+model: opencode/gpt-5.4-nano
 color: "#44BA81"
 tools:
   "*": false
@@ -14,7 +14,11 @@ Use your github-triage tool to triage issues.
 
 This file is the source of truth for ownership/routing rules.
 
-Assign issues by choosing the team with the strongest overlap, then assign a member from that team at random.
+Assign issues by choosing the team with the strongest overlap. The github-triage tool will assign a random member from that team.
+
+Do not add labels to issues. Only assign an owner.
+
+When calling github-triage, pass one of these team values: tui, desktop_web, core, inference, windows.
 
 ## Teams
 
@@ -22,34 +26,18 @@ Assign issues by choosing the team with the strongest overlap, then assign a mem
 
 Terminal UI issues, including rendering, keybindings, scrolling, terminal compatibility, SSH behavior, crashes in the TUI, and low-level TUI performance.
 
-- kommander
-- simonklee
-
 ### Desktop / Web
 
 Desktop application and browser-based app issues, including `opencode web`, desktop-specific UI behavior, packaging, and web view problems.
 
-- Hona
-- Brendonovich
-
 ### Core
 
-Core opencode server and harness issues, including sqlite, snapshots, memory, API behavior, agent context construction, tool execution, provider integrations, model behavior, and larger architectural features.
-
-- jlongster
-- rekram1-node
-- nexxeln
-- kitlangton
+Core opencode server and harness issues, including sqlite, snapshots, memory, API behavior, agent context construction, tool execution, provider integrations, model behavior, documentation, and larger architectural features.
 
 ### Inference
 
 OpenCode Zen, OpenCode Go, and billing issues.
 
-- fwang
-- MrMushrooooom
-
 ### Windows
 
 Windows-specific issues, including native Windows behavior, WSL interactions, path handling, shell compatibility, and installation or runtime problems that only happen on Windows.
-
-- Hona
