@@ -236,6 +236,34 @@ Filters apply in replay and record mode. Combine them with `RECORD=true` when re
 
 Do not blanket re-record an entire test file when adding one cassette. `RECORD=true` rewrites every recorded case that runs, and provider streams contain volatile IDs, timestamps, fingerprints, and obfuscation fields. Prefer deleting the one cassette you intend to refresh, or run a focused test pattern that only registers the scenario you want to record. Keep stable existing cassettes unchanged unless their request shape or expected behavior changed.
 
+### Provider Confidence Strategy
+
+Recorded provider tests should prove the provider/protocol contract, not certify every model in a provider catalog. Prefer one high-surface-area "golden loop" cassette per serious provider/protocol over many tiny text-only cassettes. A golden loop should use local deterministic test tools and exercise as much real API behavior as the provider supports:
+
+- Stream assistant output and/or reasoning before or around tool use when the provider supports it.
+- Stream a client tool call with fragmented JSON arguments.
+- Execute the local test tool and send the tool result back to the model.
+- Continue the same conversation to a final assistant answer.
+- Assert event order, tool call id/name/input, tool result continuation, finish reason, usage extraction, and provider-specific metadata we intentionally preserve.
+
+Use additional cassettes for provider-unique behavior rather than broad model enumeration. Examples: Anthropic/Gemini/Bedrock thinking signatures, OpenAI Responses encrypted reasoning or hosted tools, Perplexity citations/search metadata, OpenRouter routing metadata, or stable provider-specific error payloads.
+
+Router-style providers such as OpenRouter need a small representative model matrix because routing can materially affect request support and stream shape. Keep the matrix purposeful:
+
+- One baseline route with a full golden tool loop.
+- One flagship/newest model route with a full golden tool loop when the model is strategically important, even if it is expensive to record; replay is free.
+- One non-baseline upstream route when it exercises meaningfully different behavior, such as non-OpenAI streaming shape, reasoning, citations, multimodal support, or routing/provider metadata.
+
+Do not add second or third model recordings just because the provider offers them. Add them when they exercise a different protocol behavior, parameter support surface, routing mode, or metadata/error shape.
+
+AI SDK-style mocked tests are still the right tool for exhaustive parser weirdness: malformed chunks, unusual finish reasons, partial usage, provider error variants, and chunk-boundary fuzzing. Recorded tests should anchor real-provider confidence; deterministic tests should cover the weird branches cheaply and repeatably.
+
+Reference examples:
+
+- `test/provider/openai-chat-tool-loop.recorded.test.ts` is the current recorded multi-interaction tool-loop scaffold.
+- `test/provider/openai-compatible-chat.recorded.test.ts` shows provider-matrix cassettes for generic OpenAI-compatible providers, including OpenRouter text/tool recordings.
+- When a first-class golden loop reaches the full standard above, add its relative path here and prefer copying that structure for new providers.
+
 ## TODO
 
 ### Completed Foundation
