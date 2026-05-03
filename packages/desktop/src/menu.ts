@@ -20,13 +20,19 @@ export async function createMenu(trigger: (id: string) => void) {
           await PredefinedMenuItem.new({
             item: { About: null },
           }),
-          // FORK: 走上游 enabled flag 风格 — UPDATER_ENABLED=false 时菜单条目灰显;
-          // 留着 UI 给未来 fork 自家 updater 上线时翻 true 自动亮(updater-disable-adapter 2026-05-03)
-          await MenuItem.new({
-            enabled: UPDATER_ENABLED,
-            action: () => runUpdater({ alertOnFail: true }),
-            text: t("desktop.menu.checkForUpdates"),
-          }),
+          // FORK: UPDATER_ENABLED=false 时菜单条目不渲染(连 disabled 灰也不出现)
+          // 跟 settings/index.tsx 走法一致 — 全 hidden 而非 sentinel + 灰显
+          // (updater-disable-adapter rollback 2026-05-03)
+          // 未来 fork 自家 updater 上线时:翻 UPDATER_ENABLED=true,spread 自动放回菜单
+          ...(UPDATER_ENABLED
+            ? [
+                await MenuItem.new({
+                  enabled: UPDATER_ENABLED,
+                  action: () => runUpdater({ alertOnFail: true }),
+                  text: t("desktop.menu.checkForUpdates"),
+                }),
+              ]
+            : []),
           await MenuItem.new({
             action: () => installCli(),
             text: t("desktop.menu.installCli"),

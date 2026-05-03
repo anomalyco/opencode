@@ -125,11 +125,13 @@ git commit
 
 | 已知典型 | fork 路线 | 上游路线 | 默认建议 |
 |---|---|---|---|
-| 禁升级(`UPDATER_ENABLED` flag)| 方法**不暴露**(`...(UPDATER_ENABLED ? { checkUpdate } : {})`),callers 用 `if (!platform.checkUpdate) return` 短路 | 方法**始终暴露**,内部 `if (!UPDATER_ENABLED) return early`,update 改名 `updateAndRestart` | **接上游**(callers 改用 `if (!UPDATER_ENABLED)` 哨兵,适配 `updateAndRestart` 名字),长期维护成本低 |
+| 禁升级(`UPDATER_ENABLED` flag)| 方法**不暴露**(`...(UPDATER_ENABLED ? { checkUpdate } : {})`),callers 用 `if (!platform.checkUpdate) return` 短路 + UI 用 `disabled={!platform.checkUpdate}` 灰显 | 方法**始终暴露**,内部 `if (!UPDATER_ENABLED) return early`,update 改名 `updateAndRestart` | **保留 fork**(2026-05-03 试过接上游 sentinel pattern 撞 UX bug,见下方 ⚠️;rename 是 one-time 留给 merge 自然 take) |
 | 品牌 logo(`Mark` 组件)| `import { Mark } from "@opencode-ai/branding/logo"`(fork-only branding 包) | `import { Mark } from "@opencode-ai/ui/logo"` | **保留 fork**(DeskFox 品牌,不能跟上游) |
 | claude-code plugin prompt loop | fork 改了 step-finish part 兜底(R4 override case 1) | 上游可能后续也动这块 | **看上游是否真解决了 root cause**,是则可以接上游退掉我们的 override;否则保留 |
 
 ⚠️ 不要"两边都保留" — 同一功能两套实现 = 死代码 + 行为不一致 + 后续 merge 还冲突。
+
+⚠️ **教训(2026-05-03 updater-disable-adapter 翻车)**:不要把"backend 短路"和"frontend disable signal"当成两个独立轴去解耦。fork 原 `禁自动升级` 设计用 `platform.checkUpdate=undefined` 同时表达 ① backend 不工作 ② frontend 控件应 disable —— 两个意思耦合在 method 存在性上。试图换 sentinel pattern(method 永远存在 + 内部短路)= 切断 frontend signal,导致 controls 全部变可点 + "立即检查" 按钮发"已是最新版本" 假 toast。**判断准则**:任何"adapter prep" 改动前,先 grep 是否有 `disabled={!platform.<method>}` / `if (!platform.<method>)` 之类依赖 method 存在性的 callsite —— 有的话,改 method 暴露策略就会破坏 UI 信号。原结构如果**同时承担多重信号**,不要轻率"对齐上游 pattern"。
 
 #### 类型 5:同 schema 双改(语义,最棘手)
 
