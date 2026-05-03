@@ -5,7 +5,7 @@ import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { BoxRenderable, SyntaxStyle } from "@opentui/core"
+import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import path from "path"
@@ -91,7 +91,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
                     />
                   </Match>
                   <Match when={message.type === "synthetic"}>
-                    <SyntheticMessage message={message as SessionMessageSynthetic} index={index()} />
+                    <></>
                   </Match>
                   <Match when={message.type === "shell"}>
                     <ShellMessage message={message as SessionMessageShell} />
@@ -151,63 +151,36 @@ function UserMessage(props: { message: SessionMessageUser; index: number }) {
     <box
       id={props.message.id}
       border={["left"]}
-      borderColor={theme.primary}
+      borderColor={theme.secondary}
       customBorderChars={SplitBorder.customBorderChars}
       marginTop={props.index === 0 ? 0 : 1}
       flexShrink={0}
-    >
-      <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
-        <Show
-          when={props.message.text.trim()}
-          fallback={
-            <MissingData label="User message text" detail={`Message ${props.message.id} has no text field content.`} />
-          }
-        >
-          <text fg={theme.text}>{props.message.text}</text>
-        </Show>
-        <Show when={attachments().length}>
-          <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
-            <For each={props.message.files ?? []}>
-              {(file) => (
-                <text fg={theme.text}>
-                  <span style={{ bg: theme.secondary, fg: theme.background }}> {file.mime} </span>
-                  <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.name ?? file.uri} </span>
-                </text>
-              )}
-            </For>
-            <For each={props.message.agents ?? []}>
-              {(agent) => (
-                <text fg={theme.text}>
-                  <span style={{ bg: theme.accent, fg: theme.background }}> agent </span>
-                  <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {agent.name} </span>
-                </text>
-              )}
-            </For>
-          </box>
-        </Show>
-        <text fg={theme.textMuted}>{Locale.todayTimeOrDateTime(props.message.time.created)}</text>
-      </box>
-    </box>
-  )
-}
-
-function SyntheticMessage(props: { message: SessionMessageSynthetic; index: number }) {
-  const { theme } = useTheme()
-  return (
-    <box
-      id={props.message.id}
-      border={["left"]}
-      borderColor={theme.backgroundElement}
-      customBorderChars={SplitBorder.customBorderChars}
-      marginTop={props.index === 0 ? 0 : 1}
-      paddingLeft={2}
       paddingTop={1}
       paddingBottom={1}
+      paddingLeft={2}
       backgroundColor={theme.backgroundPanel}
-      flexShrink={0}
     >
-      <text fg={theme.textMuted}>Synthetic</text>
       <text fg={theme.text}>{props.message.text}</text>
+      <Show when={attachments().length}>
+        <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
+          <For each={props.message.files ?? []}>
+            {(file) => (
+              <text fg={theme.text}>
+                <span style={{ bg: theme.secondary, fg: theme.background }}> {file.mime} </span>
+                <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.name ?? file.uri} </span>
+              </text>
+            )}
+          </For>
+          <For each={props.message.agents ?? []}>
+            {(agent) => (
+              <text fg={theme.text}>
+                <span style={{ bg: theme.accent, fg: theme.background }}> agent </span>
+                <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {agent.name} </span>
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
     </box>
   )
 }
@@ -367,7 +340,7 @@ function AssistantText(props: { part: SessionMessageAssistantText; syntax: Synta
   const { theme } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box paddingLeft={3} marginTop={1} flexShrink={0} id="text">
         <code
           filetype="markdown"
           drawUnstyledText={false}
@@ -527,59 +500,93 @@ function InlineTool(props: {
   part: SessionMessageAssistantTool
 }) {
   const { theme } = useTheme()
+  const renderer = useRenderer()
   const [margin, setMargin] = createSignal(0)
+  const [hover, setHover] = createSignal(false)
+  const [showError, setShowError] = createSignal(false)
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error.message : undefined))
+  const complete = createMemo(() => !!props.complete)
   const denied = createMemo(() => {
     const message = error()
     if (!message) return false
     return (
       message.includes("QuestionRejectedError") ||
       message.includes("rejected permission") ||
+      message.includes("specified a rule") ||
       message.includes("user dismissed")
     )
   })
+  const fg = createMemo(() => {
+    if (error()) return theme.error
+    if (complete()) return theme.textMuted
+    return theme.text
+  })
+  const attributes = createMemo(() => (denied() ? TextAttributes.STRIKETHROUGH : undefined))
   return (
     <box
       marginTop={margin()}
       paddingLeft={3}
       flexShrink={0}
+      flexDirection="row"
+      gap={1}
+      backgroundColor={hover() && error() ? theme.backgroundMenu : undefined}
+      onMouseOver={() => error() && setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={() => {
+        if (!error()) return
+        if (renderer.getSelection()?.getSelectedText()) return
+        setShowError((prev) => !prev)
+      }}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
         if (!parent) return
-        if (el.height > 1) {
-          setMargin(1)
-          return
-        }
         const previous = parent.getChildren()[parent.getChildren().indexOf(el) - 1]
         if (!previous) {
           setMargin(0)
           return
         }
-        if (previous.height > 1 || previous.id.startsWith("text-")) setMargin(1)
+        if (previous.id.startsWith("text")) setMargin(1)
       }}
     >
-      <box flexDirection="row">
-        <box width={3} flexShrink={0}>
-          <Show
-            when={props.spinner}
-            fallback={<text fg={props.complete ? theme.textMuted : theme.text}>{props.complete ? props.icon : "~"}</text>}
-          >
+      <box flexShrink={0}>
+        <Switch>
+          <Match when={props.spinner}>
             <Spinner color={theme.text} />
-          </Show>
-        </box>
-        <text fg={props.complete ? theme.textMuted : theme.text}>
-          <Show fallback={props.pending} when={props.complete || props.spinner}>
-            {props.children}
-          </Show>
-        </text>
+          </Match>
+          <Match when={complete()}>
+            <text fg={fg()} attributes={attributes()}>
+              {props.icon}
+            </text>
+          </Match>
+          <Match when={true}>
+            <text fg={fg()} attributes={attributes()}>
+              ~
+            </text>
+          </Match>
+        </Switch>
       </box>
-      <Show when={error() && !denied()}>
-        <box flexDirection="row">
-          <box width={3} flexShrink={0} />
-          <text fg={theme.error}>{error()}</text>
+      <box flexGrow={1}>
+        <box>
+          <Switch>
+            <Match when={complete()}>
+              <text fg={fg()} attributes={attributes()}>
+                {props.children}
+              </text>
+            </Match>
+            <Match when={true}>
+              <text fg={fg()} attributes={attributes()}>
+                {props.pending}
+              </text>
+            </Match>
+          </Switch>
         </box>
-      </Show>
+        <Show when={showError() && error()}>
+          <box>
+            <text fg={theme.error}>{error()}</text>
+          </box>
+        </Show>
+      </box>
     </box>
   )
 }
