@@ -21,6 +21,12 @@ name: release-mirror-gitee-deskfox
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to mirror (e.g. ship-prod-2026.5.3.1). 用于补镜像 / 失败 re-run。'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -37,6 +43,8 @@ jobs:
       GITEE_API: https://gitee.com/api/v5
       TARGET_BRANCH: dev
       MAX_ASSET_SIZE: 104857600  # 100 MB,Gitee 单文件上限
+      # tag 来源:release 事件用 release.tag_name;dispatch 用 inputs.tag
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
     steps:
       - name: Validate GITEE_TOKEN secret
@@ -58,10 +66,33 @@ jobs:
           fi
           echo "[ok] GITEE_TOKEN valid"
 
+      - name: Resolve release metadata
+        id: meta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAG" ]; then
+            echo "::error::No tag resolved (release event missing tag_name AND no dispatch input)"
+            exit 1
+          fi
+          echo "[tag] $TAG"
+          # 从 GitHub API 拉 release 元数据(兼容 release / workflow_dispatch 两种触发)
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,body,isPrerelease > /tmp/release.json
+          name=$(jq -r '.name // .tagName' /tmp/release.json)
+          prerelease=$(jq -r '.isPrerelease' /tmp/release.json)
+          # body 可能含特殊字符,直接落 file 给后续 step 用
+          jq -r '.body // ""' /tmp/release.json > /tmp/release-body.md
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "[meta] name=$name prerelease=$prerelease body_bytes=$(wc -c < /tmp/release-body.md)"
+
       - name: Download GitHub release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
@@ -80,10 +111,9 @@ jobs:
         id: gitee_release
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          TAG: ${{ github.event.release.tag_name }}
-          NAME: ${{ github.event.release.name }}
-          BODY: ${{ github.event.release.body }}
-          PRERELEASE: ${{ github.event.release.prerelease }}
+          TAG: ${{ env.RELEASE_TAG }}
+          NAME: ${{ steps.meta.outputs.name }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
         run: |
           set -euo pipefail
 
@@ -96,19 +126,19 @@ jobs:
             echo "[found existing] Gitee release id=$release_id for tag=$TAG"
           else
             echo "[create] Gitee release $TAG (status was $existing_status)"
-            # 用 jq 安全构造 JSON(避免 body 里特殊字符破坏 JSON)
+            # body 从前一 step 落到 /tmp/release-body.md,jq --rawfile 读进来安全编码
             payload=$(jq -nc \
               --arg token "$GITEE_TOKEN" \
               --arg tag "$TAG" \
               --arg name "${NAME:-$TAG}" \
-              --arg body "${BODY:-Mirrored from GitHub Release.}" \
+              --rawfile body /tmp/release-body.md \
               --arg branch "$TARGET_BRANCH" \
               --argjson prerelease "${PRERELEASE:-false}" \
               '{
                 access_token: $token,
                 tag_name: $tag,
                 name: $name,
-                body: $body,
+                body: (if ($body | length) > 0 then $body else "Mirrored from GitHub Release." end),
                 prerelease: $prerelease,
                 target_commitish: $branch
               }')
