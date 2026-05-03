@@ -2883,6 +2883,36 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
     })
+
+    test("dotted gpt-5.x ids include 'minimal' (regression: matcher used to miss gpt-5.4)", () => {
+      const model = createMockModel({
+        id: "gpt-5.4",
+        providerID: "openai",
+        api: {
+          id: "gpt-5.4",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2026-03-05",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-50 (lookalike) does not get gpt-5 family treatment", () => {
+      const model = createMockModel({
+        id: "gpt-50",
+        providerID: "openai",
+        api: {
+          id: "gpt-50",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        release_date: "2024-01-01",
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
   })
 
   describe("@ai-sdk/anthropic", () => {

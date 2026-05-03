@@ -427,6 +427,36 @@ export function topK(model: Provider.Model) {
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
+// OpenAI rolled out the `none` reasoning_effort tier on this date (Responses API).
+// Models released before it 400 on `reasoning_effort: "none"`, so we only expose
+// it as a variant for models new enough to accept it.
+const OPENAI_NONE_EFFORT_RELEASE_DATE = "2025-11-13"
+
+// OpenAI rolled out the `xhigh` reasoning_effort tier on this date. Same reasoning.
+const OPENAI_XHIGH_EFFORT_RELEASE_DATE = "2025-12-04"
+
+// Matches members of the gpt-5 family across the id formats we encounter:
+//   "gpt-5", "gpt-5-nano", "gpt-5.4", "openai/gpt-5.4-codex".
+// Anchored to start-of-string or "/" so it doesn't false-match "gpt-50" or "gpt-5o".
+const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
+
+// Computes the reasoning_effort tiers an OpenAI (or OpenAI-compatible upstream
+// routed through it, e.g. cf-ai-gateway) model exposes. Returns null for models
+// with no tunable effort knob (gpt-5-pro). Effort order: weakest → strongest.
+function openaiReasoningEfforts(apiId: string, releaseDate: string): string[] | null {
+  const id = apiId.toLowerCase()
+  if (id === "gpt-5-pro" || id === "openai/gpt-5-pro") return null
+  if (id.includes("codex")) {
+    if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+    return [...WIDELY_SUPPORTED_EFFORTS]
+  }
+  const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+  if (GPT5_FAMILY_RE.test(id)) efforts.unshift("minimal")
+  if (releaseDate >= OPENAI_NONE_EFFORT_RELEASE_DATE) efforts.unshift("none")
+  if (releaseDate >= OPENAI_XHIGH_EFFORT_RELEASE_DATE) efforts.push("xhigh")
+  return efforts
+}
+
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
   if (["opus-4-7", "opus-4.7"].some((v) => apiId.includes(v))) {
     return ["low", "medium", "high", "xhigh", "max"]
@@ -595,28 +625,12 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           },
         ]),
       )
-    case "@ai-sdk/openai":
+    case "@ai-sdk/openai": {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
-      if (id === "gpt-5-pro") return {}
-      const openaiEfforts = iife(() => {
-        if (id.includes("codex")) {
-          if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-          return WIDELY_SUPPORTED_EFFORTS
-        }
-        const arr = [...WIDELY_SUPPORTED_EFFORTS]
-        if (id.includes("gpt-5-") || id === "gpt-5") {
-          arr.unshift("minimal")
-        }
-        if (model.release_date >= "2025-11-13") {
-          arr.unshift("none")
-        }
-        if (model.release_date >= "2025-12-04") {
-          arr.push("xhigh")
-        }
-        return arr
-      })
+      const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
+      if (!efforts) return {}
       return Object.fromEntries(
-        openaiEfforts.map((effort) => [
+        efforts.map((effort) => [
           effort,
           {
             reasoningEffort: effort,
@@ -625,6 +639,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           },
         ]),
       )
+    }
 
     case "@ai-sdk/anthropic":
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
