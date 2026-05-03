@@ -92,10 +92,12 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
       const { store, ctx } = await AppRuntime.runPromise(
         InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
       )
-      await Instance.restore(ctx, () =>
-        AppRuntime.runPromise(
-          opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx), Effect.ensuring(store.dispose(ctx))),
-        ),
-      )
+      try {
+        await Instance.restore(ctx, () =>
+          AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx))),
+        )
+      } finally {
+        await AppRuntime.runPromise(store.dispose(ctx))
+      }
     },
   })
