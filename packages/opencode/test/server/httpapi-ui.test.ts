@@ -201,7 +201,7 @@ describe("HttpApi UI fallback", () => {
     const response = await uiApp({ password: "secret", username: "opencode" }).request("/")
 
     expect(response.status).toBe(401)
-    expect(response.headers.get("www-authenticate")).toBe('Basic realm="opencode"')
+    expect(response.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
   })
 
   test("accepts auth token for the web UI", async () => {
