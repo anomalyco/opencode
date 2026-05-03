@@ -16,7 +16,7 @@ import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import * as Log from "@opencode-ai/core/util/log"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
-import { Instance } from "@/project/instance"
+import { WithInstance } from "@/project/with-instance"
 import {
   readPackageThemes,
   readPluginId,
@@ -790,7 +790,7 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
     state.pending.delete(spec)
     return true
   }
-  const ready = await Instance.provide({
+  const ready = await WithInstance.provide({
     directory: state.directory,
     fn: () => resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies()),
   }).catch((error) => {
@@ -986,7 +986,7 @@ async function load(input: { api: Api; config: TuiConfig.Info }) {
   }
   runtime = next
   try {
-    await Instance.provide({
+    await WithInstance.provide({
       directory: cwd,
       fn: async () => {
         const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])

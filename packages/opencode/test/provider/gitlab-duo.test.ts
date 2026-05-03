@@ -9,6 +9,7 @@ export {}
 // import { ProviderID, ModelID } from "../../src/provider/schema"
 // import { tmpdir } from "../fixture/fixture"
 // import { Instance } from "../../src/project/instance"
+import { WithInstance } from "../../src/project/with-instance"
 // import { Provider } from "@/provider/provider"
 // import { Env } from "../../src/env"
 // import { Global } from "@opencode-ai/core/global"
@@ -25,7 +26,7 @@ export {}
 //       )
 //     },
 //   })
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_TOKEN", "test-gitlab-token")
@@ -56,7 +57,7 @@ export {}
 //       )
 //     },
 //   })
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_TOKEN", "test-token")
@@ -95,7 +96,7 @@ export {}
 //     }),
 //   )
 
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_TOKEN", "")
@@ -130,7 +131,7 @@ export {}
 //     }),
 //   )
 
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_TOKEN", "")
@@ -162,7 +163,7 @@ export {}
 //       )
 //     },
 //   })
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_INSTANCE_URL", "https://gitlab.company.internal")
@@ -193,7 +194,7 @@ export {}
 //       )
 //     },
 //   })
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_TOKEN", "env-token")
@@ -216,7 +217,7 @@ export {}
 //       )
 //     },
 //   })
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_TOKEN", "test-token")
@@ -252,7 +253,7 @@ export {}
 //       )
 //     },
 //   })
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_TOKEN", "test-token")
@@ -277,7 +278,7 @@ export {}
 //       )
 //     },
 //   })
-//   await Instance.provide({
+//   await WithInstance.provide({
 //     directory: tmp.path,
 //     init: async () => {
 //       Env.set("GITLAB_TOKEN", "test-token")
@@ -301,7 +302,7 @@ export {}
 //         await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
 //       },
 //     })
-//     await Instance.provide({
+//     await WithInstance.provide({
 //       directory: tmp.path,
 //       init: async () => {
 //         Env.set("GITLAB_TOKEN", "test-token")
@@ -349,7 +350,7 @@ export {}
 //         await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
 //       },
 //     })
-//     await Instance.provide({
+//     await WithInstance.provide({
 //       directory: tmp.path,
 //       init: async () => {
 //         Env.set("GITLAB_TOKEN", "test-token")
@@ -372,7 +373,7 @@ export {}
 //         await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
 //       },
 //     })
-//     await Instance.provide({
+//     await WithInstance.provide({
 //       directory: tmp.path,
 //       init: async () => {
 //         Env.set("GITLAB_TOKEN", "test-token")
@@ -396,7 +397,7 @@ export {}
 //         await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
 //       },
 //     })
-//     await Instance.provide({
+//     await WithInstance.provide({
 //       directory: tmp.path,
 //       init: async () => {
 //         Env.set("GITLAB_TOKEN", "test-token")

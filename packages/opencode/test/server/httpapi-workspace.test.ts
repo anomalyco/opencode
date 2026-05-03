@@ -12,7 +12,7 @@ import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Project } from "../../src/project/project"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
@@ -27,9 +27,9 @@ const it = testEffect(
   Layer.mergeAll(NodeServices.layer, Project.defaultLayer, Session.defaultLayer, Workspace.defaultLayer),
 )
 
-function request(path: string, directory: string, init: RequestInit = {}) {
+function request(path: string, directory: string, init: RequestInit = {}, httpApi = true) {
   return Effect.promise(() => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = httpApi
     const headers = new Headers(init.headers)
     headers.set("x-opencode-directory", directory)
     return Promise.resolve(Server.Default().app.request(path, { ...init, headers }))
@@ -128,7 +128,7 @@ afterEach(async () => {
   mock.restore()
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = originalHttpApi
-  await Instance.disposeAll()
+  await disposeAllInstances()
   await resetDatabase()
 })
 
@@ -192,6 +192,73 @@ describe("workspace HttpApi", () => {
       const listed = yield* request(WorkspacePaths.list, dir)
       expect(listed.status).toBe(200)
       expect(yield* Effect.promise(() => listed.json())).toEqual([])
+    }),
+  )
+
+  it.live("creates workspace with the TUI payload shape", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      registerAdapter(project.project.id, "local-test", localAdapter(path.join(dir, ".workspace")))
+
+      const created = yield* request(WorkspacePaths.list, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "local-test", branch: null }),
+      })
+
+      expect(created.status).toBe(200)
+      expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
+        type: "local-test",
+        name: "local-test",
+        extra: null,
+      })
+    }),
+  )
+
+  it.live("creates a real git worktree workspace via the builtin adapter", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+
+      const created = yield* request(WorkspacePaths.list, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "worktree", branch: null }),
+      })
+
+      const body = yield* Effect.promise(() => created.text())
+      expect({ status: created.status, body }).toMatchObject({ status: 200 })
+      const workspace = JSON.parse(body) as Workspace.Info
+      expect(workspace).toMatchObject({ type: "worktree" })
+    }),
+  )
+
+  it.live("documents legacy Hono accepting the TUI payload shape", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      registerAdapter(project.project.id, "local-test", localAdapter(path.join(dir, ".workspace")))
+
+      const created = yield* request(
+        WorkspacePaths.list,
+        dir,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "local-test", branch: null }),
+        },
+        false,
+      )
+
+      expect(created.status).toBe(200)
+      expect((yield* Effect.promise(() => created.json())) as Workspace.Info).toMatchObject({
+        type: "local-test",
+        name: "local-test",
+        extra: null,
+      })
     }),
   )
 
