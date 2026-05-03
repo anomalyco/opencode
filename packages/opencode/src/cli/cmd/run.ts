@@ -667,8 +667,6 @@ export const RunCommand = effectCmd({
       return await execute(sdk)
     }
 
-    // Default path: effectCmd already loaded the instance via InstanceStore.provide
-    // (see `instance: (args) => !args.attach`), so no bootstrap() wrap needed here.
     const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init)
       return Server.Default().app.fetch(request)
