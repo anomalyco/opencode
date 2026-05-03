@@ -184,7 +184,12 @@ export const Content = Schema.Struct({...}).pipe(withStatics((s) => ({ zod: zod(
 
 ## 5. Merge 后 — checklist
 
+> **同样适用于 `git merge --abort` 之后**:任何动过 catalog 依赖版本的 sync 操作,abort 回 dev 时**必跑** 5.0,否则 node_modules 跟 lock 不对齐导致 typecheck 假错(详见 §7 第 3 行)。
+
 ```bash
+# 5.0 reconcile node_modules 跟 lock(merge 完成 OR abort 后都要)
+bun install
+
 # 5.1 typecheck 全量过
 bun run typecheck
 
@@ -235,6 +240,7 @@ git reset --hard pre-rebase-<日期>
 |---|---|---|
 | rebase 中途退出导致工作树半残 | rebase 冲突没解完 / `git stash` 忘 pop | `git rebase --abort` 回到 rebase 前;若已 commit,reset 到 pre-rebase-tag |
 | merge 后 typecheck 大量错 | 上游重构了 API,fork 引用过时 | 不要硬删 fork 代码;按上游新 API 适配,保留 fork 行为(可能要更新 FORK marker 的 reason) |
+| **`merge --abort` 后 typecheck 突然几百错** | **sync 分支 install 升过依赖版本(catalog),abort 后 git checkout 回 lock,但 node_modules symlinks 物理状态没 rollback,同一个 codebase 看到两份不同版本的 effect/library** | **`bun install` 一次,bun 检测到 symlinks 跟 lock 不一致会重新对齐;再跑 typecheck 验证 0 错。2026-05-03 dev-typecheck-fix 验证过(555 错 → 0 错,无代码改动)** |
 | installer build 失败 | 上游改了 tauri 配置 / 依赖,品牌注入路径漂了 | 看 packages/branding/scripts/build-deskfox.ps1 + tauri-overrides;必要时同步更新 override |
 | 桌面快捷方式 icon 还是老的 | Windows iconcache 卡 | 见 features/installer-打包/3-changelog.md 弯路 5(也存为 memory) |
 | dev 分支 push 拒收(non-fast-forward)| 双端 origin 一端有 force push 历史不一致 | `git push origin dev --force-with-lease`(谨慎);先 ls-remote 对比两端 HEAD |
@@ -257,5 +263,5 @@ git reset --hard pre-rebase-<日期>
 2. 改上游文件**必有** FORK marker(冲突时一眼能辨)
 3. Merge 前**必打** `pre-rebase-<日期>` tag(出问题能回)
 4. Merge 操作时**先 `--no-commit`**,按 §4.4 五类对号入座解冲突,§4.6 顺序推进
-5. Merge 后**必跑** typecheck(清缓存,避免增量假通过)+ release build + installer 重打验证
+5. Merge 后(**或 abort 后**)**必跑** `bun install` reconcile node_modules → typecheck(清缓存,避免增量假通过)→ release build → installer 重打验证
 6. 漂移 / 侵入 / override 三指标定期算,异常先治后吃
