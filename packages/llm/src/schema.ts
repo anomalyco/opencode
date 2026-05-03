@@ -169,10 +169,19 @@ export const ReasoningPart = TypeStruct("reasoning", "LLM.Content.Reasoning", {
 })
 export type ReasoningPart = Schema.Schema.Type<typeof ReasoningPart>
 
-export const ContentPart = Schema.Union([TextPart, MediaPart, ToolCallPart, ToolResultPart, ReasoningPart]).pipe(
+const contentPartTagged = Schema.Union([TextPart, MediaPart, ToolCallPart, ToolResultPart, ReasoningPart]).pipe(
   Schema.toTaggedUnion("type"),
 )
-export type ContentPart = Schema.Schema.Type<typeof ContentPart>
+export const ContentPart = Object.assign(contentPartTagged, {
+  is: {
+    text: contentPartTagged.guards.text,
+    media: contentPartTagged.guards.media,
+    toolCall: contentPartTagged.guards["tool-call"],
+    toolResult: contentPartTagged.guards["tool-result"],
+    reasoning: contentPartTagged.guards.reasoning,
+  },
+})
+export type ContentPart = Schema.Schema.Type<typeof contentPartTagged>
 
 export class Message extends Schema.Class<Message>("LLM.Message")({
   id: Schema.optional(Schema.String),
@@ -214,12 +223,19 @@ export class CacheIntent extends Schema.Class<CacheIntent>("LLM.CacheIntent")({
   key: Schema.optional(Schema.String),
 }) {}
 
-export const ResponseFormat = Schema.Union([
+const responseFormatTagged = Schema.Union([
   TypeStruct("text", "LLM.ResponseFormat.Text", {}),
   TypeStruct("json", "LLM.ResponseFormat.Json", { schema: JsonSchema }),
   TypeStruct("tool", "LLM.ResponseFormat.Tool", { tool: ToolDefinition }),
 ]).pipe(Schema.toTaggedUnion("type"))
-export type ResponseFormat = Schema.Schema.Type<typeof ResponseFormat>
+export const ResponseFormat = Object.assign(responseFormatTagged, {
+  is: {
+    text: responseFormatTagged.guards.text,
+    json: responseFormatTagged.guards.json,
+    tool: responseFormatTagged.guards.tool,
+  },
+})
+export type ResponseFormat = Schema.Schema.Type<typeof responseFormatTagged>
 
 export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   id: Schema.optional(Schema.String),
@@ -457,9 +473,27 @@ export class ToolFailure extends Schema.TaggedErrorClass<ToolFailure>()("LLM.Too
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
-export type LLMError =
-  | InvalidRequestError
-  | NoAdapterError
-  | ProviderChunkError
-  | ProviderRequestError
-  | TransportError
+const llmErrorTagged = Schema.Union([
+  InvalidRequestError,
+  NoAdapterError,
+  ProviderChunkError,
+  ProviderRequestError,
+  TransportError,
+]).pipe(Schema.toTaggedUnion("_tag"))
+
+/**
+ * Tagged-union helpers for every error that can escape the LLM client runtime.
+ * Individual classes still support `Effect.catchTag("LLM.ProviderChunkError", ...)`;
+ * this union adds `LLMError.is.*`, `LLMError.guards`, `LLMError.isAnyOf`, and
+ * `LLMError.match` for plain values, arrays, and UI/rendering code.
+ */
+export const LLMError = Object.assign(llmErrorTagged, {
+  is: {
+    invalidRequest: llmErrorTagged.guards["LLM.InvalidRequestError"],
+    noAdapter: llmErrorTagged.guards["LLM.NoAdapterError"],
+    providerChunk: llmErrorTagged.guards["LLM.ProviderChunkError"],
+    providerRequest: llmErrorTagged.guards["LLM.ProviderRequestError"],
+    transport: llmErrorTagged.guards["LLM.TransportError"],
+  },
+})
+export type LLMError = Schema.Schema.Type<typeof llmErrorTagged>
