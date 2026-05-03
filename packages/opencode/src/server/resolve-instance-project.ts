@@ -1,4 +1,5 @@
 import type { Context } from "hono"
+import { HTTPException } from "hono/http-exception"
 import { Project } from "@/project/project"
 import { ProjectID } from "@/project/schema"
 import { getRequestUser } from "./routes/auth"
@@ -8,26 +9,66 @@ import { listProjectsSimple } from "@/storage/project-pg"
 type R = Project.Info | Response
 
 function isPostgres() {
-  return process.env.DATABASE_URL?.trim().startsWith("postgresql://")
+  const dsn = process.env.DATABASE_URL?.trim()
+  if (!dsn) return false
+  return dsn.startsWith("postgresql://") || dsn.startsWith("postgres://")
 }
 
 /**
  * Resolves `project` row only — no filesystem cwd / “repo root”.
  *
- * - `?project=<uuid>` or `x-opencode-project: <uuid>`
+ * - `?project=<id>` or `x-opencode-project: <id>`
+ * - Else `?directory=<id>` (SDK / web UI: route `/:dir` is the project id and is sent as `directory`)
  * - Else first project for the tenant (Postgres).
+ *
+ * Invalid request URL: `new URL` throws. Empty `?project=` / `?directory=`, unknown id, or no tenant project: HTTP 400 via HTTPException (never silently pick the wrong project).
  */
 export async function resolveInstanceProject(c: Context): Promise<R> {
   if (!isPostgres()) {
-    return c.json({ error: "DATABASE_URL must be postgresql:// for API project resolution" }, 503)
+    return c.json({ error: "DATABASE_URL must be postgresql:// or postgres:// for API project resolution" }, 503)
   }
 
-  const id = c.req.query("project")?.trim() || c.req.header("x-opencode-project")?.trim()
+  const pick = (value: string | undefined) => {
+    const trimmed = value?.trim()
+    if (!trimmed) return
+    return trimmed
+  }
+
+  const url = new URL(c.req.url)
+
+  const read = (key: string) => {
+    const raw = c.req.query(key)
+    const head = Array.isArray(raw) ? raw[0] : raw
+    const one = pick(head)
+    if (one) return one
+    const hit = url.searchParams.get(key)
+    if (!hit) return
+    return pick(hit)
+  }
+
+  const p = read("project")
+  if (url.searchParams.has("project") && !p) {
+    throw new HTTPException(400, { message: "project query must be a non-empty id" })
+  }
+
+  const d = read("directory")
+  if (url.searchParams.has("directory") && !d) {
+    throw new HTTPException(400, { message: "directory query must be a non-empty project id" })
+  }
+
+  const key =
+    d && d.startsWith("/projects/")
+      ? d.slice("/projects/".length)
+      : d
+
+  const id = p || pick(c.req.header("x-opencode-project")) || key
 
   if (id) {
     const info = await Project.get(ProjectID.make(id))
     if (!info) {
-      return c.json({ error: "Unknown project", projectID: id }, 400)
+      throw new HTTPException(400, {
+        res: Response.json({ error: "Unknown project", projectID: id }),
+      })
     }
     return info
   }
@@ -44,11 +85,10 @@ export async function resolveInstanceProject(c: Context): Promise<R> {
     if (first) return first
   }
 
-  return c.json(
-    {
+  throw new HTTPException(400, {
+    res: Response.json({
       error: "No project",
-      detail: "Pass ?project= or x-opencode-project, or create a project for this tenant.",
-    },
-    400,
-  )
+      detail: "Pass ?project=, ?directory=, x-opencode-project, or create a project for this tenant.",
+    }),
+  })
 }
