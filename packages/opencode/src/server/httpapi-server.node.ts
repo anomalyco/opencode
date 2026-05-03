@@ -10,11 +10,12 @@ export const name = "node-http-server"
 
 export const layer = (opts: Opts) => {
   const server = createServer()
-  const serverRef = { forceStop: false }
+  const serverRef = { closeStarted: false, forceStop: false }
   const close = server.close.bind(server)
   // Keep shutdown owned by NodeHttpServer, but honor listener.stop(true) by
   // force-closing active HTTP sockets when its finalizer calls server.close().
   server.close = ((callback?: Parameters<typeof server.close>[0]) => {
+    serverRef.closeStarted = true
     const result = close(callback)
     if (serverRef.forceStop) server.closeAllConnections()
     return result
@@ -25,6 +26,7 @@ export const layer = (opts: Opts) => {
       Service.of({
         closeAll: Effect.sync(() => {
           serverRef.forceStop = true
+          if (serverRef.closeStarted) server.closeAllConnections()
         }),
       }),
     ),

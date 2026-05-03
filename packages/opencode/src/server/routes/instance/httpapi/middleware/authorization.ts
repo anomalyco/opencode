@@ -7,8 +7,9 @@ const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
 const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
 
-// Avoid HttpApiSecurity alternatives here: Effect retries every security scheme
-// on any downstream failure, so authorized NotFound responses can become 401.
+// Avoid HttpApiSecurity alternatives here: Effect security middleware wraps the
+// full handler, so a downstream failure can make the next auth alternative run
+// and remap an authorized NotFound into Unauthorized.
 export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   "@opencode/ExperimentalHttpApiAuthorization",
   {

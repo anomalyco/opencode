@@ -29,13 +29,29 @@ export function websocket(
       })
       const writeInbound = yield* inbound.writer
       const writeOutbound = yield* outbound.writer
+      const closeSocket = (socket: Socket.Socket, write: (event: Socket.CloseEvent) => Effect.Effect<void, unknown>) =>
+        socket
+          .runRaw(() => Effect.void, {
+            onOpen: write(WebSocketTracker.SERVER_CLOSING_EVENT()).pipe(Effect.catch(() => Effect.void)),
+          })
+          .pipe(
+            Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+            Effect.catch(() => Effect.void),
+          )
+      const closeAccepted = Effect.all(
+        [closeSocket(inbound, writeInbound), closeSocket(outbound, writeOutbound)],
+        { concurrency: "unbounded", discard: true },
+      )
       const registered = yield* WebSocketTracker.register(
         Effect.all(
           [writeInbound(WebSocketTracker.SERVER_CLOSING_EVENT()), writeOutbound(WebSocketTracker.SERVER_CLOSING_EVENT())],
           { concurrency: "unbounded", discard: true },
         ),
       )
-      if (!registered) return HttpServerResponse.empty()
+      if (!registered) {
+        yield* closeAccepted
+        return HttpServerResponse.empty()
+      }
 
       yield* outbound
         .runRaw((message) => writeInbound(message))

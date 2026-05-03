@@ -82,8 +82,18 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
             : undefined
         const socket = yield* Effect.orDie((yield* HttpServerRequest.HttpServerRequest).upgrade)
         const write = yield* socket.writer
+        const closeAccepted = (event: Socket.CloseEvent) =>
+          socket
+            .runRaw(() => Effect.void, { onOpen: write(event).pipe(Effect.catch(() => Effect.void)) })
+            .pipe(
+              Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+              Effect.catch(() => Effect.void),
+            )
         const registered = yield* WebSocketTracker.register(write(WebSocketTracker.SERVER_CLOSING_EVENT()))
-        if (!registered) return HttpServerResponse.empty()
+        if (!registered) {
+          yield* closeAccepted(WebSocketTracker.SERVER_CLOSING_EVENT())
+          return HttpServerResponse.empty()
+        }
         const bridge = yield* EffectBridge.make()
         const writeScoped = (effect: Effect.Effect<void, unknown>) => {
           bridge.fork(effect.pipe(Effect.catch(() => Effect.void)))
@@ -104,7 +114,10 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
           },
         }
         const handler = yield* pty.connect(params.ptyID, adapter, cursor)
-        if (!handler) return HttpServerResponse.empty()
+        if (!handler) {
+          yield* closeAccepted(new Socket.CloseEvent(4404, "session not found"))
+          return HttpServerResponse.empty()
+        }
 
         yield* socket
           .runRaw((message) => handlePtyInput(handler, message))

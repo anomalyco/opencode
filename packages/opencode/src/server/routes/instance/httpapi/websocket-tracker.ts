@@ -19,10 +19,7 @@ export const layer = Layer.sync(Service)(() => {
   return Service.of({
     add: (close) =>
       Effect.gen(function* () {
-        if (closing) {
-          yield* close.pipe(Effect.catch(() => Effect.void))
-          return false
-        }
+        if (closing) return false
         sockets.add(close)
         return true
       }),
