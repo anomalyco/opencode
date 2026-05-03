@@ -1402,6 +1402,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const slog = elog.with({ sessionID })
         let structured: unknown | undefined
         let step = 0
+        let retryAttempt = 0
         const session = yield* sessions.get(sessionID)
 
         while (true) {
@@ -1596,9 +1597,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
             if (finished && !handle.message.error) {
               if (format.type === "json_schema") {
+                const maxRetries = format.retryCount ?? 2
+                if (retryAttempt < maxRetries) {
+                  retryAttempt++
+                  return "continue" as const
+                }
                 handle.message.error = new MessageV2.StructuredOutputError({
                   message: "Model did not produce structured output",
-                  retries: 0,
+                  retries: retryAttempt,
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 return "break" as const

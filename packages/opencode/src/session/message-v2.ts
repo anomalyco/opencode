@@ -62,19 +62,21 @@ export const ContextOverflowError = namedSchemaError("ContextOverflowError", {
   responseBody: Schema.optional(Schema.String),
 })
 
-export class OutputFormatText extends Schema.Class<OutputFormatText>("OutputFormatText")({
+export const OutputFormatText = Schema.Struct({
   type: Schema.Literal("text"),
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "OutputFormatText" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type OutputFormatText = Schema.Schema.Type<typeof OutputFormatText>
 
-export class OutputFormatJsonSchema extends Schema.Class<OutputFormatJsonSchema>("OutputFormatJsonSchema")({
+export const OutputFormatJsonSchema = Schema.Struct({
   type: Schema.Literal("json_schema"),
   schema: Schema.Record(Schema.String, Schema.Any).annotate({ identifier: "JSONSchema" }),
   retryCount: NonNegativeInt.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(2))),
-}) {
-  static readonly zod = zod(this)
-}
+})
+  .annotate({ identifier: "OutputFormatJsonSchema" })
+  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export type OutputFormatJsonSchema = Schema.Schema.Type<typeof OutputFormatJsonSchema>
 
 const _Format = Schema.Union([OutputFormatText, OutputFormatJsonSchema]).annotate({
   discriminator: "type",
