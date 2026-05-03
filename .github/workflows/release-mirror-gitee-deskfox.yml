@@ -35,7 +35,7 @@ jobs:
   mirror:
     name: Mirror release to Gitee
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60  # GitHub US runner → Gitee CN 上行被 GFW 节流,50MB 实测 >10 min
 
     env:
       GITEE_OWNER: zoulukuang
@@ -198,13 +198,18 @@ jobs:
               continue
             fi
 
-            echo "[upload] $filename ($filesize bytes)..."
-            # connect-timeout 30s + max-time 600s(10 分钟,50MB 应远低于此)
-            http_code=$(curl -s -o /tmp/upload-resp.json -w "%{http_code}" -X POST \
-              --connect-timeout 30 --max-time 600 \
+            echo "[upload] $filename ($filesize bytes) starting at $(date -u +%H:%M:%SZ)..."
+            # connect-timeout 30s + max-time 1800s(30 分钟,US→CN 节流 50MB 兜底)
+            # 加 -w 输出 timing 信息便于复盘
+            http_code=$(curl -s -o /tmp/upload-resp.json -X POST \
+              --connect-timeout 30 --max-time 1800 \
+              -w "size_upload=%{size_upload} speed_upload=%{speed_upload} time_total=%{time_total}\nstatus=%{http_code}\n" \
               "$GITEE_API/repos/$GITEE_OWNER/$GITEE_REPO/releases/$RELEASE_ID/attach_files" \
               -F "access_token=$GITEE_TOKEN" \
-              -F "file=@$f")
+              -F "file=@$f" | tee /tmp/upload-stats.txt | grep "^status=" | cut -d= -f2)
+            echo "[upload stats]"
+            cat /tmp/upload-stats.txt
+            echo "[upload finish] at $(date -u +%H:%M:%SZ)"
 
             if [ "$http_code" = "201" ] || [ "$http_code" = "200" ]; then
               echo "[ok] $filename uploaded"
