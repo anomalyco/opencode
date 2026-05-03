@@ -83,7 +83,7 @@ kubectl create -f deploy/k8s/opencode-migrate-job.yaml
 
 **Production:** OpenCode / API uses the executor **Service DNS inside the cluster** (same namespace / ClusterIP). No tunnel — see `packages/executor/README.md` “Mode 1”.
 
-**Local laptop (Mac):** Firecracker does not run on the Mac; use **Mode 2**: deploy `executor-dev`, then from your machine:
+**Local laptop (Mac):** run the executor locally with QEMU (`packages/executor/README.md` “Mode 2”), or use **port-forward** to `executor-dev` in-cluster:
 
 ```bash
 ./script/executor-dev-port-forward.sh

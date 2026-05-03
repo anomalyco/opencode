@@ -1,44 +1,23 @@
-# Executor API: per-session Firecracker microVMs (Linux + KVM required).
+# Executor API: per-session QEMU microVMs (direct kernel + 9p root).
 FROM ubuntu:22.04
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
     curl \
-    iproute2 \
-    iptables \
-    socat \
-    unzip \
-    openssh-client \
+    qemu-system-arm \
+    qemu-system-x86 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-ARG FIRECRACKER_VERSION=v1.8.0
-RUN set -eux; \
-    arch="$(dpkg --print-architecture)"; \
-    case "$arch" in \
-      amd64) fc_arch="x86_64" ;; \
-      arm64) fc_arch="aarch64" ;; \
-      *) echo "unsupported arch: $arch" >&2; exit 1 ;; \
-    esac; \
-    tmp="$(mktemp -d)"; \
-    cd "$tmp"; \
-    curl -fsSLO "https://github.com/firecracker-microvm/firecracker/releases/download/${FIRECRACKER_VERSION}/firecracker-${FIRECRACKER_VERSION}-${fc_arch}.tgz"; \
-    tar -xzf "firecracker-${FIRECRACKER_VERSION}-${fc_arch}.tgz"; \
-    install -m 0755 "release-${FIRECRACKER_VERSION}-${fc_arch}/firecracker-${FIRECRACKER_VERSION}-${fc_arch}" /usr/bin/firecracker; \
-    install -m 0755 "release-${FIRECRACKER_VERSION}-${fc_arch}/jailer-${FIRECRACKER_VERSION}-${fc_arch}" /usr/bin/jailer; \
-    rm -rf "$tmp"
 
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
-RUN mkdir -p /opt/veritly
-COPY packages/executor/output/vmlinux /opt/veritly/vmlinux
-COPY packages/executor/output/initrd.img /opt/veritly/initrd.img
-COPY packages/executor/output/rootfs.ext4 /opt/veritly/rootfs.ext4
-RUN chmod +x /opt/veritly/vmlinux \
-  && test "$(stat -c%s /opt/veritly/rootfs.ext4)" -gt 1048576 \
-  && test "$(stat -c%s /opt/veritly/initrd.img)" -gt 1048576
+COPY packages/executor/output/aarch64 /app/output/aarch64
+COPY packages/executor/output/x86_64 /app/output/x86_64
+RUN test -s /app/output/aarch64/vmlinuz && test -s /app/output/x86_64/vmlinuz \
+  && test -d /app/output/aarch64/guest-root/bin \
+  && test -d /app/output/x86_64/guest-root/bin
 
 COPY packages/executor/package.json ./
 RUN bun install --production --no-save
@@ -49,11 +28,6 @@ RUN mkdir -p /workspace /tmp/veritly-vms
 
 ENV PORT=7777
 ENV VM_DATA_DIR=/tmp/veritly-vms
-ENV KERNEL_PATH=/opt/veritly/vmlinux
-ENV INITRD_PATH=/opt/veritly/initrd.img
-ENV ROOTFS_PATH=/opt/veritly/rootfs.ext4
-ENV FIRECRACKER_PATH=/usr/bin/firecracker
-ENV JAILER_PATH=/usr/bin/jailer
 ENV VM_INACTIVITY_TIMEOUT_MS=300000
 
 EXPOSE 7777

@@ -9,7 +9,7 @@ spec:
   # Old ReplicaSets only (not Failed Pods): kubectl still lists Evicted/OOM/phase=Failed Pods until deleted.
   # Churn: eviction → Deployment replaces pod → another Failed object on the node; fix limits/probes/image to stop churn.
   revisionHistoryLimit: 5
-  # Raise node RAM before increasing — each replica holds FC VMs (896Mi request / 2.5Gi cap each).
+  # Raise node RAM before increasing — each replica holds QEMU guests (896Mi request / 2.5Gi cap each).
   replicas: 2
   strategy:
     type: RollingUpdate
@@ -53,12 +53,6 @@ spec:
               value: "7777"
             - name: VM_INACTIVITY_TIMEOUT_MS
               value: "300000"
-            - name: KERNEL_PATH
-              value: "/opt/veritly/vmlinux"
-            - name: ROOTFS_PATH
-              value: "/opt/veritly/rootfs.ext4"
-            - name: QEMU_BINARY
-              value: "/usr/bin/qemu-system-x86_64"
             - name: UNIVER_SDK_WS
               value: "ws://relay:8080/ws"
             - name: VM_DATA_DIR
@@ -73,9 +67,11 @@ spec:
             httpGet:
               path: /readyz
               port: 7777
-            initialDelaySeconds: 2
-            periodSeconds: 5
-          # Same rationale as `03b-executor-dev.yaml`: FC RSS ~1.4Gi; cap raised above observed usage.
+            initialDelaySeconds: 15
+            periodSeconds: 90
+            timeoutSeconds: 180
+            failureThreshold: 4
+          # Same rationale as `03b-executor-dev.yaml`: guest RSS; cap raised above observed usage.
           resources:
             requests:
               memory: "896Mi"

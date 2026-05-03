@@ -4,16 +4,15 @@
 
 set -e
 
-if [ ! -s packages/executor/output/vmlinux ] || [ ! -s packages/executor/output/initrd.img ] || [ ! -s packages/executor/output/rootfs.ext4 ]; then
-  echo "[E2E Setup] Missing QEMU guest VM artifacts (vmlinux, initrd.img, rootfs.ext4)."
+if [ ! -s packages/executor/output/aarch64/vmlinuz ] || [ ! -s packages/executor/output/x86_64/vmlinuz ]; then
+  echo "[E2E Setup] Missing QEMU guest bundles (aarch64 and x86_64 vmlinuz + guest-root)."
   echo ""
-  echo "Build them first on a Linux machine (debootstrap needs Linux):"
+  echo "Build with Docker from repo root:"
   echo "  (cd packages/executor && bun run build-vm)"
   echo ""
-  echo "Expected files:"
-  echo "  packages/executor/output/vmlinux"
-  echo "  packages/executor/output/initrd.img"
-  echo "  packages/executor/output/rootfs.ext4"
+  echo "Expected:"
+  echo "  packages/executor/output/aarch64/{vmlinuz,initrd.img?,guest-root/}"
+  echo "  packages/executor/output/x86_64/{vmlinuz,initrd.img?,guest-root/}"
   exit 1
 fi
 

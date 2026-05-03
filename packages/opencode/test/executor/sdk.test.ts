@@ -28,9 +28,14 @@ describe("Executor SDK", () => {
 
       expect(health.ok).toBe(true)
       expect(health.service).toBe("executor")
-      expect(health.mode).toBe("firecracker")
-      expect(health.guest).toBe("x86_64")
+      expect(health.mode).toBe("qemu")
+      expect(["aarch64", "x86_64"]).toContain(health.guest)
       expect(typeof health.activeSessions).toBe("number")
+      expect(health.static.qemuRunnable).toBe(true)
+      expect(health.static.templateOk).toBe(true)
+      expect(health.vm).not.toBeNull()
+      expect(health.vm?.commandOutput).toContain("__readyz_ok__")
+      expect(health.errors.length).toBe(0)
     },
     { timeout: ms },
   )
@@ -138,7 +143,7 @@ describe("Executor SDK", () => {
       expect(status.sessionId).toBe(sessionId)
       expect(status.createdAt).toBeGreaterThan(0)
       expect(status.lastActivity).toBeGreaterThan(0)
-      expect(status.mode).toBe("firecracker")
+      expect(status.mode).toBe("qemu")
     },
     { timeout: ms },
   )

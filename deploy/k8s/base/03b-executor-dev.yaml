@@ -52,14 +52,6 @@ spec:
               value: "7777"
             - name: VM_INACTIVITY_TIMEOUT_MS
               value: "300000"
-            - name: KERNEL_PATH
-              value: "/opt/veritly/vmlinux"
-            - name: ROOTFS_PATH
-              value: "/opt/veritly/rootfs.ext4"
-            - name: FIRECRACKER_PATH
-              value: "/usr/bin/firecracker"
-            - name: JAILER_PATH
-              value: "/usr/bin/jailer"
             - name: UNIVER_SDK_WS
               value: "ws://relay:8080/ws"
             - name: VM_DATA_DIR
@@ -74,9 +66,11 @@ spec:
             httpGet:
               path: /readyz
               port: 7777
-            initialDelaySeconds: 2
-            periodSeconds: 5
-          # Bun + Firecracker + guest copy: observed ~1.4Gi RSS; prior 1Gi limit invited eviction.
+            initialDelaySeconds: 15
+            periodSeconds: 90
+            timeoutSeconds: 180
+            failureThreshold: 4
+          # Bun + QEMU + guest copy: observed RSS; prior 1Gi limit invited eviction.
           # Request stays below 1Gi so prod `executor` + `executor-dev` can coexist on a ~3Gi allocatable node.
           resources:
             requests:

@@ -1,27 +1,44 @@
 import { Hono } from "hono"
-import { execFileSync } from "child_process"
-import { constants } from "fs"
 import { existsSync } from "node:fs"
-import { access, copyFile, mkdir, readdir, rm } from "fs/promises"
+import { cp, mkdir, readdir, readFile, rm } from "fs/promises"
 import { join } from "path"
 import { NodeSSH } from "node-ssh"
-import { FIRECRACKER_PATH, firecrackerVersion, start, stop, type FirecrackerVm } from "./vm/firecracker"
+import type { ReadyzBody } from "./readyz-probe"
+import { runReadyzProbe } from "./readyz-probe"
+import { guestKind, qemuBinary, start, stop, type GuestKind, type QemuVm } from "./vm/qemu"
 
 const pkgOut = join(import.meta.dir, "../output")
 const VM_INACTIVITY_TIMEOUT_MS = Number(process.env.VM_INACTIVITY_TIMEOUT_MS ?? "300000")
 const VM_DATA_DIR = process.env.VM_DATA_DIR ?? "/tmp/veritly-vms"
-const ROOTFS_PATH = process.env.ROOTFS_PATH?.trim() || join(pkgOut, "rootfs.ext4")
-const KERNEL_PATH = process.env.KERNEL_PATH?.trim() || join(pkgOut, "vmlinux")
-const INITRD_PATH = process.env.INITRD_PATH?.trim() || join(pkgOut, "initrd.img")
 const SSH_HOST = process.env.SSH_HOST ?? "127.0.0.1"
-const SSH_BOOT_TIMEOUT_MS = Number(process.env.SSH_BOOT_TIMEOUT_MS ?? "90000")
+const SSH_BOOT_TIMEOUT_MS = Number(process.env.SSH_BOOT_TIMEOUT_MS ?? "180000")
+
+function bundle(kind: GuestKind) {
+  return join(pkgOut, kind)
+}
+
+function kernelPath(kind: GuestKind) {
+  const p = process.env.KERNEL_PATH?.trim()
+  if (p) return p
+  return join(bundle(kind), "vmlinuz")
+}
+
+function initrdPath(kind: GuestKind) {
+  const p = process.env.INITRD_PATH?.trim()
+  if (p) return p
+  return join(bundle(kind), "initrd.img")
+}
+
+function templateDir(kind: GuestKind) {
+  return join(bundle(kind), "guest-root")
+}
 
 type Session = {
   id: string
-  runtime: "firecracker"
+  runtime: "qemu"
   workspaceDir: string
   vmDir: string
-  vm: FirecrackerVm
+  vm: QemuVm
   sshPort: number
   ssh: NodeSSH
   createdAt: number
@@ -30,60 +47,56 @@ type Session = {
 
 const app = new Hono()
 const sessions = new Map<string, Session>()
+const kind = guestKind()
+
+const readyzMs = Number(process.env.READYZ_INTERVAL_MS ?? "60000")
+let readyzCache: { at: number; body: ReadyzBody } | null = null
+let readyzLock: Promise<ReadyzBody> | null = null
+
+async function readyzPayload(): Promise<ReadyzBody> {
+  if (readyzMs > 0 && readyzCache && Date.now() - readyzCache.at < readyzMs)
+    return { ...readyzCache.body, cached: true, cachedAgeMs: Date.now() - readyzCache.at }
+  readyzLock ??= runReadyzProbe({
+    kind,
+    pkgOut,
+    vmData: VM_DATA_DIR,
+    sshHost: SSH_HOST,
+    sshBootMs: SSH_BOOT_TIMEOUT_MS,
+    activeSessions: sessions.size,
+  })
+    .then((b) => {
+      readyzCache = { at: Date.now(), body: { ...b, cached: false } }
+      return b
+    })
+    .finally(() => {
+      readyzLock = null
+    })
+  return await readyzLock
+}
 
 function log(level: "info" | "error" | "warn", message: string, meta?: object) {
   const timestamp = new Date().toISOString()
   console.log(`[${timestamp}] [${level}] ${message}`, meta ? JSON.stringify(meta) : "")
 }
 
-function pids(path: string): number[] {
-  try {
-    const out = execFileSync("lsof", ["-t", path], { stdio: ["ignore", "pipe", "ignore"] }).toString().trim()
-    if (!out) return []
-    return out
-      .split(/\s+/)
-      .map((v) => Number(v))
-      .filter((v) => Number.isFinite(v) && v > 1)
-  } catch {
-    return []
-  }
-}
-
-function kill(pid: number) {
-  try {
-    process.kill(pid, "SIGTERM")
-  } catch {}
-  try {
-    process.kill(pid, "SIGKILL")
-  } catch {}
-}
-
-function haveInitrd() {
-  return existsSync(INITRD_PATH)
-}
-
-async function ready() {
-  try {
-    await access(FIRECRACKER_PATH, constants.X_OK)
-    const rootfs = await Bun.file(ROOTFS_PATH).stat()
-    if (rootfs.size <= 1024 * 1024) return false
-    await access(KERNEL_PATH, constants.R_OK)
-    if (!haveInitrd()) return false
-    await access(INITRD_PATH, constants.R_OK)
-    if (process.platform === "linux") await access("/dev/kvm", constants.R_OK | constants.W_OK)
-    return true
-  } catch {
-    return false
-  }
+async function templateOk() {
+  const p = join(templateDir(kind), "bin", "busybox")
+  const s = await Bun.file(p).stat().catch(() => null)
+  return Boolean(s && s.size >= 1000)
 }
 
 async function ensureReady() {
-  await access(FIRECRACKER_PATH, constants.X_OK)
-  const rootfs = await Bun.file(ROOTFS_PATH).stat()
-  if (rootfs.size <= 1024 * 1024) throw new Error(`ROOTFS_PATH is not a real VM image: ${ROOTFS_PATH}`)
-  await access(KERNEL_PATH, constants.R_OK)
-  if (!haveInitrd()) throw new Error(`INITRD_PATH is required for guest boot: ${INITRD_PATH}`)
-  await access(INITRD_PATH, constants.R_OK)
+  if (!Bun.spawnSync([qemuBinary(kind), "--version"], { stdout: "ignore", stderr: "ignore" }).success)
+    throw new Error(`QEMU not runnable: ${qemuBinary(kind)}`)
+  const k = kernelPath(kind)
+  const ks = await Bun.file(k).stat().catch(() => null)
+  if (!ks || ks.size < 4096) throw new Error(`KERNEL missing or empty: ${k}`)
+  if (!(await templateOk())) throw new Error(`guest template invalid: ${templateDir(kind)}`)
+  const i = initrdPath(kind)
+  if (existsSync(i)) {
+    const is = await Bun.file(i).stat().catch(() => null)
+    if (!is || is.size < 1024) throw new Error(`INITRD invalid: ${i}`)
+  }
 }
 
 async function waitForSSH(ssh: NodeSSH, host: string, port: number) {
@@ -114,18 +127,26 @@ async function createSession(id: string) {
   await ensureReady()
   const workspaceDir = join(VM_DATA_DIR, "sessions", id)
   const vmDir = join(VM_DATA_DIR, "vms", id)
-  const rootfsPath = join(vmDir, "rootfs.ext4")
+  const root = join(vmDir, "root")
   await mkdir(workspaceDir, { recursive: true })
   await mkdir(vmDir, { recursive: true })
-  await copyFile(ROOTFS_PATH, rootfsPath)
+  await cp(templateDir(kind), root, { recursive: true })
 
+  const initrd = existsSync(initrdPath(kind)) ? initrdPath(kind) : undefined
   try {
-    const vm = await start({ id, dir: vmDir, rootfsPath })
+    const vm = await start({
+      id,
+      dir: vmDir,
+      rootfsDir: root,
+      kernel: kernelPath(kind),
+      initrd,
+      kind,
+    })
     const ssh = new NodeSSH()
     await waitForSSH(ssh, SSH_HOST, vm.sshPort)
     const session: Session = {
       id,
-      runtime: "firecracker",
+      runtime: "qemu",
       workspaceDir,
       vmDir,
       vm,
@@ -135,7 +156,7 @@ async function createSession(id: string) {
       lastActivity: Date.now(),
     }
     sessions.set(id, session)
-    log("info", "Created firecracker session", { id, sshPort: vm.sshPort })
+    log("info", "Created qemu session", { id, sshPort: vm.sshPort })
     return session
   } catch (err) {
     await rm(vmDir, { recursive: true, force: true }).catch(() => undefined)
@@ -157,56 +178,52 @@ async function exec(session: Session, command: string, timeout: number) {
 
 async function cleanupInactiveSessions() {
   const now = Date.now()
-  for (const [id, session] of sessions) {
-    if (now - session.lastActivity <= VM_INACTIVITY_TIMEOUT_MS) continue
-    log("info", "Cleaning up inactive session", { id })
-    sessions.delete(id)
-    await drop(session)
-  }
+  const stale = Array.from(sessions.entries()).filter(([, s]) => now - s.lastActivity > VM_INACTIVITY_TIMEOUT_MS)
+  await Promise.all(
+    stale.map(async ([id, session]) => {
+      log("info", "Cleaning up inactive session", { id })
+      sessions.delete(id)
+      await drop(session)
+    }),
+  )
 }
 
 setInterval(cleanupInactiveSessions, 30000)
 
-async function reapOrphanVms() {
-  const root = join(VM_DATA_DIR, "vms")
-  const dirs = await readdir(root, { withFileTypes: true }).catch(() => [])
-  if (!dirs.length) return
-  let removed = 0
-  for (const dir of dirs) {
-    if (!dir.isDirectory()) continue
-    const vmDir = join(root, dir.name)
-    const rootfs = join(vmDir, "rootfs.ext4")
-    for (const id of pids(rootfs)) kill(id)
-    await rm(vmDir, { recursive: true, force: true }).catch(() => undefined)
-    removed++
-  }
-  if (removed > 0) log("warn", "Reaped orphan VM dirs from previous executor run", { removed })
+async function reapOne(vmDir: string) {
+  const raw = await readFile(join(vmDir, "qemu.pid"), "utf8").catch(() => "")
+  const pid = Number(raw.trim())
+  if (Number.isFinite(pid) && pid > 1)
+    Bun.spawnSync(["kill", "-9", String(pid)], { stderr: "ignore", stdout: "ignore" })
+  await rm(vmDir, { recursive: true, force: true }).catch(() => undefined)
 }
 
-async function health() {
-  const ok = await ready()
-  return {
-    ok,
-    service: "executor",
-    mode: "firecracker" as const,
-    guest: "x86_64" as const,
-    firecrackerVersion: firecrackerVersion(),
-    activeSessions: sessions.size,
-    ready: ok,
-  }
+async function reapOrphanVms() {
+  const root = join(VM_DATA_DIR, "vms")
+  const dirs = (await readdir(root, { withFileTypes: true }).catch(() => [])).filter((d) => d.isDirectory())
+  if (!dirs.length) return
+  await Promise.all(dirs.map((d) => reapOne(join(root, d.name))))
+  log("warn", "Reaped orphan VM dirs from previous executor run", { removed: dirs.length })
+}
+
+async function reapProbeDirs() {
+  const root = join(VM_DATA_DIR, "readyz-probes")
+  const dirs = (await readdir(root, { withFileTypes: true }).catch(() => [])).filter((d) => d.isDirectory())
+  if (!dirs.length) return
+  await Promise.all(dirs.map((d) => rm(join(root, d.name), { recursive: true, force: true }).catch(() => undefined)))
+  log("warn", "Reaped stale readyz-probes dirs", { removed: dirs.length })
 }
 
 app.use("*", async (c, next) => {
-  const start = Date.now()
+  const t0 = Date.now()
   await next()
-  const duration = Date.now() - start
-  log("info", `${c.req.method} ${c.req.path}`, { status: c.res.status, duration })
+  log("info", `${c.req.method} ${c.req.path}`, { status: c.res.status, duration: Date.now() - t0 })
 })
 
 app.get("/livez", (c) => c.text("ok"))
 app.get("/readyz", async (c) => {
-  const status = await health()
-  return c.json(status, status.ok ? 200 : 503)
+  const body = await readyzPayload()
+  return c.json(body, body.ok ? 200 : 503)
 })
 
 app.post("/v1/sessions/:sessionId/exec", async (c) => {
@@ -278,7 +295,7 @@ app.get("/v1/admin/sessions", (c) => {
 
 async function shutdown() {
   log("info", "Shutting down executor...")
-  for (const [, session] of sessions) await drop(session)
+  await Promise.all(Array.from(sessions.values()).map((s) => drop(s)))
   process.exit(0)
 }
 
@@ -286,6 +303,7 @@ process.on("SIGTERM", shutdown)
 process.on("SIGINT", shutdown)
 
 const port = Number(process.env.PORT ?? "7777")
-log("info", `Executor API starting on port ${port} (guest=x86_64 firecracker=${FIRECRACKER_PATH})`)
+log("info", `Executor API on port ${port} (guest=${kind} qemu=${qemuBinary(kind)})`)
 await reapOrphanVms()
+await reapProbeDirs()
 Bun.serve({ port, fetch: app.fetch })

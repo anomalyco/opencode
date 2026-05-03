@@ -1,249 +1,67 @@
-# Veritly Firecracker Executor
+# Veritly QEMU Executor
 
-Isolated command execution using Firecracker microVM guests. Each session gets its own VM.
+Isolated command execution: each session runs a QEMU VM with **direct kernel boot**, **`-nodefaults`**, **virtio user networking** (SSH host-forward), and a **9p-mounted** per-session root directory (copied from a minimal Alpine template). No Firecracker, no ext4 disk image for the guest root.
 
----
+## Layout
 
-## Two modes (do not confuse them)
+Guest bundles live under `packages/executor/output/<aarch64|x86_64>/`:
 
-### 1. Production — executor runs **in the cluster** (build and operate this first)
+- `vmlinuz` — kernel  
+- `initrd.img` — optional; present when Alpine `linux-virt` ships it  
+- `guest-root/` — directory rootfs template (includes OpenSSH, Python, `veritly_univer_sdk`)
 
-This is the real deployment path.
-
-- The executor Pod runs on **Linux nodes** with **`/dev/kvm`**, **privileged** networking (TAP, `socat`), and the Firecracker binary inside the image.
-- MicroVMs run **on that node** next to the HTTP service. Nothing about port-forward or your laptop belongs here.
-- OpenCode / API reaches the executor via **Kubernetes Service DNS** inside the cluster. Production uses the **`executor`** Service (see `deploy/k8s/base/03-executor.yaml`), e.g. `http://executor:7777` from `opencode-api` — **not** the dev stack. **No tunnel**, **no `kubectl port-forward`**.
-- Image build and push to your registry are part of normal deploy; see `deploy/k8s/` and your CI.
-
-```
-┌──────────────┐   Cluster DNS / ClusterIP   ┌─────────────────────┐   SSH   ┌──────────┐
-│  opencode-api│ ───────────────────────────→│ executor Service :7777   │ ─────→│ microVM  │
-│  (same VPC)  │                             │  (Pod on Linux+KVM)     │       │ per sess │
-└──────────────┘                             └─────────────────────┘         └──────────┘
-```
-
-### 2. Local development — **Mac (or any machine without KVM / Firecracker)**
-
-Firecracker **does not** run on macOS. You are **not** meant to run this HTTP server on your laptop for real VMs.
-
-- **Production** and **dev** are **two different Deployments/Services** in Kubernetes:
-  - **`executor`** — what `opencode-api` uses in production (`http://executor:7777` in-cluster).
-  - **`executor-dev`** — separate stack for experimental `:dev` images and laptop testing (`deploy/k8s/base/03b-executor-dev.yaml`). Do not point production config at this Service.
-
-- Deploy **`executor-dev`** to a **real cluster** that has KVM (same image intent as prod).
-- From your laptop, **only then**: `kubectl port-forward` from `svc/executor-dev` to `127.0.0.1` so local tools and tests can speak HTTP to the executor that still runs **in the cluster**.
-- Set `VERITLY_EXECUTOR_URL=http://127.0.0.1:<local-port>` while the forward is running.
-
-Helpers (Mode 2 only — not part of the executor process itself):
-
-- **Canonical:** `bash packages/opencode/script/executor-dev-k8s-tunnel.sh` (or `bun run --cwd packages/opencode executor-dev:k8s-tunnel`, which runs that same script)
-- **Shortcut from repo root:** `./script/executor-dev-port-forward.sh` → same script
-
-**Executor SDK integration tests** (`packages/opencode/test/executor/sdk.test.ts`) target the **dev** stack (`executor-dev` via `executor-dev-k8s-tunnel.sh` or `VERITLY_EXECUTOR_URL`), never the production `executor` Service — **Mode 2** only.
-
----
-
-## Requirements (Mode 1 — where Firecracker actually runs)
-
-- **Firecracker** + **jailer** in the image (`FIRECRACKER_PATH`, `JAILER_PATH`)
-- **Guest** `vmlinux`, `initrd.img`, `rootfs.ext4` (see `fetch-guest-kernel` / `build-vm`)
-- **Linux + KVM**: `/dev/kvm` mounted, privileged Pod, `ip` / `socat` for TAP + SSH relay
-
-## Why kernel + initrd artifacts?
-
-Firecracker boots Linux from `vmlinux` + `initrd.img` and mounts `rootfs.ext4`. The **guest** OS is Ubuntu in your built image; the **host** must be Linux with KVM for production.
-
-## Quick start — Linux (optional local container with KVM)
-
-Build VM artifacts, then run the executor image on a **Linux** host or compose stack that exposes `/dev/kvm`:
+Build (requires Docker, cross-arch supported):
 
 ```bash
 (cd packages/executor && bun run build-vm)
-
-# Example: Linux with Docker and /dev/kvm — not applicable on Mac for real FC VMs
-docker compose -f docker-compose.e2e.yml up --build executor
-
-curl http://localhost:7777/readyz
+bun run --cwd packages/executor verify-artifacts
 ```
 
-On **Mac**, use **Mode 2** (cluster executor-dev + port-forward) instead of expecting Firecracker on localhost.
+## Modes
 
-### Building VM artifacts on macOS (optional)
+### 1. Production — executor in the cluster
 
-You can build disk/kernel artifacts in a Linux VM (UTM, remote Linux box), then use them in the Docker image — that does not run Firecracker on the Mac host.
+- Pod is **Linux** with **`/dev/kvm`** when the node matches the guest ISA (aarch64 guest on arm64 nodes, x86_64 on amd64). Image installs `qemu-system-arm` and `qemu-system-x86`.
+- OpenCode reaches the executor via in-cluster Service DNS (e.g. `http://executor:7777`), not port-forward.
 
-## API Endpoints
+### 2. Local laptop (e.g. macOS Apple Silicon)
 
-### Health Check
+- Install QEMU: `brew install qemu`
+- Build guests (above), then: `bun run --cwd packages/executor start`
+- On Darwin, **HVF** is used for aarch64 guests; x86_64 guests use **TCG** (slow but works).
 
-```bash
-GET /readyz
-```
+### 3. Cluster dev image + port-forward (optional)
 
-Response:
+Same as before: deploy `executor-dev`, `kubectl port-forward`, set `VERITLY_EXECUTOR_URL=http://127.0.0.1:7777`. SDK integration tests use this URL.
 
-```json
-{
-  "ok": true,
-  "service": "executor",
-  "mode": "firecracker",
-  "guest": "x86_64",
-  "firecrackerVersion": "Firecracker v1.x.x",
-  "activeSessions": 0,
-  "ready": true
-}
-```
+## API
 
-### Execute Command
+- `GET /livez` — cheap process liveness (`ok` text).
+- `GET /readyz` — deep readiness: **HTTP 200 only if** static checks pass **and** a throwaway QEMU guest boots, SSH connects, and `echo __readyz_ok__` succeeds. JSON includes `static` (paths, sizes, KVM device, template checks), `vm` (probe timings, command output, `serialTail` on failure), and `errors`. Responses within `READYZ_INTERVAL_MS` repeat the last result with `cached: true` (kube should use a period ≥ that interval and a long enough `timeoutSeconds`).
+- `POST /v1/sessions/:id/exec` — `{ command, timeout? }`
+- `GET /v1/sessions/:id/status`
+- `POST /v1/sessions/:id/close`
 
-```bash
-POST /v1/sessions/:sessionId/exec
-Content-Type: application/json
+## Environment (sparing)
 
-{
-  "command": "python3 -c 'print(\"hello\")'",
-  "timeout": 30000
-}
-```
+| Variable | Role |
+|----------|------|
+| `PORT` | HTTP port (default `7777`) |
+| `VM_DATA_DIR` | Per-session VM and workspace dirs |
+| `VM_INACTIVITY_TIMEOUT_MS` | Idle cleanup |
+| `VM_MEMORY_MIB` / `VM_CPUS` | Guest sizing |
+| `SSH_BOOT_TIMEOUT_MS` | Wait for SSH after QEMU start |
+| `READYZ_INTERVAL_MS` | Min milliseconds between full `/readyz` probes (default `60000`; set `0` to disable cache) |
+| `KERNEL_PATH` / `INITRD_PATH` | Override kernel/initrd files (defaults under `output/<guest>/`) |
+| `QEMU_PATH` | Override QEMU binary |
 
-Response:
+Guest ISA is inferred from `process.arch` (`arm64` → aarch64 bundle, else x86_64).
 
-```json
-{
-  "output": "hello\n",
-  "exitCode": 0,
-  "vmId": "uuid-v4-string"
-}
-```
+## Docker image
 
-### Get Session Status
-
-```bash
-GET /v1/sessions/:sessionId/status
-```
-
-### Close Session
-
-```bash
-POST /v1/sessions/:sessionId/close
-```
-
-## Environment Variables
-
-| Variable                   | Default                                      | Description                                      |
-| -------------------------- | -------------------------------------------- | ------------------------------------------------ |
-| `PORT`                     | `7777`                                       | HTTP API port                                    |
-| `VM_INACTIVITY_TIMEOUT_MS` | `300000`                                     | Auto-cleanup after inactivity (5 min)            |
-| `KERNEL_PATH`              | `packages/executor/output/vmlinux` (dev)     | Linux kernel image                               |
-| `INITRD_PATH`              | `packages/executor/output/initrd.img` (dev)  | Initramfs (required)                             |
-| `ROOTFS_PATH`              | `packages/executor/output/rootfs.ext4` (dev) | ext4 root disk                                   |
-| `FIRECRACKER_PATH`         | `/usr/bin/firecracker`                       | Firecracker binary path                          |
-| `JAILER_PATH`              | `/usr/bin/jailer`                              | Jailer binary path                               |
-| `VM_DATA_DIR`              | `/tmp/veritly-vms`                             | Per-session VM state                             |
-| `VM_CPUS`                  | `1`                                          | vCPU count                                       |
-| `VM_MEMORY_MIB`            | `1024`                                       | RAM (MiB) per guest                              |
-| `SSH_BOOT_TIMEOUT_MS`      | `90000`                                      | Wait for SSH on relay port                       |
-
-## Security Model
-
-✅ **Secure by design:**
-
-- Each session → dedicated microVM
-- UUIDv4 identifiers (not guessable)
-- VMs isolated (no shared filesystem)
-- Auto-cleanup on inactivity
-- No auth needed (internal network only)
-- Full root access inside VM (intentional)
-
-⚠️ **Requirements:**
-
-- Executor runs in privileged container (for KVM/net admin)
-- In **Mode 1**, backend uses in-cluster Service URL only
-- VMs may have internet access (for package installation) depending on cluster networking
-
-## Session Lifecycle
-
-1. **First command** → VM created (~boot time varies)
-2. **Active use** → Commands execute in same VM
-3. **Inactivity** → VM cleaned up after timeout
-4. **New command after cleanup** → Session missing → new VM on next exec
-5. **Session end** → VM destroyed
-
-## VM Image Contents
-
-The Docker image builds a Ubuntu-based rootfs with:
-
-- Python 3 + pip
-- OpenSSH server
-- **Univer SDK** pre-installed
-- `/workspace` directory for session files
-
-## Docker Compose (Linux + KVM)
-
-```yaml
-executor:
-  image: opencode-veritly-executor:latest
-  build:
-    context: .
-    dockerfile: Dockerfile.executor
-  ports:
-    - "7777:7777"
-  environment:
-    - PORT=7777
-    - VM_INACTIVITY_TIMEOUT_MS=300000
-  privileged: true
-  cap_add:
-    - NET_ADMIN
-    - NET_RAW
-  volumes:
-    - /dev/kvm:/dev/kvm
-```
+`docker/Dockerfile.executor` copies `packages/executor/output/aarch64` and `x86_64` into `/app/output/`. The server resolves `../output` relative to `src/`.
 
 ## Troubleshooting
 
-### `/readyz` returns 503 (`ready: false`)
-
-- `firecracker` executable (`FIRECRACKER_PATH`)
-- Artifacts exist and `rootfs.ext4` is > 1 MiB; `initrd.img` present
-- `/dev/kvm` available and Pod privileged (**Mode 1**)
-
-### Commands timeout
-
-- Guest still booting — raise `SSH_BOOT_TIMEOUT_MS` or `VM_MEMORY_MIB`
-- Guest arch matches built `ROOTFS_PATH` / kernel
-
-### SSH connection fails
-
-- Increase `SSH_BOOT_TIMEOUT_MS`
-- Dev images use `root` / `root`
-
-### Backend can't connect (**Mode 1**)
-
-- Use the **in-cluster** executor Service URL from the API Pod, not localhost unless you deliberately use **Mode 2** port-forward.
-
-### Backend can't connect (**Mode 2**)
-
-- `kubectl port-forward` running and `VERITLY_EXECUTOR_URL` matches the local bind address
-
-## Backend Integration
-
-The bash tool in `packages/opencode/src/tool/bash.ts` sends commands to the executor:
-
-```typescript
-const result = await fetch(`${EXECUTOR_URL}/v1/sessions/${sessionId}/exec`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ command, timeout }),
-})
-```
-
-In **Mode 1**, `EXECUTOR_URL` is the cluster-internal base URL. In **Mode 2**, it is typically `http://127.0.0.1:<port>` while port-forward is active.
-
-## Future Improvements
-
-- [ ] Add streaming output via WebSocket/SSE
-- [ ] VM snapshots for faster session resume
-- [ ] File sync between backend and VMs
-- [ ] Resource limits (CPU, memory per VM)
-- [ ] VM pool for faster cold start
-- [ ] Multi-region executor deployment
+- **`/readyz` 503**: read `errors`, `static`, and `vm.serialTail`. Often: missing guest (`build-vm`), QEMU not on `PATH`, or SSH still booting (raise `SSH_BOOT_TIMEOUT_MS`). Host checks use `guest-root/bin/busybox`, not `bin/sh` (symlink breaks on the host copy).
+- **SSH timeout**: raise `SSH_BOOT_TIMEOUT_MS`; inspect `VM_DATA_DIR/vms/<id>/serial.log` or the probe’s `serialTail` in `/readyz`.

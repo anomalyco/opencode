@@ -23,7 +23,7 @@ export interface ExecResult {
   output: string
   exitCode: number
   sessionId: string
-  mode: "firecracker"
+  mode: "qemu"
   vmId: string
 }
 
@@ -31,19 +31,52 @@ export interface SessionStatus {
   sessionId: string
   createdAt: number
   lastActivity: number
-  mode: "firecracker"
+  mode: "qemu"
   vmId: string
   sshPort?: number
 }
 
+export type ExecutorReadyzStatic = {
+  qemuPath: string
+  qemuRunnable: boolean
+  kernelPath: string
+  kernelBytes: number | null
+  initrdPath: string | null
+  initrdBytes: number | null
+  templatePath: string
+  templateBusyboxBytes: number | null
+  templateOk: boolean
+  kvmDevice: boolean
+  platform: string
+  hostArch: string
+}
+
+export type ExecutorReadyzVm = {
+  probeId: string
+  vmDir: string
+  sshHost: string
+  sshPort: number
+  msToSsh: number
+  command: string
+  exitCode: number
+  commandOutput: string
+  msExec: number
+  serialTail: string | null
+}
+
+/** Same JSON as `GET /readyz`: static checks plus a real probe VM, SSH, and `echo __readyz_ok__`. */
 export interface ExecutorHealth {
   ok: boolean
-  service: string
-  mode: "firecracker"
-  guest: "x86_64"
-  firecrackerVersion?: string
+  service: "executor"
+  mode: "qemu"
+  guest: "aarch64" | "x86_64"
+  cached: boolean
+  cachedAgeMs?: number
+  qemuVersion?: string
   activeSessions: number
-  ready: boolean
+  static: ExecutorReadyzStatic
+  vm: ExecutorReadyzVm | null
+  errors: string[]
 }
 
 
@@ -77,7 +110,7 @@ export class ExecutorSDK {
   }
 
   /**
-   * Check executor health
+   * Deep readiness: same as `GET /readyz` (200 only after a successful probe VM + SSH + echo).
    */
   async health(): Promise<ExecutorHealth> {
     const response = await fetch(`${this.baseUrl}/readyz`, { headers: this.hdr() })
