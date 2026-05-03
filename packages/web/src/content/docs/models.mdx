@@ -103,6 +103,31 @@ You can globally configure a model's options through the config.
 Here we're configuring global settings for two built-in models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.
 The built-in provider and model names can be found on [Models.dev](https://models.dev).
 
+### Context and Output Limits
+
+Some providers (espeically local providers) do not automatically supply information about context and output limits to OpenCode. These can be set in the model configuration directly to show context limit information. Here, a local LM Studio provider is serving Qwen 3.6 35b with a defined context window size of 200000 tokens and an output limit of 20000 tokens:
+
+```jsonc title="opencode.jsonc" {10-13}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "models": {
+        "qwen/qwen3.6-35b-a3b": {
+          "options": {
+            "reasoningEffort": "on",
+          },
+          "limit": {
+            "context": 200000,
+            "output": 20000
+          }
+        },
+      },
+    }
+  }
+}
+```
+
 You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
 
 You can also define custom variants that extend built-in ones. Variants let you configure different settings for the same model without creating duplicate entries:
