@@ -1,22 +1,28 @@
 import { ServerAuth } from "@/server/auth"
 import { Effect, Encoding, Layer, Redacted } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiError, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
+import { HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
 const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
 
+// Avoid HttpApiSecurity alternatives here: Effect security middleware wraps the
+// full handler, so a downstream failure can make the next auth alternative run
+// and remap an authorized NotFound into Unauthorized.
 export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   "@opencode/ExperimentalHttpApiAuthorization",
   {
     error: HttpApiError.UnauthorizedNoContent,
-    security: {
-      basic: HttpApiSecurity.basic,
-      authToken: HttpApiSecurity.apiKey({ in: "query", key: AUTH_TOKEN_QUERY }),
-    },
   },
 ) {}
+
+function emptyCredential() {
+  return {
+    username: "",
+    password: Redacted.make(""),
+  }
+}
 
 function validateCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
@@ -31,19 +37,14 @@ function validateCredential<A, E, R>(
 }
 
 function decodeCredential(input: string) {
-  const emptyCredential = {
-    username: "",
-    password: Redacted.make(""),
-  }
-
   return Encoding.decodeBase64String(input)
     .asEffect()
     .pipe(
       Effect.match({
-        onFailure: () => emptyCredential,
+        onFailure: emptyCredential,
         onSuccess: (header) => {
           const parts = header.split(":")
-          if (parts.length !== 2) return emptyCredential
+          if (parts.length !== 2) return emptyCredential()
           return {
             username: parts[0],
             password: Redacted.make(parts[1]),
@@ -51,6 +52,14 @@ function decodeCredential(input: string) {
         },
       }),
     )
+}
+
+function credentialFromRequest(request: HttpServerRequest.HttpServerRequest) {
+  const token = new URL(request.url, "http://localhost").searchParams.get(AUTH_TOKEN_QUERY)
+  if (token) return decodeCredential(token)
+  const match = /^Basic\s+(.+)$/i.exec(request.headers.authorization ?? "")
+  if (match) return decodeCredential(match[1])
+  return Effect.succeed(emptyCredential())
 }
 
 function validateRawCredential<A, E, R>(
@@ -77,21 +86,9 @@ export const authorizationRouterMiddleware = HttpRouter.middleware()(
     return (effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        const match = /^Basic\s+(.+)$/i.exec(request.headers.authorization ?? "")
-        if (match) {
-          return yield* decodeCredential(match[1]).pipe(
-            Effect.flatMap((credential) => validateRawCredential(effect, credential, config)),
-          )
-        }
-
-        const token = new URL(request.url, "http://localhost").searchParams.get(AUTH_TOKEN_QUERY)
-        if (token) {
-          return yield* decodeCredential(token).pipe(
-            Effect.flatMap((credential) => validateRawCredential(effect, credential, config)),
-          )
-        }
-
-        return yield* validateRawCredential(effect, { username: "", password: Redacted.make("") }, config)
+        return yield* credentialFromRequest(request).pipe(
+          Effect.flatMap((credential) => validateRawCredential(effect, credential, config)),
+        )
       })
   }),
 )
@@ -100,12 +97,14 @@ export const authorizationLayer = Layer.effect(
   Authorization,
   Effect.gen(function* () {
     const config = yield* ServerAuth.Config
-    return Authorization.of({
-      basic: (effect, { credential }) => validateCredential(effect, credential, config),
-      authToken: (effect, { credential }) =>
-        decodeCredential(Redacted.value(credential)).pipe(
-          Effect.flatMap((decoded) => validateCredential(effect, decoded, config)),
-        ),
-    })
+    if (!ServerAuth.required(config)) return Authorization.of((effect) => effect)
+    return Authorization.of((effect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest
+        return yield* credentialFromRequest(request).pipe(
+          Effect.flatMap((credential) => validateCredential(effect, credential, config)),
+        )
+      }),
+    )
   }),
 )

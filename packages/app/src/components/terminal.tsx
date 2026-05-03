@@ -15,6 +15,7 @@ import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
+import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -65,13 +66,6 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 const debugTerminal = (...values: unknown[]) => {
   if (!import.meta.env.DEV) return
   console.debug("[terminal]", ...values)
-}
-
-const errorName = (err: unknown) => {
-  if (!err || typeof err !== "object") return
-  if (!("name" in err)) return
-  const errorName = err.name
-  return typeof errorName === "string" ? errorName : undefined
 }
 
 const useTerminalUiBindings = (input: {
@@ -478,10 +472,9 @@ export const Terminal = (props: TerminalProps) => {
 
       const gone = () =>
         client.pty
-          .get({ ptyID: id })
-          .then(() => false)
+          .get({ ptyID: id }, { throwOnError: false })
+          .then((result) => result.response.status === 404)
           .catch((err) => {
-            if (errorName(err) === "NotFoundError") return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
@@ -509,18 +502,9 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         drop?.()
 
-        const next = new URL(url + `/pty/${id}/connect`)
-        next.searchParams.set("directory", directory)
-        next.searchParams.set("cursor", String(seek))
-        next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        if (!sameOrigin && password) {
-          next.searchParams.set("auth_token", btoa(`${username}:${password}`))
-          // For same-origin requests, let the browser reuse the page's existing auth.
-          next.username = username
-          next.password = password
-        }
-
-        const socket = new WebSocket(next)
+        const socket = new WebSocket(
+          terminalWebSocketURL({ url, id, directory, cursor: seek, sameOrigin, username, password }),
+        )
         socket.binaryType = "arraybuffer"
         ws = socket
 

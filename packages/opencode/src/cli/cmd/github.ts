@@ -29,7 +29,6 @@ import { Provider } from "@/provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
-import { AppRuntime } from "@/effect/app-runtime"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
@@ -206,6 +205,8 @@ export const GithubInstallCommand = effectCmd({
     const maybeCtx = yield* InstanceRef
     if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
     const ctx = maybeCtx
+    const modelsDev = yield* ModelsDev.Service
+    const gitSvc = yield* Git.Service
     yield* Effect.promise(async () => {
       {
         UI.empty()
@@ -213,7 +214,7 @@ export const GithubInstallCommand = effectCmd({
         const app = await getAppInfo()
         await installGitHubApp()
 
-        const providers = await AppRuntime.runPromise(ModelsDev.Service.use((s) => s.get())).then((p) => {
+        const providers = await Effect.runPromise(modelsDev.get()).then((p) => {
           // TODO: add guide for copilot, for now just hide it
           delete p["github-copilot"]
           return p
@@ -261,9 +262,9 @@ export const GithubInstallCommand = effectCmd({
           }
 
           // Get repo info
-          const info = await AppRuntime.runPromise(
-            Git.Service.use((git) => git.run(["remote", "get-url", "origin"], { cwd: ctx.worktree })),
-          ).then((x) => x.text().trim())
+          const info = await Effect.runPromise(gitSvc.run(["remote", "get-url", "origin"], { cwd: ctx.worktree })).then(
+            (x) => x.text().trim(),
+          )
           const parsed = parseGitHubRemote(info)
           if (!parsed) {
             prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
@@ -440,6 +441,10 @@ export const GithubRunCommand = effectCmd({
   handler: Effect.fn("Cli.github.run")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return yield* Effect.die("InstanceRef not provided")
+    const gitSvc = yield* Git.Service
+    const sessionSvc = yield* Session.Service
+    const sessionShare = yield* SessionShare.Service
+    const sessionPrompt = yield* SessionPrompt.Service
     yield* Effect.promise(async () => {
       const isMock = args.token || args.event
 
@@ -503,21 +508,20 @@ export const GithubRunCommand = effectCmd({
           : "issue"
         : undefined
       const gitText = async (args: string[]) => {
-        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: ctx.worktree })))
+        const result = await Effect.runPromise(gitSvc.run(args, { cwd: ctx.worktree }))
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result.text().trim()
       }
       const gitRun = async (args: string[]) => {
-        const result = await AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: ctx.worktree })))
+        const result = await Effect.runPromise(gitSvc.run(args, { cwd: ctx.worktree }))
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result
       }
-      const gitStatus = (args: string[]) =>
-        AppRuntime.runPromise(Git.Service.use((git) => git.run(args, { cwd: ctx.worktree })))
+      const gitStatus = (args: string[]) => Effect.runPromise(gitSvc.run(args, { cwd: ctx.worktree }))
       const commitChanges = async (summary: string, actor?: string) => {
         const args = ["commit", "-m", summary]
         if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)
@@ -554,24 +558,22 @@ export const GithubRunCommand = effectCmd({
 
         // Setup opencode session
         const repoData = await fetchRepo()
-        session = await AppRuntime.runPromise(
-          Session.Service.use((svc) =>
-            svc.create({
-              permission: [
-                {
-                  permission: "question",
-                  action: "deny",
-                  pattern: "*",
-                },
-              ],
-            }),
-          ),
+        session = await Effect.runPromise(
+          sessionSvc.create({
+            permission: [
+              {
+                permission: "question",
+                action: "deny",
+                pattern: "*",
+              },
+            ],
+          }),
         )
         subscribeSessionEvents()
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
-          await AppRuntime.runPromise(SessionShare.Service.use((svc) => svc.share(session.id)))
+          await Effect.runPromise(sessionShare.share(session.id))
           return session.id.slice(-8)
         })()
         console.log("opencode session", session.id)
@@ -944,9 +946,9 @@ export const GithubRunCommand = effectCmd({
       async function chat(message: string, files: PromptFiles = []) {
         console.log("Sending message to opencode...")
 
-        return AppRuntime.runPromise(
+        return Effect.runPromise(
           Effect.gen(function* () {
-            const prompt = yield* SessionPrompt.Service
+            const prompt = sessionPrompt
             const result = yield* prompt.prompt({
               sessionID: session.id,
               messageID: MessageID.ascending(),
