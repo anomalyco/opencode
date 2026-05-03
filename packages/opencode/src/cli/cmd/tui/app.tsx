@@ -1,7 +1,14 @@
 import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
-import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
+import {
+  CliRenderEvents,
+  createCliRenderer,
+  MouseButton,
+  RendererControlState,
+  type CliRenderer,
+  type CliRendererConfig,
+} from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
   Switch,
@@ -91,6 +98,51 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   }
 }
 
+function installAppleTerminalRepaintWorkaround(renderer: CliRenderer) {
+  if (process.env.TERM_PROGRAM !== "Apple_Terminal") return
+  if (process.env.OPENCODE_APPLE_TERMINAL_REPAINT_WORKAROUND === "0") return
+
+  const repaint = () => {
+    if (renderer.isDestroyed) return
+
+    // Apple Terminal can leave the alternate screen partially stale after resize
+    // or screen restore. Re-entering OpenTUI's terminal setup clears the current
+    // render buffer, which makes the next frame repaint every cell.
+    if (renderer.controlState !== RendererControlState.EXPLICIT_SUSPENDED) {
+      try {
+        renderer.suspend()
+        process.stdout.write("\x1b[r\x1b[?6l\x1b[2J\x1b[H")
+        renderer.resume()
+        return
+      } catch {
+        // Fall through to a plain clear + render request. This path should only
+        // be hit if the terminal is already mid-teardown.
+      }
+    }
+
+    process.stdout.write("\x1b[r\x1b[?6l\x1b[2J\x1b[H")
+    renderer.requestRender()
+  }
+
+  let pending: ReturnType<typeof setTimeout> | undefined
+  const schedule = () => {
+    if (pending) clearTimeout(pending)
+    pending = setTimeout(() => {
+      pending = undefined
+      repaint()
+    }, 30)
+  }
+
+  process.on("SIGWINCH", schedule)
+  renderer.on(CliRenderEvents.RESIZE, schedule)
+
+  return () => {
+    if (pending) clearTimeout(pending)
+    process.off("SIGWINCH", schedule)
+    renderer.off(CliRenderEvents.RESIZE, schedule)
+  }
+}
+
 function errorMessage(error: unknown) {
   const formatted = FormatError(error)
   if (formatted !== undefined) return formatted
@@ -123,8 +175,10 @@ export function tui(input: {
   return new Promise<void>(async (resolve) => {
     const unguard = win32InstallCtrlCGuard()
     win32DisableProcessedInput()
+    let removeAppleTerminalRepaintWorkaround: (() => void) | undefined
 
     const onExit = async () => {
+      removeAppleTerminalRepaintWorkaround?.()
       unguard?.()
       resolve()
     }
@@ -134,6 +188,7 @@ export function tui(input: {
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
+    removeAppleTerminalRepaintWorkaround = installAppleTerminalRepaintWorkaround(renderer)
     // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
     void renderer.getPalette({ size: 16 }).catch(() => undefined)
     const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
