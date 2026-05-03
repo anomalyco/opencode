@@ -1,6 +1,7 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { NodeFileSystem } from "@effect/platform-node"
 import { test, type TestOptions } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Config, ConfigProvider, Effect, FileSystem, Layer, PlatformError } from "effect"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 import { RequestExecutor } from "../src/executor"
@@ -8,6 +9,53 @@ import { testEffect } from "./lib/effect"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
+const LOCAL_ENV = path.resolve(__dirname, "..", ".env.local")
+
+const LOCAL_ENV_KEYS = [
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GOOGLE_GENERATIVE_AI_API_KEY",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "BEDROCK_RECORDING_REGION",
+  "BEDROCK_MODEL_ID",
+  "GROQ_API_KEY",
+  "OPENROUTER_API_KEY",
+  "XAI_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "TOGETHER_AI_API_KEY",
+  "MISTRAL_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "VENICE_API_KEY",
+  "CEREBRAS_API_KEY",
+  "DEEPINFRA_API_KEY",
+  "FIREWORKS_API_KEY",
+  "BASETEN_API_KEY",
+]
+
+const catchMissingFile = (error: PlatformError.PlatformError) => {
+  if (error.reason._tag === "NotFound") return Effect.succeed("")
+  return Effect.fail(error)
+}
+
+const loadLocalEnv = Effect.fn("RecordedTests.loadLocalEnv")(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const contents = yield* fileSystem.readFileString(LOCAL_ENV).pipe(Effect.catch(catchMissingFile))
+  const provider = ConfigProvider.fromDotEnvContents(contents)
+  yield* Effect.forEach(LOCAL_ENV_KEYS, (name) =>
+    Config.string(name).parse(provider).pipe(
+      Effect.matchEffect({
+        onFailure: () => Effect.void,
+        onSuccess: (value) => Effect.sync(() => {
+          if (process.env[name] === undefined) process.env[name] = value
+        }),
+      }),
+    ),
+  )
+})
+
+if (process.env.RECORD === "true") await Effect.runPromise(loadLocalEnv().pipe(Effect.provide(NodeFileSystem.layer)))
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
 
