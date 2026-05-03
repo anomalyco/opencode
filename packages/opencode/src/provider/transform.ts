@@ -284,7 +284,10 @@ function normalizeMessages(
     }
 
     for (const msg of unique([...system, ...final])) {
-      const useMessageLevelOptions = model.providerID === "anthropic" || model.providerID.includes("bedrock")
+      const useMessageLevelOptions =
+        model.providerID === "anthropic" ||
+        model.providerID.includes("bedrock") ||
+        model.api.npm === "@ai-sdk/amazon-bedrock"
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
@@ -1203,7 +1206,10 @@ export function options(input: {
       result["promptCacheKey"] = input.sessionID
     }
 
-    if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
+    if (
+      (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") &&
+      input.model.capabilities.reasoning
+    ) {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
