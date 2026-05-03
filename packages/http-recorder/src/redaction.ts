@@ -66,6 +66,8 @@ const redactionSet = (values: ReadonlyArray<string> | undefined, defaults: Reado
 export const redactUrl = (raw: string, query: ReadonlyArray<string> = DEFAULT_REDACT_QUERY) => {
   if (!URL.canParse(raw)) return raw
   const url = new URL(raw)
+  if (url.username) url.username = REDACTED
+  if (url.password) url.password = REDACTED
   const redacted = redactionSet(query, DEFAULT_REDACT_QUERY)
   for (const key of [...url.searchParams.keys()]) {
     if (redacted.has(key.toLowerCase())) url.searchParams.set(key, REDACTED)

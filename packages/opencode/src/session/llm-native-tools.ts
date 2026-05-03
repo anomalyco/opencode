@@ -8,8 +8,10 @@ import {
   type ContentPart,
   type RequestExecutor,
 } from "@opencode-ai/llm"
-import { Cause, Deferred, Effect, FiberSet, Queue, Stream, type Scope } from "effect"
-import type { Tool, ToolExecutionOptions } from "ai"
+import { safeValidateTypes } from "@ai-sdk/provider-utils"
+import { Cause, Deferred, Effect, Exit, FiberSet, Queue, Schema, Stream, type Scope } from "effect"
+import { asSchema, type Tool, type ToolExecutionOptions } from "ai"
+import type { Tool as OpenCodeTool } from "@/tool/tool"
 
 // Maximum number of model rounds before the streaming-dispatch loop stops.
 // Mirrors `ToolRuntime.run`'s default; tweak via `maxSteps` if a caller needs
@@ -30,18 +32,35 @@ interface RoundState {
   toolResults: Array<{ id: string; name: string; result: unknown }>
 }
 
-const appendStreamingText = (state: RoundState, type: "text" | "reasoning", text: string) => {
+const appendStreamingText = (
+  state: RoundState,
+  type: "text" | "reasoning",
+  text: string,
+  options: { readonly encrypted?: string; readonly metadata?: Record<string, unknown> } = {},
+) => {
   const last = state.assistantContent.at(-1)
-  if (last?.type === type) {
-    state.assistantContent[state.assistantContent.length - 1] = { ...last, text: `${last.text}${text}` }
+  const canMergeSignedReasoning = type === "reasoning" && text === "" && options.encrypted && last?.type === "reasoning"
+  const canMergeText = last?.type === type && !options.metadata && !last.metadata && !options.encrypted
+  if (canMergeSignedReasoning || canMergeText) {
+    state.assistantContent[state.assistantContent.length - 1] = {
+      ...last,
+      text: `${last.text}${text}`,
+      ...(type === "reasoning" && options.encrypted ? { encrypted: options.encrypted } : {}),
+      metadata: options.metadata ? { ...(last.metadata ?? {}), ...options.metadata } : last.metadata,
+    }
     return
   }
-  state.assistantContent.push({ type, text })
+  state.assistantContent.push({
+    type,
+    text,
+    ...(type === "reasoning" && options.encrypted ? { encrypted: options.encrypted } : {}),
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+  })
 }
 
 const accumulate = (state: RoundState, event: LLMEvent) => {
-  if (event.type === "text-delta") return appendStreamingText(state, "text", event.text)
-  if (event.type === "reasoning-delta") return appendStreamingText(state, "reasoning", event.text)
+  if (event.type === "text-delta") return appendStreamingText(state, "text", event.text, { metadata: event.metadata })
+  if (event.type === "reasoning-delta") return appendStreamingText(state, "reasoning", event.text, { encrypted: event.encrypted, metadata: event.metadata })
   if (event.type === "tool-call") {
     state.assistantContent.push(
       LLM.toolCall({
@@ -49,6 +68,7 @@ const accumulate = (state: RoundState, event: LLMEvent) => {
         name: event.name,
         input: event.input,
         providerExecuted: event.providerExecuted,
+        metadata: event.metadata,
       }),
     )
     return
@@ -69,6 +89,85 @@ const accumulate = (state: RoundState, event: LLMEvent) => {
   }
 }
 
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
+
+const validationError = (error: unknown) => `Invalid tool input: ${errorMessage(error)}`
+
+const inputValidationError = (error: unknown) => ({ _tag: "InputValidationError" as const, message: validationError(error) })
+
+const isInputValidationError = (error: unknown): error is ReturnType<typeof inputValidationError> =>
+  typeof error === "object" && error !== null && "_tag" in error && error._tag === "InputValidationError"
+
+const inputValidationMessage = (error: unknown) => {
+  if (isInputValidationError(error)) return error.message
+  const message = errorMessage(error)
+  return message.includes("Invalid tool input") ? message : undefined
+}
+
+const causeError = (cause: Cause.Cause<unknown>) =>
+  (cause as { readonly failures?: ReadonlyArray<{ readonly _tag: string; readonly error?: unknown }> }).failures
+    ?.find((failure) => failure._tag === "Fail")?.error ?? Cause.pretty(cause)
+
+const repairCall = (
+  call: { readonly id: string; readonly name: string; readonly input: unknown },
+  tools: Record<string, Tool>,
+  error: string,
+) => {
+  const lower = call.name.toLowerCase()
+  if (lower !== call.name && tools[lower]) return { ...call, name: lower }
+  if (call.name !== "invalid" && tools.invalid) {
+    return { ...call, name: "invalid", input: { tool: call.name, error } }
+  }
+  return undefined
+}
+
+const validateInput = (tool: Tool, input: unknown) =>
+  Effect.tryPromise({
+    try: async () => {
+      const result = await safeValidateTypes({ value: input, schema: asSchema(tool.inputSchema) })
+      if (result.success) return result.value
+      throw result.error
+    },
+    catch: inputValidationError,
+  })
+
+const validateNativeInput = (tool: OpenCodeTool.Def | undefined, input: unknown) => {
+  if (!tool) return Effect.succeed(input)
+  return Schema.decodeUnknownEffect(tool.parameters)(input).pipe(Effect.mapError(inputValidationError))
+}
+
+const executeTool = (
+  call: { readonly id: string; readonly name: string; readonly input: unknown },
+  tool: Tool,
+  nativeTool: OpenCodeTool.Def | undefined,
+  abort: AbortSignal,
+) => {
+  const options: ToolExecutionOptions = {
+    toolCallId: call.id,
+    messages: [],
+    abortSignal: abort,
+  }
+  return validateNativeInput(nativeTool, call.input).pipe(
+    Effect.flatMap((input) => validateInput(tool, input)),
+    Effect.flatMap((input) =>
+      Effect.tryPromise({
+        try: () => Promise.resolve(tool.execute!(input as never, options)),
+        catch: (err) => err,
+      }),
+    ),
+  )
+}
+
+const dispatchFailureEvent = (
+  call: { readonly id: string; readonly name: string },
+  cause: Cause.Cause<unknown>,
+): LLMEvent => ({
+  type: "tool-error",
+  id: call.id,
+  name: call.name,
+  message: errorMessage(causeError(cause)),
+})
+
 // Dispatch a single client-side tool call. Returns the synthetic LLMEvent
 // that should be injected back into the round's stream — either a
 // `tool-result` (success) or `tool-error` (handler threw / unknown tool).
@@ -78,11 +177,14 @@ const accumulate = (state: RoundState, event: LLMEvent) => {
 const dispatchTool = (
   call: { readonly id: string; readonly name: string; readonly input: unknown },
   tools: Record<string, Tool>,
+  nativeTools: ReadonlyArray<OpenCodeTool.Def>,
   abort: AbortSignal,
 ): Effect.Effect<LLMEvent> =>
   Effect.gen(function* () {
     const tool = tools[call.name]
     if (!tool || typeof tool.execute !== "function") {
+      const repaired = repairCall(call, tools, `Unknown tool: ${call.name}`)
+      if (repaired) return yield* dispatchTool(repaired, tools, nativeTools, abort)
       return {
         type: "tool-error",
         id: call.id,
@@ -90,33 +192,27 @@ const dispatchTool = (
         message: `Unknown tool: ${call.name}`,
       } satisfies LLMEvent
     }
-    const options: ToolExecutionOptions = {
-      toolCallId: call.id,
-      messages: [],
-      abortSignal: abort,
+    const exit = yield* Effect.exit(executeTool(call, tool, nativeTools.find((item) => item.id === call.name), abort))
+    if (Exit.isSuccess(exit)) {
+      return {
+        type: "tool-result",
+        id: call.id,
+        name: call.name,
+        result: { type: "json", value: exit.value },
+      } satisfies LLMEvent
     }
-    return yield* Effect.tryPromise({
-      try: () => Promise.resolve(tool.execute!(call.input as never, options)),
-      catch: (err) => err,
-    }).pipe(
-      Effect.map(
-        (result): LLMEvent => ({
-          type: "tool-result",
-          id: call.id,
-          name: call.name,
-          result: { type: "json", value: result },
-        }),
-      ),
-      Effect.catch(
-        (err): Effect.Effect<LLMEvent> =>
-          Effect.succeed({
-            type: "tool-error",
-            id: call.id,
-            name: call.name,
-            message: err instanceof Error ? err.message : String(err),
-          }),
-      ),
-    )
+    const err = causeError(exit.cause)
+    const invalidInput = inputValidationMessage(err)
+    if (invalidInput) {
+      const repaired = repairCall(call, tools, invalidInput)
+      if (repaired) return yield* dispatchTool(repaired, tools, nativeTools, abort)
+    }
+    return {
+      type: "tool-error",
+      id: call.id,
+      name: call.name,
+      message: invalidInput ?? errorMessage(err),
+    } satisfies LLMEvent
   })
 
 // Drive one model round. Streams every LLM event in real time; each
@@ -132,6 +228,7 @@ const runOneRound = (
   client: LLMClient,
   request: LLMRequest,
   tools: Record<string, Tool>,
+  nativeTools: ReadonlyArray<OpenCodeTool.Def>,
   abort: AbortSignal,
 ): Effect.Effect<
   {
@@ -157,9 +254,10 @@ const runOneRound = (
               if (event.type === "tool-call" && !event.providerExecuted) {
                 yield* FiberSet.run(
                   fiberSet,
-                  dispatchTool(event, tools, abort).pipe(
-                    Effect.flatMap((resultEvent) =>
+                  Effect.exit(dispatchTool(event, tools, nativeTools, abort)).pipe(
+                    Effect.flatMap((exit) =>
                       Effect.gen(function* () {
+                        const resultEvent = Exit.isSuccess(exit) ? exit.value : dispatchFailureEvent(event, exit.cause)
                         if (resultEvent.type === "tool-result") {
                           state.toolResults.push({
                             id: resultEvent.id,
@@ -222,6 +320,7 @@ export const runWithTools = (input: {
   readonly client: LLMClient
   readonly request: LLMRequest
   readonly tools: Record<string, Tool>
+  readonly nativeTools?: ReadonlyArray<OpenCodeTool.Def>
   readonly abort: AbortSignal
   readonly maxSteps?: number
 }): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> => {
@@ -229,7 +328,7 @@ export const runWithTools = (input: {
   const round = (request: LLMRequest, step: number): Stream.Stream<LLMEvent, LLMError, RequestExecutor.Service> =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const { events, done } = yield* runOneRound(input.client, request, input.tools, input.abort)
+        const { events, done } = yield* runOneRound(input.client, request, input.tools, input.nativeTools ?? [], input.abort)
         const continuation = Stream.unwrap(
           Effect.gen(function* () {
             const state = yield* Deferred.await(done)

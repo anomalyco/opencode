@@ -8,7 +8,7 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http"
 import * as path from "node:path"
-import { redactedErrorRequest, mismatchDetail } from "./diff"
+import { redactedErrorRequest, mismatchDetail, requestDiff } from "./diff"
 import { defaultMatcher, decodeJson, type RequestMatcher } from "./matching"
 import { cassetteSecretFindings, redactHeaders, redactUrl, type SecretFinding } from "./redaction"
 import type { Cassette, CassetteMetadata, Interaction, ResponseSnapshot } from "./schema"
@@ -67,7 +67,7 @@ const decodeResponseBody = (snapshot: ResponseSnapshot) =>
 const fixtureMissing = (request: HttpClientRequest.HttpClientRequest, name: string) =>
   new HttpClientError.HttpClientError({
     reason: new HttpClientError.TransportError({
-      request,
+      request: redactedErrorRequest(request),
       description: `Fixture "${name}" not found. Run with RECORD=true to create it.`,
     }),
   })
@@ -87,7 +87,7 @@ const unsafeCassette = (
 ) =>
   new HttpClientError.HttpClientError({
     reason: new HttpClientError.TransportError({
-      request,
+      request: redactedErrorRequest(request),
       description: `Refusing to write cassette "${name}" because it contains possible secrets: ${findings
         .map((item) => `${item.path} (${item.reason})`)
         .join(", ")}`,
@@ -133,9 +133,14 @@ export const cassetteLayer = (
       const selectInteraction = (cassette: Cassette, incoming: Interaction["request"]) =>
         Effect.gen(function* () {
           if (sequential) {
-            const index = yield* Ref.getAndUpdate(cursor, (n) => n + 1)
+            const index = yield* Ref.get(cursor)
             const interaction = cassette.interactions[index]
-            return { interaction, detail: `interaction ${index + 1} of ${cassette.interactions.length} not recorded` }
+            if (!interaction) return { interaction, detail: `interaction ${index + 1} of ${cassette.interactions.length} not recorded` }
+            if (!match(incoming, interaction.request)) {
+              return { interaction: undefined, detail: requestDiff(interaction.request, incoming).join("\n") }
+            }
+            yield* Ref.update(cursor, (n) => n + 1)
+            return { interaction, detail: "" }
           }
           const interaction = cassette.interactions.find((candidate) => match(incoming, candidate.request))
           return { interaction, detail: interaction ? "" : mismatchDetail(cassette, incoming) }

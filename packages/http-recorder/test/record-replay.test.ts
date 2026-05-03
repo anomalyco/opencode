@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { HttpRecorder } from "../src"
+import { redactedErrorRequest } from "../src/diff"
 
 const post = (url: string, body: object) =>
   Effect.gen(function* () {
@@ -36,6 +37,12 @@ describe("http-recorder", () => {
     )
   })
 
+  test("redacts URL credentials", () => {
+    expect(HttpRecorder.redactUrl("https://user:password@example.test/path?safe=value")).toBe(
+      "https://%5BREDACTED%5D:%5BREDACTED%5D@example.test/path?safe=value",
+    )
+  })
+
   test("redacts sensitive headers when allow-listed", () => {
     expect(
       HttpRecorder.redactHeaders(
@@ -55,6 +62,20 @@ describe("http-recorder", () => {
       "x-api-key": "[REDACTED]",
       "x-custom-token": "[REDACTED]",
       "x-goog-api-key": "[REDACTED]",
+    })
+  })
+
+  test("redacts error requests without retaining headers, params, or body", () => {
+    const request = HttpClientRequest.post("https://example.test/path", {
+      headers: { authorization: "Bearer super-secret" },
+      body: HttpBody.text("super-secret-body", "text/plain"),
+    }).pipe(HttpClientRequest.setUrlParam("api_key", "super-secret-key"))
+
+    expect(redactedErrorRequest(request).toJSON()).toMatchObject({
+      url: "https://example.test/path",
+      urlParams: { params: [] },
+      headers: {},
+      body: { _tag: "Empty" },
     })
   })
 
@@ -135,6 +156,20 @@ describe("http-recorder", () => {
         yield* post("https://example.test/echo", { step: 2 })
         const exit = yield* Effect.exit(post("https://example.test/echo", { step: 3 }))
         expect(Exit.isFailure(exit)).toBe(true)
+      }),
+    )
+  })
+
+  test("sequential dispatch still validates each recorded request", async () => {
+    await runWith(
+      "record-replay/multi-step",
+      { dispatch: "sequential" },
+      Effect.gen(function* () {
+        yield* post("https://example.test/echo", { step: 1 })
+        const exit = yield* Effect.exit(post("https://example.test/echo", { step: 3 }))
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(failureText(exit)).toContain("$.step expected 2, received 3")
+        expect(yield* post("https://example.test/echo", { step: 2 })).toBe('{"reply":"second"}')
       }),
     )
   })

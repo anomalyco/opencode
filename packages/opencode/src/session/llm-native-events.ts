@@ -1,5 +1,6 @@
 import type { LLMEvent, ToolResultValue, Usage } from "@opencode-ai/llm"
 import type { Event as SessionEvent } from "./llm"
+import type { MessageV2 } from "./message-v2"
 
 type MapperState = {
   readonly text: Set<string>
@@ -46,6 +47,7 @@ type ExecuteShape = {
   readonly title?: unknown
   readonly metadata?: unknown
   readonly output?: unknown
+  readonly attachments?: unknown
 }
 
 const isExecuteResult = (value: unknown): value is ExecuteShape => {
@@ -54,15 +56,23 @@ const isExecuteResult = (value: unknown): value is ExecuteShape => {
   return typeof v.output === "string"
 }
 
+const isFilePart = (value: unknown): value is MessageV2.FilePart => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const part = value as Record<string, unknown>
+  return part.type === "file" && typeof part.id === "string" && typeof part.sessionID === "string" && typeof part.messageID === "string" && typeof part.mime === "string" && typeof part.url === "string"
+}
+
 const toolResultOutput = (result: ToolResultValue) => {
   if (result.type !== "json" || !isExecuteResult(result.value)) {
     return { title: "", metadata: {}, output: stringifyResult(result) }
   }
   const value = result.value
+  const attachments = Array.isArray(value.attachments) ? value.attachments.filter(isFilePart) : undefined
   return {
     title: typeof value.title === "string" ? value.title : "",
     metadata: typeof value.metadata === "object" && value.metadata !== null ? (value.metadata as Record<string, unknown>) : {},
     output: typeof value.output === "string" ? value.output : "",
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   }
 }
 

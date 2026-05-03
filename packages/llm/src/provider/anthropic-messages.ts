@@ -463,6 +463,10 @@ const processChunk = (state: ParserState, chunk: AnthropicChunk) =>
       return [state, [{ type: "reasoning-delta", text: chunk.delta.thinking }]] as const
     }
 
+    if (chunk.type === "content_block_delta" && chunk.delta?.type === "signature_delta" && chunk.delta.signature) {
+      return [state, [{ type: "reasoning-delta", text: "", encrypted: chunk.delta.signature }]] as const
+    }
+
     if (chunk.type === "content_block_delta" && chunk.delta?.type === "input_json_delta" && chunk.index !== undefined) {
       if (!chunk.delta.partial_json) return [state, []] as const
       const current = state.tools[chunk.index]

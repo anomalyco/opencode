@@ -266,6 +266,7 @@ export const TextDelta = Schema.Struct({
   type: Schema.Literal("text-delta"),
   id: Schema.optional(Schema.String),
   text: Schema.String,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "LLM.Event.TextDelta" })
 export type TextDelta = Schema.Schema.Type<typeof TextDelta>
 
@@ -279,6 +280,8 @@ export const ReasoningDelta = Schema.Struct({
   type: Schema.Literal("reasoning-delta"),
   id: Schema.optional(Schema.String),
   text: Schema.String,
+  encrypted: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "LLM.Event.ReasoningDelta" })
 export type ReasoningDelta = Schema.Schema.Type<typeof ReasoningDelta>
 
@@ -296,6 +299,7 @@ export const ToolCall = Schema.Struct({
   name: Schema.String,
   input: Schema.Unknown,
   providerExecuted: Schema.optional(Schema.Boolean),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "LLM.Event.ToolCall" })
 export type ToolCall = Schema.Schema.Type<typeof ToolCall>
 

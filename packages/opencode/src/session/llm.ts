@@ -547,7 +547,7 @@ const live: Layer.Layer<
       // definitions (sent to the model). Without this, the model would see
       // tools that the session has actively disabled.
       const filteredAITools = prepared.tools
-      const allowedIds = new Set(Object.keys(filteredAITools))
+      const allowedIds = new Set(Object.keys(filteredAITools).filter((id) => id !== "invalid"))
       const filteredNativeTools = input.nativeTools?.filter((tool) => allowedIds.has(tool.id))
 
       const llmRequest = yield* LLMNative.request({
@@ -602,6 +602,7 @@ const live: Layer.Layer<
             client: nativeClient,
             request: llmRequest,
             tools: filteredAITools,
+            nativeTools: filteredNativeTools,
             abort: input.abort,
           })
         : nativeClient.stream(llmRequest)

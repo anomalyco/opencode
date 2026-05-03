@@ -70,11 +70,11 @@ describe("Gemini adapter", () => {
           },
           {
             role: "model",
-            parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
+            parts: [{ functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } } }],
           },
           {
             role: "user",
-            parts: [{ functionResponse: { name: "lookup", response: { name: "lookup", content: '{"forecast":"sunny"}' } } }],
+            parts: [{ functionResponse: { id: "call_1", name: "lookup", response: { name: "lookup", content: '{"forecast":"sunny"}' } } }],
           },
         ],
         tools: [{
@@ -85,6 +85,73 @@ describe("Gemini adapter", () => {
           }],
         }],
         toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["lookup"] } },
+      })
+    }),
+  )
+
+  it.effect("round-trips thought signatures on text, reasoning, and tool calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [{
+          content: {
+            role: "model",
+            parts: [
+              { text: "visible", thoughtSignature: "text_sig" },
+              { text: "thinking", thought: true, thoughtSignature: "reasoning_sig" },
+              { functionCall: { id: "gemini_call_1", name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+            ],
+          },
+          finishReason: "STOP",
+        }],
+      })
+      const response = yield* LLMClient.make({ adapters: [Gemini.adapter] })
+        .generate(
+          LLM.updateRequest(request, {
+            tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+          }),
+        )
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toContainEqual({
+        type: "text-delta",
+        text: "visible",
+        metadata: { google: { thoughtSignature: "text_sig" } },
+      })
+      expect(response.events).toContainEqual({
+        type: "reasoning-delta",
+        text: "thinking",
+        metadata: { google: { thoughtSignature: "reasoning_sig" } },
+      })
+      expect(response.events).toContainEqual({
+        type: "tool-call",
+        id: "gemini_call_1",
+        name: "lookup",
+        input: { query: "weather" },
+        metadata: { google: { thoughtSignature: "tool_sig", functionCallId: "gemini_call_1" } },
+      })
+
+      const prepared = yield* LLMClient.make({ adapters: [Gemini.adapter] }).prepare(
+        LLM.request({
+          id: "req_thought_signatures",
+          model,
+          messages: [
+            LLM.assistant([
+              { type: "text", text: "visible", metadata: { google: { thoughtSignature: "text_sig" } } },
+              { type: "reasoning", text: "thinking", metadata: { google: { thoughtSignature: "reasoning_sig" } } },
+              LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" }, metadata: { google: { thoughtSignature: "tool_sig" } } }),
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.target).toMatchObject({
+        contents: [{
+          role: "model",
+          parts: [
+            { text: "visible", thoughtSignature: "text_sig" },
+            { text: "thinking", thought: true, thoughtSignature: "reasoning_sig" },
+            { functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+          ],
+        }],
       })
     }),
   )

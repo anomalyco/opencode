@@ -59,19 +59,54 @@ describe("LLMNativeEvents", () => {
   test("maps native tool results and errors into processor events", () => {
     const events = LLMNativeEvents.toSessionEvents([
       { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
-      { type: "tool-result", id: "call_1", name: "lookup", result: { type: "json", value: { forecast: "sunny" } } },
+      {
+        type: "tool-result",
+        id: "call_1",
+        name: "lookup",
+        result: {
+          type: "json",
+          value: {
+            title: "Lookup",
+            metadata: { count: 1 },
+            output: "sunny",
+            attachments: [{ id: "prt_file", sessionID: "ses_test", messageID: "msg_test", type: "file", mime: "text/plain", url: "data:text/plain;base64,c3Vubnk=" }],
+          },
+        },
+      },
       { type: "tool-error", id: "call_2", name: "lookup", message: "bad input" },
       { type: "tool-result", id: "call_3", name: "lookup", result: { type: "error", value: "provider failed" } },
     ] satisfies ReadonlyArray<LLMEvent>)
 
     expect(events.find((event) => event.type === "tool-result")).toMatchObject({
       toolCallId: "call_1",
-      output: { title: "", metadata: {}, output: '{"forecast":"sunny"}' },
+      output: {
+        title: "Lookup",
+        metadata: { count: 1 },
+        output: "sunny",
+        attachments: [{ id: "prt_file", sessionID: "ses_test", messageID: "msg_test", type: "file", mime: "text/plain", url: "data:text/plain;base64,c3Vubnk=" }],
+      },
     })
     expect(events.filter((event) => event.type === "tool-error")).toEqual([
       { type: "tool-error", toolCallId: "call_2", toolName: "lookup", input: {}, error: "bad input" },
       { type: "tool-error", toolCallId: "call_3", toolName: "lookup", input: {}, error: "provider failed" },
     ])
+  })
+
+  test("drops malformed native tool attachments", () => {
+    const events = LLMNativeEvents.toSessionEvents([
+      { type: "tool-call", id: "call_1", name: "lookup", input: {} },
+      {
+        type: "tool-result",
+        id: "call_1",
+        name: "lookup",
+        result: { type: "json", value: { title: "Lookup", metadata: {}, output: "done", attachments: [{ id: "missing-file-fields" }] } },
+      },
+    ] satisfies ReadonlyArray<LLMEvent>)
+
+    expect(events.find((event) => event.type === "tool-result")).toMatchObject({
+      output: { title: "Lookup", metadata: {}, output: "done" },
+    })
+    expect(events.find((event) => event.type === "tool-result" && "attachments" in event.output)).toBeUndefined()
   })
 
   test("maps provider errors into fatal processor errors", () => {

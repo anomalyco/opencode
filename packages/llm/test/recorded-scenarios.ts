@@ -63,6 +63,6 @@ export const expectFinish = (
 ) => expect(events.at(-1)).toMatchObject({ type: "request-finish", reason })
 
 export const expectWeatherToolCall = (response: LLMResponse) =>
-  expect(LLM.outputToolCalls(response)).toEqual([
+  expect(LLM.outputToolCalls(response)).toMatchObject([
     { type: "tool-call", id: expect.any(String), name: weatherToolName, input: { city: "Paris" } },
   ])

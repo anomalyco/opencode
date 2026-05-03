@@ -126,7 +126,6 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
         system: ["You are concise."],
         messages: [userMessage(mdl, userID, [userPart(userID, "Say hello.")])],
       })
-
       const client = LLMClient.make({ adapters, patches: ProviderPatch.defaults })
       const map = LLMNativeEvents.mapper()
 
@@ -289,6 +288,77 @@ describe("LLMNative stream wire-up (audit gap #4 phase 1)", () => {
 
       // No errors leaked through.
       expect(collected.some((event) => event.type === "error")).toBe(false)
+    }),
+  )
+
+  it.effect("validates native tool input before executing AI SDK tools", () =>
+    Effect.gen(function* () {
+      const mdl = anthropicModel()
+      const userID = MessageID.ascending()
+      let lookupCalled = false
+      const nativeTools = [{
+        id: "lookup",
+        description: "Lookup project data",
+        parameters: Schema.Struct({ query: Schema.String }),
+        execute: () => Effect.succeed({ title: "", metadata: {}, output: "" }),
+      }]
+      const llmRequest = yield* LLMNative.request({
+        id: "smoke-invalid-tool-input",
+        provider: ProviderTest.info({ id: ProviderID.make("anthropic"), key: "anthropic-key" }, mdl),
+        model: mdl,
+        system: ["Be concise."],
+        messages: [userMessage(mdl, userID, [userPart(userID, "Lookup weather.")])],
+        tools: nativeTools,
+      })
+
+      const body = sseBody([
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "call_1", name: "lookup" } },
+        { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"query":1}' } },
+        { type: "content_block_stop", index: 0 },
+        { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+        { type: "message_stop" },
+      ])
+
+      const events = yield* LLMNativeTools.runWithTools({
+        client: LLMClient.make({ adapters, patches: ProviderPatch.defaults }),
+        request: llmRequest,
+        nativeTools,
+        tools: {
+          lookup: tool({
+            description: "Lookup project data",
+            inputSchema: jsonSchema({
+              type: "object",
+              properties: { query: { type: "string" } },
+              required: ["query"],
+            }),
+            execute: async () => {
+              lookupCalled = true
+              return { title: "Lookup", metadata: {}, output: "should not execute" }
+            },
+          }),
+          invalid: tool({
+            description: "Do not use",
+            inputSchema: jsonSchema({
+              type: "object",
+              properties: { tool: { type: "string" }, error: { type: "string" } },
+              required: ["tool", "error"],
+            }),
+            execute: async (args) => ({ title: "Invalid Tool", metadata: {}, output: `invalid: ${args.error}` }),
+          }),
+        },
+        abort: new AbortController().signal,
+        maxSteps: 1,
+      }).pipe(Stream.runCollect, Effect.provide(fixedResponse(body)))
+
+      expect(lookupCalled).toBe(false)
+      const toolResult = Array.from(events).find((event) => event.type === "tool-result")
+      expect(toolResult).toMatchObject({
+        type: "tool-result",
+        id: "call_1",
+        name: "invalid",
+        result: { type: "json", value: { title: "Invalid Tool", metadata: {}, output: expect.stringContaining("Invalid tool input") } },
+      })
     }),
   )
 

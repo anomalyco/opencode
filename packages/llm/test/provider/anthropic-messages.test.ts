@@ -96,6 +96,35 @@ describe("Anthropic Messages adapter", () => {
     }),
   )
 
+  it.effect("round-trips streamed thinking signatures", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "message_start", message: { usage: { input_tokens: 5 } } },
+        { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
+        { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "thinking" } },
+        { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_123" } },
+        { type: "content_block_stop", index: 0 },
+        { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+      )
+      const response = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] })
+        .generate(request)
+        .pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events).toContainEqual({ type: "reasoning-delta", text: "", encrypted: "sig_123" })
+
+      const prepared = yield* LLMClient.make({ adapters: [AnthropicMessages.adapter] }).prepare(
+        LLM.request({
+          id: "req_signed_thinking",
+          model,
+          messages: [LLM.assistant({ type: "reasoning", text: "thinking", encrypted: "sig_123" })],
+        }),
+      )
+      expect(prepared.target).toMatchObject({
+        messages: [{ role: "assistant", content: [{ type: "thinking", thinking: "thinking", signature: "sig_123" }] }],
+      })
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(

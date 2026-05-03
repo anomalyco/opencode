@@ -356,10 +356,10 @@
       "name": "@opencode-ai/http-recorder",
       "version": "0.0.0",
       "dependencies": {
+        "@effect/platform-node": "catalog:",
         "effect": "catalog:",
       },
       "devDependencies": {
-        "@effect/platform-node": "catalog:",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",

@@ -121,11 +121,11 @@ interface StepState {
 
 const accumulate = (state: StepState, event: LLMEvent) => {
   if (event.type === "text-delta") {
-    appendStreamingText(state, "text", event.text)
+    appendStreamingText(state, "text", event.text, { metadata: event.metadata })
     return
   }
   if (event.type === "reasoning-delta") {
-    appendStreamingText(state, "reasoning", event.text)
+    appendStreamingText(state, "reasoning", event.text, { encrypted: event.encrypted, metadata: event.metadata })
     return
   }
   if (event.type === "tool-call") {
@@ -134,6 +134,7 @@ const accumulate = (state: StepState, event: LLMEvent) => {
       name: event.name,
       input: event.input,
       providerExecuted: event.providerExecuted,
+      metadata: event.metadata,
     })
     state.assistantContent.push(part)
     // Provider-executed tools are dispatched by the provider; the runtime must
@@ -157,13 +158,30 @@ const accumulate = (state: StepState, event: LLMEvent) => {
   }
 }
 
-const appendStreamingText = (state: StepState, type: "text" | "reasoning", text: string) => {
+const appendStreamingText = (
+  state: StepState,
+  type: "text" | "reasoning",
+  text: string,
+  options: { readonly encrypted?: string; readonly metadata?: Record<string, unknown> } = {},
+) => {
   const last = state.assistantContent.at(-1)
-  if (last?.type === type) {
-    state.assistantContent[state.assistantContent.length - 1] = { ...last, text: `${last.text}${text}` }
+  const canMergeSignedReasoning = type === "reasoning" && text === "" && options.encrypted && last?.type === "reasoning"
+  const canMergeText = last?.type === type && !options.metadata && !last.metadata && !options.encrypted
+  if (canMergeSignedReasoning || canMergeText) {
+    state.assistantContent[state.assistantContent.length - 1] = {
+      ...last,
+      text: `${last.text}${text}`,
+      ...(type === "reasoning" && options.encrypted ? { encrypted: options.encrypted } : {}),
+      metadata: options.metadata ? { ...(last.metadata ?? {}), ...options.metadata } : last.metadata,
+    }
     return
   }
-  state.assistantContent.push({ type, text })
+  state.assistantContent.push({
+    type,
+    text,
+    ...(type === "reasoning" && options.encrypted ? { encrypted: options.encrypted } : {}),
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+  })
 }
 
 const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<ToolResultValue> => {
