@@ -276,6 +276,10 @@ export interface Hooks {
     input: { command: string; sessionID: string; arguments: string },
     output: { parts: Part[] },
   ) => Promise<void>
+  "session.stopping"?: (
+    input: { sessionID: string },
+    output: { stop: boolean; message?: string },
+  ) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; messageID: string; callID: string; agent?: string; parentAgent?: string },
     output: { args: any },

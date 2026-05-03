@@ -78,6 +78,8 @@ bun test test/plugin/session-stopping.test.ts
 
 Observed result on 2026-05-03:
 - 4 pass, 0 fail, 10 assertions.
+- On `devflow/hojo`, the adapted Effect-path hook test has 2 pass, 0 fail,
+  4 assertions.
 
 Session start PR `#15224`:
 - No narrow committed test file was identified yet beyond package typecheck and

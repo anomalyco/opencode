@@ -1500,6 +1500,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             !hasToolCalls &&
             lastUser.id < lastAssistant.id
           ) {
+            const hook = yield* plugin.trigger(
+              "session.stopping",
+              { sessionID },
+              { stop: true, message: undefined as string | undefined },
+            )
+            if (!hook.stop && hook.message) {
+              yield* slog.info("session.stopping prevented stop", { sessionID })
+              yield* createUserMessage({
+                sessionID,
+                agent: lastUser.agent,
+                parentAgent: lastUser.parentAgent,
+                model: lastUser.model,
+                parts: [{ type: "text", text: hook.message }],
+              })
+              continue
+            }
             yield* slog.info("exiting loop")
             break
           }

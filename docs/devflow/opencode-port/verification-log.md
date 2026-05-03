@@ -38,6 +38,10 @@ Record verification evidence here before claiming any parity milestone.
 | 2026-05-03 | `bun run typecheck` in `packages/plugin` on `devflow/hojo` | PASS | `tsgo --noEmit` completed successfully. |
 | 2026-05-03 | `bun run typecheck` in `packages/opencode` on `devflow/hojo` before schema fix | FAIL | `Session.Event.TurnCompleted` used a Zod object where `BusEvent.define` expects Effect `Schema`. |
 | 2026-05-03 | `bun run typecheck` in `packages/opencode` on `devflow/hojo` after schema fix | PASS | `tsgo --noEmit` completed successfully. |
+| 2026-05-03 | `git cherry-pick 79739438c 7f67ccee1 daf9c9614 0296cc9ec bbd1c13e4 59c7a932b 634baac71 c233a989d e19f58e54` onto `devflow/hojo` | FAIL | First commit conflicted in `packages/opencode/src/session/prompt.ts` because the PR targets the older async prompt loop; cherry-pick was aborted and replaced with a minimal Effect-path adaptation. |
+| 2026-05-03 | `bun test test/plugin/session-stopping.test.ts` in `packages/opencode` on `devflow/hojo` | PASS | 2 tests passed, 0 failed, 4 assertions. |
+| 2026-05-03 | `bun run typecheck` in `packages/plugin` on `devflow/hojo` after `session.stopping` adaptation | PASS | `tsgo --noEmit` completed successfully. |
+| 2026-05-03 | `bun run typecheck` in `packages/opencode` on `devflow/hojo` after `session.stopping` adaptation | PASS | `tsgo --noEmit` completed successfully. |
 | TBD | `PYTHONPATH=src python3 -m pytest` | TBD | Current hook/unit baseline |
 | TBD | `./install.sh --target claude --root /tmp/devflow-claude-test install` | TBD | Claude install regression |
 | TBD | `./install.sh --target opencode --root /tmp/devflow-opencode-test install` | TBD | OpenCode install |

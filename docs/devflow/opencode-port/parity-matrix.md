@@ -8,7 +8,7 @@ Status values: `Not Started`, `Partial`, `Blocked`, `Parity`, `Not Applicable`.
 | Agents | Markdown agents with Claude `tools` arrays | Markdown agents with OpenCode `permission` objects | None | Not Started | Disposable install currently fails on Claude `tools` array |
 | Skills | `skills/<name>/SKILL.md` | Native OpenCode skills | None | Not Started | TBD |
 | `/flow` command | Claude command markdown | OpenCode command markdown with converted frontmatter | None | Not Started | TBD |
-| `/loop` command | Claude `Stop` hook re-enters loop | OpenCode `session.stopping` injects follow-up message | PR `#16598` | Blocked | TBD |
+| `/loop` command | Claude `Stop` hook re-enters loop | OpenCode `session.stopping` injects follow-up message | PR `#16598` | Partial | `session.stopping` hook integrated on `devflow/hojo`; targeted test and package typechecks pass. Command/frontmatter adapter work remains. |
 | Pre-tool edit/write enforcement | Claude `PreToolUse` hook chain blocks exit 2 | OpenCode `tool.execute.before` adapter throws on exit 2 | Existing plugin hook plus adapter | Not Started | TBD |
 | Pre-tool bash enforcement | Claude `PreToolUse Bash` hook chain blocks exit 2 | OpenCode `tool.execute.before` adapter throws on exit 2 | Existing plugin hook plus adapter | Not Started | TBD |
 | `apply_patch` enforcement | Claude uses `MultiEdit` | Adapter parses OpenCode `apply_patch` patch paths and applies write enforcement | None | Not Started | TBD |

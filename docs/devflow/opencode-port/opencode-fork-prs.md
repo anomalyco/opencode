@@ -9,7 +9,7 @@ fork. Do not apply or retain a fork patch unless it has an entry here.
 |---|---|---:|---|
 | `upstream-dev` | Mirror of `anomalyco/opencode:dev` | `387220f368ca3a31d94b4be3937d9d825ebd888c` | 2026-05-03 |
 | `devflow/base` | Rebase base for devflow patch stack | `387220f368ca3a31d94b4be3937d9d825ebd888c` | 2026-05-03 |
-| `devflow/hojo` | Curated compatibility patch stack | Integrated through `#15412` plus local `session.turn.completed` schema fix | 2026-05-03 |
+| `devflow/hojo` | Curated compatibility patch stack | Integrated through `#16598` local Effect-path adaptation | 2026-05-03 |
 | `devflow/release` | Tested branch consumed by devflow users | TBD | TBD |
 
 Local clone: `/Users/jvanzyl/js/jopen/hojo-opencode`.
@@ -22,7 +22,7 @@ Before pushing devflow branches, create or choose a fork remote explicitly.
 
 | PR | Title | Upstream State | Upstream Head | Fork Branch | Fork Commit | Devflow Gap Closed | Risk | Drop When | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| `#16598` | `feat: add session.stopping hook for plugins` | OPEN | `e19f58e5458a9cdf91645c0adb6827b438af1329` | `devflow/pr-16598-session-stopping` | `e19f58e5458a9cdf91645c0adb6827b438af1329` | `/loop` continuation / Claude `Stop` parity | Medium: loop re-entry can create infinite loops if plugin state is wrong | Upstream merges and rebase includes it | Tested |
+| `#16598` | `feat: add session.stopping hook for plugins` | OPEN | `e19f58e5458a9cdf91645c0adb6827b438af1329` | `devflow/pr-16598-session-stopping` | Local Effect-path adaptation on `devflow/hojo` | `/loop` continuation / Claude `Stop` parity | Medium: loop re-entry can create infinite loops if plugin state is wrong | Upstream merges and rebase includes it | Integrated |
 | `#15412` | `feat(plugin): include parent agent context in hook inputs` | OPEN | `0b389890a6d3c8f0dc5aceb9a5427def1f2934fb` | `devflow/pr-15412-parent-agent-context` | `22441217f`, `c56adc7bf`, `a8df203ff` on `devflow/hojo` | Agent identity and parent-agent context for boundary enforcement | Medium: hook payload shape conflicts possible | Upstream merges and rebase includes it | Integrated |
 | `#19470` | `feat(opencode): wire permission.ask plugin hook` | OPEN | `e115ed5ef6171f193e83441469631107f901e666` | `devflow/pr-19470-permission-ask` | `e115ed5ef6171f193e83441469631107f901e666` | Plugin participation in permission decisions | Medium: permission flow is security-sensitive | Upstream merges and rebase includes it | Failing Tests |
 | `#22654` | `feat(plugin): expose ask() on tool.execute.before hook` | OPEN | `d6b78a2fa9d1d5c77c3419686057a7767cca151f` | TBD | TBD | Interactive pre-tool enforcement path | Medium: depends on permission API shape | Upstream merges and rebase includes it | Not Applied |
