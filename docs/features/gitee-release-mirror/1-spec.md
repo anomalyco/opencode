@@ -6,9 +6,11 @@ related: ./1-spec.md ./3-changelog.md
 
 # gitee-release-mirror — spec
 
+> **2026-05-04 重要更新**:实施过程中发现 GitHub US runner → Gitee CN 上行 50MB 被 GFW 节流(3 次实测均 30 min timeout 不通),pivot 到**混合方案** —— workflow 只镜像元数据,附件由本地脚本(国内 IP)上传。详情见 `3-changelog.md` 的 "Pivot 决策" 章节。**本 spec 保留原始 fully-automated 设计的论证用作历史记录,但实际实现是混合**。
+
 ## 目标
 
-GitHub Release 发布后,自动同步到 Gitee Release(标题 / body / 附件 .exe / .dmg)。让国内用户从 Gitee 直接拿到安装包,不用翻去 GitHub 的 Release 页。
+GitHub Release 发布后,Gitee 上对应 Release 出现(标题 / body / 附件 .exe / .dmg),让国内用户从 Gitee 直接拿到安装包,不用翻去 GitHub 的 Release 页。
 
 ## 现状(F2a 已落地的部分)
 

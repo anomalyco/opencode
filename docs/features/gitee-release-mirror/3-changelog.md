@@ -49,15 +49,92 @@ release: published 事件
 
 详见 workflow 文件注释 + `1-spec.md`。
 
-## 验收(部分待 user 配置 + 首次 release 触发实测)
+## Pivot 决策(2026-05-04)
+
+### 触发
+
+实施过程中,workflow `release-mirror-gitee-deskfox` 三次实测全部失败(同一卡点):
+
+| 试 | timeout 上限 | 结果 |
+|---|---|---|
+| 1 | curl `--max-time 600s`(10 min)+ job timeout 20 min | 10 分钟 max-time hit,curl exit 28 |
+| 2 | 同 #1 | 同 #1 |
+| 3 | curl `--max-time 1800s`(30 min)+ job timeout 60 min | 30 分钟 max-time hit,curl exit 28 |
+
+**根因**:GitHub Actions runner(US 段 IP)→ Gitee 国内服务器,**50MB 上行被 GFW 节流到 30 分钟跑不完**。本机(国内 IP)同样 curl 调用走同 endpoint **5.5 秒** / 76 Mbps 完事。
+
+诊断证据:
+- 本机 curl `https://gitee.com/api/v5/repos/.../attach_files` (假 token)<30 秒返 401 → API 端点本身可达性正常
+- workflow 创 Gitee release(JSON POST 1KB)瞬时返 201 → 控制流量 OK
+- workflow 上传 50MB 附件 → 30 min timeout → 数据流量被节流
+
+### 方案对比
+
+| 方案 | 评价 |
+|---|---|
+| A. 用 self-hosted runner(国内 VM) | 最干净,但 user 没现成基础设施,运维成本高 |
+| B. workflow bump timeout 到 60 min | 还是 timeout,bump 没意义 |
+| C. 走 CDN / 代理转发上行 | 出 fork 项目 scope |
+| D. 用 GitHub Actions 在 docker 里跑国内 IP | 不靠谱,GitHub 不允许任意 outbound 节点 |
+| **E. 混合 — workflow 元数据 + 本地脚本附件**(选用) | workflow 30s 元数据,user 本地脚本 5s 附件,两端各干各的 |
+
+### 实施
+
+#### Workflow `release-mirror-gitee-deskfox.yml` 改动
+
+- ❌ 删 "Download GitHub release assets" step
+- ❌ 删 "Upload assets to Gitee release" step
+- ✏️ "Resolve metadata" step 末尾把 GitHub Release URL 追加到 Gitee body,让 Gitee 用户在附件还没传完时**直接点链接去 GitHub 下载**(GFW 节流是上行,下行 .exe from GitHub 国内能跑,虽然慢)
+- ⏱ `timeout-minutes` 60 → 5(纯 API 调用)
+- ➕ "Summary" step 提示 user 跑本地脚本
+
+#### 新本地脚本 `packages/branding/scripts/mirror-asset-to-gitee.ps1`
+
+- 输入 `-Tag <ship-prod-X>`
+- 自动定位本地 `.exe`(`packages/branding/installer/Output/`)→ 找不到则 `gh release download` 从 GitHub 下到 `D:\tmp\`
+- 校验 `GITEE_TOKEN`(env var,持久化建议 User 作用域)
+- GET Gitee releases 列表找 `release_id` by tag
+- 已有同名附件 → 跳过(去重)
+- curl `attach_files` 上传(国内 IP,5-10 秒)
+
+#### 用户使用流程(每次 release)
+
+```
+1. pack-installer.ps1 -Env prod    # 本地 build + bump + commit + tag
+2. git push origin --tags          # 触发 release-deskfox.yml
+3. (GitHub Actions build .exe + 创 draft Release ~10 min)
+4. 在 GitHub web UI Edit draft → Publish release
+5. (release-mirror-gitee-deskfox 触发,~30 秒在 Gitee 创 release 元数据)
+6. mirror-asset-to-gitee.ps1 -Tag ship-prod-X    # 本地秒传 .exe 到 Gitee
+```
+
+第 6 步是新增的 user 操作,**约 5-10 秒**,可接受。
+
+### 实测结果
+
+| 指标 | 实测 |
+|---|---|
+| Workflow 元数据镜像 (run #25279723354) | 30 秒 success ✅ |
+| Gitee release `id=669251` 元数据 | tag/name/body/prerelease 全 mirror,body 末尾追加 GitHub URL ✅ |
+| 本地脚本上传 `DeskFox-2026.5.3.1-setup.exe` (51.92 MB) | 5.5 秒 / 76 Mbps / HTTP 201 ✅ |
+| Gitee 端最终下载 URL | https://gitee.com/zoulukuang/deskfox/releases/download/ship-prod-2026.5.3.1/DeskFox-2026.5.3.1-setup.exe ✅ |
+
+### 已知边界(pivot 后)
+
+1. **Mac `.dmg` 自动定位待补**:本地脚本目前只覆盖 Win,Mac 端要 user 用 `-Asset <path>` 手动指定。下笔 follow-up 加 Mac 路径自动推。
+2. **不能完全自动化**:user 手动跑一行命令是结构性必需(本地 IP 是关键)。已在 `pack-installer.ps1` 流程文档中加提示。
+3. **同步延迟可见**:从 GitHub publish 到 Gitee 有附件,user 操作需要约 1 分钟(workflow 30s + 本地脚本 5s + user 切窗口操作)。如果 user 没及时跑本地脚本,Gitee release 短期只有元数据 + GitHub 链接(不影响,链接一直能用)。
+
+## 验收
 
 | 项 | 状态 |
 |---|---|
-| Workflow yaml 语法 | ✅(GitHub Actions schema 严格,yaml 语法错会被立即拒绝)|
-| `*-deskfox.yml` 命名 → pre-commit 豁免 | ✅(commit hook 验过)|
-| Gitee REST v5 端点路径 / 字段名正确 | ✅(根据公开 API 文档,curl 调用结构验过 )|
-| **GITEE_TOKEN secret 配置** | ⏳ user 自己 GitHub Settings → Secrets 配 |
-| **首次实测**:手动 publish 历史 draft `ship-prod-2026.5.3.1` → workflow 触发 → Gitee Release 出现 + 附件可下 | ⏳ user 操作 |
+| Workflow yaml 语法 | ✅(GitHub Actions parser 接受) |
+| `*-deskfox.yml` 命名 → pre-commit 豁免 | ✅ |
+| Gitee REST v5 endpoints 验证 | ✅(create + list + attach_files 全跑过)|
+| GITEE_TOKEN secret 配置 + 在 workflow 中验通 | ✅(2026-05-03 user 配,scope `projects`,1 年期)|
+| **首次实测全链路**(GitHub publish → workflow 元数据 → 本地脚本附件 → Gitee 完整 release)| ✅(`ship-prod-2026.5.3.1` 完成)|
+| 本地脚本 PS 5.1 编码处理 | ✅(UTF-8 BOM 修过一次,详见 commit hist)|
 
 ## R4 override
 

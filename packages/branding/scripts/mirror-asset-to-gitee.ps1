@@ -1,4 +1,4 @@
-# DeskFox release 安装包附件上传到 Gitee(本地跑,国内网络秒传)
+﻿# DeskFox release 安装包附件上传到 Gitee(本地跑,国内网络秒传)
 #
 # 背景:GitHub US runner 上行 Gitee CN 被 GFW 节流,50MB 30 分钟传不完,
 # 所以 .github/workflows/release-mirror-gitee-deskfox.yml 只镜像 Release 元数据,
